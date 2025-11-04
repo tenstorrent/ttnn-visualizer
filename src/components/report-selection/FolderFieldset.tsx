@@ -6,6 +6,7 @@ import { Callout, Icon, Intent } from '@blueprintjs/core';
 import { IconName } from '@blueprintjs/icons';
 import React from 'react';
 import 'styles/components/FolderFieldset.scss';
+import { TEST_IDS } from '../../definitions/TestIds';
 
 interface FolderFieldsetProps {
     title: string;
@@ -32,7 +33,7 @@ const FolderFieldset = ({ title, icon, isFeatureDisabled = false, children }: Fo
             {isFeatureDisabled ? (
                 <div
                     className='feature-disabled'
-                    data-testid='remote-sync-disabled'
+                    data-testid={TEST_IDS.REMOTE_SYNC_DISABLED}
                 >
                     <Callout
                         className='callout'

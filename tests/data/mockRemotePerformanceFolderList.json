@@ -1,0 +1,188 @@
+[
+    {
+        "reportName": "2025_06_27_14_36_02 npe-manifest",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2025_06_27_14_36_02 npe-manifest",
+        "lastModified": 1762195128,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2025_06_27_14_36_02",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2025_06_27_14_36_02",
+        "lastModified": 1751050362,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2025_03_04_15_02_28",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2025_03_04_15_02_28",
+        "lastModified": 1762195128,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2025_07_16_16_55_18",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2025_07_16_16_55_18",
+        "lastModified": 1755196371,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama-attn-21-tracy",
+        "remotePath": "/home/ctr-dblundell/reports/performance/llama-attn-21-tracy",
+        "lastModified": 1737483503,
+        "lastSynced": null
+    },
+    {
+        "reportName": "galaxy-perf",
+        "remotePath": "/home/ctr-dblundell/reports/performance/galaxy-perf",
+        "lastModified": 1739471954,
+        "lastSynced": null
+    },
+    {
+        "reportName": "vit_wh_8x4",
+        "remotePath": "/home/ctr-dblundell/reports/performance/vit_wh_8x4",
+        "lastModified": 1762195128,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2025_02_24_23_17_27",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2025_02_24_23_17_27",
+        "lastModified": 1743013672,
+        "lastSynced": null
+    },
+    {
+        "reportName": "report_matmul_padding",
+        "remotePath": "/home/ctr-dblundell/reports/performance/report_matmul_padding",
+        "lastModified": 1758038568,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2024_10_04_01_31_51",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2024_10_04_01_31_51",
+        "lastModified": 1737574139,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_attn-jan20-2 tracy",
+        "remotePath": "/home/ctr-dblundell/reports/performance/llama_attn-jan20-2 tracy",
+        "lastModified": 1737478731,
+        "lastSynced": null
+    },
+    {
+        "reportName": "4x4",
+        "remotePath": "/home/ctr-dblundell/reports/performance/4x4",
+        "lastModified": 1746152095,
+        "lastSynced": null
+    },
+    {
+        "reportName": "report_sharded_matmul",
+        "remotePath": "/home/ctr-dblundell/reports/performance/report_sharded_matmul",
+        "lastModified": 1762195129,
+        "lastSynced": null
+    },
+    {
+        "reportName": "perf n150",
+        "remotePath": "/home/ctr-dblundell/reports/performance/perf n150",
+        "lastModified": 1758039092,
+        "lastSynced": null
+    },
+    {
+        "reportName": "batch-1",
+        "remotePath": "/home/ctr-dblundell/reports/performance/batch-1",
+        "lastModified": 1746349027,
+        "lastSynced": null
+    },
+    {
+        "reportName": "lama-new-2-perf",
+        "remotePath": "/home/ctr-dblundell/reports/performance/lama-new-2-perf",
+        "lastModified": 1736270673,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2024_10_04_01_36_08",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2024_10_04_01_36_08",
+        "lastModified": 1736351551,
+        "lastSynced": null
+    },
+    {
+        "reportName": "err",
+        "remotePath": "/home/ctr-dblundell/reports/performance/err",
+        "lastModified": 1760541451,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2025_06_25_14_04_34 uncompressed manifest",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2025_06_25_14_04_34 uncompressed manifest",
+        "lastModified": 1762195129,
+        "lastSynced": null
+    },
+    {
+        "reportName": "8x8",
+        "remotePath": "/home/ctr-dblundell/reports/performance/8x8",
+        "lastModified": 1746152043,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2025_09_18_11_39_20",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2025_09_18_11_39_20",
+        "lastModified": 1762195130,
+        "lastSynced": null
+    },
+    {
+        "reportName": "batch-4",
+        "remotePath": "/home/ctr-dblundell/reports/performance/batch-4",
+        "lastModified": 1746349054,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama-perf",
+        "remotePath": "/home/ctr-dblundell/reports/performance/llama-perf",
+        "lastModified": 1742303283,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2024_10_04_01_39_26",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2024_10_04_01_39_26",
+        "lastModified": 1737574128,
+        "lastSynced": null
+    },
+    {
+        "reportName": "2025_06_27_14_36_02 npe-manifest - zst",
+        "remotePath": "/home/ctr-dblundell/reports/performance/2025_06_27_14_36_02 npe-manifest - zst",
+        "lastModified": 1752505944,
+        "lastSynced": null
+    },
+    {
+        "reportName": "perf-report",
+        "remotePath": "/home/ctr-dblundell/reports/performance/perf-report",
+        "lastModified": 1762195130,
+        "lastSynced": null
+    },
+    {
+        "reportName": "report_matmul_padding_2",
+        "remotePath": "/home/ctr-dblundell/reports/performance/report_matmul_padding_2",
+        "lastModified": 1758043973,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_attn_32l_10iterations_30jan_tracy",
+        "remotePath": "/home/ctr-dblundell/reports/performance/llama_attn_32l_10iterations_30jan_tracy",
+        "lastModified": 1738876436,
+        "lastSynced": null
+    },
+    {
+        "reportName": "device_tensors_1-perf",
+        "remotePath": "/home/ctr-dblundell/reports/performance/device_tensors_1-perf",
+        "lastModified": 1738187880,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_mlp_tracy",
+        "remotePath": "/home/ctr-dblundell/reports/performance/llama_mlp_tracy",
+        "lastModified": 1762195130,
+        "lastSynced": null
+    },
+    {
+        "reportName": "vit_wh_8x6",
+        "remotePath": "/home/ctr-dblundell/reports/performance/vit_wh_8x6",
+        "lastModified": 1746457757,
+        "lastSynced": null
+    }
+]

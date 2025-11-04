@@ -6,6 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import NPEProcessingStatus from '../src/components/NPEProcessingStatus';
+import { TEST_IDS } from '../src/definitions/TestIds';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -17,7 +18,7 @@ it('renders an initial message', () => {
         </TestProviders>,
     );
 
-    expect(screen.getByTestId('npe-processing-initial').textContent).toBeDefined();
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INITIAL).textContent).toBeDefined();
 });
 
 it('handles incorrect NPE data versions', () => {
@@ -30,7 +31,7 @@ it('handles incorrect NPE data versions', () => {
         </TestProviders>,
     );
 
-    expect(screen.getByTestId('npe-processing-invalid-version').textContent).toBeDefined();
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_VERSION).textContent).toBeDefined();
 });
 
 it('handles incomplete NPE data', () => {
@@ -44,7 +45,7 @@ it('handles incomplete NPE data', () => {
         </TestProviders>,
     );
 
-    expect(screen.getByTestId('npe-processing-invalid-data').textContent).toBeDefined();
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_DATA).textContent).toBeDefined();
 });
 
 it('handles invalid JSON data', () => {
@@ -58,7 +59,7 @@ it('handles invalid JSON data', () => {
         </TestProviders>,
     );
 
-    expect(screen.getByTestId('npe-processing-invalid-json').textContent).toBeDefined();
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON).textContent).toBeDefined();
 });
 
 it('handles unknown errors', () => {
@@ -72,5 +73,5 @@ it('handles unknown errors', () => {
         </TestProviders>,
     );
 
-    expect(screen.getByTestId('npe-processing-unhandled-error').textContent).toBeDefined();
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_UNHANDLED_ERROR).textContent).toBeDefined();
 });

@@ -11,6 +11,7 @@ import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 import remoteConnection from './data/remoteConnection.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
+import mockRemotePerformanceFolderList from './data/mockRemotePerformanceFolderList.json';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -222,6 +223,10 @@ it('handles API errors gracefully', () => {
 it.skip('enables sync buttons when folders are selected', async () => {
     window.localStorage.setItem('remoteConnections', JSON.stringify(remoteConnection));
     window.localStorage.setItem('selectedConnection', JSON.stringify(remoteConnection[0]));
+    window.localStorage.setItem(
+        `${remoteConnection[0].name} - performanceFolders`,
+        JSON.stringify(mockRemotePerformanceFolderList),
+    );
 
     render(
         <TestProviders>
@@ -231,7 +236,7 @@ it.skip('enables sync buttons when folders are selected', async () => {
 
     getAllButtonsWithText(FETCH_REMOTE_FOLDERS)[0].click();
 
-    const { reportName } = mockProfilerFolderList[0];
+    const { reportName } = mockRemotePerformanceFolderList[0];
 
     getAllButtonsWithText(NO_SELECTION)[0].click();
     await waitFor(() => document.querySelector(PORTAL_CLASS));

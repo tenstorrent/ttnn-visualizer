@@ -1,10 +1,10 @@
 [
    {
-      "name":"Local",
-      "host":"localhost",
-      "port":2222,
-      "username":"test-user",
-      "performancePath":"/test/data/perf",
-      "profilerPath":""
+      "host": "localhost",
+      "name": "Local",
+      "performancePath": "/test/data/perf",
+      "port": 2222,
+      "profilerPath": "",
+      "username": "test-user"
    }
 ]
