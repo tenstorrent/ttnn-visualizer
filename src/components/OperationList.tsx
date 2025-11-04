@@ -42,7 +42,6 @@ const OperationList = () => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     const [filterQuery, setFilterQuery] = useState('');
-    const [filteredOperationsList, setFilteredOperationsList] = useState<OperationDescription[]>([]);
     const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
@@ -55,6 +54,46 @@ const OperationList = () => {
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
     const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
     const scrollElementRef = useRef<HTMLDivElement>(null);
+
+    const operationsWithRange = useMemo(() => {
+        if (fetchedOperations && selectedOperationRange) {
+            return fetchedOperations.filter(
+                (op) => op.id >= selectedOperationRange[0] && op.id <= selectedOperationRange[1],
+            );
+        }
+
+        return fetchedOperations;
+    }, [fetchedOperations, selectedOperationRange]);
+
+    const filteredOperationsList = useMemo(() => {
+        if (operationsWithRange) {
+            let operations = [...operationsWithRange];
+
+            if (filterQuery) {
+                operations = operationsWithRange?.filter((operation) =>
+                    getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
+                );
+            }
+
+            if (isSortingModeActive(shouldSortByID)) {
+                operations = operations.sort((a, b) => a.id - b.id);
+
+                if (shouldSortByID === SortingOptions.DESCENDING) {
+                    operations = operations.reverse();
+                }
+            } else if (isSortingModeActive(shouldSortDuration)) {
+                operations = operations.sort((a, b) => a.duration - b.duration);
+
+                if (shouldSortDuration === SortingOptions.DESCENDING) {
+                    operations = operations.reverse();
+                }
+            }
+
+            return operations;
+        }
+
+        return [];
+    }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration]);
 
     const listState = getListState();
 
@@ -90,7 +129,12 @@ const OperationList = () => {
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
     const numberOfOperations = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
 
-    const handleToggleCollapsible = (operationId: number) => {
+    // Store latest values in refs for unmount cleanup
+    const scrollOffsetRef = useRef(virtualizer.scrollOffset);
+    const measurementsCacheRef = useRef(virtualizer.measurementsCache);
+    const expandedItemsRef = useRef(expandedItems);
+
+    const handleToggleCollapsible = useCallback((operationId: number) => {
         setExpandedItems((currentExpanded) => {
             const newList = currentExpanded || [];
 
@@ -98,36 +142,31 @@ const OperationList = () => {
                 ? newList.filter((id) => id !== operationId)
                 : [...newList, operationId];
         });
-    };
+    }, []);
 
-    const handleSortByID = () => {
+    const handleSortByID = useCallback(() => {
         setShouldSortDuration(SortingOptions.OFF);
         setShouldSortByID(
             shouldSortByID === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
         );
-    };
+    }, [shouldSortByID]);
 
-    const handleSortByDuration = () => {
+    const handleSortByDuration = useCallback(() => {
         setShouldSortByID(SortingOptions.OFF);
         setShouldSortDuration(
             shouldSortDuration === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
         );
-    };
+    }, [shouldSortDuration]);
 
-    const handleExpandAllToggle = () => {
+    const handleExpandAllToggle = useCallback(() => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
 
         setExpandedItems(
             !shouldCollapseAll && filteredOperationsList ? filteredOperationsList.map((operation) => operation.id) : [],
         );
-    };
+    }, [filteredOperationsList, shouldCollapseAll, setShouldCollapseAll]);
 
-    const handleUserScrolling = () => {
-        // TODO: Maybe move this into a hook
-        updateScrollShade();
-    };
-
-    const updateScrollShade = () => {
+    const updateScrollShade = useCallback(() => {
         if (scrollElementRef.current) {
             const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
             const scrollBottom = scrollTop + offsetHeight;
@@ -135,17 +174,12 @@ const OperationList = () => {
             setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
             setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
         }
-    };
+    }, []);
 
-    const operationsWithRange = useMemo(() => {
-        if (fetchedOperations && selectedOperationRange) {
-            return fetchedOperations.filter(
-                (op) => op.id >= selectedOperationRange[0] && op.id <= selectedOperationRange[1],
-            );
-        }
-
-        return fetchedOperations;
-    }, [fetchedOperations, selectedOperationRange]);
+    const handleUserScrolling = useCallback(() => {
+        // TODO: Maybe move this into a hook
+        updateScrollShade();
+    }, [updateScrollShade]);
 
     const handleToggleStackTrace = (index: number) => {
         const scrollToIndex = index - 1;
@@ -166,38 +200,6 @@ const OperationList = () => {
         setFocusedRow(null);
         scrollToIndex(numberOfOperations);
     };
-
-    useMemo(() => {
-        if (operationsWithRange) {
-            let operations = [...operationsWithRange];
-
-            if (filterQuery) {
-                operations = operationsWithRange?.filter((operation) =>
-                    getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
-                );
-            }
-
-            if (isSortingModeActive(shouldSortByID)) {
-                operations = operations.sort((a, b) => a.id - b.id);
-
-                if (shouldSortByID === SortingOptions.DESCENDING) {
-                    operations = operations.reverse();
-                }
-            } else if (isSortingModeActive(shouldSortDuration)) {
-                operations = operations.sort((a, b) => a.duration - b.duration);
-
-                if (shouldSortDuration === SortingOptions.DESCENDING) {
-                    operations = operations.reverse();
-                }
-            }
-
-            operations = selectedOperationRange
-                ? operations.filter((op) => op.id >= selectedOperationRange[0] && op.id <= selectedOperationRange[1])
-                : operations;
-
-            setFilteredOperationsList(operations);
-        }
-    }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, selectedOperationRange]);
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
@@ -223,7 +225,7 @@ const OperationList = () => {
         }
 
         updateScrollShade();
-    }, [virtualHeight]);
+    }, [virtualHeight, updateScrollShade]);
 
     // Restore expanded items on mount
     useEffect(() => {
@@ -231,12 +233,7 @@ const OperationList = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Store latest values in refs for unmount cleanup
-    const scrollOffsetRef = useRef(virtualizer.scrollOffset);
-    const measurementsCacheRef = useRef(virtualizer.measurementsCache);
-    const expandedItemsRef = useRef(expandedItems);
-
-    // Keep refs updated
+    // Keep stored refs updated
     useEffect(() => {
         scrollOffsetRef.current = virtualizer.scrollOffset;
     }, [virtualizer.scrollOffset]);
