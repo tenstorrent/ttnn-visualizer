@@ -16,8 +16,10 @@ import {
     EVENT_TYPE_FILTER,
     FABRIC_EVENT_SCOPE_OPTIONS,
     FabricEventScopeColors,
+    KERNEL_PROCESS,
     NPEData,
     NPERootZone,
+    NPERootZoneUXInfo,
     NPE_COORDINATES,
     NPE_COORDINATE_INDEX,
     NPE_LINK,
@@ -66,6 +68,11 @@ enum VISUALIZATION_MODE {
     TRANSFERS,
 }
 
+type RootzoneStateKey = string;
+const getRootZoneKey = (proc: KERNEL_PROCESS, address: NPE_COORDINATES): RootzoneStateKey => {
+    return `${proc}:${address.join(',')}`;
+};
+
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
@@ -77,6 +84,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
     const [openZonesPanel, setOpenZonesPanel] = useState<boolean>(false);
     const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
+    const [expandedZoneMap, setExpandedZoneMap] = useState<Record<RootzoneStateKey, boolean>>({});
 
     let totalColsChips = 0;
     const [zoom, setZoom] = useState<number>(0.75);
@@ -93,12 +101,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
     const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
-
     const zones: NPERootZone[] = useMemo(() => {
         return npeData.zones || [];
     }, [npeData]);
-    // eslint-disable-next-line no-void
-    void zones;
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
         return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
@@ -110,18 +115,25 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }
     }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
 
-    const selectedZoneList: NPERootZone[] = useMemo(() => {
+    const selectedZoneList: NPERootZoneUXInfo[] = useMemo(() => {
         if (selectedZoneAddress === null) {
             return [];
         }
-        return zones.filter((rootZone) => {
-            return (
-                rootZone.core[NPE_COORDINATE_INDEX.CHIP_ID] === selectedZoneAddress[NPE_COORDINATE_INDEX.CHIP_ID] &&
-                rootZone.core[NPE_COORDINATE_INDEX.Y] === selectedZoneAddress[NPE_COORDINATE_INDEX.Y] &&
-                rootZone.core[NPE_COORDINATE_INDEX.X] === selectedZoneAddress[NPE_COORDINATE_INDEX.X]
+        return zones
+            .filter((rootZone) => {
+                return (
+                    rootZone.core[NPE_COORDINATE_INDEX.CHIP_ID] === selectedZoneAddress[NPE_COORDINATE_INDEX.CHIP_ID] &&
+                    rootZone.core[NPE_COORDINATE_INDEX.Y] === selectedZoneAddress[NPE_COORDINATE_INDEX.Y] &&
+                    rootZone.core[NPE_COORDINATE_INDEX.X] === selectedZoneAddress[NPE_COORDINATE_INDEX.X]
+                );
+            })
+            .map(
+                (rootZone): NPERootZoneUXInfo => ({
+                    ...rootZone,
+                    expandedState: expandedZoneMap[getRootZoneKey(rootZone.proc, rootZone.core)] ?? false,
+                }),
             );
-        });
-    }, [selectedZoneAddress, zones]);
+    }, [expandedZoneMap, selectedZoneAddress, zones]);
 
     const links = useMemo(() => {
         const timestepData = npeData.timestep_data[selectedTimestep];
@@ -801,6 +813,13 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 }}
                 onSelect={(coords: NPE_COORDINATES | null) => {
                     setSelectedZoneAddress(coords);
+                }}
+                onExpand={(state, proc, address) => {
+                    const key = getRootZoneKey(proc, address);
+                    setExpandedZoneMap((prev) => ({
+                        ...prev,
+                        [key]: state,
+                    }));
                 }}
             />
         </div>
