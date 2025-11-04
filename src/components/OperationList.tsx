@@ -48,7 +48,7 @@ const OperationList = () => {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
-    const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
+    const [expandedItems, setExpandedItems] = useState<number[]>([]);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -92,15 +92,11 @@ const OperationList = () => {
 
     const handleToggleCollapsible = (operationId: number) => {
         setExpandedItems((currentExpanded) => {
-            const expandedList = new Set(currentExpanded || []);
+            const newList = currentExpanded || [];
 
-            if (expandedList.has(operationId)) {
-                expandedList.delete(operationId);
-            } else {
-                expandedList.add(operationId);
-            }
-
-            return expandedList;
+            return newList.includes(operationId)
+                ? newList.filter((id) => id !== operationId)
+                : [...newList, operationId];
         });
     };
 
@@ -122,9 +118,7 @@ const OperationList = () => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
 
         setExpandedItems(
-            !shouldCollapseAll && filteredOperationsList
-                ? new Set(filteredOperationsList.map((operation) => operation.id))
-                : new Set(),
+            !shouldCollapseAll && filteredOperationsList ? filteredOperationsList.map((operation) => operation.id) : [],
         );
     };
 
@@ -233,21 +227,35 @@ const OperationList = () => {
 
     // Restore expanded items on mount
     useEffect(() => {
-        if (restoredExpandedItems) {
-            setExpandedItems(restoredExpandedItems || new Set());
-        }
+        setExpandedItems(restoredExpandedItems || []);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Store latest values in refs for unmount cleanup
+    const scrollOffsetRef = useRef(virtualizer.scrollOffset);
+    const measurementsCacheRef = useRef(virtualizer.measurementsCache);
+    const expandedItemsRef = useRef(expandedItems);
+
+    // Keep refs updated
+    useEffect(() => {
+        scrollOffsetRef.current = virtualizer.scrollOffset;
+    }, [virtualizer.scrollOffset]);
+    useEffect(() => {
+        measurementsCacheRef.current = virtualizer.measurementsCache;
+    }, [virtualizer.measurementsCache]);
+    useEffect(() => {
+        expandedItemsRef.current = expandedItems;
+    }, [expandedItems]);
 
     // Update stored list state on unmount
     useEffect(() => {
         return () =>
             updateListState({
-                scrollOffset: virtualizer.scrollOffset || 0,
-                measurementsCache: virtualizer.measurementsCache,
-                expandedItems,
+                scrollOffset: scrollOffsetRef.current || 0,
+                measurementsCache: measurementsCacheRef.current,
+                expandedItems: expandedItemsRef.current,
             });
-    }, [updateListState, virtualizer.measurementsCache, virtualizer.scrollOffset, expandedItems]);
+    }, [updateListState]);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
@@ -414,7 +422,7 @@ const OperationList = () => {
                                                     variant={ButtonVariant.OUTLINED}
                                                 />
                                             }
-                                            isOpen={!!expandedItems?.has(operation.id)}
+                                            isOpen={!!expandedItems?.includes(operation.id)}
                                             keepChildrenMounted
                                         >
                                             <div className='arguments-wrapper'>
