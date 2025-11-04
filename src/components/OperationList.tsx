@@ -48,7 +48,7 @@ const OperationList = () => {
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-    const [focussedRow, setFocussedRow] = useState<number | null>(null);
+    const [focusedRow, setFocusedRow] = useState<number | null>(null);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -205,7 +205,7 @@ const OperationList = () => {
     );
 
     const scrollToTop = () => {
-        setFocussedRow(null);
+        setFocusedRow(null);
         scrollToIndex(0);
         updateListState({
             scrollOffset: 0,
@@ -213,7 +213,7 @@ const OperationList = () => {
     };
 
     const scrollToEnd = () => {
-        setFocussedRow(null);
+        setFocusedRow(null);
         scrollToIndex(numberOfOperations);
         updateListState({
             scrollOffset: scrollElementRef.current?.scrollTop || virtualizer.scrollOffset || 0,
@@ -254,7 +254,7 @@ const OperationList = () => {
                     (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
                 ) || 0;
 
-            setFocussedRow(operationIndex);
+            setFocusedRow(operationIndex);
 
             // Navigating to the same page replaces the entry in the browser history
             navigate(ROUTES.OPERATIONS, { replace: true });
@@ -404,7 +404,7 @@ const OperationList = () => {
                                 return (
                                     <li
                                         className={classNames('list-item-container', {
-                                            'focus-fade': focussedRow === virtualRow.index,
+                                            'focus-fade': focusedRow === virtualRow.index,
                                         })}
                                         key={virtualRow.key}
                                         ref={virtualizer.measureElement}

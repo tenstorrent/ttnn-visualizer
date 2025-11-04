@@ -48,7 +48,7 @@ function Layout() {
     const { data: instance } = useInstance();
     const { data: reports } = useReportFolderList();
     const location = useLocation();
-    const { resetScrollPositions } = useRestoreScrollPositionV2();
+    const { resetListState } = useRestoreScrollPositionV2();
 
     const appVersion = import.meta.env.APP_VERSION;
     const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
@@ -62,9 +62,10 @@ function Layout() {
             : getLocalReportName(reports, profilerReportPath) || '';
     const perfReportPath = instance?.active_report?.performance_name || null;
 
+    // Loads the active reports into global state when the instance changes
     useEffect(() => {
         if (instance?.active_report) {
-            resetScrollPositions();
+            resetListState();
 
             setActiveProfilerReport(
                 profilerReportPath

@@ -39,14 +39,14 @@ const useRestoreScrollPositionV2 = (key?: ScrollLocationsV2) => {
         return scrollPositions?.[key] || null;
     };
 
-    const resetScrollPositions = () => {
+    const resetListState = () => {
         setScrollPositions(null);
     };
 
     return {
         getListState,
         updateListState,
-        resetScrollPositions,
+        resetListState,
     };
 };
 
