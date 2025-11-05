@@ -22,7 +22,7 @@ interface NPEHeatMapProps {
     timestepList: TimestepData[];
     canvasWidth: number;
     useTimesteps: boolean;
-    currentPosition?: number;
+    currentTimestep?: number;
     cyclesPerTimestep: number;
     selectedZoneList: NPERootZoneUXInfo[];
     nocType?: NoCType | null;
@@ -35,7 +35,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
     canvasWidth,
     nocType = null,
     useTimesteps,
-    currentPosition,
+    currentTimestep,
     cyclesPerTimestep,
     selectedZoneList = [],
 }) => {
@@ -202,7 +202,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                 });
             }
         });
-        const x = (currentPosition ?? 0) * chunkWidth;
+        const x = (currentTimestep ?? 0) * chunkWidth;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
         ctx.fillRect(x, 0, 2, HEATMAP_HEIGHT + canvasZoneHeight);
 
@@ -214,7 +214,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
         canvasZoneHeight,
         selectedZoneList,
         zoneRanges,
-        currentPosition,
+        currentTimestep,
     ]);
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
