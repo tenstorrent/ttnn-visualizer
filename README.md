@@ -61,11 +61,11 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | L1 Summary with Tensor highlight | Operation inputs and outputs |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/6679e3ab-3819-4037-bf63-15aac0f8b625" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/7b0bf6da-d6e5-4b8d-b2cd-457181ac6b99" /> |
+| <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/7c6a3558-1084-492b-ac0b-f5f910487c8f" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/48197e65-4831-4005-9da8-99574c47d5c7" /> |
 
 | Device operations with memory consumption | DRAM memory allocation |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/46f51cde-86ec-4251-8f41-261b5e14e1b7" />| <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/588dbb57-3964-48f8-aa0d-bafc614706d3" /> |
+| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/4b8cefb9-fd75-4291-9e64-ab2f2c866c51" />| <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/a9ad8b1d-200c-4c10-b1d8-5d76900c688c" /> |
 
 | Operation graph view | Model buffer summary |
 |-----------------------------------------------|------------------------------------------|
