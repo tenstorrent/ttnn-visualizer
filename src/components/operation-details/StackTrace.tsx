@@ -16,18 +16,17 @@ import useRemoteConnection from '../../hooks/useRemote';
 import Overlay from '../Overlay';
 import 'styles/components/StackTrace.scss';
 import { ReportLocation } from '../../definitions/Reports';
+import { StackTraceLanguage } from '../../definitions/StackTrace';
 
-hljs.registerLanguage('python', python);
-hljs.registerLanguage('cpp', cpp);
+hljs.registerLanguage(StackTraceLanguage.PYTHON, python);
+hljs.registerLanguage(StackTraceLanguage.CPP, cpp);
 
 const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
 const LINE_NUMBER_REGEX = /(?<=line )(\d*)(?=,)/m;
 
-type HighlightLanguages = 'python' | 'cpp';
-
 interface StackTraceProps {
     stackTrace: string;
-    language: HighlightLanguages;
+    language: StackTraceLanguage;
     hideSourceButton?: boolean;
     isInline?: boolean;
     // Supply these two props if you want to control the expanded state from outside

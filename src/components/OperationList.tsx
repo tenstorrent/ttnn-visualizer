@@ -25,6 +25,7 @@ import StackTrace from './operation-details/StackTrace';
 import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
 import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 import { ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
+import { StackTraceLanguage } from '../definitions/StackTrace';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -431,12 +432,12 @@ const OperationList = () => {
                                                     <>
                                                         <div className='memory-error'>
                                                             <p className='memory-error-title'>
-                                                                {operation.error.error_type}
+                                                                Error ({operation.error.error_type})
                                                             </p>
 
                                                             <StackTrace
                                                                 stackTrace={operation.error.error_message}
-                                                                language='cpp'
+                                                                language={StackTraceLanguage.CPP}
                                                                 hideSourceButton
                                                                 isInline
                                                                 onExpandChange={(_isOpen: boolean) =>
@@ -446,11 +447,11 @@ const OperationList = () => {
                                                         </div>
 
                                                         <div className='memory-error'>
-                                                            <p className='memory-error-title'>Stack Trace</p>
+                                                            <p className='memory-error-title'>Error Stack Trace</p>
 
                                                             <StackTrace
                                                                 stackTrace={operation.error.stack_trace}
-                                                                language='cpp'
+                                                                language={StackTraceLanguage.CPP}
                                                                 hideSourceButton
                                                                 isInline
                                                                 onExpandChange={(_isOpen: boolean) =>
