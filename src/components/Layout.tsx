@@ -136,7 +136,7 @@ function Layout() {
                             />
                             <span className='visualizer-title'>TT-NN Visualizer</span>
                         </h1>
-                        <sup className='version'>v{appVersion}</sup>
+                        {!parseInt(import.meta.env.VITE_MARKETING, 10) && <sup className='version'>v{appVersion}</sup>}
                     </Link>
 
                     <MainNavigation />
