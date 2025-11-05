@@ -2,9 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-export type TableKeys = Partial<keyof PerfTableRow>;
+import { DeviceOperationLayoutTypes } from '../model/APIData';
+import { BufferType } from '../model/BufferType';
+import { OpType } from './Performance';
 
-export type TableFilter = Record<TableKeys, string> | null;
+export type TableKeys = keyof TypedPerfTableRow;
+export type TableFilter = Partial<Record<TableKeys, string>> | null;
 
 export interface TableHeader {
     label: string;
@@ -16,12 +19,20 @@ export interface TableHeader {
     filterable?: boolean;
 }
 
+enum BoundType {
+    BOTH,
+    DRAM,
+    FLOP,
+    SLOW,
+    HOST,
+}
+
 export interface PerfTableRow {
     id: string;
     global_call_count: number;
     advice: string[];
     total_percent: string;
-    bound: string;
+    bound: BoundType;
     op_code: string;
     raw_op_code: string;
     device_time: string;
@@ -44,6 +55,7 @@ export interface PerfTableRow {
     output_subblock_w: string;
     high_dispatch?: boolean;
     pm_ideal_ns: string;
+    op_type: OpType;
     op?: number;
     missing?: boolean;
 }
@@ -61,6 +73,7 @@ export interface TypedPerfTableRow
         | 'dram_percent'
         | 'flops'
         | 'flops_percent'
+        | 'bound'
     > {
     id: number | null;
     global_call_count: number | null;
@@ -72,11 +85,21 @@ export interface TypedPerfTableRow
     dram_percent: number | null;
     flops: number | null;
     flops_percent: number | null;
+    bound: BoundType | null;
+    // Next three extracted from input_0_memory
+    buffer_type: BufferType | null;
+    device: number | null;
+    layout: DeviceOperationLayoutTypes | null;
 }
 
-export type MathFidelity = 'HiFi4' | 'HiFi2' | 'LoFi';
+// Not a general enum but used in evaluateFidelity to analyze tt-perf-report output
+export enum MathFidelity {
+    HiFi4 = 'HiFi4',
+    HiFi2 = 'HiFi2',
+    LoFi = 'LoFi',
+}
 
-export const MARKER_COLOURS = [
+export const MarkerColours = [
     'rgb(0, 128, 128)',
     'rgb(255, 215, 0)',
     'rgb(31, 119, 180)',
@@ -112,7 +135,7 @@ export const MARKER_COLOURS = [
 
 export interface Marker {
     opCode: string;
-    colour: (typeof MARKER_COLOURS)[number];
+    colour: (typeof MarkerColours)[number];
 }
 
 export enum ColumnHeaders {
@@ -120,7 +143,10 @@ export enum ColumnHeaders {
     total_percent = 'total_percent',
     bound = 'bound',
     op_code = 'op_code',
+    device = 'device',
+    buffer_type = 'buffer_type',
     device_time = 'device_time',
+    layout = 'layout',
     op_to_op_gap = 'op_to_op_gap',
     cores = 'cores',
     dram = 'dram',
@@ -138,6 +164,9 @@ export const TableHeaders: TableHeader[] = [
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
     { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true },
+    // { label: 'Device', key: ColumnHeaders.device }, Hidden because tt-perf-report doesn't really support multi device well
+    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true },
+    { label: 'Layout', key: ColumnHeaders.layout, sortable: true, filterable: true },
     { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
     { label: 'Op-to-Op Gap', key: ColumnHeaders.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
     { label: 'Cores', key: ColumnHeaders.cores, colour: 'green', sortable: true },
@@ -165,3 +194,33 @@ export const ComparisonKeys: TableKeys[] = [
     ColumnHeaders.high_dispatch,
     ColumnHeaders.global_call_count,
 ];
+
+export const signpostRowDefaults = Object.freeze({
+    global_call_count: null,
+    total_percent: null,
+    device_time: null,
+    op_to_op_gap: null,
+    cores: null,
+    dram: null,
+    dram_percent: null,
+    flops: null,
+    flops_percent: null,
+    advice: [],
+    bound: null,
+    math_fidelity: '',
+    output_datatype: '',
+    output_0_memory: '',
+    input_0_datatype: '',
+    input_1_datatype: '',
+    dram_sharded: '',
+    input_0_memory: '',
+    input_1_memory: '',
+    inner_dim_block_size: '',
+    output_subblock_h: '',
+    output_subblock_w: '',
+    pm_ideal_ns: '',
+    op_type: OpType.SIGNPOST,
+    device: null,
+    layout: null,
+    buffer_type: null,
+});

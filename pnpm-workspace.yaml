@@ -4,3 +4,6 @@ onlyBuiltDependencies:
   - es5-ext
   - esbuild
   - unrs-resolver
+
+nodeLinker: hoisted
+engineStrict: true

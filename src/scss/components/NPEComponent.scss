@@ -15,6 +15,13 @@
 .npe {
     position: relative;
 
+    .header {
+        position: sticky;
+        top: 0;
+        background-color: $tt-grey-2;
+        z-index: 5;
+    }
+
     .npe-controls {
         display: flex;
         flex-direction: column;
@@ -31,6 +38,22 @@
             margin-bottom: 0;
             padding-bottom: 0;
         }
+
+        .zones-open-panel-btn {
+            &:not([class*='bp6-intent-'], [class*='bp6-disabled']) {
+                background-color: rgba($tt-zone-color, 0.2);
+
+                &:hover {
+                    background-color: rgba($tt-zone-color, 0.5);
+                }
+            }
+
+            border: 1px solid rgba($tt-zone-color, 0);
+
+            &.bp6-active {
+                border: 1px solid $tt-zone-color;
+            }
+        }
     }
 
     .bp6-slider-progress {
@@ -44,20 +67,16 @@
         }
     }
 
-    .color-square {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-    }
-
     .split-grid {
         display: flex;
-
-        // align-items: stretch;
         gap: 10px;
         margin-top: 10px;
         margin-bottom: 20px;
         border: 1px solid $tt-grey-5;
+
+        .grid-spacer {
+            width: variables.$active-transfer-width;
+        }
     }
 
     .metadata {
@@ -177,6 +196,11 @@
                 position: relative;
             }
 
+            &.selected-zone {
+                border: 2px solid $tt-zone-color;
+                inset: -1px;
+            }
+
             &.no-click {
                 border: 1px solid transparent;
                 pointer-events: none;
@@ -294,5 +318,12 @@
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+}
+
+.congestion-heatmap-tooltip {
+    h3 {
+        margin: 0;
+        margin-bottom: 10px;
     }
 }

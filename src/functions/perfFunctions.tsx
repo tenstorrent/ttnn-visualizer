@@ -6,11 +6,22 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import {
+    ColumnHeaders,
+    MathFidelity,
+    PerfTableRow,
+    TableHeader,
+    TableKeys,
+    TypedPerfTableRow,
+} from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
+import { OpType } from '../definitions/Performance';
+import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
+import { NormalisedPerfData } from './normalisePerformanceData';
+import { BufferTypeLabel } from '../model/BufferType';
 
 export enum CellColour {
     White = 'white',
@@ -24,6 +35,11 @@ export enum CellColour {
     Grey = 'grey',
 }
 
+export interface Signpost {
+    id: number;
+    op_code: string;
+}
+
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
     Matmul: CellColour.Magenta,
@@ -35,7 +51,8 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
     NlpCreateHeadsDeviceOperation: CellColour.Blue,
     NLPConcatHeadsDecodeDeviceOperation: CellColour.Blue,
     UpdateCache: CellColour.Blue,
-    OptimizedConvNew: CellColour.Orange,
+    OptimizedConvNew: CellColour.Orange, // Deprecated - Conv2d is the new name for this operation
+    Conv2d: CellColour.Orange,
 };
 
 const DEFAULT_COLOUR = CellColour.White;
@@ -64,8 +81,31 @@ export const formatCell = (
     const { key, unit, decimals } = header;
     let formatted: string | boolean | string[];
     let value = row[key];
+    const isSignpost = row.op_type === OpType.SIGNPOST;
+    const isHost = isHostOp(row.raw_op_code);
 
-    if (key === 'high_dispatch') {
+    if (isSignpost) {
+        if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code) {
+            return '';
+        }
+
+        // Return here because we don't want to apply formatting
+        return value !== null ? String(value) : '';
+    }
+
+    if (isHost) {
+        if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code && key !== ColumnHeaders.bound) {
+            return '';
+        }
+    }
+
+    if (key === ColumnHeaders.buffer_type) {
+        return typeof value === 'number' && Number.isInteger(value) && value in BufferTypeLabel
+            ? BufferTypeLabel[value as number]
+            : '';
+    }
+
+    if (key === ColumnHeaders.high_dispatch) {
         return (
             <Tooltip content='Op with > 6 µs dispatch latency'>
                 <Icon
@@ -77,7 +117,7 @@ export const formatCell = (
         );
     }
 
-    if (key === 'op' && operations) {
+    if (key === ColumnHeaders.OP && operations) {
         return (
             <Tooltip
                 content={
@@ -146,11 +186,15 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return FALLBACK_COLOUR;
     }
 
-    if (key === 'id' || key === 'total_percent' || key === 'device_time') {
+    if (row.op_type === OpType.SIGNPOST) {
         return DEFAULT_COLOUR;
     }
 
-    if (key === 'bound') {
+    if (key === ColumnHeaders.id || key === ColumnHeaders.total_percent || key === ColumnHeaders.device_time) {
+        return DEFAULT_COLOUR;
+    }
+
+    if (key === ColumnHeaders.bound) {
         if (keyValue === 'DRAM') {
             return CellColour.Green;
         }
@@ -164,16 +208,21 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         }
     }
 
-    if (key === 'dram' || key === 'dram_percent' || key === 'flops' || key === 'flops_percent') {
+    if (
+        key === ColumnHeaders.dram ||
+        key === ColumnHeaders.dram_percent ||
+        key === ColumnHeaders.flops ||
+        key === ColumnHeaders.flops_percent
+    ) {
         const dramP = row.dram_percent;
         const flopsP = row.flops_percent;
 
         if (dramP != null && flopsP != null) {
             if (dramP > flopsP) {
-                if (key === 'dram' || key === 'dram_percent') {
+                if (key === ColumnHeaders.dram || key === ColumnHeaders.dram_percent) {
                     return CellColour.Yellow;
                 }
-            } else if (key === 'flops' || key === 'flops_percent') {
+            } else if (key === ColumnHeaders.flops || key === ColumnHeaders.flops_percent) {
                 return CellColour.Yellow;
             }
         }
@@ -185,17 +234,17 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === 'cores' && keyValue != null) {
+    if (key === ColumnHeaders.cores && keyValue != null) {
         return getCoreColour(keyValue);
     }
 
-    if (key === 'op_code') {
+    if (key === ColumnHeaders.op_code) {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : DEFAULT_COLOUR;
     }
 
-    if (key === 'math_fidelity' && typeof keyValue === 'string') {
+    if (key === ColumnHeaders.math_fidelity && typeof keyValue === 'string') {
         const parts = keyValue.split(' ');
         const mathFidelity = parts[0] as MathFidelity;
         const input0Datatype = row.input_0_datatype || '';
@@ -218,7 +267,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === 'op_to_op_gap' && typeof keyValue === 'string') {
+    if (key === ColumnHeaders.op_to_op_gap && typeof keyValue === 'string') {
         return getOpToOpGapColour(keyValue);
     }
 
@@ -284,7 +333,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const percentageSaved = (maxDispatchOverhead / totalDuration) * 100;
 
     return (
-        <div>
+        <div className='high-dispatch-advice'>
             <p>
                 Marked ops have &gt; 6 µs dispatch latency. Running with tracing could save{' '}
                 {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
@@ -302,6 +351,7 @@ export function evaluateFidelity(
     mathFidelity: MathFidelity | '',
 ): [string, string | null] {
     const mantissaBits: Record<string, number> = {
+        FLOAT32: 23,
         BFLOAT16: 8,
         BFLOAT8_B: 7,
         BFLOAT4_B: 3,
@@ -313,55 +363,55 @@ export function evaluateFidelity(
 
     // I note that we're not using the second part of the returned array, only the first part.
     if (in0Bits === 8 && outBits >= 7) {
-        if (mathFidelity === 'HiFi4') {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['sufficient', 'HiFi2 may also work and has 2x the throughput of HiFi4'];
         }
 
-        if (mathFidelity === 'HiFi2') {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['too_low', 'If your matmuls are not FLOP-bound use HiFi4 with BF16 activations for full accuracy'];
         }
 
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'Use HiFi2 or HiFi4 with BF16 activations for improved accuracy'];
         }
     } else if (in0Bits === 8 && outBits === 3) {
-        if (mathFidelity === 'HiFi4') {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['too_high', 'HiFi2 is very likely to work for BFP8 output and has 2x the throughput of HiFi4'];
         }
 
-        if (mathFidelity === 'HiFi2') {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['sufficient', 'LoFi might also be sufficient with BFP4 output and has almost 2x the throughput'];
         }
 
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'HiFi2 may give better accuracy for large matmuls with many intermediate accumulations'];
         }
     } else if (in1Bits >= 7 && outBits >= 7) {
-        if (mathFidelity === 'HiFi4') {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['too_high', 'HiFi2 is sufficient for BFP8 multiplication and faster'];
         }
 
-        if (mathFidelity === 'HiFi2') {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['sufficient', null];
         }
 
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'HiFi2 is recommended for accuracy; LoFi discards low bits of weights'];
         }
     } else if (in1Bits >= 7 && outBits === 3) {
-        if (mathFidelity === 'HiFi4') {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['too_high', 'HiFi2 is sufficient and 2x throughput'];
         }
 
-        if (mathFidelity === 'HiFi2') {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['sufficient', 'LoFi might also be sufficient (BFP4 output) and has almost 2x throughput'];
         }
 
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'HiFi2 may give slightly better accuracy for large matmuls'];
         }
     } else if (in1Bits === 3) {
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['sufficient', null];
         }
         return ['too_high', 'LoFi is sufficient with BFP4 weights'];
@@ -382,3 +432,56 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
 }
 
 export const isHostOp = (op: string) => op.includes('(torch)');
+
+export const getStandardViewCounts = (
+    data: TypedPerfTableRow[],
+    filteredData: TypedPerfTableRow[],
+    isInitialTab: boolean,
+    processedComparisonRows: TypedPerfTableRow[][],
+    filteredComparisonRows: TypedPerfTableRow[],
+    normalisedData: NormalisedPerfData | null,
+    comparisonIndex: number,
+    comparisonData?: PerfTableRow[][],
+) => {
+    const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
+    let total = 0;
+    let delta = 0;
+
+    if (normalisedData) {
+        total = normalisedData.data[0]?.length || 0;
+    } else {
+        total = isInitialTab ? data?.length || 0 : comparisonData?.[comparisonIndex]?.length || 0;
+    }
+
+    if (normalisedData) {
+        if (isInitialTab) {
+            delta = data.length - (normalisedData.data?.[0]?.length || 0);
+        } else if (processedComparisonRows?.[comparisonIndex] && normalisedData.data?.[comparisonIndex + 1]) {
+            delta = processedComparisonRows[comparisonIndex].length - normalisedData.data[comparisonIndex + 1].length;
+        }
+    }
+
+    return { filtered, total, delta };
+};
+
+export const getStackedViewCounts = (
+    data: TypedStackedPerfRow[],
+    filteredData: TypedStackedPerfRow[],
+    processedComparisonStackedRows: TypedStackedPerfRow[][],
+    filteredComparisonRows: TypedStackedPerfRow[],
+    comparisonIndex: number,
+    isInitialTab: boolean,
+) => {
+    const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
+    let total = data?.length;
+
+    if (comparisonIndex > -1) {
+        total = processedComparisonStackedRows[comparisonIndex]?.length || 0;
+    }
+
+    return {
+        filtered,
+        total,
+        delta: total - filtered,
+    };
+};

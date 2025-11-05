@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { NoCID } from '../../model/NPEModel';
+import { FABRIC_EVENT_SCOPE_OPTIONS, FabricEventScopeColors, NoCID } from '../../model/NPEModel';
 
 export const NODE_SIZE = 50;
 
@@ -34,21 +34,21 @@ export interface LinkPoints {
 }
 
 const colorList: string[] = [
-    '#FFFFFF', // White
-    '#FF0000', // Red
-    '#0000FF', // Blue
-    '#FFFF00', // Yellow
-    '#FF00FF', // Fuchsia
-    '#FF4500', // OrangeRed
-    'rgb(91,131,19)',
-    '#9400D3', // DarkViolet
-    '#FFD700', // Gold
-    '#1E90FF', // DodgerBlue
-    '#007500', // LimeGreen
-    '#FF69B4', // HotPink
-    '#BA55D3', // MediumOrchid
-    '#7FFF00', // Chartreuse
-    '#B22222', // FireBrick
+    '#FFFFFF',
+    '#FF0000',
+    '#0000FF',
+    '#FFFF00',
+    '#FF00FF',
+    '#FF4500',
+    '#5B8313',
+    '#9400D3',
+    '#FFD700',
+    '#1E90FF',
+    '#007500',
+    '#FF69B4',
+    '#BA55D3',
+    '#7FFF00',
+    '#B22222',
 ];
 
 function* colorGenerator(): IterableIterator<string> {
@@ -232,16 +232,62 @@ export const calculateLinkCongestionColor = (value: number, min: number = 0, isH
     const max = 150;
     const normalizedVal = Math.min(value, max);
     const ratio = (normalizedVal - min) / (max - min);
-    const intensity = Math.round(ratio * 255);
-    if (isHC) {
-        return `rgb(${intensity},${intensity},${255 - intensity})`;
-    }
 
+    if (isHC) {
+        const r = Math.round(ratio * 255);
+        const g = Math.round(100 + ratio * (165 - 100));
+        const b = Math.round(255 - ratio * 255);
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+    const intensity = Math.round(ratio * 255);
     return `rgb(${intensity}, ${255 - intensity}, 0)`;
 };
 
+export const calculateFabricColor = (eventType: FABRIC_EVENT_SCOPE_OPTIONS | undefined): string => {
+    return eventType !== undefined ? FabricEventScopeColors[eventType] : 'rgb(255,255,255)';
+};
 export const getLines = (nocs: Array<{ transfer: number | null; nocId: NoCID }>) => {
     return nocs.map((noc) => {
         return getLinkPoints(noc.nocId, getRouteColor(noc.transfer));
     });
+};
+
+const NPE_ZONE_ALPHA = 0.5;
+
+const NPE_ZONE_COLOR = [
+    `rgba(255, 0, 0, ${NPE_ZONE_ALPHA})`, // Red
+    `rgba(0, 0, 255, ${NPE_ZONE_ALPHA})`, // Blue
+    `rgba(255, 255, 0, ${NPE_ZONE_ALPHA})`, // Yellow
+    `rgba(255, 0, 255, ${NPE_ZONE_ALPHA})`, // Fuchsia
+    `rgba(255, 69, 0, ${NPE_ZONE_ALPHA})`, // OrangeRed
+    `rgba(91, 131, 19, ${NPE_ZONE_ALPHA})`, // Olive-ish green
+    `rgba(148, 0, 211, ${NPE_ZONE_ALPHA})`, // DarkViolet
+    `rgba(255, 215, 0, ${NPE_ZONE_ALPHA})`, // Gold
+    `rgba(30, 144, 255, ${NPE_ZONE_ALPHA})`, // DodgerBlue
+    `rgba(0, 117, 0, ${NPE_ZONE_ALPHA})`, // LimeGreen
+    `rgba(255, 105, 180, ${NPE_ZONE_ALPHA})`, // HotPink
+    `rgba(186, 85, 211, ${NPE_ZONE_ALPHA})`, // MediumOrchid
+    `rgba(127, 255, 0, ${NPE_ZONE_ALPHA})`, // Chartreuse
+    `rgba(178, 34, 34, ${NPE_ZONE_ALPHA})`, // FireBrick
+];
+
+function* npeColorGenerator(): IterableIterator<string> {
+    let i = 0;
+    while (true) {
+        yield NPE_ZONE_COLOR[i]!;
+        i = (i + 1) % NPE_ZONE_COLOR.length;
+    }
+}
+
+const getNextNpeColor = npeColorGenerator();
+const npeColorMap = new Map<number | string, string>();
+export const getNpeZoneColor = (id: number | string | null): string => {
+    const DEFAULT_COLOR = `rgba(255, 255, 255, ${NPE_ZONE_ALPHA})`;
+    if (id === null) {
+        return DEFAULT_COLOR;
+    }
+    if (!npeColorMap.has(id)) {
+        npeColorMap.set(id, getNextNpeColor.next().value);
+    }
+    return npeColorMap.get(id) || DEFAULT_COLOR;
 };

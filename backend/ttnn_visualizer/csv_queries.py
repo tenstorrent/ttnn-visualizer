@@ -4,6 +4,7 @@
 
 import csv
 import json
+import logging
 import os
 import tempfile
 from io import StringIO
@@ -15,6 +16,8 @@ import zstd
 from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
+
+logger = logging.getLogger(__name__)
 
 
 class LocalCSVQueryRunner:
@@ -432,7 +435,7 @@ class OpsPerformanceReportQueries:
     }
 
     DEFAULT_SIGNPOST = None
-    DEFAULT_IGNORE_SIGNPOSTS = None
+    DEFAULT_IGNORE_SIGNPOSTS = True
     DEFAULT_MIN_PERCENTAGE = 0.5
     DEFAULT_ID_RANGE = None
     DEFAULT_NO_ADVICE = False
@@ -443,19 +446,26 @@ class OpsPerformanceReportQueries:
     DEFAULT_NO_STACK_BY_IN0 = True
 
     @classmethod
-    def generate_report(cls, instance):
+    def generate_report(cls, instance, **kwargs):
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
         csv_output_file = tempfile.mktemp(suffix=".csv")
         csv_stacked_output_file = tempfile.mktemp(suffix=".csv")
+        signpost = kwargs.get("signpost", cls.DEFAULT_SIGNPOST)
+        ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
+        stack_by_in0 = kwargs.get("stack_by_in0", cls.DEFAULT_NO_STACK_BY_IN0)
+
+        if signpost:
+            ignore_signposts = False
+
         # perf_report currently generates a PNG alongside the CSV using the same temp name - we'll just delete it afterwards
         stacked_png_file = os.path.splitext(csv_output_file)[0] + ".png"
 
         try:
             perf_report.generate_perf_report(
                 csv_file,
-                cls.DEFAULT_SIGNPOST,
-                cls.DEFAULT_IGNORE_SIGNPOSTS,
+                signpost,
+                ignore_signposts,
                 cls.DEFAULT_MIN_PERCENTAGE,
                 cls.DEFAULT_ID_RANGE,
                 csv_output_file,
@@ -464,10 +474,11 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_RAW_OP_CODES,
                 cls.DEFAULT_NO_HOST_OPS,
                 cls.DEFAULT_NO_STACKED_REPORT,
-                cls.DEFAULT_NO_STACK_BY_IN0,
+                stack_by_in0,
                 csv_stacked_output_file,
             )
         except Exception as e:
+            logger.error(f"Error generating performance report: {e}")
             raise DataFormatError(f"Error generating performance report: {e}") from e
 
         ops_perf_results = []
@@ -476,56 +487,89 @@ class OpsPerformanceReportQueries:
         for row in ops_perf_results_reader:
             ops_perf_results.append(row)
 
+        # Returns a list of unique signposts in the order they appear
+        # TODO: Signpost names are not unique but tt-perf-report treats them as such
+        captured_signposts = set()
+        signposts = []
+        for index, row in enumerate(ops_perf_results):
+            if row.get("OP TYPE") == "signpost":
+                op_code = row["OP CODE"]
+                op_id = index + 2  # Match IDs with row numbers in ops perf results csv
+                if not any(s["op_code"] == op_code for s in signposts):
+                    captured_signposts.add(op_code)
+                    signposts.append({"id": op_id, "op_code": op_code})
+
         report = []
 
-        try:
-            with open(csv_output_file, newline="") as csvfile:
-                reader = csv.reader(csvfile, delimiter=",")
-                next(reader, None)
-                for row in reader:
-                    processed_row = {
-                        column: row[index]
-                        for index, column in enumerate(cls.REPORT_COLUMNS)
-                        if index < len(row)
-                    }
-                    if "advice" in processed_row and processed_row["advice"]:
-                        processed_row["advice"] = processed_row["advice"].split(" • ")
-                    else:
-                        processed_row["advice"] = []
+        if os.path.exists(csv_output_file):
+            try:
+                with open(csv_output_file, newline="") as csvfile:
+                    reader = csv.reader(csvfile, delimiter=",")
+                    next(reader, None)
+                    for row in reader:
+                        processed_row = {
+                            column: row[index]
+                            for index, column in enumerate(cls.REPORT_COLUMNS)
+                            if index < len(row)
+                        }
+                        if "advice" in processed_row and processed_row["advice"]:
+                            processed_row["advice"] = processed_row["advice"].split(
+                                " • "
+                            )
+                        else:
+                            processed_row["advice"] = []
 
-                    for key, value in cls.PASSTHROUGH_COLUMNS.items():
-                        op_id = int(row[0])
-                        idx = (
-                            op_id - 2
-                        )  # IDs in result column one correspond to row numbers in ops perf results csv
-                        processed_row[key] = ops_perf_results[idx][value]
+                            # Get the op type from the raw file for this row as it is not returned from tt-perf-report
+                            op_id = int(row[0])
+                            raw_idx = op_id - 2
+                            if 0 <= raw_idx < len(ops_perf_results):
+                                processed_row["op_type"] = ops_perf_results[
+                                    raw_idx
+                                ].get("OP TYPE")
+                            else:
+                                processed_row["op_type"] = None
 
-                    report.append(processed_row)
-        except csv.Error as e:
-            raise DataFormatError() from e
-        finally:
-            os.unlink(csv_output_file)
+                        report.append(processed_row)
+            except csv.Error as e:
+                raise DataFormatError() from e
+            finally:
+                os.unlink(csv_output_file)
 
         stacked_report = []
 
-        try:
-            with open(csv_stacked_output_file, newline="") as csvfile:
-                reader = csv.reader(csvfile, delimiter=",")
-                next(reader, None)
+        if os.path.exists(csv_stacked_output_file):
+            try:
+                with open(csv_stacked_output_file, newline="") as csvfile:
+                    reader = csv.reader(csvfile, delimiter=",")
+                    next(reader, None)
 
-                for row in reader:
-                    processed_row = {
-                        column: row[index]
-                        for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
-                        if index < len(row)
-                    }
+                    for row in reader:
+                        processed_row = {
+                            column: row[index]
+                            for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
+                            if index < len(row)
+                        }
+
+                        if "op_code" in processed_row and any(
+                            processed_row["op_code"] in signpost["op_code"]
+                            for signpost in signposts
+                        ):
+                            processed_row["op_type"] = "signpost"
+                        else:
+                            processed_row["op_type"] = "unknown"
+
+                        stacked_report.append(processed_row)
+            except csv.Error as e:
+                raise DataFormatError() from e
+            finally:
+                os.unlink(csv_stacked_output_file)
+                if os.path.exists(stacked_png_file):
+                    os.unlink(stacked_png_file)
 
                     stacked_report.append(processed_row)
-        except csv.Error as e:
-            raise DataFormatError() from e
-        finally:
-            os.unlink(csv_stacked_output_file)
-            if os.path.exists(stacked_png_file):
-                os.unlink(stacked_png_file)
 
-        return {"report": report, "stacked_report": stacked_report}
+        return {
+            "report": report,
+            "stacked_report": stacked_report,
+            "signposts": signposts,
+        }

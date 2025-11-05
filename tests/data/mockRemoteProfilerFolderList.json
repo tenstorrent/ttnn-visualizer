@@ -1,0 +1,236 @@
+[
+    {
+        "reportName": "",
+        "remotePath": "/home/ctr-dblundell/reports/yolo_report",
+        "lastModified": 1762195129,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/llama-attn-21",
+        "lastModified": 1738170163,
+        "lastSynced": null
+    },
+    {
+        "reportName": "segformer_encoder_good",
+        "remotePath": "/home/ctr-dblundell/reports/segformer_encoder 2",
+        "lastModified": 1737388673,
+        "lastSynced": null
+    },
+    {
+        "reportName": "segformer_encoder_good",
+        "remotePath": "/home/ctr-dblundell/reports/segformer_encoder",
+        "lastModified": 1747228950,
+        "lastSynced": null
+    },
+    {
+        "reportName": "resnet_device_perf",
+        "remotePath": "/home/ctr-dblundell/reports/9890672024816326689",
+        "lastModified": 1743699706,
+        "lastSynced": null
+    },
+    {
+        "reportName": "TODO ADD NAME",
+        "remotePath": "/home/ctr-dblundell/reports/4022384122692481760",
+        "lastModified": 1755196264,
+        "lastSynced": null
+    },
+    {
+        "reportName": "",
+        "remotePath": "/home/ctr-dblundell/reports/buffer layout",
+        "lastModified": 1762195130,
+        "lastSynced": null
+    },
+    {
+        "reportName": "Segformer_Decoder_0216",
+        "remotePath": "/home/ctr-dblundell/reports/3119846618735255520",
+        "lastModified": 1739994202,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/llama 8 april 1 cluster",
+        "lastModified": 1745343352,
+        "lastSynced": null
+    },
+    {
+        "reportName": "LLAMA3.2_1B_DECODE_SINGLE_LAYER",
+        "remotePath": "/home/ctr-dblundell/reports/8874904312477388110",
+        "lastModified": 1753794901,
+        "lastSynced": null
+    },
+    {
+        "reportName": "",
+        "remotePath": "/home/ctr-dblundell/reports/15856334099832111637",
+        "lastModified": 1762195130,
+        "lastSynced": null
+    },
+    {
+        "reportName": "",
+        "remotePath": "/home/ctr-dblundell/reports/mem n150",
+        "lastModified": 1762195130,
+        "lastSynced": null
+    },
+    {
+        "reportName": "Demo_Segformer_Decoder_0216",
+        "remotePath": "/home/ctr-dblundell/reports/demo_segformer_decoder_3119846618735255520",
+        "lastModified": 1750709022,
+        "lastSynced": null
+    },
+    {
+        "reportName": "vit_8x6",
+        "remotePath": "/home/ctr-dblundell/reports/vit_wh_8x6__vis",
+        "lastModified": 1746457742,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_attn_30jan",
+        "remotePath": "/home/ctr-dblundell/reports/llama_attn_32l_10iterations_30jan_db",
+        "lastModified": 1741887325,
+        "lastSynced": null
+    },
+    {
+        "reportName": "vit_8x4",
+        "remotePath": "/home/ctr-dblundell/reports/vit_wh_8x4__vis",
+        "lastModified": 1746457590,
+        "lastSynced": null
+    },
+    {
+        "reportName": "lraspp",
+        "remotePath": "/home/ctr-dblundell/reports/minicpm_viz",
+        "lastModified": 1759774768,
+        "lastSynced": null
+    },
+    {
+        "reportName": "Demo_Segformer_Encoder_0216",
+        "remotePath": "/home/ctr-dblundell/reports/demo_segformer_encoder_11911356357027855134",
+        "lastModified": 1750710756,
+        "lastSynced": null
+    },
+    {
+        "reportName": "segnet-512-256",
+        "remotePath": "/home/ctr-dblundell/reports/14933683936648201485",
+        "lastModified": 1743013743,
+        "lastSynced": null
+    },
+    {
+        "reportName": "new_test_2",
+        "remotePath": "/home/ctr-dblundell/reports/13854563594264682723",
+        "lastModified": 1744654233,
+        "lastSynced": null
+    },
+    {
+        "reportName": "kiwi-dillation-opt",
+        "remotePath": "/home/ctr-dblundell/reports/marko-l1",
+        "lastModified": 1743094575,
+        "lastSynced": null
+    },
+    {
+        "reportName": "sdxl_28_10_30",
+        "remotePath": "/home/ctr-dblundell/reports/marko 1.2 errors",
+        "lastModified": 1756395748,
+        "lastSynced": null
+    },
+    {
+        "reportName": "topdown_hang",
+        "remotePath": "/home/ctr-dblundell/reports/topdown_hang_oct10_1335",
+        "lastModified": 1760114188,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/llama_attn_20jan",
+        "lastModified": 1737476360,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/17274205533343344897",
+        "lastModified": 1743013659,
+        "lastSynced": null
+    },
+    {
+        "reportName": "TODO ADD NAME",
+        "remotePath": "/home/ctr-dblundell/reports/memory_report",
+        "lastModified": 1752681448,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/lama-new-2",
+        "lastModified": 1738170128,
+        "lastSynced": null
+    },
+    {
+        "reportName": "Segformer_Encoder_0216",
+        "remotePath": "/home/ctr-dblundell/reports/segformer-encoder",
+        "lastModified": 1743013803,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/llama",
+        "lastModified": 1743080512,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/device_tensors_1",
+        "lastModified": 1738186853,
+        "lastSynced": null
+    },
+    {
+        "reportName": "mlp_tg",
+        "remotePath": "/home/ctr-dblundell/reports/galaxy",
+        "lastModified": 1741891843,
+        "lastSynced": null
+    },
+    {
+        "reportName": "halo_opt",
+        "remotePath": "/home/ctr-dblundell/reports/marko",
+        "lastModified": 1742914248,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/report_with_exception_oct01_2322",
+        "lastModified": 1759361748,
+        "lastSynced": null
+    },
+    {
+        "reportName": "new_test",
+        "remotePath": "/home/ctr-dblundell/reports/14458435790153556300",
+        "lastModified": 1743784312,
+        "lastSynced": null
+    },
+    {
+        "reportName": "TODO ADD NAME",
+        "remotePath": "/home/ctr-dblundell/reports/slavko",
+        "lastModified": 1746800275,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/scott-llama",
+        "lastModified": 1736964300,
+        "lastSynced": null
+    },
+    {
+        "reportName": "TODO ADD NAME",
+        "remotePath": "/home/ctr-dblundell/reports/new_report_simple_test",
+        "lastModified": 1755882355,
+        "lastSynced": null
+    },
+    {
+        "reportName": "llama_test",
+        "remotePath": "/home/ctr-dblundell/reports/llama_attn-jan20-2",
+        "lastModified": 1738170079,
+        "lastSynced": null
+    },
+    {
+        "reportName": "",
+        "remotePath": "/home/ctr-dblundell/reports/llama_mlp_db",
+        "lastModified": 1762195135,
+        "lastSynced": null
+    }
+]

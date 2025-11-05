@@ -5,22 +5,38 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
+import 'styles/components/NPEZoneFilterComponent.scss';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
+import { useAtom } from 'jotai';
 import {
     EVENT_TYPE_FILTER,
+    FABRIC_EVENT_SCOPE_OPTIONS,
+    FabricEventScopeColors,
+    KERNEL_PROCESS,
     NPEData,
+    NPERootZone,
+    NPERootZoneUXInfo,
+    NPEZone,
     NPE_COORDINATES,
+    NPE_COORDINATE_INDEX,
     NPE_LINK,
     NoCFlowBase,
     NoCTransfer,
     NoCType,
 } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
-import { NODE_SIZE, calculateLinkCongestionColor, getLines, getLinkPoints, resetRouteColors } from './drawingApi';
+import {
+    NODE_SIZE,
+    calculateFabricColor,
+    calculateLinkCongestionColor,
+    getLines,
+    getLinkPoints,
+    resetRouteColors,
+} from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
@@ -30,6 +46,9 @@ import NPEMetadata from './NPEMetadata';
 import { EmptyChipRenderer } from './EmptyChipRenderer';
 import { RouteOriginsRenderer } from './RouteOriginsRenderer';
 import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHandlers';
+import { altCongestionColorsAtom } from '../../store/app';
+import GlobalSwitch from '../GlobalSwitch';
+import NPEZoneFilterComponent from './NPEZoneFilterComponent';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -45,6 +64,16 @@ const PLAYBACK_SPEED_2X = 2;
 const LABEL_STEP_COUNT_TIMESTEPSCALE = 20;
 const LABEL_STEP_COUNT_CYCLESCALE = 10;
 
+enum VISUALIZATION_MODE {
+    CONGESTION,
+    TRANSFERS,
+}
+
+type RootzoneStateKey = string;
+const getRootZoneKey = (proc: KERNEL_PROCESS, address: NPE_COORDINATES): RootzoneStateKey => {
+    return `${proc}:${address.join(',')}`;
+};
+
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
@@ -53,6 +82,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
+    const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
+    const [openZonesPanel, setOpenZonesPanel] = useState<boolean>(false);
+    const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
+    const [expandedZoneMap, setExpandedZoneMap] = useState<Record<RootzoneStateKey, boolean>>({});
+
     let totalColsChips = 0;
     const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
@@ -65,8 +99,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+    const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
     const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
+    const zones: NPERootZone[] = useMemo(() => {
+        return npeData.zones || [];
+    }, [npeData]);
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
         return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
@@ -78,12 +116,36 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }
     }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
 
+    const selectedZoneList: NPERootZoneUXInfo[] = useMemo(() => {
+        if (selectedZoneAddress === null) {
+            return [];
+        }
+        return zones
+            .filter((rootZone) => {
+                return (
+                    rootZone.core[NPE_COORDINATE_INDEX.CHIP_ID] === selectedZoneAddress[NPE_COORDINATE_INDEX.CHIP_ID] &&
+                    rootZone.core[NPE_COORDINATE_INDEX.Y] === selectedZoneAddress[NPE_COORDINATE_INDEX.Y] &&
+                    rootZone.core[NPE_COORDINATE_INDEX.X] === selectedZoneAddress[NPE_COORDINATE_INDEX.X]
+                );
+            })
+            .map(
+                (rootZone): NPERootZoneUXInfo => ({
+                    ...rootZone,
+                    expandedState: expandedZoneMap[getRootZoneKey(rootZone.proc, rootZone.core)] ?? false,
+                }),
+            );
+    }, [expandedZoneMap, selectedZoneAddress, zones]);
+
     const links = useMemo(() => {
         const timestepData = npeData.timestep_data[selectedTimestep];
         timestepData.active_transfers.forEach((id) => {
             const transfer = npeData.noc_transfers.find((tr) => tr.id === id);
             // TODO: this functionality should MAYBE move to BE. https://github.com/orgs/tenstorrent/projects/178/views/1?pane=issue&itemId=124188622&issue=tenstorrent%7Cttnn-visualizer%7C745
-            if (transfer && fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS) {
+            if (
+                transfer &&
+                (fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS ||
+                    visualizationMode === VISUALIZATION_MODE.TRANSFERS)
+            ) {
                 transfer.route.forEach((route) => {
                     route.links.forEach((link) => {
                         timestepData.link_demand.forEach((linkDemand) => {
@@ -93,15 +155,23 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 linkDemand[NPE_LINK.Y] === link[NPE_LINK.Y] &&
                                 linkDemand[NPE_LINK.X] === link[NPE_LINK.X]
                             ) {
-                                linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = transfer.fabric_event_type || false;
+                                const targetFabric = transfer.fabric_event_type
+                                    ? FABRIC_EVENT_SCOPE_OPTIONS.FABRIC
+                                    : FABRIC_EVENT_SCOPE_OPTIONS.LOCAL;
+                                if (linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] === undefined) {
+                                    linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] = targetFabric;
+                                } else if (linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] !== targetFabric) {
+                                    linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] = FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
+                                }
                             }
                         });
                     });
                 });
             }
         });
+
         return timestepData;
-    }, [npeData.noc_transfers, npeData.timestep_data, selectedTimestep, fabricEventsFilter]);
+    }, [npeData.timestep_data, npeData.noc_transfers, selectedTimestep, fabricEventsFilter, visualizationMode]);
 
     const transfers = useMemo(() => {
         return npeData.noc_transfers
@@ -208,6 +278,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return prev < range - 1 ? prev + 1 : 0;
         });
     };
+    const onHandleZoneNavigation = (zone: NPEZone) => {
+        const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep ?? 1));
+        setSelectedTimestep(timestep);
+    };
     const handleScrubberChange = (value: number) => {
         stopAnimation();
         setSelectedTimestep(value);
@@ -232,27 +306,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const showAllTransfers = () => {
         setIsShowingAllTransfers(true);
         setSelectedNode(null);
-
         const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
             .map((transferId) => npeData.noc_transfers.find((tr) => tr.id === transferId))
             .filter((transfer): transfer is NoCTransfer => transfer !== undefined);
         setSelectedTransferList(activeTransfers as NoCTransfer[]);
     };
-
-    // DEBUG CODE, keeping for now
-    // useEffect(() => {
-    //     // console.log('------------ selected transfers -------------');
-    //     // console.log(selectedTransferList);
-    //     selectedTransferList
-    //         .find((transfer) => {
-    //             return transfer.id === 50;
-    //         })
-    //         ?.route.forEach((r) => console.log(r));
-    // }, [selectedTransferList]);
-    // useEffect(() => {
-    //     // console.log('route', highlightedRoute);
-    //     // console.log('transfer', highlightedTransfer);
-    // }, [highlightedRoute, highlightedTransfer]);
 
     const getOriginOpacity = (transfer: NoCFlowBase): number => {
         if (transfer.id === null || transfer.id === undefined) {
@@ -342,6 +400,46 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         </ButtonGroup>
                     </div>
                     <div className='npe-controls-line'>
+                        <Button
+                            text='Zones'
+                            className='zones-open-panel-btn'
+                            icon={IconNames.MultiSelect}
+                            active={openZonesPanel}
+                            onClick={() => setOpenZonesPanel(true)}
+                            disabled={!npeData.zones}
+                        />
+                        <ButtonGroup
+                            variant={ButtonVariant.OUTLINED}
+                            size={Size.SMALL}
+                        >
+                            <Button
+                                text='Congestion Mode'
+                                icon={
+                                    visualizationMode === VISUALIZATION_MODE.CONGESTION
+                                        ? IconNames.ENDORSED
+                                        : IconNames.CIRCLE
+                                }
+                                active={visualizationMode === VISUALIZATION_MODE.CONGESTION}
+                                onClick={() => setVisualizationMode(VISUALIZATION_MODE.CONGESTION)}
+                            />
+                            <Button
+                                text='Transfers Scope Mode'
+                                icon={
+                                    visualizationMode === VISUALIZATION_MODE.TRANSFERS
+                                        ? IconNames.ENDORSED
+                                        : IconNames.CIRCLE
+                                }
+                                active={visualizationMode === VISUALIZATION_MODE.TRANSFERS}
+                                onClick={() => setVisualizationMode(VISUALIZATION_MODE.TRANSFERS)}
+                            />
+                        </ButtonGroup>
+                        <GlobalSwitch
+                            label='Alternate congestion colors'
+                            checked={altCongestionColors}
+                            onChange={() => setAltCongestionColors(!altCongestionColors)}
+                        />
+                    </div>
+                    <div className='npe-controls-line'>
                         <Switch
                             label='NOC0'
                             checked={nocFilter === NoCType.NOC0 || nocFilter === null}
@@ -353,7 +451,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onChange={() => showNOCType(NoCType.NOC1)}
                         />
                         <Switch
-                            label='Fabric events'
+                            labelElement={
+                                <>
+                                    <div
+                                        className='color-square'
+                                        style={{
+                                            backgroundColor: FabricEventScopeColors[FABRIC_EVENT_SCOPE_OPTIONS.FABRIC],
+                                        }}
+                                    />{' '}
+                                    Fabric events
+                                </>
+                            }
                             checked={
                                 fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS ||
                                 fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
@@ -370,7 +478,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             }}
                         />
                         <Switch
-                            label='Local events'
+                            labelElement={
+                                <>
+                                    <div
+                                        className='color-square'
+                                        style={{
+                                            backgroundColor: FabricEventScopeColors[FABRIC_EVENT_SCOPE_OPTIONS.LOCAL],
+                                        }}
+                                    />{' '}
+                                    Local events
+                                </>
+                            }
                             checked={
                                 fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS ||
                                 fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
@@ -430,6 +548,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 <NPECongestionHeatMap
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
+                    currentTimestep={selectedTimestep}
+                    useTimesteps={timestepsScale}
+                    cyclesPerTimestep={npeData.common_info.cycles_per_timestep ?? 1}
+                    selectedZoneList={selectedZoneList}
                     nocType={nocFilter}
                 />
             </div>
@@ -462,6 +584,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     eth={eth}
                                     pcie={pcie}
                                     showActiveTransfers={showActiveTransfers}
+                                    selectedZoneAddress={selectedZoneAddress}
                                     isAnnotatingCores={isAnnotatingCores}
                                     TENSIX_SIZE={TENSIX_SIZE}
                                     renderChipId={chips.length > 1}
@@ -498,9 +621,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     {links?.link_demand.map((linkUtilization, index) => {
                                         let fabricCondition = true;
                                         if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
-                                            fabricCondition = linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] === true;
+                                            fabricCondition =
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.FABRIC ||
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
                                         } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
-                                            fabricCondition = linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] !== true;
+                                            fabricCondition =
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.LOCAL ||
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
                                         }
                                         if (
                                             linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
@@ -522,6 +653,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                 >
                                                     {/* // TENSIX CONGESTION */}
                                                     <TensixTransferRenderer
+                                                        key={`${index}-${linkUtilization[NPE_LINK.Y]}-${linkUtilization[NPE_LINK.X]}-${linkUtilization[NPE_LINK.NOC_ID]}-transfers`}
                                                         style={{
                                                             opacity:
                                                                 highlightedTransfer !== null ||
@@ -534,14 +666,27 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                         data={[
                                                             getLinkPoints(
                                                                 linkUtilization[NPE_LINK.NOC_ID],
-                                                                calculateLinkCongestionColor(
-                                                                    linkUtilization[NPE_LINK.DEMAND],
-                                                                ),
+                                                                visualizationMode === VISUALIZATION_MODE.CONGESTION
+                                                                    ? calculateLinkCongestionColor(
+                                                                          linkUtilization[NPE_LINK.DEMAND],
+                                                                          0,
+                                                                          altCongestionColors,
+                                                                      )
+                                                                    : calculateFabricColor(
+                                                                          linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE],
+                                                                      ),
                                                             ),
                                                         ]}
                                                         isMulticolor={false}
                                                     />
-                                                    <div style={{ fontSize: '9px', position: 'absolute', top: 0 }}>
+                                                    <div
+                                                        style={{
+                                                            fontSize: '9px',
+                                                            position: 'absolute',
+                                                            top: 0,
+                                                            opacity: 1,
+                                                        }}
+                                                    >
                                                         {linkUtilization[NPE_LINK.Y]}-{linkUtilization[NPE_LINK.X]}
                                                     </div>
                                                 </button>
@@ -649,23 +794,41 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
-
-                <ActiveTransferDetails
-                    groupedTransfersByNoCID={groupedTransfersByNoCID}
-                    selectedNode={selectedNode}
-                    congestionData={links?.link_demand.filter(
-                        (route) =>
-                            route[NPE_LINK.Y] === selectedNode?.coords[NPE_LINK.Y] &&
-                            route[NPE_LINK.X] === selectedNode?.coords[NPE_LINK.X],
-                    )}
-                    showActiveTransfers={showActiveTransfers}
-                    highlightedTransfer={highlightedTransfer}
-                    setHighlightedTransfer={setHighlightedTransfer}
-                    highlightedRoute={highlightedRoute}
-                    setHighlightedRoute={setHighlightedRoute}
-                    nocType={nocFilter}
-                />
+                {selectedNode && <div className='grid-spacer'>&nbsp;</div>}
             </div>
+            <ActiveTransferDetails
+                groupedTransfersByNoCID={groupedTransfersByNoCID}
+                selectedNode={selectedNode}
+                congestionData={links?.link_demand.filter(
+                    (route) =>
+                        route[NPE_LINK.Y] === selectedNode?.coords[NPE_LINK.Y] &&
+                        route[NPE_LINK.X] === selectedNode?.coords[NPE_LINK.X],
+                )}
+                showActiveTransfers={showActiveTransfers}
+                highlightedTransfer={highlightedTransfer}
+                setHighlightedTransfer={setHighlightedTransfer}
+                highlightedRoute={highlightedRoute}
+                setHighlightedRoute={setHighlightedRoute}
+                nocType={nocFilter}
+            />
+            <NPEZoneFilterComponent
+                npeData={npeData}
+                open={openZonesPanel}
+                onClose={() => {
+                    setOpenZonesPanel(false);
+                }}
+                onSelect={(coords: NPE_COORDINATES | null) => {
+                    setSelectedZoneAddress(coords);
+                }}
+                onExpand={(state, proc, address) => {
+                    const key = getRootZoneKey(proc, address);
+                    setExpandedZoneMap((prev) => ({
+                        ...prev,
+                        [key]: state,
+                    }));
+                }}
+                onZoneClick={onHandleZoneNavigation}
+            />
         </div>
     );
 };

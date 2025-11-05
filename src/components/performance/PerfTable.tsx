@@ -7,96 +7,123 @@ import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
+import { useAtomValue } from 'jotai';
 import {
     ColumnHeaders,
     ComparisonKeys,
+    TableFilter,
     TableHeader,
     TableHeaders,
-    TableKeys,
     TypedPerfTableRow,
+    signpostRowDefaults,
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useDeviceLog, useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
-import { formatCell, isHostOp } from '../../functions/perfFunctions';
+import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
+import { Signpost, formatCell, isHostOp } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
-import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
-import getCoreCount from '../../functions/getCoreCount';
-import LoadingSpinner from '../LoadingSpinner';
-import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { formatSize } from '../../functions/math';
+import PerfDeviceArchitecture from './PerfDeviceArchitecture';
+import { filterBySignpostAtom, hideHostOpsAtom } from '../../store/app';
+import LoadingSpinner from '../LoadingSpinner';
+import { PATTERN_COUNT } from '../../definitions/Performance';
+import { BufferType } from '../../model/BufferType';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
-    filters: Record<TableKeys, string> | null;
-    mathFidelityFilter: (string | number)[];
+    filters: TableFilter;
+    rawOpCodeFilter: string[];
+    mathFidelityFilter: string[];
+    bufferTypeFilter: (BufferType | null)[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
-    reportName?: string;
+    reportName: string | null;
+    signposts?: Signpost[];
 }
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
-const NO_META_DATA = 'n/a';
-const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss
 
 const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
     comparisonData,
     filters,
+    rawOpCodeFilter,
     mathFidelityFilter,
+    bufferTypeFilter,
     provideMatmulAdvice,
     hiliteHighDispatch,
     shouldHighlightRows,
-    reportName = null,
+    reportName,
+    signposts,
 }) => {
+    const filterBySignpost = useAtomValue(filterBySignpostAtom);
+    const hideHostOps = useAtomValue(hideHostOpsAtom);
+
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
     const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
     const navigate = useNavigate();
-    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog(reportName);
-
-    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
-    const maxCores = data ? getCoreCount(architecture, data) : 0;
-
-    const filterableColumnKeys = useMemo(
-        () => TableHeaders.filter((column) => column.filterable).map((column) => column.key),
-        [],
-    );
 
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
-        const parsedRows = sortAndFilterPerfTableData(
-            data?.filter((row) => !isHostOp(row.raw_op_code)),
+        let parsedRows = sortAndFilterPerfTableData(
+            data,
             filters,
-            filterableColumnKeys,
+            rawOpCodeFilter,
             mathFidelityFilter,
+            bufferTypeFilter,
+            hideHostOps,
         );
+
+        // If filtering by signpost, add a fake row at the top to represent the signpost as tt-perf-report removes it from the data
+        if (filterBySignpost && parsedRows.length > 0) {
+            parsedRows = [
+                {
+                    ...signpostRowDefaults,
+                    id: filterBySignpost.id,
+                    op_code: filterBySignpost.op_code,
+                    raw_op_code: filterBySignpost.op_code,
+                },
+                ...parsedRows,
+            ];
+        }
 
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
-    }, [data, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
+    }, [
+        data,
+        filters,
+        rawOpCodeFilter,
+        mathFidelityFilter,
+        bufferTypeFilter,
+        sortTableFields,
+        filterBySignpost,
+        hideHostOps,
+    ]);
 
     const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
         () =>
             comparisonData?.map((dataset) => {
                 const parsedRows = sortAndFilterPerfTableData(
-                    dataset.filter((row) => !isHostOp(row.raw_op_code)),
+                    dataset,
                     filters,
-                    filterableColumnKeys,
+                    rawOpCodeFilter,
                     mathFidelityFilter,
+                    bufferTypeFilter,
+                    hideHostOps,
                 );
 
                 // Still some awkward casting here
                 return [...sortTableFields(parsedRows as [])];
             }) || [],
-        [comparisonData, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields],
+        [comparisonData, filters, rawOpCodeFilter, mathFidelityFilter, bufferTypeFilter, sortTableFields, hideHostOps],
     );
 
     const visibleHeaders = [
@@ -132,7 +159,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                             <Button
                                 icon={IconNames.Random}
                                 onClick={() => navigate(`${ROUTES.NPE}/${manifestRecord.file}`)}
-                                variant='minimal'
+                                variant={ButtonVariant.MINIMAL}
                                 className='graph-button'
                             />
                         </Tooltip>
@@ -145,6 +172,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
         return formatCell(row, header, operations, highlight);
     };
+
+    if (!data) {
+        return <LoadingSpinner />;
+    }
 
     return (
         <>
@@ -159,182 +190,178 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 </div>
             )}
 
-            <div className='meta-data'>
-                {isLoadingDeviceLog ? (
-                    <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
-                ) : (
-                    <>
-                        <p>
-                            <strong>Arch: </strong>
-                            {architecture || NO_META_DATA}
-                        </p>
-                        <p>
-                            <strong>Cores: </strong>
-                            {maxCores || NO_META_DATA}
-                        </p>
-                    </>
-                )}
-            </div>
+            <PerfDeviceArchitecture
+                data={data}
+                reportName={reportName}
+            />
 
-            <table className='perf-table monospace'>
-                <thead className='table-header'>
-                    <tr>
-                        {visibleHeaders.map((h) => {
-                            const targetSortDirection =
-                                // eslint-disable-next-line no-nested-ternary
-                                sortingColumn === h.key
-                                    ? sortDirection === SortingDirection.ASC
-                                        ? SortingDirection.DESC
-                                        : SortingDirection.ASC
-                                    : sortDirection;
+            {data?.length > 0 ? (
+                <table className='perf-table monospace'>
+                    <thead className='table-header'>
+                        <tr>
+                            {visibleHeaders.map((h) => {
+                                const targetSortDirection =
+                                    // eslint-disable-next-line no-nested-ternary
+                                    sortingColumn === h.key
+                                        ? sortDirection === SortingDirection.ASC
+                                            ? SortingDirection.DESC
+                                            : SortingDirection.ASC
+                                        : sortDirection;
 
-                            return (
-                                <th
-                                    key={h.key}
-                                    className='cell-header'
-                                >
-                                    {h.sortable ? (
-                                        <Button
-                                            onClick={() => changeSorting(h.key)(targetSortDirection)}
-                                            variant={ButtonVariant.MINIMAL}
-                                            size={Size.SMALL}
-                                        >
-                                            <span className='header-label'>{h.label}</span>
-
-                                            {sortingColumn === h.key ? (
-                                                <Icon
-                                                    className={classNames(
-                                                        {
-                                                            'is-active': sortingColumn === h.key,
-                                                        },
-                                                        'sort-icon',
-                                                    )}
-                                                    icon={
-                                                        sortDirection === SortingDirection.ASC
-                                                            ? IconNames.CARET_UP
-                                                            : IconNames.CARET_DOWN
-                                                    }
-                                                />
-                                            ) : (
-                                                <Icon
-                                                    className={classNames('sort-icon')}
-                                                    icon={IconNames.CARET_DOWN}
-                                                />
-                                            )}
-                                        </Button>
-                                    ) : (
-                                        <span className='header-label no-button'>{h.label}</span>
-                                    )}
-
-                                    {/* TODO: May want this in the near future */}
-                                    {/* {h?.filterable && (
-                                            <div className='column-filter'>
-                                                <InputGroup
-                                                    asyncControl
-                                                    size='small'
-                                                    onValueChange={(value) => updateColumnFilter(h.key, value)}
-                                                    placeholder='Filter...'
-                                                    value={filters?.[h.key]}
-                                                />
-                                            </div>
-                                        )} */}
-                                </th>
-                            );
-                        })}
-                    </tr>
-                </thead>
-
-                <tbody>
-                    {tableFields?.map((row, i) => (
-                        <Fragment key={i}>
-                            <tr
-                                className={classNames({
-                                    'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
-                                })}
-                            >
-                                {visibleHeaders.map((h) => (
-                                    <td
+                                return (
+                                    <th
                                         key={h.key}
-                                        className={classNames('cell', {
-                                            'align-right': h.key === ColumnHeaders.math_fidelity,
-                                            'break-word': h.key === ColumnHeaders.op_code,
-                                        })}
+                                        className='cell-header'
                                     >
-                                        {cellFormattingProxy(row, h, operations, filters?.[h.key])}
-                                    </td>
-                                ))}
-                            </tr>
-
-                            {comparisonDataTableFields?.length > 0 &&
-                                comparisonDataTableFields.map((dataset, index) => (
-                                    <tr
-                                        key={`comparison-${i}-${index}`}
-                                        className={classNames(
-                                            {
-                                                'missing-data':
-                                                    shouldHighlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
-                                            },
-                                            'comparison-row',
-                                            `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
-                                        )}
-                                    >
-                                        {visibleHeaders.map((h) => (
-                                            <td
-                                                key={h.key}
-                                                className={classNames('cell', {
-                                                    'align-right': h.key === ColumnHeaders.math_fidelity,
-                                                    'break-word': h.key === ColumnHeaders.op_code,
-                                                })}
+                                        {h.sortable ? (
+                                            <Button
+                                                onClick={() => changeSorting(h.key)(targetSortDirection)}
+                                                variant={ButtonVariant.MINIMAL}
+                                                size={Size.SMALL}
                                             >
-                                                {ComparisonKeys.includes(h.key) &&
-                                                    dataset[i] &&
-                                                    formatCell(dataset[i], h, operations, filters?.[h.key])}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))}
-                            {provideMatmulAdvice && row.op_code.includes('Matmul') && (
-                                <tr>
-                                    <td
-                                        colSpan={visibleHeaders.length}
-                                        className='cell advice'
-                                    >
-                                        <ul>
-                                            {row?.advice.map((advice, j) => (
-                                                <li key={`advice-${j}`}>{advice}</li>
-                                            ))}
-                                        </ul>
-                                    </td>
-                                </tr>
-                            )}
-                        </Fragment>
-                    ))}
-                </tbody>
+                                                <span className='header-label'>{h.label}</span>
 
-                <tfoot className='table-footer'>
-                    <tr>
-                        {visibleHeaders.length > 0 &&
-                            data?.length > 0 &&
-                            visibleHeaders.map((header) => (
-                                <td
-                                    key={header.key}
+                                                {sortingColumn === h.key ? (
+                                                    <Icon
+                                                        className={classNames(
+                                                            {
+                                                                'is-active': sortingColumn === h.key,
+                                                            },
+                                                            'sort-icon',
+                                                        )}
+                                                        icon={
+                                                            sortDirection === SortingDirection.ASC
+                                                                ? IconNames.CARET_UP
+                                                                : IconNames.CARET_DOWN
+                                                        }
+                                                    />
+                                                ) : (
+                                                    <Icon
+                                                        className={classNames('sort-icon')}
+                                                        icon={IconNames.CARET_DOWN}
+                                                    />
+                                                )}
+                                            </Button>
+                                        ) : (
+                                            <span className='header-label no-button'>{h.label}</span>
+                                        )}
+
+                                        {/* TODO: May want this in the near future */}
+                                        {/* {h?.filterable && (
+                                                <div className='column-filter'>
+                                                    <InputGroup
+                                                        asyncControl
+                                                        size={Size.SMALL}
+                                                        onValueChange={(value) => updateColumnFilter(h.key, value)}
+                                                        placeholder='Filter...'
+                                                        value={filters?.[h.key]}
+                                                    />
+                                                </div>
+                                            )} */}
+                                    </th>
+                                );
+                            })}
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {tableFields?.map((row, i) => (
+                            <Fragment key={i}>
+                                <tr
                                     className={classNames({
-                                        'no-wrap':
-                                            header.key === ColumnHeaders.op_code ||
-                                            header.key === ColumnHeaders.op_to_op_gap,
+                                        'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
+                                        'signpost-op': signposts?.map((sp) => sp.op_code).includes(row.raw_op_code),
                                     })}
                                 >
-                                    {getTotalsForHeader(header, data)}
-                                </td>
-                            ))}
-                    </tr>
-                </tfoot>
-            </table>
+                                    {visibleHeaders.map((h) => (
+                                        <td
+                                            key={h.key}
+                                            className={classNames('cell', {
+                                                'align-right': h.key === ColumnHeaders.math_fidelity,
+                                                'break-word': h.key === ColumnHeaders.op_code,
+                                            })}
+                                        >
+                                            {cellFormattingProxy(row, h, operations, filters?.[h.key])}
+                                        </td>
+                                    ))}
+                                </tr>
+
+                                {comparisonDataTableFields?.length > 0 &&
+                                    comparisonDataTableFields.map((dataset, index) => (
+                                        <tr
+                                            key={`comparison-${i}-${index}`}
+                                            className={classNames(
+                                                {
+                                                    'missing-data':
+                                                        shouldHighlightRows &&
+                                                        dataset[i]?.raw_op_code.includes('MISSING'),
+                                                },
+                                                'comparison-row',
+                                                `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
+                                            )}
+                                        >
+                                            {visibleHeaders.map((h) => (
+                                                <td
+                                                    key={h.key}
+                                                    className={classNames('cell', {
+                                                        'align-right': h.key === ColumnHeaders.math_fidelity,
+                                                        'break-word': h.key === ColumnHeaders.op_code,
+                                                    })}
+                                                >
+                                                    {ComparisonKeys.includes(h.key) &&
+                                                        dataset[i] &&
+                                                        formatCell(dataset[i], h, operations, filters?.[h.key])}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                {provideMatmulAdvice && row.op_code.includes('Matmul') && (
+                                    <tr>
+                                        <td
+                                            colSpan={visibleHeaders.length}
+                                            className='cell advice'
+                                        >
+                                            <ul>
+                                                {row?.advice.map((advice, j) => (
+                                                    <li key={`advice-${j}`}>{advice}</li>
+                                                ))}
+                                            </ul>
+                                        </td>
+                                    </tr>
+                                )}
+                            </Fragment>
+                        ))}
+                    </tbody>
+
+                    <tfoot className='table-footer'>
+                        <tr>
+                            {visibleHeaders.length > 0 &&
+                                data?.length > 0 &&
+                                visibleHeaders.map((header) => (
+                                    <td
+                                        key={header.key}
+                                        className={classNames({
+                                            'no-wrap':
+                                                header.key === ColumnHeaders.op_code ||
+                                                header.key === ColumnHeaders.op_to_op_gap,
+                                        })}
+                                    >
+                                        {getTotalsForFooter(header, data, hideHostOps)}
+                                    </td>
+                                ))}
+                        </tr>
+                    </tfoot>
+                </table>
+            ) : (
+                <p>
+                    <em>No data to display</em>
+                </p>
+            )}
         </>
     );
 };
 
-const getTotalsForHeader = (header: TableHeader, data: TypedPerfTableRow[]): string => {
+const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[], hideHostOps: boolean): string => {
     if (header.key === ColumnHeaders.total_percent) {
         return `100 %`;
     }
@@ -350,7 +377,7 @@ const getTotalsForHeader = (header: TableHeader, data: TypedPerfTableRow[]): str
         const hostOpsCount = data.filter((row) => isHostOp(row.raw_op_code)).length;
         const deviceOpsCount = data.length - hostOpsCount;
 
-        return `${deviceOpsCount} device ops, ${hostOpsCount} host ops`;
+        return `${deviceOpsCount} device ops${hostOpsCount !== 0 && !hideHostOps ? `, ${hostOpsCount} host ops` : ''}`;
     }
 
     if (header.key === ColumnHeaders.op_to_op_gap) {

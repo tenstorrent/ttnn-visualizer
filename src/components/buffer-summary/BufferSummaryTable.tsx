@@ -6,7 +6,7 @@ import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
-import { Checkbox, HotkeysProvider, Icon, InputGroup } from '@blueprintjs/core';
+import { Checkbox, HotkeysProvider, Icon, InputGroup, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { BuffersByOperationData } from '../../hooks/useAPI';
 import { BufferTypeLabel } from '../../model/BufferType';
@@ -20,65 +20,7 @@ import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData } from '../../model/APIData';
 import { selectedTensorAtom } from '../../store/app';
-
-interface ColumnDefinition {
-    name: string;
-    key: COLUMN_KEYS;
-    sortable?: boolean;
-    filterable?: boolean;
-}
-
-enum COLUMN_HEADERS {
-    operation_id = 'Operation',
-    tensor_id = 'Tensor',
-    address = 'Address',
-    hexAddress = 'Address (hex)',
-    size = 'Size',
-    buffer_type = 'Buffer Type',
-    device_id = 'Device Id',
-}
-
-type COLUMN_KEYS = keyof typeof COLUMN_HEADERS;
-
-const COLUMNS: ColumnDefinition[] = [
-    {
-        name: COLUMN_HEADERS.operation_id,
-        key: 'operation_id',
-        sortable: true,
-        filterable: true,
-    },
-    {
-        name: COLUMN_HEADERS.tensor_id,
-        key: 'tensor_id',
-        sortable: true,
-        filterable: true,
-    },
-    {
-        name: COLUMN_HEADERS.address,
-        key: 'address',
-        sortable: true,
-        filterable: true,
-    },
-    {
-        name: COLUMN_HEADERS.hexAddress,
-        key: 'hexAddress',
-        sortable: true,
-        filterable: true,
-    },
-    {
-        name: COLUMN_HEADERS.size,
-        key: 'size',
-        sortable: true,
-    },
-    {
-        name: COLUMN_HEADERS.buffer_type,
-        key: 'buffer_type',
-    },
-    {
-        name: COLUMN_HEADERS.device_id,
-        key: 'device_id',
-    },
-];
+import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperationData[];
@@ -93,7 +35,7 @@ interface SummaryTableBuffer extends BufferData {
 }
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(COLUMNS[0].key);
+    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
     const selectedTensor = useAtomValue(selectedTensorAtom);
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
@@ -101,12 +43,12 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 
     const tableRef = useRef<Table2 | null>(null);
     const filterableColumnKeys = useMemo(
-        () => COLUMNS.filter((column) => column.filterable).map((column) => column.key),
+        () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
     );
-    const [filters, setFilters] = useState<Record<COLUMN_KEYS, string>>(
-        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [COLUMN_KEYS, string])) as Record<
-            COLUMN_KEYS,
+    const [filters, setFilters] = useState<BufferTableFilters>(
+        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [ColumnKeys, string])) as Record<
+            ColumnKeys,
             string
         >,
     );
@@ -149,7 +91,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             .flat() as SummaryTableBuffer[];
     }, [buffersByOperation, tensorListByOperation, uniqueBuffersByOperationList, mergedByDevice]);
 
-    const updateColumnFilter = (key: COLUMN_KEYS, value: string) => {
+    const updateColumnFilter = (key: ColumnKeys, value: string) => {
         setFilters({
             ...filters,
             [key]: value,
@@ -157,10 +99,10 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     };
 
     const createColumns = () => {
-        return COLUMNS.map((column) => createColumn(column.key, column.name));
+        return Columns.map((column) => createColumn(column.key, column.name));
     };
 
-    const createColumn = (key: COLUMN_KEYS, label: string) => (
+    const createColumn = (key: ColumnKeys, label: string) => (
         <Column
             key={key}
             name={label}
@@ -169,10 +111,10 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         />
     );
 
-    const createCellHeader = (key: COLUMN_KEYS, label: string) => {
+    const createCellHeader = (key: ColumnKeys, label: string) => {
         let targetSortDirection = sortDirection;
 
-        const definition = COLUMNS.find((column) => column.key === key);
+        const definition = Columns.find((column) => column.key === key);
 
         if (sortingColumn === key) {
             targetSortDirection = sortDirection === SortingDirection.ASC ? SortingDirection.DESC : SortingDirection.ASC;
@@ -208,7 +150,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 {definition?.filterable && (
                     <div className='column-filter'>
                         <InputGroup
-                            size='small'
+                            size={Size.SMALL}
                             asyncControl
                             onChange={(e) => updateColumnFilter(key, e.target.value)}
                             placeholder='Filter...'
@@ -232,7 +174,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 const isFilteredOut = Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
-                        const bufferValue = getCellText(buffer, key as COLUMN_KEYS);
+                        const bufferValue = getCellText(buffer, key as ColumnKeys);
 
                         return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
                     });
@@ -309,7 +251,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
                     columnWidths={[200, 120, 120, 140, 120, 120, 100]}
                     ref={tableRef}
-                    getCellClipboardData={(row, col) => getCellText(tableFields[row], COLUMNS[col].key)}
+                    getCellClipboardData={(row, col) => getCellText(tableFields[row], Columns[col].key)}
                 >
                     {createColumns()}
                 </BlueprintTable>
@@ -320,7 +262,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     );
 }
 
-const getCellText = (buffer: SummaryTableBuffer, key: COLUMN_KEYS) => {
+const getCellText = (buffer: SummaryTableBuffer, key: ColumnKeys) => {
     let textValue = buffer[key]?.toString() || '';
 
     if (key === 'tensor_id') {
@@ -339,12 +281,7 @@ const getCellText = (buffer: SummaryTableBuffer, key: COLUMN_KEYS) => {
 };
 
 const createCell =
-    (
-        key: COLUMN_KEYS,
-        tableFields: SummaryTableBuffer[],
-        filters: Record<COLUMN_KEYS, string>,
-        selectedRows: number[],
-    ) =>
+    (key: ColumnKeys, tableFields: SummaryTableBuffer[], filters: BufferTableFilters, selectedRows: number[]) =>
     (rowIndex: number) => (
         <Cell className={classNames({ 'row-is-active': selectedRows.includes(rowIndex) })}>
             {getCellContent(key, rowIndex, tableFields, filters)}
@@ -352,10 +289,10 @@ const createCell =
     );
 
 const getCellContent = (
-    key: COLUMN_KEYS,
+    key: ColumnKeys,
     rowIndex: number,
     tableFields: SummaryTableBuffer[],
-    filters: Record<COLUMN_KEYS, string>,
+    filters: BufferTableFilters,
 ) => {
     const buffer = tableFields[rowIndex] as SummaryTableBuffer;
     const textValue = getCellText(buffer, key);
@@ -383,7 +320,7 @@ const getCellContent = (
         );
     }
 
-    return COLUMNS.find((column) => column.key === key)?.filterable ? (
+    return Columns.find((column) => column.key === key)?.filterable ? (
         <HighlightedText
             text={textValue}
             filter={filters[key]}
@@ -393,7 +330,7 @@ const getCellContent = (
     );
 };
 
-function isFiltersActive(filters: Record<COLUMN_KEYS, string>) {
+function isFiltersActive(filters: BufferTableFilters) {
     return Object.values(filters).some((filter) => filter.length > 0);
 }
 

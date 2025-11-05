@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useEffect } from 'react';
-import { Button, ButtonGroup, ButtonVariant, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
@@ -119,12 +119,27 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 {isLoading ? (
                     <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
                 ) : (
-                    <h2 className='title'>
-                        {operation && `${operation.id} ${operation.name}`}{' '}
-                        {operation?.operationFileIdentifier && (
-                            <span className='small'>{`(${operation.operationFileIdentifier})`}</span>
+                    <>
+                        <h2 className='title'>
+                            {operation && `${operation.id} ${operation.name}`}{' '}
+                            {operation?.operationFileIdentifier && (
+                                <span className='small'>{`(${operation.operationFileIdentifier})`}</span>
+                            )}
+                        </h2>
+
+                        {operation?.error && (
+                            <Tooltip
+                                content='Error recorded in operation'
+                                placement={PopoverPosition.TOP}
+                            >
+                                <Icon
+                                    icon={IconNames.ERROR}
+                                    intent={Intent.DANGER}
+                                    size={20}
+                                />
+                            </Tooltip>
                         )}
-                    </h2>
+                    </>
                 )}
             </ButtonGroup>
         </nav>

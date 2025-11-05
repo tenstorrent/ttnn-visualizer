@@ -2,14 +2,16 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useState } from 'react';
-import { Button, Icon, Intent, Switch, Tag } from '@blueprintjs/core';
+import React, { useState } from 'react';
+import { useAtomValue } from 'jotai';
+import { Button, ButtonVariant, Icon, Switch, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
 import { formatPercentage, formatUnit } from '../../functions/math';
 import 'styles/components/ActiveTransferDetails.scss';
+import { altCongestionColorsAtom } from '../../store/app';
 
 const ActiveTransferDetails = ({
     groupedTransfersByNoCID,
@@ -33,6 +35,7 @@ const ActiveTransferDetails = ({
     setHighlightedRoute: (route: number | null) => void;
     nocType: NoCType | null;
 }) => {
+    const altCongestionColors = useAtomValue(altCongestionColorsAtom);
     const hasData = Object.keys(groupedTransfersByNoCID).length !== 0;
     const [showRoutes, setShowRoutes] = useState(false);
     return (
@@ -47,7 +50,7 @@ const ActiveTransferDetails = ({
                         <span>Active transfers through {selectedNode?.coords.join('-')}</span>
                         <Button
                             aria-label='Close active transfers'
-                            variant='minimal'
+                            variant={ButtonVariant.MINIMAL}
                             icon={IconNames.CROSS}
                             onClick={() => showActiveTransfers(null)}
                         />
@@ -77,7 +80,13 @@ const ActiveTransferDetails = ({
                                         {nocId}
                                         <span
                                             className='color-square'
-                                            style={{ backgroundColor: calculateLinkCongestionColor(congestion) }}
+                                            style={{
+                                                backgroundColor: calculateLinkCongestionColor(
+                                                    congestion,
+                                                    0,
+                                                    altCongestionColors,
+                                                ),
+                                            }}
                                         />
                                         {formatPercentage(congestion)}
                                     </h4>
@@ -123,44 +132,50 @@ const ActiveTransferDetails = ({
                                                 <div>{formatUnit(transfer.total_bytes, 'byte')}</div>
                                                 <div>{transfer.noc_event_type}</div>
                                                 {transfer.route[0].injection_rate.toFixed(2)} b/cycle
-                                                {transfer.fabric_event_type && (
-                                                    <Tag
-                                                        icon={IconNames.FLOW_LINEAR}
-                                                        intent={Intent.PRIMARY}
-                                                        minimal
-                                                    >
-                                                        Fabric
-                                                    </Tag>
-                                                )}
-                                                {showRoutes && (
-                                                    <ul className='routes'>
-                                                        {transfer.route.map((route, index) => (
-                                                            <li
-                                                                key={`${transfer.id}-${route.src}-${route.dst.join('-')}`}
-                                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                                                onMouseOver={() => setHighlightedRoute(index)}
-                                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                                                onMouseOut={() => setHighlightedRoute(null)}
-                                                                style={{
-                                                                    opacity:
-                                                                        highlightedRoute === null ||
-                                                                        (highlightedRoute === index &&
-                                                                            highlightedTransfer === transfer)
-                                                                            ? 1
-                                                                            : 0.5,
-                                                                }}
-                                                            >
-                                                                <Icon icon={IconNames.FLOW_LINEAR} />
-                                                                {route.src.join('-')}
-                                                                <Icon
-                                                                    size={11}
-                                                                    icon={IconNames.ArrowRight}
-                                                                />{' '}
-                                                                {route.dst.map((el) => el.join('-')).join('-')}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                )}
+                                                <div className='transfer-properties'>
+                                                    {transfer.fabric_event_type && (
+                                                        <Tag
+                                                            className='fabric-tag'
+                                                            icon={IconNames.FLOW_LINEAR}
+                                                            minimal
+                                                        >
+                                                            Fabric
+                                                        </Tag>
+                                                    )}
+
+                                                    {transfer.zones && <ZoneDetails zones={transfer.zones} />}
+                                                    {showRoutes && (
+                                                        <ul className='routes'>
+                                                            {transfer.route.map((route, index) => (
+                                                                <li
+                                                                    key={`${transfer.id}-${route.src}-${route.dst.join('-')}`}
+                                                                    // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                                    onMouseOver={() => setHighlightedRoute(index)}
+                                                                    // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                                    onMouseOut={() => setHighlightedRoute(null)}
+                                                                    style={{
+                                                                        opacity:
+                                                                            highlightedRoute === null ||
+                                                                            (highlightedRoute === index &&
+                                                                                highlightedTransfer === transfer)
+                                                                                ? 1
+                                                                                : 0.5,
+                                                                    }}
+                                                                >
+                                                                    <Icon icon={IconNames.FLOW_LINEAR} />
+                                                                    {route.src.join('-')}
+                                                                    <Icon
+                                                                        size={11}
+                                                                        icon={IconNames.ArrowRight}
+                                                                    />{' '}
+                                                                    {route.dst.length === 1
+                                                                        ? route.dst[0].join('-')
+                                                                        : `${route.dst[0].join('-')} - ${route.dst[route.dst.length - 1].join('-')}`}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -172,5 +187,22 @@ const ActiveTransferDetails = ({
             )}
         </aside>
     );
+};
+
+interface ZoneDetailsProps {
+    zones: string;
+}
+
+const ZoneDetails: React.FC<ZoneDetailsProps> = ({ zones }) => {
+    const render = zones.split('/').map((zone: string, index: number) => (
+        <Tag
+            style={{ marginLeft: `${15 * index}px` }}
+            key={zone}
+            minimal
+        >
+            {zone}
+        </Tag>
+    ));
+    return <div className='zones'>{render}</div>;
 };
 export default ActiveTransferDetails;

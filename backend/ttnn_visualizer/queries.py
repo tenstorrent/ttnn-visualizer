@@ -12,6 +12,7 @@ from ttnn_visualizer.models import (
     BufferPage,
     Device,
     DeviceOperation,
+    ErrorRecord,
     InputTensor,
     Instance,
     Operation,
@@ -155,6 +156,13 @@ class DatabaseQueries:
         for row in rows:
             operation_id, stack_trace = row
             yield StackTrace(operation_id, stack_trace=stack_trace)
+
+    def query_error_records(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[ErrorRecord, None, None]:
+        rows = self._query_table("errors", filters)
+        for row in rows:
+            yield ErrorRecord(*row)
 
     def query_tensor_comparisons(
         self, local: bool = True, filters: Optional[Dict[str, Any]] = None

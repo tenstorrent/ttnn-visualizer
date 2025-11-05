@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Fragment, UIEvent, useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
@@ -20,6 +20,7 @@ import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
+import { SCROLL_TOLERANCE_PX } from '../../definitions/ScrollPositions';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -43,16 +44,17 @@ const CHART_DATA: Partial<PlotData>[][] = [
 ];
 
 interface BufferSummaryPlotRendererDRAMProps {
-    buffersByOperation: BuffersByOperationData[];
+    uniqueBuffersByOperationList: BuffersByOperationData[];
     tensorListByOperation: TensorsByOperationByAddress;
 }
 
 function BufferSummaryPlotRendererDRAM({
-    buffersByOperation,
+    uniqueBuffersByOperationList,
     tensorListByOperation,
 }: BufferSummaryPlotRendererDRAMProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [activeRow, setActiveRow] = useState<number | null>(null);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
@@ -60,17 +62,19 @@ function BufferSummaryPlotRendererDRAM({
 
     const numberOfOperations = useMemo(
         () =>
-            buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
-        [buffersByOperation],
+            uniqueBuffersByOperationList && uniqueBuffersByOperationList.length >= 0
+                ? uniqueBuffersByOperationList.length
+                : PLACEHOLDER_ARRAY_SIZE,
+        [uniqueBuffersByOperationList],
     );
 
     const segmentedChartData: BuffersByOperationData[][] = useMemo(() => {
         if (isZoomedIn) {
-            return getSplitBuffers(buffersByOperation);
+            return getSplitBuffers(uniqueBuffersByOperationList);
         }
 
-        return [buffersByOperation];
-    }, [buffersByOperation, isZoomedIn]);
+        return [uniqueBuffersByOperationList];
+    }, [uniqueBuffersByOperationList, isZoomedIn]);
 
     const zoomedMemoryOptions = useMemo(
         () =>
@@ -89,21 +93,30 @@ function BufferSummaryPlotRendererDRAM({
     );
 
     const virtualizer = useVirtualizer({
-        count: buffersByOperation?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
         estimateSize: () => OPERATION_EL_HEIGHT,
         overscan: 20,
     });
     const virtualItems = virtualizer.getVirtualItems();
 
-    const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const el = event.currentTarget;
-
-        setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
-        setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
+    const handleUserScrolling = () => {
+        updateScrollShade();
     };
 
-    return buffersByOperation && tensorListByOperation ? (
+    const updateScrollShade = () => {
+        if (scrollElementRef.current) {
+            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
+
+            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
+
+            const scrollBottom = scrollTop + offsetHeight;
+
+            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        }
+    };
+
+    return uniqueBuffersByOperationList && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
             <div className='controls'>
                 <Switch
@@ -158,7 +171,7 @@ function BufferSummaryPlotRendererDRAM({
                             'scroll-shade-top': hasScrolledFromTop,
                             'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                         })}
-                        onScroll={(event) => handleUserScrolling(event)}
+                        onScroll={handleUserScrolling}
                         ref={scrollElementRef}
                     >
                         <div
@@ -183,8 +196,11 @@ function BufferSummaryPlotRendererDRAM({
                                             key={virtualRow.key}
                                             data-index={virtualRow.index}
                                             ref={virtualizer.measureElement}
+                                            onMouseEnter={() => setActiveRow(operation.id)}
+                                            onMouseLeave={() => setActiveRow(null)}
                                         >
                                             <BufferSummaryRow
+                                                className={classNames({ 'is-active': operation.id === activeRow })}
                                                 buffers={operation.buffers}
                                                 // operationId={operation.id}
                                                 memoryStart={isZoomedIn ? zoomedMemoryOptions[index].start : 0}

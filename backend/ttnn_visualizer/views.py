@@ -68,6 +68,7 @@ from ttnn_visualizer.utils import (
     create_path_resolver,
     get_cluster_descriptor_path,
     read_last_synced_file,
+    str_to_bool,
     timer,
 )
 
@@ -98,6 +99,11 @@ def operation_list(instance: Instance):
         inputs = list(db.query_input_tensors())
         devices = list(db.query_devices())
         producers_consumers = list(db.query_producers_consumers())
+
+        error_records = None
+        if db._check_table_exists("errors"):
+            error_records = list(db.query_error_records())
+
         serialized_operations = serialize_operations(
             inputs,
             operation_arguments,
@@ -108,6 +114,7 @@ def operation_list(instance: Instance):
             devices,
             producers_consumers,
             device_operations,
+            error_records,
         )
         return Response(
             orjson.dumps(serialized_operations),
@@ -172,6 +179,14 @@ def operation_detail(operation_id, instance: Instance):
 
         devices = list(db.query_devices())
 
+        error_record = None
+        if db._check_table_exists("errors"):
+            error_records = list(
+                db.query_error_records(filters={"operation_id": operation_id})
+            )
+            if error_records:
+                error_record = error_records[0]
+
         serialized_operation = serialize_operation(
             buffers,
             inputs,
@@ -185,6 +200,7 @@ def operation_detail(operation_id, instance: Instance):
             devices,
             producers_consumers,
             device_operations,
+            error_record,
         )
 
         return Response(
@@ -206,6 +222,30 @@ def operation_history(instance: Instance):
     with open(operation_history_file, "r") as file:
         return Response(
             orjson.dumps(json.load(file)),
+            mimetype="application/json",
+        )
+
+
+@api.route("/errors", methods=["GET"])
+@with_instance
+@timer
+def errors_list(instance: Instance):
+    with DatabaseQueries(instance) as db:
+        if not db._check_table_exists("errors"):
+            return (
+                jsonify(
+                    {
+                        "error": "Error records table does not exist in this report database."
+                    }
+                ),
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
+
+        error_records = list(db.query_error_records())
+        serialized_errors = [dataclasses.asdict(error) for error in error_records]
+
+        return Response(
+            orjson.dumps(serialized_errors),
             mimetype="application/json",
         )
 
@@ -687,6 +727,8 @@ def get_performance_results_report(instance: Instance):
         )
 
     name = request.args.get("name", None)
+    signpost = request.args.get("signpost", None)
+    stack_by_in0 = str_to_bool(request.args.get("stack_by_in0", "true"))
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -694,7 +736,11 @@ def get_performance_results_report(instance: Instance):
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     try:
-        report = OpsPerformanceReportQueries.generate_report(instance)
+        report = OpsPerformanceReportQueries.generate_report(
+            instance,
+            stack_by_in0=stack_by_in0,
+            signpost=signpost,
+        )
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
@@ -1118,11 +1164,19 @@ def test_remote_folder():
 
 
 @api.route("/remote/read", methods=["POST"])
-def read_remote_folder():
-    connection = RemoteConnection.model_validate(request.json, strict=False)
+@with_instance
+def read_remote_folder(instance: Instance):
+    file_path = request.json.get("filePath")
+
+    remote_connection = instance.remote_connection
+    if not remote_connection:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST,
+            response="No remote connection found in instance.",
+        )
+
     try:
-        # Only profilerPath is relevant here as we're reading the stack trace file
-        content = read_remote_file(connection, remote_path=connection.profilerPath)
+        content = read_remote_file(remote_connection, remote_path=file_path)
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)
@@ -1300,16 +1354,15 @@ def get_npe_data(instance: Instance):
         if compressed_path and compressed_path.exists():
             with open(compressed_path, "rb") as file:
                 compressed_data = file.read()
-                uncompressed_data = zstd.uncompress(compressed_data)
-                npe_data = json.loads(uncompressed_data)
+                npe_data = zstd.uncompress(compressed_data)
         else:
             with open(uncompressed_path, "r") as file:
-                npe_data = json.load(file)
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in NPE file: {e}")
+                npe_data = file.read()
+    except Exception as e:
+        logger.error(f"Error reading NPE file: {e}")
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
-    return Response(orjson.dumps(npe_data), mimetype="application/json")
+    return Response(npe_data, mimetype="application/json")
 
 
 @api.route("/notify", methods=["POST"])

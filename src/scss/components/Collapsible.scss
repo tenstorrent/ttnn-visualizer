@@ -32,6 +32,12 @@
         }
     }
 
+    .collapsible-controls {
+        .collapsible-button {
+            background-color: transparent;
+        }
+    }
+
     &.empty-collapsible {
         .collapsible-controls {
             [type='button'] {

@@ -8,6 +8,7 @@ import { HttpStatusCode } from 'axios';
 import 'styles/components/NPEProcessingStatus.scss';
 import { semverParse } from '../functions/semverParse';
 import { NPE_DATA_VERSION } from '../definitions/NPEData';
+import { TEST_IDS } from '../definitions/TestIds';
 
 const NPE_REPO_URL = (
     <a
@@ -68,7 +69,7 @@ const NPEProcessingStatus = ({
     if (!hasUploadedFile) {
         return (
             <Callout
-                data-testid='npe-processing-initial'
+                data-testid={TEST_IDS.NPE_PROCESSING_INITIAL}
                 {...SHARED_PROPS}
             >
                 See {NPE_REPO_URL} for details on how to generate NPE report files.
@@ -88,10 +89,19 @@ const NPEProcessingStatus = ({
         >
             {(() => {
                 switch (errorType) {
+                    case ErrorCodes.INVALID_NPE_DATA:
+                        return (
+                            <>
+                                <p data-testid={TEST_IDS.NPE_PROCESSING_INVALID_DATA}>
+                                    Unable to validate uploaded NPE data.
+                                </p>
+                                <p>Use {NPE_REPO_URL} to generate a new dataset.</p>
+                            </>
+                        );
                     case ErrorCodes.INVALID_NPE_VERSION:
                         return (
                             <>
-                                <p data-testid='npe-processing-invalid-version'>
+                                <p data-testid={TEST_IDS.NPE_PROCESSING_INVALID_VERSION}>
                                     Current supported version is <u>{NPE_DATA_VERSION}</u>, uploaded data version is{' '}
                                     <u>{dataVersion || 'null'}</u>.
                                 </p>
@@ -106,23 +116,19 @@ const NPEProcessingStatus = ({
                     case ErrorCodes.INVALID_JSON:
                         return (
                             <>
-                                <p data-testid='npe-processing-invalid-json'>
+                                <p data-testid={TEST_IDS.NPE_PROCESSING_INVALID_JSON}>
                                     The uploaded data cannot be parsed as valid JSON.
                                 </p>
                                 <p>Check the file contents or use {NPE_REPO_URL} to generate a new dataset.</p>
                             </>
                         );
-                    case ErrorCodes.INVALID_NPE_DATA:
-                        return (
-                            <>
-                                <p data-testid='npe-processing-invalid-data'>Unable to validate uploaded NPE data.</p>
-                                <p>Use {NPE_REPO_URL} to generate a new dataset.</p>
-                            </>
-                        );
+
                     default:
                         return (
                             <>
-                                <p data-testid='npe-processing-unhandled-error'>An unknown error has occurred.</p>
+                                <p data-testid={TEST_IDS.NPE_PROCESSING_UNHANDLED_ERROR}>
+                                    An unknown error has occurred.
+                                </p>
                                 <p>Please raise an issue at {NPE_REPO_URL} and include the relevant NPE data.</p>
                             </>
                         );
@@ -137,16 +143,15 @@ const getErrorType = (
     fetchErrorCode?: HttpStatusCode,
     isInvalidData?: boolean,
 ): ErrorCodes => {
+    if (isInvalidData) {
+        return ErrorCodes.INVALID_NPE_DATA;
+    }
     if (fetchErrorCode === HttpStatusCode.UnprocessableEntity) {
         return ErrorCodes.INVALID_JSON;
     }
 
     if (legacyVersion) {
         return ErrorCodes.INVALID_NPE_VERSION;
-    }
-
-    if (isInvalidData) {
-        return ErrorCodes.INVALID_NPE_DATA;
     }
 
     return ErrorCodes.DEFAULT;

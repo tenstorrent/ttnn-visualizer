@@ -6,6 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, expect, it, vi } from 'vitest';
 import { activePerformanceReportAtom } from '../src/store/app';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import Home from '../src/routes/Home';
 import Performance from '../src/routes/Performance';
 import mockPerformanceReport from './data/mockPerformanceReport.json';
@@ -13,9 +14,8 @@ import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.js
 import mockDeviceLog from './data/mockDeviceLog.json';
 import mockInstance from './data/mockInstance.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
-import getButtonWithText from './helpers/getButtonWithText';
 import { TestProviders } from './helpers/TestProviders';
-import getAllButtonsWithText from './helpers/getAllButtonsWithText';
+import getButtonWithText from './helpers/getButtonWithText';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -40,14 +40,14 @@ vi.mock('../src/functions/getServerConfig.ts', () => ({
 
 it('Disable remote sync in Home route', () => {
     render(
-        <TestProviders initialAtomValues={[[activePerformanceReportAtom, 'test-report']]}>
+        <TestProviders initialAtomValues={[[activePerformanceReportAtom, { reportName: 'test', path: 'testPath' }]]}>
             <Home />
         </TestProviders>,
     );
 
-    const noSelectionButtons = getAllButtonsWithText('(No selection)');
+    const noSelectionButtons = screen.getAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
 
-    expect(screen.getAllByTestId('remote-sync-disabled')).toHaveLength(1);
+    expect(screen.getAllByTestId(TEST_IDS.REMOTE_SYNC_DISABLED)).toHaveLength(1);
     expect(getButtonWithText('Add new connection')).toBeDisabled();
     expect(getButtonWithText('(No connection)')).toBeDisabled();
     expect(getButtonWithText('Fetch remote folders list')).toBeDisabled();
@@ -58,10 +58,10 @@ it('Disable remote sync in Home route', () => {
 
 it('Hide comparison component in Performance route', () => {
     render(
-        <TestProviders initialAtomValues={[[activePerformanceReportAtom, 'test-report']]}>
+        <TestProviders initialAtomValues={[[activePerformanceReportAtom, { reportName: 'test', path: 'testPath' }]]}>
             <Performance />
         </TestProviders>,
     );
 
-    expect(() => screen.getAllByTestId('comparison-report-selector')).toThrowError();
+    expect(() => screen.getAllByTestId(TEST_IDS.COMPARISON_REPORT_SELECTOR)).toThrowError();
 });

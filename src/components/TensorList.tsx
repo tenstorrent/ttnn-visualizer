@@ -2,22 +2,21 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, ButtonGroup, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
-import { MultiSelect } from '@blueprintjs/select';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
-import { useOperationsList, useTensors } from '../hooks/useAPI';
+import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import { Tensor } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
-import { expandedTensorsAtom, selectedOperationRangeAtom } from '../store/app';
+import { expandedTensorsAtom, selectedOperationRangeAtom, tensorBufferTypeFiltersAtom } from '../store/app';
 import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
 import 'styles/components/ListView.scss';
@@ -25,17 +24,18 @@ import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import { toReadableShape, toReadableType } from '../functions/math';
-import useTableFilter from '../hooks/useTableFilter';
+import MultiSelectField from './MultiSelectField';
+import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
-const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
+const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
 const TensorList = () => {
-    const location = useLocation();
-    const navigate = useNavigate();
-    const scrollElementRef = useRef<HTMLDivElement>(null);
+    const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
+    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
 
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
@@ -43,9 +43,11 @@ const TensorList = () => {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
-    const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
-    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useState(false);
 
+    const location = useLocation();
+    const navigate = useNavigate();
+    const scrollElementRef = useRef<HTMLDivElement>(null);
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
     const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
 
@@ -63,10 +65,7 @@ const TensorList = () => {
         return fetchedTensors;
     }, [fetchedTensors, selectedOperationRange]);
 
-    const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter(
-        'buffer_type',
-        tensorsWithRange || [],
-    );
+    const { nonDeallocatedTensorList } = useGetTensorDeallocationReportByOperation();
 
     // TODO: Figure out an initial scroll position based on last used tensor - https://github.com/tenstorrent/ttnn-visualizer/issues/737
     const virtualizer = useVirtualizer({
@@ -75,15 +74,23 @@ const TensorList = () => {
         estimateSize: () => OPERATION_EL_HEIGHT,
     });
     const virtualItems = virtualizer.getVirtualItems();
-    const numberOfTensors =
-        filteredTensorList && filteredTensorList.length >= 0 ? filteredTensorList.length : PLACEHOLDER_ARRAY_SIZE;
+    const numberOfTensors = filteredTensorList.length || PLACEHOLDER_ARRAY_SIZE;
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
-    const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const el = event.currentTarget;
+    const handleUserScrolling = () => {
+        updateScrollShade();
+    };
 
-        setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
-        setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
+    const updateScrollShade = () => {
+        if (scrollElementRef.current) {
+            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
+
+            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
+
+            const scrollBottom = scrollTop + offsetHeight;
+
+            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        }
     };
 
     const handleToggleCollapsible = (operationId: number) => {
@@ -106,29 +113,44 @@ const TensorList = () => {
         );
     };
 
-    useMemo(() => {
-        if (tensorsWithRange && operations) {
-            let tensors = [...tensorsWithRange];
+    useMemo(
+        () => {
+            if (tensorsWithRange && operations) {
+                let tensors = [...tensorsWithRange];
 
-            if (filterQuery) {
-                tensors = tensorsWithRange?.filter((tensor) =>
-                    getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
-                );
+                if (filterQuery) {
+                    tensors = tensorsWithRange?.filter((tensor) =>
+                        getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
+                    );
+                }
+
+                if (bufferTypeFilters && bufferTypeFilters?.length > 0) {
+                    tensors = tensors.filter(
+                        (tensor) => tensor?.buffer_type !== null && bufferTypeFilters.includes(tensor.buffer_type),
+                    );
+                }
+
+                if (showHighConsumerTensors) {
+                    tensors = tensors.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS);
+                }
+
+                if (showLateDeallocatedTensors) {
+                    tensors = tensors.filter((tensor) => nonDeallocatedTensorList.get(tensor.id));
+                }
+
+                setFilteredTensorList(tensors);
             }
-
-            if (activeFilters?.length > 0) {
-                tensors = tensors.filter(
-                    (tensor) => tensor?.buffer_type !== null && activeFilters.includes(tensor.buffer_type),
-                );
-            }
-
-            if (showHighConsumerTensors) {
-                tensors = tensors.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS);
-            }
-
-            setFilteredTensorList(tensors);
-        }
-    }, [operations, tensorsWithRange, filterQuery, activeFilters, showHighConsumerTensors]);
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [
+            tensorsWithRange,
+            operations,
+            filterQuery,
+            bufferTypeFilters,
+            showHighConsumerTensors,
+            showLateDeallocatedTensors,
+        ],
+    );
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
@@ -151,7 +173,10 @@ const TensorList = () => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
             setHasScrolledFromTop(false);
+            setHasScrolledToBottom(false);
         }
+
+        updateScrollShade();
     }, [virtualHeight]);
 
     return (
@@ -166,7 +191,7 @@ const TensorList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
-                <ButtonGroup variant='minimal'>
+                <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
                         content='Toggle high consumer tensors'
                         placement={PopoverPosition.TOP}
@@ -176,13 +201,28 @@ const TensorList = () => {
                             endIcon={IconNames.ISSUE}
                             disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
                             intent={HIGH_CONSUMER_INTENT}
-                            variant={showHighConsumerTensors ? 'outlined' : undefined}
+                            variant={showHighConsumerTensors ? ButtonVariant.OUTLINED : undefined}
                             aria-label='Toggle high consumer tensors'
                         >
                             {filteredTensorList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
                         </Button>
                     </Tooltip>
 
+                    <Tooltip
+                        content='Show late deallocated tensors'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => setShowLateDeallocatedTensors(!showLateDeallocatedTensors)}
+                            endIcon={IconNames.OUTDATED}
+                            intent={Intent.WARNING}
+                            disabled={nonDeallocatedTensorList.size === 0}
+                            variant={showLateDeallocatedTensors ? ButtonVariant.OUTLINED : undefined}
+                            aria-label='Toggle high consumer tensors'
+                        >
+                            {filteredTensorList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
+                        </Button>
+                    </Tooltip>
                     <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         placement={PopoverPosition.TOP}
@@ -193,7 +233,6 @@ const TensorList = () => {
                             aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         />
                     </Tooltip>
-
                     <Tooltip
                         content='Scroll to top'
                         placement={PopoverPosition.TOP}
@@ -206,7 +245,6 @@ const TensorList = () => {
                             aria-label='Scroll to top'
                         />
                     </Tooltip>
-
                     <Tooltip
                         content='Scroll to bottom'
                         placement={PopoverPosition.TOP}
@@ -220,36 +258,19 @@ const TensorList = () => {
                         />
                     </Tooltip>
 
-                    <MultiSelect
-                        items={tensorsWithRange ? (getFilterOptions() as number[]) : []}
+                    <MultiSelectField<Tensor, 'buffer_type'>
+                        keyName='buffer_type'
+                        options={tensorsWithRange || []}
                         placeholder='Buffer type filter...'
-                        // Type requires this but it seems pointless
-                        onItemSelect={(selectedType: number) => updateFilters(selectedType.toString())}
-                        selectedItems={activeFilters as number[]}
-                        itemRenderer={(value: number) => {
-                            return FilterItem(value, BufferTypeLabel[value]);
-                        }}
-                        tagRenderer={(buffer: number) => {
-                            return BufferTypeLabel[buffer];
-                        }}
-                        onRemove={(type) => updateFilters(type.toString())}
-                        itemPredicate={(query, bufferType) =>
-                            !query || BufferTypeLabel[bufferType].toLowerCase().includes(query.toLowerCase())
-                        }
-                        noResults={
-                            <MenuItem
-                                disabled
-                                text='No results.'
-                                roleStructure='listoption'
-                            />
-                        }
-                        resetOnSelect
+                        values={bufferTypeFilters}
+                        updateHandler={setBufferTypeFilters}
+                        labelFormatter={(value) => (value === null ? 'Unknown' : BufferTypeLabel[value])}
                     />
                 </ButtonGroup>
 
                 {!isTensorsLoading && !isOperationsLoading ? (
                     <p className='result-count'>
-                        {tensorsWithRange && filterQuery
+                        {tensorsWithRange && (filterQuery || bufferTypeFilters)
                             ? `Showing ${numberOfTensors} of ${tensorsWithRange.length} tensors`
                             : `Showing ${numberOfTensors} tensors`}
                     </p>
@@ -261,9 +282,8 @@ const TensorList = () => {
                 className={classNames('scrollable-element', {
                     'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfTensors > virtualItems.length,
-                    'scroll-lock': virtualHeight <= 0,
                 })}
-                onScroll={(event) => handleUserScrolling(event)}
+                onScroll={handleUserScrolling}
             >
                 <div
                     style={{
@@ -282,10 +302,12 @@ const TensorList = () => {
                             virtualItems.map((virtualRow) => {
                                 const tensor = filteredTensorList[virtualRow.index];
 
+                                const isLateDeallocated = nonDeallocatedTensorList.get(tensor.id);
+
                                 return (
                                     <li
                                         className='list-item-container'
-                                        key={virtualRow.index}
+                                        key={virtualRow.key}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
                                     >
@@ -320,6 +342,20 @@ const TensorList = () => {
                                                                 icon={IconNames.ISSUE}
                                                                 intent={HIGH_CONSUMER_INTENT}
                                                                 title='Unusually high number of consumers'
+                                                            />
+                                                        </Tooltip>
+                                                    ) : null}
+
+                                                    {isLateDeallocated ? (
+                                                        <Tooltip
+                                                            content='Tensor has an opportunity for earlier deallocation'
+                                                            position={PopoverPosition.TOP}
+                                                            className='high-number-consumers'
+                                                        >
+                                                            <Icon
+                                                                icon={IconNames.OUTDATED}
+                                                                intent={Intent.WARNING}
+                                                                title='Tensor has an opportunity for earlier deallocation'
                                                             />
                                                         </Tooltip>
                                                     ) : null}

@@ -34,7 +34,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
-    const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
+    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
     const maxCores = getCoreCount(architecture, datasets[0] ?? []);
 
     const matmulData = useMemo(
@@ -104,7 +104,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                 {performanceReport && (
                     <PerfOperationTypesChart
                         className='flex-chart'
-                        reportTitle={comparisonReportList ? performanceReport : ''}
+                        reportTitle={comparisonReportList ? performanceReport.reportName : ''}
                         data={chartData}
                         opCodes={opCodeOptions}
                     />

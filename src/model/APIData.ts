@@ -6,6 +6,15 @@ import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection'
 import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
 import { BufferType } from './BufferType';
 
+interface OperationError {
+    operation_id: number;
+    operation_name: string;
+    error_type: string;
+    error_message: string;
+    stack_trace: string;
+    timestamp: string;
+}
+
 export interface Operation {
     id: number;
     name: string;
@@ -14,6 +23,7 @@ export interface Operation {
     stack_trace: string;
     device_operations: Node[];
     operationFileIdentifier: string;
+    error: OperationError | null;
 }
 
 export interface Tensor {
@@ -75,10 +85,14 @@ export interface OperationDetailsData extends Operation {
 }
 
 export interface Instance {
-    active_report?: { performance_name?: string; profiler_name?: string; npe_name?: string };
-    remote_connection?: RemoteConnection;
-    remote_profiler_folder?: RemoteFolder;
-    remote_performance_folder?: RemoteFolder;
+    instance_id: string;
+    profiler_path: string | null;
+    performance_path: string | null;
+    npe_path: string | null;
+    active_report: { performance_name?: string; profiler_name?: string; npe_name?: string } | null;
+    remote_connection: RemoteConnection | null;
+    remote_profiler_folder: RemoteFolder | null;
+    remote_performance_folder: RemoteFolder | null;
 }
 
 export enum FileStatus {
@@ -113,6 +127,7 @@ export const defaultOperationDetailsData: OperationDetailsData = {
     stack_trace: '',
     device_operations: [],
     operationFileIdentifier: '',
+    error: null,
 };
 
 export const defaultTensorData: Tensor = {

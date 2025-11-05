@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, Collapse } from '@blueprintjs/core';
+import { Button, ButtonVariant, Collapse, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import React, { useEffect } from 'react';
 import { JSX } from 'react/jsx-runtime';
@@ -17,7 +17,7 @@ interface CollapsibleProps {
     contentStyles?: React.CSSProperties;
     contentClassName?: string;
     keepChildrenMounted?: boolean;
-    onExpandToggle?: () => void;
+    onExpandToggle?: (state: boolean) => void;
     isDisabled?: boolean;
 }
 
@@ -44,13 +44,14 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
             <div className='collapsible-controls'>
                 {children && (
                     <Button
-                        size='small'
-                        variant='minimal'
+                        size={Size.SMALL}
+                        variant={ButtonVariant.MINIMAL}
+                        className='collapsible-button'
                         onClick={
                             !isDisabled
                                 ? () => {
                                       if (onExpandToggle) {
-                                          onExpandToggle();
+                                          onExpandToggle(!isOpenState);
                                       }
                                       setIsOpenState(!isOpenState);
                                   }

@@ -23,6 +23,7 @@ const ICON_COLOURS = {
     none: '',
     operation: 'operation-icon',
     tensor: 'tensor-icon',
+    error: 'error-icon',
 };
 
 const ListItem: React.FC<ListItemProps> = ({

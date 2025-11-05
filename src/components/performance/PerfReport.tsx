@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FC, useEffect, useMemo, useState } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
     ButtonGroup,
@@ -19,64 +19,105 @@ import {
     Tabs,
     Tooltip,
 } from '@blueprintjs/core';
-import { MultiSelect } from '@blueprintjs/select';
+import { ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import {
     FilterableColumnKeys,
     PerfTableRow,
     TableFilter,
-    TableHeaders,
     TableKeys,
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
-import { calcHighDispatchOps } from '../../functions/perfFunctions';
+import {
+    Signpost,
+    calcHighDispatchOps,
+    getStackedViewCounts,
+    getStandardViewCounts,
+} from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
-import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import {
+    activePerformanceReportAtom,
+    bufferTypeFilterListAtom,
+    comparisonPerformanceReportListAtom,
+    filterBySignpostAtom,
+    hideHostOpsAtom,
+    isStackedViewAtom,
+    mathFilterListAtom,
+    rawOpCodeFilterListAtom,
+    stackByIn0Atom,
+} from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
-import { StackedPerfRow, TypedStackedPerfRow } from '../../definitions/StackedPerfTable';
+import {
+    FilterableStackedColumnKeys,
+    StackedPerfRow,
+    StackedTableFilter,
+    StackedTableKeys,
+    TypedStackedPerfRow,
+} from '../../definitions/StackedPerfTable';
+import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
+import HighlightedText from '../HighlightedText';
+import { OpType } from '../../definitions/Performance';
+import PerfReportRowCount from './PerfReportRowCount';
+import MultiSelectField from '../MultiSelectField';
+import { BufferType, BufferTypeLabel } from '../../model/BufferType';
+import { DeviceOperationLayoutTypes } from '../../model/APIData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
     comparisonData?: PerfTableRow[][];
     stackedData?: StackedPerfRow[];
     comparisonStackedData?: StackedPerfRow[][];
+    signposts?: Signpost[];
 }
 
-const INITIAL_TAB_ID = 'perf-table-0';
+const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
 
 const PerformanceReport: FC<PerformanceReportProps> = ({
     data,
     comparisonData,
     stackedData,
     comparisonStackedData,
+    signposts,
 }) => {
-    const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
-    const opIdsMap = useOpToPerfIdFiltered();
-
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+    const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
+    const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
+    const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
+    const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
+    const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
+    const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
+    const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
-    const [isStackedView, setIsStackedView] = useState<boolean>(false);
-    const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
-    const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
+    const [provideMatmulAdvice, setProvideMatmulAdvice] = useState(false);
+    const [hiliteHighDispatch, setHiliteHighDispatch] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
-    const [highlightRows, setHighlightRows] = useState<boolean>(true);
+    const [highlightRows, setHighlightRows] = useState(true);
     const [filters, setFilters] = useState<TableFilter>(
         Object.fromEntries(FilterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
             string
         >,
     );
+    const [stackedFilters, setStackedFilters] = useState<StackedTableFilter>(
+        Object.fromEntries(FilterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
+            StackedTableKeys,
+            string
+        >,
+    );
+
+    const opIdsMap = useOpToPerfIdFiltered();
+
+    const isSignpostsDisabled = !signposts || signposts.length === 0;
 
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
 
@@ -105,15 +146,28 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     );
     const normalisedComparisonData = normalisedData.data.slice(1);
 
+    const isNormalisationApplied = !isStackedView && useNormalisedData;
+
     const filteredRows = useMemo(
         () =>
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[0] : processedRows,
                 filters,
-                FilterableColumnKeys,
-                activeFilters,
+                activeRawOpCodeFilterList,
+                activeMathFilterList,
+                activeBufferTypeFilterList,
+                hideHostOps,
             ),
-        [processedRows, filters, activeFilters, useNormalisedData, normalisedData.data],
+        [
+            processedRows,
+            filters,
+            activeMathFilterList,
+            activeRawOpCodeFilterList,
+            activeBufferTypeFilterList,
+            useNormalisedData,
+            normalisedData.data,
+            hideHostOps,
+        ],
     );
 
     const filteredComparisonRows = useMemo(
@@ -121,49 +175,65 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
                 filters,
-                FilterableColumnKeys,
-                activeFilters,
+                activeRawOpCodeFilterList,
+                activeMathFilterList,
+                activeBufferTypeFilterList,
+                hideHostOps,
             ),
-        [comparisonIndex, processedComparisonRows, filters, activeFilters, useNormalisedData, normalisedData.data],
+        [
+            comparisonIndex,
+            processedComparisonRows,
+            filters,
+            activeRawOpCodeFilterList,
+            activeMathFilterList,
+            activeBufferTypeFilterList,
+            useNormalisedData,
+            normalisedData.data,
+            hideHostOps,
+        ],
+    );
+
+    const filteredStackedRows = useMemo(
+        () =>
+            sortAndFilterStackedPerfTableData(
+                processedStackedRows,
+                stackedFilters,
+                activeRawOpCodeFilterList,
+                hideHostOps,
+                stackByIn0,
+            ),
+        [processedStackedRows, stackedFilters, activeRawOpCodeFilterList, hideHostOps, stackByIn0],
+    );
+
+    const filteredComparisonStackedRows = useMemo(
+        () =>
+            sortAndFilterStackedPerfTableData(
+                processedComparisonStackedRows[comparisonIndex],
+                stackedFilters,
+                activeRawOpCodeFilterList,
+                hideHostOps,
+                stackByIn0,
+            ),
+        [
+            comparisonIndex,
+            processedComparisonStackedRows,
+            stackedFilters,
+            activeRawOpCodeFilterList,
+            hideHostOps,
+            stackByIn0,
+        ],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
-        setFilters({
+        const updatedFilters = {
             ...filters,
             [key]: value ?? '',
-        } as Record<TableKeys, string>);
+        };
+
+        // TODO: Sort this madness out
+        setStackedFilters(updatedFilters as Record<StackedTableKeys, string>);
+        setFilters(updatedFilters as TableFilter);
     };
-
-    const totalDataLength = getTotalDataLength(
-        useNormalisedData,
-        normalisedData,
-        selectedTabId,
-        data,
-        comparisonData?.[comparisonIndex],
-    );
-    const filteredDataLength = getFilteredDataLength(selectedTabId, filteredRows, filteredComparisonRows);
-    const rowDelta = useMemo(() => {
-        if (!useNormalisedData) {
-            return 0;
-        }
-
-        if (selectedTabId === INITIAL_TAB_ID) {
-            return processedRows.length - (normalisedData.data?.[0]?.length || 0);
-        }
-
-        if (processedComparisonRows?.[comparisonIndex] && normalisedData.data?.[comparisonIndex + 1]) {
-            return processedComparisonRows[comparisonIndex].length - normalisedData.data[comparisonIndex + 1].length;
-        }
-
-        return 0;
-    }, [
-        useNormalisedData,
-        selectedTabId,
-        processedRows,
-        normalisedData.data,
-        comparisonIndex,
-        processedComparisonRows,
-    ]);
 
     // Resets various state if we remove all comparison reports
     useEffect(() => {
@@ -179,12 +249,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     // If currently selected tab is disabled, reset to initial tab
     useEffect(() => {
         const isSelectedTabDisabled =
-            useNormalisedData && normalisedData?.data?.slice(1)?.[comparisonIndex]?.length === 0;
+            isNormalisationApplied && normalisedData?.data?.slice(1)?.[comparisonIndex]?.length === 0;
 
         if (isSelectedTabDisabled) {
             setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [selectedTabId, useNormalisedData, normalisedData, comparisonIndex]);
+    }, [selectedTabId, useNormalisedData, normalisedData, comparisonIndex, isNormalisationApplied]);
 
     return (
         <>
@@ -202,52 +272,100 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <div className='header-aside'>
                         <p className='result-count'>
-                            {filteredDataLength !== totalDataLength
-                                ? `Showing ${filteredDataLength} of ${totalDataLength} rows`
-                                : `Showing ${filteredDataLength} rows`}
-
-                            {useNormalisedData && rowDelta
-                                ? ` (${rowDelta > 0 ? `${rowDelta} ops removed` : `${rowDelta * -1} ops added`})`
-                                : null}
+                            <PerfReportRowCount
+                                standardView={getStandardViewCounts(
+                                    processedRows,
+                                    filteredRows,
+                                    selectedTabId === INITIAL_TAB_ID,
+                                    processedComparisonRows,
+                                    filteredComparisonRows,
+                                    useNormalisedData ? normalisedData : null,
+                                    comparisonIndex,
+                                    comparisonData,
+                                )}
+                                stackedView={getStackedViewCounts(
+                                    processedStackedRows,
+                                    filteredStackedRows,
+                                    processedComparisonStackedRows,
+                                    filteredComparisonStackedRows,
+                                    comparisonIndex,
+                                    selectedTabId === INITIAL_TAB_ID,
+                                )}
+                                useNormalisedData={useNormalisedData}
+                            />
                         </p>
                     </div>
                 </div>
 
                 <div className='filters'>
-                    {FilterableColumnKeys.map((key) => (
-                        <SearchField
-                            key={key}
-                            onQueryChanged={(value) => updateColumnFilter(key, value)}
-                            placeholder={`Filter ${TableHeaders.find((header) => header.key === key)?.label}`}
-                            searchQuery={filters?.[key] || ''}
-                        />
-                    ))}
+                    <SearchField
+                        onQueryChanged={(value) => updateColumnFilter('op_code', value)}
+                        placeholder='Filter by operation name'
+                        searchQuery={filters?.op_code || ''}
+                    />
 
-                    <MultiSelect
-                        items={data ? getFilterOptions() : []}
-                        placeholder='Math fidelity filter...'
-                        // Type requires this but it seems pointless
-                        onItemSelect={(selectedType) => updateFilters(selectedType)}
-                        selectedItems={activeFilters}
-                        itemRenderer={(value: string | number, _props) => FilterItem(String(value))}
-                        tagRenderer={(mathFidelity) => mathFidelity}
-                        onRemove={(type) => updateFilters(type)}
-                        itemPredicate={(query, mathFidelity) =>
-                            !query || String(mathFidelity).toLowerCase().includes(query.toLowerCase())
+                    <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
+                        keyName='buffer_type'
+                        options={processedRows || []}
+                        labelFormatter={(value: BufferType | null) =>
+                            value !== null ? BufferTypeLabel[value] : 'No value'
                         }
+                        placeholder='Select Buffer Type...'
+                        values={activeBufferTypeFilterList}
+                        updateHandler={setActiveBufferTypeFilterList}
+                    />
+
+                    <MultiSelectField<TypedPerfTableRow, 'raw_op_code'>
+                        keyName='raw_op_code'
+                        options={processedRows || []}
+                        placeholder='Select Op Codes...'
+                        values={activeRawOpCodeFilterList}
+                        updateHandler={setActiveRawOpCodeFilterList}
+                    />
+
+                    <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
+                        keyName='math_fidelity'
+                        options={processedRows || []}
+                        placeholder='Select Math Fidelity...'
+                        values={activeMathFilterList}
+                        updateHandler={setActiveMathFilterList}
                         disabled={isStackedView}
+                    />
+
+                    <Select<Signpost>
+                        items={signposts || []}
+                        itemPredicate={filterSignpost}
+                        itemRenderer={renderSignpost}
+                        onItemSelect={setFilterBySignpost}
                         noResults={
                             <MenuItem
-                                disabled
-                                text='No results.'
+                                text='No signposts found'
                                 roleStructure='listoption'
                             />
                         }
-                        resetOnSelect
+                        filterable
+                        disabled={isSignpostsDisabled}
+                    >
+                        <Button
+                            text={
+                                filterBySignpost?.op_code ??
+                                `Select signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
+                            }
+                            endIcon={IconNames.CARET_DOWN}
+                            disabled={isSignpostsDisabled}
+                        />
+                    </Select>
+
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        icon={IconNames.CROSS}
+                        onClick={() => setFilterBySignpost(null)}
+                        disabled={isSignpostsDisabled}
+                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
                     />
                 </div>
 
-                <div className='data-options'>
+                <div className='view-options'>
                     <ButtonGroup
                         variant={ButtonVariant.OUTLINED}
                         size={Size.SMALL}
@@ -267,49 +385,78 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             intent={isStackedView ? Intent.PRIMARY : Intent.NONE}
                         />
                     </ButtonGroup>
+                </div>
 
-                    <Switch
-                        label='Matmul optimization analysis'
-                        onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
-                        checked={provideMatmulAdvice}
-                        className='option-switch'
-                        disabled={isStackedView}
-                    />
-
-                    <Switch
-                        label='Highlight high dispatch ops'
-                        onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
-                        checked={hiliteHighDispatch}
-                        className='option-switch'
-                        disabled={isStackedView}
-                    />
-
-                    <Tooltip
-                        content='Tries to match up operations between the performance reports'
-                        position={Position.TOP}
-                    >
-                        <Switch
-                            label='Normalise data'
-                            disabled={!activeComparisonReportList || isStackedView}
-                            onChange={() => setUseNormalisedData(!useNormalisedData)}
-                            checked={useNormalisedData}
-                            className='option-switch'
-                        />
-                    </Tooltip>
-
-                    {activeComparisonReportList && useNormalisedData && (
-                        <Tooltip
-                            content='Highlights rows where ops have been added or are missing after normalising the data'
-                            position={Position.TOP}
-                        >
+                <div className='data-options'>
+                    {!isStackedView && (
+                        <>
                             <Switch
-                                label='Highlight row differences'
-                                onChange={() => setHighlightRows(!highlightRows)}
-                                disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
-                                checked={highlightRows}
+                                label='Matmul optimization analysis'
+                                onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                                checked={provideMatmulAdvice}
                                 className='option-switch'
+                                disabled={isStackedView}
                             />
-                        </Tooltip>
+
+                            <Switch
+                                label='Highlight high dispatch ops'
+                                onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                                checked={hiliteHighDispatch}
+                                className='option-switch'
+                                disabled={isStackedView}
+                            />
+                        </>
+                    )}
+
+                    <Switch
+                        label='Hide host ops'
+                        onChange={() => setHideHostOps(!hideHostOps)}
+                        checked={hideHostOps}
+                        className='option-switch'
+                        // TODO: Host Ops don't get sent in non-stacked-by-in0
+                        disabled={!stackByIn0 && isStackedView}
+                    />
+
+                    {!isStackedView && (
+                        <>
+                            <Tooltip
+                                content='Tries to match up operations between the performance reports'
+                                position={Position.TOP}
+                            >
+                                <Switch
+                                    label='Normalise data'
+                                    disabled={!activeComparisonReportList || isStackedView}
+                                    onChange={() => setUseNormalisedData(!useNormalisedData)}
+                                    checked={useNormalisedData}
+                                    className='option-switch'
+                                />
+                            </Tooltip>
+
+                            {activeComparisonReportList && useNormalisedData && (
+                                <Tooltip
+                                    content='Highlights rows where ops have been added or are missing after normalising the data'
+                                    position={Position.TOP}
+                                >
+                                    <Switch
+                                        label='Highlight row differences'
+                                        onChange={() => setHighlightRows(!highlightRows)}
+                                        disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
+                                        checked={highlightRows}
+                                        className='option-switch'
+                                    />
+                                </Tooltip>
+                            )}
+                        </>
+                    )}
+
+                    {isStackedView && (
+                        <Switch
+                            label='Stack by input 0'
+                            onChange={() => setStackByIn0(!stackByIn0)}
+                            checked={stackByIn0}
+                            className='option-switch'
+                            disabled={!isStackedView}
+                        />
                     )}
                 </div>
 
@@ -319,18 +466,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     renderActiveTabPanelOnly
                     size={Size.LARGE}
                     id='performance-tabs'
+                    className='report-tabs'
                 >
                     <Tab
                         id={INITIAL_TAB_ID}
-                        title={activePerformanceReport || 'Loading...'}
+                        title={activePerformanceReport?.reportName || 'Loading...'}
                         icon={IconNames.TH_LIST}
-                        className='tab-panel'
                         panel={
                             isStackedView ? (
                                 <StackedPerformanceTable
-                                    data={useNormalisedData ? normalisedData.data[0] : filteredRows}
-                                    stackedData={processedStackedRows}
+                                    data={filteredRows}
+                                    stackedData={filteredStackedRows}
                                     filters={filters}
+                                    stackedComparisonData={processedComparisonStackedRows}
+                                    reportName={activePerformanceReport?.reportName || null}
                                 />
                             ) : (
                                 <PerfTable
@@ -338,13 +487,17 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     comparisonData={
                                         useNormalisedData && normalisedComparisonData.length > 0
                                             ? normalisedComparisonData
-                                            : []
+                                            : processedComparisonRows
                                     }
                                     filters={filters}
-                                    mathFidelityFilter={activeFilters}
+                                    rawOpCodeFilter={activeRawOpCodeFilterList}
+                                    mathFidelityFilter={activeMathFilterList}
+                                    bufferTypeFilter={activeBufferTypeFilterList}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
+                                    signposts={signposts}
+                                    reportName={activePerformanceReport?.reportName || null}
                                 />
                             )
                         }
@@ -355,10 +508,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             id={report}
                             key={index}
                             icon={IconNames.TH_LIST}
-                            className='tab-panel'
-                            disabled={useNormalisedData && normalisedComparisonData?.[index]?.length === 0}
+                            disabled={isNormalisationApplied && normalisedComparisonData?.[index]?.length === 0}
                             title={
-                                normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
+                                isNormalisationApplied && normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
                                     <Tooltip
                                         content='Report has too many differences to be normalised'
                                         position={PopoverPosition.TOP}
@@ -372,9 +524,32 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             panel={
                                 isStackedView ? (
                                     <StackedPerformanceTable
-                                        data={useNormalisedData ? normalisedData.data[0] : filteredRows}
-                                        stackedData={processedComparisonStackedRows[comparisonIndex]}
+                                        data={filteredRows}
+                                        stackedData={
+                                            comparisonIndex > -1
+                                                ? sortAndFilterStackedPerfTableData(
+                                                      processedComparisonStackedRows[comparisonIndex],
+                                                      stackedFilters,
+                                                      activeRawOpCodeFilterList,
+                                                      hideHostOps,
+                                                      stackByIn0,
+                                                  )
+                                                : filteredStackedRows
+                                        }
+                                        stackedComparisonData={[
+                                            processedStackedRows,
+                                            ...processedComparisonStackedRows.filter((_, i) => i !== comparisonIndex),
+                                        ].map((dataset) =>
+                                            sortAndFilterStackedPerfTableData(
+                                                dataset,
+                                                stackedFilters,
+                                                activeRawOpCodeFilterList,
+                                                hideHostOps,
+                                                stackByIn0,
+                                            ),
+                                        )}
                                         filters={filters}
+                                        reportName={report}
                                     />
                                 ) : (
                                     <PerfTable
@@ -386,30 +561,69 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         comparisonData={
                                             useNormalisedData && normalisedData.data.length > 1
                                                 ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
-                                                : []
+                                                : [
+                                                      processedRows,
+                                                      ...processedComparisonRows.filter(
+                                                          (_, i) => i !== comparisonIndex,
+                                                      ),
+                                                  ]
                                         }
                                         filters={filters}
-                                        mathFidelityFilter={activeFilters}
+                                        rawOpCodeFilter={activeRawOpCodeFilterList}
+                                        mathFidelityFilter={activeMathFilterList}
+                                        bufferTypeFilter={activeBufferTypeFilterList}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}
                                         reportName={report}
+                                        signposts={signposts}
                                     />
                                 )
                             }
                         />
                     ))}
                 </Tabs>
+
+                {hiliteHighDispatch && !isStackedView && calcHighDispatchOps(processedRows)}
             </div>
-
-            <hr />
-
-            {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
         </>
     );
 };
 
 const HIGH_DISPATCH_THRESHOLD = 6.5;
+
+interface RowAttributes {
+    device: number | null;
+    buffer_type: BufferType | null;
+    layout: DeviceOperationLayoutTypes | null;
+}
+
+const getBufferType = (type?: string): BufferType | null => {
+    if (!type) {
+        return null;
+    }
+
+    if (type === 'L1') {
+        return BufferType.L1;
+    }
+
+    if (type === 'DRAM') {
+        return BufferType.DRAM;
+    }
+
+    return null;
+};
+
+const getRowAttributes = (row: PerfTableRow): RowAttributes => {
+    const regex = /DEV_(\d)_(DRAM|L1)_(\w*)/m;
+    const matchIn0 = regex.exec(row.input_0_memory);
+
+    return {
+        device: matchIn0?.[1] ? parseInt(matchIn0[1], 10) : null,
+        buffer_type: getBufferType(matchIn0?.[2]),
+        layout: matchIn0?.[3] ? (matchIn0[3] as DeviceOperationLayoutTypes) : null,
+    };
+};
 
 const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
     return rows.map((row) => {
@@ -430,44 +644,50 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
             dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
             flops: row.flops ? parseFloat(row.flops) : null,
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
+            ...getRowAttributes(row),
         };
     });
 };
 
 const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
-    rows.map((row) => ({
-        ...row,
-        percent: parseFloat(row.percent),
-        device_time_sum_us: parseFloat(row.device_time_sum_us),
-        ops_count: parseFloat(row.ops_count),
-        flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
-        flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
-        flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
-        flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
-    }));
+    rows
+        .map((row) => ({
+            ...row,
+            percent: parseFloat(row.percent),
+            device_time_sum_us: parseFloat(row.device_time_sum_us),
+            ops_count: parseFloat(row.ops_count),
+            flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
+            flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
+            flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
+            flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
+        }))
+        .filter((row) => row.op_type !== OpType.SIGNPOST); // Filter out signposts here because they are not useful in stacked view
 
-const getTotalDataLength = (
-    useNormalisedData: boolean,
-    normalisedData: { data: TypedPerfTableRow[][] },
-    selectedTabId: TabId,
-    data?: PerfTableRow[],
-    comparisonData?: PerfTableRow[],
-) => {
-    if (useNormalisedData) {
-        return normalisedData.data[0]?.length || 0;
+const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
+    if (!modifiers.matchesPredicate) {
+        return null;
     }
 
-    if (selectedTabId === INITIAL_TAB_ID) {
-        return data?.length || 0;
-    }
-
-    return comparisonData?.length || 0;
+    return (
+        <MenuItem
+            active={modifiers.active}
+            disabled={modifiers.disabled}
+            key={signpost.id}
+            onClick={handleClick}
+            onFocus={handleFocus}
+            roleStructure='listoption'
+            text={
+                <HighlightedText
+                    text={`${signpost.id}. ${signpost.op_code}`}
+                    filter={query}
+                />
+            }
+        />
+    );
 };
 
-const getFilteredDataLength = (
-    selectedTabId: TabId,
-    filteredRows: TypedPerfTableRow[],
-    filteredComparisonRows: TypedPerfTableRow[],
-) => (selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0);
+const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
+    return signpost.op_code.toLowerCase().includes(query.toLowerCase());
+};
 
 export default PerformanceReport;

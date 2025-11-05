@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { TEST_IDS } from '../definitions/TestIds';
+
 interface ToastFileChangeProps {
     message: string;
     fileName: string;
@@ -12,7 +14,7 @@ const ToastFileChange = ({ message, fileName }: ToastFileChangeProps) => {
         <div>
             {message}
             <br />
-            <strong data-testid='toast-filename'>{fileName}</strong>
+            <strong data-testid={TEST_IDS.TOAST_FILENAME}>{fileName}</strong>
         </div>
     );
 };

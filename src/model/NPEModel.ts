@@ -111,13 +111,25 @@ export enum NoCID {
     NOC1_OUT = 'NOC1_OUT',
 }
 
+export enum FABRIC_EVENT_SCOPE_OPTIONS {
+    BOTH,
+    FABRIC,
+    LOCAL,
+}
+
+export const FabricEventScopeColors: Record<FABRIC_EVENT_SCOPE_OPTIONS, string> = {
+    [FABRIC_EVENT_SCOPE_OPTIONS.BOTH]: 'rgb(225,0,0)',
+    [FABRIC_EVENT_SCOPE_OPTIONS.FABRIC]: 'rgb(255,234,0)',
+    [FABRIC_EVENT_SCOPE_OPTIONS.LOCAL]: 'rgb(204,0,204)',
+};
+
 export type LinkUtilization = [
     device_id: number,
     row: number,
     col: number,
     noc_id: NoCID,
     demand: number, // percentage - it can exceed 100% if there is congestion
-    fabric_event_type: boolean,
+    fabric_event_scope: FABRIC_EVENT_SCOPE_OPTIONS | undefined,
 ];
 export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
 export type NPE_COORDINATES = [device_id: number, row: number, col: number];
@@ -147,6 +159,7 @@ export interface NoCTransfer extends NoCFlowBase {
     start_cycle: number;
     end_cycle: number;
     route: NoCRoute[];
+    zones?: string;
 }
 
 export interface TimestepData {
@@ -168,21 +181,74 @@ export interface NPEData {
     common_info: CommonInfo;
     noc_transfers: NoCTransfer[];
     timestep_data: TimestepData[];
+    zones?: NPERootZone[];
     chips: {
         [key: device_id]: ClusterCoordinates;
     };
 }
 
-export enum NPE_LINK {
+export interface NPERootZone {
+    zones: NPEZone[];
+    proc: KERNEL_PROCESS;
+    core: NPE_COORDINATES;
+}
+
+export interface NPERootZoneUXInfo extends NPERootZone {
+    expandedState: boolean;
+}
+
+export interface NPEZone {
+    id: string;
+    zones: NPEZone[];
+    start: number;
+    end: number;
+    depth: number;
+}
+
+export interface ZoneDrawingInfo {
+    depth: number;
+    start: number;
+    end: number;
+    id: string;
+    color?: string;
+}
+
+export enum NPE_COORDINATE_INDEX {
     CHIP_ID,
     Y,
     X,
+}
+
+export enum NPE_LINK {
+    CHIP_ID = NPE_COORDINATE_INDEX.CHIP_ID,
+    Y = NPE_COORDINATE_INDEX.Y,
+    X = NPE_COORDINATE_INDEX.X,
     NOC_ID,
     DEMAND,
-    FABRIC_EVENT_TYPE,
+    FABRIC_EVENT_SCOPE,
 }
 
 export interface NPEManifestEntry {
     global_call_count: number;
     file: string;
 }
+
+export enum KERNEL_PROCESS {
+    BRISC = 'BRISC',
+    TRISC_0 = 'TRISC_0',
+    TRISC_1 = 'TRISC_1',
+    NCRISC = 'NCRISC',
+    ERISC = 'ERISC',
+    CORE_AGG = 'CORE_AGG',
+}
+
+export const KERNEL_COLORS: Record<KERNEL_PROCESS, string> = {
+    [KERNEL_PROCESS.BRISC]: `rgba(255, 99, 71, 1)`,
+    [KERNEL_PROCESS.TRISC_0]: `rgba(34, 139, 34, 1)`,
+    [KERNEL_PROCESS.TRISC_1]: `rgba(255, 215, 0, 1)`,
+    [KERNEL_PROCESS.NCRISC]: `rgba(30, 144, 255, 1)`,
+    [KERNEL_PROCESS.ERISC]: `rgba(186, 85, 211, 1)`,
+    [KERNEL_PROCESS.CORE_AGG]: `rgba(255, 69, 0, 1)`,
+};
+
+export const getKernelColor = (proc: KERNEL_PROCESS): string => KERNEL_COLORS[proc] || 'rgba(255, 255,255, 1)';

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
-import { Button, Card, Overlay2 } from '@blueprintjs/core';
+import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { PlotData } from 'plotly.js';
 import classNames from 'classnames';
@@ -133,8 +133,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         {title}
                         <Button
                             icon={IconNames.CROSS}
-                            variant='minimal'
-                            size='small'
+                            variant={ButtonVariant.MINIMAL}
+                            size={Size.SMALL}
                             onClick={onClose}
                         />
                     </h3>
@@ -201,8 +201,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         <div className='tensix-details-header'>
                             <Button
                                 icon={IconNames.CROSS}
-                                variant='minimal'
-                                size='small'
+                                variant={ButtonVariant.MINIMAL}
+                                size={Size.SMALL}
                                 onClick={() => {
                                     setSelectedTensix(null);
                                 }}

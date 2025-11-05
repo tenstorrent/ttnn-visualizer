@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useState } from 'react';
-import { Button, Icon } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, Size } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
@@ -51,8 +51,8 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                         onClick={() => setIsCollapsed(!isCollapsed)}
                         className='close-button'
                         endIcon={isCollapsed ? IconNames.CARET_DOWN : IconNames.CARET_UP}
-                        variant='minimal'
-                        size='small'
+                        variant={ButtonVariant.MINIMAL}
+                        size={Size.SMALL}
                     />
                 </div>
 
