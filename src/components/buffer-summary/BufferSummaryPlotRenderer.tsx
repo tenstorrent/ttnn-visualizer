@@ -63,7 +63,7 @@ function BufferSummaryPlotRenderer({
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
-    const scrollElementRef = useRef(null);
+    const scrollElementRef = useRef<HTMLDivElement>(null);
     const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const navigate = useNavigate();

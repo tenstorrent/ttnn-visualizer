@@ -14,6 +14,7 @@ import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { TableFilter, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
+import { ScrollPositionV2 } from '../definitions/ScrollPositionsV2';
 
 // Unsorted
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
@@ -33,6 +34,7 @@ export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 
 export const scrollPositionsAtom = atom<ScrollPositions | null>(null);
+export const scrollPositionsV2Atom = atom<ScrollPositionV2 | null>(null);
 
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom<FileProgress>({
@@ -45,7 +47,6 @@ export const fileTransferProgressAtom = atom<FileProgress>({
 
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);
-export const expandedOperationsAtom = atom<number[]>([]);
 
 // Operation details route
 export const isFullStackTraceAtom = atom(false);

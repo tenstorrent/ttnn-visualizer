@@ -27,6 +27,7 @@ import FeedbackButton from './FeedbackButton';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import useRemoteConnection from '../hooks/useRemote';
+import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -47,6 +48,7 @@ function Layout() {
     const { data: instance } = useInstance();
     const { data: reports } = useReportFolderList();
     const location = useLocation();
+    const { resetListStates } = useRestoreScrollPositionV2();
 
     const appVersion = import.meta.env.APP_VERSION;
     const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
@@ -60,8 +62,11 @@ function Layout() {
             : getLocalReportName(reports, profilerReportPath) || '';
     const perfReportPath = instance?.active_report?.performance_name || null;
 
+    // Loads the active reports into global state when the instance changes
     useEffect(() => {
         if (instance?.active_report) {
+            resetListStates();
+
             setActiveProfilerReport(
                 profilerReportPath
                     ? {
@@ -101,6 +106,7 @@ function Layout() {
         profilerReportLocation,
         setProfilerReportLocation,
         setPerformanceReportLocation,
+        resetListStates,
     ]);
 
     return (
