@@ -95,7 +95,6 @@ function Layout() {
                     : ReportLocation.LOCAL,
             );
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- resetScrollPositions is stable and does not need to be a dependency
     }, [
         instance,
         profilerReportPath,
@@ -107,6 +106,7 @@ function Layout() {
         profilerReportLocation,
         setProfilerReportLocation,
         setPerformanceReportLocation,
+        resetListStates,
     ]);
 
     return (
