@@ -341,32 +341,42 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             }
         });
 
-        continuousMemory.forEach((chunk, index) => {
-            if (index > 0) {
-                let prevChunkIndex = index - 1;
-                let prevChunk = continuousMemory[prevChunkIndex];
-
-                while (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size > chunk.address) {
-                    prevChunkIndex--;
-                    if (prevChunkIndex >= 0) {
-                        prevChunk = continuousMemory[prevChunkIndex];
+        if (bufferType === BufferType.L1) {
+            continuousMemory.forEach((chunk, index) => {
+                if (index > 0) {
+                    let prevChunkIndex = index - 1;
+                    let prevChunk = continuousMemory[prevChunkIndex];
+                    while (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size > chunk.address) {
+                        prevChunkIndex--;
+                        if (prevChunkIndex >= 0) {
+                            prevChunk = continuousMemory[prevChunkIndex];
+                        }
+                    }
+                    if (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size < chunk.address) {
+                        if (
+                            prevChunk.address + prevChunk.size > this.memoryConfig.l1start &&
+                            prevChunk.address < this.memoryConfig.l1end
+                        ) {
+                            fragmentation.push({
+                                address: prevChunk.address + prevChunk.size,
+                                size: chunk.address - (prevChunk.address + prevChunk.size),
+                                empty: true,
+                            });
+                        } else if (prevChunk.address === 0 && prevChunk.size === 0) {
+                            const startAddress = Math.max(this.memoryConfig.l1start, 0);
+                            const size = chunk.address - startAddress;
+                            if (size > 0) {
+                                fragmentation.push({
+                                    address: startAddress,
+                                    size,
+                                    empty: true,
+                                });
+                            }
+                        }
                     }
                 }
-                if (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size < chunk.address) {
-                    if (
-                        prevChunk.address + prevChunk.size > this.memoryConfig.l1start &&
-                        prevChunk.address < this.memoryConfig.l1end
-                    ) {
-                        fragmentation.push({
-                            address: prevChunk.address + prevChunk.size,
-                            size: chunk.address - (prevChunk.address + prevChunk.size),
-                            empty: true,
-                        });
-                    }
-                }
-            }
-        });
-
+            });
+        }
         const largestEmpty = fragmentation.length
             ? fragmentation.reduce((prev, current) => {
                   return prev.size > current.size ? prev : current;
