@@ -363,11 +363,11 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                                 empty: true,
                             });
                         } else if (prevChunk.address === 0 && prevChunk.size === 0) {
-                            const startAddress = Math.max(this.memoryConfig.l1start, 0);
-                            const size = chunk.address - startAddress;
+                            const address = this.memoryConfig.l1start ?? 0;
+                            const size = chunk.address - address;
                             if (size > 0) {
                                 fragmentation.push({
-                                    address: startAddress,
+                                    address,
                                     size,
                                     empty: true,
                                 });
