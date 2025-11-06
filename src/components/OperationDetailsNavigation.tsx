@@ -150,7 +150,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 onClose={() => setErrorIsOpen(false)}
             >
                 {operation?.error && (
-                    <div className='memory-error'>
+                    <>
                         <StackTrace
                             title={`Error (${operation.error.error_type})`}
                             stackTrace={operation.error.error_message}
@@ -166,7 +166,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                             hideSourceButton
                             isInline
                         />
-                    </div>
+                    </>
                 )}
             </Overlay>
         </nav>

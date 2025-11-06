@@ -430,31 +430,29 @@ const OperationList = () => {
 
                                                 {operation?.error && (
                                                     <>
-                                                        <div className='memory-error'>
-                                                            <StackTrace
-                                                                title={`Error (${operation.error.error_type})`}
-                                                                stackTrace={operation.error.error_message}
-                                                                language={StackTraceLanguage.CPP}
-                                                                hideSourceButton
-                                                                isInline
-                                                                onExpandChange={(_isOpen: boolean) =>
-                                                                    handleToggleStackTrace(virtualRow.index)
-                                                                }
-                                                            />
-                                                        </div>
+                                                        <StackTrace
+                                                            className='memory-error'
+                                                            title={`Error (${operation.error.error_type})`}
+                                                            stackTrace={operation.error.error_message}
+                                                            language={StackTraceLanguage.CPP}
+                                                            hideSourceButton
+                                                            isInline
+                                                            onExpandChange={(_isOpen: boolean) =>
+                                                                handleToggleStackTrace(virtualRow.index)
+                                                            }
+                                                        />
 
-                                                        <div className='memory-error'>
-                                                            <StackTrace
-                                                                title='Error Stack Trace'
-                                                                stackTrace={operation.error.stack_trace}
-                                                                language={StackTraceLanguage.CPP}
-                                                                hideSourceButton
-                                                                isInline
-                                                                onExpandChange={(_isOpen: boolean) =>
-                                                                    handleToggleStackTrace(virtualRow.index)
-                                                                }
-                                                            />
-                                                        </div>
+                                                        <StackTrace
+                                                            className='memory-error'
+                                                            title='Error Stack Trace'
+                                                            stackTrace={operation.error.stack_trace}
+                                                            language={StackTraceLanguage.CPP}
+                                                            hideSourceButton
+                                                            isInline
+                                                            onExpandChange={(_isOpen: boolean) =>
+                                                                handleToggleStackTrace(virtualRow.index)
+                                                            }
+                                                        />
                                                     </>
                                                 )}
 

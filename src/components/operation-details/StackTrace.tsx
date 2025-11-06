@@ -33,6 +33,7 @@ interface StackTraceProps {
     // Supply these two props if you want to control the expanded state from outside
     isInitiallyExpanded?: boolean;
     onExpandChange?: (isVisible: boolean) => void;
+    className?: string;
 }
 
 function StackTrace({
@@ -43,6 +44,7 @@ function StackTrace({
     isInline,
     isInitiallyExpanded,
     onExpandChange,
+    className,
 }: StackTraceProps) {
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
@@ -135,7 +137,7 @@ function StackTrace({
     };
 
     return (
-        <div className='stack-trace'>
+        <div className={classNames('stack-trace', className)}>
             {title && <p className='stack-trace-title'>{title}</p>}
             <pre
                 className={classNames('formatted-code', {
