@@ -160,6 +160,7 @@ export interface Chunk {
     size: number;
     tensorId?: number;
     device_id?: number;
+    lateDeallocation?: boolean;
 }
 
 export interface ColoredChunk extends Chunk {

@@ -9,6 +9,7 @@ import { useAtom } from 'jotai';
 import {
     useGetL1SmallMarker,
     useGetL1StartMarker,
+    useGetTensorDeallocationReportByOperation,
     useOperationDetails,
     useOperationsList,
     usePreviousOperationDetails,
@@ -23,6 +24,7 @@ import {
     renderMemoryLayoutAtom,
     selectedAddressAtom,
     selectedTensorAtom,
+    showDeallocationReportAtom,
     showHexAtom,
     showMemoryRegionsAtom,
 } from '../../store/app';
@@ -50,6 +52,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const [showFullStackTrace, setShowFullStackTrace] = useAtom(isFullStackTraceAtom);
+    const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
 
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
@@ -75,6 +78,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const operation = operations?.find((op) => op.id === operationId);
+    const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails || !operations) {
         return (
@@ -87,17 +91,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             </>
         );
     }
-
+    const deallocationReport = lateDeallocationsByOperation.get(operation?.id || -1) || [];
     const details: OperationDetails | null = new OperationDetails(
         operationDetails,
         operations,
+        deallocationReport,
         { l1start, l1end },
         {
             renderPattern: renderMemoryLayoutPattern,
+            lateDeallocation: showDeallocationReport,
         },
     );
 
-    const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations, {
+    const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations, [], {
         l1start,
         l1end,
     });
@@ -217,6 +223,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 disabled={cbChartDataByOperation.size === 0}
                                 onChange={() => {
                                     setShowCircularBuffer(!showCircularBuffer);
+                                }}
+                            />
+                            <GlobalSwitch
+                                label='Mark late tensor deallocations'
+                                checked={showDeallocationReport}
+                                onChange={() => {
+                                    setShowDeallocationReport(!showDeallocationReport);
                                 }}
                             />
                             <GlobalSwitch
