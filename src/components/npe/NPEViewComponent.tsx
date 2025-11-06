@@ -338,6 +338,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
+    const showDetails = !!(selectedNode && playbackSpeed === 0);
 
     return (
         <div className='npe'>
@@ -353,18 +354,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onClick={onBackward}
                         />
                         <Button
-                            icon={IconNames.Play}
+                            icon={playbackSpeed === 0 ? IconNames.Play : IconNames.Pause}
                             intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
-                            onClick={onPlay}
+                            onClick={playbackSpeed === 0 ? onPlay : onPause}
                         />
                         <Button
                             icon={IconNames.FastForward}
                             onClick={onPlay2x}
                             intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
-                        />
-                        <Button
-                            icon={IconNames.STOP}
-                            onClick={onPause}
                         />
                         <Button
                             icon={IconNames.StepForward}
@@ -558,7 +555,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             <div className='split-grid'>
                 <div
                     className={classNames('chip-cluster-wrap', {
-                        'details-open': selectedNode !== null,
+                        'details-open': showDetails,
                     })}
                     style={{
                         gridTemplateColumns: `repeat(${totalColsChips || 0}, ${(TENSIX_SIZE + 1) * width}px)`,
@@ -794,9 +791,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
-                {selectedNode && <div className='grid-spacer'>&nbsp;</div>}
+                {showDetails && <div className='grid-spacer'>&nbsp;</div>}
             </div>
             <ActiveTransferDetails
+                isOpen={showDetails}
                 groupedTransfersByNoCID={groupedTransfersByNoCID}
                 selectedNode={selectedNode}
                 congestionData={links?.link_demand.filter(

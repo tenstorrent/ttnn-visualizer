@@ -22,6 +22,7 @@ const ActiveTransferDetails = ({
     congestionData,
     highlightedRoute,
     setHighlightedRoute,
+    isOpen,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     nocType, // this may or may not be used in the future
 }: {
@@ -34,9 +35,10 @@ const ActiveTransferDetails = ({
     highlightedRoute: number | null;
     setHighlightedRoute: (route: number | null) => void;
     nocType: NoCType | null;
+    isOpen: boolean;
 }) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
-    const hasData = Object.keys(groupedTransfersByNoCID).length !== 0;
+    const hasData = Object.keys(groupedTransfersByNoCID).length !== 0 && isOpen;
     const [showRoutes, setShowRoutes] = useState(false);
     return (
         <aside
