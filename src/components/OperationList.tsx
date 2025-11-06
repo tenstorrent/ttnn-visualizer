@@ -431,11 +431,8 @@ const OperationList = () => {
                                                 {operation?.error && (
                                                     <>
                                                         <div className='memory-error'>
-                                                            <p className='memory-error-title'>
-                                                                Error ({operation.error.error_type})
-                                                            </p>
-
                                                             <StackTrace
+                                                                title={`Error (${operation.error.error_type})`}
                                                                 stackTrace={operation.error.error_message}
                                                                 language={StackTraceLanguage.CPP}
                                                                 hideSourceButton
@@ -447,9 +444,8 @@ const OperationList = () => {
                                                         </div>
 
                                                         <div className='memory-error'>
-                                                            <p className='memory-error-title'>Error Stack Trace</p>
-
                                                             <StackTrace
+                                                                title='Error Stack Trace'
                                                                 stackTrace={operation.error.stack_trace}
                                                                 language={StackTraceLanguage.CPP}
                                                                 hideSourceButton

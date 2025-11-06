@@ -5,14 +5,38 @@
 @use '../definitions/colours' as *;
 
 .stack-trace {
-    display: flex;
-    flex-wrap: nowrap;
-    padding: 10px;
-    padding-left: 0;
-    background-color: $tt-black;
-    align-items: flex-start;
-    gap: 10px;
-    margin-top: 0;
+    .stack-trace-title {
+        font-size: 16px;
+        font-weight: bold;
+    }
+
+    .formatted-code {
+        display: flex;
+        flex-wrap: nowrap;
+        padding: 10px;
+        padding-left: 0;
+        background-color: $tt-black;
+        align-items: flex-start;
+        gap: 10px;
+        margin-top: 0;
+
+        &.is-inline {
+            overflow: hidden scroll;
+            max-height: 500px; // Allows sticky behaviour to work within operation list
+
+            .code-wrapper {
+                padding-top: 0;
+                padding-bottom: 0;
+                overflow: hidden scroll;
+            }
+
+            .stack-trace-buttons.is-sticky {
+                position: sticky;
+                top: 5px;
+                z-index: 10;
+            }
+        }
+    }
 
     .code-wrapper {
         flex-basis: 100%;
@@ -67,23 +91,6 @@
             .line-number {
                 color: $tt-grey-7;
             }
-        }
-    }
-
-    &.is-inline {
-        overflow: hidden scroll;
-        max-height: 500px; // Allows sticky behaviour to work within operation list
-
-        .code-wrapper {
-            padding-top: 0;
-            padding-bottom: 0;
-            overflow: hidden scroll;
-        }
-
-        .stack-trace-buttons.is-sticky {
-            position: sticky;
-            top: 5px;
-            z-index: 10;
         }
     }
 }

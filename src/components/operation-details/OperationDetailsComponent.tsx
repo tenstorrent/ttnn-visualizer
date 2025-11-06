@@ -173,38 +173,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 )}
                 {!isLoading && isValidNumber(operationDetails?.id) ? (
                     <>
-                        {operation?.error && (
-                            <>
-                                <p className='memory-error-title'>Error ({operation.error.error_type})</p>
-                                <StackTrace
-                                    stackTrace={operation.error.error_message}
-                                    language={StackTraceLanguage.CPP}
-                                    hideSourceButton
-                                    isInline
-                                    // onExpandChange={(_isOpen: boolean) => handleToggleStackTrace(virtualRow.index)}
-                                />
-
-                                <p className='memory-error-title'>Error Stack Trace</p>
-                                <StackTrace
-                                    stackTrace={operation.error.stack_trace}
-                                    language={StackTraceLanguage.CPP}
-                                    hideSourceButton
-                                    isInline
-                                    // onExpandChange={(_isOpen: boolean) => handleToggleStackTrace(virtualRow.index)}
-                                />
-                            </>
-                        )}
-
                         {details.stack_trace && (
-                            <>
-                                <p>Stack Trace</p>
-                                <StackTrace
-                                    stackTrace={details.stack_trace}
-                                    language={StackTraceLanguage.PYTHON}
-                                    isInitiallyExpanded={showFullStackTrace}
-                                    onExpandChange={() => setShowFullStackTrace(!showFullStackTrace)}
-                                />
-                            </>
+                            <StackTrace
+                                stackTrace={details.stack_trace}
+                                language={StackTraceLanguage.PYTHON}
+                                isInitiallyExpanded={showFullStackTrace}
+                                onExpandChange={() => setShowFullStackTrace(!showFullStackTrace)}
+                            />
                         )}
                         <div className='chart-controls'>
                             <ButtonGroup>
