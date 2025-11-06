@@ -81,12 +81,11 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | Performance charts |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/23e6b1d0-2def-490a-8921-3477ded2c8ce" /> |  <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/ee620711-10be-4582-ab6f-635c896a1101" /> |
+| <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/19f6bd6f-8f48-48dd-b9ee-726b1a1e40e3" /> |  <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/bc6ae03b-f143-4ee5-9f14-834ddf8b0cde" /> |
 
 | NPE |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/5a25a79c-0fcc-4298-aaae-8e8656b99ab5" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/b2845948-02fa-4255-81f4-fc3257a282da" />
-
+| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/5f45c1bf-565d-4003-b3b7-0ddd90cbdeca" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/8a3e9a09-4c86-45a6-9916-52fba16debc6" />
 
 ## Sample reports
 
