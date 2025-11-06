@@ -2,65 +2,54 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, Icon, MenuItem, Spinner, Tooltip } from '@blueprintjs/core';
+import { Button, Icon, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
-import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import { TEST_IDS } from '../../definitions/TestIds';
+import {
+    NEVER_SYNCED_LABEL,
+    RemoteConnection,
+    RemoteFolder,
+    SYNC_DATE_FORMATTER,
+    getUTCFromEpoch,
+} from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
 import 'styles/components/RemoteFolderSelector.scss';
 import HighlightedText from '../HighlightedText';
 
-const formatter = new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-});
-
 type FolderTypes = 'performance' | 'profiler';
 
 const remoteFolderRenderer =
-    (
-        syncingFolderList: boolean,
-        type: FolderTypes,
-        selectedFolder?: RemoteFolder,
-        connection?: RemoteConnection,
-    ): ItemRenderer<RemoteFolder> =>
+    (type: FolderTypes, selectedFolder?: RemoteFolder, connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
 
         const { lastSynced, lastModified, reportName, remotePath } = folder;
-        const lastSyncedDate = lastSynced ? formatter.format(getUTC(lastSynced)) : 'Never';
+        const lastSyncedDate = lastSynced
+            ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(lastSynced))
+            : NEVER_SYNCED_LABEL;
 
-        let statusIcon = (
-            <Tooltip content={`Fetching folder status, last sync: ${lastSyncedDate}`}>
-                <Spinner size={16} />
+        const isReportOutdated = isRemoteFolderOutdated(folder);
+
+        const statusIcon = (
+            <Tooltip
+                content={
+                    isReportOutdated
+                        ? `Report is stale - last synced: ${lastSyncedDate}`
+                        : `Report is up to date - last synced: ${lastSyncedDate}`
+                }
+                placement={PopoverPosition.TOP}
+            >
+                <Icon
+                    icon={isReportOutdated ? IconNames.UPDATED : IconNames.HISTORY}
+                    color={isReportOutdated ? 'goldenrod' : 'green'}
+                />
             </Tooltip>
         );
-
-        if (!syncingFolderList) {
-            if (isRemoteFolderOutdated(folder)) {
-                statusIcon = (
-                    <Tooltip content={`Folder is stale, last sync: ${lastSyncedDate}`}>
-                        <Icon
-                            icon={IconNames.HISTORY}
-                            color='goldenrod'
-                        />
-                    </Tooltip>
-                );
-            } else {
-                statusIcon = (
-                    <Tooltip content={`Folder is up to date, last sync: ${lastSyncedDate}`}>
-                        <Icon
-                            icon={IconNames.UPDATED}
-                            color='green'
-                        />
-                    </Tooltip>
-                );
-            }
-        }
 
         const getLabelElement = (filterText: string) => (
             <>
@@ -92,9 +81,8 @@ interface RemoteFolderSelectorProps {
     remoteFolderList?: RemoteFolder[];
     loading?: boolean;
     disabled?: boolean;
-    updatingFolderList?: boolean;
     fallbackLabel?: string;
-    icon?: string;
+    icon?: IconName;
     onSelectFolder: (folder: RemoteFolder) => void;
     type: FolderTypes;
 }
@@ -104,7 +92,6 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     remoteFolderList = [],
     loading = false,
     disabled = false,
-    updatingFolderList = false,
     onSelectFolder,
     children,
     fallbackLabel = '(No selection)',
@@ -121,7 +108,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
             <Select
                 className='remote-select'
                 items={remoteFolderList ?? []}
-                itemRenderer={remoteFolderRenderer(updatingFolderList, type, remoteFolder, remoteConnection)}
+                itemRenderer={remoteFolderRenderer(type, remoteFolder, remoteConnection)}
                 filterable
                 itemPredicate={filterFolders(type, remoteConnection)}
                 noResults={
@@ -135,23 +122,17 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                 onItemSelect={onSelectFolder}
             >
                 <Button
-                    icon={icon as IconName}
+                    icon={icon}
                     endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
                     text={remoteFolder?.reportName ?? fallbackLabel}
+                    data-testid={TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON}
                 />
             </Select>
 
             {children}
         </div>
     );
-};
-
-const getUTC = (epoch: number): Date => {
-    const date = new Date(0);
-    date.setUTCSeconds(epoch);
-
-    return date;
 };
 
 const formatRemoteFolderName = (

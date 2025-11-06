@@ -34,6 +34,9 @@ const PLACEHOLDER: TypedPerfTableRow = {
     output_subblock_w: '',
     pm_ideal_ns: '',
     op_type: OpType.UNKNOWN,
+    device: null,
+    buffer_type: null,
+    layout: null,
 };
 
 export interface NormalisedPerfData {

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
-import { Button, Collapse } from '@blueprintjs/core';
+import { Button, ButtonVariant, Collapse, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
@@ -48,8 +48,8 @@ export const MemoryLegendGroup: React.FC<{
                         setIsOpen(!isOpen);
                     }}
                     endIcon={isOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
-                    size='small'
-                    variant='minimal'
+                    size={Size.SMALL}
+                    variant={ButtonVariant.MINIMAL}
                 />
             </div>
 

@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Button, Icon, Switch, Tag } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, Switch, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
@@ -50,7 +50,7 @@ const ActiveTransferDetails = ({
                         <span>Active transfers through {selectedNode?.coords.join('-')}</span>
                         <Button
                             aria-label='Close active transfers'
-                            variant='minimal'
+                            variant={ButtonVariant.MINIMAL}
                             icon={IconNames.CROSS}
                             onClick={() => showActiveTransfers(null)}
                         />

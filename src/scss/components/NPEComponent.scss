@@ -67,12 +67,6 @@
         }
     }
 
-    .color-square {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-    }
-
     .split-grid {
         display: flex;
         gap: 10px;
@@ -324,5 +318,12 @@
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+}
+
+.congestion-heatmap-tooltip {
+    h3 {
+        margin: 0;
+        margin-bottom: 10px;
     }
 }

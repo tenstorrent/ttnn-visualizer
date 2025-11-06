@@ -4,23 +4,40 @@
 
 // @eslint-disable jsx-a11y/mouse-events-have-key-events
 
-import React, { useCallback, useMemo } from 'react';
+import React, { Fragment, useCallback, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonGroup, ButtonVariant, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import type { ItemRenderer } from '@blueprintjs/select';
 import { ItemPredicate, Select } from '@blueprintjs/select';
 import Collapsible from '../Collapsible';
-import { NPEData, NPERootZone, NPEZone, NPE_COORDINATES, NPE_COORDINATE_INDEX } from '../../model/NPEModel';
+import {
+    KERNEL_PROCESS,
+    NPEData,
+    NPERootZone,
+    NPEZone,
+    NPE_COORDINATES,
+    NPE_COORDINATE_INDEX,
+    getKernelColor,
+} from '../../model/NPEModel';
 
-interface NPEZonesRendererProps {
+interface NPEZoneFilterComponentProps {
     npeData: NPEData;
     open: boolean;
     onClose: () => void;
     onSelect: (address: NPE_COORDINATES | null) => void;
+    onExpand: (state: boolean, proc: KERNEL_PROCESS, address: NPE_COORDINATES) => void;
+    onZoneClick: (zone: NPEZone) => void;
 }
 
-const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = false, onClose, onSelect }) => {
+const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
+    npeData,
+    open = false,
+    onClose,
+    onSelect,
+    onExpand,
+    onZoneClick,
+}) => {
     const [selectedDeviceId, setSelectedDeviceId] = React.useState<number | null>(null);
     const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string | null>(null);
     const sortCoreAddress = useCallback((a: NPERootZone, b: NPERootZone) => {
@@ -76,26 +93,29 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
     ): React.JSX.Element | React.JSX.Element[] => {
         return zones.map((zone, index) => {
             return (
-                <>
-                    {}
+                <Fragment key={`${zone.id}-start-${index}`}>
+                    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions */}
                     <div
                         className={`zone-interactive  depth-${depth}`}
-                        key={`${zone.id}-start-${index}`}
                         style={{ marginLeft: `${depth * 20}px` }}
-                        // onClick={() => {
-                        // FUTURE FUNCTIONALITY, zone selection on click
-                        // }}
+                        onClick={() => {
+                            onZoneClick(zone);
+                        }}
                     >
                         {zone.id} <span className='zone-timeline-range'>{`${zone.start} - ${zone.end}`}</span>
                     </div>
                     {getZoneElements(zone.zones, core, depth + 1)}
-                </>
+                </Fragment>
             );
         });
     };
 
     const coreItemRenderer = useMemo(() => coreAddressItemRenderer(selectedCoreAddress), [selectedCoreAddress]);
     const deviceItemRenderer = useMemo(() => deviceIdItemRenderer(selectedDeviceId), [selectedDeviceId]);
+
+    const onExpandStateChange = (state: boolean, proc: KERNEL_PROCESS, address: NPE_COORDINATES) => {
+        onExpand(state, proc, address);
+    };
     return (
         <div className={classNames('zones-renderer', { open })}>
             <div className='zones-controls'>
@@ -136,7 +156,7 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                         className='core-selector'
                         items={coreAddressList}
                         itemRenderer={coreItemRenderer}
-                        disabled={selectedDeviceId === -1}
+                        disabled={selectedDeviceId === null}
                         filterable
                         itemPredicate={filterCoreAddress}
                         noResults={
@@ -154,8 +174,8 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                     >
                         <Button
                             variant={ButtonVariant.OUTLINED}
-                            disabled={selectedDeviceId === -1}
-                            text={selectedCoreAddress ? `Selected core ${selectedCoreAddress}` : 'Filter cores'}
+                            disabled={selectedDeviceId === null}
+                            text={selectedCoreAddress ? `${selectedCoreAddress}` : 'Filter cores'}
                         />
                     </Select>
                     <Tooltip
@@ -181,8 +201,19 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                         <Collapsible
                             collapseClassName='root-zone-collapsible'
                             key={`${rootZone.proc}-${rootZone.core.join('-')}`}
-                            label={`${rootZone.proc} ${rootZone.core.join('-')}`}
+                            label={
+                                <div className='root-zone-label'>
+                                    <span
+                                        className='color-square'
+                                        style={{ backgroundColor: getKernelColor(rootZone.proc) }}
+                                    />
+                                    {rootZone.proc} {rootZone.core.join('-')}
+                                </div>
+                            }
                             isOpen={false}
+                            onExpandToggle={(state) => {
+                                onExpandStateChange(state, rootZone.proc, rootZone.core);
+                            }}
                         >
                             <div>{getZoneElements(rootZone.zones, rootZone.core, 1)}</div>
                         </Collapsible>
@@ -218,4 +249,4 @@ const deviceIdItemRenderer =
             icon={id === selected ? IconNames.TICK : IconNames.BLANK}
         />
     );
-export default NPEZonesRenderer;
+export default NPEZoneFilterComponent;

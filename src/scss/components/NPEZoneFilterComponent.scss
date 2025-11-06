@@ -56,12 +56,20 @@
     }
 
     .root-zone-collapsible {
-        //
+        .root-zone-label {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
     }
 
     .zone-interactive {
-        // cursor: pointer; //will need this eventually
+        cursor: pointer;
         margin-bottom: 2px;
+
+        &:hover {
+            background-color: color.adjust($tt-zone-color, $alpha: -0.9);
+        }
 
         .zone-timeline-range {
             font-family: variables.$monospace-font;

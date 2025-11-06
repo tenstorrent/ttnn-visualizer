@@ -193,11 +193,24 @@ export interface NPERootZone {
     core: NPE_COORDINATES;
 }
 
+export interface NPERootZoneUXInfo extends NPERootZone {
+    expandedState: boolean;
+}
+
 export interface NPEZone {
     id: string;
     zones: NPEZone[];
     start: number;
     end: number;
+    depth: number;
+}
+
+export interface ZoneDrawingInfo {
+    depth: number;
+    start: number;
+    end: number;
+    id: string;
+    color?: string;
 }
 
 export enum NPE_COORDINATE_INDEX {
@@ -228,3 +241,14 @@ export enum KERNEL_PROCESS {
     ERISC = 'ERISC',
     CORE_AGG = 'CORE_AGG',
 }
+
+export const KERNEL_COLORS: Record<KERNEL_PROCESS, string> = {
+    [KERNEL_PROCESS.BRISC]: `rgba(255, 99, 71, 1)`,
+    [KERNEL_PROCESS.TRISC_0]: `rgba(34, 139, 34, 1)`,
+    [KERNEL_PROCESS.TRISC_1]: `rgba(255, 215, 0, 1)`,
+    [KERNEL_PROCESS.NCRISC]: `rgba(30, 144, 255, 1)`,
+    [KERNEL_PROCESS.ERISC]: `rgba(186, 85, 211, 1)`,
+    [KERNEL_PROCESS.CORE_AGG]: `rgba(255, 69, 0, 1)`,
+};
+
+export const getKernelColor = (proc: KERNEL_PROCESS): string => KERNEL_COLORS[proc] || 'rgba(255, 255,255, 1)';

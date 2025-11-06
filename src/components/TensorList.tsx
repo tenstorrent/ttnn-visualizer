@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, ButtonGroup, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import SearchField from './SearchField';
@@ -28,14 +28,14 @@ import MultiSelectField from './MultiSelectField';
 import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
-const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
+const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
 const TensorList = () => {
-    const location = useLocation();
-    const navigate = useNavigate();
-    const scrollElementRef = useRef<HTMLDivElement>(null);
+    const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
+    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
 
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
@@ -44,10 +44,10 @@ const TensorList = () => {
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
     const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useState(false);
-    const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
-    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
 
+    const location = useLocation();
+    const navigate = useNavigate();
+    const scrollElementRef = useRef<HTMLDivElement>(null);
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
     const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
 
@@ -74,8 +74,7 @@ const TensorList = () => {
         estimateSize: () => OPERATION_EL_HEIGHT,
     });
     const virtualItems = virtualizer.getVirtualItems();
-    const numberOfTensors =
-        filteredTensorList && filteredTensorList.length >= 0 ? filteredTensorList.length : PLACEHOLDER_ARRAY_SIZE;
+    const numberOfTensors = filteredTensorList.length || PLACEHOLDER_ARRAY_SIZE;
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
     const handleUserScrolling = () => {
@@ -192,7 +191,7 @@ const TensorList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
-                <ButtonGroup variant='minimal'>
+                <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
                         content='Toggle high consumer tensors'
                         placement={PopoverPosition.TOP}
@@ -202,7 +201,7 @@ const TensorList = () => {
                             endIcon={IconNames.ISSUE}
                             disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
                             intent={HIGH_CONSUMER_INTENT}
-                            variant={showHighConsumerTensors ? 'outlined' : undefined}
+                            variant={showHighConsumerTensors ? ButtonVariant.OUTLINED : undefined}
                             aria-label='Toggle high consumer tensors'
                         >
                             {filteredTensorList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
@@ -218,7 +217,7 @@ const TensorList = () => {
                             endIcon={IconNames.OUTDATED}
                             intent={Intent.WARNING}
                             disabled={nonDeallocatedTensorList.size === 0}
-                            variant={showLateDeallocatedTensors ? 'outlined' : undefined}
+                            variant={showLateDeallocatedTensors ? ButtonVariant.OUTLINED : undefined}
                             aria-label='Toggle high consumer tensors'
                         >
                             {filteredTensorList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
@@ -283,7 +282,6 @@ const TensorList = () => {
                 className={classNames('scrollable-element', {
                     'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfTensors > virtualItems.length,
-                    'scroll-lock': virtualHeight <= 0,
                 })}
                 onScroll={handleUserScrolling}
             >
@@ -309,7 +307,7 @@ const TensorList = () => {
                                 return (
                                     <li
                                         className='list-item-container'
-                                        key={virtualRow.index}
+                                        key={virtualRow.key}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
                                     >

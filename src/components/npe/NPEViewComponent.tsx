@@ -5,7 +5,7 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
-import 'styles/components/ZonesRenderer.scss';
+import 'styles/components/NPEZoneFilterComponent.scss';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -16,9 +16,13 @@ import {
     EVENT_TYPE_FILTER,
     FABRIC_EVENT_SCOPE_OPTIONS,
     FabricEventScopeColors,
+    KERNEL_PROCESS,
     NPEData,
     NPERootZone,
+    NPERootZoneUXInfo,
+    NPEZone,
     NPE_COORDINATES,
+    NPE_COORDINATE_INDEX,
     NPE_LINK,
     NoCFlowBase,
     NoCTransfer,
@@ -44,7 +48,7 @@ import { RouteOriginsRenderer } from './RouteOriginsRenderer';
 import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHandlers';
 import { altCongestionColorsAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
-import NPEZonesRenderer from './NPEZonesRenderer';
+import NPEZoneFilterComponent from './NPEZoneFilterComponent';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -65,6 +69,11 @@ enum VISUALIZATION_MODE {
     TRANSFERS,
 }
 
+type RootzoneStateKey = string;
+const getRootZoneKey = (proc: KERNEL_PROCESS, address: NPE_COORDINATES): RootzoneStateKey => {
+    return `${proc}:${address.join(',')}`;
+};
+
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
@@ -76,6 +85,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
     const [openZonesPanel, setOpenZonesPanel] = useState<boolean>(false);
     const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
+    const [expandedZoneMap, setExpandedZoneMap] = useState<Record<RootzoneStateKey, boolean>>({});
+
     let totalColsChips = 0;
     const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
@@ -91,12 +102,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
     const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
-
     const zones: NPERootZone[] = useMemo(() => {
         return npeData.zones || [];
     }, [npeData]);
-    // eslint-disable-next-line no-void
-    void zones;
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
         return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
@@ -107,6 +115,26 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
         }
     }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
+
+    const selectedZoneList: NPERootZoneUXInfo[] = useMemo(() => {
+        if (selectedZoneAddress === null) {
+            return [];
+        }
+        return zones
+            .filter((rootZone) => {
+                return (
+                    rootZone.core[NPE_COORDINATE_INDEX.CHIP_ID] === selectedZoneAddress[NPE_COORDINATE_INDEX.CHIP_ID] &&
+                    rootZone.core[NPE_COORDINATE_INDEX.Y] === selectedZoneAddress[NPE_COORDINATE_INDEX.Y] &&
+                    rootZone.core[NPE_COORDINATE_INDEX.X] === selectedZoneAddress[NPE_COORDINATE_INDEX.X]
+                );
+            })
+            .map(
+                (rootZone): NPERootZoneUXInfo => ({
+                    ...rootZone,
+                    expandedState: expandedZoneMap[getRootZoneKey(rootZone.proc, rootZone.core)] ?? false,
+                }),
+            );
+    }, [expandedZoneMap, selectedZoneAddress, zones]);
 
     const links = useMemo(() => {
         const timestepData = npeData.timestep_data[selectedTimestep];
@@ -249,6 +277,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTimestep((prev) => {
             return prev < range - 1 ? prev + 1 : 0;
         });
+    };
+    const onHandleZoneNavigation = (zone: NPEZone) => {
+        const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep ?? 1));
+        setSelectedTimestep(timestep);
     };
     const handleScrubberChange = (value: number) => {
         stopAnimation();
@@ -516,6 +548,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 <NPECongestionHeatMap
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
+                    currentTimestep={selectedTimestep}
+                    useTimesteps={timestepsScale}
+                    cyclesPerTimestep={npeData.common_info.cycles_per_timestep ?? 1}
+                    selectedZoneList={selectedZoneList}
                     nocType={nocFilter}
                 />
             </div>
@@ -775,7 +811,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 setHighlightedRoute={setHighlightedRoute}
                 nocType={nocFilter}
             />
-            <NPEZonesRenderer
+            <NPEZoneFilterComponent
                 npeData={npeData}
                 open={openZonesPanel}
                 onClose={() => {
@@ -784,6 +820,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 onSelect={(coords: NPE_COORDINATES | null) => {
                     setSelectedZoneAddress(coords);
                 }}
+                onExpand={(state, proc, address) => {
+                    const key = getRootZoneKey(proc, address);
+                    setExpandedZoneMap((prev) => ({
+                        ...prev,
+                        [key]: state,
+                    }));
+                }}
+                onZoneClick={onHandleZoneNavigation}
             />
         </div>
     );

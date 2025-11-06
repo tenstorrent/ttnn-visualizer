@@ -38,6 +38,7 @@ import {
     hasBeenNormalised,
     normaliseReportFolder,
 } from '../../functions/validateReportFolder';
+import { TEST_IDS } from '../../definitions/TestIds';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -302,7 +303,7 @@ const LocalFolderOptions: FC = () => {
                                 directory: '',
                                 webkitdirectory: '',
                                 multiple: true,
-                                'data-testid': 'local-profiler-upload',
+                                'data-testid': TEST_IDS.LOCAL_PROFILER_UPLOAD,
                             }}
                         />
 
@@ -351,7 +352,7 @@ const LocalFolderOptions: FC = () => {
                                 directory: '',
                                 webkitdirectory: '',
                                 multiple: true,
-                                'data-testid': 'local-performance-upload',
+                                'data-testid': TEST_IDS.LOCAL_PERFORMANCE_UPLOAD,
                             }}
                         />
 

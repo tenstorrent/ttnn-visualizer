@@ -35,10 +35,6 @@
         overflow-y: auto;
         position: relative;
 
-        &.scroll-lock {
-            overflow-y: unset;
-        }
-
         &::before,
         &::after {
             content: '';
@@ -85,8 +81,18 @@
         // https://github.com/TanStack/virtual/issues/540#issuecomment-1720745734
         overflow-anchor: none;
 
-        &.has-error {
-            background-color: rgba($tt-red-accent, 0.5);
+        &.focus-fade {
+            animation: focus-fade-bg 1.5s ease-out;
+
+            @keyframes focus-fade-bg {
+                0% {
+                    background-color: rgba($tt-purple, 0.5);
+                }
+
+                100% {
+                    background-color: transparent;
+                }
+            }
         }
     }
 
@@ -94,5 +100,11 @@
         margin-left: 5px;
         margin-right: 5px;
         margin-bottom: 5px;
+    }
+
+    .no-results {
+        font-size: 18px;
+        margin-top: 5px;
+        margin-left: 8px;
     }
 }

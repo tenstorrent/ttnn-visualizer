@@ -10,6 +10,7 @@ import classNames from 'classnames';
 import LocalFolderPicker from '../report-selection/LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import { TEST_IDS } from '../../definitions/TestIds';
 
 interface ComparisonReportSelectorProps {
     folderList: ReportFolder[];
@@ -34,7 +35,7 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({
             className={classNames('form-group', className)}
             label={label}
             subLabel={subLabel}
-            data-testid='comparison-report-selector'
+            data-testid={TEST_IDS.COMPARISON_REPORT_SELECTOR}
         >
             <div className='folder-selection'>
                 <LocalFolderPicker
