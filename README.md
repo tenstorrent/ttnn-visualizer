@@ -69,15 +69,15 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | Operation graph view | Model buffer summary |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/a77b099e-9caa-4758-8dee-8b30cad4dad8" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/90a4c0e6-58cb-4031-b224-a91f3beadc51" /> |
+| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/422f1591-4232-4d16-a783-726960261443" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/9afa48b2-628d-4dad-ac89-42fda762aee6" /> |
 
 | Per core allocation details | Per core allocation details for individual tensors |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/0d4a833a-d9b6-4239-a953-42c0b84d4f80" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/06b69fbb-c6fc-45fe-9360-36722e68bee5" /> |
+| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/681c8d0e-c628-4839-afca-f31ff9d53f73" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/a9d66f2d-2457-4ced-b777-6e8f0c54eb86" /> |
 
 | Tensor details list | Performance report |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/919da94e-45f9-432e-9eb4-c584b4140663" /> | <img width="400" alt="Performnance analysis" src="https://github.com/user-attachments/assets/468b0acb-733e-4891-8e16-781c47889017" /> |
+| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/315089ff-ae75-4615-87b9-19c45431871c" /> | <img width="400" alt="Performnance analysis" src="https://github.com/user-attachments/assets/468b0acb-733e-4891-8e16-781c47889017" /> |
 
 | Performance charts |  |
 |-----------------------------------------------|------------------------------------------|
