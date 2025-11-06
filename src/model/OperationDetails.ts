@@ -315,13 +315,15 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             this.buffers
                 ?.filter((buffer: BufferData) => buffer.buffer_type === bufferType)
                 .map((buffer: BufferData) => {
-                    const lateTensor = this.deallocationReport.some((report) => report.address === buffer.address);
+                    const lateDeallocation = this.deallocationReport.some(
+                        (report) => report.address === buffer.address,
+                    );
 
                     return {
                         address: buffer.address,
                         size: buffer.max_size_per_bank,
                         tensorId: this.getTensorForAddress(buffer.address)?.id,
-                        lateDeallocation: lateTensor || false,
+                        lateDeallocation,
                     };
                 })
                 .sort((a, b) => a.address - b.address) || [];
