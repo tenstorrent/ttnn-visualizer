@@ -228,7 +228,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             />
 
                             <Switch
-                                label={!showCircularBuffer ? 'Show L1 Small' : 'Hide L1 Small'}
+                                label={!showL1Small ? 'Show L1 Small' : 'Hide L1 Small'}
                                 checked={showL1Small}
                                 disabled={l1Small.condensed.size === 0}
                                 onChange={() => {
