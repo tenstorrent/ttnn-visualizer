@@ -108,7 +108,11 @@ export default function getChartData(
 <span style="color:${color};font-size:20px;">&#9632;</span>
 ${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
 ${tensor ? `<br>${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} Tensor${tensor.id}<br>${tensorMemoryLayout || ''}` : ''}
-${options?.lateDeallocation && chunk.lateDeallocation ? `<br><span style="color:red;font-weight:bold;">Opportunity to deallocate earlier</span>` : ''}
+${
+    options?.lateDeallocation && chunk.lateDeallocation
+        ? `<br><span style="font-weight:bold;">Opportunity to deallocate earlier</span>`
+        : ''
+}
 <extra></extra>`,
 
             hoverlabel: {
