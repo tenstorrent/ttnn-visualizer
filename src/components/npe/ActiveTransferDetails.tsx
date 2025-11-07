@@ -38,12 +38,13 @@ const ActiveTransferDetails = ({
     isOpen: boolean;
 }) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
-    const hasData = Object.keys(groupedTransfersByNoCID).length !== 0 && isOpen;
+    const hasData = Object.keys(groupedTransfersByNoCID).length !== 0;
     const [showRoutes, setShowRoutes] = useState(false);
+
     return (
         <aside
             className={classNames('side-data', {
-                'has-data': hasData,
+                'is-open': isOpen,
             })}
         >
             {hasData && (

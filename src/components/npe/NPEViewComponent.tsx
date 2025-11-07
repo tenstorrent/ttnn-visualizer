@@ -86,9 +86,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [openZonesPanel, setOpenZonesPanel] = useState<boolean>(false);
     const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
     const [expandedZoneMap, setExpandedZoneMap] = useState<Record<RootzoneStateKey, boolean>>({});
+    const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
+    const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
+    const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
+    const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+    const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
+    const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
+    const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
+    const [zoom, setZoom] = useState<number>(0.75);
 
     let totalColsChips = 0;
-    const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
         totalColsChips = Math.max(totalColsChips, coords[CLUSTER_COORDS.X]);
         return {
@@ -96,12 +103,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             coords,
         };
     });
-    const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
-    const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
-    const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
-    const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
-    const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
-    const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
+
     const zones: NPERootZone[] = useMemo(() => {
         return npeData.zones || [];
     }, [npeData]);
@@ -200,7 +202,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }
     };
 
-    const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
     useEffect(() => {
         const handleResize = () => setCanvasWidth(window.innerWidth);
         window.addEventListener('resize', handleResize);
@@ -263,8 +264,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const onBackward = () => {
         stopAnimation();
         const range = npeData.timestep_data.length;
-        setSelectedNode(null);
-        setSelectedTransferList([]);
         setSelectedTimestep((prev) => {
             return prev > 0 ? prev - 1 : range - 1;
         });
@@ -277,6 +276,38 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTimestep((prev) => {
             return prev < range - 1 ? prev + 1 : 0;
         });
+
+        // const updatedTimestep = selectedTimestep < range - 1 ? selectedTimestep + 1 : 0;
+        // const selectedCoords = JSON.stringify(selectedNode?.coords);
+        // const hasSelectionInList = selectedTransferList.some(
+        //     (list) =>
+        //         JSON.stringify(list.src) === selectedCoords ||
+        //         list.dst.some((dst) => JSON.stringify(dst) === selectedCoords),
+        //     || list.route.some((route) =>
+        //         route.links.some((link) => JSON.stringify(link.slice(0, 3)) === selectedCoords),
+        //     ),
+        // );
+
+        // console.log('onForward', selectedCoords);
+        // console.log(
+        //     'checking coords',
+        //     selectedTransferList,
+        //     selectedTransferList.map((t) => JSON.stringify(t.src)),
+        //     selectedTransferList.flatMap((t) => t.dst.map((dst) => JSON.stringify(dst))),
+        //     selectedTransferList.flatMap((t) =>
+        //         t.route.map((route) => route.links.map((link) => JSON.stringify(link.slice(0, 3)))),
+        //     ),
+        // );
+
+        // console.log('transfer list', hasSelectionInList);
+
+        // if (!hasSelectionInList) {
+        //     setSelectedNode(null);
+        //     setSelectedTransferList([]);
+        // }
+
+        // stopAnimation();
+        // setSelectedTimestep(updatedTimestep);
     };
     const onHandleZoneNavigation = (zone: NPEZone) => {
         const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep ?? 1));
@@ -337,8 +368,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return 0.5;
     };
 
-    const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
-    const showDetails = !!(selectedNode && playbackSpeed === 0);
+    const switchWidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
+    const isActiveTransferDetailsOpen = !!(selectedNode && playbackSpeed === 0);
 
     return (
         <div className='npe'>
@@ -517,7 +548,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         </label>
                     </div>
                 </ButtonGroup>
-                <div style={{ position: 'relative', width: `${switchwidth}px` }}>
+                <div style={{ position: 'relative', width: `${switchWidth}px` }}>
                     <Slider
                         handleHtmlProps={{ 'aria-label': 'Timeline scrubber' }}
                         min={0}
@@ -555,7 +586,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             <div className='split-grid'>
                 <div
                     className={classNames('chip-cluster-wrap', {
-                        'details-open': showDetails,
+                        'details-open': isActiveTransferDetailsOpen,
                     })}
                     style={{
                         gridTemplateColumns: `repeat(${totalColsChips || 0}, ${(TENSIX_SIZE + 1) * width}px)`,
@@ -791,10 +822,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
-                {showDetails && <div className='grid-spacer'>&nbsp;</div>}
+                {isActiveTransferDetailsOpen && <div className='grid-spacer'>&nbsp;</div>}
             </div>
             <ActiveTransferDetails
-                isOpen={showDetails}
+                isOpen={isActiveTransferDetailsOpen}
                 groupedTransfersByNoCID={groupedTransfersByNoCID}
                 selectedNode={selectedNode}
                 congestionData={links?.link_demand.filter(
