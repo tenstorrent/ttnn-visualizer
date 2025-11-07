@@ -21,6 +21,12 @@ import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../definitions/L1MemorySize';
+import { TensorDeallocationReport } from './BufferSummary';
+
+export interface OperationDetailsOptions {
+    renderPattern: boolean;
+    lateDeallocation: boolean;
+}
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -49,6 +55,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     private operations: OperationDescription[] = [];
 
+    private deallocationReport: TensorDeallocationReport[] = [];
+
     public deviceOperations: DeviceOperation[] = [];
 
     private memoryConfig: {
@@ -56,16 +64,20 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         l1end: number;
     };
 
-    private options: { renderPattern: boolean } = { renderPattern: false };
+    private options: OperationDetailsOptions = {
+        renderPattern: false,
+        lateDeallocation: false,
+    };
 
     constructor(
         data: OperationDetailsData,
         operations: OperationDescription[],
+        deallocationReport: TensorDeallocationReport[],
         memoryConfig: {
             l1start: number;
             l1end: number;
         },
-        options?: { renderPattern: boolean },
+        options?: OperationDetailsOptions,
     ) {
         this.id = data.id;
         this.inputs = data.inputs;
@@ -77,10 +89,11 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.stack_trace = data.stack_trace;
         this.operations = operations;
         this.raw_device_operations = data.device_operations;
+        this.deallocationReport = deallocationReport;
         // DEBUG
         // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
-        this.options = options || { renderPattern: false };
+        this.options = options || { renderPattern: false, lateDeallocation: false };
         this.memoryConfig = memoryConfig;
 
         this.inputs.forEach((tensor) => {
@@ -302,10 +315,15 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             this.buffers
                 ?.filter((buffer: BufferData) => buffer.buffer_type === bufferType)
                 .map((buffer: BufferData) => {
+                    const lateDeallocation = this.deallocationReport.some(
+                        (report) => report.address === buffer.address,
+                    );
+
                     return {
                         address: buffer.address,
                         size: buffer.max_size_per_bank,
                         tensorId: this.getTensorForAddress(buffer.address)?.id,
+                        lateDeallocation,
                     };
                 })
                 .sort((a, b) => a.address - b.address) || [];

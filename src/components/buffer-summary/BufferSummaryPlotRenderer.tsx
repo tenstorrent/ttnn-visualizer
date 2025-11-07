@@ -32,6 +32,7 @@ import {
     renderMemoryLayoutAtom,
     selectedDeviceAtom,
     showBufferSummaryZoomedAtom,
+    showDeallocationReportAtom,
     showHexAtom,
     showMemoryRegionsAtom,
 } from '../../store/app';
@@ -57,7 +58,7 @@ function BufferSummaryPlotRenderer({
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [activeRow, setActiveRow] = useState<number | null>(null);
-    const [showDeallocationReport, setShowDeallocationReport] = useState(true);
+    const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
@@ -157,7 +158,7 @@ function BufferSummaryPlotRenderer({
                         setIsZoomedIn(!isZoomedIn);
                     }}
                 />
-                <Switch
+                <GlobalSwitch
                     label='Mark late tensor deallocations'
                     checked={showDeallocationReport}
                     onChange={() => {

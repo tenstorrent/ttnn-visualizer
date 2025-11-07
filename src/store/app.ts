@@ -36,6 +36,8 @@ export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 export const scrollPositionsAtom = atom<ScrollPositions | null>(null);
 export const scrollPositionsV2Atom = atom<ScrollPositionV2 | null>(null);
 
+export const showDeallocationReportAtom = atom<boolean>(false);
+
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom<FileProgress>({
     currentFileName: '',
