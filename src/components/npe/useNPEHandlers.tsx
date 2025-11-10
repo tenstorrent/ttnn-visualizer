@@ -16,38 +16,6 @@ interface UseShowActiveTransfersParams {
     setSelectedTransferList: (transfers: NoCTransfer[]) => void;
 }
 
-export const computeActiveTransfers = (
-    npeData: NPEData,
-    selectedTimestep: number,
-    linkUtilizationData: LinkUtilization,
-    nocFilter: NoCType | null,
-): NoCTransfer[] => {
-    return npeData.timestep_data[selectedTimestep].active_transfers
-        .map((transferId) => {
-            const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
-
-            const routes = transfer?.route
-                ?.map((r) =>
-                    r.links.some(
-                        (link) =>
-                            link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
-                            link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
-                            link[NPE_LINK.CHIP_ID] === linkUtilizationData[NPE_LINK.CHIP_ID] &&
-                            (nocFilter === null || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
-                    )
-                        ? r
-                        : null,
-                )
-                .filter((r) => r !== null);
-
-            if (routes && routes.length > 0) {
-                return transfer;
-            }
-            return undefined;
-        })
-        .filter((tr): tr is NoCTransfer => tr !== undefined);
-};
-
 export const useShowActiveTransfers = ({
     npeData,
     selectedNode,
@@ -80,7 +48,30 @@ export const useShowActiveTransfers = ({
 
             onPause();
 
-            const activeTransfers = computeActiveTransfers(npeData, selectedTimestep, linkUtilizationData, nocFilter);
+            const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
+                .map((transferId) => {
+                    const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
+
+                    const routes = transfer?.route
+                        ?.map((r) =>
+                            r.links.some(
+                                (link) =>
+                                    link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
+                                    link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
+                                    link[NPE_LINK.CHIP_ID] === linkUtilizationData[NPE_LINK.CHIP_ID] &&
+                                    (nocFilter === null || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
+                            )
+                                ? r
+                                : null,
+                        )
+                        .filter((r) => r !== null);
+
+                    if (routes && routes.length > 0) {
+                        return transfer;
+                    }
+                    return undefined;
+                })
+                .filter((tr): tr is NoCTransfer => tr !== undefined);
 
             setSelectedTransferList(activeTransfers);
         },
@@ -97,7 +88,10 @@ export const useShowActiveTransfers = ({
     );
 };
 
-export function useSelectedTransferGrouping(selectedTransferList: NoCTransfer[], selectedNode: SelectedNode | null) {
+export function useSelectedTransferGrouping(
+    selectedTransferList: NoCTransfer[],
+    selectedNode: { coords: number[] } | null,
+) {
     const transferListSelectionRendering = useMemo(() => {
         const selectedNoCByDevice = new Map<number, Array<Array<Array<{ transfer: number; nocId: NoCID }>>>>();
 

@@ -248,6 +248,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }, 100 / speed);
         setAnimationInterval(Number(interval));
     };
+
     const stopAnimation = () => {
         setPlaybackSpeed(0);
         return clearInterval(animationInterval as number);
@@ -256,23 +257,26 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const onPlay = () => {
         startAnimation();
     };
+
     const onPlay2x = () => {
         startAnimation(PLAYBACK_SPEED_2X);
     };
+
     const onPause = () => {
         stopAnimation();
     };
+
     const onBackward = () => {
-        stopAnimation();
         const range = npeData.timestep_data.length;
+        stopAnimation();
         setSelectedNode(null);
         setSelectedTransferList([]);
         setSelectedTimestep((prev) => (prev > 0 ? prev - 1 : range - 1));
     };
 
     const onForward = () => {
-        stopAnimation();
         const range = npeData.timestep_data.length;
+        stopAnimation();
         setSelectedNode(null);
         setSelectedTransferList([]);
         setSelectedTimestep((prev) => (prev < range - 1 ? prev + 1 : 0));
@@ -282,16 +286,19 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep ?? 1));
         setSelectedTimestep(timestep);
     };
+
     const handleScrubberChange = (value: number) => {
         stopAnimation();
         setSelectedTimestep(value);
         setSelectedNode(null);
         setSelectedTransferList([]);
     };
+
     const hideAllTransfers = () => {
         setIsShowingAllTransfers(false);
         setSelectedTransferList([]);
     };
+
     const showActiveTransfers = useShowActiveTransfers({
         npeData,
         selectedNode,
