@@ -27,6 +27,7 @@ import {
     NoCFlowBase,
     NoCTransfer,
     NoCType,
+    SelectedNode,
 } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import {
@@ -80,7 +81,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
-    const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
+    const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
     const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
     const [openZonesPanel, setOpenZonesPanel] = useState<boolean>(false);
@@ -264,51 +265,19 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const onBackward = () => {
         stopAnimation();
         const range = npeData.timestep_data.length;
-        setSelectedTimestep((prev) => {
-            return prev > 0 ? prev - 1 : range - 1;
-        });
-    };
-    const onForward = () => {
-        stopAnimation();
         setSelectedNode(null);
         setSelectedTransferList([]);
-        const range = npeData.timestep_data.length;
-        setSelectedTimestep((prev) => {
-            return prev < range - 1 ? prev + 1 : 0;
-        });
-
-        // const updatedTimestep = selectedTimestep < range - 1 ? selectedTimestep + 1 : 0;
-        // const selectedCoords = JSON.stringify(selectedNode?.coords);
-        // const hasSelectionInList = selectedTransferList.some(
-        //     (list) =>
-        //         JSON.stringify(list.src) === selectedCoords ||
-        //         list.dst.some((dst) => JSON.stringify(dst) === selectedCoords),
-        //     || list.route.some((route) =>
-        //         route.links.some((link) => JSON.stringify(link.slice(0, 3)) === selectedCoords),
-        //     ),
-        // );
-
-        // console.log('onForward', selectedCoords);
-        // console.log(
-        //     'checking coords',
-        //     selectedTransferList,
-        //     selectedTransferList.map((t) => JSON.stringify(t.src)),
-        //     selectedTransferList.flatMap((t) => t.dst.map((dst) => JSON.stringify(dst))),
-        //     selectedTransferList.flatMap((t) =>
-        //         t.route.map((route) => route.links.map((link) => JSON.stringify(link.slice(0, 3)))),
-        //     ),
-        // );
-
-        // console.log('transfer list', hasSelectionInList);
-
-        // if (!hasSelectionInList) {
-        //     setSelectedNode(null);
-        //     setSelectedTransferList([]);
-        // }
-
-        // stopAnimation();
-        // setSelectedTimestep(updatedTimestep);
+        setSelectedTimestep((prev) => (prev > 0 ? prev - 1 : range - 1));
     };
+
+    const onForward = () => {
+        stopAnimation();
+        const range = npeData.timestep_data.length;
+        setSelectedNode(null);
+        setSelectedTransferList([]);
+        setSelectedTimestep((prev) => (prev < range - 1 ? prev + 1 : 0));
+    };
+
     const onHandleZoneNavigation = (zone: NPEZone) => {
         const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep ?? 1));
         setSelectedTimestep(timestep);
@@ -369,7 +338,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchWidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
-    const isActiveTransferDetailsOpen = !!(selectedNode && playbackSpeed === 0);
+    const isPlaying = playbackSpeed > 0;
+    const isActiveTransferDetailsOpen = !!(selectedNode && selectedTransferList?.length > 0);
 
     return (
         <div className='npe'>
@@ -377,6 +347,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 info={npeData.common_info}
                 numTransfers={transfers.length}
             />
+
             <div className='header'>
                 <ButtonGroup className='npe-controls'>
                     <div className='npe-controls-line'>
@@ -385,9 +356,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onClick={onBackward}
                         />
                         <Button
-                            icon={playbackSpeed === 0 ? IconNames.Play : IconNames.Pause}
+                            icon={isPlaying ? IconNames.Pause : IconNames.Play}
                             intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
-                            onClick={playbackSpeed === 0 ? onPlay : onPause}
+                            onClick={isPlaying ? onPause : onPlay}
                         />
                         <Button
                             icon={IconNames.FastForward}
@@ -824,6 +795,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 </div>
                 {isActiveTransferDetailsOpen && <div className='grid-spacer'>&nbsp;</div>}
             </div>
+
             <ActiveTransferDetails
                 isOpen={isActiveTransferDetailsOpen}
                 groupedTransfersByNoCID={groupedTransfersByNoCID}
@@ -840,6 +812,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 setHighlightedRoute={setHighlightedRoute}
                 nocType={nocFilter}
             />
+
             <NPEZoneFilterComponent
                 npeData={npeData}
                 open={openZonesPanel}

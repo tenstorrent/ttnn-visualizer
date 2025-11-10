@@ -3,18 +3,50 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useMemo } from 'react';
-import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
+import { LinkUtilization, NPEData, NPE_LINK, NoCID, NoCTransfer, NoCType, SelectedNode } from '../../model/NPEModel';
 
 interface UseShowActiveTransfersParams {
     npeData: NPEData;
-    selectedNode: { index: number } | null;
+    selectedNode: SelectedNode | null;
     selectedTimestep: number;
     nocFilter: NoCType | null;
     onPause: () => void;
     hideAllTransfers: () => void;
-    setSelectedNode: (value: { index: number; coords: NPE_COORDINATES } | null) => void;
+    setSelectedNode: (value: SelectedNode | null) => void;
     setSelectedTransferList: (transfers: NoCTransfer[]) => void;
 }
+
+export const computeActiveTransfers = (
+    npeData: NPEData,
+    selectedTimestep: number,
+    linkUtilizationData: LinkUtilization,
+    nocFilter: NoCType | null,
+): NoCTransfer[] => {
+    return npeData.timestep_data[selectedTimestep].active_transfers
+        .map((transferId) => {
+            const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
+
+            const routes = transfer?.route
+                ?.map((r) =>
+                    r.links.some(
+                        (link) =>
+                            link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
+                            link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
+                            link[NPE_LINK.CHIP_ID] === linkUtilizationData[NPE_LINK.CHIP_ID] &&
+                            (nocFilter === null || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
+                    )
+                        ? r
+                        : null,
+                )
+                .filter((r) => r !== null);
+
+            if (routes && routes.length > 0) {
+                return transfer;
+            }
+            return undefined;
+        })
+        .filter((tr): tr is NoCTransfer => tr !== undefined);
+};
 
 export const useShowActiveTransfers = ({
     npeData,
@@ -48,30 +80,7 @@ export const useShowActiveTransfers = ({
 
             onPause();
 
-            const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
-                .map((transferId) => {
-                    const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
-
-                    const routes = transfer?.route
-                        ?.map((r) =>
-                            r.links.some(
-                                (link) =>
-                                    link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
-                                    link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
-                                    link[NPE_LINK.CHIP_ID] === linkUtilizationData[NPE_LINK.CHIP_ID] &&
-                                    (nocFilter === null || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
-                            )
-                                ? r
-                                : null,
-                        )
-                        .filter((r) => r !== null);
-
-                    if (routes && routes.length > 0) {
-                        return transfer;
-                    }
-                    return undefined;
-                })
-                .filter((tr): tr is NoCTransfer => tr !== undefined);
+            const activeTransfers = computeActiveTransfers(npeData, selectedTimestep, linkUtilizationData, nocFilter);
 
             setSelectedTransferList(activeTransfers);
         },
@@ -88,10 +97,7 @@ export const useShowActiveTransfers = ({
     );
 };
 
-export function useSelectedTransferGrouping(
-    selectedTransferList: NoCTransfer[],
-    selectedNode: { coords: number[] } | null,
-) {
+export function useSelectedTransferGrouping(selectedTransferList: NoCTransfer[], selectedNode: SelectedNode | null) {
     const transferListSelectionRendering = useMemo(() => {
         const selectedNoCByDevice = new Map<number, Array<Array<Array<{ transfer: number; nocId: NoCID }>>>>();
 
