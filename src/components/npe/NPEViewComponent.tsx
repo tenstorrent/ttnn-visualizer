@@ -346,7 +346,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
 
     const switchWidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
     const isPlaying = playbackSpeed > 0;
-    const isActiveTransferDetailsOpen = !!(selectedNode && selectedTransferList?.length > 0);
+    const isActiveTransferDetailsOpen = !!(selectedNode && !isPlaying && selectedTransferList?.length > 0);
 
     return (
         <div className='npe'>
