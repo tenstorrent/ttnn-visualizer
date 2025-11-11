@@ -7,6 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import NPEProcessingStatus from '../src/components/NPEProcessingStatus';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { MIN_NPE_DATA_VERSION, getNpeDataErrorType } from '../src/definitions/NPEData';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -14,7 +15,10 @@ afterEach(cleanup);
 it('renders an initial message', () => {
     render(
         <TestProviders>
-            <NPEProcessingStatus dataVersion={null} />
+            <NPEProcessingStatus
+                dataVersion={null}
+                errorType={getNpeDataErrorType(null)}
+            />
         </TestProviders>,
     );
 
@@ -27,6 +31,7 @@ it('handles incorrect NPE data versions', () => {
             <NPEProcessingStatus
                 hasUploadedFile
                 dataVersion={null}
+                errorType={getNpeDataErrorType(null)}
             />
         </TestProviders>,
     );
@@ -40,7 +45,7 @@ it('handles incomplete NPE data', () => {
             <NPEProcessingStatus
                 hasUploadedFile
                 dataVersion='0.1.0'
-                isInvalidData
+                errorType={getNpeDataErrorType('0.1.0', undefined, true)}
             />
         </TestProviders>,
     );
@@ -53,8 +58,8 @@ it('handles invalid JSON data', () => {
         <TestProviders>
             <NPEProcessingStatus
                 hasUploadedFile
-                dataVersion='1.0.0'
-                fetchErrorCode={422}
+                dataVersion={MIN_NPE_DATA_VERSION}
+                errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 422)}
             />
         </TestProviders>,
     );
@@ -67,8 +72,8 @@ it('handles unknown errors', () => {
         <TestProviders>
             <NPEProcessingStatus
                 hasUploadedFile
-                dataVersion='1.0.0'
-                fetchErrorCode={500}
+                dataVersion={MIN_NPE_DATA_VERSION}
+                errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 500)}
             />
         </TestProviders>,
     );

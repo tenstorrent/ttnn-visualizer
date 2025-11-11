@@ -33,6 +33,7 @@ import FileStatusOverlay from '../components/FileStatusOverlay';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
+import { MIN_NPE_DATA_VERSION, getNpeDataErrorType } from '../definitions/NPEData';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -619,41 +620,39 @@ export default function Styleguide() {
 
             <div className='container'>
                 <h3>NPE Processing Status</h3>
-                <NPEProcessingStatus dataVersion={null} />
 
-                <br />
-                <br />
-
+                <h4>Initial state (no uploaded file)</h4>
                 <NPEProcessingStatus
                     dataVersion={null}
+                    errorType={getNpeDataErrorType(null)}
+                />
+
+                <h4>Legacy file format (no version)</h4>
+                <NPEProcessingStatus
+                    dataVersion={null}
+                    errorType={getNpeDataErrorType(null)}
                     hasUploadedFile
                 />
 
-                <br />
-                <br />
-
+                <h4>Invalid NPE Data</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
-                    dataVersion='1.0.0'
-                    isInvalidData
+                    dataVersion={MIN_NPE_DATA_VERSION}
+                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, undefined, true)}
                 />
 
-                <br />
-                <br />
-
+                <h4>Unprocessable JSON error (HTTP 422)</h4>
                 <NPEProcessingStatus
-                    fetchErrorCode={422}
                     hasUploadedFile
-                    dataVersion='1.0.0'
+                    dataVersion={MIN_NPE_DATA_VERSION}
+                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 422)}
                 />
 
-                <br />
-                <br />
-
+                <h4>Unknown error (HTTP 500)</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
-                    dataVersion='1.0.0'
-                    fetchErrorCode={500}
+                    dataVersion={MIN_NPE_DATA_VERSION}
+                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 500)}
                 />
             </div>
         </>

@@ -17,7 +17,7 @@ import { semverParse } from '../functions/semverParse';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
-import { NPE_DATA_VERSION } from '../definitions/NPEData';
+import { MIN_NPE_DATA_VERSION, getNpeDataErrorType } from '../definitions/NPEData';
 
 const NPE: FC = () => {
     const { filepath } = useParams<{ filepath?: string }>();
@@ -78,15 +78,14 @@ const NPE: FC = () => {
                     <NPEProcessingStatus
                         dataVersion={dataVersion}
                         hasUploadedFile={hasUploadedFile}
-                        isInvalidData
+                        errorType={getNpeDataErrorType(dataVersion, processingError?.status, true)}
                     />
                 )
             ) : (
                 <NPEProcessingStatus
                     dataVersion={dataVersion}
                     hasUploadedFile={hasUploadedFile}
-                    fetchErrorCode={processingError?.status}
-                    isInvalidData
+                    errorType={getNpeDataErrorType(dataVersion, processingError?.status, true)}
                 />
             )}
         </>
@@ -99,10 +98,10 @@ const isValidNpeData = (data: NPEData): boolean => {
     }
     const requiredKeys: (keyof NPEData)[] = ['common_info', 'noc_transfers', 'timestep_data'];
     const hasAllKeys = requiredKeys.every((key) => key in data);
-    const version = semverParse(data.common_info.version);
-    const expectedVersion = semverParse(NPE_DATA_VERSION);
+    const dataVersion = semverParse(data.common_info.version);
+    const minSupportedVersion = semverParse(MIN_NPE_DATA_VERSION);
 
-    if (!hasAllKeys || version?.major !== expectedVersion?.major) {
+    if (!hasAllKeys || dataVersion?.major !== minSupportedVersion?.major) {
         return false;
     }
 
