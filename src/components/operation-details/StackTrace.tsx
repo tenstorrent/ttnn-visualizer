@@ -16,32 +16,37 @@ import useRemoteConnection from '../../hooks/useRemote';
 import Overlay from '../Overlay';
 import 'styles/components/StackTrace.scss';
 import { ReportLocation } from '../../definitions/Reports';
+import { StackTraceLanguage } from '../../definitions/StackTrace';
 
-hljs.registerLanguage('python', python);
-hljs.registerLanguage('cpp', cpp);
+hljs.registerLanguage(StackTraceLanguage.PYTHON, python);
+hljs.registerLanguage(StackTraceLanguage.CPP, cpp);
 
 const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
 const LINE_NUMBER_REGEX = /(?<=line )(\d*)(?=,)/m;
 
-type HighlightLanguages = 'python' | 'cpp';
-
 interface StackTraceProps {
+    title?: string;
     stackTrace: string;
-    language: HighlightLanguages;
+    language: StackTraceLanguage;
     hideSourceButton?: boolean;
     isInline?: boolean;
     // Supply these two props if you want to control the expanded state from outside
     isInitiallyExpanded?: boolean;
     onExpandChange?: (isVisible: boolean) => void;
+    className?: string;
+    intent?: Intent;
 }
 
 function StackTrace({
+    title,
     stackTrace,
     language,
     hideSourceButton,
     isInline,
     isInitiallyExpanded,
     onExpandChange,
+    className,
+    intent = Intent.NONE,
 }: StackTraceProps) {
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
@@ -134,76 +139,80 @@ function StackTrace({
     };
 
     return (
-        <pre
-            className={classNames('stack-trace', {
-                'is-inline': isInline,
-            })}
-            ref={scrollElementRef}
-        >
-            {isExpanded ? (
-                <div className='code-wrapper'>
-                    <code
-                        className={`language-${language} code-output`}
-                        // eslint-disable-next-line react/no-danger
-                        dangerouslySetInnerHTML={{ __html: stackTraceWithHighlights }}
-                    />
-                </div>
-            ) : (
-                <div className='code-wrapper'>
-                    <code
-                        className={`language-${language} code-output`}
-                        // eslint-disable-next-line react/no-danger
-                        dangerouslySetInnerHTML={{
-                            __html: getStackTracePreview(stackTraceWithHighlights),
-                        }}
-                    />
-                </div>
-            )}
-
-            <div className={classNames('stack-trace-buttons is-sticky')}>
-                <Button
-                    variant={ButtonVariant.MINIMAL}
-                    intent={Intent.PRIMARY}
-                    onClick={handleToggleStackTrace}
-                    text={isExpanded ? 'Collapse' : 'Expand'}
-                    endIcon={isExpanded ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
-                />
-
-                {!hideSourceButton && (
-                    <Tooltip
-                        content={isRemote ? 'View external source file' : 'Cannot view local source file'}
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            variant={ButtonVariant.MINIMAL}
-                            intent={Intent.SUCCESS}
-                            onClick={handleReadRemoteFile}
-                            endIcon={IconNames.DOCUMENT_OPEN}
-                            text='Source'
-                            disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
-                            loading={isFetchingFile}
-                        />
-                    </Tooltip>
-                )}
-            </div>
-
-            <Overlay
-                isOpen={isViewingSourceFile}
-                onClose={toggleViewingFile}
+        <div className={classNames('stack-trace', className)}>
+            {title && <p className='stack-trace-title'>{title}</p>}
+            <pre
+                className={classNames('formatted-code', {
+                    'is-inline': isInline,
+                    'intent-danger': intent === Intent.DANGER,
+                })}
+                ref={scrollElementRef}
             >
-                {fileWithHighlights && (
-                    <pre className='stack-trace'>
+                {isExpanded ? (
+                    <div className='code-wrapper'>
+                        <code
+                            className={`language-${language} code-output`}
+                            // eslint-disable-next-line react/no-danger
+                            dangerouslySetInnerHTML={{ __html: stackTraceWithHighlights }}
+                        />
+                    </div>
+                ) : (
+                    <div className='code-wrapper'>
                         <code
                             className={`language-${language} code-output`}
                             // eslint-disable-next-line react/no-danger
                             dangerouslySetInnerHTML={{
-                                __html: fileWithHighlights,
+                                __html: getStackTracePreview(stackTraceWithHighlights),
                             }}
                         />
-                    </pre>
+                    </div>
                 )}
-            </Overlay>
-        </pre>
+
+                <div className={classNames('stack-trace-buttons is-sticky')}>
+                    <Button
+                        variant={ButtonVariant.MINIMAL}
+                        intent={Intent.PRIMARY}
+                        onClick={handleToggleStackTrace}
+                        text={isExpanded ? 'Collapse' : 'Expand'}
+                        endIcon={isExpanded ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
+                    />
+
+                    {!hideSourceButton && (
+                        <Tooltip
+                            content={isRemote ? 'View external source file' : 'Cannot view local source file'}
+                            placement={PopoverPosition.TOP}
+                        >
+                            <Button
+                                variant={ButtonVariant.MINIMAL}
+                                intent={Intent.SUCCESS}
+                                onClick={handleReadRemoteFile}
+                                endIcon={IconNames.DOCUMENT_OPEN}
+                                text='Source'
+                                disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
+                                loading={isFetchingFile}
+                            />
+                        </Tooltip>
+                    )}
+                </div>
+
+                <Overlay
+                    isOpen={isViewingSourceFile}
+                    onClose={toggleViewingFile}
+                >
+                    {fileWithHighlights && (
+                        <pre className='stack-trace'>
+                            <code
+                                className={`language-${language} code-output`}
+                                // eslint-disable-next-line react/no-danger
+                                dangerouslySetInnerHTML={{
+                                    __html: fileWithHighlights,
+                                }}
+                            />
+                        </pre>
+                    )}
+                </Overlay>
+            </pre>
+        </div>
     );
 }
 

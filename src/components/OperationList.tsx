@@ -25,6 +25,7 @@ import StackTrace from './operation-details/StackTrace';
 import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
 import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 import { ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
+import { StackTraceLanguage } from '../definitions/StackTrace';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -429,35 +430,31 @@ const OperationList = () => {
 
                                                 {operation?.error && (
                                                     <>
-                                                        <div className='memory-error'>
-                                                            <p className='memory-error-title'>
-                                                                {operation.error.error_type}
-                                                            </p>
+                                                        <StackTrace
+                                                            className='memory-error'
+                                                            title='Error Message'
+                                                            stackTrace={operation.error.error_message}
+                                                            language={StackTraceLanguage.CPP}
+                                                            onExpandChange={(_isOpen: boolean) =>
+                                                                handleToggleStackTrace(virtualRow.index)
+                                                            }
+                                                            intent={Intent.DANGER}
+                                                            hideSourceButton
+                                                            isInline
+                                                        />
 
-                                                            <StackTrace
-                                                                stackTrace={operation.error.error_message}
-                                                                language='cpp'
-                                                                hideSourceButton
-                                                                isInline
-                                                                onExpandChange={(_isOpen: boolean) =>
-                                                                    handleToggleStackTrace(virtualRow.index)
-                                                                }
-                                                            />
-                                                        </div>
-
-                                                        <div className='memory-error'>
-                                                            <p className='memory-error-title'>Stack Trace</p>
-
-                                                            <StackTrace
-                                                                stackTrace={operation.error.stack_trace}
-                                                                language='cpp'
-                                                                hideSourceButton
-                                                                isInline
-                                                                onExpandChange={(_isOpen: boolean) =>
-                                                                    handleToggleStackTrace(virtualRow.index)
-                                                                }
-                                                            />
-                                                        </div>
+                                                        <StackTrace
+                                                            className='memory-error'
+                                                            title='Error Stack Trace'
+                                                            stackTrace={operation.error.stack_trace}
+                                                            language={StackTraceLanguage.CPP}
+                                                            onExpandChange={(_isOpen: boolean) =>
+                                                                handleToggleStackTrace(virtualRow.index)
+                                                            }
+                                                            intent={Intent.DANGER}
+                                                            hideSourceButton
+                                                            isInline
+                                                        />
                                                     </>
                                                 )}
 
