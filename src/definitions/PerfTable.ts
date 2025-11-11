@@ -164,7 +164,7 @@ export const TableHeaders: TableHeader[] = [
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
     { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true },
-    // { label: 'Device', key: ColumnHeaders.device }, Hidden because tt-perf-report doesn't really support multi device well
+    { label: 'Device ID', key: ColumnHeaders.device },
     { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true },
     { label: 'Layout', key: ColumnHeaders.layout, sortable: true, filterable: true },
     { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
