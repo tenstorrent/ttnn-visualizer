@@ -34,6 +34,7 @@ interface StackTraceProps {
     isInitiallyExpanded?: boolean;
     onExpandChange?: (isVisible: boolean) => void;
     className?: string;
+    intent?: Intent;
 }
 
 function StackTrace({
@@ -45,6 +46,7 @@ function StackTrace({
     isInitiallyExpanded,
     onExpandChange,
     className,
+    intent = Intent.NONE,
 }: StackTraceProps) {
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
@@ -142,6 +144,7 @@ function StackTrace({
             <pre
                 className={classNames('formatted-code', {
                     'is-inline': isInline,
+                    'intent-danger': intent === Intent.DANGER,
                 })}
                 ref={scrollElementRef}
             >

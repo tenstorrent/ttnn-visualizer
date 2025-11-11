@@ -155,6 +155,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                             title='Error Message'
                             stackTrace={operation.error.error_message}
                             language={StackTraceLanguage.CPP}
+                            intent={Intent.DANGER}
                             hideSourceButton
                             isInline
                         />
@@ -163,6 +164,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                             title='Error Stack Trace'
                             stackTrace={operation.error.stack_trace}
                             language={StackTraceLanguage.CPP}
+                            intent={Intent.DANGER}
                             hideSourceButton
                             isInline
                         />

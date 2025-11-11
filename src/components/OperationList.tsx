@@ -435,11 +435,12 @@ const OperationList = () => {
                                                             title='Error Message'
                                                             stackTrace={operation.error.error_message}
                                                             language={StackTraceLanguage.CPP}
-                                                            hideSourceButton
-                                                            isInline
                                                             onExpandChange={(_isOpen: boolean) =>
                                                                 handleToggleStackTrace(virtualRow.index)
                                                             }
+                                                            intent={Intent.DANGER}
+                                                            hideSourceButton
+                                                            isInline
                                                         />
 
                                                         <StackTrace
@@ -447,11 +448,12 @@ const OperationList = () => {
                                                             title='Error Stack Trace'
                                                             stackTrace={operation.error.stack_trace}
                                                             language={StackTraceLanguage.CPP}
-                                                            hideSourceButton
-                                                            isInline
                                                             onExpandChange={(_isOpen: boolean) =>
                                                                 handleToggleStackTrace(virtualRow.index)
                                                             }
+                                                            intent={Intent.DANGER}
+                                                            hideSourceButton
+                                                            isInline
                                                         />
                                                     </>
                                                 )}
