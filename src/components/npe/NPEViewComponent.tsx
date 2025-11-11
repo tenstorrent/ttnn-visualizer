@@ -37,7 +37,7 @@ import {
     getLinkPoints,
     resetRouteColors,
 } from './drawingApi';
-import NPECongestionHeatMap from './NPECongestionHeatMap';
+import NPETimelineComponent from './NPETimelineComponent';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
@@ -545,7 +545,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         style={{ width: `${canvasWidth - RIGHT_MARGIN_OFFSET_PX}px` }}
                     />
                 </div>
-                <NPECongestionHeatMap
+                <NPETimelineComponent
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
                     currentTimestep={selectedTimestep}
@@ -553,6 +553,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     cyclesPerTimestep={npeData.common_info.cycles_per_timestep ?? 1}
                     selectedZoneList={selectedZoneList}
                     nocType={nocFilter}
+                    navigationCallback={setSelectedTimestep}
                 />
             </div>
             <div className='split-grid'>
