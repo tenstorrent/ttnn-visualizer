@@ -462,11 +462,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 </div>
 
                 <Callout
-                    title='Multi Device Data Consolidation'
+                    className='multi-device-note'
                     intent={Intent.PRIMARY}
                     icon={IconNames.INFO_SIGN}
                 >
-                    Multi-device operations are merged into single rows using <u>average duration</u> for collective
+                    Multi device operations are merged into single rows using <u>average duration</u> for collective
                     operations (AllGather, ReduceScatter, AllReduce) and <u>maximum duration</u> for all others.
                 </Callout>
 
