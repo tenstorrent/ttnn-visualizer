@@ -152,7 +152,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 {operation?.error && (
                     <>
                         <StackTrace
-                            title={`Error (${operation.error.error_type})`}
+                            title='Error Message'
                             stackTrace={operation.error.error_message}
                             language={StackTraceLanguage.CPP}
                             hideSourceButton
