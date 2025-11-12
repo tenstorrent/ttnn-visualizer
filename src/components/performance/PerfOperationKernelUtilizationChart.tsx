@@ -83,7 +83,7 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
             title: {
                 text: 'Utilization (%)',
             },
-            tickformat: '.0%',
+            tickformat: '.1%',
             hoverformat: '.2%',
             range: [0, 1],
         },
