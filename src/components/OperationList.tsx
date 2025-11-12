@@ -23,8 +23,7 @@ import { formatSize } from '../functions/math';
 import OperationListPerfData from './OperationListPerfData';
 import StackTrace from './operation-details/StackTrace';
 import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
-import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
-import { ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
+import { SCROLL_TOLERANCE_PX, ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
@@ -96,14 +95,12 @@ const OperationList = () => {
         return [];
     }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration]);
 
-    const listState = getListState();
-
     const {
         itemCount: restoredItemCount,
         scrollOffset: restoredOffset,
         measurementsCache: restoredMeasurementsCache,
         expandedItems: restoredExpandedItems,
-    } = listState ?? {};
+    } = getListState() ?? {};
 
     const virtualizer = useVirtualizer({
         estimateSize: () => OPERATION_EL_HEIGHT,

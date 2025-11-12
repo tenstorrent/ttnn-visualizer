@@ -54,7 +54,7 @@ export const shouldCollapseAllOperationsAtom = atom(false);
 export const isFullStackTraceAtom = atom(false);
 
 // Tensors route
-export const expandedTensorsAtom = atom<number[]>([]);
+export const shouldCollapseAllTensorsAtom = atom(false);
 export const tensorBufferTypeFiltersAtom = atom<(BufferType | null)[]>([]);
 
 // Buffers route

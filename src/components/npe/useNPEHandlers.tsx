@@ -3,16 +3,16 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useMemo } from 'react';
-import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
+import { LinkUtilization, NPEData, NPE_LINK, NoCID, NoCTransfer, NoCType, SelectedNode } from '../../model/NPEModel';
 
 interface UseShowActiveTransfersParams {
     npeData: NPEData;
-    selectedNode: { index: number } | null;
+    selectedNode: SelectedNode | null;
     selectedTimestep: number;
     nocFilter: NoCType | null;
     onPause: () => void;
     hideAllTransfers: () => void;
-    setSelectedNode: (value: { index: number; coords: NPE_COORDINATES } | null) => void;
+    setSelectedNode: (value: SelectedNode | null) => void;
     setSelectedTransferList: (transfers: NoCTransfer[]) => void;
 }
 
