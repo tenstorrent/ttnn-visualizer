@@ -508,6 +508,9 @@ class OpsPerformanceReportQueries:
                     next(reader, None)
                     for row in reader:
                         op_id = int(row[0])
+                        # IDs in result column one correspond to row numbers in ops perf results csv
+                        idx = op_id - 2
+
                         processed_row = {
                             column: row[index]
                             for index, column in enumerate(cls.REPORT_COLUMNS)
@@ -522,15 +525,15 @@ class OpsPerformanceReportQueries:
                             processed_row["advice"] = []
 
                         for key, value in cls.PASSTHROUGH_COLUMNS.items():
-                            idx = (
-                                op_id - 2
-                            )  # IDs in result column one correspond to row numbers in ops perf results csv
-                            processed_row[key] = ops_perf_results[idx][value]
+                            if 0 <= idx < len(ops_perf_results):
+
+                                processed_row[key] = ops_perf_results[idx][value]
+                            else:
+                                processed_row[key] = None
 
                         # Get the op type from the raw file for this row as it is not returned from tt-perf-report
-                        raw_idx = op_id - 2
-                        if 0 <= raw_idx < len(ops_perf_results):
-                            processed_row["op_type"] = ops_perf_results[raw_idx].get(
+                        if 0 <= idx < len(ops_perf_results):
+                            processed_row["op_type"] = ops_perf_results[idx].get(
                                 "OP TYPE"
                             )
                         else:
