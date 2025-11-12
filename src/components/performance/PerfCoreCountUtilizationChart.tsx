@@ -75,7 +75,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
         },
         yAxis2: {
             title: { text: 'Utilization (%)' },
-            tickformat: '.0%',
+            tickformat: '.1%',
             hoverformat: '.2%',
             range: [0, 1],
         },

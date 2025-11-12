@@ -52,7 +52,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
             title: {
                 text: 'Utilization (%)',
             },
-            tickformat: '.0%',
+            tickformat: '.1%',
             hoverformat: '.2%',
         },
     };
