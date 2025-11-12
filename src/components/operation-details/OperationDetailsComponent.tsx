@@ -40,6 +40,7 @@ import TensorDetailsList from './TensorDetailsList';
 import OperationArguments from '../OperationArguments';
 import DeviceOperationsFullRender from './DeviceOperationsFullRender';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import { StackTraceLanguage } from '../../definitions/StackTrace';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -181,7 +182,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.stack_trace && (
                             <StackTrace
                                 stackTrace={details.stack_trace}
-                                language='python'
+                                language={StackTraceLanguage.PYTHON}
                                 isInitiallyExpanded={showFullStackTrace}
                                 onExpandChange={() => setShowFullStackTrace(!showFullStackTrace)}
                             />

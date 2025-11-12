@@ -9,7 +9,6 @@ $outer-padding: 10px;
 
 .side-data {
     z-index: variables.$z-index-active-transfer-details;
-    display: flex;
     flex-direction: column;
     width: variables.$active-transfer-width;
     overflow-y: scroll;
@@ -20,12 +19,10 @@ $outer-padding: 10px;
     right: 0;
     max-height: 100vh;
     min-height: 100vh;
+    display: none;
 
-    &:empty {
-        display: none;
-    }
-
-    &.has-data {
+    &.is-open {
+        display: flex;
         border-left: 1px solid $tt-grey-5;
     }
 
