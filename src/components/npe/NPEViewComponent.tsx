@@ -345,8 +345,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchWidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
-    const isPlaying = playbackSpeed > 0;
-    const isActiveTransferDetailsOpen = !!(selectedNode && !isPlaying && selectedTransferList?.length > 0);
+    const isTimelinePlaying = playbackSpeed > 0;
+    const isActiveTransferDetailsOpen = !!(selectedNode && !isTimelinePlaying && selectedTransferList?.length > 0);
 
     return (
         <div className='npe'>
@@ -363,9 +363,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onClick={onBackward}
                         />
                         <Button
-                            icon={isPlaying ? IconNames.Pause : IconNames.Play}
+                            icon={isTimelinePlaying ? IconNames.Pause : IconNames.Play}
                             intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
-                            onClick={isPlaying ? onPause : onPlay}
+                            onClick={isTimelinePlaying ? onPause : onPlay}
                         />
                         <Button
                             icon={IconNames.FastForward}
