@@ -8,6 +8,7 @@ import {
     Button,
     ButtonGroup,
     ButtonVariant,
+    Callout,
     Intent,
     MenuItem,
     PopoverPosition,
@@ -459,6 +460,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         />
                     )}
                 </div>
+
+                <Callout
+                    className='multi-device-note'
+                    intent={Intent.PRIMARY}
+                    icon={IconNames.INFO_SIGN}
+                    compact
+                >
+                    Multi device operations are merged into single rows using <u>average duration</u> for collective
+                    operations (AllGather, ReduceScatter, AllReduce) and <u>maximum duration</u> for all others.
+                </Callout>
 
                 <Tabs
                     selectedTabId={selectedTabId}

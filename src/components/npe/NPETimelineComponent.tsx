@@ -26,11 +26,12 @@ interface NPEHeatMapProps {
     cyclesPerTimestep: number;
     selectedZoneList: NPERootZoneUXInfo[];
     nocType?: NoCType | null;
+    navigationCallback: (timestepIndex: number) => void;
 }
 const HEATMAP_HEIGHT = 30;
 const ZONE_HEIGHT = 10;
 
-const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
+const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
     timestepList,
     canvasWidth,
     nocType = null,
@@ -38,6 +39,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
     currentTimestep,
     cyclesPerTimestep,
     selectedZoneList = [],
+    navigationCallback,
 }) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -217,6 +219,15 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
         currentTimestep,
     ]);
 
+    const handleTimelineClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const chunkWidth = rect.width / congestionMapPerTimestamp.worst.length;
+            const index = Math.floor((event.clientX - rect.left) / chunkWidth);
+            navigationCallback(index);
+        }
+    };
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
         if (canvas) {
@@ -346,9 +357,10 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                 height={HEATMAP_HEIGHT + canvasZoneHeight}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
+                onClick={handleTimelineClick}
             />
         </>
     );
 };
 
-export default NPECongestionHeatMap;
+export default NPETimelineComponent;

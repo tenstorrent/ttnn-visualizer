@@ -74,10 +74,16 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         flex-wrap: nowrap;
         gap: 10px;
         align-items: center;
+        margin-bottom: 1rem;
 
         .option-switch {
             margin-bottom: 0;
         }
+    }
+
+    .multi-device-note {
+        width: auto;
+        display: inline-block;
     }
 
     .cell-header {

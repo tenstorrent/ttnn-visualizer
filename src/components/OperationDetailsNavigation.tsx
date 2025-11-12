@@ -2,8 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useEffect } from 'react';
-import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { useCallback, useEffect, useState } from 'react';
+import { Button, ButtonGroup, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
@@ -11,6 +11,9 @@ import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/Routes';
 import LoadingSpinner from './LoadingSpinner';
 import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
+import Overlay from './Overlay';
+import StackTrace from './operation-details/StackTrace';
+import { StackTraceLanguage } from '../definitions/StackTrace';
 
 interface OperationDetailsNavigationProps {
     operationId: number;
@@ -18,6 +21,8 @@ interface OperationDetailsNavigationProps {
 }
 
 function OperationDetailsNavigation({ operationId, isLoading }: OperationDetailsNavigationProps) {
+    const [errorIsOpen, setErrorIsOpen] = useState(false);
+
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
@@ -128,20 +133,44 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                         </h2>
 
                         {operation?.error && (
-                            <Tooltip
-                                content='Error recorded in operation'
-                                placement={PopoverPosition.TOP}
-                            >
-                                <Icon
-                                    icon={IconNames.ERROR}
-                                    intent={Intent.DANGER}
-                                    size={20}
-                                />
-                            </Tooltip>
+                            <Button
+                                icon={IconNames.ERROR}
+                                intent={Intent.DANGER}
+                                onClick={() => setErrorIsOpen(true)}
+                                variant={ButtonVariant.MINIMAL}
+                                text='View operation error'
+                            />
                         )}
                     </>
                 )}
             </ButtonGroup>
+
+            <Overlay
+                isOpen={errorIsOpen}
+                onClose={() => setErrorIsOpen(false)}
+            >
+                {operation?.error && (
+                    <>
+                        <StackTrace
+                            title='Error Message'
+                            stackTrace={operation.error.error_message}
+                            language={StackTraceLanguage.CPP}
+                            intent={Intent.DANGER}
+                            hideSourceButton
+                            isInline
+                        />
+
+                        <StackTrace
+                            title='Error Stack Trace'
+                            stackTrace={operation.error.stack_trace}
+                            language={StackTraceLanguage.CPP}
+                            intent={Intent.DANGER}
+                            hideSourceButton
+                            isInline
+                        />
+                    </>
+                )}
+            </Overlay>
         </nav>
     );
 }
