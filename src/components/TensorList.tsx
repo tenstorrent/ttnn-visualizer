@@ -49,7 +49,7 @@ const TensorList = () => {
     const navigate = useNavigate();
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
     const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
-    const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
+    const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.TENSOR_LIST);
     const { nonDeallocatedTensorList } = useGetTensorDeallocationReportByOperation();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
