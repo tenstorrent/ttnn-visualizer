@@ -134,6 +134,11 @@ export type LinkUtilization = [
 export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
 export type NPE_COORDINATES = [device_id: number, row: number, col: number];
 
+export interface SelectedNode {
+    index: number;
+    coords: NPE_COORDINATES;
+}
+
 export interface NoCFlowBase {
     id: NoCTransferId | null;
     src: [device_id, row, col];

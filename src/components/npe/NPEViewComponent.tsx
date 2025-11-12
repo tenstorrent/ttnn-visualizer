@@ -27,6 +27,7 @@ import {
     NoCFlowBase,
     NoCTransfer,
     NoCType,
+    SelectedNode,
 } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import {
@@ -80,15 +81,22 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
-    const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
+    const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
     const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
     const [openZonesPanel, setOpenZonesPanel] = useState<boolean>(false);
     const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
     const [expandedZoneMap, setExpandedZoneMap] = useState<Record<RootzoneStateKey, boolean>>({});
+    const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
+    const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
+    const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
+    const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+    const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
+    const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
+    const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
+    const [zoom, setZoom] = useState<number>(0.75);
 
     let totalColsChips = 0;
-    const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
         totalColsChips = Math.max(totalColsChips, coords[CLUSTER_COORDS.X]);
         return {
@@ -96,12 +104,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             coords,
         };
     });
-    const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
-    const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
-    const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
-    const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
-    const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
-    const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
+
     const zones: NPERootZone[] = useMemo(() => {
         return npeData.zones || [];
     }, [npeData]);
@@ -200,7 +203,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }
     };
 
-    const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
     useEffect(() => {
         const handleResize = () => setCanvasWidth(window.innerWidth);
         window.addEventListener('resize', handleResize);
@@ -246,6 +248,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }, 100 / speed);
         setAnimationInterval(Number(interval));
     };
+
     const stopAnimation = () => {
         setPlaybackSpeed(0);
         return clearInterval(animationInterval as number);
@@ -254,44 +257,48 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const onPlay = () => {
         startAnimation();
     };
+
     const onPlay2x = () => {
         startAnimation(PLAYBACK_SPEED_2X);
     };
+
     const onPause = () => {
         stopAnimation();
     };
+
     const onBackward = () => {
-        stopAnimation();
         const range = npeData.timestep_data.length;
+        stopAnimation();
         setSelectedNode(null);
         setSelectedTransferList([]);
-        setSelectedTimestep((prev) => {
-            return prev > 0 ? prev - 1 : range - 1;
-        });
+        setSelectedTimestep((prev) => (prev > 0 ? prev - 1 : range - 1));
     };
+
     const onForward = () => {
+        const range = npeData.timestep_data.length;
         stopAnimation();
         setSelectedNode(null);
         setSelectedTransferList([]);
-        const range = npeData.timestep_data.length;
-        setSelectedTimestep((prev) => {
-            return prev < range - 1 ? prev + 1 : 0;
-        });
+        setSelectedTimestep((prev) => (prev < range - 1 ? prev + 1 : 0));
     };
+
     const onHandleZoneNavigation = (zone: NPEZone) => {
         const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep ?? 1));
         setSelectedTimestep(timestep);
     };
+
     const handleScrubberChange = (value: number) => {
         stopAnimation();
         setSelectedTimestep(value);
         setSelectedNode(null);
         setSelectedTransferList([]);
     };
+
     const hideAllTransfers = () => {
         setIsShowingAllTransfers(false);
         setSelectedTransferList([]);
     };
+
     const showActiveTransfers = useShowActiveTransfers({
         npeData,
         selectedNode,
@@ -337,7 +344,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return 0.5;
     };
 
-    const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
+    const switchWidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
+    const isTimelinePlaying = playbackSpeed > 0;
+    const isActiveTransferDetailsOpen = !!(selectedNode && !isTimelinePlaying && selectedTransferList?.length > 0);
 
     return (
         <div className='npe'>
@@ -345,6 +354,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 info={npeData.common_info}
                 numTransfers={transfers.length}
             />
+
             <div className='header'>
                 <ButtonGroup className='npe-controls'>
                     <div className='npe-controls-line'>
@@ -353,18 +363,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onClick={onBackward}
                         />
                         <Button
-                            icon={IconNames.Play}
+                            icon={isTimelinePlaying ? IconNames.Pause : IconNames.Play}
                             intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
-                            onClick={onPlay}
+                            onClick={isTimelinePlaying ? onPause : onPlay}
                         />
                         <Button
                             icon={IconNames.FastForward}
                             onClick={onPlay2x}
                             intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
-                        />
-                        <Button
-                            icon={IconNames.STOP}
-                            onClick={onPause}
                         />
                         <Button
                             icon={IconNames.StepForward}
@@ -520,7 +526,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         </label>
                     </div>
                 </ButtonGroup>
-                <div style={{ position: 'relative', width: `${switchwidth}px` }}>
+                <div style={{ position: 'relative', width: `${switchWidth}px` }}>
                     <Slider
                         handleHtmlProps={{ 'aria-label': 'Timeline scrubber' }}
                         min={0}
@@ -558,7 +564,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             <div className='split-grid'>
                 <div
                     className={classNames('chip-cluster-wrap', {
-                        'details-open': selectedNode !== null,
+                        'details-open': isActiveTransferDetailsOpen,
                     })}
                     style={{
                         gridTemplateColumns: `repeat(${totalColsChips || 0}, ${(TENSIX_SIZE + 1) * width}px)`,
@@ -794,9 +800,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
-                {selectedNode && <div className='grid-spacer'>&nbsp;</div>}
+                {isActiveTransferDetailsOpen && <div className='grid-spacer'>&nbsp;</div>}
             </div>
+
             <ActiveTransferDetails
+                isOpen={isActiveTransferDetailsOpen}
                 groupedTransfersByNoCID={groupedTransfersByNoCID}
                 selectedNode={selectedNode}
                 congestionData={links?.link_demand.filter(
@@ -811,6 +819,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 setHighlightedRoute={setHighlightedRoute}
                 nocType={nocFilter}
             />
+
             <NPEZoneFilterComponent
                 npeData={npeData}
                 open={openZonesPanel}
