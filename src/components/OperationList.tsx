@@ -23,8 +23,9 @@ import { formatSize } from '../functions/math';
 import OperationListPerfData from './OperationListPerfData';
 import StackTrace from './operation-details/StackTrace';
 import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
-import { SCROLL_TOLERANCE_PX, ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
+import { ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
 import { StackTraceLanguage } from '../definitions/StackTrace';
+import { useScrollShade } from '../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -44,8 +45,6 @@ const OperationList = () => {
     const [filterQuery, setFilterQuery] = useState('');
     const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
-    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
-    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
 
@@ -53,6 +52,7 @@ const OperationList = () => {
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
     const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade } = useScrollShade();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const operationsWithRange = useMemo(() => {
@@ -164,19 +164,10 @@ const OperationList = () => {
         );
     }, [filteredOperationsList, shouldCollapseAll, setShouldCollapseAll]);
 
-    const updateScrollShade = useCallback(() => {
-        if (scrollElementRef.current) {
-            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
-            const scrollBottom = scrollTop + offsetHeight;
-
-            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
-            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
-        }
-    }, []);
-
     const handleUserScrolling = useCallback(() => {
-        // TODO: Maybe move this into a hook
-        updateScrollShade();
+        if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
+        }
     }, [updateScrollShade]);
 
     const handleToggleStackTrace = (index: number) => {
@@ -218,12 +209,11 @@ const OperationList = () => {
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
-            setHasScrolledFromTop(false);
-            setHasScrolledToBottom(false);
+            resetScrollShade();
+        } else if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
         }
-
-        updateScrollShade();
-    }, [virtualHeight, updateScrollShade]);
+    }, [virtualHeight, updateScrollShade, resetScrollShade]);
 
     // Restore expanded items on mount
     useEffect(() => {
