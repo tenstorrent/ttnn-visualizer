@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useState } from 'react';
-import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositionsV2';
+import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 
 interface UseScrollShadeReturn {
     hasScrolledFromTop: boolean;
