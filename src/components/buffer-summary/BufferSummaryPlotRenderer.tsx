@@ -44,7 +44,7 @@ import useScrollShade from '../../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
-const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
+const TOTAL_SHADE_HEIGHT = 20; // Total height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {

@@ -29,7 +29,7 @@ import useScrollShade from '../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
-const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 
 enum SortingOptions {
     OFF,
@@ -51,7 +51,8 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade } = useScrollShade();
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
+        useScrollShade();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.OPERATION_LIST);
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
@@ -351,8 +352,8 @@ const OperationList = () => {
             <div
                 ref={scrollElementRef}
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                    [shadeClasses.top]: hasScrolledFromTop && virtualHeight >= 0,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                 })}
                 onScroll={handleUserScrolling}
             >

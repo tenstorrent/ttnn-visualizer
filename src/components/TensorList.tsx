@@ -31,7 +31,7 @@ import useScrollShade from '../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
-const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
 const TensorList = () => {
@@ -50,7 +50,8 @@ const TensorList = () => {
     const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.TENSOR_LIST);
     const { nonDeallocatedTensorList } = useGetTensorDeallocationReportByOperation();
-    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade } = useScrollShade();
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
+        useScrollShade();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const tensorsWithRange = useMemo(() => {
@@ -311,8 +312,8 @@ const TensorList = () => {
             <div
                 ref={scrollElementRef}
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfTensors > virtualItems.length,
+                    [shadeClasses.top]: hasScrolledFromTop && virtualHeight >= 0,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && numberOfTensors > virtualItems.length,
                 })}
                 onScroll={handleUserScrolling}
             >

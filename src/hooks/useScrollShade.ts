@@ -5,20 +5,22 @@
 import { useCallback, useState } from 'react';
 import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 
-interface UseScrollShadeReturn {
+interface UseScrollShade {
     hasScrolledFromTop: boolean;
     hasScrolledToBottom: boolean;
     updateScrollShade: (scrollElement: HTMLElement) => void;
     resetScrollShade: () => void;
+    shadeClasses: Record<'top' | 'bottom', string>;
 }
 
-/**
- * Custom hook to manage scroll shade state for scrollable elements
- * Tracks whether the user has scrolled from the top or reached the bottom
- */
-const useScrollShade = (): UseScrollShadeReturn => {
+const useScrollShade = (): UseScrollShade => {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+
+    const shadeClasses = {
+        top: 'scroll-shade-top',
+        bottom: 'scroll-shade-bottom',
+    };
 
     const updateScrollShade = useCallback((scrollElement: HTMLElement) => {
         const { scrollTop, offsetHeight, scrollHeight } = scrollElement;
@@ -38,6 +40,7 @@ const useScrollShade = (): UseScrollShadeReturn => {
         hasScrolledToBottom,
         updateScrollShade,
         resetScrollShade,
+        shadeClasses,
     };
 };
 
