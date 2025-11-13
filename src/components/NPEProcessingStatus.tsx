@@ -7,6 +7,7 @@ import { Callout, Intent } from '@blueprintjs/core';
 import 'styles/components/NPEProcessingStatus.scss';
 import { ErrorCodes, LEGACY_VISUALIZER_VERSION, MIN_NPE_DATA_VERSION, ProcessingErrors } from '../definitions/NPEData';
 import { TEST_IDS } from '../definitions/TestIds';
+import LoadingSpinner from './LoadingSpinner';
 
 const NPE_REPO_URL = (
     <a
@@ -27,9 +28,18 @@ interface NPEProcessingStatusProps {
     dataVersion: string | null;
     hasUploadedFile?: boolean;
     errorType: ErrorCodes;
+    isLoading: boolean;
 }
 
-const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorType }: NPEProcessingStatusProps) => {
+const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorType, isLoading }: NPEProcessingStatusProps) => {
+    if (isLoading) {
+        return (
+            <div>
+                <LoadingSpinner />
+            </div>
+        );
+    }
+
     if (!hasUploadedFile) {
         return (
             <Callout
@@ -46,7 +56,6 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorType }: NPEPro
             {...SHARED_PROPS}
             intent={Intent.WARNING}
             title={ProcessingErrors?.[errorType]?.title}
-            className='npe-processing-status'
         >
             {(() => {
                 switch (errorType) {

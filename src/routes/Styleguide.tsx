@@ -625,6 +625,14 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     dataVersion={null}
                     errorType={getNpeDataErrorType(null)}
+                    isLoading={false}
+                />
+
+                <h4>Loading state</h4>
+                <NPEProcessingStatus
+                    dataVersion={null}
+                    errorType={getNpeDataErrorType(null)}
+                    isLoading
                 />
 
                 <h4>Legacy file format (no version)</h4>
@@ -632,6 +640,7 @@ export default function Styleguide() {
                     dataVersion={null}
                     errorType={getNpeDataErrorType(null)}
                     hasUploadedFile
+                    isLoading={false}
                 />
 
                 <h4>Invalid NPE Data</h4>
@@ -639,6 +648,7 @@ export default function Styleguide() {
                     hasUploadedFile
                     dataVersion={MIN_NPE_DATA_VERSION}
                     errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, undefined, true)}
+                    isLoading={false}
                 />
 
                 <h4>Unprocessable JSON error (HTTP 422)</h4>
@@ -646,6 +656,7 @@ export default function Styleguide() {
                     hasUploadedFile
                     dataVersion={MIN_NPE_DATA_VERSION}
                     errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 422)}
+                    isLoading={false}
                 />
 
                 <h4>Unknown error (HTTP 500)</h4>
@@ -653,6 +664,7 @@ export default function Styleguide() {
                     hasUploadedFile
                     dataVersion={MIN_NPE_DATA_VERSION}
                     errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 500)}
+                    isLoading={false}
                 />
             </div>
         </>
