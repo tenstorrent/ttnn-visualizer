@@ -25,9 +25,9 @@ import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import { toReadableShape, toReadableType } from '../functions/math';
 import MultiSelectField from './MultiSelectField';
-import { useScrollShade } from '../hooks/useScrollShade';
 import { ScrollLocations } from '../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
+import useScrollShade from '../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px

@@ -25,7 +25,7 @@ import StackTrace from './operation-details/StackTrace';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import { ScrollLocations } from '../definitions/ScrollPositions';
 import { StackTraceLanguage } from '../definitions/StackTrace';
-import { useScrollShade } from '../hooks/useScrollShade';
+import useScrollShade from '../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item

@@ -16,7 +16,7 @@ interface UseScrollShadeReturn {
  * Custom hook to manage scroll shade state for scrollable elements
  * Tracks whether the user has scrolled from the top or reached the bottom
  */
-export const useScrollShade = (): UseScrollShadeReturn => {
+const useScrollShade = (): UseScrollShadeReturn => {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
