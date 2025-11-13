@@ -25,9 +25,9 @@ import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import { toReadableShape, toReadableType } from '../functions/math';
 import MultiSelectField from './MultiSelectField';
-import { ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
-import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
 import { useScrollShade } from '../hooks/useScrollShade';
+import { ScrollLocations } from '../definitions/ScrollPositions';
+import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
@@ -48,7 +48,7 @@ const TensorList = () => {
     const navigate = useNavigate();
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
     const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
-    const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.TENSOR_LIST);
+    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.TENSOR_LIST);
     const { nonDeallocatedTensorList } = useGetTensorDeallocationReportByOperation();
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade } = useScrollShade();
     const scrollElementRef = useRef<HTMLDivElement>(null);
@@ -109,7 +109,7 @@ const TensorList = () => {
         scrollOffset: restoredOffset,
         measurementsCache: restoredMeasurementsCache,
         expandedItems: restoredExpandedItems,
-    } = getListState() ?? {};
+    } = useMemo(() => getListState(), [getListState]) ?? {};
 
     const virtualizer = useVirtualizer({
         estimateSize: () => OPERATION_EL_HEIGHT,
@@ -200,11 +200,12 @@ const TensorList = () => {
     useEffect(() => {
         return () =>
             updateListState({
+                itemCount: filteredTensorsList?.length || PLACEHOLDER_ARRAY_SIZE,
                 scrollOffset: scrollOffsetRef.current || 0,
                 measurementsCache: measurementsCacheRef.current,
                 expandedItems: expandedItemsRef.current,
             });
-    }, [updateListState]);
+    }, [updateListState, filteredTensorsList]);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
