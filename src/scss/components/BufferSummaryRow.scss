@@ -42,10 +42,3 @@
     height: 0;
     z-index: 100;
 }
-
-.buffer-summary-tooltip-contents {
-    .bp6-tooltip.bp6-dark .bp6-icon.bp6-intent-warning,
-    .deallocation-warning {
-        color: $tt-yellow-accent;
-    }
-}

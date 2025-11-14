@@ -167,13 +167,16 @@ const BufferSummaryRow = ({
             const missingDeallocationNotice = interactiveBuffer.notDeallocated ? (
                 <>
                     <br />
-                    Last consumer is {interactiveBuffer.consumerOperationId} {interactiveBuffer.consumerName}
+                    Last consumer is{' '}
+                    <u>
+                        {interactiveBuffer.consumerOperationId} {interactiveBuffer.consumerName}
+                    </u>
                     <br />
                     <Icon
                         intent={Intent.WARNING}
                         icon={IconNames.WARNING_SIGN}
                     />{' '}
-                    <span className='deallocation-warning'>Opportunity to deallocate earlier</span>
+                    Opportunity to deallocate earlier
                 </>
             ) : null;
 
@@ -224,7 +227,6 @@ const BufferSummaryRow = ({
             {tooltip && (
                 <Tooltip
                     content={tooltip.text}
-                    portalClassName='buffer-summary-tooltip-contents'
                     position={PopoverPosition.TOP}
                     hoverOpenDelay={0}
                     hoverCloseDelay={0}
