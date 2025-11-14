@@ -29,7 +29,6 @@ import {
     TableKeys,
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
-import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import {
     Signpost,
     calcHighDispatchOps,
@@ -66,14 +65,14 @@ import { OpType } from '../../definitions/Performance';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
-import { DeviceOperationLayoutTypes } from '../../model/APIData';
 
 interface PerformanceReportProps {
-    data?: PerfTableRow[];
-    comparisonData?: PerfTableRow[][];
+    data?: TypedPerfTableRow[];
+    comparisonData?: TypedPerfTableRow[][];
     stackedData?: StackedPerfRow[];
     comparisonStackedData?: StackedPerfRow[][];
     signposts?: Signpost[];
+    rawComparisonData?: PerfTableRow[][];
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -84,6 +83,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     stackedData,
     comparisonStackedData,
     signposts,
+    rawComparisonData,
 }) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -116,19 +116,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         >,
     );
 
-    const opIdsMap = useOpToPerfIdFiltered();
-
     const isSignpostsDisabled = !signposts || signposts.length === 0;
-
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
 
-    const processedRows: TypedPerfTableRow[] = useMemo(() => {
-        return data ? enrichRowData(data, opIdsMap) : [];
-    }, [data, opIdsMap]);
-
-    const processedComparisonRows: TypedPerfTableRow[][] = useMemo(() => {
-        return comparisonData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [];
-    }, [comparisonData, opIdsMap]);
+    const processedRows = useMemo(() => data || [], [data]);
+    const processedComparisonRows = useMemo(
+        () => comparisonData?.map((dataset) => dataset || []) || [],
+        [comparisonData],
+    );
 
     const processedStackedRows: TypedStackedPerfRow[] = useMemo(() => {
         return stackedData ? enrichStackedRowData(stackedData) : [];
@@ -282,7 +277,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     filteredComparisonRows,
                                     useNormalisedData ? normalisedData : null,
                                     comparisonIndex,
-                                    comparisonData,
+                                    rawComparisonData?.[comparisonIndex]?.length,
                                 )}
                                 stackedView={getStackedViewCounts(
                                     processedStackedRows,
@@ -599,65 +594,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             </div>
         </>
     );
-};
-
-const HIGH_DISPATCH_THRESHOLD = 6.5;
-
-interface RowAttributes {
-    device: number | null;
-    buffer_type: BufferType | null;
-    layout: DeviceOperationLayoutTypes | null;
-}
-
-const getBufferType = (type?: string): BufferType | null => {
-    if (!type) {
-        return null;
-    }
-
-    if (type === 'L1') {
-        return BufferType.L1;
-    }
-
-    if (type === 'DRAM') {
-        return BufferType.DRAM;
-    }
-
-    return null;
-};
-
-const getRowAttributes = (row: PerfTableRow): RowAttributes => {
-    const regex = /DEV_(\d)_(DRAM|L1)_(\w*)/m;
-    const matchIn0 = regex.exec(row.input_0_memory);
-
-    return {
-        device: matchIn0?.[1] ? parseInt(matchIn0[1], 10) : null,
-        buffer_type: getBufferType(matchIn0?.[2]),
-        layout: matchIn0?.[3] ? (matchIn0[3] as DeviceOperationLayoutTypes) : null,
-    };
-};
-
-const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
-    return rows.map((row) => {
-        const val = parseInt(row.op_to_op_gap, 10);
-        const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
-        const op = opStr !== undefined ? Number(opStr) : undefined;
-
-        return {
-            ...row,
-            op,
-            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
-            id: parseInt(row.id, 10),
-            total_percent: parseFloat(row.total_percent),
-            device_time: parseFloat(row.device_time),
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: parseInt(row.cores, 10),
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-            ...getRowAttributes(row),
-        };
-    });
 };
 
 const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>

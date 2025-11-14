@@ -5,7 +5,7 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
@@ -15,7 +15,7 @@ import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfCoreCountUtilizationChartProps {
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
     maxCores: number;
 }
 
@@ -55,6 +55,8 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
         [datasets, perfReport, comparisonReportList, maxCores],
     );
 
+    const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
+
     const configuration: PlotConfiguration = {
         margin: {
             l: 100,
@@ -77,7 +79,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
             title: { text: 'Utilization (%)' },
             tickformat: '.0%',
             hoverformat: '.2%',
-            range: [0, 1],
+            range: [0, maxY2Value],
         },
     };
 

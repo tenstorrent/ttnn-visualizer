@@ -6,14 +6,7 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import {
-    ColumnHeaders,
-    MathFidelity,
-    PerfTableRow,
-    TableHeader,
-    TableKeys,
-    TypedPerfTableRow,
-} from '../definitions/PerfTable';
+import { ColumnHeaders, MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
@@ -441,7 +434,7 @@ export const getStandardViewCounts = (
     filteredComparisonRows: TypedPerfTableRow[],
     normalisedData: NormalisedPerfData | null,
     comparisonIndex: number,
-    comparisonData?: PerfTableRow[][],
+    comparisonMaxLength?: number,
 ) => {
     const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
     let total = 0;
@@ -450,7 +443,7 @@ export const getStandardViewCounts = (
     if (normalisedData) {
         total = normalisedData.data[0]?.length || 0;
     } else {
-        total = isInitialTab ? data?.length || 0 : comparisonData?.[comparisonIndex]?.length || 0;
+        total = isInitialTab ? data?.length || 0 : comparisonMaxLength || 0;
     }
 
     if (normalisedData) {

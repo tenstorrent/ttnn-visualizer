@@ -5,7 +5,7 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
@@ -14,7 +14,7 @@ import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfKernelDurationUtilizationChartProps {
-    datasets: PerfTableRow[][];
+    datasets: TypedPerfTableRow[][];
     maxCores: number;
 }
 

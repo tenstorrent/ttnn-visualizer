@@ -74,6 +74,7 @@ export interface TypedPerfTableRow
         | 'flops'
         | 'flops_percent'
         | 'bound'
+        | 'pm_ideal_ns'
     > {
     id: number | null;
     global_call_count: number | null;
@@ -86,6 +87,7 @@ export interface TypedPerfTableRow
     flops: number | null;
     flops_percent: number | null;
     bound: BoundType | null;
+    pm_ideal_ns: number | null;
     // Next three extracted from input_0_memory
     buffer_type: BufferType | null;
     device: number | null;
@@ -218,7 +220,7 @@ export const signpostRowDefaults = Object.freeze({
     inner_dim_block_size: '',
     output_subblock_h: '',
     output_subblock_w: '',
-    pm_ideal_ns: '',
+    pm_ideal_ns: null,
     op_type: OpType.SIGNPOST,
     device: null,
     layout: null,

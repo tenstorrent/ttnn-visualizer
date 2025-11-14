@@ -5,7 +5,7 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
@@ -15,7 +15,7 @@ import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfOperationKernelUtilizationChartProps {
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
     maxCores: number;
 }
 
@@ -56,6 +56,7 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
     );
 
     const maxYValue = Math.max(...chartDataDuration.flatMap((data) => (data.y as number[]) ?? []));
+    const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
 
     const configuration: PlotConfiguration = {
         margin: {
@@ -85,7 +86,7 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
             },
             tickformat: '.0%',
             hoverformat: '.2%',
-            range: [0, 1],
+            range: [0, maxY2Value],
         },
     };
 
