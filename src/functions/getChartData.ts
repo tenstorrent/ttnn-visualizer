@@ -77,8 +77,7 @@ export default function getChartData(
                 shape: '/',
                 fillmode: 'overlay',
                 size: 5,
-                fgcolor: '#000000',
-                fgopacity: 0.6,
+                fgcolor: 'rgba(0, 0, 0, 0.6)',
             };
         }
         return {

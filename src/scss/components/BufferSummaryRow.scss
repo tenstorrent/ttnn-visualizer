@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+@use 'sass:color';
 @use '../definitions/colours' as *;
 
 .buffer-summary-row {
@@ -34,10 +35,17 @@
     }
 }
 
-.buffer-summary-row-tooltip {
+.buffer-summary-tooltip-position {
     position: absolute;
     top: 0;
     width: 0;
     height: 0;
     z-index: 100;
+}
+
+.buffer-summary-tooltip-contents {
+    .bp6-tooltip.bp6-dark .bp6-icon.bp6-intent-warning,
+    .deallocation-warning {
+        color: $tt-yellow-accent;
+    }
 }
