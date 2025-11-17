@@ -22,6 +22,7 @@ $pt-intent-text-colors: (
 );
 
 @use '@blueprintjs/core/src/blueprint.scss' with (
+    $pt-intent-text-colors: $pt-intent-text-colors,
     $dark-button-background-color: $dark-button-background-base,
     $dark-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: -5%),
     $dark-minimal-button-background-color: $dark-button-background-base,
@@ -97,15 +98,14 @@ $pt-intent-text-colors: (
                 $red1,
                 $white,
             ),
-        )
+        ),
+    // Remove elevation shadows in dark mode (navbar)
+    $pt-dark-elevation-shadow-1: none
 );
 
 // Overrides for BlueprintJS which cannot be done via SASS variables
 .bp6-dark {
-    .bp6-navbar {
-        box-shadow: none;
-    }
-
+    // $dark-hover-text-color in blueprint.js cannot currently be overridden, but also this colour applies to all intents
     .bp6-button {
         &.bp6-minimal {
             &.bp6-intent-primary {

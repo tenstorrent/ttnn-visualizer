@@ -126,7 +126,7 @@ export default function Styleguide() {
 
             <div className='container flex wrap'>
                 <div className='container colour-container flex no-gap flex-column'>
-                    <p>Grey</p>
+                    <p className='heading'>Grey</p>
                     <div className='colour w-1' />
                     <div className='colour g-6' />
                     <div className='colour g-5' />
@@ -136,8 +136,11 @@ export default function Styleguide() {
                     <div className='colour g-1' />
                     <div className='colour b-1' />
                 </div>
+            </div>
+
+            <div className='container flex wrap'>
                 <div className='container colour-container flex no-gap flex-column'>
-                    <p>Purple</p>
+                    <p className='heading'>Purple</p>
                     <div className='colour purple-base' />
                     <div className='colour purple-tint-1' />
                     <div className='colour purple-tint-2' />
@@ -146,7 +149,7 @@ export default function Styleguide() {
                 </div>
 
                 <div className='container colour-container flex no-gap flex-column'>
-                    <p>Red</p>
+                    <p className='heading'>Red</p>
                     <div className='colour red-base' />
                     <div className='colour red-tint-1' />
                     <div className='colour red-tint-2' />
@@ -155,7 +158,7 @@ export default function Styleguide() {
                 </div>
 
                 <div className='container colour-container flex no-gap flex-column'>
-                    <p>Blue</p>
+                    <p className='heading'>Blue</p>
                     <div className='colour blue-base' />
                     <div className='colour blue-tint-1' />
                     <div className='colour blue-tint-2' />
@@ -164,7 +167,7 @@ export default function Styleguide() {
                 </div>
 
                 <div className='container colour-container flex no-gap flex-column'>
-                    <p>Yellow</p>
+                    <p className='heading'>Yellow</p>
                     <div className='colour yellow-base' />
                     <div className='colour yellow-tint-1' />
                     <div className='colour yellow-tint-2' />
@@ -173,7 +176,7 @@ export default function Styleguide() {
                 </div>
 
                 <div className='container colour-container flex no-gap flex-column'>
-                    <p>Teal</p>
+                    <p className='heading'>Teal</p>
                     <div className='colour teal-base' />
                     <div className='colour teal-tint-1' />
                     <div className='colour teal-tint-2' />
@@ -182,7 +185,7 @@ export default function Styleguide() {
                 </div>
 
                 <div className='container colour-container flex no-gap flex-column'>
-                    <p>Green</p>
+                    <p className='heading'>Green</p>
                     <div className='colour green-base' />
                     <div className='colour green-tint-1' />
                     <div className='colour green-tint-2' />
@@ -191,7 +194,7 @@ export default function Styleguide() {
                 </div>
 
                 <div className='container colour-container flex no-gap flex-column'>
-                    <p>Sand</p>
+                    <p className='heading'>Sand</p>
                     <div className='colour sand-base' />
                     <div className='colour sand-tint-1' />
                     <div className='colour sand-tint-2' />
@@ -200,12 +203,21 @@ export default function Styleguide() {
                 </div>
 
                 <div className='container colour-container flex no-gap flex-column'>
-                    <p>Slate</p>
+                    <p className='heading'>Slate</p>
                     <div className='colour slate-base' />
                     <div className='colour slate-tint-1' />
                     <div className='colour slate-tint-2' />
                     <div className='colour slate-accent' />
                     <div className='colour slate-shade' />
+                </div>
+
+                <div className='container colour-container flex no-gap flex-column'>
+                    <div className='colour heading'>&nbsp;</div>
+                    <div className='colour heading'>Base</div>
+                    <div className='colour heading'>Tint 1</div>
+                    <div className='colour heading'>Tint 2</div>
+                    <div className='colour heading'>Accent</div>
+                    <div className='colour heading'>Shade</div>
                 </div>
             </div>
 
@@ -227,7 +239,7 @@ export default function Styleguide() {
                     <tr>
                         <th>Default</th>
                         <td>
-                            <Button icon={IconNames.ADD}>Your text here</Button>
+                            <Button>Your text here</Button>
                         </td>
                         <td>
                             <Button
@@ -239,7 +251,7 @@ export default function Styleguide() {
                         </td>
                         <td>
                             <Button
-                                icon={IconNames.ADD}
+                                icon={IconNames.TICK}
                                 intent={Intent.SUCCESS}
                             >
                                 Your text here
@@ -247,7 +259,7 @@ export default function Styleguide() {
                         </td>
                         <td>
                             <Button
-                                icon={IconNames.ADD}
+                                icon={IconNames.WARNING_SIGN}
                                 intent={Intent.WARNING}
                             >
                                 Your text here
@@ -255,7 +267,7 @@ export default function Styleguide() {
                         </td>
                         <td>
                             <Button
-                                icon={IconNames.ADD}
+                                icon={IconNames.ISSUE}
                                 intent={Intent.DANGER}
                             >
                                 Your text here
@@ -265,12 +277,7 @@ export default function Styleguide() {
                     <tr>
                         <th>Outlined</th>
                         <td>
-                            <Button
-                                icon={IconNames.ADD}
-                                variant={ButtonVariant.OUTLINED}
-                            >
-                                Your text here
-                            </Button>
+                            <Button variant={ButtonVariant.OUTLINED}>Your text here</Button>
                         </td>
                         <td>
                             <Button
@@ -283,7 +290,7 @@ export default function Styleguide() {
                         </td>
                         <td>
                             <Button
-                                icon={IconNames.ADD}
+                                icon={IconNames.TICK}
                                 intent={Intent.SUCCESS}
                                 variant={ButtonVariant.OUTLINED}
                             >
@@ -292,7 +299,7 @@ export default function Styleguide() {
                         </td>
                         <td>
                             <Button
-                                icon={IconNames.ADD}
+                                icon={IconNames.WARNING_SIGN}
                                 intent={Intent.WARNING}
                                 variant={ButtonVariant.OUTLINED}
                             >
@@ -301,7 +308,7 @@ export default function Styleguide() {
                         </td>
                         <td>
                             <Button
-                                icon={IconNames.ADD}
+                                icon={IconNames.ISSUE}
                                 intent={Intent.DANGER}
                                 variant={ButtonVariant.OUTLINED}
                             >
@@ -312,12 +319,7 @@ export default function Styleguide() {
                     <tr>
                         <th>Minimal</th>
                         <td>
-                            <Button
-                                icon={IconNames.ADD}
-                                variant={ButtonVariant.MINIMAL}
-                            >
-                                Your text here
-                            </Button>
+                            <Button variant={ButtonVariant.MINIMAL}>Your text here</Button>
                         </td>
                         <td>
                             <Button
@@ -330,7 +332,7 @@ export default function Styleguide() {
                         </td>
                         <td>
                             <Button
-                                icon={IconNames.ADD}
+                                icon={IconNames.TICK}
                                 intent={Intent.SUCCESS}
                                 variant={ButtonVariant.MINIMAL}
                             >
@@ -339,7 +341,7 @@ export default function Styleguide() {
                         </td>
                         <td>
                             <Button
-                                icon={IconNames.ADD}
+                                icon={IconNames.WARNING_SIGN}
                                 intent={Intent.WARNING}
                                 variant={ButtonVariant.MINIMAL}
                             >
@@ -348,7 +350,7 @@ export default function Styleguide() {
                         </td>
                         <td>
                             <Button
-                                icon={IconNames.ADD}
+                                icon={IconNames.ISSUE}
                                 intent={Intent.DANGER}
                                 variant={ButtonVariant.MINIMAL}
                             >
@@ -413,6 +415,35 @@ export default function Styleguide() {
                         placement={PopoverPosition.TOP}
                     >
                         <Button icon={IconNames.DOUBLE_CHEVRON_DOWN} />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Toggle high consumer tensors'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => {}}
+                            endIcon={IconNames.ISSUE}
+                            intent={Intent.DANGER}
+                            aria-label='Toggle high consumer tensors'
+                        >
+                            27
+                        </Button>
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Show late deallocated tensors'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => {}}
+                            endIcon={IconNames.OUTDATED}
+                            intent={Intent.WARNING}
+                            variant={ButtonVariant.OUTLINED}
+                            aria-label='Toggle high consumer tensors'
+                        >
+                            123
+                        </Button>
                     </Tooltip>
                 </ButtonGroup>
             </div>
@@ -549,21 +580,14 @@ export default function Styleguide() {
 
             <div className='container short-width'>
                 <ProgressBar
-                    progress={0.05}
+                    progress={0}
                     estimated={36}
                 />
             </div>
 
             <div className='container short-width'>
                 <ProgressBar
-                    progress={0.5}
-                    estimated={17}
-                />
-            </div>
-
-            <div className='container short-width'>
-                <ProgressBar
-                    progress={0.95}
+                    progress={0.85}
                     estimated={1}
                 />
             </div>

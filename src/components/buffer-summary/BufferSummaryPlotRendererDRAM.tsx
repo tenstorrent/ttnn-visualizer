@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
@@ -20,9 +20,10 @@ import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
-import { SCROLL_TOLERANCE_PX } from '../../definitions/ScrollPositions';
+import { SCROLL_TOLERANCE_PX, ScrollLocations } from '../../definitions/ScrollPositions';
+import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 
-const PLACEHOLDER_ARRAY_SIZE = 30;
+const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
@@ -92,29 +93,64 @@ function BufferSummaryPlotRendererDRAM({
         [segmentedChartData],
     );
 
+    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
+
+    const {
+        itemCount: restoredItemCount,
+        scrollOffset: restoredOffset,
+        measurementsCache: restoredMeasurementsCache,
+    } = useMemo(() => getListState(), [getListState]) ?? {};
+
     const virtualizer = useVirtualizer({
-        count: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
-        getScrollElement: () => scrollElementRef.current,
         estimateSize: () => OPERATION_EL_HEIGHT,
+        getScrollElement: () => scrollElementRef.current,
         overscan: 20,
+        initialMeasurementsCache: restoredMeasurementsCache,
+        count: restoredItemCount || uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
+        initialOffset: restoredOffset || 0,
     });
+
     const virtualItems = virtualizer.getVirtualItems();
+    const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
-    const handleUserScrolling = () => {
-        updateScrollShade();
-    };
+    // Store latest values in refs for unmount cleanup
+    const scrollOffsetRef = useRef(virtualizer.scrollOffset);
+    const measurementsCacheRef = useRef(virtualizer.measurementsCache);
 
-    const updateScrollShade = () => {
+    const updateScrollShade = useCallback(() => {
         if (scrollElementRef.current) {
             const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
-
-            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
-
             const scrollBottom = scrollTop + offsetHeight;
 
+            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
             setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
         }
-    };
+    }, []);
+
+    const handleUserScrolling = useCallback(() => {
+        // TODO: Maybe move this into a hook
+        updateScrollShade();
+    }, [updateScrollShade]);
+
+    // Keep stored refs updated
+    useEffect(() => {
+        scrollOffsetRef.current = virtualizer.scrollOffset;
+    }, [virtualizer.scrollOffset]);
+
+    useEffect(() => {
+        measurementsCacheRef.current = virtualizer.measurementsCache;
+    }, [virtualizer.measurementsCache]);
+
+    // Update stored list state on unmount
+    useEffect(() => {
+        return () => {
+            updateListState({
+                itemCount: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
+                scrollOffset: scrollOffsetRef.current || 0,
+                measurementsCache: measurementsCacheRef.current,
+            });
+        };
+    }, [updateListState, uniqueBuffersByOperationList]);
 
     return uniqueBuffersByOperationList && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
@@ -177,7 +213,7 @@ function BufferSummaryPlotRendererDRAM({
                         <div
                             style={{
                                 // Div is sized to the maximum required to render all list items minus our shade element heights
-                                height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
+                                height: virtualHeight,
                             }}
                         >
                             <div
