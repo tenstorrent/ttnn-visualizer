@@ -16,6 +16,7 @@ it('renders an initial message', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
+                isLoading={false}
                 dataVersion={null}
                 errorType={getNpeDataErrorType(null)}
             />
@@ -29,6 +30,7 @@ it('handles incorrect NPE data versions', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
+                isLoading={false}
                 hasUploadedFile
                 dataVersion={null}
                 errorType={getNpeDataErrorType(null)}
@@ -43,9 +45,10 @@ it('handles incomplete NPE data', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
+                isLoading={false}
                 hasUploadedFile
                 dataVersion='0.1.0'
-                errorType={getNpeDataErrorType('0.1.0', undefined, true)}
+                errorType={getNpeDataErrorType('0.1.0', undefined, false)}
             />
         </TestProviders>,
     );
@@ -57,6 +60,7 @@ it('handles invalid JSON data', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
+                isLoading={false}
                 hasUploadedFile
                 dataVersion={MIN_NPE_DATA_VERSION}
                 errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 422)}
@@ -71,6 +75,7 @@ it('handles unknown errors', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
+                isLoading={false}
                 hasUploadedFile
                 dataVersion={MIN_NPE_DATA_VERSION}
                 errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 500)}
