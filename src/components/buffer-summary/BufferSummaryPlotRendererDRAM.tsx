@@ -20,8 +20,9 @@ import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
-import { SCROLL_TOLERANCE_PX, ScrollLocations } from '../../definitions/ScrollPositions';
+import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
+import useScrollShade from '../../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -53,13 +54,14 @@ function BufferSummaryPlotRendererDRAM({
     uniqueBuffersByOperationList,
     tensorListByOperation,
 }: BufferSummaryPlotRendererDRAMProps) {
-    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
-    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [activeRow, setActiveRow] = useState<number | null>(null);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
     const scrollElementRef = useRef(null);
+
+    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
 
     const numberOfOperations = useMemo(
         () =>
@@ -93,8 +95,6 @@ function BufferSummaryPlotRendererDRAM({
         [segmentedChartData],
     );
 
-    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
-
     const {
         itemCount: restoredItemCount,
         scrollOffset: restoredOffset,
@@ -117,19 +117,10 @@ function BufferSummaryPlotRendererDRAM({
     const scrollOffsetRef = useRef(virtualizer.scrollOffset);
     const measurementsCacheRef = useRef(virtualizer.measurementsCache);
 
-    const updateScrollShade = useCallback(() => {
-        if (scrollElementRef.current) {
-            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
-            const scrollBottom = scrollTop + offsetHeight;
-
-            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
-            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
-        }
-    }, []);
-
     const handleUserScrolling = useCallback(() => {
-        // TODO: Maybe move this into a hook
-        updateScrollShade();
+        if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
+        }
     }, [updateScrollShade]);
 
     // Keep stored refs updated
@@ -204,8 +195,8 @@ function BufferSummaryPlotRendererDRAM({
 
                     <div
                         className={classNames('scrollable-element', {
-                            'scroll-shade-top': hasScrolledFromTop,
-                            'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                            [shadeClasses.top]: hasScrolledFromTop,
+                            [shadeClasses.bottom]: !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                         })}
                         onScroll={handleUserScrolling}
                         ref={scrollElementRef}

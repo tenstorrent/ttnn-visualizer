@@ -25,12 +25,13 @@ import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import { toReadableShape, toReadableType } from '../functions/math';
 import MultiSelectField from './MultiSelectField';
-import { SCROLL_TOLERANCE_PX, ScrollLocations } from '../definitions/ScrollPositions';
+import { ScrollLocations } from '../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
+import useScrollShade from '../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
-const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
 const TensorList = () => {
@@ -39,8 +40,6 @@ const TensorList = () => {
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
 
     const [filterQuery, setFilterQuery] = useState('');
-    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
-    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
     const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useState(false);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
@@ -51,6 +50,8 @@ const TensorList = () => {
     const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.TENSOR_LIST);
     const { nonDeallocatedTensorList } = useGetTensorDeallocationReportByOperation();
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
+        useScrollShade();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const tensorsWithRange = useMemo(() => {
@@ -129,19 +130,10 @@ const TensorList = () => {
     const measurementsCacheRef = useRef(virtualizer.measurementsCache);
     const expandedItemsRef = useRef(expandedItems);
 
-    const updateScrollShade = useCallback(() => {
-        if (scrollElementRef.current) {
-            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
-            const scrollBottom = scrollTop + offsetHeight;
-
-            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
-            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
-        }
-    }, []);
-
     const handleUserScrolling = useCallback(() => {
-        // TODO: Maybe move this into a hook
-        updateScrollShade();
+        if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
+        }
     }, [updateScrollShade]);
 
     const handleToggleCollapsible = useCallback((operationId: number) => {
@@ -199,12 +191,11 @@ const TensorList = () => {
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
-            setHasScrolledFromTop(false);
-            setHasScrolledToBottom(false);
+            resetScrollShade();
+        } else if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
         }
-
-        updateScrollShade();
-    }, [virtualHeight, updateScrollShade]);
+    }, [virtualHeight, updateScrollShade, resetScrollShade]);
 
     // Update stored list state on unmount
     useEffect(() => {
@@ -321,8 +312,8 @@ const TensorList = () => {
             <div
                 ref={scrollElementRef}
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfTensors > virtualItems.length,
+                    [shadeClasses.top]: hasScrolledFromTop && virtualHeight >= 0,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && numberOfTensors > virtualItems.length,
                 })}
                 onScroll={handleUserScrolling}
             >
