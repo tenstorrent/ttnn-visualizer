@@ -22,8 +22,8 @@ import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
 import OperationListPerfData from './OperationListPerfData';
 import StackTrace from './operation-details/StackTrace';
-import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
-import { SCROLL_TOLERANCE_PX, ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
+import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
+import { SCROLL_TOLERANCE_PX, ScrollLocations } from '../definitions/ScrollPositions';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
@@ -52,7 +52,7 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
+    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.OPERATION_LIST);
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const operationsWithRange = useMemo(() => {
@@ -100,7 +100,7 @@ const OperationList = () => {
         scrollOffset: restoredOffset,
         measurementsCache: restoredMeasurementsCache,
         expandedItems: restoredExpandedItems,
-    } = getListState() ?? {};
+    } = useMemo(() => getListState(), [getListState]) ?? {};
 
     const virtualizer = useVirtualizer({
         estimateSize: () => OPERATION_EL_HEIGHT,
@@ -244,13 +244,15 @@ const OperationList = () => {
 
     // Update stored list state on unmount
     useEffect(() => {
-        return () =>
+        return () => {
             updateListState({
+                itemCount: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
                 scrollOffset: scrollOffsetRef.current || 0,
                 measurementsCache: measurementsCacheRef.current,
                 expandedItems: expandedItemsRef.current,
             });
-    }, [updateListState]);
+        };
+    }, [updateListState, filteredOperationsList]);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList

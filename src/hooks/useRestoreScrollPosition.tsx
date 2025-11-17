@@ -2,51 +2,55 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect } from 'react';
 import { useAtom } from 'jotai';
-import { Virtualizer } from '@tanstack/react-virtual';
-import { ScrollLocations, ScrollPositions } from '../definitions/ScrollPositions';
+import { useCallback } from 'react';
 import { scrollPositionsAtom } from '../store/app';
+import { ScrollLocations, ScrollPosition, VirtualListState } from '../definitions/ScrollPositions';
 
-const useRestoreScrollPosition = (virtualizer: Virtualizer<HTMLDivElement, Element>, key: ScrollLocations) => {
+const useRestoreScrollPosition = (key?: ScrollLocations) => {
     const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsAtom);
 
-    const updateScrollPosition = (index: number) => {
-        setScrollPositions((currentValue): ScrollPositions => {
-            const updatedPosition = {
-                [key]: {
-                    index,
-                },
-            };
+    const updateListState = useCallback(
+        (state: Partial<VirtualListState>) => {
+            if (key) {
+                setScrollPositions((currentValue): ScrollPosition => {
+                    if (!currentValue) {
+                        return {
+                            [key]: {
+                                ...(state as VirtualListState),
+                            },
+                        };
+                    }
 
-            if (!currentValue) {
-                return updatedPosition;
+                    return {
+                        ...currentValue,
+                        [key]: {
+                            ...currentValue[key],
+                            ...state,
+                        },
+                    };
+                });
             }
+        },
+        [key, setScrollPositions],
+    );
 
-            return {
-                ...currentValue,
-                ...updatedPosition,
-            };
-        });
-    };
-
-    useEffect(() => {
-        const offsetIndex = scrollPositions?.[key].index || 0;
-
-        if (offsetIndex > 0) {
-            virtualizer.scrollToIndex(offsetIndex, { align: 'start' }); // start seems to align best with the centre of the list
-            setScrollPositions(
-                (currentValue): ScrollPositions => ({
-                    ...currentValue,
-                    [key]: { index: 0 },
-                }),
-            );
+    const getListState = useCallback((): VirtualListState | null => {
+        if (!key) {
+            return null;
         }
-    }, [virtualizer, scrollPositions, setScrollPositions, key]);
+
+        return scrollPositions?.[key] || null;
+    }, [key, scrollPositions]);
+
+    const resetListStates = useCallback(() => {
+        setScrollPositions(null);
+    }, [setScrollPositions]);
 
     return {
-        scrollPositions,
-        updateScrollPosition,
+        getListState,
+        updateListState,
+        resetListStates,
     };
 };
 
