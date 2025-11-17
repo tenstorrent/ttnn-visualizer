@@ -22,7 +22,13 @@ dependencies = [
     "PyYAML==6.0.2",
     "tt-perf-report==1.1.8",
     "uvicorn==0.30.1",
-    "zstd==1.5.7.0"
+    "zstd==1.5.7.0",
+    "sphinx",
+    "nbsphinx",
+    "sphinxcontrib.email",
+    "sphinx_sitemap",
+    "myst_parser",
+    "sphinx_rtd_theme"
 ]
 
 classifiers = [
