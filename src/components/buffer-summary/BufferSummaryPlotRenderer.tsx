@@ -71,7 +71,7 @@ function BufferSummaryPlotRenderer({
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY);
-    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade } = useScrollShade();
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
 
     const {
         itemCount: restoredItemCount,
@@ -241,8 +241,8 @@ function BufferSummaryPlotRenderer({
 
             <div
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                    [shadeClasses.top]: hasScrolledFromTop,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                 })}
                 onScroll={handleUserScrolling}
                 ref={scrollElementRef}
