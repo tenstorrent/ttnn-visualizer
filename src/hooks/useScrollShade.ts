@@ -13,20 +13,20 @@ interface UseScrollShade {
     shadeClasses: Record<'top' | 'bottom', string>;
 }
 
+const SHADE_CLASSES = {
+    top: 'scroll-shade-top',
+    bottom: 'scroll-shade-bottom',
+};
+
 const useScrollShade = (): UseScrollShade => {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-
-    const shadeClasses = {
-        top: 'scroll-shade-top',
-        bottom: 'scroll-shade-bottom',
-    };
 
     const updateScrollShade = useCallback((scrollElement: HTMLElement) => {
         const { scrollTop, offsetHeight, scrollHeight } = scrollElement;
         const scrollBottom = scrollTop + offsetHeight;
 
-        setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
+        setHasScrolledFromTop(scrollTop > SCROLL_TOLERANCE_PX);
         setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
     }, []);
 
@@ -40,7 +40,7 @@ const useScrollShade = (): UseScrollShade => {
         hasScrolledToBottom,
         updateScrollShade,
         resetScrollShade,
-        shadeClasses,
+        shadeClasses: SHADE_CLASSES,
     };
 };
 
