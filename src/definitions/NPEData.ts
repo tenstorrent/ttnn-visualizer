@@ -34,7 +34,7 @@ export const ProcessingErrors: Record<ErrorCodes, { title: string }> = {
 export const getNpeDataErrorType = (
     dataVersion: string | null,
     httpStatus?: HttpStatusCode,
-    isInvalidData?: boolean,
+    isValidData?: boolean,
 ): ErrorCodes => {
     const parsedVersion = dataVersion ? semverParse(dataVersion) : null;
 
@@ -42,7 +42,7 @@ export const getNpeDataErrorType = (
         return ErrorCodes.INVALID_JSON;
     }
 
-    if (isInvalidData) {
+    if (isValidData === false) {
         return ErrorCodes.INVALID_NPE_DATA;
     }
 

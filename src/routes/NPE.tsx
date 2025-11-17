@@ -72,7 +72,7 @@ const NPE: FC = () => {
                     isLoading={isLoading}
                     dataVersion={dataVersion}
                     hasUploadedFile={hasUploadedFile}
-                    errorType={getNpeDataErrorType(dataVersion, processingError?.status, true)}
+                    errorType={getNpeDataErrorType(dataVersion, processingError?.status, isValidData)}
                 />
             )}
         </>

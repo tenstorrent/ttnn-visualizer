@@ -20,6 +20,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import { useState } from 'react';
 import { useAtom } from 'jotai';
+import { HttpStatusCode } from 'axios';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
@@ -671,7 +672,7 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     hasUploadedFile
                     dataVersion={MIN_NPE_DATA_VERSION}
-                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, undefined, true)}
+                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, undefined, false)}
                     isLoading={false}
                 />
 
@@ -679,15 +680,15 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     hasUploadedFile
                     dataVersion={MIN_NPE_DATA_VERSION}
-                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 422)}
+                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, HttpStatusCode.UnprocessableEntity, true)}
                     isLoading={false}
                 />
 
-                <h4>Unknown error (HTTP 500)</h4>
+                <h4>Internal server error (HTTP 500)</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
                     dataVersion={MIN_NPE_DATA_VERSION}
-                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 500)}
+                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, HttpStatusCode.InternalServerError, true)}
                     isLoading={false}
                 />
             </div>
