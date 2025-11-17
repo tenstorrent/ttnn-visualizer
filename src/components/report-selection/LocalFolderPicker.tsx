@@ -70,10 +70,9 @@ const LocalFolderPicker = ({
                     text={`/${getPrettyPath(folder.path)}`}
                     labelElement={
                         <Tooltip
-                            className='folder-picker-name-label'
                             content={folder.reportName}
                             disabled={folder.reportName.length < REPORT_NAME_MAX_LENGTH}
-                            position={Position.RIGHT}
+                            position={Position.TOP}
                         >
                             <HighlightedText
                                 text={folder.reportName}
@@ -143,7 +142,12 @@ const LocalFolderPicker = ({
             onItemSelect={handleSelect}
             disabled={!items || !instance}
         >
-            <Tooltip content={activePath ? `/${activePath}` : ''}>
+            <Tooltip
+                content={`/${activePath}`}
+                disabled={!activePath}
+                position={Position.RIGHT}
+                openOnTargetFocus={false}
+            >
                 <Button
                     className='folder-picker-button'
                     text={activeName || defaultLabel}
