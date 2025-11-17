@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath("."))
 
 SphinxConfig = collections.namedtuple("SphinxConfig", ["fullname", "shortname"])
 
-sphinx_config = SphinxConfig(fullname="TTNN-Visualizer", shortname="ttnn_visualizer")
+sphinx_config = SphinxConfig(fullname="TT-NN Visualizer", shortname="ttnn_visualizer")
 
 # -- Project information -----------------------------------------------------
 

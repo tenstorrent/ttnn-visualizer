@@ -1,18 +1,23 @@
-Welcome to TTNN-Visualizer documentation!
-=========================================
+Welcome to TT-NN Visualizer documentation!
+==========================================
 
 .. toctree::
    :maxdepth: 3
-   :caption: Getting Started
+   :caption: Get Started
 
-   src/introduction
    src/getting-started
 
 .. toctree::
    :maxdepth: 3
    :caption: User Guide
 
-   src/experiments
+   src/remote-sync
+
+.. toctree::
+   :maxdepth: 3
+   :caption: Resources
+
+   src/contributing
 
 Indices and tables
 ==================
