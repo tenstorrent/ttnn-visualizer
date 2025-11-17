@@ -1,6 +1,6 @@
 # Contributing
 
-**NOTE:** If you're just looking to run the app, [installing via PyPI](https://github.com/tenstorrent/ttnn-visualizer/blob/dev/docs/getting-started.md#installing-from-pypi) is highly recommended.
+**NOTE:** If you're just looking to run the app, [installing via PyPI](https://github.com/tenstorrent/ttnn-visualizer/blob/dev/docs/src/getting-started.md#installing-from-pypi) is highly recommended.
 
 ## Running the app from source
 

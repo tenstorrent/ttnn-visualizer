@@ -111,7 +111,7 @@ You can have multiple sets of profiler data on the remote paths, but they must b
 
 The application will sync the files from the remote server to your local machine for analysis.
 
-**Need help setting up SSH?** See our [Remote Sync guide](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/remote-sync.md) for detailed SSH setup instructions.
+**Need help setting up SSH?** See our [Remote Sync guide](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/remote-sync.md) for detailed SSH setup instructions.
 
 ### Custom report and profiler data paths
 

@@ -31,9 +31,9 @@ After installation run `ttnn-visualizer` to start the application.
 
 It is recommended to do this within a virtual environment. The minimum Python version is **3.10**.
 
-Please see the [getting started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/getting-started.md) guide for further information on getting up and running with TT-NN Visualizer.
+Please see the [getting started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/getting-started.md) guide for further information on getting up and running with TT-NN Visualizer.
 
-If you want to test out TT-NN Visualizer you can try some of the [sample data](https://github.com/tenstorrent/ttnn-visualizer/tree/main?tab=readme-ov-file#sample-reports). See [loading data](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/getting-started.md#loading-data) for instructions on how to use this.
+If you want to test out TT-NN Visualizer you can try some of the [sample data](https://github.com/tenstorrent/ttnn-visualizer/tree/main?tab=readme-ov-file#sample-reports). See [loading data](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/getting-started.md#loading-data) for instructions on how to use this.
 
 ## Features
 
@@ -115,4 +115,4 @@ Unzip the files into their own directories and select them with the local folder
 
 ## Contributing
 
-How to run [TT-NN Visualizer](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/contributing.md) from source.
+How to run [TT-NN Visualizer](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/contributing.md) from source.
