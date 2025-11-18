@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { PerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
@@ -50,12 +50,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
             tickformat: 'd',
             hoverformat: ',.2r',
         },
-        yAxis: {
-            title: { text: 'Utilization (%)' },
-            tickformat: '.0%',
-            hoverformat: '.2%',
-            range: [0, Math.max(1, maxYValue)],
-        },
+        yAxis: getDeviceUtilizationAxisConfig(maxYValue),
     };
 
     return (
