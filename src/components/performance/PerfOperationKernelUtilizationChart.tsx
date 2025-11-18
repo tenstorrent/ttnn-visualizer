@@ -13,6 +13,7 @@ import { getAxisUpperRange } from '../../functions/perfFunctions';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface PerfOperationKernelUtilizationChartProps {
     datasets?: TypedPerfTableRow[][];
@@ -91,11 +92,14 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
     };
 
     return (
-        <PerfChart
-            title='Device Kernel Duration + Utilization'
-            chartData={[...chartDataDuration, ...chartDataUtilization]}
-            configuration={configuration}
-        />
+        <>
+            {maxY2Value > 1 && <PerfMultiDeviceNotice />}
+            <PerfChart
+                title='Device Kernel Duration + Utilization'
+                chartData={[...chartDataDuration, ...chartDataUtilization]}
+                configuration={configuration}
+            />
+        </>
     );
 }
 

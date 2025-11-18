@@ -13,6 +13,7 @@ import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface PerfCoreCountUtilizationChartProps {
     datasets?: TypedPerfTableRow[][];
@@ -84,11 +85,14 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
     };
 
     return (
-        <PerfChart
-            title='Core Count + Utilization'
-            chartData={[...chartDataDuration, ...chartDataUtilization]}
-            configuration={configuration}
-        />
+        <>
+            {maxY2Value > 1 && <PerfMultiDeviceNotice />}
+            <PerfChart
+                title='Core Count + Utilization'
+                chartData={[...chartDataDuration, ...chartDataUtilization]}
+                configuration={configuration}
+            />
+        </>
     );
 }
 

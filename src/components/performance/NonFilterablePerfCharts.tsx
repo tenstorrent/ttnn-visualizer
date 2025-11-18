@@ -16,7 +16,6 @@ import PerfDeviceTimeChart from './PerfDeviceTimeChart';
 import getCoreCount from '../../functions/getCoreCount';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { useDeviceLog } from '../../hooks/useAPI';
-import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface NonFilterablePerfChartsProps {
     chartData: TypedPerfTableRow[];
@@ -48,19 +47,12 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
         [datasets],
     );
 
-    const isMultiDevice = useMemo(() => {
-        return datasets.some((dataset) => new Set(dataset.map((row) => row.device)).size > 1);
-    }, [datasets]);
-
-    const MultiDeviceNotice = isMultiDevice ? <PerfMultiDeviceNotice /> : null;
-
     return (
         <div className='charts'>
             <h2>Matmul operations</h2>
 
             {matmulData.filter((data) => data.length).length > 0 ? (
                 <>
-                    {MultiDeviceNotice}
                     <PerfCoreCountUtilizationChart
                         datasets={matmulData}
                         maxCores={maxCores}
@@ -68,13 +60,11 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
 
                     <PerfDeviceTimeChart datasets={matmulData} />
 
-                    {MultiDeviceNotice}
                     <PerfOperationKernelUtilizationChart
                         datasets={matmulData}
                         maxCores={maxCores}
                     />
 
-                    {MultiDeviceNotice}
                     <PerfKernelDurationUtilizationChart
                         datasets={matmulData}
                         maxCores={maxCores}

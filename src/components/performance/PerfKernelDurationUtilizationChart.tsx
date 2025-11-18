@@ -12,6 +12,7 @@ import PerfChart from './PerfChart';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface PerfKernelDurationUtilizationChartProps {
     datasets: TypedPerfTableRow[][];
@@ -39,6 +40,8 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
         [datasets, maxCores, perfReport, comparisonReportList],
     );
 
+    const maxYValue = Math.max(...chartData.flatMap((data) => (data.y as number[]) ?? []));
+
     const configuration: PlotConfiguration = {
         showLegend: true,
         xAxis: {
@@ -58,11 +61,14 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
     };
 
     return (
-        <PerfChart
-            title='Utilization vs Device Kernel Duration'
-            chartData={chartData}
-            configuration={configuration}
-        />
+        <>
+            {maxYValue > 1 && <PerfMultiDeviceNotice />}
+            <PerfChart
+                title='Utilization vs Device Kernel Duration'
+                chartData={chartData}
+                configuration={configuration}
+            />
+        </>
     );
 }
 
