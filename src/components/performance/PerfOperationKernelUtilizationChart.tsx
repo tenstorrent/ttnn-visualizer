@@ -56,6 +56,7 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
     );
 
     const maxYValue = Math.max(...chartDataDuration.flatMap((data) => (data.y as number[]) ?? []));
+    const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
 
     const configuration: PlotConfiguration = {
         margin: {
@@ -80,12 +81,10 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
             range: [0, maxYValue],
         },
         yAxis2: {
-            title: {
-                text: 'Utilization (%)',
-            },
-            tickformat: '.1%',
+            title: { text: 'Utilization (%)' },
+            tickformat: '.0%',
             hoverformat: '.2%',
-            range: [0, 1],
+            range: [0, Math.max(1, maxY2Value)],
         },
     };
 

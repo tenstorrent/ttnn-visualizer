@@ -39,6 +39,8 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
         [datasets, maxCores, perfReport, comparisonReportList],
     );
 
+    const maxYValue = Math.max(...chartData.flatMap((data) => (data.y as number[]) ?? []));
+
     const configuration: PlotConfiguration = {
         showLegend: true,
         xAxis: {
@@ -49,11 +51,10 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
             hoverformat: ',.2r',
         },
         yAxis: {
-            title: {
-                text: 'Utilization (%)',
-            },
-            tickformat: '.1%',
+            title: { text: 'Utilization (%)' },
+            tickformat: '.0%',
             hoverformat: '.2%',
+            range: [0, Math.max(1, maxYValue)],
         },
     };
 

@@ -54,6 +54,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
             })) as Partial<PlotData>[],
         [datasets, perfReport, comparisonReportList, maxCores],
     );
+    const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
 
     const configuration: PlotConfiguration = {
         margin: {
@@ -75,9 +76,9 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
         },
         yAxis2: {
             title: { text: 'Utilization (%)' },
-            tickformat: '.1%',
+            tickformat: '.0%',
             hoverformat: '.2%',
-            range: [0, 1],
+            range: [0, Math.max(1, maxY2Value)],
         },
     };
 
