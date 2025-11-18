@@ -41,9 +41,6 @@ export default function Performance() {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
     const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
-
-    // const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
-    // const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[][]>([]);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>([]);
 
     const {
@@ -120,30 +117,6 @@ export default function Performance() {
             setSelectedRange([perfRange[0], perfRange[1]]);
         }
     }, [comparisonReportList, setSelectedRange, perfRange]);
-
-    // useEffect(() => {
-    //     setFilteredComparisonData(
-    //         comparisonPerfData?.map((dataset) =>
-    //             dataset.filter((row) =>
-    //                 selectedOpCodes.length
-    //                     ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
-    //                       row.op_type === OpType.SIGNPOST
-    //                     : row.op_type === OpType.SIGNPOST,
-    //             ),
-    //         ) || [],
-    //     );
-    // }, [selectedOpCodes, comparisonPerfData]);
-
-    // useEffect(() => {
-    //     setFilteredPerfData(
-    //         perfData?.filter((row) =>
-    //             selectedOpCodes.length
-    //                 ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
-    //                   row.op_type === OpType.SIGNPOST
-    //                 : row.op_type === OpType.SIGNPOST,
-    //         ) || [],
-    //     );
-    // }, [selectedOpCodes, perfData]);
 
     useEffect(() => {
         setSelectedOpCodes(opCodeOptions);

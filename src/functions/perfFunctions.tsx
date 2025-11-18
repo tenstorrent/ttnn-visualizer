@@ -72,10 +72,10 @@ export const formatCell = (
     highlight?: string | null,
 ): React.JSX.Element | string => {
     const { key, unit, decimals } = header;
-    let formatted: string | boolean | string[];
-    let value = row[key];
     const isSignpost = row.op_type === OpType.SIGNPOST;
     const isHost = isHostOp(row.raw_op_code);
+    let formatted: string | boolean | string[];
+    let value = row[key];
 
     if (isSignpost) {
         if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code) {

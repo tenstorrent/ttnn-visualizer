@@ -3,14 +3,14 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../definitions/PerfTable';
 
 const CORE_COUNT = {
     grayskull: 108,
     wormhole_b0: 64,
 };
 
-function getCoreCount(architecture: DeviceArchitecture, data: PerfTableRow[] | TypedPerfTableRow[]): number {
+function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[]): number {
     const highestCoreCount = Math.max(
         ...data
             .filter((row) => row.cores)

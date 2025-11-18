@@ -61,7 +61,6 @@ import {
 } from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import HighlightedText from '../HighlightedText';
-import { OpType } from '../../definitions/Performance';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
@@ -597,18 +596,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 };
 
 const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
-    rows
-        .map((row) => ({
-            ...row,
-            percent: parseFloat(row.percent),
-            device_time_sum_us: parseFloat(row.device_time_sum_us),
-            ops_count: parseFloat(row.ops_count),
-            flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
-            flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
-            flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
-            flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
-        }))
-        .filter((row) => row.op_type !== OpType.SIGNPOST); // Filter out signposts here because they are not useful in stacked view
+    rows.map((row) => ({
+        ...row,
+        percent: parseFloat(row.percent),
+        device_time_sum_us: parseFloat(row.device_time_sum_us),
+        ops_count: parseFloat(row.ops_count),
+        flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
+        flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
+        flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
+        flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
+    }));
 
 const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
     if (!modifiers.matchesPredicate) {
