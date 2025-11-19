@@ -166,6 +166,8 @@ The following separate and independent dependencies are utilized by this project
 - gunicorn - MIT - https://github.com/benoitc/gunicorn/blob/master/LICENSE
 - isort - MIT - https://github.com/PyCQA/isort/blob/main/LICENSE
 - mypy - MIT - https://github.com/python/mypy/blob/master/LICENSE
+- myst_parser - MIT - https://github.com/executablebooks/MyST-Parser
+- nbsphinx - MIT - https://github.com/spatialaudio/nbsphinx/
 - orjson - Dual-license Apache-2.0 or MIT - https://github.com/ijl/orjson/blob/master/LICENSE-APACHE and https://github.com/ijl/orjson/blob/master/LICENSE-MIT
 - pandas - BSD‑3‑Clause - https://github.com/pandas-dev/pandas/blob/main/LICENSE
 - playwright - Apache-2.0 - https://github.com/microsoft/playwright-python/blob/main/LICENSE
@@ -176,6 +178,10 @@ The following separate and independent dependencies are utilized by this project
 - python-dotenv - BSD‑3‑Clause - https://github.com/theskumar/python-dotenv/blob/main/LICENSE
 - PyYAML - MIT - https://github.com/yaml/pyyaml/blob/main/LICENSE
 - setuptools - MIT - https://github.com/pypa/setuptools/blob/main/LICENSE
+- sphinx - BSD-2-Clause - https://github.com/sphinx-doc/sphinx
+- sphinx_rtd_theme - MIT - https://github.com/readthedocs/sphinx_rtd_theme
+- sphinx_sitemap - MIT - https://github.com/jdillard/sphinx-sitemap
+- sphinxcontrib.email - BSD-3-Clause - https://github.com/sphinx-contrib/email
 - tt-perf-report - MIT - https://opensource.org/license/mit
 - uvicorn - BSD‑3‑Clause - https://github.com/encode/uvicorn/blob/master/LICENSE.md
 - wheel - MIT - https://opensource.org/license/mit

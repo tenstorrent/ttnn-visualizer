@@ -26,7 +26,7 @@ const SPDX_PACKAGE_JSON_LICENSE = {
 };
 
 // File extensions
-const JS_FILE_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.css', '.scss', '.xml'];
+const JS_FILE_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.scss', '.xml'];
 const PYTHON_FILE_EXTENSIONS = ['.py'];
 const JSON_FILE_EXTENSIONS = ['.json'];
 
@@ -42,6 +42,7 @@ const IGNORED_DIRS = [
     'backend/ttnn_visualizer/static',
     'node_modules',
     'ttnn_env',
+    'docs/output',
 ];
 const NON_COMPLIANT_FILES = [];
 
