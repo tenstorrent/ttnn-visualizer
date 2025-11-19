@@ -99,6 +99,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
 
     useEffect(() => {
+        // TODO: look into resetting this value
         if (didInitZoomRange.current) {
             return;
         }
@@ -372,7 +373,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         />
                                     )}
                                     <Tooltip
-                                        content='Turn buffer zoom on'
+                                        content='Requires buffer zoom to be enabled'
                                         disabled={zoomedInViewMainMemory}
                                     >
                                         <Label
