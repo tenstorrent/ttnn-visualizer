@@ -124,4 +124,31 @@
         margin-top: -18px;
         padding-left: 18px;
     }
+
+    .memory-zoom-range {
+        $zoom-range-margin: 15px;
+
+        margin-left: $zoom-range-margin;
+        max-width: calc(100% - #{$zoom-range-margin * 2});
+
+        &.bp6-disabled {
+            opacity: 0.3;
+
+            .bp6-slider-label {
+                opacity: 0;
+            }
+        }
+    }
+
+    .memory-zoom-range-label {
+        display: inline-flex;
+        gap: 10px;
+        align-items: center;
+        margin-left: 10px;
+        margin-bottom: 5px;
+
+        &[disabled] {
+            opacity: 0.5;
+        }
+    }
 }
