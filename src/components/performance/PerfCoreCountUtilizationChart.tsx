@@ -5,7 +5,7 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
@@ -13,9 +13,10 @@ import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface PerfCoreCountUtilizationChartProps {
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
     maxCores: number;
 }
 
@@ -78,11 +79,14 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
     };
 
     return (
-        <PerfChart
-            title='Core Count + Utilization'
-            chartData={[...chartDataDuration, ...chartDataUtilization]}
-            configuration={configuration}
-        />
+        <>
+            {maxY2Value > 1 && <PerfMultiDeviceNotice />}
+            <PerfChart
+                title='Core Count + Utilization'
+                chartData={[...chartDataDuration, ...chartDataUtilization]}
+                configuration={configuration}
+            />
+        </>
     );
 }
 

@@ -9,6 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import {
+    useOpToPerfIdFiltered,
     usePerfFolderList,
     usePerformanceComparisonReport,
     usePerformanceRange,
@@ -24,12 +25,14 @@ import {
 } from '../store/app';
 import PerfCharts from '../components/performance/PerfCharts';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
-import { Marker, MarkerColours, PerfTableRow } from '../definitions/PerfTable';
+import { Marker, MarkerColours, PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
 import { OpType, PerfTabIds } from '../definitions/Performance';
+import { BufferType } from '../model/BufferType';
+import { DeviceOperationLayoutTypes } from '../model/APIData';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
@@ -38,9 +41,6 @@ export default function Performance() {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
     const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
-
-    const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
-    const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[][]>([]);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>([]);
 
     const {
@@ -51,11 +51,14 @@ export default function Performance() {
     const { data: comparisonData } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
+    const opIdsMap = useOpToPerfIdFiltered();
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
     const perfData = data?.report;
     const stackedData = data?.stacked_report;
+    const reportSelectors =
+        comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
     const comparisonPerfData = useMemo(() => comparisonData?.map((d) => d.report) || [], [comparisonData]);
     const comparisonStackedData = useMemo(() => comparisonData?.map((d) => d.stacked_report) || [], [comparisonData]);
     const opCodeOptions = useMemo(() => {
@@ -84,13 +87,19 @@ export default function Performance() {
 
     const rangedData = useMemo(
         () =>
-            comparisonReportList && selectedRange && filteredPerfData.length > 0
-                ? filteredPerfData.filter((row) => {
+            selectedRange && perfData
+                ? perfData.filter((row) => {
                       const rowId = typeof row?.id === 'number' ? row.id : parseInt(row?.id, 10);
                       return rowId >= selectedRange[0] && rowId <= selectedRange[1];
                   })
-                : filteredPerfData,
-        [selectedRange, filteredPerfData, comparisonReportList],
+                : [],
+        [selectedRange, perfData],
+    );
+
+    const enrichedData = useMemo(() => enrichRowData(rangedData, opIdsMap), [rangedData, opIdsMap]);
+    const enrichedComparisonData = useMemo(
+        () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [],
+        [comparisonPerfData, opIdsMap],
     );
 
     // Clear comparison report if users switches active perf report to the comparison report
@@ -108,30 +117,6 @@ export default function Performance() {
             setSelectedRange([perfRange[0], perfRange[1]]);
         }
     }, [comparisonReportList, setSelectedRange, perfRange]);
-
-    useEffect(() => {
-        setFilteredComparisonData(
-            comparisonPerfData?.map((dataset) =>
-                dataset.filter((row) =>
-                    selectedOpCodes.length
-                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
-                          row.op_type === OpType.SIGNPOST
-                        : row.op_type === OpType.SIGNPOST,
-                ),
-            ) || [],
-        );
-    }, [selectedOpCodes, comparisonPerfData]);
-
-    useEffect(() => {
-        setFilteredPerfData(
-            perfData?.filter((row) =>
-                selectedOpCodes.length
-                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
-                      row.op_type === OpType.SIGNPOST
-                    : row.op_type === OpType.SIGNPOST,
-            ) || [],
-        );
-    }, [selectedOpCodes, perfData]);
 
     useEffect(() => {
         setSelectedOpCodes(opCodeOptions);
@@ -156,9 +141,6 @@ export default function Performance() {
             </>
         );
     }
-
-    const reportSelectors =
-        comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
 
     return (
         <div className='performance data-padding'>
@@ -198,11 +180,12 @@ export default function Performance() {
                     icon={IconNames.TH}
                     panel={
                         <PerformanceReport
-                            data={rangedData}
-                            comparisonData={filteredComparisonData}
+                            data={enrichedData}
+                            comparisonData={enrichedComparisonData}
                             stackedData={stackedData}
                             comparisonStackedData={comparisonStackedData}
                             signposts={data?.signposts}
+                            rawComparisonData={comparisonPerfData}
                         />
                     }
                 />
@@ -225,8 +208,8 @@ export default function Performance() {
                                         />
 
                                         <PerfCharts
-                                            filteredPerfData={rangedData}
-                                            comparisonData={filteredComparisonData}
+                                            filteredPerfData={enrichedData}
+                                            comparisonData={enrichedComparisonData || []}
                                             selectedOpCodes={selectedOpCodes}
                                         />
                                     </div>
@@ -236,8 +219,8 @@ export default function Performance() {
 
                                         <div>
                                             <NonFilterablePerfCharts
-                                                chartData={rangedData}
-                                                secondaryData={comparisonPerfData || []}
+                                                chartData={enrichedData}
+                                                secondaryData={enrichedComparisonData || []}
                                                 opCodeOptions={opCodeOptions}
                                             />
                                         </div>
@@ -251,3 +234,63 @@ export default function Performance() {
         </div>
     );
 }
+
+const HIGH_DISPATCH_THRESHOLD = 6.5;
+
+interface RowAttributes {
+    device: number | null;
+    buffer_type: BufferType | null;
+    layout: DeviceOperationLayoutTypes | null;
+}
+
+const getBufferType = (type?: string): BufferType | null => {
+    if (!type) {
+        return null;
+    }
+
+    if (type === 'L1') {
+        return BufferType.L1;
+    }
+
+    if (type === 'DRAM') {
+        return BufferType.DRAM;
+    }
+
+    return null;
+};
+
+const getRowAttributes = (row: PerfTableRow): RowAttributes => {
+    const regex = /DEV_(\d)_(DRAM|L1)_(\w*)/m;
+    const matchIn0 = regex.exec(row.input_0_memory);
+
+    return {
+        device: matchIn0?.[1] ? parseInt(matchIn0[1], 10) : null,
+        buffer_type: getBufferType(matchIn0?.[2]),
+        layout: matchIn0?.[3] ? (matchIn0[3] as DeviceOperationLayoutTypes) : null,
+    };
+};
+
+const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
+    return rows.map((row) => {
+        const val = parseInt(row.op_to_op_gap, 10);
+        const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
+        const op = opStr !== undefined ? Number(opStr) : undefined;
+
+        return {
+            ...row,
+            op,
+            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
+            id: parseInt(row.id, 10),
+            total_percent: parseFloat(row.total_percent),
+            device_time: parseFloat(row.device_time),
+            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
+            cores: parseInt(row.cores, 10),
+            dram: row.dram ? parseFloat(row.dram) : null,
+            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
+            flops: row.flops ? parseFloat(row.flops) : null,
+            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
+            pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
+            ...getRowAttributes(row),
+        };
+    });
+};

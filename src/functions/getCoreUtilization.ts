@@ -2,13 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { PerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../definitions/PerfTable';
 import isValidNumber from './isValidNumber';
 
-function getCoreUtilization(row: PerfTableRow, maxCores: number): number {
-    const ideal = row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null;
-    const kernelDuration = row.device_time ? parseFloat(row.device_time) : null;
-    const coreCount = row.cores ? parseInt(row.cores, 10) : null;
+function getCoreUtilization(row: TypedPerfTableRow, maxCores: number): number {
+    const ideal = row.pm_ideal_ns ?? null;
+    const kernelDuration = row.device_time ?? null;
+    const coreCount = row.cores ?? null;
 
     if (!isValidNumber(ideal) || !isValidNumber(kernelDuration) || !isValidNumber(coreCount)) {
         return 0;

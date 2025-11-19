@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 @use '../definitions/colours' as *;
+@use '../mixins/scrollShade' as scrollShade;
 
 $label-width: 160px;
 $label-margin: 10px;
@@ -69,31 +71,7 @@ $height-offset: 15px;
         position: relative;
         top: $height-offset;
 
-        &::before,
-        &::after {
-            content: '';
-            display: block;
-            width: 100%;
-            height: 10px;
-            z-index: 1;
-            position: sticky;
-            left: 0;
-            pointer-events: none;
-        }
-
-        &.scroll-shade-top {
-            &::before {
-                top: 0;
-                background-image: linear-gradient(180deg, rgba($tt-background, 100%) 0%, rgba($tt-background, 0%) 100%);
-            }
-        }
-
-        &.scroll-shade-bottom {
-            &::after {
-                bottom: 0;
-                background-image: linear-gradient(0deg, rgba($tt-background, 100%) 0%, rgba($tt-background, 0%) 100%);
-            }
-        }
+        @include scrollShade.scroll-shade(10px);
     }
 
     .list-container {
