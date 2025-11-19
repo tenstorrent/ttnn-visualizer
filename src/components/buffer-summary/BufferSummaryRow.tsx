@@ -112,26 +112,7 @@ const BufferSummaryRow = ({
                     }
 
                     if (notDeallocated) {
-                        ctx.strokeStyle = '#000000';
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(position, 1, size, CANVAS_HEIGHT - 2);
-
-                        ctx.save();
-
-                        ctx.beginPath();
-                        ctx.rect(position, 1, size, CANVAS_HEIGHT - 1);
-                        ctx.clip();
-
-                        const spacing = 10;
-
-                        for (let x = position - CANVAS_HEIGHT; x < position + size; x += spacing) {
-                            ctx.beginPath();
-                            ctx.moveTo(x, 1);
-                            ctx.lineTo(x + CANVAS_HEIGHT, CANVAS_HEIGHT);
-                            ctx.stroke();
-                        }
-
-                        ctx.restore();
+                        getWarningPattern(ctx, position, size);
                     }
                 });
             }
@@ -186,7 +167,10 @@ const BufferSummaryRow = ({
             const missingDeallocationNotice = interactiveBuffer.notDeallocated ? (
                 <>
                     <br />
-                    Last consumer is {interactiveBuffer.consumerOperationId} {interactiveBuffer.consumerName}
+                    Last consumer is{' '}
+                    <u>
+                        {interactiveBuffer.consumerOperationId} {interactiveBuffer.consumerName}
+                    </u>
                     <br />
                     <Icon
                         intent={Intent.WARNING}
@@ -259,7 +243,7 @@ const BufferSummaryRow = ({
                     minimal
                 >
                     <div
-                        className='buffer-summary-row-tooltip'
+                        className='buffer-summary-tooltip-position'
                         style={{
                             left: `${tooltip.x}px`,
                         }}
@@ -279,5 +263,33 @@ const BufferSummaryRow = ({
         </div>
     );
 };
+
+function getWarningPattern(ctx: CanvasRenderingContext2D, position: number, size: number) {
+    ctx.save();
+
+    const warningStroke = 'rgba(0, 0, 0, 0.8)';
+
+    // Draw diagonal lines
+    ctx.beginPath();
+    ctx.rect(position, 1, size, CANVAS_HEIGHT - 1);
+    ctx.clip();
+    ctx.strokeStyle = warningStroke;
+    ctx.lineWidth = 1;
+    const spacing = 8;
+
+    for (let x = position - CANVAS_HEIGHT; x < position + size; x += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(x, CANVAS_HEIGHT);
+        ctx.lineTo(x + CANVAS_HEIGHT, 1);
+        ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // Add border stroke
+    ctx.strokeStyle = warningStroke;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(position, 1, size, CANVAS_HEIGHT - 2);
+}
 
 export default BufferSummaryRow;
