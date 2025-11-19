@@ -2,8 +2,18 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useEffect, useState } from 'react';
-import { Button, ButtonGroup, Intent, RangeSlider, Switch } from '@blueprintjs/core';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Button,
+    ButtonGroup,
+    ButtonVariant,
+    Intent,
+    Label,
+    RangeSlider,
+    Size,
+    Switch,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import {
@@ -41,6 +51,7 @@ import OperationArguments from '../OperationArguments';
 import DeviceOperationsFullRender from './DeviceOperationsFullRender';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
+import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -70,6 +81,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: operations } = useOperationsList();
     const l1start = useGetL1StartMarker();
     const l1end = useGetL1SmallMarker();
+
+    const didInitZoomRange = useRef(false);
+
     const {
         operationDetails: { data: operationDetails, isLoading, status },
     } = useOperationDetails(operationId);
@@ -85,6 +99,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
 
     useEffect(() => {
+        if (didInitZoomRange.current) {
+            return;
+        }
         if (!isLoading && !isPrevLoading && operationDetails && previousOperationDetails) {
             const { plotZoomRangeStart, plotZoomRangeEnd } = calculatePlotZoomRange();
             setZoomRangeStart(plotZoomRangeStart);
@@ -92,6 +109,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isLoading, isPrevLoading, operationDetails, previousOperationDetails]);
+
+    useEffect(() => {
+        didInitZoomRange.current = false;
+    }, [operationId]);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails || !operations) {
         return (
@@ -234,11 +255,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 }}
                             />
                             <Switch
-                                label={
-                                    !showCircularBuffer
-                                        ? 'Show Circular Buffers Details'
-                                        : 'Hide Circular Buffers Details'
-                                }
+                                label='Show Circular Buffers Details'
                                 checked={showCircularBuffer}
                                 disabled={cbChartDataByOperation.size === 0}
                                 onChange={() => {
@@ -282,20 +299,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 onChange={() => {
                                     setShowMemoryRegions(!showMemoryRegions);
                                 }}
-                            />
-                            <RangeSlider
-                                // initialValue={plotZoomRangeStart}
-                                min={plotZoomRangeStart}
-                                max={plotZoomRangeEnd}
-                                disabled={!zoomedInViewMainMemory}
-                                // stepSize={memorySizeL1 / 10}
-                                labelStepSize={(plotZoomRangeEnd - plotZoomRangeStart) / 3 || 1000000}
-                                value={[zoomRangeStart, zoomRangeEnd]}
-                                onChange={(value: number[]) => {
-                                    setZoomRangeStart(value[0]);
-                                    setZoomRangeEnd(value[1]);
-                                }}
-                                // labelRenderer={(value) => `${value.toFixed(1)}`}
                             />
                         </div>
 
@@ -368,6 +371,49 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             tensorByAddress={details.tensorListByAddress}
                                         />
                                     )}
+                                    <Tooltip
+                                        content='Turn buffer zoom on'
+                                        disabled={zoomedInViewMainMemory}
+                                    >
+                                        <Label
+                                            className='memory-zoom-range-label'
+                                            disabled={!zoomedInViewMainMemory}
+                                        >
+                                            L1 memory zoom range
+                                            <Button
+                                                className='memory-zoom-range-reset'
+                                                disabled={
+                                                    !zoomedInViewMainMemory ||
+                                                    (plotZoomRangeStart === zoomRangeStart &&
+                                                        plotZoomRangeEnd === zoomRangeEnd)
+                                                }
+                                                size={Size.SMALL}
+                                                variant={ButtonVariant.MINIMAL}
+                                                icon={IconNames.RESET}
+                                                intent={Intent.WARNING}
+                                                onClick={() => {
+                                                    setZoomRangeStart(plotZoomRangeStart);
+                                                    setZoomRangeEnd(plotZoomRangeEnd);
+                                                }}
+                                            />
+                                        </Label>
+                                    </Tooltip>
+
+                                    <RangeSlider
+                                        min={plotZoomRangeStart}
+                                        max={plotZoomRangeEnd}
+                                        disabled={!zoomedInViewMainMemory}
+                                        intent={Intent.WARNING}
+                                        labelStepSize={
+                                            (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
+                                        }
+                                        value={[zoomRangeStart, zoomRangeEnd]}
+                                        onChange={(value: number[]) => {
+                                            setZoomRangeStart(value[0]);
+                                            setZoomRangeEnd(value[1]);
+                                        }}
+                                        className='memory-zoom-range'
+                                    />
 
                                     <L1Plots
                                         operationDetails={details}
