@@ -8,7 +8,7 @@ import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
@@ -62,9 +62,9 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
     const configuration: PlotConfiguration = {
         margin: {
             l: 100,
-            r: 0,
+            r: 50,
             b: 50,
-            t: 0,
+            t: 10,
         },
         showLegend: true,
         xAxis: {
@@ -81,14 +81,7 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
             hoverformat: ',.2r',
             range: [0, maxYValue],
         },
-        yAxis2: {
-            title: {
-                text: 'Utilization (%)',
-            },
-            tickformat: '.0%',
-            hoverformat: '.2%',
-            range: [0, maxY2Value],
-        },
+        yAxis2: getDeviceUtilizationAxisConfig(maxY2Value),
     };
 
     return (

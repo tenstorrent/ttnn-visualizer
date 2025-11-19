@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
@@ -55,7 +55,6 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
             })) as Partial<PlotData>[],
         [datasets, perfReport, comparisonReportList, maxCores],
     );
-
     const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
 
     const configuration: PlotConfiguration = {
@@ -76,12 +75,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
             hoverformat: ',.2r',
             range: [0, maxCores],
         },
-        yAxis2: {
-            title: { text: 'Utilization (%)' },
-            tickformat: '.0%',
-            hoverformat: '.2%',
-            range: [0, maxY2Value],
-        },
+        yAxis2: getDeviceUtilizationAxisConfig(maxY2Value),
     };
 
     return (
