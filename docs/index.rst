@@ -6,17 +6,19 @@ Welcome to TT-NN Visualizer documentation!
    :caption: Get Started
 
    src/what-is-ttnn-visualizer
-   src/getting-started
+   src/installing
 
 .. toctree::
    :maxdepth: 3
    :caption: User Guide
 
    src/remote-sync
-   src/troubleshooting
+   src/running-from-source
+
 
 .. toctree::
    :maxdepth: 3
    :caption: Resources
 
-   src/contributing
+   src/support
+   src/troubleshooting

@@ -1,4 +1,4 @@
-# Getting started
+# Installing TT-NN Visualizer
 
 ## Prerequisites
 

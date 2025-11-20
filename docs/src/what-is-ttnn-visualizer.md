@@ -1,15 +1,16 @@
 # What is TT-NN Visualizer?
 
-The visualiser is a diagnostic tool for visualizing the Tenstorrent Neural Network model (TT-NN). 
+The visualiser is a diagnostic tool for visualizing the Tenstorrent Neural Network model ([TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/index.html)). 
+
+The app is available to [install via PyPI](https://docs.tenstorrent.com/ttnn-visualizer/src/getting-started.html#installing-from-pypi) or [hosted online](https://ttnn-visualizer.tenstorrent.com/). You may also [build and run from source](https://docs.tenstorrent.com/ttnn-visualizer/src/contributing.html#running-the-app-from-source).
 
 ## Features
 - Comprehensive list of all operations in the model
 - Load reports via the local file system or through an SSH connection
 - Interactive graph visualization of operations
 - Detailed and interactive L1, DRAM, and circular buffer memory plots
-- Filterable list of tensor details
-- Flagging of high consumer or late deallocated tensors
-- Overview of all buffers for the entire model run
+- Filterable list of tensor details and flagging of high consumer or late deallocated tensors
+- Visual overview of all buffers for the entire model run
 - Visualization of input and output tensors with core tiling and sharding details
 - Visualize inputs/outputs per tensor or tensor allocation across each core
 - Detailed insights into L1 peak memory consumption, with an interactive graph of allocation over time
