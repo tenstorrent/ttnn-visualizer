@@ -5,7 +5,7 @@
 import { FC, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import PerfCoreCountUtilizationChart from './PerfCoreCountUtilizationChart';
-import { Marker, PerfTableRow } from '../../definitions/PerfTable';
+import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import PerfOperationTypesChart from './PerfOperationTypesChart';
 import SkeletalChart from './SkeletalChart';
 import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
@@ -18,8 +18,8 @@ import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { useDeviceLog } from '../../hooks/useAPI';
 
 interface NonFilterablePerfChartsProps {
-    chartData: PerfTableRow[];
-    secondaryData?: PerfTableRow[][];
+    chartData: TypedPerfTableRow[];
+    secondaryData?: TypedPerfTableRow[][];
     opCodeOptions: Marker[];
 }
 
@@ -28,10 +28,10 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     secondaryData = [],
     opCodeOptions,
 }) => {
-    const { data: deviceLog } = useDeviceLog();
-
     const performanceReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+
+    const { data: deviceLog } = useDeviceLog();
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
     const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;

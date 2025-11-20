@@ -78,6 +78,20 @@ export const BufferSummaryAxisConfiguration: PlotConfiguration = {
     bgColour: '#fff',
 } as PlotConfiguration;
 
+interface AxisConfig {
+    title?: {
+        text?: string;
+    };
+    side?: 'top' | 'bottom';
+    tickmode?: 'array' | 'auto' | 'linear';
+    tick0?: number;
+    dtick?: number;
+    tickvals?: number[];
+    range?: [number, number];
+    tickformat?: string;
+    hoverformat?: string;
+}
+
 export interface PlotConfiguration {
     height?: number;
     margin?: {
@@ -90,35 +104,9 @@ export interface PlotConfiguration {
     title?: string;
     gridColour?: string;
     bgColour?: string;
-    xAxis?: {
-        title?: {
-            text?: string;
-        };
-        side?: 'top' | 'bottom';
-        tickmode?: 'array' | 'auto' | 'linear';
-        tick0?: number;
-        dtick?: number;
-        tickvals?: number[];
-        range?: [number, number];
-        tickformat?: string;
-        hoverformat?: string;
-    };
-    yAxis?: {
-        title?: {
-            text?: string;
-        };
-        range?: [number, number];
-        tickformat?: string;
-        hoverformat?: string;
-    };
-    yAxis2?: {
-        title?: {
-            text?: string;
-        };
-        range?: [number, number];
-        tickformat?: string;
-        hoverformat?: string;
-    };
+    xAxis?: AxisConfig;
+    yAxis?: AxisConfig;
+    yAxis2?: AxisConfig;
     barMode?: 'stack' | 'group';
 }
 
@@ -219,3 +207,10 @@ export const PerfChartLayout: Partial<Layout> = {
 
 export const L1_SMALL_MARKER_COLOR: string = '#FF0000';
 export const L1_START_MARKER_COLOR: string = '#8EF32F';
+
+export const getDeviceUtilizationAxisConfig = (maxValue: number): AxisConfig => ({
+    title: { text: 'Utilization (%)' },
+    tickformat: '.0%',
+    hoverformat: '.2%',
+    range: [0, Math.max(1.1, maxValue * 1.1)], // Using 1.1 because otherwise the top end tick label can get cut off
+});

@@ -31,9 +31,9 @@ After installation run `ttnn-visualizer` to start the application.
 
 It is recommended to do this within a virtual environment. The minimum Python version is **3.10**.
 
-Please see the [getting started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/getting-started.md) guide for further information on getting up and running with TT-NN Visualizer.
+Please see the [getting started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/getting-started.md) guide for further information on getting up and running with TT-NN Visualizer.
 
-If you want to test out TT-NN Visualizer you can try some of the [sample data](https://github.com/tenstorrent/ttnn-visualizer/tree/main?tab=readme-ov-file#sample-reports). See [loading data](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/getting-started.md#loading-data) for instructions on how to use this.
+If you want to test out TT-NN Visualizer you can try some of the [sample data](https://github.com/tenstorrent/ttnn-visualizer/tree/main?tab=readme-ov-file#sample-reports). See [loading data](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/getting-started.md#loading-data) for instructions on how to use this.
 
 ## Features
 
@@ -61,32 +61,31 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | L1 Summary with Tensor highlight | Operation inputs and outputs |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/6679e3ab-3819-4037-bf63-15aac0f8b625" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/7b0bf6da-d6e5-4b8d-b2cd-457181ac6b99" /> |
+| <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/7c6a3558-1084-492b-ac0b-f5f910487c8f" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/48197e65-4831-4005-9da8-99574c47d5c7" /> |
 
 | Device operations with memory consumption | DRAM memory allocation |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/46f51cde-86ec-4251-8f41-261b5e14e1b7" />| <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/588dbb57-3964-48f8-aa0d-bafc614706d3" /> |
+| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/4b8cefb9-fd75-4291-9e64-ab2f2c866c51" />| <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/a9ad8b1d-200c-4c10-b1d8-5d76900c688c" /> |
 
 | Operation graph view | Model buffer summary |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/a77b099e-9caa-4758-8dee-8b30cad4dad8" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/90a4c0e6-58cb-4031-b224-a91f3beadc51" /> |
+| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/422f1591-4232-4d16-a783-726960261443" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/9afa48b2-628d-4dad-ac89-42fda762aee6" /> |
 
 | Per core allocation details | Per core allocation details for individual tensors |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/0d4a833a-d9b6-4239-a953-42c0b84d4f80" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/06b69fbb-c6fc-45fe-9360-36722e68bee5" /> |
+| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/681c8d0e-c628-4839-afca-f31ff9d53f73" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/a9d66f2d-2457-4ced-b777-6e8f0c54eb86" /> |
 
 | Tensor details list | Performance report |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/919da94e-45f9-432e-9eb4-c584b4140663" /> | <img width="400" alt="Performnance analysis" src="https://github.com/user-attachments/assets/468b0acb-733e-4891-8e16-781c47889017" /> |
+| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/315089ff-ae75-4615-87b9-19c45431871c" /> | <img width="400" alt="Performnance analysis" src="https://github.com/user-attachments/assets/468b0acb-733e-4891-8e16-781c47889017" /> |
 
 | Performance charts |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/23e6b1d0-2def-490a-8921-3477ded2c8ce" /> |  <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/ee620711-10be-4582-ab6f-635c896a1101" /> |
+| <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/19f6bd6f-8f48-48dd-b9ee-726b1a1e40e3" /> |  <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/bc6ae03b-f143-4ee5-9f14-834ddf8b0cde" /> |
 
 | NPE |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/5a25a79c-0fcc-4298-aaae-8e8656b99ab5" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/b2845948-02fa-4255-81f4-fc3257a282da" />
-
+| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/5f45c1bf-565d-4003-b3b7-0ddd90cbdeca" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/8a3e9a09-4c86-45a6-9916-52fba16debc6" />
 
 ## Sample reports
 
@@ -116,4 +115,4 @@ Unzip the files into their own directories and select them with the local folder
 
 ## Contributing
 
-How to run [TT-NN Visualizer](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/contributing.md) from source.
+How to run [TT-NN Visualizer](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/contributing.md) from source.

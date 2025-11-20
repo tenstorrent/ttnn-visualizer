@@ -8,13 +8,12 @@ import { NumberRange, TabId } from '@blueprintjs/core';
 import { FileProgress, FileStatus } from '../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../definitions/Devices';
 import { TAB_IDS } from '../definitions/BufferSummary';
-import { ScrollPositions } from '../definitions/ScrollPositions';
+import { ScrollPosition } from '../definitions/ScrollPositions';
 import { Signpost } from '../functions/perfFunctions';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { TableFilter, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
-import { ScrollPositionV2 } from '../definitions/ScrollPositionsV2';
 
 // Unsorted
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
@@ -33,8 +32,9 @@ export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 
-export const scrollPositionsAtom = atom<ScrollPositions | null>(null);
-export const scrollPositionsV2Atom = atom<ScrollPositionV2 | null>(null);
+export const scrollPositionsAtom = atom<ScrollPosition | null>(null);
+
+export const showDeallocationReportAtom = atom<boolean>(false);
 
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom<FileProgress>({
@@ -52,7 +52,7 @@ export const shouldCollapseAllOperationsAtom = atom(false);
 export const isFullStackTraceAtom = atom(false);
 
 // Tensors route
-export const expandedTensorsAtom = atom<number[]>([]);
+export const shouldCollapseAllTensorsAtom = atom(false);
 export const tensorBufferTypeFiltersAtom = atom<(BufferType | null)[]>([]);
 
 // Buffers route

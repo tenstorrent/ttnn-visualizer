@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
@@ -32,17 +32,19 @@ import {
     renderMemoryLayoutAtom,
     selectedDeviceAtom,
     showBufferSummaryZoomedAtom,
+    showDeallocationReportAtom,
     showHexAtom,
     showMemoryRegionsAtom,
 } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
-import { SCROLL_TOLERANCE_PX, ScrollLocations } from '../../definitions/ScrollPositions';
+import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
+import useScrollShade from '../../hooks/useScrollShade';
 
-const PLACEHOLDER_ARRAY_SIZE = 30;
+const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
-const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
+const TOTAL_SHADE_HEIGHT = 20; // Total height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {
@@ -54,22 +56,47 @@ function BufferSummaryPlotRenderer({
     uniqueBuffersByOperationList,
     tensorListByOperation,
 }: BufferSummaryPlotRendererProps) {
-    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
-    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-    const [activeRow, setActiveRow] = useState<number | null>(null);
-    const [showDeallocationReport, setShowDeallocationReport] = useState(true);
-    const [showHex, setShowHex] = useAtom(showHexAtom);
-    const deviceId = useAtomValue(selectedDeviceAtom) || 0;
+    const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
+    const [showHex, setShowHex] = useAtom(showHexAtom);
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
-    const { data: devices, isLoading: isLoadingDevices } = useDevices();
-    const scrollElementRef = useRef<HTMLDivElement>(null);
-    const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
-    const navigate = useNavigate();
+    const deviceId = useAtomValue(selectedDeviceAtom) || 0;
+    const [activeRow, setActiveRow] = useState<number | null>(null);
 
+    const { data: devices, isLoading: isLoadingDevices } = useDevices();
+    const { data: operations } = useOperationsList();
+    const navigate = useNavigate();
+    const scrollElementRef = useRef<HTMLDivElement>(null);
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
+    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY);
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
+
+    const {
+        itemCount: restoredItemCount,
+        scrollOffset: restoredOffset,
+        measurementsCache: restoredMeasurementsCache,
+    } = useMemo(() => getListState(), [getListState]) ?? {};
+
+    const virtualizer = useVirtualizer({
+        estimateSize: () => OPERATION_EL_HEIGHT,
+        getScrollElement: () => scrollElementRef.current,
+        overscan: 20,
+        initialMeasurementsCache: restoredMeasurementsCache,
+        count: restoredItemCount || uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
+        initialOffset: restoredOffset || 0,
+    });
+
+    const virtualItems = virtualizer.getVirtualItems();
+    const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
+
+    // Store latest values in refs for unmount cleanup
+    const scrollOffsetRef = useRef(virtualizer.scrollOffset);
+    const measurementsCacheRef = useRef(virtualizer.measurementsCache);
+
+    const getMemorySize = () =>
+        !isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
 
     const numberOfOperations = useMemo(
         () =>
@@ -81,9 +108,6 @@ function BufferSummaryPlotRenderer({
 
     const { lateDeallocationsByOperation: nondeallocatedTensorsByOperationId } =
         useGetTensorDeallocationReportByOperation();
-
-    const getMemorySize = () =>
-        !isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
 
     // TODO: Multi device support
     const memorySize = useMemo(getMemorySize, [deviceId, devices, isLoadingDevices]);
@@ -104,41 +128,36 @@ function BufferSummaryPlotRenderer({
         return minValue && maxValue ? [minValue, maxValue] : [0, memorySize];
     }, [uniqueBuffersByOperationList, memorySize]);
 
-    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
-    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
-    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
-
-    const virtualizer = useVirtualizer({
-        count: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
-        getScrollElement: () => scrollElementRef.current,
-        estimateSize: () => OPERATION_EL_HEIGHT,
-        overscan: 20,
-    });
-    const virtualItems = virtualizer.getVirtualItems();
-
-    const { updateScrollPosition } = useRestoreScrollPosition(virtualizer, ScrollLocations.BUFFER_SUMMARY);
-
-    const handleUserScrolling = () => {
-        updateScrollShade();
-    };
-
-    const updateScrollShade = () => {
+    const handleUserScrolling = useCallback(() => {
         if (scrollElementRef.current) {
-            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
-
-            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
-
-            const scrollBottom = scrollTop + offsetHeight;
-
-            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+            updateScrollShade(scrollElementRef.current);
         }
-    };
+    }, [updateScrollShade]);
 
-    const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string, index: number) => {
+    const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string) => {
         event.preventDefault();
-        updateScrollPosition(index);
         navigate(path);
     };
+
+    // Keep stored refs updated
+    useEffect(() => {
+        scrollOffsetRef.current = virtualizer.scrollOffset;
+    }, [virtualizer.scrollOffset]);
+
+    useEffect(() => {
+        measurementsCacheRef.current = virtualizer.measurementsCache;
+    }, [virtualizer.measurementsCache]);
+
+    // Update stored list state on unmount
+    useEffect(() => {
+        return () => {
+            updateListState({
+                itemCount: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
+                scrollOffset: scrollOffsetRef.current || 0,
+                measurementsCache: measurementsCacheRef.current,
+            });
+        };
+    }, [updateListState, uniqueBuffersByOperationList]);
 
     const memoryRegionsMarkers = showMemoryRegions
         ? [
@@ -146,6 +165,9 @@ function BufferSummaryPlotRenderer({
               { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: '' },
           ]
         : [];
+    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
+    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
+    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     return uniqueBuffersByOperationList && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
@@ -157,7 +179,7 @@ function BufferSummaryPlotRenderer({
                         setIsZoomedIn(!isZoomedIn);
                     }}
                 />
-                <Switch
+                <GlobalSwitch
                     label='Mark late tensor deallocations'
                     checked={showDeallocationReport}
                     onChange={() => {
@@ -219,8 +241,8 @@ function BufferSummaryPlotRenderer({
 
             <div
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                    [shadeClasses.top]: hasScrolledFromTop,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                 })}
                 onScroll={handleUserScrolling}
                 ref={scrollElementRef}
@@ -228,7 +250,7 @@ function BufferSummaryPlotRenderer({
                 <div
                     style={{
                         // Div is sized to the maximum required to render all list items minus our shade element heights
-                        height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
+                        height: virtualHeight,
                     }}
                 >
                     <div
@@ -272,11 +294,7 @@ function BufferSummaryPlotRenderer({
                                         <a
                                             href={`${ROUTES.OPERATIONS}/${operation.id}`}
                                             onClick={(event) =>
-                                                handleNavigateToOperation(
-                                                    event,
-                                                    `${ROUTES.OPERATIONS}/${operation.id}`,
-                                                    virtualRow.index,
-                                                )
+                                                handleNavigateToOperation(event, `${ROUTES.OPERATIONS}/${operation.id}`)
                                             }
                                         >
                                             {operation.id}&nbsp;{operation.name}

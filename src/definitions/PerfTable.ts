@@ -74,6 +74,7 @@ export interface TypedPerfTableRow
         | 'flops'
         | 'flops_percent'
         | 'bound'
+        | 'pm_ideal_ns'
     > {
     id: number | null;
     global_call_count: number | null;
@@ -86,6 +87,7 @@ export interface TypedPerfTableRow
     flops: number | null;
     flops_percent: number | null;
     bound: BoundType | null;
+    pm_ideal_ns: number | null;
     // Next three extracted from input_0_memory
     buffer_type: BufferType | null;
     device: number | null;
@@ -164,7 +166,7 @@ export const TableHeaders: TableHeader[] = [
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
     { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true },
-    // { label: 'Device', key: ColumnHeaders.device }, Hidden because tt-perf-report doesn't really support multi device well
+    { label: 'Device ID', key: ColumnHeaders.device },
     { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true },
     { label: 'Layout', key: ColumnHeaders.layout, sortable: true, filterable: true },
     { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
@@ -218,7 +220,7 @@ export const signpostRowDefaults = Object.freeze({
     inner_dim_block_size: '',
     output_subblock_h: '',
     output_subblock_w: '',
-    pm_ideal_ns: '',
+    pm_ideal_ns: null,
     op_type: OpType.SIGNPOST,
     device: null,
     layout: null,

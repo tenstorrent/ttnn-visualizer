@@ -34,7 +34,6 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     isDisabled = false,
 }) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
-
     useEffect(() => {
         setIsOpenState(isOpen);
     }, [isOpen]);

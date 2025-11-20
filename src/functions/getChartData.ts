@@ -12,7 +12,7 @@ export default function getChartData(
     memory: Chunk[],
     getTensorForAddress: (id: number) => Tensor | null,
     overrides?: { color?: string; colorVariance?: number; hovertemplate?: string },
-    options?: { renderPattern?: boolean },
+    options?: { renderPattern?: boolean; lateDeallocation?: boolean },
 ): Partial<PlotDataCustom>[] {
     return memory.map((chunk) => {
         const { address, size } = chunk;
@@ -34,13 +34,13 @@ export default function getChartData(
 
         if (options?.renderPattern) {
             //  shape options "" | "/" | "\\" | "x" | "-" | "|" | "+" | ".";
+
             if (tensorMemoryLayout === TensorMemoryLayout.INTERLEAVED) {
                 pattern = {
                     shape: '.',
                     fillmode: 'overlay',
                     size: 4,
-                    fgcolor: '#000000',
-                    fgopacity: 0.3,
+                    fgcolor: 'rgba(0, 0, 0, 0.3)',
                 };
             }
             if (tensorMemoryLayout === TensorMemoryLayout.BLOCK_SHARDED) {
@@ -48,8 +48,7 @@ export default function getChartData(
                     shape: '+',
                     fillmode: 'overlay',
                     size: 6,
-                    fgcolor: '#000000',
-                    fgopacity: 0.2,
+                    fgcolor: 'rgba(0, 0, 0, 0.2)',
                 };
             }
             if (tensorMemoryLayout === TensorMemoryLayout.HEIGHT_SHARDED) {
@@ -57,8 +56,7 @@ export default function getChartData(
                     shape: '|',
                     fillmode: 'overlay',
                     size: 6,
-                    fgcolor: '#000000',
-                    fgopacity: 0.2,
+                    fgcolor: 'rgba(0, 0, 0, 0.2)',
                 };
             }
             if (tensorMemoryLayout === TensorMemoryLayout.WIDTH_SHARDED) {
@@ -66,12 +64,18 @@ export default function getChartData(
                     shape: '-',
                     fillmode: 'overlay',
                     size: 6,
-                    fgcolor: '#000000',
-                    fgopacity: 0.2,
+                    fgcolor: 'rgba(0, 0, 0, 0.2)',
                 };
             }
         }
-
+        if (options?.lateDeallocation && chunk.lateDeallocation) {
+            pattern = {
+                shape: '/',
+                fillmode: 'overlay',
+                size: 5,
+                fgcolor: 'rgba(0, 0, 0, 0.6)',
+            };
+        }
         return {
             x: [address + size / 2],
             y: [1],
@@ -99,6 +103,11 @@ export default function getChartData(
 <span style="color:${color};font-size:20px;">&#9632;</span>
 ${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
 ${tensor ? `<br>${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} Tensor${tensor.id}<br>${tensorMemoryLayout || ''}` : ''}
+${
+    options?.lateDeallocation && chunk.lateDeallocation
+        ? `<br><span style="font-weight:bold;">Opportunity to deallocate earlier</span>`
+        : ''
+}
 <extra></extra>`,
 
             hoverlabel: {

@@ -21,6 +21,12 @@ import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../definitions/L1MemorySize';
+import { TensorDeallocationReport } from './BufferSummary';
+
+export interface OperationDetailsOptions {
+    renderPattern: boolean;
+    lateDeallocation: boolean;
+}
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -49,6 +55,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     private operations: OperationDescription[] = [];
 
+    private deallocationReport: TensorDeallocationReport[] = [];
+
     public deviceOperations: DeviceOperation[] = [];
 
     private memoryConfig: {
@@ -56,16 +64,20 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         l1end: number;
     };
 
-    private options: { renderPattern: boolean } = { renderPattern: false };
+    private options: OperationDetailsOptions = {
+        renderPattern: false,
+        lateDeallocation: false,
+    };
 
     constructor(
         data: OperationDetailsData,
         operations: OperationDescription[],
+        deallocationReport: TensorDeallocationReport[],
         memoryConfig: {
             l1start: number;
             l1end: number;
         },
-        options?: { renderPattern: boolean },
+        options?: OperationDetailsOptions,
     ) {
         this.id = data.id;
         this.inputs = data.inputs;
@@ -77,10 +89,11 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.stack_trace = data.stack_trace;
         this.operations = operations;
         this.raw_device_operations = data.device_operations;
+        this.deallocationReport = deallocationReport;
         // DEBUG
         // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
-        this.options = options || { renderPattern: false };
+        this.options = options || { renderPattern: false, lateDeallocation: false };
         this.memoryConfig = memoryConfig;
 
         this.inputs.forEach((tensor) => {
@@ -302,10 +315,15 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             this.buffers
                 ?.filter((buffer: BufferData) => buffer.buffer_type === bufferType)
                 .map((buffer: BufferData) => {
+                    const lateDeallocation = this.deallocationReport.some(
+                        (report) => report.address === buffer.address,
+                    );
+
                     return {
                         address: buffer.address,
                         size: buffer.max_size_per_bank,
                         tensorId: this.getTensorForAddress(buffer.address)?.id,
+                        lateDeallocation,
                     };
                 })
                 .sort((a, b) => a.address - b.address) || [];
@@ -341,32 +359,42 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             }
         });
 
-        continuousMemory.forEach((chunk, index) => {
-            if (index > 0) {
-                let prevChunkIndex = index - 1;
-                let prevChunk = continuousMemory[prevChunkIndex];
-
-                while (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size > chunk.address) {
-                    prevChunkIndex--;
-                    if (prevChunkIndex >= 0) {
-                        prevChunk = continuousMemory[prevChunkIndex];
+        if (bufferType === BufferType.L1) {
+            continuousMemory.forEach((chunk, index) => {
+                if (index > 0) {
+                    let prevChunkIndex = index - 1;
+                    let prevChunk = continuousMemory[prevChunkIndex];
+                    while (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size > chunk.address) {
+                        prevChunkIndex--;
+                        if (prevChunkIndex >= 0) {
+                            prevChunk = continuousMemory[prevChunkIndex];
+                        }
+                    }
+                    if (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size < chunk.address) {
+                        if (
+                            prevChunk.address + prevChunk.size > this.memoryConfig.l1start &&
+                            prevChunk.address < this.memoryConfig.l1end
+                        ) {
+                            fragmentation.push({
+                                address: prevChunk.address + prevChunk.size,
+                                size: chunk.address - (prevChunk.address + prevChunk.size),
+                                empty: true,
+                            });
+                        } else if (prevChunk.address === 0 && prevChunk.size === 0) {
+                            const address = this.memoryConfig.l1start ?? 0;
+                            const size = chunk.address - address;
+                            if (size > 0) {
+                                fragmentation.push({
+                                    address,
+                                    size,
+                                    empty: true,
+                                });
+                            }
+                        }
                     }
                 }
-                if (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size < chunk.address) {
-                    if (
-                        prevChunk.address + prevChunk.size > this.memoryConfig.l1start &&
-                        prevChunk.address < this.memoryConfig.l1end
-                    ) {
-                        fragmentation.push({
-                            address: prevChunk.address + prevChunk.size,
-                            size: chunk.address - (prevChunk.address + prevChunk.size),
-                            empty: true,
-                        });
-                    }
-                }
-            }
-        });
-
+            });
+        }
         const largestEmpty = fragmentation.length
             ? fragmentation.reduce((prev, current) => {
                   return prev.size > current.size ? prev : current;

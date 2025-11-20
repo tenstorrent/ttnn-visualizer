@@ -6,14 +6,14 @@ import Plot from 'react-plotly.js';
 import classNames from 'classnames';
 import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { Marker, PerfTableRow } from '../../definitions/PerfTable';
+import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import 'styles/components/PerformanceOperationTypesChart.scss';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';
 
 interface PerfOperationTypesChartProps {
     reportTitle: string;
     opCodes: Marker[];
-    data?: PerfTableRow[];
+    data?: TypedPerfTableRow[];
     className?: string;
 }
 
