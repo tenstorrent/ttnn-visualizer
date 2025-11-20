@@ -5,54 +5,53 @@ on:
 
 # Sets permissions to allow deployment to GitHub Pages
 permissions:
-    contents: read
-    pages: write
-    id-token: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-    build:
-        runs-on:
-            - ubuntu-latest
+  build:
+    runs-on:
+      - ubuntu-latest
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
 
-            - name: Set up Python
-              uses: actions/setup-python@v4
-              with:
-                  python-version: '3.10.16'
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10.16'
 
-            - name: Install documentation dependencies
-              run: |
-                  python -m pip install --upgrade pip
-                  pip install build
+    - name: Install documentation dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
 
-            - name: Build Docs
-              run: |
-                  cd docs
-                  sphinx-build . output
-                  cd ..
+    - name: Setup Pages
+      id: pages
+      uses: actions/configure-pages@v5
 
-            - name: Setup Pages
-              id: pages
-              uses: actions/configure-pages@v5
+    - name: Build Docs
+      run: |
+        cd docs
+        make build
+        cd ..
 
-            - name: Upload artifact
-              uses: actions/upload-pages-artifact@v3
-              with:
-                  path: ./docs/output
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./docs/output
 
-    # Deployment job
-    deploy:
-        needs: build
-        
-        environment:
-            name: github-pages
-            url: ${{ steps.deployment.outputs.page_url }}
+  # Deployment job
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
-        runs-on: ubuntu-latest
-        steps:
-            - name: Deploy to GitHub Pages
-              id: deployment
-              uses: actions/deploy-pages@v4
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
