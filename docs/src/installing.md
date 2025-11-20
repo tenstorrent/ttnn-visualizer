@@ -6,6 +6,8 @@ TT-NN Visualizer requires data generated from TT-NN to analyze.
 
 Follow instructions for setting up [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/index.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/index.html).
 
+### Memory reports
+
 Recommended PyTest config when generating your data:
 
 ``` bash
