@@ -4,7 +4,7 @@
 
 TT-NN Visualizer requires data generated from TT-NN to analyze.
 
-Follow instructions for setting up [TT-Metalium](https://github.com/tenstorrent/tt-metal) and [TT-NN](https://github.com/tenstorrent/tt-metal/blob/main/ttnn/README.md).
+Follow instructions for setting up [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/index.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/index.html).
 
 Recommended PyTest config when generating your data:
 
@@ -34,7 +34,7 @@ The final output should be a folder including at least a `config.json` and a `db
 
 ### Performance reports
 
-TT-NN Visualizer supports the reading of TT-Metalium performance reports. The expected output should be a folder containing `profile_log_device.csv`, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
+TT-NN Visualizer supports the reading of TT-Metalium performance reports. The expected output should be a folder containing a `profile_log_device.csv` file, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
 
 Consult the TT-Metalium documentation on [how to generate a performance report](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
 
@@ -44,17 +44,17 @@ Consult the TT-Metalium documentation on [how to generate a performance report](
 
 Network-on-chip performance estimator data can be loaded separately on the `/npe` route.
 
-To generate this data for your model, refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe).
+To generate this data for your model, refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe/blob/main/docs/src/getting_started.md).
 
 ## Installing from PyPI
 
-TT-NN Visualizer can be installed from PyPI:
+TT-NN Visualizer can be installed from [PyPI](https://pypi.org/project/ttnn-visualizer/):
 
 `pip install ttnn-visualizer`
 
-After installation run `ttnn-visualizer` to start the application.
+After installation run `ttnn-visualizer` to start the application. It is recommended to do this within a virtual environment.
 
-It is recommended to do this within a virtual environment. The minimum supported version of Python is **3.10**. Pyenv can be used to ensure the application runs with a supported version of Python:
+The minimum supported version of Python is **3.10**. Pyenv can be used to ensure the application runs with a supported version of Python:
 
 ```bash
 mkdir ttnn-visualizer

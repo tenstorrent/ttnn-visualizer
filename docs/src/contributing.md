@@ -1,12 +1,12 @@
 # Contributing
 
-**NOTE:** If you're just looking to run the app, [installing via PyPI](https://github.com/tenstorrent/ttnn-visualizer/blob/dev/docs/src/getting-started.md#installing-from-pypi) is highly recommended.
+**NOTE:** If you're just looking to run the app, [installing via PyPI](https://docs.tenstorrent.com/ttnn-visualizer/src/getting-started.html#installing-from-pypi) is highly recommended.
 
 ## Running the app from source
 
 ### Front end
 
-Currently the project requires **Node 20.11**. We have a `.nvmrc` file for ease of versioning if you're using a node version manager.
+The current supported Node version is listed in the [.nvmrc](https://github.com/tenstorrent/ttnn-visualizer/blob/dev/.nvmrc) file. We recommend using a node version manager such as NVM for ease of use. 
 
 We use [pnpm](https://pnpm.io/) as our package manager. Please see their guidelines for [installing pnpm on your machine](https://pnpm.io/installation).
 
@@ -72,14 +72,14 @@ If your key isn't present, run the following on your local machine:
 ssh-add
 ```
 
-### Fix for python random errors not finding modules
+### Fix for python not finding modules
 
 ```shell
 deactivate
 rm -rf myenv
 ```
 
-Then follow steps for creating virtual environment and reinstalling dependencies
+Then [follow the steps](https://docs.tenstorrent.com/ttnn-visualizer/src/contributing.html#back-end) for creating virtual environment and reinstalling dependencies
 
 ### Fix for missing distutils package
 

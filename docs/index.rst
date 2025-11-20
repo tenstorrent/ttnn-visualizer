@@ -18,10 +18,3 @@ Welcome to TT-NN Visualizer documentation!
    :caption: Resources
 
    src/contributing
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
