@@ -1,7 +1,7 @@
 name: Docs - Build & Deploy
 
 on:
-    workflow_call:
+  workflow_dispatch:
 
 # Sets permissions to allow deployment to GitHub Pages
 permissions:
