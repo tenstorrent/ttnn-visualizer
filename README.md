@@ -31,9 +31,9 @@ After installation run `ttnn-visualizer` to start the application.
 
 It is recommended to do this within a virtual environment. The minimum Python version is **3.10**.
 
-Please see the [getting started](https://docs.tenstorrent.com/ttnn-visualizer/src/getting-started.html) guide for further information on getting up and running with TT-NN Visualizer.
+Please see the [install guide](https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html) guide for further information on getting up and running with TT-NN Visualizer.
 
-If you want to test out TT-NN Visualizer you can try some of the [sample data](https://github.com/tenstorrent/ttnn-visualizer/tree/main?tab=readme-ov-file#sample-reports). See [loading data](https://docs.tenstorrent.com/ttnn-visualizer/src/getting-started.html#loading-data) for instructions on how to use this.
+If you want to test out TT-NN Visualizer you can try some of the [sample data](https://github.com/tenstorrent/ttnn-visualizer/tree/main?tab=readme-ov-file#sample-reports). See [loading data](https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html#loading-data) for instructions on how to use this.
 
 ## Features
 
@@ -110,9 +110,6 @@ Unzip the files into their own directories and select them with the local folder
 **T3K synthetic**
 [synthetic_t3k_small.json.zip](https://github.com/user-attachments/files/20491459/synthetic_t3k_small.json.zip)
 
-
-
-
 ## Contributing
 
-How to run [TT-NN Visualizer](https://docs.tenstorrent.com/ttnn-visualizer/src/contributing.html) from source.
+How to run [TT-NN Visualizer](https://docs.tenstorrent.com/ttnn-visualizer/src/running-from-source.html) from source.
