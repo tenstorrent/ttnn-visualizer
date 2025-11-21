@@ -2,6 +2,11 @@ name: Docs - Build & Deploy
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'docs/**'
 
 # Sets permissions to allow deployment to GitHub Pages
 permissions:

@@ -5,23 +5,20 @@ Welcome to TT-NN Visualizer documentation!
    :maxdepth: 3
    :caption: Get Started
 
-   src/getting-started
+   src/what-is-ttnn-visualizer
+   src/installing
 
 .. toctree::
    :maxdepth: 3
    :caption: User Guide
 
    src/remote-sync
+   src/running-from-source
+
 
 .. toctree::
    :maxdepth: 3
    :caption: Resources
 
-   src/contributing
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+   src/support
+   src/troubleshooting
