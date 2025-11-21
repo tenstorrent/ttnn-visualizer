@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from sqlalchemy.pool import NullPool
 from ttnn_visualizer.utils import str_to_bool
 
 load_dotenv()
@@ -55,13 +56,17 @@ class DefaultConfig(object):
     USE_WEBSOCKETS = str_to_bool(os.getenv("USE_WEBSOCKETS", "true"))
 
     # SQL Alchemy Settings
-    SQLALCHEMY_DATABASE_URI = (
-        f"sqlite:///{os.path.join(APP_DATA_DIRECTORY, f'ttnn_{DB_VERSION}.db')}"
-    )
+    # Build database path - use absolute path to avoid any ambiguity
+    _db_file_path = str(Path(APP_DATA_DIRECTORY) / f"ttnn_{DB_VERSION}.db")
+    SQLALCHEMY_DATABASE_URI = f"sqlite:///{_db_file_path}"
     SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_size": 10,  # Adjust pool size as needed (default is 5)
-        "max_overflow": 20,  # Allow overflow of the pool size if necessary
-        "pool_timeout": 30,  # Timeout in seconds before giving up on getting a connection
+        # SQLite-specific settings for multi-process/worker environments
+        # NullPool: Each worker gets its own connection, avoiding file locking issues
+        # This is critical for gunicorn's multi-worker mode with SQLite
+        "poolclass": NullPool,
+        "connect_args": {
+            "check_same_thread": False,  # Allow SQLite to be used across threads in gevent
+        },
     }
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
