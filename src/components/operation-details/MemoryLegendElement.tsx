@@ -117,7 +117,8 @@ export const MemoryLegendElement: React.FC<{
             <div>
                 {!isMultiDeviceBuffer && !chunk.empty && derivedTensor && (
                     <>
-                        {derivedTensor.operationIdentifier} : Tensor {derivedTensor.id}
+                        {derivedTensor.operationIdentifier} {derivedTensor.operationIdentifier && ':'} Tensor{' '}
+                        {derivedTensor.id}
                     </>
                 )}
                 {!isMultiDeviceBuffer && chunk.empty && emptyChunkLabel}
