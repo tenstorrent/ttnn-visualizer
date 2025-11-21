@@ -115,7 +115,6 @@ def extensions(app: flask.Flask):
     :param app: Flask application instance
     :return: None
     """
-
     flask_static_digest.init_app(app)
     if app.config["USE_WEBSOCKETS"]:
         socketio.init_app(app)
@@ -124,13 +123,8 @@ def extensions(app: flask.Flask):
     if app.config["USE_WEBSOCKETS"]:
         register_handlers(socketio)
 
-    # Create the tables within the application context
     with app.app_context():
         db.create_all()
-
-    # For automatically reflecting table data
-    # with app.app_context():
-    #    db.reflect()
 
     return None
 
@@ -201,60 +195,82 @@ def parse_args():
     return parser.parse_args()
 
 
+def display_mode_info_without_db(config):
+    """Display mode information using only config, without initializing database."""
+    # Determine if we're in TT-Metal mode
+    tt_metal_home = config.TT_METAL_HOME
+    is_tt_metal_mode = tt_metal_home is not None
+
+    if is_tt_metal_mode:
+        print("🚀 TT-METAL MODE: Working directly with tt-metal generated directory")
+        print(f"   TT_METAL_HOME: {tt_metal_home}")
+
+        profiler_base = Path(tt_metal_home) / "generated" / "ttnn" / "reports"
+        performance_base = Path(tt_metal_home) / "generated" / "profiler" / "reports"
+
+        print(f"   Profiler reports: {profiler_base}")
+        print(f"   Performance reports: {performance_base}")
+
+        # Validate setup
+        if not Path(tt_metal_home).exists():
+            print(
+                f"   ⚠️  Warning: TT_METAL_HOME directory does not exist: {tt_metal_home}"
+            )
+        elif not (Path(tt_metal_home) / "generated").exists():
+            print(f"   ⚠️  Warning: TT-Metal generated directory not found")
+        elif not profiler_base.exists():
+            print(
+                f"   ⚠️  Warning: Profiler reports directory not found: {profiler_base}"
+            )
+        elif not performance_base.exists():
+            print(
+                f"   ⚠️  Warning: Performance reports directory not found: {performance_base}"
+            )
+        else:
+            print(f"   ✓ TT-Metal setup is valid")
+    else:
+        print(
+            "📁 UPLOAD/SYNC MODE: Using local data directory for uploaded/synced reports"
+        )
+        print(f"   Local directory: {config.LOCAL_DATA_DIRECTORY}")
+        print(f"   Remote directory: {config.REMOTE_DATA_DIRECTORY}")
+
+
 def main():
 
     run_command = sys.argv[0].split("/")
     if run_command[-1] == "ttnn-visualizer":
         os.environ.setdefault("FLASK_ENV", "production")
 
-    config = cast(DefaultConfig, Config())
     args = parse_args()
+
+    config = cast(DefaultConfig, Config())
     instance_id = None
 
-    if args.profiler_path or args.performance_path:
-        app = create_app()
-        app.app_context().push()
-        try:
-            session = create_instance_from_local_paths(
-                profiler_path=args.profiler_path,
-                performance_path=args.performance_path,
-            )
-        except InvalidReportPath:
-            sys.exit("Invalid report path")
-        except InvalidProfilerPath:
-            sys.exit("Invalid profiler path")
-
-        instance_id = session.instance_id
-
+    # Display mode information first (using config only, no DB needed)
     if args.tt_metal_home:
         config.TT_METAL_HOME = args.tt_metal_home
 
-    # Display mode information
-    app = create_app()
-    with app.app_context():
-        resolver = create_path_resolver(app)
-        mode_info = resolver.get_mode_info()
+    display_mode_info_without_db(config)
 
-        if mode_info["mode"] == "tt_metal":
-            print(
-                "🚀 TT-METAL MODE: Working directly with tt-metal generated directory"
-            )
-            print(f"   TT_METAL_HOME: {mode_info['tt_metal_home']}")
-            print(f"   Profiler reports: {mode_info['profiler_base']}")
-            print(f"   Performance reports: {mode_info['performance_base']}")
+    # If profiler/performance paths are provided, create an instance
+    # This requires DB access, so we create the app temporarily
+    if args.profiler_path or args.performance_path:
+        app = create_app()
+        with app.app_context():
+            try:
+                session = create_instance_from_local_paths(
+                    profiler_path=args.profiler_path,
+                    performance_path=args.performance_path,
+                )
+                instance_id = session.instance_id
+            except InvalidReportPath:
+                sys.exit("Invalid report path")
+            except InvalidProfilerPath:
+                sys.exit("Invalid profiler path")
 
-            # Validate setup
-            is_valid, message = resolver.validate_tt_metal_setup()
-            if is_valid:
-                print(f"   ✓ {message}")
-            else:
-                print(f"   ⚠️  Warning: {message}")
-        else:
-            print(
-                "📁 UPLOAD/SYNC MODE: Using local data directory for uploaded/synced reports"
-            )
-            print(f"   Local directory: {mode_info['local_dir']}")
-            print(f"   Remote directory: {mode_info['remote_dir']}")
+        # Clean up this temporary app - workers will create their own
+        del app
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
@@ -262,6 +278,12 @@ def main():
         print("\nENVIRONMENT:")
         for key, value in config.to_dict().items():
             print(f"{key}={value}")
+
+    # Warn if there's a gunicorn config file in current directory
+    if Path("gunicorn.conf.py").exists():
+        logger.warning(
+            "Found gunicorn.conf.py in current directory - this may override environment settings"
+        )
 
     gunicorn_args = [
         "gunicorn",
