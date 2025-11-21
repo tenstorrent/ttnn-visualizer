@@ -1,4 +1,3 @@
-/* eslint-disable no-nested-ternary */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
@@ -12,12 +11,11 @@ import NPEView from '../components/npe/NPEViewComponent';
 import { useNPETimelineFile, useNpe } from '../hooks/useAPI';
 import { activeNpeOpTraceAtom } from '../store/app';
 import { NPEData } from '../model/NPEModel';
-import LoadingSpinner from '../components/LoadingSpinner';
 import { semverParse } from '../functions/semverParse';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
-import { NPE_DATA_VERSION } from '../definitions/NPEData';
+import { MIN_NPE_DATA_VERSION, getNpeDataErrorType } from '../definitions/NPEData';
 
 const NPE: FC = () => {
     const { filepath } = useParams<{ filepath?: string }>();
@@ -27,8 +25,8 @@ const NPE: FC = () => {
     const [demoData, setDemoData] = useState<NPEData | null>(null);
     const [selectedDemo, setSelectedDemo] = useState<NPEDemoData | null>(null);
 
-    // Determine the current NPE data source
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
+    const isValidData = useMemo(() => (npeData ? isValidNpeData(npeData) : false), [npeData]);
     const isDemoEnabled = getServerConfig()?.SERVER_MODE;
     const isLoading = isLoadingNPE || isLoadingTimeline;
     const hasUploadedFile = !!npeFileName || !!filepath;
@@ -67,26 +65,14 @@ const NPE: FC = () => {
                 )}
             </div>
 
-            {isLoading || isLoadingTimeline ? (
-                <div>
-                    <LoadingSpinner />
-                </div>
-            ) : npeData ? (
-                isValidNpeData(npeData) ? (
-                    <NPEView npeData={npeData} />
-                ) : (
-                    <NPEProcessingStatus
-                        dataVersion={dataVersion}
-                        hasUploadedFile={hasUploadedFile}
-                        isInvalidData
-                    />
-                )
+            {npeData && isValidData ? (
+                <NPEView npeData={npeData} />
             ) : (
                 <NPEProcessingStatus
+                    isLoading={isLoading}
                     dataVersion={dataVersion}
                     hasUploadedFile={hasUploadedFile}
-                    fetchErrorCode={processingError?.status}
-                    isInvalidData
+                    errorType={getNpeDataErrorType(dataVersion, processingError?.status, isValidData)}
                 />
             )}
         </>
@@ -99,10 +85,10 @@ const isValidNpeData = (data: NPEData): boolean => {
     }
     const requiredKeys: (keyof NPEData)[] = ['common_info', 'noc_transfers', 'timestep_data'];
     const hasAllKeys = requiredKeys.every((key) => key in data);
-    const version = semverParse(data.common_info.version);
-    const expectedVersion = semverParse(NPE_DATA_VERSION);
+    const dataVersion = semverParse(data.common_info.version);
+    const minSupportedVersion = semverParse(MIN_NPE_DATA_VERSION);
 
-    if (!hasAllKeys || version?.major !== expectedVersion?.major) {
+    if (!hasAllKeys || dataVersion?.major !== minSupportedVersion?.major) {
         return false;
     }
 
