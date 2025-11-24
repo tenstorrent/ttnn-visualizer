@@ -6,7 +6,7 @@ If you have a bug to report, a feature to formally propose or need for support s
 
 ## Troubleshooting and debugging tips
 
-See [troubleshooting](https://docs.tenstorrent.com/ttnn-visualizer/src/troubleshooting.html) for known solutions.
+See [troubleshooting](./troubleshooting.md) for known solutions.
 
 ## Community
 

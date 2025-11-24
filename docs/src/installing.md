@@ -48,6 +48,7 @@ Network-on-chip performance estimator data can be loaded separately on the `/npe
 
 To generate this data for your model, refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe/blob/main/docs/src/getting_started.md).
 
+(installing-from-pypi)=
 ## Installing from PyPI
 
 TT-NN Visualizer can be installed from [PyPI](https://pypi.org/project/ttnn-visualizer/):
@@ -113,7 +114,7 @@ You can have multiple sets of profiler data on the remote paths, but they must b
 
 The application will sync the files from the remote server to your local machine for analysis.
 
-**Need help setting up SSH?** See our [Remote Sync guide](https://docs.tenstorrent.com/ttnn-visualizer/src/remote-sync.html) for detailed SSH setup instructions.
+**Need help setting up SSH?** See our [Remote Sync guide](./remote-sync.md) for detailed SSH setup instructions.
 
 ### Custom report and profiler data paths
 

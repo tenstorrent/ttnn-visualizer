@@ -23,7 +23,7 @@ deactivate
 rm -rf myenv
 ```
 
-Then [follow the steps](https://docs.tenstorrent.com/ttnn-visualizer/src/running-from-source.html#back-end) for creating virtual environment and reinstalling dependencies
+Then [follow the steps](./running-from-source.md#back-end) for creating virtual environment and reinstalling dependencies
 
 ## Fix for missing distutils package
 

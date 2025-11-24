@@ -84,4 +84,4 @@ dropdown to perform the sync.
 
 ### Troubleshooting
 
-See our [troubleshooting](https://docs.tenstorrent.com/ttnn-visualizer/src/troubleshooting.html) section for some known issues and solutions.
+See our [troubleshooting](./troubleshooting.md) section for some known issues and solutions.

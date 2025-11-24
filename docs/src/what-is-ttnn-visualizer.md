@@ -2,7 +2,7 @@
 
 The visualiser is a diagnostic tool for visualizing the Tenstorrent Neural Network model ([TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/index.html)). 
 
-The app is available to [install via PyPI](https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html#installing-from-pypi) or [hosted online](https://ttnn-visualizer.tenstorrent.com/). You may also [build and run from source](https://docs.tenstorrent.com/ttnn-visualizer/src/running-from-source.html).
+The app is available to [install via PyPI](./installing.md#installing-from-pypi) or [hosted online](https://ttnn-visualizer.tenstorrent.com/). You may also [build and run from source](./running-from-source.md).
 
 ## Features
 <!-- Reports -->

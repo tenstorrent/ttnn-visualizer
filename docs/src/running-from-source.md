@@ -1,6 +1,6 @@
 # Running from source
 
-**NOTE:** If you're just looking to run the app, [installing via PyPI](https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html#installing-from-pypi) or using the [hosted version](https://ttnn-visualizer.tenstorrent.com/) is highly recommended.
+**NOTE:** If you're just looking to run the app, [installing via PyPI](./installing.md#installing-from-pypi) or using the [hosted version](https://ttnn-visualizer.tenstorrent.com/) is highly recommended.
 
 ## Front end
 
