@@ -39,19 +39,20 @@ If you want to test out TT-NN Visualizer you can try some of the [sample data](h
 
 For the latest updates and features, please see [releases](https://github.com/tenstorrent/ttnn-visualizer/releases).
 
-- Comprehensive list of all operations in the model
-- Interactive graph visualization of operations
-- Detailed and interactive L1, DRAM, and circular buffer memory plots
-- Filterable list of tensor details
-- Overview of all buffers for the entire model run
-- Visualization of input and output tensors with core tiling and sharding details
-- Visualize inputs/outputs per tensor or tensor allocation across each core
-- Detailed insights into L1 peak memory consumption, with an interactive graph of allocation over time
-- Navigate a tree of device operations with associated buffers and circular buffers
-- Operation flow graph for a holistic view of model execution
-- Load reports via the local file system or through an SSH connection
-- Supports multiple instances of the application running concurrently
-- BETA: Network-on-chip performance estimator (NPE) for Tenstorrent Tensix-based devices
+## Features
+- Upload reports from the local file system or sync remotely via SSH
+- Filterable list of all operations in the model
+- Interactive memory and tensor visualizations, including per core allocations, memory layout, allocation over time
+- Input/output tensors details per operation including allocation details per core
+- Navigable device operation tree with associated buffers and circular buffers
+- Filterable list of tensor details and flagging of high consumer or late deallocated tensors
+- Visual overview of all buffers for the entire model run 
+- Interactive model graph view (operations and connecting tensors)
+- Integration with tt-perf-report performance analysis
+- Compare multiple performance traces in charts and tables
+- Network-on-chip performance estimator (NPE) for Tenstorrent Tensix-based devices
+- Display physical topology and configuration of Tenstorrent chip clusters
+- Run multiple instances of the application concurrently
 
 ### Demo
 
