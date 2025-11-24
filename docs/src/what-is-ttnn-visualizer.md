@@ -10,7 +10,7 @@ The app is available to [install via PyPI](./installing.md#installing-from-pypi)
 - Upload reports from the local file system or sync remotely via SSH
 - Switch seamlessly between previously uploaded or synced reports
 - Run multiple instances of the application concurrently with different data
-- Set data ranges for both memory and performance data
+- Set data ranges for both memory and performance traces
 - Display physical topology and configuration of Tenstorrent chip clusters
 
 ### Operations
@@ -36,7 +36,7 @@ The app is available to [install via PyPI](./installing.md#installing-from-pypi)
 - Find all operations by name
 
 ### Performance
-- Integration with tt-perf-report performance analysis
+- Integration with tt-perf-report and rendering of performance analysis
 - Interactive charts and tables
 - Multiple filtering options of performance data 
 - Compare multiple performance traces
