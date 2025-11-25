@@ -304,9 +304,9 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
 const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
     rows.map((row) => ({
         ...row,
-        percent: parseFloat(row.percent),
-        device_time_sum_us: parseFloat(row.device_time_sum_us),
-        ops_count: parseFloat(row.ops_count),
+        percent: row.percent ? parseFloat(row.percent) : null,
+        device_time_sum_us: row.device_time_sum_us ? parseFloat(row.device_time_sum_us) : null,
+        ops_count: row.ops_count ? parseFloat(row.ops_count) : null,
         flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
         flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
         flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
