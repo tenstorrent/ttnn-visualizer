@@ -463,7 +463,7 @@ class OpsPerformanceReportQueries:
 
         try:
             perf_report.generate_perf_report(
-                csv_file,
+                [csv_file],
                 signpost,
                 ignore_signposts,
                 cls.DEFAULT_MIN_PERCENTAGE,
@@ -497,7 +497,12 @@ class OpsPerformanceReportQueries:
                 op_id = index + 2  # Match IDs with row numbers in ops perf results csv
                 if not any(s["op_code"] == op_code for s in signposts):
                     captured_signposts.add(op_code)
-                    signposts.append({"id": op_id, "op_code": op_code})
+                    signposts.append(
+                        {
+                            "id": op_id,
+                            "op_code": op_code,
+                        }
+                    )
 
         report = []
 
