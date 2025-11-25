@@ -16,6 +16,7 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
+import classNames from 'classnames';
 import {
     useGetL1SmallMarker,
     useGetL1StartMarker,
@@ -28,7 +29,7 @@ import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import { PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
+import { L1RenderZoomoutConfiguration, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import {
     isFullStackTraceAtom,
     renderMemoryLayoutAtom,
@@ -52,6 +53,7 @@ import DeviceOperationsFullRender from './DeviceOperationsFullRender';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
+import MemoryPlotRenderer from './MemoryPlotRenderer';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -202,6 +204,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const inputOutputList = details.inputs.concat(details.outputs);
     const inputOutputAddressList: string = inputOutputList.map((tensor) => tensor.address).join(',');
+    const { chartData } = details.memoryData();
 
     return (
         <>
@@ -400,6 +403,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         </Label>
                                     </Tooltip>
 
+                                    <MemoryPlotRenderer
+                                        className={classNames('l1-memory-renderer zoom-reference', {
+                                            disabled: !zoomedInViewMainMemory,
+                                        })}
+                                        plotZoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                                        chartDataList={[chartData]}
+                                        isZoomedIn={zoomedInViewMainMemory}
+                                        memorySize={memorySizeL1}
+                                        configuration={L1RenderZoomoutConfiguration}
+                                    />
                                     <RangeSlider
                                         min={plotZoomRangeStart}
                                         max={plotZoomRangeEnd}
