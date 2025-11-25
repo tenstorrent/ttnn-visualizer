@@ -310,7 +310,7 @@ def main():
     if args.daemon:
         gunicorn_args.insert(1, "--daemon")
 
-    if config.LAUNCH_BROWSER_ON_START:
+    if config.LAUNCH_BROWSER_ON_START and not args.daemon:
         flask_env = os.getenv("FLASK_ENV", "development")
         port = config.PORT if flask_env == "production" else config.DEV_SERVER_PORT
         host = config.HOST if flask_env == "production" else config.DEV_SERVER_HOST
