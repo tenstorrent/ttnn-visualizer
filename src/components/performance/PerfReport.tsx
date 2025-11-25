@@ -291,6 +291,38 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 </div>
 
                 <div className='filters'>
+                    <Select<Signpost>
+                        items={signposts || []}
+                        itemPredicate={filterSignpost}
+                        itemRenderer={(item, itemProps) => renderSignpost(item, itemProps, filterBySignpost)}
+                        onItemSelect={setFilterBySignpost}
+                        noResults={
+                            <MenuItem
+                                text='No signposts found'
+                                roleStructure='listoption'
+                            />
+                        }
+                        disabled={isSignpostsDisabled}
+                        filterable
+                    >
+                        <Button
+                            text={
+                                filterBySignpost?.op_code ??
+                                `Select signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
+                            }
+                            endIcon={IconNames.CARET_DOWN}
+                            disabled={isSignpostsDisabled}
+                        />
+                    </Select>
+
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        icon={IconNames.CROSS}
+                        onClick={() => setFilterBySignpost(null)}
+                        disabled={isSignpostsDisabled}
+                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
+                    />
+
                     <SearchField
                         onQueryChanged={(value) => updateColumnFilter('op_code', value)}
                         placeholder='Filter by operation name'
@@ -332,38 +364,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         className='option-switch'
                         // TODO: Host Ops are missing when stackByIn0 is disabled
                         disabled={!stackByIn0 && isStackedView}
-                    />
-
-                    <Select<Signpost>
-                        items={signposts || []}
-                        itemPredicate={filterSignpost}
-                        itemRenderer={(item, itemProps) => renderSignpost(item, itemProps, filterBySignpost)}
-                        onItemSelect={setFilterBySignpost}
-                        noResults={
-                            <MenuItem
-                                text='No signposts found'
-                                roleStructure='listoption'
-                            />
-                        }
-                        disabled={isSignpostsDisabled}
-                        filterable
-                    >
-                        <Button
-                            text={
-                                filterBySignpost?.op_code ??
-                                `Select signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
-                            }
-                            endIcon={IconNames.CARET_DOWN}
-                            disabled={isSignpostsDisabled}
-                        />
-                    </Select>
-
-                    <Button
-                        variant={ButtonVariant.OUTLINED}
-                        icon={IconNames.CROSS}
-                        onClick={() => setFilterBySignpost(null)}
-                        disabled={isSignpostsDisabled}
-                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
                     />
                 </div>
 

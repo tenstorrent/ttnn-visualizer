@@ -38,6 +38,19 @@ const sortAndFilterPerfTableData = (
 
     let filteredRows = data || [];
 
+    if (filterBySignpost) {
+        filteredRows = [
+            {
+                ...signpostRowDefaults,
+                id: filterBySignpost.id,
+                // TODO: Figure out a better logic for this mismatch between tt-perf-report and visualiser
+                op_code: `${filterBySignpost.op_code} ${!filterBySignpost.op_code.includes(SIGNPOST_MARKER) ? SIGNPOST_MARKER : ''}`,
+                raw_op_code: filterBySignpost.op_code,
+            },
+            ...filteredRows,
+        ];
+    }
+
     if (hideHostOps) {
         filteredRows = filteredRows.filter((row) => !isHostOp(row.raw_op_code));
     }
@@ -76,20 +89,6 @@ const sortAndFilterPerfTableData = (
         );
     }
 
-    if (filterBySignpost) {
-        filteredRows = [
-            {
-                ...signpostRowDefaults,
-                id: filterBySignpost.id,
-                // TODO: Figure out a better logic for this mismatch between tt-perf-report and visualiser
-                op_code: filterBySignpost.op_code.includes(SIGNPOST_MARKER)
-                    ? filterBySignpost.op_code
-                    : `${filterBySignpost.op_code} ${SIGNPOST_MARKER}`,
-                raw_op_code: filterBySignpost.op_code,
-            },
-            ...filteredRows,
-        ];
-    }
     return filteredRows;
 };
 

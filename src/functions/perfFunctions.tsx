@@ -82,8 +82,7 @@ export const formatCell = (
             return '';
         }
 
-        // Return here because we don't want to apply formatting
-        return value !== null ? String(value) : '';
+        value = value !== null ? String(value) : '';
     }
 
     if (isHost) {
