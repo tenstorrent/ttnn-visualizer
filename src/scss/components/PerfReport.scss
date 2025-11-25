@@ -59,6 +59,11 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         flex-wrap: nowrap;
         gap: 5px;
         margin-bottom: 15px;
+        align-items: center;
+
+        .option-switch {
+            margin-bottom: 0;
+        }
     }
 
     .view-options {

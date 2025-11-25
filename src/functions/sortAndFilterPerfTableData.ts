@@ -2,9 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import {
+    FilterableColumnKeys,
+    TableFilter,
+    TableKeys,
+    TypedPerfTableRow,
+    signpostRowDefaults,
+} from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
-import { isHostOp } from './perfFunctions';
+import { Signpost, isHostOp } from './perfFunctions';
+
+const SIGNPOST_MARKER = '(signpost)';
 
 const isFiltersActive = (filters: TableFilter) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
@@ -22,6 +30,7 @@ const sortAndFilterPerfTableData = (
     mathFilter: string[],
     bufferTypeFilter: (BufferType | null)[],
     hideHostOps: boolean,
+    filterBySignpost: Signpost | null,
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
         return data;
@@ -67,6 +76,18 @@ const sortAndFilterPerfTableData = (
         );
     }
 
+    if (filterBySignpost) {
+        filteredRows = [
+            {
+                ...signpostRowDefaults,
+                id: filterBySignpost.id,
+                // TODO: Figure out a better logic for this mismatch between tt-perf-report and visualiser
+                op_code: `${filterBySignpost.op_code} ${!filterBySignpost.op_code.includes(SIGNPOST_MARKER) ? SIGNPOST_MARKER : ''}`,
+                raw_op_code: filterBySignpost.op_code,
+            },
+            ...filteredRows,
+        ];
+    }
     return filteredRows;
 };
 
