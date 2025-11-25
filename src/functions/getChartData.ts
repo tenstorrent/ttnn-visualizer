@@ -40,8 +40,7 @@ export default function getChartData(
                     shape: '.',
                     fillmode: 'overlay',
                     size: 4,
-                    fgcolor: '#000000',
-                    fgopacity: 0.3,
+                    fgcolor: 'rgba(0, 0, 0, 0.3)',
                 };
             }
             if (tensorMemoryLayout === TensorMemoryLayout.BLOCK_SHARDED) {
@@ -49,8 +48,7 @@ export default function getChartData(
                     shape: '+',
                     fillmode: 'overlay',
                     size: 6,
-                    fgcolor: '#000000',
-                    fgopacity: 0.2,
+                    fgcolor: 'rgba(0, 0, 0, 0.2)',
                 };
             }
             if (tensorMemoryLayout === TensorMemoryLayout.HEIGHT_SHARDED) {
@@ -58,8 +56,7 @@ export default function getChartData(
                     shape: '|',
                     fillmode: 'overlay',
                     size: 6,
-                    fgcolor: '#000000',
-                    fgopacity: 0.2,
+                    fgcolor: 'rgba(0, 0, 0, 0.2)',
                 };
             }
             if (tensorMemoryLayout === TensorMemoryLayout.WIDTH_SHARDED) {
@@ -67,8 +64,7 @@ export default function getChartData(
                     shape: '-',
                     fillmode: 'overlay',
                     size: 6,
-                    fgcolor: '#000000',
-                    fgopacity: 0.2,
+                    fgcolor: 'rgba(0, 0, 0, 0.2)',
                 };
             }
         }
@@ -77,8 +73,7 @@ export default function getChartData(
                 shape: '/',
                 fillmode: 'overlay',
                 size: 5,
-                fgcolor: '#000000',
-                fgopacity: 0.6,
+                fgcolor: 'rgba(0, 0, 0, 0.6)',
             };
         }
         return {

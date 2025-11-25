@@ -32,7 +32,7 @@ const PLACEHOLDER: TypedPerfTableRow = {
     inner_dim_block_size: '',
     output_subblock_h: '',
     output_subblock_w: '',
-    pm_ideal_ns: '',
+    pm_ideal_ns: null,
     op_type: OpType.UNKNOWN,
     device: null,
     buffer_type: null,

@@ -56,15 +56,8 @@ function L1Plots({
     const l1StartMarker = useGetL1StartMarker();
     const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const {
-        chartData,
-        memory,
-        fragmentation,
-        cbChartData,
-        cbChartDataByOperation,
-        bufferMemory,
-        bufferChartDataByOperation,
-    } = operationDetails.memoryData();
+    const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation, bufferChartDataByOperation } =
+        operationDetails.memoryData();
 
     const { chartData: previousChartData } = previousOperationDetails.memoryData();
     const {
@@ -122,11 +115,12 @@ function L1Plots({
             .flat(),
     ].sort((a, b) => a.address - b.address);
 
-    const bufferZoomRangeStart = Math.min(...bufferMemory.map((chunk) => chunk.address));
-    const bufferZoomRangeEnd = Math.max(...bufferMemory.map((chunk) => chunk.address + chunk.size));
+    // keeping for now, to make sure nothing breaks
+    // const bufferZoomRangeStart = Math.min(...bufferMemory.map((chunk) => chunk.address));
+    // const bufferZoomRangeEnd = Math.max(...bufferMemory.map((chunk) => chunk.address + chunk.size));
 
-    const zoomRangeStart = Math.min(plotZoomRangeStart, bufferZoomRangeStart);
-    const zoomRangeEnd = Math.max(plotZoomRangeEnd, bufferZoomRangeEnd);
+    const zoomRangeStart = plotZoomRangeStart; // Math.min(plotZoomRangeStart, bufferZoomRangeStart);
+    const zoomRangeEnd = plotZoomRangeEnd; // Math.max(plotZoomRangeEnd, bufferZoomRangeEnd);
 
     const memoryRegionsMarkers = showMemoryRegions
         ? [

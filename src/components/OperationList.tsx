@@ -23,12 +23,13 @@ import { formatSize } from '../functions/math';
 import OperationListPerfData from './OperationListPerfData';
 import StackTrace from './operation-details/StackTrace';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
-import { SCROLL_TOLERANCE_PX, ScrollLocations } from '../definitions/ScrollPositions';
+import { ScrollLocations } from '../definitions/ScrollPositions';
 import { StackTraceLanguage } from '../definitions/StackTrace';
+import useScrollShade from '../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
-const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 
 enum SortingOptions {
     OFF,
@@ -44,14 +45,14 @@ const OperationList = () => {
     const [filterQuery, setFilterQuery] = useState('');
     const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
-    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
-    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
 
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
+        useScrollShade();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.OPERATION_LIST);
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
@@ -164,19 +165,10 @@ const OperationList = () => {
         );
     }, [filteredOperationsList, shouldCollapseAll, setShouldCollapseAll]);
 
-    const updateScrollShade = useCallback(() => {
-        if (scrollElementRef.current) {
-            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
-            const scrollBottom = scrollTop + offsetHeight;
-
-            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
-            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
-        }
-    }, []);
-
     const handleUserScrolling = useCallback(() => {
-        // TODO: Maybe move this into a hook
-        updateScrollShade();
+        if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
+        }
     }, [updateScrollShade]);
 
     const handleToggleStackTrace = (index: number) => {
@@ -218,12 +210,11 @@ const OperationList = () => {
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
-            setHasScrolledFromTop(false);
-            setHasScrolledToBottom(false);
+            resetScrollShade();
+        } else if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
         }
-
-        updateScrollShade();
-    }, [virtualHeight, updateScrollShade]);
+    }, [virtualHeight, updateScrollShade, resetScrollShade]);
 
     // Restore expanded items on mount
     useEffect(() => {
@@ -361,8 +352,8 @@ const OperationList = () => {
             <div
                 ref={scrollElementRef}
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                    [shadeClasses.top]: hasScrolledFromTop && virtualHeight >= 0,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                 })}
                 onScroll={handleUserScrolling}
             >

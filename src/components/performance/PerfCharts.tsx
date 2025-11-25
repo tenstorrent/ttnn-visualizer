@@ -6,12 +6,12 @@ import { FC } from 'react';
 import PerfDeviceKernelDurationChart from './PerfDeviceKernelDurationChart';
 import PerfDeviceKernelRuntimeChart from './PerfDeviceKernelRuntimeChart';
 import PerfOpCountVsRuntimeChart from './PerfOpCountVsRuntimeChart';
-import { Marker, PerfTableRow } from '../../definitions/PerfTable';
+import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import 'styles/components/PerfCharts.scss';
 
 interface PerfChartsProps {
-    filteredPerfData: PerfTableRow[];
-    comparisonData?: PerfTableRow[][];
+    filteredPerfData: TypedPerfTableRow[];
+    comparisonData?: TypedPerfTableRow[][];
     selectedOpCodes: Marker[];
 }
 

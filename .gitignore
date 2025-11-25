@@ -40,3 +40,6 @@ backend/*egg-info
 build
 .env
 *.db
+
+# Sphinx documentation build
+docs/output

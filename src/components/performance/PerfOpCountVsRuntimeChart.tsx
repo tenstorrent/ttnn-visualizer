@@ -5,7 +5,7 @@
 import { useMemo } from 'react';
 import { PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
-import { Marker, PerfTableRow } from '../../definitions/PerfTable';
+import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
@@ -13,7 +13,7 @@ import getPlotLabel from '../../functions/getPlotLabel';
 
 interface PerfOpCountVsRuntimeChartProps {
     selectedOpCodes: Marker[];
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
 }
 
 function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCountVsRuntimeChartProps) {
@@ -91,7 +91,6 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
     );
 }
 
-const getDeviceTimePercentage = (sum: number, row: PerfTableRow) =>
-    sum + (row.device_time ? parseInt(row.device_time, 10) : 0);
+const getDeviceTimePercentage = (sum: number, row: TypedPerfTableRow) => sum + (row.device_time ?? 0);
 
 export default PerfOpCountVsRuntimeChart;

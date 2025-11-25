@@ -38,12 +38,13 @@ import {
 } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
-import { SCROLL_TOLERANCE_PX, ScrollLocations } from '../../definitions/ScrollPositions';
+import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
+import useScrollShade from '../../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
-const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
+const TOTAL_SHADE_HEIGHT = 20; // Total height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {
@@ -61,9 +62,6 @@ function BufferSummaryPlotRenderer({
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
-
-    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
-    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [activeRow, setActiveRow] = useState<number | null>(null);
 
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
@@ -73,6 +71,7 @@ function BufferSummaryPlotRenderer({
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY);
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
 
     const {
         itemCount: restoredItemCount,
@@ -129,19 +128,10 @@ function BufferSummaryPlotRenderer({
         return minValue && maxValue ? [minValue, maxValue] : [0, memorySize];
     }, [uniqueBuffersByOperationList, memorySize]);
 
-    const updateScrollShade = useCallback(() => {
-        if (scrollElementRef.current) {
-            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
-            const scrollBottom = scrollTop + offsetHeight;
-
-            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
-            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
-        }
-    }, []);
-
     const handleUserScrolling = useCallback(() => {
-        // TODO: Maybe move this into a hook
-        updateScrollShade();
+        if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
+        }
     }, [updateScrollShade]);
 
     const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string) => {
@@ -251,8 +241,8 @@ function BufferSummaryPlotRenderer({
 
             <div
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                    [shadeClasses.top]: hasScrolledFromTop,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                 })}
                 onScroll={handleUserScrolling}
                 ref={scrollElementRef}

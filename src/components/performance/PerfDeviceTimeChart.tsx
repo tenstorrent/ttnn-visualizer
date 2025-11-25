@@ -5,7 +5,7 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
@@ -14,7 +14,7 @@ import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceTimeChartProps {
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
 }
 
 function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
@@ -25,7 +25,7 @@ function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
         () =>
             datasets.map((data, dataIndex) => ({
                 x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => parseFloat(row.device_time) * 1000), // Convert microseconds to nanoseconds
+                y: data?.map((row) => (row.device_time ? row.device_time * 1000 : 0)), // Convert microseconds to nanoseconds
                 type: 'bar',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Device time: %{y} ns<extra></extra>`,
                 name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
@@ -53,9 +53,9 @@ function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
     );
 
     const maxDeviceTime = Math.max(
-        ...datasets.flatMap((data) => data.map((row) => parseFloat(row.device_time) * 1000)),
+        ...datasets.flatMap((data) => data.map((row) => (row.device_time ? row.device_time * 1000 : 0))),
     ); // Convert microseconds to nanoseconds
-    const maxIdealTime = Math.max(...datasets.flatMap((data) => data.map((row) => parseFloat(row.pm_ideal_ns))));
+    const maxIdealTime = Math.max(...datasets.flatMap((data) => data.map((row) => row.pm_ideal_ns ?? 0)));
 
     const configuration: PlotConfiguration = {
         margin: {
