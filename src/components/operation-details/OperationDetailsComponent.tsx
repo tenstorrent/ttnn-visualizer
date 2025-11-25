@@ -370,7 +370,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         className='memory-zoom-range-label'
                                         disabled={!zoomedInViewMainMemory}
                                     >
-                                        L1 memory zoom range:
+                                        L1 memory zoom range
                                         <Button
                                             className='memory-zoom-range-reset'
                                             disabled={
