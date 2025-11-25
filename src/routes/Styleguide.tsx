@@ -34,7 +34,7 @@ import FileStatusOverlay from '../components/FileStatusOverlay';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
-import { MIN_NPE_DATA_VERSION, getNpeDataErrorType } from '../definitions/NPEData';
+import { MIN_SUPPORTED_VERSION, getNpeDataErrorType } from '../definitions/NPEData';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -671,24 +671,24 @@ export default function Styleguide() {
                 <h4>Invalid NPE Data</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
-                    dataVersion={MIN_NPE_DATA_VERSION}
-                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, undefined, false)}
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, undefined, false)}
                     isLoading={false}
                 />
 
                 <h4>Unprocessable JSON error (HTTP 422)</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
-                    dataVersion={MIN_NPE_DATA_VERSION}
-                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, HttpStatusCode.UnprocessableEntity, true)}
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, HttpStatusCode.UnprocessableEntity, true)}
                     isLoading={false}
                 />
 
                 <h4>Internal server error (HTTP 500)</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
-                    dataVersion={MIN_NPE_DATA_VERSION}
-                    errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, HttpStatusCode.InternalServerError, true)}
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, HttpStatusCode.InternalServerError, true)}
                     isLoading={false}
                 />
             </div>

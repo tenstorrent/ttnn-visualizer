@@ -4,8 +4,9 @@
 
 import { HttpStatusCode } from 'axios';
 import { semverParse } from '../functions/semverParse';
+import { NPEData } from '../model/NPEModel';
 
-export const MIN_NPE_DATA_VERSION = '1.0.0';
+export const MIN_SUPPORTED_VERSION = '1.0.0';
 export const LEGACY_VISUALIZER_VERSION = '0.32.3'; // Version of the visualizer that supports pre-version data format
 
 // NPE data processing error codes
@@ -51,4 +52,20 @@ export const getNpeDataErrorType = (
     }
 
     return ErrorCodes.DEFAULT;
+};
+
+export const isValidNpeData = (data: NPEData): boolean => {
+    if (typeof data !== 'object' || data === null || data === undefined) {
+        return false;
+    }
+    const requiredKeys: (keyof NPEData)[] = ['common_info', 'noc_transfers', 'timestep_data'];
+    const hasAllKeys = requiredKeys.every((key) => key in data);
+    const dataVersion = semverParse(data.common_info.version);
+    const minSupportedVersion = semverParse(MIN_SUPPORTED_VERSION);
+
+    if (!hasAllKeys || dataVersion?.major !== minSupportedVersion?.major) {
+        return false;
+    }
+
+    return true;
 };

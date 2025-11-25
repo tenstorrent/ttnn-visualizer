@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import NPEProcessingStatus from '../src/components/NPEProcessingStatus';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { MIN_NPE_DATA_VERSION, getNpeDataErrorType } from '../src/definitions/NPEData';
+import { MIN_SUPPORTED_VERSION, getNpeDataErrorType } from '../src/definitions/NPEData';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -62,8 +62,8 @@ it('handles invalid JSON data', () => {
             <NPEProcessingStatus
                 isLoading={false}
                 hasUploadedFile
-                dataVersion={MIN_NPE_DATA_VERSION}
-                errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 422)}
+                dataVersion={MIN_SUPPORTED_VERSION}
+                errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, 422)}
             />
         </TestProviders>,
     );
@@ -77,8 +77,8 @@ it('handles unknown errors', () => {
             <NPEProcessingStatus
                 isLoading={false}
                 hasUploadedFile
-                dataVersion={MIN_NPE_DATA_VERSION}
-                errorType={getNpeDataErrorType(MIN_NPE_DATA_VERSION, 500)}
+                dataVersion={MIN_SUPPORTED_VERSION}
+                errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, 500)}
             />
         </TestProviders>,
     );
