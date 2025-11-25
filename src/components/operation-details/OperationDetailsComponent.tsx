@@ -3,17 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useEffect, useRef, useState } from 'react';
-import {
-    Button,
-    ButtonGroup,
-    ButtonVariant,
-    Intent,
-    Label,
-    RangeSlider,
-    Size,
-    Switch,
-    Tooltip,
-} from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Intent, Label, RangeSlider, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import classNames from 'classnames';
@@ -375,33 +365,30 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             tensorByAddress={details.tensorListByAddress}
                                         />
                                     )}
-                                    <Tooltip
-                                        content='Requires buffer zoom to be enabled'
-                                        disabled={zoomedInViewMainMemory}
+
+                                    <Label
+                                        className='memory-zoom-range-label'
+                                        disabled={!zoomedInViewMainMemory}
                                     >
-                                        <Label
-                                            className='memory-zoom-range-label'
-                                            disabled={!zoomedInViewMainMemory}
-                                        >
-                                            L1 memory zoom range
-                                            <Button
-                                                className='memory-zoom-range-reset'
-                                                disabled={
-                                                    !zoomedInViewMainMemory ||
-                                                    (plotZoomRangeStart === zoomRangeStart &&
-                                                        plotZoomRangeEnd === zoomRangeEnd)
-                                                }
-                                                size={Size.SMALL}
-                                                variant={ButtonVariant.MINIMAL}
-                                                icon={IconNames.RESET}
-                                                intent={Intent.WARNING}
-                                                onClick={() => {
-                                                    setZoomRangeStart(plotZoomRangeStart);
-                                                    setZoomRangeEnd(plotZoomRangeEnd);
-                                                }}
-                                            />
-                                        </Label>
-                                    </Tooltip>
+                                        L1 memory zoom range:
+                                        <Button
+                                            className='memory-zoom-range-reset'
+                                            disabled={
+                                                !zoomedInViewMainMemory ||
+                                                (plotZoomRangeStart === zoomRangeStart &&
+                                                    plotZoomRangeEnd === zoomRangeEnd)
+                                            }
+                                            size={Size.SMALL}
+                                            variant={ButtonVariant.MINIMAL}
+                                            icon={IconNames.RESET}
+                                            intent={Intent.WARNING}
+                                            onClick={() => {
+                                                setZoomRangeStart(plotZoomRangeStart);
+                                                setZoomRangeEnd(plotZoomRangeEnd);
+                                            }}
+                                        />
+                                        {!zoomedInViewMainMemory && '(Requires buffer zoom to be enabled)'}
+                                    </Label>
 
                                     <MemoryPlotRenderer
                                         className={classNames('l1-memory-renderer zoom-reference', {
@@ -413,6 +400,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         memorySize={memorySizeL1}
                                         configuration={L1RenderZoomoutConfiguration}
                                     />
+
                                     <RangeSlider
                                         min={plotZoomRangeStart}
                                         max={plotZoomRangeEnd}
@@ -421,6 +409,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         labelStepSize={
                                             (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
                                         }
+                                        labelRenderer={(value) => {
+                                            return showHex ? `0x${value.toString(16).toUpperCase()}` : `${value}`;
+                                        }}
                                         value={[zoomRangeStart, zoomRangeEnd]}
                                         onChange={(value: number[]) => {
                                             setZoomRangeStart(value[0]);

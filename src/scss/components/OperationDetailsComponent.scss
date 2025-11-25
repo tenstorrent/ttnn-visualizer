@@ -141,6 +141,7 @@
             height: 16px;
             top: 4.5px;
             border: 1px solid #000;
+            z-index: -1;
         }
 
         &::before {
@@ -192,7 +193,7 @@
         margin-bottom: 5px;
 
         &[disabled] {
-            opacity: 0.5;
+            opacity: 0.75;
         }
     }
 }
