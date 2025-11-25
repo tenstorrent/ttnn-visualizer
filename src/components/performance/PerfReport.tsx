@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useEffect, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
@@ -20,7 +20,7 @@ import {
     Tabs,
     Tooltip,
 } from '@blueprintjs/core';
-import { ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
+import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import {
     FilterableColumnKeys,
@@ -284,6 +284,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     selectedTabId === INITIAL_TAB_ID,
                                 )}
                                 useNormalisedData={useNormalisedData}
+                                hasSignpostFilter={!!filterBySignpost}
                             />
                         </p>
                     </div>
@@ -336,7 +337,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     <Select<Signpost>
                         items={signposts || []}
                         itemPredicate={filterSignpost}
-                        itemRenderer={renderSignpost}
+                        itemRenderer={(item, itemProps) => renderSignpost(item, itemProps, filterBySignpost)}
                         onItemSelect={setFilterBySignpost}
                         noResults={
                             <MenuItem
@@ -344,8 +345,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 roleStructure='listoption'
                             />
                         }
-                        filterable
                         disabled={isSignpostsDisabled}
+                        filterable
                     >
                         <Button
                             text={
@@ -584,14 +585,22 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     );
 };
 
-const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
+interface RenderSignpostProps<T> {
+    (item: T, itemProps: ItemRendererProps, selectedItem: T | null): React.JSX.Element | null;
+}
+
+const renderSignpost: RenderSignpostProps<Signpost> = (
+    signpost,
+    { handleClick, handleFocus, modifiers, query },
+    activeSignpost,
+) => {
     if (!modifiers.matchesPredicate) {
         return null;
     }
 
     return (
         <MenuItem
-            active={modifiers.active}
+            active={signpost.id === activeSignpost?.id}
             disabled={modifiers.disabled}
             key={signpost.id}
             onClick={handleClick}
