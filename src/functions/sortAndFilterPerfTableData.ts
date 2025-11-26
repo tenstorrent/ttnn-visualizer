@@ -82,7 +82,9 @@ const sortAndFilterPerfTableData = (
                 ...signpostRowDefaults,
                 id: filterBySignpost.id,
                 // TODO: Figure out a better logic for this mismatch between tt-perf-report and visualiser
-                op_code: `${filterBySignpost.op_code} ${!filterBySignpost.op_code.includes(SIGNPOST_MARKER) ? SIGNPOST_MARKER : ''}`,
+                op_code: filterBySignpost.op_code.includes(SIGNPOST_MARKER)
+                    ? filterBySignpost.op_code
+                    : `${filterBySignpost.op_code} ${SIGNPOST_MARKER}`,
                 raw_op_code: filterBySignpost.op_code,
             },
             ...filteredRows,
