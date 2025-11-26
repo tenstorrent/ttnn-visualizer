@@ -25,7 +25,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
-from ttnn_visualizer.utils import create_path_resolver
+from ttnn_visualizer.utils import find_gunicorn_path
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -291,8 +291,13 @@ def main():
             "Found gunicorn.conf.py in current directory - this may override environment settings"
         )
 
+    gunicorn_cmd, gunicorn_warning = find_gunicorn_path()
+
+    if gunicorn_warning:
+        print(gunicorn_warning)
+
     gunicorn_args = [
-        "gunicorn",
+        gunicorn_cmd,
         "-t",
         config.GUNICORN_TIMEOUT,
         "-k",
