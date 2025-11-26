@@ -15,34 +15,27 @@ import {
     TableHeader,
     TableHeaders,
     TypedPerfTableRow,
-    signpostRowDefaults,
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
-import { Signpost, formatCell, isHostOp } from '../../functions/perfFunctions';
+import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
 import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
-import { filterBySignpostAtom, hideHostOpsAtom } from '../../store/app';
+import { hideHostOpsAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
-import { PATTERN_COUNT } from '../../definitions/Performance';
-import { BufferType } from '../../model/BufferType';
+import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
     filters: TableFilter;
-    rawOpCodeFilter: string[];
-    mathFidelityFilter: string[];
-    bufferTypeFilter: (BufferType | null)[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
     reportName: string | null;
-    signposts?: Signpost[];
 }
 
 const OP_ID_INSERTION_POINT = 1;
@@ -52,78 +45,37 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
     comparisonData,
     filters,
-    rawOpCodeFilter,
-    mathFidelityFilter,
-    bufferTypeFilter,
     provideMatmulAdvice,
     hiliteHighDispatch,
     shouldHighlightRows,
     reportName,
-    signposts,
 }) => {
-    const filterBySignpost = useAtomValue(filterBySignpostAtom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
 
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
-    const { data: operations } = useOperationsList();
+    const { data: operationsList } = useOperationsList();
     const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
     const navigate = useNavigate();
 
-    // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
-    // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
-        let parsedRows = sortAndFilterPerfTableData(
-            data,
-            filters,
-            rawOpCodeFilter,
-            mathFidelityFilter,
-            bufferTypeFilter,
-            hideHostOps,
-        );
-
-        // If filtering by signpost, add a fake row at the top to represent the signpost as tt-perf-report removes it from the data
-        if (filterBySignpost && parsedRows.length > 0) {
-            parsedRows = [
-                {
-                    ...signpostRowDefaults,
-                    id: filterBySignpost.id,
-                    op_code: filterBySignpost.op_code,
-                    raw_op_code: filterBySignpost.op_code,
-                },
-                ...parsedRows,
-            ];
+        if (!data) {
+            return [];
         }
 
         // Still some awkward casting here
-        return [...sortTableFields(parsedRows as [])];
-    }, [
-        data,
-        filters,
-        rawOpCodeFilter,
-        mathFidelityFilter,
-        bufferTypeFilter,
-        sortTableFields,
-        filterBySignpost,
-        hideHostOps,
-    ]);
+        return [...sortTableFields(data as [])];
+    }, [data, sortTableFields]);
 
     const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
         () =>
             comparisonData?.map((dataset) => {
-                const parsedRows = sortAndFilterPerfTableData(
-                    dataset,
-                    filters,
-                    rawOpCodeFilter,
-                    mathFidelityFilter,
-                    bufferTypeFilter,
-                    hideHostOps,
-                );
+                const parsedData = dataset;
 
                 // Still some awkward casting here
-                return [...sortTableFields(parsedRows as [])];
+                return [...sortTableFields(parsedData as [])];
             }) || [],
-        [comparisonData, filters, rawOpCodeFilter, mathFidelityFilter, bufferTypeFilter, sortTableFields, hideHostOps],
+        [comparisonData, sortTableFields],
     );
 
     const visibleHeaders = [
@@ -138,13 +90,12 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     const cellFormattingProxy = (
         row: TypedPerfTableRow,
         header: TableHeader,
-        // eslint-disable-next-line @typescript-eslint/no-shadow
         operations?: OperationDescription[],
         highlight?: string | null,
     ) => {
         const { key } = header;
 
-        if (key === 'global_call_count') {
+        if (key === ColumnHeaders.global_call_count) {
             // TODO: this is an inefficient way of doing things but its also temporary. will update next iteration
             const value = parseInt(String(row[key]), 10) || 0;
             const manifestRecord = npeManifest?.find((el) => {
@@ -270,7 +221,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                 <tr
                                     className={classNames({
                                         'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
-                                        'signpost-op': signposts?.map((sp) => sp.op_code).includes(row.raw_op_code),
+                                        'signpost-op': row.op_type === OpType.SIGNPOST,
                                     })}
                                 >
                                     {visibleHeaders.map((h) => (
@@ -281,7 +232,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 'break-word': h.key === ColumnHeaders.op_code,
                                             })}
                                         >
-                                            {cellFormattingProxy(row, h, operations, filters?.[h.key])}
+                                            {cellFormattingProxy(row, h, operationsList, filters?.[h.key])}
                                         </td>
                                     ))}
                                 </tr>
@@ -310,7 +261,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 >
                                                     {ComparisonKeys.includes(h.key) &&
                                                         dataset[i] &&
-                                                        formatCell(dataset[i], h, operations, filters?.[h.key])}
+                                                        formatCell(dataset[i], h, operationsList, filters?.[h.key])}
                                                 </td>
                                             ))}
                                         </tr>

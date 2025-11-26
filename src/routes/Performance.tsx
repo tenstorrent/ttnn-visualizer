@@ -33,6 +33,7 @@ import getServerConfig from '../functions/getServerConfig';
 import { OpType, PerfTabIds } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
+import { StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
@@ -100,6 +101,11 @@ export default function Performance() {
     const enrichedComparisonData = useMemo(
         () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [],
         [comparisonPerfData, opIdsMap],
+    );
+    const enrichedStackedData = useMemo(() => (stackedData ? enrichStackedRowData(stackedData) : []), [stackedData]);
+    const enrichedComparisonStackedData = useMemo(
+        () => comparisonStackedData?.map((dataset) => enrichStackedRowData(dataset)) || [],
+        [comparisonStackedData],
     );
 
     // Clear comparison report if users switches active perf report to the comparison report
@@ -182,8 +188,8 @@ export default function Performance() {
                         <PerformanceReport
                             data={enrichedData}
                             comparisonData={enrichedComparisonData}
-                            stackedData={stackedData}
-                            comparisonStackedData={comparisonStackedData}
+                            stackedData={enrichedStackedData}
+                            comparisonStackedData={enrichedComparisonStackedData}
                             signposts={data?.signposts}
                             rawComparisonData={comparisonPerfData}
                         />
@@ -294,3 +300,15 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
         };
     });
 };
+
+const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
+    rows.map((row) => ({
+        ...row,
+        percent: row.percent ? parseFloat(row.percent) : null,
+        device_time_sum_us: row.device_time_sum_us ? parseFloat(row.device_time_sum_us) : null,
+        ops_count: row.ops_count ? parseFloat(row.ops_count) : null,
+        flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
+        flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
+        flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
+        flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
+    }));

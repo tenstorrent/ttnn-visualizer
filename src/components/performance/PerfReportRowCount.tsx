@@ -15,15 +15,23 @@ interface PerfReportRowCountProps {
     standardView: DataCounts;
     stackedView: DataCounts;
     useNormalisedData: boolean;
+    hasSignpostFilter?: boolean;
 }
 
-const PerfReportRowCount = ({ standardView, stackedView, useNormalisedData }: PerfReportRowCountProps): string => {
+const PerfReportRowCount = ({
+    standardView,
+    stackedView,
+    useNormalisedData,
+    hasSignpostFilter,
+}: PerfReportRowCountProps): string => {
     const isStackedView = useAtomValue(isStackedViewAtom);
 
     const currentView = isStackedView ? stackedView : standardView;
     const { filtered, total, delta = 0 } = currentView;
+    // Signpost filter adds an extra row for the initial signpost, but only in standard view
+    const computedTotal = hasSignpostFilter && !isStackedView ? total + 1 : total;
 
-    return getRowCount(filtered, total, delta, useNormalisedData);
+    return getRowCount(filtered, computedTotal, delta, useNormalisedData);
 };
 
 const getRowCount = (filteredCount: number, totalCount: number, delta: number, useNormalisedData: boolean): string => {

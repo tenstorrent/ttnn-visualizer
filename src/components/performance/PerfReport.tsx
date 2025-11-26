@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useEffect, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
@@ -20,7 +20,7 @@ import {
     Tabs,
     Tooltip,
 } from '@blueprintjs/core';
-import { ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
+import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import {
     FilterableColumnKeys,
@@ -54,7 +54,6 @@ import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
     FilterableStackedColumnKeys,
-    StackedPerfRow,
     StackedTableFilter,
     StackedTableKeys,
     TypedStackedPerfRow,
@@ -68,8 +67,8 @@ import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 interface PerformanceReportProps {
     data?: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
-    stackedData?: StackedPerfRow[];
-    comparisonStackedData?: StackedPerfRow[][];
+    stackedData?: TypedStackedPerfRow[];
+    comparisonStackedData?: TypedStackedPerfRow[][];
     signposts?: Signpost[];
     rawComparisonData?: PerfTableRow[][];
 }
@@ -123,14 +122,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         () => comparisonData?.map((dataset) => dataset || []) || [],
         [comparisonData],
     );
-
-    const processedStackedRows: TypedStackedPerfRow[] = useMemo(() => {
-        return stackedData ? enrichStackedRowData(stackedData) : [];
-    }, [stackedData]);
-
-    const processedComparisonStackedRows: TypedStackedPerfRow[][] = useMemo(() => {
-        return comparisonStackedData?.map(enrichStackedRowData) || [];
-    }, [comparisonStackedData]);
+    const processedStackedRows = useMemo(() => stackedData || [], [stackedData]);
+    const processedComparisonStackedRows = useMemo(() => comparisonStackedData || [], [comparisonStackedData]);
 
     const normalisedData = useMemo(
         () =>
@@ -152,6 +145,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 activeMathFilterList,
                 activeBufferTypeFilterList,
                 hideHostOps,
+                filterBySignpost,
             ),
         [
             processedRows,
@@ -162,6 +156,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             useNormalisedData,
             normalisedData.data,
             hideHostOps,
+            filterBySignpost,
         ],
     );
 
@@ -174,6 +169,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 activeMathFilterList,
                 activeBufferTypeFilterList,
                 hideHostOps,
+                filterBySignpost,
             ),
         [
             comparisonIndex,
@@ -185,6 +181,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             useNormalisedData,
             normalisedData.data,
             hideHostOps,
+            filterBySignpost,
         ],
     );
 
@@ -287,12 +284,45 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     selectedTabId === INITIAL_TAB_ID,
                                 )}
                                 useNormalisedData={useNormalisedData}
+                                hasSignpostFilter={!!filterBySignpost}
                             />
                         </p>
                     </div>
                 </div>
 
                 <div className='filters'>
+                    <Select<Signpost>
+                        items={signposts || []}
+                        itemPredicate={filterSignpost}
+                        itemRenderer={(item, itemProps) => renderSignpost(item, itemProps, filterBySignpost)}
+                        onItemSelect={setFilterBySignpost}
+                        noResults={
+                            <MenuItem
+                                text='No signposts found'
+                                roleStructure='listoption'
+                            />
+                        }
+                        disabled={isSignpostsDisabled}
+                        filterable
+                    >
+                        <Button
+                            text={
+                                filterBySignpost?.op_code ??
+                                `Select signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
+                            }
+                            endIcon={IconNames.CARET_DOWN}
+                            disabled={isSignpostsDisabled}
+                        />
+                    </Select>
+
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        icon={IconNames.CROSS}
+                        onClick={() => setFilterBySignpost(null)}
+                        disabled={isSignpostsDisabled}
+                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
+                    />
+
                     <SearchField
                         onQueryChanged={(value) => updateColumnFilter('op_code', value)}
                         placeholder='Filter by operation name'
@@ -327,36 +357,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         disabled={isStackedView}
                     />
 
-                    <Select<Signpost>
-                        items={signposts || []}
-                        itemPredicate={filterSignpost}
-                        itemRenderer={renderSignpost}
-                        onItemSelect={setFilterBySignpost}
-                        noResults={
-                            <MenuItem
-                                text='No signposts found'
-                                roleStructure='listoption'
-                            />
-                        }
-                        filterable
-                        disabled={isSignpostsDisabled}
-                    >
-                        <Button
-                            text={
-                                filterBySignpost?.op_code ??
-                                `Select signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
-                            }
-                            endIcon={IconNames.CARET_DOWN}
-                            disabled={isSignpostsDisabled}
-                        />
-                    </Select>
-
-                    <Button
-                        variant={ButtonVariant.OUTLINED}
-                        icon={IconNames.CROSS}
-                        onClick={() => setFilterBySignpost(null)}
-                        disabled={isSignpostsDisabled}
-                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
+                    <Switch
+                        label='Hide host ops'
+                        onChange={() => setHideHostOps(!hideHostOps)}
+                        checked={hideHostOps}
+                        className='option-switch'
+                        // TODO: Host Ops are missing when stackByIn0 is disabled
+                        disabled={!stackByIn0 && isStackedView}
                     />
                 </div>
 
@@ -402,15 +409,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             />
                         </>
                     )}
-
-                    <Switch
-                        label='Hide host ops'
-                        onChange={() => setHideHostOps(!hideHostOps)}
-                        checked={hideHostOps}
-                        className='option-switch'
-                        // TODO: Host Ops don't get sent in non-stacked-by-in0
-                        disabled={!stackByIn0 && isStackedView}
-                    />
 
                     {!isStackedView && (
                         <>
@@ -495,13 +493,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                             : processedComparisonRows
                                     }
                                     filters={filters}
-                                    rawOpCodeFilter={activeRawOpCodeFilterList}
-                                    mathFidelityFilter={activeMathFilterList}
-                                    bufferTypeFilter={activeBufferTypeFilterList}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
-                                    signposts={signposts}
                                     reportName={activePerformanceReport?.reportName || null}
                                 />
                             )
@@ -574,14 +568,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                                   ]
                                         }
                                         filters={filters}
-                                        rawOpCodeFilter={activeRawOpCodeFilterList}
-                                        mathFidelityFilter={activeMathFilterList}
-                                        bufferTypeFilter={activeBufferTypeFilterList}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}
                                         reportName={report}
-                                        signposts={signposts}
                                     />
                                 )
                             }
@@ -595,26 +585,22 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     );
 };
 
-const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
-    rows.map((row) => ({
-        ...row,
-        percent: parseFloat(row.percent),
-        device_time_sum_us: parseFloat(row.device_time_sum_us),
-        ops_count: parseFloat(row.ops_count),
-        flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
-        flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
-        flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
-        flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
-    }));
+interface RenderSignpostProps<T> {
+    (item: T, itemProps: ItemRendererProps, selectedItem: T | null): React.JSX.Element | null;
+}
 
-const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
+const renderSignpost: RenderSignpostProps<Signpost> = (
+    signpost,
+    { handleClick, handleFocus, modifiers, query },
+    activeSignpost,
+) => {
     if (!modifiers.matchesPredicate) {
         return null;
     }
 
     return (
         <MenuItem
-            active={modifiers.active}
+            active={signpost.id === activeSignpost?.id}
             disabled={modifiers.disabled}
             key={signpost.id}
             onClick={handleClick}
