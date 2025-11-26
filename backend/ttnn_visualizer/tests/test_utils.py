@@ -16,7 +16,6 @@ def test_find_gunicorn_in_same_directory(
     mock_which, mock_is_file, mock_exists, mock_access
 ):
     """Test finding gunicorn in the same directory as ttnn-visualizer."""
-    # Setup: gunicorn exists in same dir and is executable
     mock_exists.return_value = True
     mock_is_file.return_value = True
     mock_access.return_value = True
@@ -24,7 +23,6 @@ def test_find_gunicorn_in_same_directory(
 
     gunicorn_path, warning = find_gunicorn_path()
 
-    # Check path ends with expected value (resolve() may add prefix on some systems)
     assert gunicorn_path.endswith("/home/user/.local/bin/gunicorn")
     assert warning is None
 
@@ -38,7 +36,6 @@ def test_find_multiple_gunicorn_installations(
     mock_which, mock_is_file, mock_exists, mock_access
 ):
     """Test warning when multiple gunicorn installations are detected."""
-    # Setup: gunicorn in same dir and also in PATH
     mock_exists.return_value = True
     mock_is_file.return_value = True
     mock_access.return_value = True
@@ -46,7 +43,6 @@ def test_find_multiple_gunicorn_installations(
 
     gunicorn_path, warning = find_gunicorn_path()
 
-    # Check path ends with expected value (resolve() may add prefix on some systems)
     assert gunicorn_path.endswith("/home/user/.local/bin/gunicorn")
     assert warning is not None
     assert "Multiple gunicorn installations detected" in warning
@@ -59,7 +55,6 @@ def test_find_multiple_gunicorn_installations(
 @patch("shutil.which")
 def test_gunicorn_not_executable(mock_which, mock_is_file, mock_exists, mock_access):
     """Test when gunicorn exists but is not executable."""
-    # Setup: file exists but not executable, found in PATH
     mock_exists.return_value = True
     mock_is_file.return_value = True
     mock_access.return_value = False  # Not executable
@@ -80,7 +75,6 @@ def test_gunicorn_not_executable(mock_which, mock_is_file, mock_exists, mock_acc
 @patch("shutil.which")
 def test_fallback_to_path(mock_which, mock_is_file, mock_exists, mock_access):
     """Test falling back to PATH when not in same directory."""
-    # Setup: not in same dir, but found in PATH
     mock_exists.return_value = False
     mock_is_file.return_value = False
     mock_which.return_value = "/usr/bin/gunicorn"
@@ -100,7 +94,6 @@ def test_fallback_to_path(mock_which, mock_is_file, mock_exists, mock_access):
 @patch("shutil.which")
 def test_gunicorn_not_found(mock_which, mock_is_file, mock_exists, mock_access):
     """Test when gunicorn is not found anywhere."""
-    # Setup: not found anywhere
     mock_exists.return_value = False
     mock_is_file.return_value = False
     mock_which.return_value = None
