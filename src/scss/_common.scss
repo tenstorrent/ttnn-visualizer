@@ -164,6 +164,20 @@ $row-background: $tt-grey-2;
         margin-bottom: -14px;
         margin-top: 0;
     }
+
+    &.zoom-reference {
+        margin-bottom: -60px;
+        margin-top: -20px;
+        padding-left: 10px;
+        padding-right: 10px;
+
+        &.disabled {
+            opacity: 0.4;
+            filter: brightness(0.2);
+        }
+
+        // background-color: #00e0e0;
+    }
 }
 
 // Element to trigger onClick to dismiss focussed buffer
