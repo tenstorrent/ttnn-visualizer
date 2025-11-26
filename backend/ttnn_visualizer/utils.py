@@ -6,6 +6,7 @@ import dataclasses
 import enum
 import json
 import logging
+import os
 import re
 import shutil
 import sys
@@ -27,7 +28,9 @@ def find_gunicorn_path() -> tuple[str, Optional[str]]:
     Returns:
         tuple: (gunicorn_path, warning_message)
             - gunicorn_path: Full path to the gunicorn executable to use
-            - warning_message: Warning if there's a conflicting gunicorn in PATH, or None
+            - warning_message: Warning message if there are any issues finding gunicorn
+              (e.g., multiple installations, falling back to PATH, or not found),
+              or None if found without conflicts.
     """
     # Get the directory where ttnn-visualizer was run from
     ttnn_visualizer_path = Path(sys.argv[0]).resolve()
@@ -36,8 +39,12 @@ def find_gunicorn_path() -> tuple[str, Optional[str]]:
     # Look for gunicorn in the same directory
     expected_gunicorn = bin_dir / "gunicorn"
 
-    if expected_gunicorn.exists() and expected_gunicorn.is_file():
-        # Found gunicorn in the same bin directory
+    if (
+        expected_gunicorn.exists()
+        and expected_gunicorn.is_file()
+        and os.access(expected_gunicorn, os.X_OK)
+    ):
+        # Found gunicorn in the same bin directory and it's executable
         gunicorn_path = str(expected_gunicorn)
 
         # Check if there's a different gunicorn in PATH
@@ -53,6 +60,23 @@ def find_gunicorn_path() -> tuple[str, Optional[str]]:
             )
 
         return gunicorn_path, warning_message
+
+    # If file exists but isn't executable, add a warning about that
+    if expected_gunicorn.exists() and expected_gunicorn.is_file():
+        warning_message = (
+            f"⚠️  WARNING: gunicorn found at {expected_gunicorn} but it's not executable!\n"
+            f"   Falling back to PATH. Fix permissions with: chmod +x {expected_gunicorn}"
+        )
+        path_gunicorn = shutil.which("gunicorn")
+        if path_gunicorn:
+            return path_gunicorn, warning_message
+        # If not in PATH either, return error with permission hint
+        error_message = (
+            f"❌ ERROR: gunicorn found at {expected_gunicorn} but it's not executable!\n"
+            f"   Not found in PATH either.\n"
+            f"   Fix permissions with: chmod +x {expected_gunicorn}"
+        )
+        return "gunicorn", error_message
 
     # Fall back to PATH
     path_gunicorn = shutil.which("gunicorn")
