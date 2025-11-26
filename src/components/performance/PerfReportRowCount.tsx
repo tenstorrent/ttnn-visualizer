@@ -28,8 +28,8 @@ const PerfReportRowCount = ({
 
     const currentView = isStackedView ? stackedView : standardView;
     const { filtered, total, delta = 0 } = currentView;
-    // Signpost filter adds an extra row for the initial signpost
-    const computedTotal = hasSignpostFilter ? total + 1 : total;
+    // Signpost filter adds an extra row for the initial signpost, but only in standard view
+    const computedTotal = hasSignpostFilter && !isStackedView ? total + 1 : total;
 
     return getRowCount(filtered, computedTotal, delta, useNormalisedData);
 };
