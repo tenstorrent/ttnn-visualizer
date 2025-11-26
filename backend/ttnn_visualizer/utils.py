@@ -7,6 +7,8 @@ import enum
 import json
 import logging
 import re
+import shutil
+import sys
 import time
 from functools import wraps
 from pathlib import Path
@@ -16,6 +18,59 @@ from typing import Any, Callable, Dict, Optional
 logger = logging.getLogger(__name__)
 
 LAST_SYNCED_FILE_NAME = ".last-synced"
+
+
+def find_gunicorn_path() -> tuple[str, Optional[str]]:
+    """
+    Find the gunicorn executable, prioritizing the same bin directory as ttnn-visualizer.
+
+    Returns:
+        tuple: (gunicorn_path, warning_message)
+            - gunicorn_path: Full path to the gunicorn executable to use
+            - warning_message: Warning if there's a conflicting gunicorn in PATH, or None
+    """
+    # Get the directory where ttnn-visualizer was run from
+    ttnn_visualizer_path = Path(sys.argv[0]).resolve()
+    bin_dir = ttnn_visualizer_path.parent
+
+    # Look for gunicorn in the same directory
+    expected_gunicorn = bin_dir / "gunicorn"
+
+    if expected_gunicorn.exists() and expected_gunicorn.is_file():
+        # Found gunicorn in the same bin directory
+        gunicorn_path = str(expected_gunicorn)
+
+        # Check if there's a different gunicorn in PATH
+        path_gunicorn = shutil.which("gunicorn")
+        warning_message = None
+
+        if path_gunicorn and Path(path_gunicorn).resolve() != expected_gunicorn:
+            warning_message = (
+                f"⚠️  WARNING: Multiple gunicorn installations detected!\n"
+                f"   Using: {gunicorn_path}\n"
+                f"   Found in PATH: {path_gunicorn}\n"
+                f"   This may cause version conflicts. Consider using a virtual environment."
+            )
+
+        return gunicorn_path, warning_message
+
+    # Fall back to PATH
+    path_gunicorn = shutil.which("gunicorn")
+
+    if path_gunicorn:
+        warning_message = (
+            f"⚠️  WARNING: gunicorn not found in {bin_dir}\n"
+            f"   Falling back to gunicorn from PATH: {path_gunicorn}\n"
+            f"   This may cause issues if different versions are installed."
+        )
+        return path_gunicorn, warning_message
+
+    # Not found anywhere - return "gunicorn" and let subprocess.run fail with a clear error
+    warning_message = (
+        f"❌ ERROR: gunicorn not found!\n"
+        f"   Expected location: {expected_gunicorn}\n"
+    )
+    return "gunicorn", warning_message
 
 
 class PathResolver:
