@@ -7,6 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import NPEProcessingStatus from '../src/components/NPEProcessingStatus';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { MIN_SUPPORTED_VERSION, getNpeDataErrorType } from '../src/definitions/NPEData';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -14,7 +15,11 @@ afterEach(cleanup);
 it('renders an initial message', () => {
     render(
         <TestProviders>
-            <NPEProcessingStatus dataVersion={null} />
+            <NPEProcessingStatus
+                isLoading={false}
+                dataVersion={null}
+                errorType={getNpeDataErrorType(null)}
+            />
         </TestProviders>,
     );
 
@@ -25,8 +30,10 @@ it('handles incorrect NPE data versions', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
+                isLoading={false}
                 hasUploadedFile
                 dataVersion={null}
+                errorType={getNpeDataErrorType(null)}
             />
         </TestProviders>,
     );
@@ -38,9 +45,10 @@ it('handles incomplete NPE data', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
+                isLoading={false}
                 hasUploadedFile
                 dataVersion='0.1.0'
-                isInvalidData
+                errorType={getNpeDataErrorType('0.1.0', undefined, false)}
             />
         </TestProviders>,
     );
@@ -52,9 +60,10 @@ it('handles invalid JSON data', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
+                isLoading={false}
                 hasUploadedFile
-                dataVersion='1.0.0'
-                fetchErrorCode={422}
+                dataVersion={MIN_SUPPORTED_VERSION}
+                errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, 422)}
             />
         </TestProviders>,
     );
@@ -66,9 +75,10 @@ it('handles unknown errors', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
+                isLoading={false}
                 hasUploadedFile
-                dataVersion='1.0.0'
-                fetchErrorCode={500}
+                dataVersion={MIN_SUPPORTED_VERSION}
+                errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, 500)}
             />
         </TestProviders>,
     );

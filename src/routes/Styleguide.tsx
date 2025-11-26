@@ -20,6 +20,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import { useState } from 'react';
 import { useAtom } from 'jotai';
+import { HttpStatusCode } from 'axios';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
@@ -33,6 +34,7 @@ import FileStatusOverlay from '../components/FileStatusOverlay';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
+import { MIN_SUPPORTED_VERSION, getNpeDataErrorType } from '../definitions/NPEData';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -643,41 +645,51 @@ export default function Styleguide() {
 
             <div className='container'>
                 <h3>NPE Processing Status</h3>
-                <NPEProcessingStatus dataVersion={null} />
 
-                <br />
-                <br />
-
+                <h4>Initial state (no uploaded file)</h4>
                 <NPEProcessingStatus
                     dataVersion={null}
-                    hasUploadedFile
+                    errorType={getNpeDataErrorType(null)}
+                    isLoading={false}
                 />
 
-                <br />
-                <br />
-
+                <h4>Loading state</h4>
                 <NPEProcessingStatus
-                    hasUploadedFile
-                    dataVersion='1.0.0'
-                    isInvalidData
+                    dataVersion={null}
+                    errorType={getNpeDataErrorType(null)}
+                    isLoading
                 />
 
-                <br />
-                <br />
-
+                <h4>Legacy file format (no version)</h4>
                 <NPEProcessingStatus
-                    fetchErrorCode={422}
+                    dataVersion={null}
+                    errorType={getNpeDataErrorType(null)}
                     hasUploadedFile
-                    dataVersion='1.0.0'
+                    isLoading={false}
                 />
 
-                <br />
-                <br />
-
+                <h4>Invalid NPE Data</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
-                    dataVersion='1.0.0'
-                    fetchErrorCode={500}
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, undefined, false)}
+                    isLoading={false}
+                />
+
+                <h4>Unprocessable JSON error (HTTP 422)</h4>
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, HttpStatusCode.UnprocessableEntity, true)}
+                    isLoading={false}
+                />
+
+                <h4>Internal server error (HTTP 500)</h4>
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, HttpStatusCode.InternalServerError, true)}
+                    isLoading={false}
                 />
             </div>
         </>

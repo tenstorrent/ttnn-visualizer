@@ -4,11 +4,10 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Callout, Intent } from '@blueprintjs/core';
-import { HttpStatusCode } from 'axios';
 import 'styles/components/NPEProcessingStatus.scss';
-import { semverParse } from '../functions/semverParse';
-import { NPE_DATA_VERSION } from '../definitions/NPEData';
+import { ErrorCodes, LEGACY_VISUALIZER_VERSION, MIN_SUPPORTED_VERSION, ProcessingErrors } from '../definitions/NPEData';
 import { TEST_IDS } from '../definitions/TestIds';
+import LoadingSpinner from './LoadingSpinner';
 
 const NPE_REPO_URL = (
     <a
@@ -20,52 +19,27 @@ const NPE_REPO_URL = (
     </a>
 );
 
-interface NPEProcessingStatusProps {
-    expectedVersion?: string;
-    dataVersion: string | null;
-    fetchErrorCode?: HttpStatusCode;
-    npeData?: {
-        common_info?: {
-            version?: string;
-        };
-    };
-    hasUploadedFile?: boolean;
-    isInvalidData?: boolean;
-}
-
-enum ErrorCodes {
-    DEFAULT,
-    INVALID_NPE_VERSION,
-    INVALID_JSON,
-    INVALID_NPE_DATA,
-}
-
-const PROCESSING_ERRORS = {
-    [ErrorCodes.DEFAULT]: {
-        title: 'Unknown error',
-    },
-    [ErrorCodes.INVALID_NPE_VERSION]: {
-        title: 'Invalid NPE version',
-    },
-    [ErrorCodes.INVALID_JSON]: {
-        title: 'Unable to process JSON',
-    },
-    [ErrorCodes.INVALID_NPE_DATA]: {
-        title: 'Invalid NPE data',
-    },
-};
-
 const SHARED_PROPS = {
     className: 'npe-processing-status',
     compact: true,
 };
 
-const NPEProcessingStatus = ({
-    dataVersion,
-    fetchErrorCode,
-    hasUploadedFile,
-    isInvalidData,
-}: NPEProcessingStatusProps) => {
+interface NPEProcessingStatusProps {
+    dataVersion: string | null;
+    hasUploadedFile?: boolean;
+    errorType: ErrorCodes;
+    isLoading: boolean;
+}
+
+const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorType, isLoading }: NPEProcessingStatusProps) => {
+    if (isLoading) {
+        return (
+            <div>
+                <LoadingSpinner />
+            </div>
+        );
+    }
+
     if (!hasUploadedFile) {
         return (
             <Callout
@@ -77,15 +51,11 @@ const NPEProcessingStatus = ({
         );
     }
 
-    const legacyVersion = getLegacyNpeVersion(dataVersion);
-    const errorType = getErrorType(legacyVersion, fetchErrorCode, isInvalidData);
-
     return (
         <Callout
             {...SHARED_PROPS}
             intent={Intent.WARNING}
-            title={PROCESSING_ERRORS?.[errorType]?.title}
-            className='npe-processing-status'
+            title={ProcessingErrors?.[errorType]?.title}
         >
             {(() => {
                 switch (errorType) {
@@ -102,14 +72,16 @@ const NPEProcessingStatus = ({
                         return (
                             <>
                                 <p data-testid={TEST_IDS.NPE_PROCESSING_INVALID_VERSION}>
-                                    Current supported version is <u>{NPE_DATA_VERSION}</u>, uploaded data version is{' '}
-                                    <u>{dataVersion || 'null'}</u>.
+                                    Current supported version is <u>{MIN_SUPPORTED_VERSION}</u>, uploaded data version
+                                    is <u>{dataVersion || 'null'}</u>.
                                 </p>
 
                                 <p>
                                     Use {NPE_REPO_URL} to generate new NPE dataset or install an older version of the
                                     visualizer{' '}
-                                    <code className='formatted-code'>pip install ttnn-visualizer=={legacyVersion}</code>
+                                    <code className='formatted-code'>
+                                        pip install ttnn-visualizer=={LEGACY_VISUALIZER_VERSION}
+                                    </code>
                                 </p>
                             </>
                         );
@@ -136,35 +108,6 @@ const NPEProcessingStatus = ({
             })()}
         </Callout>
     );
-};
-
-const getErrorType = (
-    legacyVersion: string | null,
-    fetchErrorCode?: HttpStatusCode,
-    isInvalidData?: boolean,
-): ErrorCodes => {
-    if (isInvalidData) {
-        return ErrorCodes.INVALID_NPE_DATA;
-    }
-    if (fetchErrorCode === HttpStatusCode.UnprocessableEntity) {
-        return ErrorCodes.INVALID_JSON;
-    }
-
-    if (legacyVersion) {
-        return ErrorCodes.INVALID_NPE_VERSION;
-    }
-
-    return ErrorCodes.DEFAULT;
-};
-
-const getLegacyNpeVersion = (version: string | null): string | null => {
-    const parsedVersion = version ? semverParse(version) : null;
-
-    if (!parsedVersion) {
-        return '0.32.3'; // Version of the visualizer that supports pre-version data format
-    }
-
-    return null;
 };
 
 export default NPEProcessingStatus;
