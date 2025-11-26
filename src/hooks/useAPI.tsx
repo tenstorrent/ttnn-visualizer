@@ -36,6 +36,7 @@ import {
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
+    hideHostOpsAtom,
     selectedOperationRangeAtom,
     stackByIn0Atom,
 } from '../store/app';
@@ -339,9 +340,14 @@ export interface PerformanceReportResponse {
     signposts?: Signpost[];
 }
 
-const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: Signpost | null) => {
+const fetchPerformanceReport = async (
+    name: string | null,
+    stackByIn0: boolean,
+    signpost: Signpost | null,
+    hideHostOps: boolean,
+) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name, stack_by_in0: stackByIn0, signpost: signpost?.op_code },
+        params: { name, stack_by_in0: stackByIn0, signpost: signpost?.op_code, hide_host_ops: hideHostOps },
     });
 
     return data;
@@ -860,15 +866,19 @@ export const usePerformanceReport = (name: string | null) => {
     // TODO: Name in this case is the report "name" which is really just the parent folder name, which we're using as the unique key
     const signpost = useAtomValue(filterBySignpostAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
+    const hideHostOps = useAtomValue(hideHostOpsAtom);
 
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
-            name !== null ? fetchPerformanceReport(name, stackByIn0, signpost) : Promise.resolve(EMPTY_PERF_RETURN),
+            name !== null
+                ? fetchPerformanceReport(name, stackByIn0, signpost, hideHostOps)
+                : Promise.resolve(EMPTY_PERF_RETURN),
         queryKey: [
             'get-performance-report',
             name,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
             `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
+            `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
         ],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
@@ -885,6 +895,7 @@ export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
     const signpost = useAtomValue(filterBySignpostAtom);
+    const hideHostOps = useAtomValue(hideHostOpsAtom);
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -897,7 +908,7 @@ export const usePerformanceComparisonReport = () => {
             }
 
             const results = await Promise.all(
-                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, signpost)),
+                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, signpost, hideHostOps)),
             );
 
             return results;
@@ -907,6 +918,7 @@ export const usePerformanceComparisonReport = () => {
             reportNames,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
             `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
+            `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
         ],
         staleTime: Infinity,
         enabled: !!reportNames,

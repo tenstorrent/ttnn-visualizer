@@ -191,7 +191,6 @@ export default function Performance() {
                             stackedData={enrichedStackedData}
                             comparisonStackedData={enrichedComparisonStackedData}
                             signposts={data?.signposts}
-                            rawComparisonData={comparisonPerfData}
                         />
                     }
                 />

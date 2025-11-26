@@ -22,19 +22,8 @@ import {
 } from '@blueprintjs/core';
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import {
-    FilterableColumnKeys,
-    PerfTableRow,
-    TableFilter,
-    TableKeys,
-    TypedPerfTableRow,
-} from '../../definitions/PerfTable';
-import {
-    Signpost,
-    calcHighDispatchOps,
-    getStackedViewCounts,
-    getStandardViewCounts,
-} from '../../functions/perfFunctions';
+import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
 import {
@@ -63,6 +52,7 @@ import HighlightedText from '../HighlightedText';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
+import { OpType } from '../../definitions/Performance';
 
 interface PerformanceReportProps {
     data?: TypedPerfTableRow[];
@@ -70,7 +60,6 @@ interface PerformanceReportProps {
     stackedData?: TypedStackedPerfRow[];
     comparisonStackedData?: TypedStackedPerfRow[][];
     signposts?: Signpost[];
-    rawComparisonData?: PerfTableRow[][];
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -81,7 +70,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     stackedData,
     comparisonStackedData,
     signposts,
-    rawComparisonData,
 }) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -139,12 +127,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const filteredRows = useMemo(
         () =>
             sortAndFilterPerfTableData(
-                useNormalisedData ? normalisedData.data[0] : processedRows,
+                processedRows,
                 filters,
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
                 activeBufferTypeFilterList,
-                hideHostOps,
                 filterBySignpost,
             ),
         [
@@ -153,22 +140,19 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             activeMathFilterList,
             activeRawOpCodeFilterList,
             activeBufferTypeFilterList,
-            useNormalisedData,
-            normalisedData.data,
-            hideHostOps,
             filterBySignpost,
         ],
     );
 
+    // TODO: Filters should apply to all comparison datasets, not just the selected one
     const filteredComparisonRows = useMemo(
         () =>
             sortAndFilterPerfTableData(
-                useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
+                processedComparisonRows[comparisonIndex],
                 filters,
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
                 activeBufferTypeFilterList,
-                hideHostOps,
                 filterBySignpost,
             ),
         [
@@ -178,9 +162,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             activeRawOpCodeFilterList,
             activeMathFilterList,
             activeBufferTypeFilterList,
-            useNormalisedData,
-            normalisedData.data,
-            hideHostOps,
             filterBySignpost,
         ],
     );
@@ -191,10 +172,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 processedStackedRows,
                 stackedFilters,
                 activeRawOpCodeFilterList,
-                hideHostOps,
                 stackByIn0,
             ),
-        [processedStackedRows, stackedFilters, activeRawOpCodeFilterList, hideHostOps, stackByIn0],
+        [processedStackedRows, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
     );
 
     const filteredComparisonStackedRows = useMemo(
@@ -203,17 +183,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 processedComparisonStackedRows[comparisonIndex],
                 stackedFilters,
                 activeRawOpCodeFilterList,
-                hideHostOps,
                 stackByIn0,
             ),
-        [
-            comparisonIndex,
-            processedComparisonStackedRows,
-            stackedFilters,
-            activeRawOpCodeFilterList,
-            hideHostOps,
-            stackByIn0,
-        ],
+        [comparisonIndex, processedComparisonStackedRows, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
@@ -291,6 +263,15 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 </div>
 
                 <div className='filters'>
+                    <Switch
+                        label='Hide host ops'
+                        onChange={() => setHideHostOps(!hideHostOps)}
+                        checked={hideHostOps}
+                        className='option-switch'
+                        // TODO: Host Ops are missing when stackByIn0 is disabled
+                        disabled={!stackByIn0 && isStackedView}
+                    />
+
                     <Select<Signpost>
                         items={signposts || []}
                         itemPredicate={filterSignpost}
@@ -342,7 +323,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <MultiSelectField<TypedPerfTableRow, 'raw_op_code'>
                         keyName='raw_op_code'
-                        options={processedRows || []}
+                        options={getRawOpCodeOptions(processedRows) || []}
                         placeholder='Select Op Codes...'
                         values={activeRawOpCodeFilterList}
                         updateHandler={setActiveRawOpCodeFilterList}
@@ -355,15 +336,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         values={activeMathFilterList}
                         updateHandler={setActiveMathFilterList}
                         disabled={isStackedView}
-                    />
-
-                    <Switch
-                        label='Hide host ops'
-                        onChange={() => setHideHostOps(!hideHostOps)}
-                        checked={hideHostOps}
-                        className='option-switch'
-                        // TODO: Host Ops are missing when stackByIn0 is disabled
-                        disabled={!stackByIn0 && isStackedView}
                     />
                 </div>
 
@@ -618,6 +590,14 @@ const renderSignpost: RenderSignpostProps<Signpost> = (
 
 const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
     return signpost.op_code.toLowerCase().includes(query.toLowerCase());
+};
+
+const getRawOpCodeOptions = (rows: TypedPerfTableRow[]): TypedPerfTableRow[] => {
+    let options = rows.filter((row) => row.op_code !== OpType.SIGNPOST);
+
+    options = Array.from(new Set(options));
+
+    return options;
 };
 
 export default PerformanceReport;

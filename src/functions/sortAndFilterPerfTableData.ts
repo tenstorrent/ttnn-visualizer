@@ -10,7 +10,7 @@ import {
     signpostRowDefaults,
 } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
-import { Signpost, isHostOp } from './perfFunctions';
+import { Signpost } from './perfFunctions';
 
 const SIGNPOST_MARKER = '(signpost)';
 
@@ -29,7 +29,6 @@ const sortAndFilterPerfTableData = (
     rawOpCodeFilter: string[],
     mathFilter: string[],
     bufferTypeFilter: (BufferType | null)[],
-    hideHostOps: boolean,
     filterBySignpost: Signpost | null,
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
@@ -49,10 +48,6 @@ const sortAndFilterPerfTableData = (
             },
             ...filteredRows,
         ];
-    }
-
-    if (hideHostOps) {
-        filteredRows = filteredRows.filter((row) => !isHostOp(row.raw_op_code));
     }
 
     if (isFiltersActive(filters) && FilterableColumnKeys) {

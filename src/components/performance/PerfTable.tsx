@@ -328,7 +328,9 @@ const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[], hide
         const hostOpsCount = data.filter((row) => isHostOp(row.raw_op_code)).length;
         const deviceOpsCount = data.length - hostOpsCount;
 
-        return `${deviceOpsCount} device ops${hostOpsCount !== 0 && !hideHostOps ? `, ${hostOpsCount} host ops` : ''}`;
+        return hideHostOps
+            ? `${deviceOpsCount} device ops`
+            : `${data.length} ops (${deviceOpsCount} device ops + ${hostOpsCount} host ops)`;
     }
 
     if (header.key === ColumnHeaders.op_to_op_gap) {
