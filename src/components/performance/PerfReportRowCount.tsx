@@ -3,35 +3,30 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useAtomValue } from 'jotai';
-import { isStackedViewAtom } from '../../store/app';
-
-export interface DataCounts {
-    filtered: number;
-    total: number;
-    delta?: number;
-}
+import { filterBySignpostAtom, isStackedViewAtom } from '../../store/app';
 
 interface PerfReportRowCountProps {
-    standardView: DataCounts;
-    stackedView: DataCounts;
+    filteredCount: number;
+    total: number;
+    delta: number;
     useNormalisedData: boolean;
-    hasSignpostFilter?: boolean;
+    // hasSignpostFilter?: boolean;
 }
 
 const PerfReportRowCount = ({
-    standardView,
-    stackedView,
+    filteredCount,
+    total,
+    delta,
     useNormalisedData,
-    hasSignpostFilter,
+    // hasSignpostFilter,
 }: PerfReportRowCountProps): string => {
     const isStackedView = useAtomValue(isStackedViewAtom);
+    const hasSignpostFilter = useAtomValue(filterBySignpostAtom);
 
-    const currentView = isStackedView ? stackedView : standardView;
-    const { filtered, total, delta = 0 } = currentView;
     // Signpost filter adds an extra row for the initial signpost, but only in standard view
     const computedTotal = hasSignpostFilter && !isStackedView ? total + 1 : total;
 
-    return getRowCount(filtered, computedTotal, delta, useNormalisedData);
+    return getRowCount(filteredCount, computedTotal, delta, useNormalisedData);
 };
 
 const getRowCount = (filteredCount: number, totalCount: number, delta: number, useNormalisedData: boolean): string => {
@@ -39,7 +34,7 @@ const getRowCount = (filteredCount: number, totalCount: number, delta: number, u
         filteredCount !== totalCount ? `Showing ${filteredCount} of ${totalCount} rows` : `Showing ${totalCount} rows`;
 
     const rowDeltaText =
-        useNormalisedData && delta ? ` (${delta > 0 ? `${delta} ops removed` : `${Math.abs(delta)} ops added`})` : null;
+        useNormalisedData && delta ? ` (${delta > 0 ? `${delta} ops added` : `${Math.abs(delta)} ops removed`})` : null;
 
     return `${rowCountText}${rowDeltaText ?? ''}`;
 };

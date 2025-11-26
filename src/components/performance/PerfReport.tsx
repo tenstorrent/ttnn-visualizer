@@ -81,6 +81,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
 
+    console.log(
+        'PerformanceReport render',
+        data?.length,
+        comparisonData?.map((set) => set.length),
+    );
+
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
@@ -105,22 +111,22 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const isSignpostsDisabled = !signposts || signposts.length === 0;
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
 
-    const processedRows = useMemo(() => data || [], [data]);
-    const processedComparisonRows = useMemo(
-        () => comparisonData?.map((dataset) => dataset || []) || [],
-        [comparisonData],
-    );
     const processedStackedRows = useMemo(() => stackedData || [], [stackedData]);
     const processedComparisonStackedRows = useMemo(() => comparisonStackedData || [], [comparisonStackedData]);
 
-    const normalisedData = useMemo(
-        () =>
-            processedRows?.length > 0 && processedComparisonRows?.length > 0
-                ? alignByOpCode(processedRows, processedComparisonRows)
-                : { data: [], missingRows: [] },
-        [processedRows, processedComparisonRows],
-    );
-    const normalisedComparisonData = normalisedData.data.slice(1);
+    const {
+        data: [processedRows, ...processedComparisonRows],
+        missingRows,
+    } = useMemo(() => {
+        const rows = data || [];
+        const compRows = comparisonData?.map((dataset) => dataset || []) || [];
+
+        if (useNormalisedData && rows.length > 0 && compRows.length > 0) {
+            return alignByOpCode(rows, compRows);
+        }
+
+        return { data: [rows, ...compRows], missingRows: [] };
+    }, [data, comparisonData, useNormalisedData]);
 
     const isNormalisationApplied = !isStackedView && useNormalisedData;
 
@@ -213,12 +219,45 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     // If currently selected tab is disabled, reset to initial tab
     useEffect(() => {
         const isSelectedTabDisabled =
-            isNormalisationApplied && normalisedData?.data?.slice(1)?.[comparisonIndex]?.length === 0;
+            isNormalisationApplied && processedComparisonRows?.[comparisonIndex]?.length === 0;
 
         if (isSelectedTabDisabled) {
             setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [selectedTabId, useNormalisedData, normalisedData, comparisonIndex, isNormalisationApplied]);
+    }, [selectedTabId, processedComparisonRows, comparisonIndex, isNormalisationApplied]);
+
+    const isInitialTab = selectedTabId === INITIAL_TAB_ID;
+
+    const activeDataCount = useMemo(() => {
+        const isComparison = !isInitialTab;
+        let filteredData;
+        let processedData;
+
+        if (isComparison) {
+            filteredData = isStackedView ? filteredComparisonStackedRows : filteredComparisonRows;
+            processedData = isStackedView
+                ? processedComparisonStackedRows[comparisonIndex]
+                : processedComparisonRows[comparisonIndex];
+        } else {
+            filteredData = isStackedView ? filteredStackedRows : filteredRows;
+            processedData = isStackedView ? processedStackedRows : processedRows;
+        }
+
+        return { filtered: filteredData?.length, total: processedData?.length, delta: missingRows?.length };
+    }, [
+        isInitialTab,
+        comparisonIndex,
+        isStackedView,
+        filteredRows,
+        processedRows,
+        filteredStackedRows,
+        processedStackedRows,
+        filteredComparisonRows,
+        processedComparisonRows,
+        filteredComparisonStackedRows,
+        processedComparisonStackedRows,
+        missingRows,
+    ]);
 
     return (
         <>
@@ -236,28 +275,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <div className='header-aside'>
                         <p className='result-count'>
-                            <PerfReportRowCount
-                                standardView={getStandardViewCounts(
-                                    processedRows,
-                                    filteredRows,
-                                    selectedTabId === INITIAL_TAB_ID,
-                                    processedComparisonRows,
-                                    filteredComparisonRows,
-                                    useNormalisedData ? normalisedData : null,
-                                    comparisonIndex,
-                                    rawComparisonData?.[comparisonIndex]?.length,
-                                )}
-                                stackedView={getStackedViewCounts(
-                                    processedStackedRows,
-                                    filteredStackedRows,
-                                    processedComparisonStackedRows,
-                                    filteredComparisonStackedRows,
-                                    comparisonIndex,
-                                    selectedTabId === INITIAL_TAB_ID,
-                                )}
-                                useNormalisedData={useNormalisedData}
-                                hasSignpostFilter={!!filterBySignpost}
-                            />
+                            {data && data.length ? (
+                                <PerfReportRowCount
+                                    delta={isInitialTab ? 0 : activeDataCount.delta}
+                                    filteredCount={activeDataCount.filtered}
+                                    total={activeDataCount.total}
+                                    useNormalisedData={useNormalisedData}
+                                />
+                            ) : null}
                         </p>
                     </div>
                 </div>
@@ -458,12 +483,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 />
                             ) : (
                                 <PerfTable
-                                    data={useNormalisedData ? normalisedData.data[0] : filteredRows}
-                                    comparisonData={
-                                        useNormalisedData && normalisedComparisonData.length > 0
-                                            ? normalisedComparisonData
-                                            : processedComparisonRows
-                                    }
+                                    data={filteredRows}
+                                    comparisonData={processedComparisonRows}
                                     filters={filters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
@@ -479,9 +500,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             id={report}
                             key={index}
                             icon={IconNames.TH_LIST}
-                            disabled={isNormalisationApplied && normalisedComparisonData?.[index]?.length === 0}
+                            disabled={isNormalisationApplied && processedComparisonRows?.[index]?.length === 0}
                             title={
-                                isNormalisationApplied && normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
+                                isNormalisationApplied && processedComparisonRows?.[index]?.length === 0 ? (
                                     <Tooltip
                                         content='Report has too many differences to be normalised'
                                         position={PopoverPosition.TOP}
@@ -502,7 +523,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                                       processedComparisonStackedRows[comparisonIndex],
                                                       stackedFilters,
                                                       activeRawOpCodeFilterList,
-                                                      hideHostOps,
                                                       stackByIn0,
                                                   )
                                                 : filteredStackedRows
@@ -515,7 +535,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                                 dataset,
                                                 stackedFilters,
                                                 activeRawOpCodeFilterList,
-                                                hideHostOps,
                                                 stackByIn0,
                                             ),
                                         )}
@@ -524,21 +543,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     />
                                 ) : (
                                     <PerfTable
-                                        data={
-                                            useNormalisedData && normalisedComparisonData.length > 0
-                                                ? normalisedComparisonData[comparisonIndex]
-                                                : filteredComparisonRows
-                                        }
-                                        comparisonData={
-                                            useNormalisedData && normalisedData.data.length > 1
-                                                ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
-                                                : [
-                                                      processedRows,
-                                                      ...processedComparisonRows.filter(
-                                                          (_, i) => i !== comparisonIndex,
-                                                      ),
-                                                  ]
-                                        }
+                                        data={filteredComparisonRows}
+                                        comparisonData={[
+                                            processedRows,
+                                            ...processedComparisonRows.filter((_, i) => i !== comparisonIndex),
+                                        ]}
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
