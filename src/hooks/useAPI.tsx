@@ -42,7 +42,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { BuffersByOperation, DeviceData, DeviceOperationMapping, NPEData, NPEManifestEntry } from '../model/NPEModel';
+import { BuffersByOperation, DeviceInfo, DeviceOperationMapping, NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
@@ -267,7 +267,7 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 };
 
 const fetchDevices = async (reportName: string) => {
-    const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
+    const { data: meta } = await axiosInstance.get<DeviceInfo[]>('/api/devices');
 
     if (meta.length === 0) {
         // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
@@ -730,7 +730,7 @@ export const useTensors = () => {
 export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<DeviceData[], AxiosError>({
+    return useQuery<DeviceInfo[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport?.path) : Promise.resolve([])),
         queryKey: ['get-devices', activeProfilerReport?.path],
         retry: false,

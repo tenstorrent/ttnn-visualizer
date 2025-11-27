@@ -265,7 +265,7 @@ export interface BuffersByOperation {
     name: string;
 }
 
-export interface DeviceData {
+export interface DeviceInfo {
     address_at_first_l1_bank: number;
     address_at_first_l1_cb_buffer: number;
     cb_limit: number;
