@@ -6,8 +6,9 @@ import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
 import { formatSize } from '../functions/math';
 import { getCoreColour, getOpToOpGapColour } from '../functions/perfFunctions';
-import { DeviceOperationMapping, useGetDeviceOperationListPerf } from '../hooks/useAPI';
+import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
+import { DeviceOperationMapping } from '../model/NPEModel';
 
 interface OperationListPerfDataProps {
     operation: OperationDescription;

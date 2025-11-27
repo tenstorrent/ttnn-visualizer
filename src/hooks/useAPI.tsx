@@ -42,7 +42,13 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { NPEData, NPEManifestEntry } from '../model/NPEModel';
+import {
+    BuffersByOperationData,
+    DeviceData,
+    DeviceOperationMapping,
+    NPEData,
+    NPEManifestEntry,
+} from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
@@ -175,49 +181,6 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
         } as OperationDescription;
     });
 };
-
-export interface BuffersByOperationData {
-    buffers: Buffer[];
-    id: number;
-    name: string;
-}
-
-export interface DeviceData {
-    address_at_first_l1_bank: number;
-    address_at_first_l1_cb_buffer: number;
-    cb_limit: number;
-    device_id: number;
-    l1_bank_size: number;
-    l1_num_banks: number;
-    num_banks_per_storage_core: number;
-    num_compute_cores: number;
-    num_storage_cores: number;
-    num_x_compute_cores: number;
-    num_x_cores: number;
-    num_y_compute_cores: number;
-    num_y_cores: number;
-    total_l1_for_interleaved_buffers: number;
-    total_l1_for_sharded_buffers: number;
-    total_l1_for_tensors: number;
-    total_l1_memory: number;
-    worker_l1_size: number;
-}
-
-export interface PerformanceData {
-    PCIe_slot: number;
-    RISC_processor_type: string; // Can we scope this down to a specific set of values?
-    core_x: number;
-    core_y: number;
-    run_ID: number;
-    run_host_ID: number;
-    source_file: string;
-    source_line: number;
-    stat_value: number;
-    'time[cycles_since_reset]': number;
-    timer_id: number;
-    zone_name: string; // Can we scope this down to a specific set of values?
-    zone_phase: 'begin' | 'end';
-}
 
 const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
     const params = {
@@ -637,13 +600,6 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
         return collapseMultideviceOPs(result, devices.length);
     }, [operations, devices]);
 };
-
-export interface DeviceOperationMapping {
-    name: string;
-    id: number;
-    operationName: string;
-    perfData?: PerfTableRow;
-}
 
 // Unused
 const useProxyPerformanceReport = (): PerformanceReportResponse => {

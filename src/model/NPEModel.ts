@@ -3,6 +3,8 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { ClusterCoordinates } from './ClusterModel';
+import { Buffer } from './APIData';
+import { PerfTableRow } from '../definitions/PerfTable';
 
 export interface CommonInfo {
     version: string;
@@ -257,3 +259,52 @@ export const KERNEL_COLORS: Record<KERNEL_PROCESS, string> = {
 };
 
 export const getKernelColor = (proc: KERNEL_PROCESS): string => KERNEL_COLORS[proc] || 'rgba(255, 255,255, 1)';
+export interface BuffersByOperationData {
+    buffers: Buffer[];
+    id: number;
+    name: string;
+}
+
+export interface DeviceData {
+    address_at_first_l1_bank: number;
+    address_at_first_l1_cb_buffer: number;
+    cb_limit: number;
+    device_id: number;
+    l1_bank_size: number;
+    l1_num_banks: number;
+    num_banks_per_storage_core: number;
+    num_compute_cores: number;
+    num_storage_cores: number;
+    num_x_compute_cores: number;
+    num_x_cores: number;
+    num_y_compute_cores: number;
+    num_y_cores: number;
+    total_l1_for_interleaved_buffers: number;
+    total_l1_for_sharded_buffers: number;
+    total_l1_for_tensors: number;
+    total_l1_memory: number;
+    worker_l1_size: number;
+}
+
+export interface PerformanceData {
+    PCIe_slot: number;
+    RISC_processor_type: string; // Can we scope this down to a specific set of values?
+    core_x: number;
+    core_y: number;
+    run_ID: number;
+    run_host_ID: number;
+    source_file: string;
+    source_line: number;
+    stat_value: number;
+    'time[cycles_since_reset]': number;
+    timer_id: number;
+    zone_name: string;
+    zone_phase: 'begin' | 'end';
+}
+
+export interface DeviceOperationMapping {
+    name: string;
+    id: number;
+    operationName: string;
+    perfData?: PerfTableRow;
+}
