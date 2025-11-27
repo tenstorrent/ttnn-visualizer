@@ -22,7 +22,8 @@ import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
-import { BuffersByOperation } from '../../model/NPEModel';
+
+import { BuffersByOperation } from '../../model/APIData';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item

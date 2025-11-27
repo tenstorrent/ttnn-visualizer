@@ -8,8 +8,7 @@ import BufferSummaryTable from './BufferSummaryTable';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { SECTION_IDS } from '../../definitions/BufferSummary';
 import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
-import { Buffer } from '../../model/APIData';
-import { BuffersByOperation } from '../../model/NPEModel';
+import { Buffer, BuffersByOperation } from '../../model/APIData';
 
 interface BufferSummaryTabProps {
     plotRef: RefObject<HTMLHeadingElement>;

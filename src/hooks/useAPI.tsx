@@ -14,6 +14,8 @@ import {
     Buffer,
     BufferData,
     BufferPage,
+    BuffersByOperation,
+    DeviceInfo,
     Instance,
     NodeType,
     Operation,
@@ -42,7 +44,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { BuffersByOperation, DeviceInfo, DeviceOperationMapping, NPEData, NPEManifestEntry } from '../model/NPEModel';
+import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
@@ -538,6 +540,13 @@ export const useGetDeviceOperationsListByOp = () => {
         );
     }, [operations]);
 };
+
+export interface DeviceOperationMapping {
+    name: string;
+    id: number;
+    operationName: string;
+    perfData?: PerfTableRow;
+}
 
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
