@@ -57,8 +57,8 @@ import { OpType } from '../../definitions/Performance';
 interface PerformanceReportProps {
     data?: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
-    stackedData?: TypedStackedPerfRow[];
-    comparisonStackedData?: TypedStackedPerfRow[][];
+    stackedData: TypedStackedPerfRow[];
+    comparisonStackedData: TypedStackedPerfRow[][];
     signposts?: Signpost[];
 }
 
@@ -105,12 +105,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const isSignpostsDisabled = !signposts || signposts.length === 0;
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
 
-    const processedStackedRows = useMemo(() => stackedData || [], [stackedData]);
-    const processedComparisonStackedRows = useMemo(() => comparisonStackedData || [], [comparisonStackedData]);
-
     const {
         data: [processedRows, ...processedComparisonRows],
-        missingRows,
     } = useMemo(() => {
         const rows = data || [];
         const compRows = comparisonData?.map((dataset) => dataset || []) || [];
@@ -167,25 +163,19 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     );
 
     const filteredStackedRows = useMemo(
-        () =>
-            sortAndFilterStackedPerfTableData(
-                processedStackedRows,
-                stackedFilters,
-                activeRawOpCodeFilterList,
-                stackByIn0,
-            ),
-        [processedStackedRows, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
+        () => sortAndFilterStackedPerfTableData(stackedData, stackedFilters, activeRawOpCodeFilterList, stackByIn0),
+        [stackedData, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
     );
 
     const filteredComparisonStackedRows = useMemo(
         () =>
             sortAndFilterStackedPerfTableData(
-                processedComparisonStackedRows[comparisonIndex],
+                comparisonStackedData[comparisonIndex],
                 stackedFilters,
                 activeRawOpCodeFilterList,
                 stackByIn0,
             ),
-        [comparisonIndex, processedComparisonStackedRows, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
+        [comparisonIndex, comparisonStackedData, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
@@ -230,14 +220,18 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         if (isComparison) {
             filteredData = isStackedView ? filteredComparisonStackedRows : filteredComparisonRows;
             processedData = isStackedView
-                ? processedComparisonStackedRows[comparisonIndex]
+                ? comparisonStackedData[comparisonIndex]
                 : processedComparisonRows[comparisonIndex];
         } else {
             filteredData = isStackedView ? filteredStackedRows : filteredRows;
-            processedData = isStackedView ? processedStackedRows : processedRows;
+            processedData = isStackedView ? stackedData : processedRows;
         }
 
-        return { filtered: filteredData?.length, total: processedData?.length, delta: missingRows?.length };
+        const delta = isComparison
+            ? (processedComparisonRows[comparisonIndex]?.length ?? 0) - (comparisonData?.[comparisonIndex]?.length ?? 0)
+            : 0;
+
+        return { filtered: filteredData?.length, total: processedData?.length, delta };
     }, [
         isInitialTab,
         comparisonIndex,
@@ -245,12 +239,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         filteredRows,
         processedRows,
         filteredStackedRows,
-        processedStackedRows,
+        comparisonData,
+        stackedData,
+        comparisonStackedData,
         filteredComparisonRows,
         processedComparisonRows,
         filteredComparisonStackedRows,
-        processedComparisonStackedRows,
-        missingRows,
     ]);
 
     return (
@@ -472,7 +466,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     data={filteredRows}
                                     stackedData={filteredStackedRows}
                                     filters={filters}
-                                    stackedComparisonData={processedComparisonStackedRows}
+                                    stackedComparisonData={comparisonStackedData}
                                     reportName={activePerformanceReport?.reportName || null}
                                 />
                             ) : (
@@ -514,7 +508,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         stackedData={
                                             comparisonIndex > -1
                                                 ? sortAndFilterStackedPerfTableData(
-                                                      processedComparisonStackedRows[comparisonIndex],
+                                                      comparisonStackedData[comparisonIndex],
                                                       stackedFilters,
                                                       activeRawOpCodeFilterList,
                                                       stackByIn0,
@@ -522,8 +516,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                                 : filteredStackedRows
                                         }
                                         stackedComparisonData={[
-                                            processedStackedRows,
-                                            ...processedComparisonStackedRows.filter((_, i) => i !== comparisonIndex),
+                                            stackedData,
+                                            ...comparisonStackedData.filter((_, i) => i !== comparisonIndex),
                                         ].map((dataset) =>
                                             sortAndFilterStackedPerfTableData(
                                                 dataset,

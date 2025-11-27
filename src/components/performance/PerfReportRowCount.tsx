@@ -10,16 +10,9 @@ interface PerfReportRowCountProps {
     total: number;
     delta: number;
     useNormalisedData: boolean;
-    // hasSignpostFilter?: boolean;
 }
 
-const PerfReportRowCount = ({
-    filteredCount,
-    total,
-    delta,
-    useNormalisedData,
-    // hasSignpostFilter,
-}: PerfReportRowCountProps): string => {
+const PerfReportRowCount = ({ filteredCount, total, delta, useNormalisedData }: PerfReportRowCountProps): string => {
     const isStackedView = useAtomValue(isStackedViewAtom);
     const hasSignpostFilter = useAtomValue(filterBySignpostAtom);
 
@@ -30,11 +23,13 @@ const PerfReportRowCount = ({
 };
 
 const getRowCount = (filteredCount: number, totalCount: number, delta: number, useNormalisedData: boolean): string => {
+    const deltaLabel = delta === 1 || delta === -1 ? 'op' : 'ops';
     const rowCountText =
         filteredCount !== totalCount ? `Showing ${filteredCount} of ${totalCount} rows` : `Showing ${totalCount} rows`;
-
     const rowDeltaText =
-        useNormalisedData && delta ? ` (${delta > 0 ? `${delta} ops added` : `${Math.abs(delta)} ops removed`})` : null;
+        useNormalisedData && delta
+            ? ` (${delta > 0 ? `${delta} ${deltaLabel} added` : `${Math.abs(delta)} ${deltaLabel} removed`})`
+            : null;
 
     return `${rowCountText}${rowDeltaText ?? ''}`;
 };

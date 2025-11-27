@@ -6,7 +6,6 @@ import { Checkbox } from '@blueprintjs/core';
 import { useEffect, useState } from 'react';
 import 'styles/components/PerfChartFilter.scss';
 import { Marker } from '../../definitions/PerfTable';
-import { isHostOp } from '../../functions/perfFunctions';
 
 const MAX_OPTION_LENGTH = 25; // Brittle
 
@@ -96,7 +95,6 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
                 </div>
 
                 {opCodeOptions
-                    .filter((option) => !isHostOp(option.opCode))
                     .sort((a, b) => a.opCode.localeCompare(b.opCode))
                     .map((option) => (
                         <div
