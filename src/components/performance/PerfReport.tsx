@@ -590,11 +590,10 @@ const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
 };
 
 const getRawOpCodeOptions = (rows: TypedPerfTableRow[]): TypedPerfTableRow[] => {
-    let options = rows.filter((row) => row.op_code !== OpType.SIGNPOST);
+    // Don't want signposts here
+    const options = rows.filter((row) => row.op_type !== OpType.SIGNPOST);
 
-    options = Array.from(new Set(options));
-
-    return options;
+    return Array.from(new Set(options));
 };
 
 export default PerformanceReport;
