@@ -40,7 +40,7 @@ import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
-import { BuffersByOperationData } from '../../model/NPEModel';
+import { BuffersByOperation } from '../../model/NPEModel';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -48,7 +48,7 @@ const TOTAL_SHADE_HEIGHT = 20; // Total height in px of 'scroll-shade' pseudo el
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {
-    uniqueBuffersByOperationList: BuffersByOperationData[];
+    uniqueBuffersByOperationList: BuffersByOperation[];
     tensorListByOperation: TensorsByOperationByAddress;
 }
 

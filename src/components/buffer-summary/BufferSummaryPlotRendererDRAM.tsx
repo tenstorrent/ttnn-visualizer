@@ -22,7 +22,7 @@ import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
-import { BuffersByOperationData } from '../../model/NPEModel';
+import { BuffersByOperation } from '../../model/NPEModel';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -46,7 +46,7 @@ const CHART_DATA: Partial<PlotData>[][] = [
 ];
 
 interface BufferSummaryPlotRendererDRAMProps {
-    uniqueBuffersByOperationList: BuffersByOperationData[];
+    uniqueBuffersByOperationList: BuffersByOperation[];
     tensorListByOperation: TensorsByOperationByAddress;
 }
 
@@ -71,7 +71,7 @@ function BufferSummaryPlotRendererDRAM({
         [uniqueBuffersByOperationList],
     );
 
-    const segmentedChartData: BuffersByOperationData[][] = useMemo(() => {
+    const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
         if (isZoomedIn) {
             return getSplitBuffers(uniqueBuffersByOperationList);
         }
@@ -260,7 +260,7 @@ function BufferSummaryPlotRendererDRAM({
 
 const SPLIT_THRESHOLD_RATIO = 2;
 
-function getSplitBuffers(data: BuffersByOperationData[]): BuffersByOperationData[][] {
+function getSplitBuffers(data: BuffersByOperation[]): BuffersByOperation[][] {
     const buffers = data
         .flatMap((op) => op.buffers.map((buffer) => ({ ...buffer, opName: op.name, opId: op.id })))
         .sort((a, b) => a.address - b.address);
@@ -288,7 +288,7 @@ function getSplitBuffers(data: BuffersByOperationData[]): BuffersByOperationData
     }
 
     return result.map((buffersGroup) => {
-        const operationsMap = new Map<number, BuffersByOperationData>();
+        const operationsMap = new Map<number, BuffersByOperation>();
 
         buffersGroup.forEach((buffer) => {
             const { opId, opName, ...originalBuffer } = buffer;

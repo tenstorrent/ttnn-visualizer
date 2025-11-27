@@ -42,13 +42,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import {
-    BuffersByOperationData,
-    DeviceData,
-    DeviceOperationMapping,
-    NPEData,
-    NPEManifestEntry,
-} from '../model/NPEModel';
+import { BuffersByOperation, DeviceData, DeviceOperationMapping, NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
@@ -182,12 +176,12 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     });
 };
 
-const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
+const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperation[]> => {
     const params = {
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', {
+    const { data: buffers } = await axiosInstance.get<BuffersByOperation[]>('/api/operation-buffers', {
         params,
     });
 
@@ -258,7 +252,7 @@ export const fetchOperationBuffers = async (operationId: number) => {
 };
 
 export const useOperationBuffers = (operationId: number) => {
-    return useQuery<BuffersByOperationData, AxiosError>({
+    return useQuery<BuffersByOperation, AxiosError>({
         queryKey: ['get-operation-buffers', operationId],
         queryFn: () => fetchOperationBuffers(operationId),
         retry: false,
@@ -771,7 +765,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    const response = useQuery<BuffersByOperationData[], AxiosError>({
+    const response = useQuery<BuffersByOperation[], AxiosError>({
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         enabled: activeProfilerReport !== null,
         retry: false,

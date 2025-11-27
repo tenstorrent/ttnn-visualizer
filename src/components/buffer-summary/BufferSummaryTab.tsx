@@ -9,12 +9,12 @@ import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { SECTION_IDS } from '../../definitions/BufferSummary';
 import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
 import { Buffer } from '../../model/APIData';
-import { BuffersByOperationData } from '../../model/NPEModel';
+import { BuffersByOperation } from '../../model/NPEModel';
 
 interface BufferSummaryTabProps {
     plotRef: RefObject<HTMLHeadingElement>;
     tableRef: RefObject<HTMLHeadingElement>;
-    buffersByOperation: BuffersByOperationData[];
+    buffersByOperation: BuffersByOperation[];
     tensorListByOperation: TensorsByOperationByAddress;
     isDram?: boolean;
 }

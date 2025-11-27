@@ -20,10 +20,10 @@ import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData } from '../../model/APIData';
 import { selectedTensorAtom } from '../../store/app';
 import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
-import { BuffersByOperationData } from '../../model/NPEModel';
+import { BuffersByOperation } from '../../model/NPEModel';
 
 interface BufferSummaryTableProps {
-    buffersByOperation: BuffersByOperationData[];
+    buffersByOperation: BuffersByOperation[];
     tensorListByOperation: TensorsByOperationByAddress;
 }
 

@@ -259,7 +259,7 @@ export const KERNEL_COLORS: Record<KERNEL_PROCESS, string> = {
 };
 
 export const getKernelColor = (proc: KERNEL_PROCESS): string => KERNEL_COLORS[proc] || 'rgba(255, 255,255, 1)';
-export interface BuffersByOperationData {
+export interface BuffersByOperation {
     buffers: Buffer[];
     id: number;
     name: string;
