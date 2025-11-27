@@ -347,7 +347,12 @@ const fetchPerformanceReport = async (
     hideHostOps: boolean,
 ) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name, stack_by_in0: stackByIn0, signpost: signpost?.op_code, hide_host_ops: hideHostOps },
+        params: {
+            name,
+            stack_by_in0: stackByIn0,
+            signpost: signpost?.op_code,
+            hide_host_ops: hideHostOps,
+        },
     });
 
     return data;
@@ -863,7 +868,6 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
-    // TODO: Name in this case is the report "name" which is really just the parent folder name, which we're using as the unique key
     const signpost = useAtomValue(filterBySignpostAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
@@ -924,21 +928,7 @@ export const usePerformanceComparisonReport = () => {
         enabled: !!reportNames,
     });
 
-    const filteredData = useMemo(() => {
-        if (response.data) {
-            return response.data.map((perfReport: PerformanceReportResponse) => {
-                perfReport.report = perfReport.report
-                    .slice()
-                    .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
-
-                return perfReport;
-            });
-        }
-
-        return response.data;
-    }, [response.data]);
-
-    return useMemo(() => ({ ...response, data: filteredData }), [response, filteredData]);
+    return response;
 };
 
 export const useInstance = () => {

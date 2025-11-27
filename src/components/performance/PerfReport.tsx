@@ -81,12 +81,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
 
-    console.log(
-        'PerformanceReport render',
-        data?.length,
-        comparisonData?.map((set) => set.length),
-    );
-
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
