@@ -30,6 +30,7 @@ const NPE: FC = () => {
 
         return npeData ? getNpeDataErrorType(dataVersion, processingError?.status, isValidNpeData(npeData)) : null;
     }, [npeData, processingError]);
+
     const isDemoEnabled = getServerConfig()?.SERVER_MODE;
     const isLoading = isLoadingNPE || isLoadingTimeline;
     const hasUploadedFile = !!npeFileName || !!filepath;

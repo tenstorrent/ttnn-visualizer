@@ -36,7 +36,7 @@ export const getNpeDataErrorType = (
     dataVersion: string | null,
     httpStatus?: HttpStatusCode,
     isValidData?: boolean,
-): ErrorCodes => {
+): ErrorCodes | null => {
     const parsedVersion = dataVersion ? semverParse(dataVersion) : null;
 
     if (httpStatus === HttpStatusCode.UnprocessableEntity) {
@@ -51,7 +51,7 @@ export const getNpeDataErrorType = (
         return ErrorCodes.INVALID_NPE_VERSION;
     }
 
-    return ErrorCodes.DEFAULT;
+    return null;
 };
 
 export const isValidNpeData = (data: NPEData): boolean => {
