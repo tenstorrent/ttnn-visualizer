@@ -222,6 +222,54 @@ def str_to_bool(string_value):
     return string_value.lower() in ("yes", "true", "t", "1")
 
 
+def is_running_in_container():
+    """
+    Detect if running inside a container (Docker, Podman, Kubernetes, etc.).
+
+    Uses multiple detection methods for robustness:
+    1. /.dockerenv file (Docker-specific, fastest check)
+    2. /proc/self/cgroup contains container indicators
+    3. Container-specific environment variables
+
+    Returns:
+        bool: True if running in a container, False otherwise
+    """
+    # Method 1: Check for /.dockerenv (Docker-specific, most common)
+    if os.path.exists("/.dockerenv"):
+        logger.debug("Container detected via /.dockerenv file")
+        return True
+
+    # Method 2: Check cgroup for container indicators
+    try:
+        with open("/proc/self/cgroup", "r") as f:
+            content = f.read()
+            # Check for various container runtimes
+            container_indicators = ["docker", "containerd", "lxc", "kubepods"]
+            if any(indicator in content for indicator in container_indicators):
+                logger.debug(
+                    f"Container detected via /proc/self/cgroup: {content[:100]}"
+                )
+                return True
+    except (FileNotFoundError, PermissionError):
+        # Not on Linux or no permission to read cgroup
+        pass
+
+    # Method 3: Check for container-specific environment variables
+    container_env_vars = [
+        "KUBERNETES_SERVICE_HOST",  # Kubernetes
+        "KUBERNETES_PORT",  # Kubernetes
+        "container",  # systemd-nspawn and others
+    ]
+
+    for env_var in container_env_vars:
+        if os.getenv(env_var):
+            logger.debug(f"Container detected via environment variable: {env_var}")
+            return True
+
+    logger.debug("No container environment detected")
+    return False
+
+
 @dataclasses.dataclass
 class SerializeableDataclass:
     def to_dict(self) -> dict:

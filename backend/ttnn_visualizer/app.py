@@ -193,6 +193,23 @@ def parse_args():
         "--tt-metal-home", help="Specify a TT-Metal home path", default=None
     )
     parser.add_argument(
+        "--host",
+        type=str,
+        help="Host to bind to (default: auto-detected based on environment)",
+        default=None,
+    )
+    parser.add_argument(
+        "--port",
+        type=str,
+        help="Port to bind to (default: 8000)",
+        default=None,
+    )
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Bind to all network interfaces (0.0.0.0) and enable server mode. Useful for servers and VMs",
+    )
+    parser.add_argument(
         "-d",
         "--daemon",
         action="store_true",
@@ -249,6 +266,21 @@ def main():
         os.environ.setdefault("FLASK_ENV", "production")
 
     args = parse_args()
+
+    # Handle host/port CLI overrides
+    # Priority: CLI args > env vars > auto-detection (in settings.py)
+    if args.host:
+        os.environ["HOST"] = args.host
+        print(f"🌐 Binding to host: {args.host} (from --host flag)")
+    elif args.server:
+        os.environ["HOST"] = "0.0.0.0"
+        os.environ["SERVER_MODE"] = "true"
+        print("🌐 Binding to all interfaces (0.0.0.0) via --server flag")
+        print("🖥️  Server mode enabled")
+
+    if args.port:
+        os.environ["PORT"] = args.port
+        print(f"🔌 Binding to port: {args.port}")
 
     config = cast(DefaultConfig, Config())
     instance_id = None
