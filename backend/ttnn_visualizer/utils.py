@@ -236,7 +236,7 @@ def is_running_in_container():
     """
     # Method 1: Check for /.dockerenv (Docker-specific, most common)
     if os.path.exists("/.dockerenv"):
-        logger.debug("Container detected via /.dockerenv file")
+        logger.info("Container detected via /.dockerenv file")
         return True
 
     # Method 2: Check cgroup for container indicators
@@ -246,7 +246,7 @@ def is_running_in_container():
             # Check for various container runtimes
             container_indicators = ["docker", "containerd", "lxc", "kubepods"]
             if any(indicator in content for indicator in container_indicators):
-                logger.debug(
+                logger.info(
                     f"Container detected via /proc/self/cgroup: {content[:100]}"
                 )
                 return True
@@ -263,10 +263,9 @@ def is_running_in_container():
 
     for env_var in container_env_vars:
         if os.getenv(env_var):
-            logger.debug(f"Container detected via environment variable: {env_var}")
+            logger.info(f"Container detected via environment variable: {env_var}")
             return True
 
-    logger.debug("No container environment detected")
     return False
 
 

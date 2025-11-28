@@ -55,8 +55,9 @@ def create_app(settings_override=None):
         static_folder=config.STATIC_ASSETS_DIR,
         static_url_path=f"{config.BASE_PATH}static",
     )
-    logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
+    # logging.basicConfig(level=app.config.get("LOG_LEVEL", "DEBUG"))
+    logging.basicConfig(level=logging.DEBUG)
     app.config.from_object(config)
 
     if settings_override:
