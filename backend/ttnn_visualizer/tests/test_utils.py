@@ -2,9 +2,9 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
-from ttnn_visualizer.utils import find_gunicorn_path
+from ttnn_visualizer.utils import find_gunicorn_path, is_running_in_container
 
 
 @patch("sys.argv", ["/home/user/.local/bin/ttnn-visualizer"])
@@ -104,3 +104,191 @@ def test_gunicorn_not_found(mock_which, mock_is_file, mock_exists, mock_access):
     assert warning is not None
     assert "ERROR" in warning
     assert "not found" in warning
+
+
+# Tests for is_running_in_container()
+
+
+@patch("os.path.exists")
+@patch("os.getenv")
+def test_container_detection_via_dockerenv(mock_getenv, mock_exists):
+    """Test container detection via /.dockerenv file."""
+    mock_exists.return_value = True
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+    mock_exists.assert_called_once_with("/.dockerenv")
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/docker/abc123\n11:cpuset:/docker/abc123",
+)
+@patch("os.getenv")
+def test_container_detection_via_cgroup_docker(mock_getenv, mock_file, mock_exists):
+    """Test container detection via /proc/self/cgroup containing 'docker'."""
+    mock_exists.return_value = False  # No /.dockerenv
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+    mock_file.assert_called_once_with("/proc/self/cgroup", "r")
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/containerd/abc123\n11:cpuset:/containerd/abc123",
+)
+@patch("os.getenv")
+def test_container_detection_via_cgroup_containerd(mock_getenv, mock_file, mock_exists):
+    """Test container detection via /proc/self/cgroup containing 'containerd'."""
+    mock_exists.return_value = False
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/lxc/container123\n11:cpuset:/lxc/container123",
+)
+@patch("os.getenv")
+def test_container_detection_via_cgroup_lxc(mock_getenv, mock_file, mock_exists):
+    """Test container detection via /proc/self/cgroup containing 'lxc'."""
+    mock_exists.return_value = False
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/kubepods/besteffort/pod123\n11:cpuset:/kubepods/besteffort/pod123",
+)
+@patch("os.getenv")
+def test_container_detection_via_cgroup_kubepods(mock_getenv, mock_file, mock_exists):
+    """Test container detection via /proc/self/cgroup containing 'kubepods'."""
+    mock_exists.return_value = False
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch("builtins.open", side_effect=FileNotFoundError())
+@patch("os.getenv")
+def test_container_detection_cgroup_file_not_found(mock_getenv, mock_file, mock_exists):
+    """Test container detection handles FileNotFoundError from /proc/self/cgroup."""
+    mock_exists.return_value = False
+
+    def getenv_side_effect(key):
+        return None
+
+    mock_getenv.side_effect = getenv_side_effect
+
+    result = is_running_in_container()
+
+    assert result is False
+
+
+@patch("os.path.exists")
+@patch("builtins.open", side_effect=PermissionError())
+@patch("os.getenv")
+def test_container_detection_cgroup_permission_error(
+    mock_getenv, mock_file, mock_exists
+):
+    """Test container detection handles PermissionError from /proc/self/cgroup."""
+    mock_exists.return_value = False
+
+    def getenv_side_effect(key):
+        return None
+
+    mock_getenv.side_effect = getenv_side_effect
+
+    result = is_running_in_container()
+
+    assert result is False
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/user.slice\n11:cpuset:/",
+)
+def test_container_detection_via_kubernetes_service_host(mock_file, mock_exists):
+    """Test container detection via KUBERNETES_SERVICE_HOST environment variable."""
+    mock_exists.return_value = False
+
+    with patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, clear=True):
+        result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/user.slice\n11:cpuset:/",
+)
+def test_container_detection_via_kubernetes_port(mock_file, mock_exists):
+    """Test container detection via KUBERNETES_PORT environment variable."""
+    mock_exists.return_value = False
+
+    with patch.dict(
+        "os.environ", {"KUBERNETES_PORT": "tcp://10.0.0.1:443"}, clear=True
+    ):
+        result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/user.slice\n11:cpuset:/",
+)
+def test_container_detection_via_container_env(mock_file, mock_exists):
+    """Test container detection via 'container' environment variable."""
+    mock_exists.return_value = False
+
+    with patch.dict("os.environ", {"container": "podman"}, clear=True):
+        result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/user.slice\n11:cpuset:/",
+)
+@patch("os.getenv")
+def test_no_container_detection(mock_getenv, mock_file, mock_exists):
+    """Test that no container is detected when all checks fail."""
+    mock_exists.return_value = False  # No /.dockerenv
+    mock_getenv.return_value = None  # No container env vars
+
+    result = is_running_in_container()
+
+    assert result is False
