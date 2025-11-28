@@ -269,6 +269,8 @@ def main():
 
     # Handle host/port CLI overrides
     # Priority: CLI args > env vars > auto-detection (in settings.py)
+    # Note: We need to set env vars before creating Config, but also
+    # manually update the config object in case it was already instantiated
     if args.host:
         os.environ["HOST"] = args.host
         print(f"🌐 Binding to host: {args.host} (from --host flag)")
@@ -283,6 +285,21 @@ def main():
         print(f"🔌 Binding to port: {args.port}")
 
     config = cast(DefaultConfig, Config())
+
+    # Apply CLI overrides directly to config object
+    # (Config is a singleton that may have been created before we set env vars)
+    if args.host:
+        config.HOST = args.host
+    elif args.server:
+        config.HOST = "0.0.0.0"
+        config.SERVER_MODE = True
+
+    if args.port:
+        config.PORT = args.port
+
+    # Recalculate GUNICORN_BIND with the updated values
+    config.GUNICORN_BIND = f"{config.HOST}:{config.PORT}"
+
     instance_id = None
 
     # Display mode information first (using config only, no DB needed)
