@@ -7,7 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
-from ttnn_visualizer.utils import str_to_bool
+from ttnn_visualizer.utils import is_running_in_container, str_to_bool
 
 load_dotenv()
 
@@ -75,7 +75,7 @@ class DefaultConfig(object):
     GUNICORN_WORKERS = os.getenv("GUNICORN_WORKERS", "1")
     GUNICORN_TIMEOUT = os.getenv("GUNICORN_TIMEOUT", "60")
     PORT = os.getenv("PORT", "8000")
-    HOST = os.getenv("HOST", "localhost")
+    HOST = os.getenv("HOST", "0.0.0.0" if is_running_in_container() else "localhost")
     DEV_SERVER_PORT = "5173"
     DEV_SERVER_HOST = "localhost"
 
