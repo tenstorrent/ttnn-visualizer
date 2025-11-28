@@ -454,6 +454,7 @@ class OpsPerformanceReportQueries:
         signpost = kwargs.get("signpost", cls.DEFAULT_SIGNPOST)
         ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
         stack_by_in0 = kwargs.get("stack_by_in0", cls.DEFAULT_NO_STACK_BY_IN0)
+        no_host_ops = kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS)
 
         if signpost:
             ignore_signposts = False
@@ -472,7 +473,7 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_NO_ADVICE,
                 cls.DEFAULT_TRACING_MODE,
                 cls.DEFAULT_RAW_OP_CODES,
-                cls.DEFAULT_NO_HOST_OPS,
+                no_host_ops,
                 cls.DEFAULT_NO_STACKED_REPORT,
                 stack_by_in0,
                 csv_stacked_output_file,
