@@ -5,16 +5,15 @@
 import { RefObject, useMemo } from 'react';
 import BufferSummaryPlotRenderer from './BufferSummaryPlotRenderer';
 import BufferSummaryTable from './BufferSummaryTable';
-import { BuffersByOperationData } from '../../hooks/useAPI';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { SECTION_IDS } from '../../definitions/BufferSummary';
 import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
-import { Buffer } from '../../model/APIData';
+import { Buffer, BuffersByOperation } from '../../model/APIData';
 
 interface BufferSummaryTabProps {
     plotRef: RefObject<HTMLHeadingElement>;
     tableRef: RefObject<HTMLHeadingElement>;
-    buffersByOperation: BuffersByOperationData[];
+    buffersByOperation: BuffersByOperation[];
     tensorListByOperation: TensorsByOperationByAddress;
     isDram?: boolean;
 }
