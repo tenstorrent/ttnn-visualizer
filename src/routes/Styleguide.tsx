@@ -77,29 +77,6 @@ export default function Styleguide() {
             setTimeRemaining(autoCloseTime);
         }, autoCloseTime);
     };
-    // const getNpeDataErrorType = (
-    //         dataVersion: string | null,
-    //         httpStatusCode?: HttpStatusCode,
-    //         hasUploadedFile: boolean = true,
-    //     ) => {
-    //         if (!hasUploadedFile) {
-    //             return null;
-    //         }
-    //
-    //         if (httpStatusCode === HttpStatusCode.UnprocessableEntity) {
-    //             return NPEValidationError.INVALID_NPE_DATA
-    //         }
-    //
-    //         if (httpStatusCode === HttpStatusCode.InternalServerError) {
-    //             return NPEValidationError.DEFAULT
-    //         }
-    //
-    //         if (!dataVersion) {
-    //             return NPEValidationError.INVALID_NPE_VERSION;
-    //         }
-    //
-    //         return NPEValidationError.DEFAULT
-    //     };
     useClearSelectedBuffer();
 
     return (
