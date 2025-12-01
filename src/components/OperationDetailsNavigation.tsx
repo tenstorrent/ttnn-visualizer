@@ -39,7 +39,7 @@ interface OperationDetailsNavigationProps {
 function OperationDetailsNavigation({ operationId, isLoading }: OperationDetailsNavigationProps) {
     const [errorIsOpen, setErrorIsOpen] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(TAB_IDS.ERROR);
-    const [isErrorExpanded, setisErrorExpanded] = useState(false);
+    const [isErrorExpanded, setIsErrorExpanded] = useState(false);
 
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
@@ -186,7 +186,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                                     language={StackTraceLanguage.CPP}
                                     intent={Intent.DANGER}
                                     isInitiallyExpanded={isErrorExpanded}
-                                    onExpandChange={(state) => setisErrorExpanded(!state)}
+                                    onExpandChange={(state) => setIsErrorExpanded(!state)}
                                     hideSourceButton
                                     isInline
                                 />
@@ -203,7 +203,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                                     language={StackTraceLanguage.CPP}
                                     intent={Intent.DANGER}
                                     isInitiallyExpanded={isErrorExpanded}
-                                    onExpandChange={(state) => setisErrorExpanded(!state)}
+                                    onExpandChange={(state) => setIsErrorExpanded(!state)}
                                     hideSourceButton
                                     isInline
                                 />
