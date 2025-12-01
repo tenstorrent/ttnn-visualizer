@@ -19,6 +19,8 @@ afterEach(cleanup);
 const PORTAL_CLASS = '.bp6-portal';
 const TOASTIFY_CLASS = '.Toastify';
 
+const WAIT_FOR_OPTIONS = { timeout: 3000 };
+
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetClusterDescription: () => ({ data: null }),
     usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
@@ -49,7 +51,10 @@ it('renders the folder selector and upload fields', async () => {
 
     getAllButtonsWithText('Select a report...')[0].click();
 
-    await waitFor(() => document.querySelector(PORTAL_CLASS)); // Select menu is rendered in a portal
+    await waitFor(() => {
+        const portal = document.querySelector(PORTAL_CLASS);
+        expect(portal).not.toBeNull();
+    }, WAIT_FOR_OPTIONS); // Select menu is rendered in a portal
 
     mockProfilerFolderList.forEach((folder: ReportFolder) => {
         expect(screen.getByText(folder.reportName)).not.toBeNull();
@@ -66,13 +71,19 @@ it('updates the instance when a profiler report is selected and creates toast me
 
     getAllButtonsWithText('Select a report...')[0].click();
 
-    await waitFor(() => document.querySelector(PORTAL_CLASS)); // Select menu is rendered in a portal
+    await waitFor(() => {
+        const portal = document.querySelector(PORTAL_CLASS);
+        expect(portal).not.toBeNull();
+    }, WAIT_FOR_OPTIONS); // Select menu is rendered in a portal
 
     const { reportName } = mockProfilerFolderList[0];
 
     screen.getByText(reportName).click();
 
-    await waitFor(() => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(reportName));
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(reportName),
+        WAIT_FOR_OPTIONS,
+    );
 
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
     expect(getAllButtonsWithText('Select a report...')).toHaveLength(1);
@@ -87,13 +98,16 @@ it('updates the instance when a performance report is selected and creates toast
 
     getAllButtonsWithText('Select a report...')[1].click();
 
-    await waitFor(() => document.querySelector(PORTAL_CLASS)); // Select menu is rendered in a portal
+    await waitFor(() => {
+        const portal = document.querySelector(PORTAL_CLASS);
+        expect(portal).not.toBeNull();
+    }, WAIT_FOR_OPTIONS);
 
     const { reportName } = mockPerformanceReportFolders[0];
 
     screen.getByText(reportName).click();
 
-    await waitFor(() => document.querySelector(TOASTIFY_CLASS));
+    await waitFor(() => document.querySelector(TOASTIFY_CLASS), WAIT_FOR_OPTIONS);
 
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
     expect(getAllButtonsWithText('Select a report...')).toHaveLength(1);
