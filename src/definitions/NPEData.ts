@@ -30,7 +30,7 @@ export const validateNpeData = (data: unknown): NPEValidationError => {
         return NPEValidationError.INVALID_NPE_DATA;
     }
 
-    const parsedVersion = dataVersion ? semverParse(dataVersion) : semverParse(npeData.common_info?.version);
+    const parsedVersion = dataVersion ? semverParse(dataVersion) || null : null;
 
     if (!parsedVersion) {
         return NPEValidationError.INVALID_NPE_VERSION;
