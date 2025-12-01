@@ -45,11 +45,11 @@ const ProcessingErrors: Record<NPEValidationError, { title: string }> = {
 interface NPEProcessingStatusProps {
     dataVersion: string | null;
     hasUploadedFile?: boolean;
-    errorType: NPEValidationError;
+    errorCode: NPEValidationError;
     isLoading: boolean;
 }
 
-const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorType, isLoading }: NPEProcessingStatusProps) => {
+const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoading }: NPEProcessingStatusProps) => {
     if (isLoading) {
         return (
             <div>
@@ -73,10 +73,10 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorType, isLoadin
         <Callout
             {...SHARED_PROPS}
             intent={Intent.WARNING}
-            title={ProcessingErrors?.[errorType]?.title}
+            title={ProcessingErrors?.[errorCode]?.title}
         >
             {(() => {
-                switch (errorType) {
+                switch (errorCode) {
                     case NPEValidationError.INVALID_NPE_DATA:
                         return (
                             <>

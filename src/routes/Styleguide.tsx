@@ -647,21 +647,21 @@ export default function Styleguide() {
                 <h4>Initial state (no uploaded file)</h4>
                 <NPEProcessingStatus
                     dataVersion={null}
-                    errorType={NPEValidationError.OK}
+                    errorCode={NPEValidationError.OK}
                     isLoading={false}
                 />
 
                 <h4>Loading state</h4>
                 <NPEProcessingStatus
                     dataVersion={null}
-                    errorType={NPEValidationError.OK}
+                    errorCode={NPEValidationError.OK}
                     isLoading
                 />
 
                 <h4>Legacy file format (no version)</h4>
                 <NPEProcessingStatus
                     dataVersion={null}
-                    errorType={NPEValidationError.INVALID_NPE_VERSION}
+                    errorCode={NPEValidationError.INVALID_NPE_VERSION}
                     hasUploadedFile
                     isLoading={false}
                 />
@@ -670,7 +670,7 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     hasUploadedFile
                     dataVersion={MIN_SUPPORTED_VERSION}
-                    errorType={NPEValidationError.INVALID_NPE_DATA}
+                    errorCode={NPEValidationError.INVALID_NPE_DATA}
                     isLoading={false}
                 />
 
@@ -678,7 +678,7 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     hasUploadedFile
                     dataVersion={MIN_SUPPORTED_VERSION}
-                    errorType={NPEValidationError.INVALID_JSON}
+                    errorCode={NPEValidationError.INVALID_JSON}
                     isLoading={false}
                 />
 
@@ -686,7 +686,7 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     hasUploadedFile
                     dataVersion={MIN_SUPPORTED_VERSION}
-                    errorType={NPEValidationError.DEFAULT}
+                    errorCode={NPEValidationError.DEFAULT}
                     isLoading={false}
                 />
             </div>

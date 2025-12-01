@@ -81,7 +81,7 @@ const NPE: FC = () => {
 
             {errorCode !== NPEValidationError.OK ? (
                 <NPEProcessingStatus
-                    errorType={errorCode}
+                    errorCode={errorCode}
                     dataVersion={npeData?.common_info?.version || null}
                     isLoading={isLoading}
                     hasUploadedFile={hasUploadedFile}

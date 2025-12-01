@@ -18,7 +18,7 @@ it('renders an initial message', () => {
             <NPEProcessingStatus
                 isLoading={false}
                 dataVersion={null}
-                errorType={NPEValidationError.OK}
+                errorCode={NPEValidationError.OK}
             />
         </TestProviders>,
     );
@@ -33,7 +33,7 @@ it('handles incorrect NPE data versions', () => {
                 isLoading={false}
                 hasUploadedFile
                 dataVersion={null}
-                errorType={NPEValidationError.INVALID_NPE_VERSION}
+                errorCode={NPEValidationError.INVALID_NPE_VERSION}
             />
         </TestProviders>,
     );
@@ -48,7 +48,7 @@ it('handles incomplete NPE data', () => {
                 isLoading={false}
                 hasUploadedFile
                 dataVersion='0.1.0'
-                errorType={NPEValidationError.INVALID_NPE_DATA}
+                errorCode={NPEValidationError.INVALID_NPE_DATA}
             />
         </TestProviders>,
     );
@@ -63,7 +63,7 @@ it('handles invalid JSON data', () => {
                 isLoading={false}
                 hasUploadedFile
                 dataVersion={MIN_SUPPORTED_VERSION}
-                errorType={NPEValidationError.INVALID_JSON}
+                errorCode={NPEValidationError.INVALID_JSON}
             />
         </TestProviders>,
     );
@@ -78,7 +78,7 @@ it('handles unknown errors', () => {
                 isLoading={false}
                 hasUploadedFile
                 dataVersion={MIN_SUPPORTED_VERSION}
-                errorType={NPEValidationError.DEFAULT}
+                errorCode={NPEValidationError.DEFAULT}
             />
         </TestProviders>,
     );
