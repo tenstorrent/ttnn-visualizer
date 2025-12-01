@@ -5,7 +5,7 @@
 
 import { Callout, Intent } from '@blueprintjs/core';
 import 'styles/components/NPEProcessingStatus.scss';
-import { ErrorCodes, LEGACY_VISUALIZER_VERSION, MIN_SUPPORTED_VERSION, ProcessingErrors } from '../definitions/NPEData';
+import { LEGACY_VISUALIZER_VERSION, MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 import { TEST_IDS } from '../definitions/TestIds';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -24,10 +24,28 @@ const SHARED_PROPS = {
     compact: true,
 };
 
+const ProcessingErrors: Record<NPEValidationError, { title: string }> = {
+    [NPEValidationError.OK]: {
+        title: '',
+    },
+    [NPEValidationError.DEFAULT]: {
+        title: 'Unknown error',
+    },
+    [NPEValidationError.INVALID_NPE_VERSION]: {
+        title: 'Invalid NPE version',
+    },
+    [NPEValidationError.INVALID_JSON]: {
+        title: 'Unable to process JSON',
+    },
+    [NPEValidationError.INVALID_NPE_DATA]: {
+        title: 'Invalid NPE data',
+    },
+};
+
 interface NPEProcessingStatusProps {
     dataVersion: string | null;
     hasUploadedFile?: boolean;
-    errorType: ErrorCodes;
+    errorType: NPEValidationError;
     isLoading: boolean;
 }
 
@@ -59,7 +77,7 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorType, isLoadin
         >
             {(() => {
                 switch (errorType) {
-                    case ErrorCodes.INVALID_NPE_DATA:
+                    case NPEValidationError.INVALID_NPE_DATA:
                         return (
                             <>
                                 <p data-testid={TEST_IDS.NPE_PROCESSING_INVALID_DATA}>
@@ -68,7 +86,7 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorType, isLoadin
                                 <p>Use {NPE_REPO_URL} to generate a new dataset.</p>
                             </>
                         );
-                    case ErrorCodes.INVALID_NPE_VERSION:
+                    case NPEValidationError.INVALID_NPE_VERSION:
                         return (
                             <>
                                 <p data-testid={TEST_IDS.NPE_PROCESSING_INVALID_VERSION}>
@@ -85,7 +103,7 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorType, isLoadin
                                 </p>
                             </>
                         );
-                    case ErrorCodes.INVALID_JSON:
+                    case NPEValidationError.INVALID_JSON:
                         return (
                             <>
                                 <p data-testid={TEST_IDS.NPE_PROCESSING_INVALID_JSON}>

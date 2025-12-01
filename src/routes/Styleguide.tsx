@@ -20,7 +20,6 @@ import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import { useState } from 'react';
 import { useAtom } from 'jotai';
-import { HttpStatusCode } from 'axios';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
@@ -34,7 +33,7 @@ import FileStatusOverlay from '../components/FileStatusOverlay';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
-import { MIN_SUPPORTED_VERSION, getNpeDataErrorType } from '../definitions/NPEData';
+import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -78,7 +77,29 @@ export default function Styleguide() {
             setTimeRemaining(autoCloseTime);
         }, autoCloseTime);
     };
-
+    // const getNpeDataErrorType = (
+    //         dataVersion: string | null,
+    //         httpStatusCode?: HttpStatusCode,
+    //         hasUploadedFile: boolean = true,
+    //     ) => {
+    //         if (!hasUploadedFile) {
+    //             return null;
+    //         }
+    //
+    //         if (httpStatusCode === HttpStatusCode.UnprocessableEntity) {
+    //             return NPEValidationError.INVALID_NPE_DATA
+    //         }
+    //
+    //         if (httpStatusCode === HttpStatusCode.InternalServerError) {
+    //             return NPEValidationError.DEFAULT
+    //         }
+    //
+    //         if (!dataVersion) {
+    //             return NPEValidationError.INVALID_NPE_VERSION;
+    //         }
+    //
+    //         return NPEValidationError.DEFAULT
+    //     };
     useClearSelectedBuffer();
 
     return (
@@ -649,21 +670,21 @@ export default function Styleguide() {
                 <h4>Initial state (no uploaded file)</h4>
                 <NPEProcessingStatus
                     dataVersion={null}
-                    errorType={getNpeDataErrorType(null)}
+                    errorType={NPEValidationError.OK}
                     isLoading={false}
                 />
 
                 <h4>Loading state</h4>
                 <NPEProcessingStatus
                     dataVersion={null}
-                    errorType={getNpeDataErrorType(null)}
+                    errorType={NPEValidationError.OK}
                     isLoading
                 />
 
                 <h4>Legacy file format (no version)</h4>
                 <NPEProcessingStatus
                     dataVersion={null}
-                    errorType={getNpeDataErrorType(null)}
+                    errorType={NPEValidationError.INVALID_NPE_VERSION}
                     hasUploadedFile
                     isLoading={false}
                 />
@@ -672,7 +693,7 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     hasUploadedFile
                     dataVersion={MIN_SUPPORTED_VERSION}
-                    errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, undefined, false)}
+                    errorType={NPEValidationError.INVALID_NPE_DATA}
                     isLoading={false}
                 />
 
@@ -680,7 +701,7 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     hasUploadedFile
                     dataVersion={MIN_SUPPORTED_VERSION}
-                    errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, HttpStatusCode.UnprocessableEntity, true)}
+                    errorType={NPEValidationError.INVALID_JSON}
                     isLoading={false}
                 />
 
@@ -688,7 +709,7 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     hasUploadedFile
                     dataVersion={MIN_SUPPORTED_VERSION}
-                    errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, HttpStatusCode.InternalServerError, true)}
+                    errorType={NPEValidationError.DEFAULT}
                     isLoading={false}
                 />
             </div>
