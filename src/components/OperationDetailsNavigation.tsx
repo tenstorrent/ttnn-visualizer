@@ -3,7 +3,18 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useEffect, useState } from 'react';
-import { Button, ButtonGroup, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    ButtonGroup,
+    ButtonVariant,
+    Intent,
+    PopoverPosition,
+    Size,
+    Tab,
+    TabId,
+    Tabs,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
@@ -15,6 +26,11 @@ import Overlay from './Overlay';
 import StackTrace from './operation-details/StackTrace';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 
+enum TAB_IDS {
+    ERROR = 'ERROR',
+    STACK_TRACE = 'STACK_TRACE',
+}
+
 interface OperationDetailsNavigationProps {
     operationId: number;
     isLoading: boolean;
@@ -22,6 +38,8 @@ interface OperationDetailsNavigationProps {
 
 function OperationDetailsNavigation({ operationId, isLoading }: OperationDetailsNavigationProps) {
     const [errorIsOpen, setErrorIsOpen] = useState(false);
+    const [selectedTabId, setSelectedTabId] = useState<TabId>(TAB_IDS.ERROR);
+    const [isErrorExpanded, setisErrorExpanded] = useState(false);
 
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
@@ -150,25 +168,48 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 onClose={() => setErrorIsOpen(false)}
             >
                 {operation?.error && (
-                    <>
-                        <StackTrace
-                            title='Error Message'
-                            stackTrace={operation.error.error_message}
-                            language={StackTraceLanguage.CPP}
-                            intent={Intent.DANGER}
-                            hideSourceButton
-                            isInline
+                    <Tabs
+                        selectedTabId={selectedTabId}
+                        onChange={setSelectedTabId}
+                        size={Size.LARGE}
+                        id='error-details-tabs'
+                        className='report-tabs'
+                        renderActiveTabPanelOnly
+                    >
+                        <Tab
+                            id={TAB_IDS.ERROR}
+                            title='Error details'
+                            icon={IconNames.COMMENT}
+                            panel={
+                                <StackTrace
+                                    stackTrace={operation.error.error_message}
+                                    language={StackTraceLanguage.CPP}
+                                    intent={Intent.DANGER}
+                                    isInitiallyExpanded={isErrorExpanded}
+                                    onExpandChange={(state) => setisErrorExpanded(!state)}
+                                    hideSourceButton
+                                    isInline
+                                />
+                            }
                         />
 
-                        <StackTrace
-                            title='Error Stack Trace'
-                            stackTrace={operation.error.stack_trace}
-                            language={StackTraceLanguage.CPP}
-                            intent={Intent.DANGER}
-                            hideSourceButton
-                            isInline
+                        <Tab
+                            id={TAB_IDS.STACK_TRACE}
+                            title='Stack Trace'
+                            icon={IconNames.APPLICATION}
+                            panel={
+                                <StackTrace
+                                    stackTrace={operation.error.stack_trace}
+                                    language={StackTraceLanguage.CPP}
+                                    intent={Intent.DANGER}
+                                    isInitiallyExpanded={isErrorExpanded}
+                                    onExpandChange={(state) => setisErrorExpanded(!state)}
+                                    hideSourceButton
+                                    isInline
+                                />
+                            }
                         />
-                    </>
+                    </Tabs>
                 )}
             </Overlay>
         </nav>
