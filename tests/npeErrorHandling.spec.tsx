@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import NPEProcessingStatus from '../src/components/NPEProcessingStatus';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { MIN_SUPPORTED_VERSION, getNpeDataErrorType } from '../src/definitions/NPEData';
+import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../src/definitions/NPEData';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -18,7 +18,7 @@ it('renders an initial message', () => {
             <NPEProcessingStatus
                 isLoading={false}
                 dataVersion={null}
-                errorType={getNpeDataErrorType(null)}
+                errorCode={NPEValidationError.OK}
             />
         </TestProviders>,
     );
@@ -33,7 +33,7 @@ it('handles incorrect NPE data versions', () => {
                 isLoading={false}
                 hasUploadedFile
                 dataVersion={null}
-                errorType={getNpeDataErrorType(null)}
+                errorCode={NPEValidationError.INVALID_NPE_VERSION}
             />
         </TestProviders>,
     );
@@ -48,7 +48,7 @@ it('handles incomplete NPE data', () => {
                 isLoading={false}
                 hasUploadedFile
                 dataVersion='0.1.0'
-                errorType={getNpeDataErrorType('0.1.0', undefined, false)}
+                errorCode={NPEValidationError.INVALID_NPE_DATA}
             />
         </TestProviders>,
     );
@@ -63,7 +63,7 @@ it('handles invalid JSON data', () => {
                 isLoading={false}
                 hasUploadedFile
                 dataVersion={MIN_SUPPORTED_VERSION}
-                errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, 422)}
+                errorCode={NPEValidationError.INVALID_JSON}
             />
         </TestProviders>,
     );
@@ -78,7 +78,7 @@ it('handles unknown errors', () => {
                 isLoading={false}
                 hasUploadedFile
                 dataVersion={MIN_SUPPORTED_VERSION}
-                errorType={getNpeDataErrorType(MIN_SUPPORTED_VERSION, 500)}
+                errorCode={NPEValidationError.DEFAULT}
             />
         </TestProviders>,
     );

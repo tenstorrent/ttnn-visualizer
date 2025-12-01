@@ -6,6 +6,7 @@ import { FC, useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router';
+import { HttpStatusCode } from 'axios';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
 import { useNPETimelineFile, useNpe } from '../hooks/useAPI';
@@ -14,27 +15,36 @@ import { NPEData } from '../model/NPEModel';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
-import { getNpeDataErrorType, isValidNpeData } from '../definitions/NPEData';
+import { NPEValidationError, validateNpeData } from '../definitions/NPEData';
 
 const NPE: FC = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    const { data: loadedData, isLoading: isLoadingNPE, error: processingError } = useNpe(npeFileName);
+    const { data: loadedData, isLoading: isLoadingNPE, error: httpError } = useNpe(npeFileName);
     const { data: loadedTimeline, isLoading: isLoadingTimeline } = useNPETimelineFile(filepath);
     const [demoData, setDemoData] = useState<NPEData | null>(null);
     const [selectedDemo, setSelectedDemo] = useState<NPEDemoData | null>(null);
 
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
-    const errorType = useMemo(() => {
-        const dataVersion = npeData?.common_info?.version || null;
-
-        return npeData ? getNpeDataErrorType(dataVersion, processingError?.status, isValidNpeData(npeData)) : null;
-    }, [npeData, processingError]);
 
     const isDemoEnabled = getServerConfig()?.SERVER_MODE;
     const isLoading = isLoadingNPE || isLoadingTimeline;
     const hasUploadedFile = !!npeFileName || !!filepath;
-    const dataVersion = npeData?.common_info?.version || null;
+
+    const errorCode = useMemo(() => {
+        if (isLoading) {
+            return NPEValidationError.OK;
+        }
+        if (httpError?.status === HttpStatusCode.UnprocessableEntity) {
+            return NPEValidationError.INVALID_JSON;
+        }
+
+        if (httpError?.status !== undefined && httpError?.status >= HttpStatusCode.BadRequest) {
+            return NPEValidationError.DEFAULT;
+        }
+
+        return validateNpeData(npeData);
+    }, [isLoading, httpError?.status, npeData]);
 
     useEffect(() => {
         if (loadedData || loadedTimeline) {
@@ -69,10 +79,10 @@ const NPE: FC = () => {
                 )}
             </div>
 
-            {errorType !== null ? (
+            {errorCode !== NPEValidationError.OK ? (
                 <NPEProcessingStatus
-                    errorType={errorType}
-                    dataVersion={dataVersion}
+                    errorCode={errorCode}
+                    dataVersion={npeData?.common_info?.version || null}
                     isLoading={isLoading}
                     hasUploadedFile={hasUploadedFile}
                 />
