@@ -14,6 +14,8 @@ import {
     Buffer,
     BufferData,
     BufferPage,
+    BuffersByOperation,
+    DeviceInfo,
     Instance,
     NodeType,
     Operation,
@@ -177,55 +179,12 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     });
 };
 
-export interface BuffersByOperationData {
-    buffers: Buffer[];
-    id: number;
-    name: string;
-}
-
-export interface DeviceData {
-    address_at_first_l1_bank: number;
-    address_at_first_l1_cb_buffer: number;
-    cb_limit: number;
-    device_id: number;
-    l1_bank_size: number;
-    l1_num_banks: number;
-    num_banks_per_storage_core: number;
-    num_compute_cores: number;
-    num_storage_cores: number;
-    num_x_compute_cores: number;
-    num_x_cores: number;
-    num_y_compute_cores: number;
-    num_y_cores: number;
-    total_l1_for_interleaved_buffers: number;
-    total_l1_for_sharded_buffers: number;
-    total_l1_for_tensors: number;
-    total_l1_memory: number;
-    worker_l1_size: number;
-}
-
-export interface PerformanceData {
-    PCIe_slot: number;
-    RISC_processor_type: string; // Can we scope this down to a specific set of values?
-    core_x: number;
-    core_y: number;
-    run_ID: number;
-    run_host_ID: number;
-    source_file: string;
-    source_line: number;
-    stat_value: number;
-    'time[cycles_since_reset]': number;
-    timer_id: number;
-    zone_name: string; // Can we scope this down to a specific set of values?
-    zone_phase: 'begin' | 'end';
-}
-
-const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
+const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperation[]> => {
     const params = {
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', {
+    const { data: buffers } = await axiosInstance.get<BuffersByOperation[]>('/api/operation-buffers', {
         params,
     });
 
@@ -296,7 +255,7 @@ export const fetchOperationBuffers = async (operationId: number) => {
 };
 
 export const useOperationBuffers = (operationId: number) => {
-    return useQuery<BuffersByOperationData, AxiosError>({
+    return useQuery<BuffersByOperation, AxiosError>({
         queryKey: ['get-operation-buffers', operationId],
         queryFn: () => fetchOperationBuffers(operationId),
         retry: false,
@@ -311,7 +270,7 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 };
 
 const fetchDevices = async (reportName: string) => {
-    const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
+    const { data: meta } = await axiosInstance.get<DeviceInfo[]>('/api/devices');
 
     if (meta.length === 0) {
         // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
@@ -593,6 +552,13 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
+export interface DeviceOperationMapping {
+    name: string;
+    id: number;
+    operationName: string;
+    perfData?: PerfTableRow;
+}
+
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
     const { data: devices } = useDevices();
@@ -648,13 +614,6 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
         return collapseMultideviceOPs(result, devices.length);
     }, [operations, devices]);
 };
-
-export interface DeviceOperationMapping {
-    name: string;
-    id: number;
-    operationName: string;
-    perfData?: PerfTableRow;
-}
 
 // Unused
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
@@ -791,7 +750,7 @@ export const useTensors = () => {
 export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<DeviceData[], AxiosError>({
+    return useQuery<DeviceInfo[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport?.path) : Promise.resolve([])),
         queryKey: ['get-devices', activeProfilerReport?.path],
         retry: false,
@@ -826,7 +785,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    const response = useQuery<BuffersByOperationData[], AxiosError>({
+    const response = useQuery<BuffersByOperation[], AxiosError>({
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         enabled: activeProfilerReport !== null,
         retry: false,

@@ -14,7 +14,6 @@ import {
     L1_START_MARKER_COLOR,
 } from '../../definitions/PlotConfigurations';
 import {
-    BuffersByOperationData,
     useDevices,
     useGetL1SmallMarker,
     useGetL1StartMarker,
@@ -42,13 +41,15 @@ import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
 
+import { BuffersByOperation } from '../../model/APIData';
+
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Total height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {
-    uniqueBuffersByOperationList: BuffersByOperationData[];
+    uniqueBuffersByOperationList: BuffersByOperation[];
     tensorListByOperation: TensorsByOperationByAddress;
 }
 

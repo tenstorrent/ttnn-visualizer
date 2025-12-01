@@ -8,7 +8,6 @@ import { useAtomValue } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
 import { Checkbox, HotkeysProvider, Icon, InputGroup, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { BuffersByOperationData } from '../../hooks/useAPI';
 import { BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
@@ -18,12 +17,12 @@ import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { Buffer, BufferData } from '../../model/APIData';
+import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
 import { selectedTensorAtom } from '../../store/app';
 import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
 
 interface BufferSummaryTableProps {
-    buffersByOperation: BuffersByOperationData[];
+    buffersByOperation: BuffersByOperation[];
     tensorListByOperation: TensorsByOperationByAddress;
 }
 
