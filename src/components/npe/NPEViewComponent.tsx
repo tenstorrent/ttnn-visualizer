@@ -361,20 +361,24 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         <Button
                             icon={IconNames.StepBackward}
                             onClick={onBackward}
+                            aria-label='Step backward'
                         />
                         <Button
                             icon={isTimelinePlaying ? IconNames.Pause : IconNames.Play}
                             intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
                             onClick={isTimelinePlaying ? onPause : onPlay}
+                            aria-label={isTimelinePlaying ? 'Pause' : 'Play'}
                         />
                         <Button
                             icon={IconNames.FastForward}
                             onClick={onPlay2x}
                             intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
+                            aria-label='Play 2x speed'
                         />
                         <Button
                             icon={IconNames.StepForward}
                             onClick={onForward}
+                            aria-label='Step forward'
                         />
                         |
                         <Switch
@@ -510,11 +514,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 }
                             }}
                         />
-                        |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-                        <label>
+
+                        <div>
                             Zoom
                             <Slider
-                                aria-label='zoom'
+                                handleHtmlProps={{ 'aria-label': 'Zoom' }}
                                 min={0.1}
                                 max={2}
                                 stepSize={0.1}
@@ -523,7 +527,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 onChange={(value: number) => setZoom(value)}
                                 labelRenderer={(value) => `${value.toFixed(1)}`}
                             />
-                        </label>
+                        </div>
                     </div>
                 </ButtonGroup>
                 <div style={{ position: 'relative', width: `${switchWidth}px` }}>
