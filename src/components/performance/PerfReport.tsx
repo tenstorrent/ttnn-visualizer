@@ -327,7 +327,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             icon={IconNames.CROSS}
                             onClick={() => setFilterBySignpost((filter) => [null, filter[1]])}
                             disabled={isSignpostsDisabled}
-                            aria-label={filterBySignpost ? `Remove start signpost` : 'No start signpost selected'}
+                            aria-label={filterBySignpost[0] ? `Remove start signpost` : 'No start signpost selected'}
                         />
                     </ButtonGroup>
 
@@ -368,7 +368,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             icon={IconNames.CROSS}
                             onClick={() => setFilterBySignpost((filter) => [filter[0], null])}
                             disabled={isSignpostsDisabled}
-                            aria-label={filterBySignpost ? `Remove end signpost` : 'No end signpost selected'}
+                            aria-label={filterBySignpost[1] ? `Remove end signpost` : 'No end signpost selected'}
                         />
                     </ButtonGroup>
 
