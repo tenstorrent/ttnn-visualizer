@@ -9,7 +9,14 @@ import { useArchitecture, useGetClusterDescription } from '../../hooks/useAPI';
 import { stringToArchitecture } from '../../definitions/DeviceArchitecture';
 
 import '../../scss/components/ClusterView.scss';
-import { CLUSTER_COORDS, CLUSTER_ETH_POSITION, ClusterChip, DEFAULT_ARCHITECTURE } from '../../model/ClusterModel';
+import {
+    CLUSTER_COORDS,
+    CLUSTER_ETH_POSITION,
+    ClusterChip,
+    ClusterCoordinates,
+    ClusterModel,
+    DEFAULT_ARCHITECTURE,
+} from '../../model/ClusterModel';
 
 const CLUSTER_NODE_GRID_SIZE = 6; // number of cores in a col/row per chip
 const CLUSTER_CHIP_SIZE_LARGE = 350;
@@ -19,7 +26,7 @@ const CLUSTER_CHIP_SIZE_SMALL = 150;
 function ClusterRenderer() {
     const navigate = useNavigate();
     const clusterDescription = useGetClusterDescription();
-    const data = clusterDescription?.data;
+    const data: ClusterModel | null = clusterDescription?.data;
     // we don't support mixed architecture for now
     // we will default to wormhole
     const arch = stringToArchitecture((data?.arch.length && data?.arch[0]) || DEFAULT_ARCHITECTURE);
@@ -52,7 +59,19 @@ function ClusterRenderer() {
     });
 
     const connections = data.ethernet_connections;
-    const chips = Object.entries(data.chips).map(([ClusterChipId, coords]) => {
+    let chipsObject = data.chips;
+    // fallback for an empty chips array
+    if ((!chipsObject || Object.keys(chipsObject).length === 0) && mmioChips.length) {
+        chipsObject = mmioChips.reduce(
+            (acc, chipId: number, index: number) => {
+                acc[chipId] = [index, 0, 0, 0];
+                return acc;
+            },
+            {} as { [p: number]: ClusterCoordinates },
+        );
+    }
+
+    const chips = Object.entries(chipsObject).map(([ClusterChipId, coords]) => {
         const chipId = parseInt(ClusterChipId, 10);
         totalCols = Math.max(totalCols, coords[CLUSTER_COORDS.X]);
 
