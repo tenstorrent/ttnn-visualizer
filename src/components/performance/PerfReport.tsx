@@ -309,6 +309,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         />
                     </Select>
 
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        icon={IconNames.CROSS}
+                        onClick={() => setFilterBySignpost((filter) => [null, filter[1]])}
+                        disabled={isSignpostsDisabled}
+                        aria-label={filterBySignpost ? `Remove start signpost` : 'No start signpost selected'}
+                    />
+
                     <Select<Signpost>
                         items={
                             filterBySignpost[0]
@@ -341,9 +349,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     <Button
                         variant={ButtonVariant.OUTLINED}
                         icon={IconNames.CROSS}
-                        onClick={() => setFilterBySignpost((filter) => [null, filter[1]])}
+                        onClick={() => setFilterBySignpost((filter) => [filter[0], null])}
                         disabled={isSignpostsDisabled}
-                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
+                        aria-label={filterBySignpost ? `Remove end signpost` : 'No end signpost selected'}
                     />
 
                     <SearchField
