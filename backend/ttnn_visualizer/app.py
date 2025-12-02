@@ -25,7 +25,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
-from ttnn_visualizer.utils import find_gunicorn_path
+from ttnn_visualizer.utils import find_gunicorn_path, str_to_bool
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -306,6 +306,16 @@ def main():
     # Display mode information first (using config only, no DB needed)
     if args.tt_metal_home:
         config.TT_METAL_HOME = args.tt_metal_home
+
+        if not str_to_bool(os.getenv("APP_DATA_DIRECTORY")):
+            config.APP_DATA_DIRECTORY = str(
+                Path(args.tt_metal_home) / "generated" / "ttnn-visualizer"
+            )
+            # Recalculate database path with new APP_DATA_DIRECTORY
+            _db_file_path = str(
+                Path(config.APP_DATA_DIRECTORY) / f"ttnn_{config.DB_VERSION}.db"
+            )
+            config.SQLALCHEMY_DATABASE_URI = f"sqlite:///{_db_file_path}"
 
     display_mode_info_without_db(config)
 

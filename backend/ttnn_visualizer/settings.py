@@ -41,9 +41,17 @@ class DefaultConfig(object):
     PERFORMANCE_DIRECTORY_NAME = "performance-reports"
     NPE_DIRECTORY_NAME = "npe-reports"
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
-    APP_DATA_DIRECTORY = os.getenv("APP_DATA_DIRECTORY", APPLICATION_DIR)
-    STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     TT_METAL_HOME = os.getenv("TT_METAL_HOME", None)
+    APP_DATA_DIRECTORY = os.getenv(
+        "APP_DATA_DIRECTORY",
+        (
+            str(Path(TT_METAL_HOME) / "generated" / "ttnn-visualizer")
+            if str_to_bool(TT_METAL_HOME)
+            else APPLICATION_DIR
+        ),
+    )
+
+    STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
     LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
