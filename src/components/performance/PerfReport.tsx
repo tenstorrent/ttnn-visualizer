@@ -288,8 +288,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     <Select<Signpost>
                         items={signposts || []}
                         itemPredicate={filterSignpost}
-                        itemRenderer={(item, itemProps) => renderSignpost(item, itemProps, filterBySignpost)}
-                        onItemSelect={setFilterBySignpost}
+                        itemRenderer={(item, itemProps) => renderSignpost(item, itemProps, filterBySignpost[0])}
+                        onItemSelect={(value) => setFilterBySignpost((filter) => [value, filter[1]])}
                         noResults={
                             <MenuItem
                                 text='No signposts found'
@@ -301,8 +301,37 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     >
                         <Button
                             text={
-                                filterBySignpost?.op_code ??
-                                `Select signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
+                                filterBySignpost[0]?.op_code ??
+                                `Select start signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
+                            }
+                            endIcon={IconNames.CARET_DOWN}
+                            disabled={isSignpostsDisabled}
+                        />
+                    </Select>
+
+                    <Select<Signpost>
+                        items={
+                            filterBySignpost[0]
+                                ? signposts?.slice(signposts.findIndex((s) => s.id === filterBySignpost[0]?.id) + 1) ||
+                                  []
+                                : signposts || []
+                        }
+                        itemPredicate={filterSignpost}
+                        itemRenderer={(item, itemProps) => renderSignpost(item, itemProps, filterBySignpost[1])}
+                        onItemSelect={(value) => setFilterBySignpost((filter) => [filter[0], value])}
+                        noResults={
+                            <MenuItem
+                                text='No signposts found'
+                                roleStructure='listoption'
+                            />
+                        }
+                        disabled={isSignpostsDisabled}
+                        filterable
+                    >
+                        <Button
+                            text={
+                                filterBySignpost[1]?.op_code ??
+                                `Select end signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
                             }
                             endIcon={IconNames.CARET_DOWN}
                             disabled={isSignpostsDisabled}
@@ -312,7 +341,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     <Button
                         variant={ButtonVariant.OUTLINED}
                         icon={IconNames.CROSS}
-                        onClick={() => setFilterBySignpost(null)}
+                        onClick={() => setFilterBySignpost((filter) => [null, filter[1]])}
                         disabled={isSignpostsDisabled}
                         aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
                     />
