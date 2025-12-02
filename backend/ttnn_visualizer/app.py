@@ -119,6 +119,8 @@ def extensions(app: flask.Flask):
     flask_static_digest.init_app(app)
     if app.config["USE_WEBSOCKETS"]:
         socketio.init_app(app)
+
+    Path(app.config["APP_DATA_DIRECTORY"]).mkdir(parents=True, exist_ok=True)
     db.init_app(app)
 
     if app.config["USE_WEBSOCKETS"]:
