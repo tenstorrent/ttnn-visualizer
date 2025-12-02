@@ -46,7 +46,7 @@ class DefaultConfig(object):
         "APP_DATA_DIRECTORY",
         (
             str(Path(TT_METAL_HOME) / "generated" / "ttnn-visualizer")
-            if str_to_bool(TT_METAL_HOME)
+            if TT_METAL_HOME
             else APPLICATION_DIR
         ),
     )

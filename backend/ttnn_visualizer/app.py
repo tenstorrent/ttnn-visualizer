@@ -25,7 +25,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
-from ttnn_visualizer.utils import find_gunicorn_path, str_to_bool
+from ttnn_visualizer.utils import find_gunicorn_path
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -307,7 +307,7 @@ def main():
     if args.tt_metal_home:
         config.TT_METAL_HOME = args.tt_metal_home
 
-        if not str_to_bool(os.getenv("APP_DATA_DIRECTORY")):
+        if not os.getenv("APP_DATA_DIRECTORY"):
             config.APP_DATA_DIRECTORY = str(
                 Path(args.tt_metal_home) / "generated" / "ttnn-visualizer"
             )
