@@ -6,7 +6,10 @@ import dataclasses
 import enum
 import json
 import logging
+import os
 import re
+import shutil
+import sys
 import time
 from functools import wraps
 from pathlib import Path
@@ -16,6 +19,98 @@ from typing import Any, Callable, Dict, Optional
 logger = logging.getLogger(__name__)
 
 LAST_SYNCED_FILE_NAME = ".last-synced"
+
+
+def get_app_data_directory(tt_metal_home: Optional[str], application_dir: str) -> str:
+    """
+    Calculate the APP_DATA_DIRECTORY based on TT_METAL_HOME or fallback to application_dir.
+
+    Args:
+        tt_metal_home: Path to TT-Metal home directory, or None
+        application_dir: Fallback application directory path
+
+    Returns:
+        Path to the app data directory
+    """
+    if tt_metal_home and tt_metal_home.strip():
+        return str(Path(tt_metal_home).expanduser() / "generated" / "ttnn-visualizer")
+    return application_dir
+
+
+def find_gunicorn_path() -> tuple[str, Optional[str]]:
+    """
+    Find the gunicorn executable, prioritizing the same bin directory as ttnn-visualizer.
+
+    Returns:
+        tuple: (gunicorn_path, warning_message)
+            - gunicorn_path: Full path to the gunicorn executable to use
+            - warning_message: Warning message if there are any issues finding gunicorn
+              (e.g., multiple installations, falling back to PATH, or not found),
+              or None if found without conflicts.
+    """
+    # Get the directory where ttnn-visualizer was run from
+    ttnn_visualizer_path = Path(sys.argv[0]).resolve()
+    bin_dir = ttnn_visualizer_path.parent
+
+    # Look for gunicorn in the same directory
+    expected_gunicorn = bin_dir / "gunicorn"
+
+    if (
+        expected_gunicorn.exists()
+        and expected_gunicorn.is_file()
+        and os.access(expected_gunicorn, os.X_OK)
+    ):
+        # Found gunicorn in the same bin directory and it's executable
+        gunicorn_path = str(expected_gunicorn)
+
+        # Check if there's a different gunicorn in PATH
+        path_gunicorn = shutil.which("gunicorn")
+        warning_message = None
+
+        if path_gunicorn and Path(path_gunicorn).resolve() != expected_gunicorn:
+            warning_message = (
+                f"⚠️  WARNING: Multiple gunicorn installations detected!\n"
+                f"   Using: {gunicorn_path}\n"
+                f"   Found in PATH: {path_gunicorn}\n"
+                f"   This may cause version conflicts. Consider using a virtual environment."
+            )
+
+        return gunicorn_path, warning_message
+
+    # If file exists but isn't executable, add a warning about that
+    if expected_gunicorn.exists() and expected_gunicorn.is_file():
+        warning_message = (
+            f"⚠️  WARNING: gunicorn found at {expected_gunicorn} but it's not executable!\n"
+            f"   Falling back to PATH. Fix permissions with: chmod +x {expected_gunicorn}"
+        )
+        path_gunicorn = shutil.which("gunicorn")
+        if path_gunicorn:
+            return path_gunicorn, warning_message
+        # If not in PATH either, return error with permission hint
+        error_message = (
+            f"❌ ERROR: gunicorn found at {expected_gunicorn} but it's not executable!\n"
+            f"   Not found in PATH either.\n"
+            f"   Fix permissions with: chmod +x {expected_gunicorn}"
+        )
+        return "gunicorn", error_message
+
+    # Fall back to PATH
+    path_gunicorn = shutil.which("gunicorn")
+
+    if path_gunicorn:
+        warning_message = (
+            f"⚠️  WARNING: gunicorn not found in {bin_dir}\n"
+            f"   Falling back to gunicorn from PATH: {path_gunicorn}\n"
+            f"   This may cause issues if different versions are installed."
+        )
+        return path_gunicorn, warning_message
+
+    # Not found anywhere - return "gunicorn" and let subprocess.run fail with a clear error
+    warning_message = (
+        f"❌ ERROR: gunicorn not found!\n"
+        f"   Expected location: {expected_gunicorn}\n"
+    )
+    return "gunicorn", warning_message
 
 
 class PathResolver:
@@ -141,6 +236,53 @@ class PathResolver:
 
 def str_to_bool(string_value):
     return string_value.lower() in ("yes", "true", "t", "1")
+
+
+def is_running_in_container():
+    """
+    Detect if running inside a container (Docker, Podman, Kubernetes, etc.).
+
+    Uses multiple detection methods for robustness:
+    1. /.dockerenv file (Docker-specific, fastest check)
+    2. /proc/self/cgroup contains container indicators
+    3. Container-specific environment variables
+
+    Returns:
+        bool: True if running in a container, False otherwise
+    """
+    # Method 1: Check for /.dockerenv (Docker-specific, most common)
+    if os.path.exists("/.dockerenv"):
+        logger.info("Container detected via /.dockerenv file")
+        return True
+
+    # Method 2: Check cgroup for container indicators
+    try:
+        with open("/proc/self/cgroup", "r") as f:
+            content = f.read()
+            # Check for various container runtimes
+            container_indicators = ["docker", "containerd", "lxc", "kubepods"]
+            if any(indicator in content for indicator in container_indicators):
+                logger.info(
+                    f"Container detected via /proc/self/cgroup: {content[:100]}"
+                )
+                return True
+    except (FileNotFoundError, PermissionError):
+        # Not on Linux or no permission to read cgroup
+        pass
+
+    # Method 3: Check for container-specific environment variables
+    container_env_vars = [
+        "KUBERNETES_SERVICE_HOST",  # Kubernetes
+        "KUBERNETES_PORT",  # Kubernetes
+        "container",  # systemd-nspawn and others
+    ]
+
+    for env_var in container_env_vars:
+        if os.getenv(env_var):
+            logger.info(f"Container detected via environment variable: {env_var}")
+            return True
+
+    return False
 
 
 @dataclasses.dataclass

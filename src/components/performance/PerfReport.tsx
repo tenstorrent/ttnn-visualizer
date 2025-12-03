@@ -2,13 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useEffect, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
     ButtonGroup,
     ButtonVariant,
     Callout,
+    FormGroup,
     Intent,
     MenuItem,
     PopoverPosition,
@@ -20,21 +21,10 @@ import {
     Tabs,
     Tooltip,
 } from '@blueprintjs/core';
-import { ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
+import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import {
-    FilterableColumnKeys,
-    PerfTableRow,
-    TableFilter,
-    TableKeys,
-    TypedPerfTableRow,
-} from '../../definitions/PerfTable';
-import {
-    Signpost,
-    calcHighDispatchOps,
-    getStackedViewCounts,
-    getStandardViewCounts,
-} from '../../functions/perfFunctions';
+import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
 import {
@@ -54,7 +44,6 @@ import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
     FilterableStackedColumnKeys,
-    StackedPerfRow,
     StackedTableFilter,
     StackedTableKeys,
     TypedStackedPerfRow,
@@ -64,14 +53,19 @@ import HighlightedText from '../HighlightedText';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
+import { OpType } from '../../definitions/Performance';
+
+enum SignpostSelectType {
+    START,
+    END,
+}
 
 interface PerformanceReportProps {
     data?: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
-    stackedData?: StackedPerfRow[];
-    comparisonStackedData?: StackedPerfRow[][];
+    stackedData: TypedStackedPerfRow[];
+    comparisonStackedData: TypedStackedPerfRow[][];
     signposts?: Signpost[];
-    rawComparisonData?: PerfTableRow[][];
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -82,7 +76,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     stackedData,
     comparisonStackedData,
     signposts,
-    rawComparisonData,
 }) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -118,40 +111,30 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const isSignpostsDisabled = !signposts || signposts.length === 0;
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
 
-    const processedRows = useMemo(() => data || [], [data]);
-    const processedComparisonRows = useMemo(
-        () => comparisonData?.map((dataset) => dataset || []) || [],
-        [comparisonData],
-    );
+    const {
+        data: [processedRows, ...processedComparisonRows],
+    } = useMemo(() => {
+        const rows = data || [];
+        const compRows = comparisonData?.map((dataset) => dataset || []) || [];
 
-    const processedStackedRows: TypedStackedPerfRow[] = useMemo(() => {
-        return stackedData ? enrichStackedRowData(stackedData) : [];
-    }, [stackedData]);
+        if (useNormalisedData && rows.length > 0 && compRows.length > 0) {
+            return alignByOpCode(rows, compRows);
+        }
 
-    const processedComparisonStackedRows: TypedStackedPerfRow[][] = useMemo(() => {
-        return comparisonStackedData?.map(enrichStackedRowData) || [];
-    }, [comparisonStackedData]);
-
-    const normalisedData = useMemo(
-        () =>
-            processedRows?.length > 0 && processedComparisonRows?.length > 0
-                ? alignByOpCode(processedRows, processedComparisonRows)
-                : { data: [], missingRows: [] },
-        [processedRows, processedComparisonRows],
-    );
-    const normalisedComparisonData = normalisedData.data.slice(1);
+        return { data: [rows, ...compRows], missingRows: [] };
+    }, [data, comparisonData, useNormalisedData]);
 
     const isNormalisationApplied = !isStackedView && useNormalisedData;
 
     const filteredRows = useMemo(
         () =>
             sortAndFilterPerfTableData(
-                useNormalisedData ? normalisedData.data[0] : processedRows,
+                processedRows,
                 filters,
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
                 activeBufferTypeFilterList,
-                hideHostOps,
+                filterBySignpost,
             ),
         [
             processedRows,
@@ -159,21 +142,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             activeMathFilterList,
             activeRawOpCodeFilterList,
             activeBufferTypeFilterList,
-            useNormalisedData,
-            normalisedData.data,
-            hideHostOps,
+            filterBySignpost,
         ],
     );
 
+    // TODO: Filters should apply to all comparison datasets, not just the selected one
     const filteredComparisonRows = useMemo(
         () =>
             sortAndFilterPerfTableData(
-                useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
+                processedComparisonRows[comparisonIndex],
                 filters,
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
                 activeBufferTypeFilterList,
-                hideHostOps,
+                filterBySignpost,
             ),
         [
             comparisonIndex,
@@ -182,41 +164,24 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             activeRawOpCodeFilterList,
             activeMathFilterList,
             activeBufferTypeFilterList,
-            useNormalisedData,
-            normalisedData.data,
-            hideHostOps,
+            filterBySignpost,
         ],
     );
 
     const filteredStackedRows = useMemo(
-        () =>
-            sortAndFilterStackedPerfTableData(
-                processedStackedRows,
-                stackedFilters,
-                activeRawOpCodeFilterList,
-                hideHostOps,
-                stackByIn0,
-            ),
-        [processedStackedRows, stackedFilters, activeRawOpCodeFilterList, hideHostOps, stackByIn0],
+        () => sortAndFilterStackedPerfTableData(stackedData, stackedFilters, activeRawOpCodeFilterList, stackByIn0),
+        [stackedData, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
     );
 
     const filteredComparisonStackedRows = useMemo(
         () =>
             sortAndFilterStackedPerfTableData(
-                processedComparisonStackedRows[comparisonIndex],
+                comparisonStackedData[comparisonIndex],
                 stackedFilters,
                 activeRawOpCodeFilterList,
-                hideHostOps,
                 stackByIn0,
             ),
-        [
-            comparisonIndex,
-            processedComparisonStackedRows,
-            stackedFilters,
-            activeRawOpCodeFilterList,
-            hideHostOps,
-            stackByIn0,
-        ],
+        [comparisonIndex, comparisonStackedData, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
@@ -244,12 +209,49 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     // If currently selected tab is disabled, reset to initial tab
     useEffect(() => {
         const isSelectedTabDisabled =
-            isNormalisationApplied && normalisedData?.data?.slice(1)?.[comparisonIndex]?.length === 0;
+            isNormalisationApplied && processedComparisonRows?.[comparisonIndex]?.length === 0;
 
         if (isSelectedTabDisabled) {
             setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [selectedTabId, useNormalisedData, normalisedData, comparisonIndex, isNormalisationApplied]);
+    }, [selectedTabId, processedComparisonRows, comparisonIndex, isNormalisationApplied]);
+
+    const isInitialTab = selectedTabId === INITIAL_TAB_ID;
+
+    const activeDataCount = useMemo(() => {
+        const isComparison = !isInitialTab;
+        let filteredData;
+        let processedData;
+
+        if (isComparison) {
+            filteredData = isStackedView ? filteredComparisonStackedRows : filteredComparisonRows;
+            processedData = isStackedView
+                ? comparisonStackedData[comparisonIndex]
+                : processedComparisonRows[comparisonIndex];
+        } else {
+            filteredData = isStackedView ? filteredStackedRows : filteredRows;
+            processedData = isStackedView ? stackedData : processedRows;
+        }
+
+        const delta = isComparison
+            ? (processedComparisonRows[comparisonIndex]?.length ?? 0) - (comparisonData?.[comparisonIndex]?.length ?? 0)
+            : 0;
+
+        return { filtered: filteredData?.length, total: processedData?.length, delta };
+    }, [
+        isInitialTab,
+        comparisonIndex,
+        isStackedView,
+        filteredRows,
+        processedRows,
+        filteredStackedRows,
+        comparisonData,
+        stackedData,
+        comparisonStackedData,
+        filteredComparisonRows,
+        processedComparisonRows,
+        filteredComparisonStackedRows,
+    ]);
 
     return (
         <>
@@ -267,29 +269,112 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <div className='header-aside'>
                         <p className='result-count'>
-                            <PerfReportRowCount
-                                standardView={getStandardViewCounts(
-                                    processedRows,
-                                    filteredRows,
-                                    selectedTabId === INITIAL_TAB_ID,
-                                    processedComparisonRows,
-                                    filteredComparisonRows,
-                                    useNormalisedData ? normalisedData : null,
-                                    comparisonIndex,
-                                    rawComparisonData?.[comparisonIndex]?.length,
-                                )}
-                                stackedView={getStackedViewCounts(
-                                    processedStackedRows,
-                                    filteredStackedRows,
-                                    processedComparisonStackedRows,
-                                    filteredComparisonStackedRows,
-                                    comparisonIndex,
-                                    selectedTabId === INITIAL_TAB_ID,
-                                )}
-                                useNormalisedData={useNormalisedData}
-                            />
+                            {data && data.length ? (
+                                <PerfReportRowCount
+                                    delta={isInitialTab ? 0 : activeDataCount.delta}
+                                    filteredCount={activeDataCount.filtered}
+                                    total={activeDataCount.total}
+                                    useNormalisedData={useNormalisedData}
+                                />
+                            ) : null}
                         </p>
                     </div>
+                </div>
+
+                <div className='filters'>
+                    <FormGroup
+                        className='signpost-filters'
+                        subLabel='Filter by signpost delimiters'
+                    >
+                        <ButtonGroup className='signpost-group'>
+                            <Select<Signpost>
+                                items={signposts || []}
+                                itemPredicate={filterSignpost}
+                                itemRenderer={(item, itemProps) =>
+                                    renderSignpost(
+                                        item,
+                                        itemProps,
+                                        filterBySignpost,
+                                        signposts || [],
+                                        SignpostSelectType.START,
+                                    )
+                                }
+                                onItemSelect={(value) => setFilterBySignpost((filter) => [value, filter[1]])}
+                                noResults={
+                                    <MenuItem
+                                        text='No signposts found'
+                                        roleStructure='listoption'
+                                    />
+                                }
+                                disabled={isSignpostsDisabled}
+                                filterable
+                            >
+                                <Button
+                                    text={filterBySignpost[0]?.op_code ?? `Start signpost...`}
+                                    endIcon={IconNames.CARET_DOWN}
+                                    disabled={isSignpostsDisabled}
+                                />
+                            </Select>
+
+                            <Button
+                                icon={IconNames.CROSS}
+                                onClick={() => setFilterBySignpost((filter) => [null, filter[1]])}
+                                disabled={isSignpostsDisabled}
+                                aria-label={
+                                    filterBySignpost[0] ? `Remove start signpost` : 'No start signpost selected'
+                                }
+                            />
+                        </ButtonGroup>
+
+                        <ButtonGroup className='signpost-group'>
+                            <Select<Signpost>
+                                items={signposts || []}
+                                itemPredicate={filterSignpost}
+                                itemRenderer={(item, itemProps) =>
+                                    renderSignpost(
+                                        item,
+                                        itemProps,
+                                        filterBySignpost,
+                                        signposts || [],
+                                        SignpostSelectType.END,
+                                    )
+                                }
+                                onItemSelect={(value) => setFilterBySignpost((filter) => [filter[0], value])}
+                                noResults={
+                                    <MenuItem
+                                        text='No signposts found'
+                                        roleStructure='listoption'
+                                    />
+                                }
+                                disabled={isSignpostsDisabled}
+                                filterable
+                            >
+                                <Button
+                                    text={filterBySignpost[1]?.op_code ?? `End signpost...`}
+                                    endIcon={IconNames.CARET_DOWN}
+                                    disabled={isSignpostsDisabled}
+                                />
+                            </Select>
+
+                            <Button
+                                icon={IconNames.CROSS}
+                                onClick={() => setFilterBySignpost((filter) => [filter[0], null])}
+                                disabled={isSignpostsDisabled}
+                                aria-label={filterBySignpost[1] ? `Remove end signpost` : 'No end signpost selected'}
+                            />
+                        </ButtonGroup>
+                    </FormGroup>
+
+                    <FormGroup className='toggle-filters'>
+                        <Switch
+                            label='Hide host ops'
+                            onChange={() => setHideHostOps(!hideHostOps)}
+                            checked={hideHostOps}
+                            className='option-switch'
+                            // TODO: Host Ops are missing when stackByIn0 is disabled
+                            disabled={!stackByIn0 && isStackedView}
+                        />
+                    </FormGroup>
                 </div>
 
                 <div className='filters'>
@@ -312,7 +397,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <MultiSelectField<TypedPerfTableRow, 'raw_op_code'>
                         keyName='raw_op_code'
-                        options={processedRows || []}
+                        options={getRawOpCodeOptions(processedRows) || []}
                         placeholder='Select Op Codes...'
                         values={activeRawOpCodeFilterList}
                         updateHandler={setActiveRawOpCodeFilterList}
@@ -325,38 +410,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         values={activeMathFilterList}
                         updateHandler={setActiveMathFilterList}
                         disabled={isStackedView}
-                    />
-
-                    <Select<Signpost>
-                        items={signposts || []}
-                        itemPredicate={filterSignpost}
-                        itemRenderer={renderSignpost}
-                        onItemSelect={setFilterBySignpost}
-                        noResults={
-                            <MenuItem
-                                text='No signposts found'
-                                roleStructure='listoption'
-                            />
-                        }
-                        filterable
-                        disabled={isSignpostsDisabled}
-                    >
-                        <Button
-                            text={
-                                filterBySignpost?.op_code ??
-                                `Select signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
-                            }
-                            endIcon={IconNames.CARET_DOWN}
-                            disabled={isSignpostsDisabled}
-                        />
-                    </Select>
-
-                    <Button
-                        variant={ButtonVariant.OUTLINED}
-                        icon={IconNames.CROSS}
-                        onClick={() => setFilterBySignpost(null)}
-                        disabled={isSignpostsDisabled}
-                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
                     />
                 </div>
 
@@ -402,15 +455,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             />
                         </>
                     )}
-
-                    <Switch
-                        label='Hide host ops'
-                        onChange={() => setHideHostOps(!hideHostOps)}
-                        checked={hideHostOps}
-                        className='option-switch'
-                        // TODO: Host Ops don't get sent in non-stacked-by-in0
-                        disabled={!stackByIn0 && isStackedView}
-                    />
 
                     {!isStackedView && (
                         <>
@@ -483,25 +527,17 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     data={filteredRows}
                                     stackedData={filteredStackedRows}
                                     filters={filters}
-                                    stackedComparisonData={processedComparisonStackedRows}
+                                    stackedComparisonData={comparisonStackedData}
                                     reportName={activePerformanceReport?.reportName || null}
                                 />
                             ) : (
                                 <PerfTable
-                                    data={useNormalisedData ? normalisedData.data[0] : filteredRows}
-                                    comparisonData={
-                                        useNormalisedData && normalisedComparisonData.length > 0
-                                            ? normalisedComparisonData
-                                            : processedComparisonRows
-                                    }
+                                    data={filteredRows}
+                                    comparisonData={processedComparisonRows}
                                     filters={filters}
-                                    rawOpCodeFilter={activeRawOpCodeFilterList}
-                                    mathFidelityFilter={activeMathFilterList}
-                                    bufferTypeFilter={activeBufferTypeFilterList}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
-                                    signposts={signposts}
                                     reportName={activePerformanceReport?.reportName || null}
                                 />
                             )
@@ -513,9 +549,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             id={report}
                             key={index}
                             icon={IconNames.TH_LIST}
-                            disabled={isNormalisationApplied && normalisedComparisonData?.[index]?.length === 0}
+                            disabled={isNormalisationApplied && processedComparisonRows?.[index]?.length === 0}
                             title={
-                                isNormalisationApplied && normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
+                                isNormalisationApplied && processedComparisonRows?.[index]?.length === 0 ? (
                                     <Tooltip
                                         content='Report has too many differences to be normalised'
                                         position={PopoverPosition.TOP}
@@ -533,23 +569,21 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         stackedData={
                                             comparisonIndex > -1
                                                 ? sortAndFilterStackedPerfTableData(
-                                                      processedComparisonStackedRows[comparisonIndex],
+                                                      comparisonStackedData[comparisonIndex],
                                                       stackedFilters,
                                                       activeRawOpCodeFilterList,
-                                                      hideHostOps,
                                                       stackByIn0,
                                                   )
                                                 : filteredStackedRows
                                         }
                                         stackedComparisonData={[
-                                            processedStackedRows,
-                                            ...processedComparisonStackedRows.filter((_, i) => i !== comparisonIndex),
+                                            stackedData,
+                                            ...comparisonStackedData.filter((_, i) => i !== comparisonIndex),
                                         ].map((dataset) =>
                                             sortAndFilterStackedPerfTableData(
                                                 dataset,
                                                 stackedFilters,
                                                 activeRawOpCodeFilterList,
-                                                hideHostOps,
                                                 stackByIn0,
                                             ),
                                         )}
@@ -558,30 +592,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     />
                                 ) : (
                                     <PerfTable
-                                        data={
-                                            useNormalisedData && normalisedComparisonData.length > 0
-                                                ? normalisedComparisonData[comparisonIndex]
-                                                : filteredComparisonRows
-                                        }
-                                        comparisonData={
-                                            useNormalisedData && normalisedData.data.length > 1
-                                                ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
-                                                : [
-                                                      processedRows,
-                                                      ...processedComparisonRows.filter(
-                                                          (_, i) => i !== comparisonIndex,
-                                                      ),
-                                                  ]
-                                        }
+                                        data={filteredComparisonRows}
+                                        comparisonData={[
+                                            processedRows,
+                                            ...processedComparisonRows.filter((_, i) => i !== comparisonIndex),
+                                        ]}
                                         filters={filters}
-                                        rawOpCodeFilter={activeRawOpCodeFilterList}
-                                        mathFidelityFilter={activeMathFilterList}
-                                        bufferTypeFilter={activeBufferTypeFilterList}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}
                                         reportName={report}
-                                        signposts={signposts}
                                     />
                                 )
                             }
@@ -595,27 +615,54 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     );
 };
 
-const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
-    rows.map((row) => ({
-        ...row,
-        percent: parseFloat(row.percent),
-        device_time_sum_us: parseFloat(row.device_time_sum_us),
-        ops_count: parseFloat(row.ops_count),
-        flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
-        flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
-        flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
-        flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
-    }));
+interface RenderSignpostProps<T> {
+    (
+        item: T,
+        itemProps: ItemRendererProps,
+        selectedSignposts: (T | null)[],
+        allSignposts: T[],
+        selectType: SignpostSelectType,
+    ): React.JSX.Element | null;
+}
 
-const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
+const renderSignpost: RenderSignpostProps<Signpost> = (
+    signpost,
+    { handleClick, handleFocus, modifiers, query },
+    selectedSignposts,
+    allSignposts,
+    selectType,
+) => {
     if (!modifiers.matchesPredicate) {
         return null;
+    }
+
+    // Check if the current signpost should be disabled based on selectType and filterBySignpost
+    let isOutsideRange = false;
+    const [startSignpost, endSignpost] = selectedSignposts;
+    const currentIndex = allSignposts.findIndex((s) => s.id === signpost.id);
+
+    if (selectType === SignpostSelectType.START) {
+        // For start select: only disable items after the end signpost
+        if (endSignpost) {
+            const endIndex = allSignposts.findIndex((s) => s.id === endSignpost.id) - 1;
+            if (endIndex !== -1) {
+                isOutsideRange = currentIndex > endIndex;
+            }
+        }
+    } else if (selectType === SignpostSelectType.END) {
+        // For end select: only disable items before the start signpost
+        if (startSignpost) {
+            const startIndex = allSignposts.findIndex((s) => s.id === startSignpost.id) + 1;
+            if (startIndex !== -1) {
+                isOutsideRange = currentIndex < startIndex;
+            }
+        }
     }
 
     return (
         <MenuItem
             active={modifiers.active}
-            disabled={modifiers.disabled}
+            disabled={modifiers.disabled || isOutsideRange}
             key={signpost.id}
             onClick={handleClick}
             onFocus={handleFocus}
@@ -632,6 +679,13 @@ const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleF
 
 const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
     return signpost.op_code.toLowerCase().includes(query.toLowerCase());
+};
+
+const getRawOpCodeOptions = (rows: TypedPerfTableRow[]): TypedPerfTableRow[] => {
+    // Don't want signposts here
+    const options = rows.filter((row) => row.op_type !== OpType.SIGNPOST);
+
+    return Array.from(new Set(options));
 };
 
 export default PerformanceReport;

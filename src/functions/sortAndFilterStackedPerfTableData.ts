@@ -8,7 +8,6 @@ import {
     StackedTableKeys,
     TypedStackedPerfRow,
 } from '../definitions/StackedPerfTable';
-import { isHostOp } from './perfFunctions';
 
 const isFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
@@ -23,7 +22,6 @@ const sortAndFilterStackedPerfTableData = (
     data: TypedStackedPerfRow[],
     filters: StackedTableFilter,
     rawOpCodeFilter: string[],
-    hideHostOps: boolean,
     stackByIn0: boolean,
 ): TypedStackedPerfRow[] => {
     if (data?.length === 0) {
@@ -31,10 +29,6 @@ const sortAndFilterStackedPerfTableData = (
     }
 
     let filteredRows = data || [];
-
-    if (hideHostOps) {
-        filteredRows = filteredRows.filter((row) => !isHostOp(row.op_code));
-    }
 
     if (filters && isFiltersActive(filters) && FilterableStackedColumnKeys) {
         filteredRows = filteredRows.filter((row) => {

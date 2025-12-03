@@ -2,9 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import {
+    FilterableColumnKeys,
+    TableFilter,
+    TableKeys,
+    TypedPerfTableRow,
+    signpostRowDefaults,
+} from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
-import { isHostOp } from './perfFunctions';
+import { Signpost } from './perfFunctions';
+
+const SIGNPOST_MARKER = '(signpost)';
 
 const isFiltersActive = (filters: TableFilter) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
@@ -21,7 +29,7 @@ const sortAndFilterPerfTableData = (
     rawOpCodeFilter: string[],
     mathFilter: string[],
     bufferTypeFilter: (BufferType | null)[],
-    hideHostOps: boolean,
+    filterBySignpost: (Signpost | null)[],
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
         return data;
@@ -29,8 +37,30 @@ const sortAndFilterPerfTableData = (
 
     let filteredRows = data || [];
 
-    if (hideHostOps) {
-        filteredRows = filteredRows.filter((row) => !isHostOp(row.raw_op_code));
+    if (filterBySignpost[0]) {
+        filteredRows = [
+            {
+                ...signpostRowDefaults,
+                id: filterBySignpost[0].id,
+                // TODO: Figure out a better logic for this mismatch between tt-perf-report and visualiser
+                op_code: `${filterBySignpost[0].op_code} ${!filterBySignpost[0].op_code.includes(SIGNPOST_MARKER) ? SIGNPOST_MARKER : ''}`,
+                raw_op_code: filterBySignpost[0].op_code,
+            },
+            ...filteredRows,
+        ];
+    }
+
+    if (filterBySignpost[1]) {
+        filteredRows = [
+            ...filteredRows,
+            {
+                ...signpostRowDefaults,
+                id: filterBySignpost[1].id,
+                // TODO: Figure out a better logic for this mismatch between tt-perf-report and visualiser
+                op_code: `${filterBySignpost[1].op_code} ${!filterBySignpost[1].op_code.includes(SIGNPOST_MARKER) ? SIGNPOST_MARKER : ''}`,
+                raw_op_code: filterBySignpost[1].op_code,
+            },
+        ];
     }
 
     if (isFiltersActive(filters) && FilterableColumnKeys) {

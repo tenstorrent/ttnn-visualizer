@@ -125,6 +125,7 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                         variant={ButtonVariant.MINIMAL}
                         onClick={onClose}
                         icon={IconNames.CHEVRON_LEFT}
+                        title='Close zones panel'
                     />
                 </h3>
                 <ButtonGroup className='zone-filters'>

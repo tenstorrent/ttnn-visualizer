@@ -5,6 +5,7 @@
 import { Checkbox, MenuItem } from '@blueprintjs/core';
 import { ItemPredicate, MultiSelect } from '@blueprintjs/select';
 import { Dispatch, SetStateAction, useCallback, useMemo } from 'react';
+import HighlightedText from './HighlightedText';
 
 type MultiSelectFieldProps<T, K extends keyof T> = {
     keyName: K;
@@ -38,9 +39,10 @@ const MultiSelectField = <T, K extends keyof T>({
     );
 
     const renderOption = useCallback(
-        (option: T[K]) => (
+        (option: T[K], { query }: { query: string }) => (
             <Option
                 key={String(option)}
+                query={query}
                 type={option}
                 label={labelFormatter ? labelFormatter(option) : String(option)}
                 values={values}
@@ -59,8 +61,10 @@ const MultiSelectField = <T, K extends keyof T>({
     }, [options, keyName]);
 
     const filterPredicate: ItemPredicate<T[K]> = useCallback(
-        (query, selected) => !query || String(selected).toLowerCase().includes(query.toLowerCase()),
-        [],
+        (query, selected) =>
+            !query ||
+            (labelFormatter ? labelFormatter(selected) : String(selected)).toLowerCase().includes(query.toLowerCase()),
+        [labelFormatter],
     );
 
     const selectedItems = useMemo(
@@ -90,13 +94,19 @@ type OptionProps<T> = {
     values: T[];
     updateHandler: (type: T) => void;
     label?: string;
+    query?: string;
 };
 
-const Option = <T,>({ type, values, updateHandler, label }: OptionProps<T>) => {
+const Option = <T,>({ type, values, updateHandler, label, query }: OptionProps<T>) => {
     return (
         <li>
             <Checkbox
-                label={label || String(type)}
+                labelElement={
+                    <HighlightedText
+                        text={label ?? String(type)}
+                        filter={query || ''}
+                    />
+                }
                 checked={values.includes(type)}
                 onClick={() => updateHandler(type)}
             />

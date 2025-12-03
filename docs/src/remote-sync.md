@@ -1,13 +1,18 @@
 # Remote Sync
 
-TT-NN Visualizer supports syncing data from remote servers via SSH. This feature downloads files
-from the remote server to your local machine using SSH/SFTP, allowing you to work with them as
-if they were generated locally.
+TT-NN Visualizer supports syncing data from remote servers via SSH. This feature downloads files from the remote server to your local machine using SSH/SFTP, allowing you to work with them as if they were generated locally.
+
+## Benefits of remote sync
+- Work with files locally after downloading for faster access
+- Ability to work offline after the initial sync
+- Full access to all file data and features
+- No additional server-side requirements
+- Ability to easily re-sync updated files
 
 ## SSH Setup
 
 ### Prerequisites
-**Important**: Remote sync requires SSH key-based authentication. Password authentication is not supported.
+**Important:** Remote sync requires SSH key-based authentication. Password authentication is not supported.
 
 Before using remote sync, ensure that:
 1. Your SSH public key is added to the `~/.ssh/authorized_keys` file on the remote server
@@ -41,38 +46,6 @@ ssh username@hostname
 ```
 
 You should be able to connect without entering a password.
-
-#### 4. Troubleshooting SSH Key Issues
-
-If you encounter a 'no keys found' error:
-
-<img width="492" alt="Screenshot 2025-01-30 at 1 55 10 PM" src="https://github.com/user-attachments/assets/3f7f9983-f92d-4900-9321-9d46c6355c36" />
-
-Check your local ssh agent has your ssh key by running:
-
-```shell
-ssh-add -L
-```
-
-If your key isn't present, run the following on your local machine:
-
-```shell
-ssh-add
-```
-
-## How Remote Sync Works
-
-Remote sync downloads files from the remote server to your local machine using SSH/SFTP. This is
-the default behavior when connecting to a remote server in TT-NN Visualizer.
-
-**Benefits of remote sync:**
-- Work with files locally after downloading for faster access
-- Ability to work offline after the initial sync
-- Full access to all file data and features
-- No additional server-side requirements
-
-The sync process will transfer all necessary files from the remote directories to your local
-machine, allowing you to work with them as if they were generated locally.
 
 ## Using Remote Sync
 
@@ -108,3 +81,7 @@ After saving the SSH connection details, you must fetch the list of remote folde
 and performance reports that were found at the provided report paths will appear in the respective
 dropdowns. Choose which report you would like to sync, and press the sync button beside the
 dropdown to perform the sync.
+
+### Troubleshooting
+
+See our [troubleshooting](./troubleshooting.md) section for some known issues and solutions.

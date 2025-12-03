@@ -434,7 +434,8 @@ class OpsPerformanceReportQueries:
         "pm_ideal_ns": "PM IDEAL [ns]",
     }
 
-    DEFAULT_SIGNPOST = None
+    DEFAULT_START_SIGNPOST = None
+    DEFAULT_END_SIGNPOST = None
     DEFAULT_IGNORE_SIGNPOSTS = True
     DEFAULT_MIN_PERCENTAGE = 0.5
     DEFAULT_ID_RANGE = None
@@ -451,11 +452,13 @@ class OpsPerformanceReportQueries:
         csv_file = StringIO(raw_csv)
         csv_output_file = tempfile.mktemp(suffix=".csv")
         csv_stacked_output_file = tempfile.mktemp(suffix=".csv")
-        signpost = kwargs.get("signpost", cls.DEFAULT_SIGNPOST)
+        start_signpost = kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST)
+        end_signpost = kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST)
         ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
         stack_by_in0 = kwargs.get("stack_by_in0", cls.DEFAULT_NO_STACK_BY_IN0)
+        no_host_ops = kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS)
 
-        if signpost:
+        if start_signpost or end_signpost:
             ignore_signposts = False
 
         # perf_report currently generates a PNG alongside the CSV using the same temp name - we'll just delete it afterwards
@@ -463,8 +466,9 @@ class OpsPerformanceReportQueries:
 
         try:
             perf_report.generate_perf_report(
-                csv_file,
-                signpost,
+                [csv_file],
+                start_signpost,
+                end_signpost,
                 ignore_signposts,
                 cls.DEFAULT_MIN_PERCENTAGE,
                 cls.DEFAULT_ID_RANGE,
@@ -472,7 +476,7 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_NO_ADVICE,
                 cls.DEFAULT_TRACING_MODE,
                 cls.DEFAULT_RAW_OP_CODES,
-                cls.DEFAULT_NO_HOST_OPS,
+                no_host_ops,
                 cls.DEFAULT_NO_STACKED_REPORT,
                 stack_by_in0,
                 csv_stacked_output_file,
@@ -497,7 +501,12 @@ class OpsPerformanceReportQueries:
                 op_id = index + 2  # Match IDs with row numbers in ops perf results csv
                 if not any(s["op_code"] == op_code for s in signposts):
                     captured_signposts.add(op_code)
-                    signposts.append({"id": op_id, "op_code": op_code})
+                    signposts.append(
+                        {
+                            "id": op_id,
+                            "op_code": op_code,
+                        }
+                    )
 
         report = []
 

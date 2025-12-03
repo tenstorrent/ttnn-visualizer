@@ -202,5 +202,6 @@ module.exports = defineConfig([
         '**/ttnn_env',
         '**/backend',
         'eslint.config.cjs',
+        '**/docs/output',
     ]),
 ]);

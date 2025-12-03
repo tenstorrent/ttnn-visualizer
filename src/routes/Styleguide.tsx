@@ -33,6 +33,7 @@ import FileStatusOverlay from '../components/FileStatusOverlay';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
+import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -76,7 +77,6 @@ export default function Styleguide() {
             setTimeRemaining(autoCloseTime);
         }, autoCloseTime);
     };
-
     useClearSelectedBuffer();
 
     return (
@@ -643,41 +643,51 @@ export default function Styleguide() {
 
             <div className='container'>
                 <h3>NPE Processing Status</h3>
-                <NPEProcessingStatus dataVersion={null} />
 
-                <br />
-                <br />
-
+                <h4>Initial state (no uploaded file)</h4>
                 <NPEProcessingStatus
                     dataVersion={null}
-                    hasUploadedFile
+                    errorCode={NPEValidationError.OK}
+                    isLoading={false}
                 />
 
-                <br />
-                <br />
-
+                <h4>Loading state</h4>
                 <NPEProcessingStatus
-                    hasUploadedFile
-                    dataVersion='1.0.0'
-                    isInvalidData
+                    dataVersion={null}
+                    errorCode={NPEValidationError.OK}
+                    isLoading
                 />
 
-                <br />
-                <br />
-
+                <h4>Legacy file format (no version)</h4>
                 <NPEProcessingStatus
-                    fetchErrorCode={422}
+                    dataVersion={null}
+                    errorCode={NPEValidationError.INVALID_NPE_VERSION}
                     hasUploadedFile
-                    dataVersion='1.0.0'
+                    isLoading={false}
                 />
 
-                <br />
-                <br />
-
+                <h4>Invalid NPE Data</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
-                    dataVersion='1.0.0'
-                    fetchErrorCode={500}
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorCode={NPEValidationError.INVALID_NPE_DATA}
+                    isLoading={false}
+                />
+
+                <h4>Unprocessable JSON error (HTTP 422)</h4>
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorCode={NPEValidationError.INVALID_JSON}
+                    isLoading={false}
+                />
+
+                <h4>Internal server error (HTTP 500)</h4>
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorCode={NPEValidationError.DEFAULT}
+                    isLoading={false}
                 />
             </div>
         </>

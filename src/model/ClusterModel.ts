@@ -33,6 +33,18 @@ export enum CLUSTER_COORDS {
     S,
 }
 
+export enum CLUSTER_BOARD_INDEX {
+    BOARD_ID,
+    BOARD_TYPE,
+    CHIPS,
+}
+export type ClusterBoard = [
+    //
+    { board_id: string },
+    { board_type: string },
+    { chips: ChipId[] },
+];
+
 export interface ClusterModel {
     arch: string[];
     chips: {
@@ -40,6 +52,12 @@ export interface ClusterModel {
     };
     ethernet_connections: EthernetConnections;
     chips_with_mmio: [key: number, ChipId][];
+
+    ethernet_connections_to_remote_devices: [];
+    chip_to_boardtype: Record<ChipId, string>;
+    chip_to_bus_id: Record<ChipId, number>;
+    chip_unique_ids: Record<ChipId, number>;
+    boards: ClusterBoard[];
 }
 
 type EthernetConnections = [{ chip: ChipId; chan: EthChannel }, { chip: ChipId; chan: EthChannel }][];

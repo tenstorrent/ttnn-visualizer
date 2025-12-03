@@ -14,6 +14,8 @@ import {
     Buffer,
     BufferData,
     BufferPage,
+    BuffersByOperation,
+    DeviceInfo,
     Instance,
     NodeType,
     Operation,
@@ -36,6 +38,7 @@ import {
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
+    hideHostOpsAtom,
     selectedOperationRangeAtom,
     stackByIn0Atom,
 } from '../store/app';
@@ -176,55 +179,12 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     });
 };
 
-export interface BuffersByOperationData {
-    buffers: Buffer[];
-    id: number;
-    name: string;
-}
-
-export interface DeviceData {
-    address_at_first_l1_bank: number;
-    address_at_first_l1_cb_buffer: number;
-    cb_limit: number;
-    device_id: number;
-    l1_bank_size: number;
-    l1_num_banks: number;
-    num_banks_per_storage_core: number;
-    num_compute_cores: number;
-    num_storage_cores: number;
-    num_x_compute_cores: number;
-    num_x_cores: number;
-    num_y_compute_cores: number;
-    num_y_cores: number;
-    total_l1_for_interleaved_buffers: number;
-    total_l1_for_sharded_buffers: number;
-    total_l1_for_tensors: number;
-    total_l1_memory: number;
-    worker_l1_size: number;
-}
-
-export interface PerformanceData {
-    PCIe_slot: number;
-    RISC_processor_type: string; // Can we scope this down to a specific set of values?
-    core_x: number;
-    core_y: number;
-    run_ID: number;
-    run_host_ID: number;
-    source_file: string;
-    source_line: number;
-    stat_value: number;
-    'time[cycles_since_reset]': number;
-    timer_id: number;
-    zone_name: string; // Can we scope this down to a specific set of values?
-    zone_phase: 'begin' | 'end';
-}
-
-const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
+const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperation[]> => {
     const params = {
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', {
+    const { data: buffers } = await axiosInstance.get<BuffersByOperation[]>('/api/operation-buffers', {
         params,
     });
 
@@ -295,7 +255,7 @@ export const fetchOperationBuffers = async (operationId: number) => {
 };
 
 export const useOperationBuffers = (operationId: number) => {
-    return useQuery<BuffersByOperationData, AxiosError>({
+    return useQuery<BuffersByOperation, AxiosError>({
         queryKey: ['get-operation-buffers', operationId],
         queryFn: () => fetchOperationBuffers(operationId),
         retry: false,
@@ -310,7 +270,7 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 };
 
 const fetchDevices = async (reportName: string) => {
-    const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
+    const { data: meta } = await axiosInstance.get<DeviceInfo[]>('/api/devices');
 
     if (meta.length === 0) {
         // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
@@ -339,9 +299,21 @@ export interface PerformanceReportResponse {
     signposts?: Signpost[];
 }
 
-const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: Signpost | null) => {
+const fetchPerformanceReport = async (
+    name: string | null,
+    stackByIn0: boolean,
+    startSignpost: Signpost | null,
+    endSignpost: Signpost | null,
+    hideHostOps: boolean,
+) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name, stack_by_in0: stackByIn0, signpost: signpost?.op_code },
+        params: {
+            name,
+            stack_by_in0: stackByIn0,
+            start_signpost: startSignpost?.op_code,
+            end_signpost: endSignpost?.op_code,
+            hide_host_ops: hideHostOps,
+        },
     });
 
     return data;
@@ -582,6 +554,13 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
+export interface DeviceOperationMapping {
+    name: string;
+    id: number;
+    operationName: string;
+    perfData?: PerfTableRow;
+}
+
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
     const { data: devices } = useDevices();
@@ -637,13 +616,6 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
         return collapseMultideviceOPs(result, devices.length);
     }, [operations, devices]);
 };
-
-export interface DeviceOperationMapping {
-    name: string;
-    id: number;
-    operationName: string;
-    perfData?: PerfTableRow;
-}
 
 // Unused
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
@@ -780,7 +752,7 @@ export const useTensors = () => {
 export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<DeviceData[], AxiosError>({
+    return useQuery<DeviceInfo[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport?.path) : Promise.resolve([])),
         queryKey: ['get-devices', activeProfilerReport?.path],
         retry: false,
@@ -815,7 +787,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    const response = useQuery<BuffersByOperationData[], AxiosError>({
+    const response = useQuery<BuffersByOperation[], AxiosError>({
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         enabled: activeProfilerReport !== null,
         retry: false,
@@ -857,18 +829,22 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
-    // TODO: Name in this case is the report "name" which is really just the parent folder name, which we're using as the unique key
-    const signpost = useAtomValue(filterBySignpostAtom);
+    const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
+    const hideHostOps = useAtomValue(hideHostOpsAtom);
 
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
-            name !== null ? fetchPerformanceReport(name, stackByIn0, signpost) : Promise.resolve(EMPTY_PERF_RETURN),
+            name !== null
+                ? fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps)
+                : Promise.resolve(EMPTY_PERF_RETURN),
         queryKey: [
             'get-performance-report',
             name,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
+            `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
+            `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
+            `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
         ],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
@@ -884,7 +860,8 @@ export const usePerformanceReport = (name: string | null) => {
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
-    const signpost = useAtomValue(filterBySignpostAtom);
+    const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
+    const hideHostOps = useAtomValue(hideHostOpsAtom);
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -897,7 +874,9 @@ export const usePerformanceComparisonReport = () => {
             }
 
             const results = await Promise.all(
-                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, signpost)),
+                reportNames.map((name) =>
+                    fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps),
+                ),
             );
 
             return results;
@@ -906,27 +885,15 @@ export const usePerformanceComparisonReport = () => {
             'get-performance-comparison-report',
             reportNames,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
+            `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
+            `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
+            `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
         ],
         staleTime: Infinity,
         enabled: !!reportNames,
     });
 
-    const filteredData = useMemo(() => {
-        if (response.data) {
-            return response.data.map((perfReport: PerformanceReportResponse) => {
-                perfReport.report = perfReport.report
-                    .slice()
-                    .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
-
-                return perfReport;
-            });
-        }
-
-        return response.data;
-    }, [response.data]);
-
-    return useMemo(() => ({ ...response, data: filteredData }), [response, filteredData]);
+    return response;
 };
 
 export const useInstance = () => {

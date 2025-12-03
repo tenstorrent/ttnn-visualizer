@@ -7,3 +7,4 @@ src/sample-data
 *.json
 *.yml
 *.yaml
+/docs/output/**

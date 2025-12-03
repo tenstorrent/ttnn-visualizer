@@ -15,7 +15,7 @@ A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 
 <h2>
 
-[Buy Hardware](https://tenstorrent.com/cards/) | [Install TT-NN](https://github.com/tenstorrent/tt-metal/blob/main/INSTALLING.md) | [Discord](https://discord.gg/tvhGzHQwaj) | [Join Us](https://boards.greenhouse.io/tenstorrent/jobs/4155609007)
+[Buy Hardware](https://tenstorrent.com/cards/) | [Install TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/installing.html) | [Discord](https://discord.gg/tvhGzHQwaj) | [Join Us](https://boards.greenhouse.io/tenstorrent/jobs/4155609007)
 
 </h2>
 
@@ -31,27 +31,52 @@ After installation run `ttnn-visualizer` to start the application.
 
 It is recommended to do this within a virtual environment. The minimum Python version is **3.10**.
 
-Please see the [getting started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/getting-started.md) guide for further information on getting up and running with TT-NN Visualizer.
+Please see the [install guide](https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html) guide for further information on getting up and running with TT-NN Visualizer.
 
-If you want to test out TT-NN Visualizer you can try some of the [sample data](https://github.com/tenstorrent/ttnn-visualizer/tree/main?tab=readme-ov-file#sample-reports). See [loading data](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/getting-started.md#loading-data) for instructions on how to use this.
+If you want to test out TT-NN Visualizer you can try some of the [sample data](https://github.com/tenstorrent/ttnn-visualizer/tree/main?tab=readme-ov-file#sample-reports). See [loading data](https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html#loading-data) for instructions on how to use this.
 
 ## Features
 
 For the latest updates and features, please see [releases](https://github.com/tenstorrent/ttnn-visualizer/releases).
 
-- Comprehensive list of all operations in the model
-- Interactive graph visualization of operations
-- Detailed and interactive L1, DRAM, and circular buffer memory plots
-- Filterable list of tensor details
-- Overview of all buffers for the entire model run
-- Visualization of input and output tensors with core tiling and sharding details
-- Visualize inputs/outputs per tensor or tensor allocation across each core
-- Detailed insights into L1 peak memory consumption, with an interactive graph of allocation over time
-- Navigate a tree of device operations with associated buffers and circular buffers
-- Operation flow graph for a holistic view of model execution
-- Load reports via the local file system or through an SSH connection
-- Supports multiple instances of the application running concurrently
-- BETA: Network-on-chip performance estimator (NPE) for Tenstorrent Tensix-based devices
+### Reports
+- Upload reports from the local file system or sync remotely via SSH
+- Switch seamlessly between previously uploaded or synced reports
+- Run multiple instances of the application concurrently with different data
+- Set data ranges for both memory and performance traces
+- Display physical topology and configuration of Tenstorrent chip clusters
+
+### Operations
+- Filterable list of all operations in the model
+- Interactive memory and tensor visualizations, including per core allocations, memory layout, allocation over time
+- Input/output tensors details per operation including allocation details per core
+- Navigable device operation tree with associated buffers and circular buffers
+
+### Tensors
+- List of tensor details filterable by buffer type
+- Flagging of high consumer or late deallocated tensors
+
+### Buffers
+- Visual overview of all buffers for the entire model run by L1 or DRAM memory
+- Toggle additional overlays such as memory layouts or late deallocated tensors
+- Ease of navigation to the relevant operation
+- Track a specific buffer in the data across the application
+- Filterable table view for a more schematic look at buffers
+
+### Graph
+- Interactive model graph view showing all operations and connecting tensors
+- Filter out deallocated operations 
+- Find all operations by name
+
+### Performance
+- Integration with tt-perf-report and rendering of performance analysis
+- Interactive charts and tables
+- Multiple filtering options of performance data 
+- Compare multiple performance traces
+
+### NPE
+- Network-on-chip performance estimator (NPE) for Tenstorrent Tensix-based devices
+- Dedicated NPE visualizations: zones, transfers, congestion, timelines with elaborate filtering capability
 
 ### Demo
 
@@ -110,9 +135,6 @@ Unzip the files into their own directories and select them with the local folder
 **T3K synthetic**
 [synthetic_t3k_small.json.zip](https://github.com/user-attachments/files/20491459/synthetic_t3k_small.json.zip)
 
-
-
-
 ## Contributing
 
-How to run [TT-NN Visualizer](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/src/contributing.md) from source.
+How to run [TT-NN Visualizer](https://docs.tenstorrent.com/ttnn-visualizer/src/running-from-source.html) from source.
