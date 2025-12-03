@@ -361,24 +361,24 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         <Button
                             icon={IconNames.StepBackward}
                             onClick={onBackward}
-                            aria-label='Step backward'
+                            title='Step backward'
                         />
                         <Button
                             icon={isTimelinePlaying ? IconNames.Pause : IconNames.Play}
                             intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
                             onClick={isTimelinePlaying ? onPause : onPlay}
-                            aria-label={isTimelinePlaying ? 'Pause' : 'Play'}
+                            title={isTimelinePlaying ? 'Pause' : 'Play'}
                         />
                         <Button
                             icon={IconNames.FastForward}
                             onClick={onPlay2x}
                             intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
-                            aria-label='Play 2x speed'
+                            title='Play 2x speed'
                         />
                         <Button
                             icon={IconNames.StepForward}
                             onClick={onForward}
-                            aria-label='Step forward'
+                            title='Step forward'
                         />
                         |
                         <Switch
