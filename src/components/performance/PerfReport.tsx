@@ -367,7 +367,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         </ButtonGroup>
                     </FormGroup>
 
-                    <FormGroup className='toggle-filters'>
+                    <FormGroup
+                        className='toggle-filters'
+                        subLabel='Data options'
+                    >
                         <Switch
                             label='Hide host ops'
                             onChange={() => setHideHostOps(!hideHostOps)}
