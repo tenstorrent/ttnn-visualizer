@@ -14,7 +14,6 @@ import {
     CLUSTER_ETH_POSITION,
     ClusterChip,
     ClusterCoordinates,
-    ClusterModel,
     DEFAULT_ARCHITECTURE,
 } from '../../model/ClusterModel';
 
@@ -26,7 +25,7 @@ const CLUSTER_CHIP_SIZE_SMALL = 150;
 function ClusterRenderer() {
     const navigate = useNavigate();
     const clusterDescription = useGetClusterDescription();
-    const data: ClusterModel | null = clusterDescription?.data;
+    const { data } = clusterDescription;
     // we don't support mixed architecture for now
     // we will default to wormhole
     const arch = stringToArchitecture((data?.arch.length && data?.arch[0]) || DEFAULT_ARCHITECTURE);
