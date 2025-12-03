@@ -369,7 +369,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         // TODO: Host Ops are missing when stackByIn0 is disabled
                         disabled={!stackByIn0 && isStackedView}
                     />
+                </div>
 
+                <div className='filters'>
                     <SearchField
                         onQueryChanged={(value) => updateColumnFilter('op_code', value)}
                         placeholder='Filter by operation name'
