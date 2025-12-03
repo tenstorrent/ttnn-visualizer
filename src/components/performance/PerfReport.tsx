@@ -281,6 +281,86 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 </div>
 
                 <div className='filters'>
+                    <ButtonGroup>
+                        <ButtonGroup>
+                            <Select<Signpost>
+                                items={signposts || []}
+                                itemPredicate={filterSignpost}
+                                itemRenderer={(item, itemProps) =>
+                                    renderSignpost(
+                                        item,
+                                        itemProps,
+                                        filterBySignpost,
+                                        signposts || [],
+                                        SignpostSelectType.START,
+                                    )
+                                }
+                                onItemSelect={(value) => setFilterBySignpost((filter) => [value, filter[1]])}
+                                noResults={
+                                    <MenuItem
+                                        text='No signposts found'
+                                        roleStructure='listoption'
+                                    />
+                                }
+                                disabled={isSignpostsDisabled}
+                                filterable
+                            >
+                                <Button
+                                    text={filterBySignpost[0]?.op_code ?? `Start signpost...`}
+                                    endIcon={IconNames.CARET_DOWN}
+                                    disabled={isSignpostsDisabled}
+                                />
+                            </Select>
+
+                            <Button
+                                icon={IconNames.CROSS}
+                                onClick={() => setFilterBySignpost((filter) => [null, filter[1]])}
+                                disabled={isSignpostsDisabled}
+                                aria-label={
+                                    filterBySignpost[0] ? `Remove start signpost` : 'No start signpost selected'
+                                }
+                            />
+                        </ButtonGroup>
+
+                        <ButtonGroup>
+                            <Select<Signpost>
+                                items={signposts || []}
+                                itemPredicate={filterSignpost}
+                                itemRenderer={(item, itemProps) =>
+                                    renderSignpost(
+                                        item,
+                                        itemProps,
+                                        filterBySignpost,
+                                        signposts || [],
+                                        SignpostSelectType.END,
+                                    )
+                                }
+                                onItemSelect={(value) => setFilterBySignpost((filter) => [filter[0], value])}
+                                noResults={
+                                    <MenuItem
+                                        text='No signposts found'
+                                        roleStructure='listoption'
+                                    />
+                                }
+                                disabled={isSignpostsDisabled}
+                                filterable
+                            >
+                                <Button
+                                    text={filterBySignpost[1]?.op_code ?? `End signpost...`}
+                                    endIcon={IconNames.CARET_DOWN}
+                                    disabled={isSignpostsDisabled}
+                                />
+                            </Select>
+
+                            <Button
+                                icon={IconNames.CROSS}
+                                onClick={() => setFilterBySignpost((filter) => [filter[0], null])}
+                                disabled={isSignpostsDisabled}
+                                aria-label={filterBySignpost[1] ? `Remove end signpost` : 'No end signpost selected'}
+                            />
+                        </ButtonGroup>
+                    </ButtonGroup>
+
                     <Switch
                         label='Hide host ops'
                         onChange={() => setHideHostOps(!hideHostOps)}
@@ -289,88 +369,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         // TODO: Host Ops are missing when stackByIn0 is disabled
                         disabled={!stackByIn0 && isStackedView}
                     />
-
-                    <ButtonGroup>
-                        <Select<Signpost>
-                            items={signposts || []}
-                            itemPredicate={filterSignpost}
-                            itemRenderer={(item, itemProps) =>
-                                renderSignpost(
-                                    item,
-                                    itemProps,
-                                    filterBySignpost,
-                                    signposts || [],
-                                    SignpostSelectType.START,
-                                )
-                            }
-                            onItemSelect={(value) => setFilterBySignpost((filter) => [value, filter[1]])}
-                            noResults={
-                                <MenuItem
-                                    text='No signposts found'
-                                    roleStructure='listoption'
-                                />
-                            }
-                            disabled={isSignpostsDisabled}
-                            filterable
-                        >
-                            <Button
-                                text={
-                                    filterBySignpost[0]?.op_code ??
-                                    `Select start signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
-                                }
-                                endIcon={IconNames.CARET_DOWN}
-                                disabled={isSignpostsDisabled}
-                            />
-                        </Select>
-
-                        <Button
-                            icon={IconNames.CROSS}
-                            onClick={() => setFilterBySignpost((filter) => [null, filter[1]])}
-                            disabled={isSignpostsDisabled}
-                            aria-label={filterBySignpost[0] ? `Remove start signpost` : 'No start signpost selected'}
-                        />
-                    </ButtonGroup>
-
-                    <ButtonGroup>
-                        <Select<Signpost>
-                            items={signposts || []}
-                            itemPredicate={filterSignpost}
-                            itemRenderer={(item, itemProps) =>
-                                renderSignpost(
-                                    item,
-                                    itemProps,
-                                    filterBySignpost,
-                                    signposts || [],
-                                    SignpostSelectType.END,
-                                )
-                            }
-                            onItemSelect={(value) => setFilterBySignpost((filter) => [filter[0], value])}
-                            noResults={
-                                <MenuItem
-                                    text='No signposts found'
-                                    roleStructure='listoption'
-                                />
-                            }
-                            disabled={isSignpostsDisabled}
-                            filterable
-                        >
-                            <Button
-                                text={
-                                    filterBySignpost[1]?.op_code ??
-                                    `Select end signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
-                                }
-                                endIcon={IconNames.CARET_DOWN}
-                                disabled={isSignpostsDisabled}
-                            />
-                        </Select>
-
-                        <Button
-                            icon={IconNames.CROSS}
-                            onClick={() => setFilterBySignpost((filter) => [filter[0], null])}
-                            disabled={isSignpostsDisabled}
-                            aria-label={filterBySignpost[1] ? `Remove end signpost` : 'No end signpost selected'}
-                        />
-                    </ButtonGroup>
 
                     <SearchField
                         onQueryChanged={(value) => updateColumnFilter('op_code', value)}
