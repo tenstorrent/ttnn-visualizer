@@ -99,6 +99,7 @@ function FooterInfobar() {
                                 className='path-button'
                                 icon={IconNames.FOLDER_OPEN}
                                 variant={ButtonVariant.MINIMAL}
+                                aria-label='Report paths'
                             />
                         </Tooltip>
                     )}

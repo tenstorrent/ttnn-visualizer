@@ -38,7 +38,7 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
     return (
         <div className='metadata'>
             <Collapsible
-                label={<h3 className='title'>Run summary</h3>}
+                label={<h2 className='title'>Run summary</h2>}
                 isOpen
             >
                 <div>
