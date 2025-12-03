@@ -28,7 +28,7 @@ function ClusterRenderer() {
     const { data } = clusterDescription;
     // we don't support mixed architecture for now
     // we will default to wormhole
-    const arch = stringToArchitecture((data?.arch.length && data?.arch[0]) || DEFAULT_ARCHITECTURE);
+    const arch = stringToArchitecture((data?.arch.length && data.arch[0]) || DEFAULT_ARCHITECTURE);
     const chipDesign = useArchitecture(arch);
     let clusterChipSize = CLUSTER_CHIP_SIZE_LARGE;
     const header = (
@@ -59,7 +59,7 @@ function ClusterRenderer() {
 
     const connections = data.ethernet_connections;
     let chipsObject = data.chips;
-    // fallback for an empty chips array
+    // fallback for an empty chips object
     if ((!chipsObject || Object.keys(chipsObject).length === 0) && mmioChips.length) {
         chipsObject = mmioChips.reduce(
             (acc, chipId: number, index: number) => {
