@@ -25,7 +25,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
-from ttnn_visualizer.utils import find_gunicorn_path
+from ttnn_visualizer.utils import find_gunicorn_path, get_app_data_directory
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -311,8 +311,8 @@ def main():
         config.TT_METAL_HOME = args.tt_metal_home
 
         if not os.getenv("APP_DATA_DIRECTORY"):
-            config.APP_DATA_DIRECTORY = str(
-                Path(args.tt_metal_home) / "generated" / "ttnn-visualizer"
+            config.APP_DATA_DIRECTORY = get_app_data_directory(
+                args.tt_metal_home, config.APPLICATION_DIR
             )
             # Recalculate database path with new APP_DATA_DIRECTORY
             _db_file_path = str(

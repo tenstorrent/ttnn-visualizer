@@ -7,7 +7,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
-from ttnn_visualizer.utils import is_running_in_container, str_to_bool
+from ttnn_visualizer.utils import (
+    get_app_data_directory,
+    is_running_in_container,
+    str_to_bool,
+)
 
 load_dotenv()
 
@@ -44,11 +48,7 @@ class DefaultConfig(object):
     TT_METAL_HOME = os.getenv("TT_METAL_HOME", None)
     APP_DATA_DIRECTORY = os.getenv(
         "APP_DATA_DIRECTORY",
-        (
-            str(Path(TT_METAL_HOME) / "generated" / "ttnn-visualizer")
-            if TT_METAL_HOME
-            else APPLICATION_DIR
-        ),
+        get_app_data_directory(TT_METAL_HOME, APPLICATION_DIR),
     )
 
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
