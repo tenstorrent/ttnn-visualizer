@@ -727,7 +727,8 @@ def get_performance_results_report(instance: Instance):
         )
 
     name = request.args.get("name", None)
-    signpost = request.args.get("signpost", None)
+    start_signpost = request.args.get("start_signpost", None)
+    end_signpost = request.args.get("end_signpost", None)
     stack_by_in0 = str_to_bool(request.args.get("stack_by_in0", "true"))
     hide_host_ops = str_to_bool(request.args.get("hide_host_ops", "true"))
 
@@ -740,7 +741,8 @@ def get_performance_results_report(instance: Instance):
         report = OpsPerformanceReportQueries.generate_report(
             instance,
             stack_by_in0=stack_by_in0,
-            signpost=signpost,
+            start_signpost=start_signpost,
+            end_signpost=end_signpost,
             hide_host_ops=hide_host_ops,
         )
     except DataFormatError:

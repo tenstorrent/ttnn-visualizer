@@ -9,6 +9,7 @@ import {
     ButtonGroup,
     ButtonVariant,
     Callout,
+    FormGroup,
     Intent,
     MenuItem,
     PopoverPosition,
@@ -53,6 +54,11 @@ import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { OpType } from '../../definitions/Performance';
+
+enum SignpostSelectType {
+    START,
+    END,
+}
 
 interface PerformanceReportProps {
     data?: TypedPerfTableRow[];
@@ -276,47 +282,102 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 </div>
 
                 <div className='filters'>
-                    <Switch
-                        label='Hide host ops'
-                        onChange={() => setHideHostOps(!hideHostOps)}
-                        checked={hideHostOps}
-                        className='option-switch'
-                        // TODO: Host Ops are missing when stackByIn0 is disabled
-                        disabled={!stackByIn0 && isStackedView}
-                    />
-
-                    <Select<Signpost>
-                        items={signposts || []}
-                        itemPredicate={filterSignpost}
-                        itemRenderer={(item, itemProps) => renderSignpost(item, itemProps, filterBySignpost)}
-                        onItemSelect={setFilterBySignpost}
-                        noResults={
-                            <MenuItem
-                                text='No signposts found'
-                                roleStructure='listoption'
-                            />
-                        }
-                        disabled={isSignpostsDisabled}
-                        filterable
+                    <FormGroup
+                        className='signpost-filters'
+                        subLabel='Filter by signpost delimiters'
                     >
-                        <Button
-                            text={
-                                filterBySignpost?.op_code ??
-                                `Select signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
-                            }
-                            endIcon={IconNames.CARET_DOWN}
-                            disabled={isSignpostsDisabled}
+                        <ButtonGroup className='signpost-group'>
+                            <Select<Signpost>
+                                items={signposts || []}
+                                itemPredicate={filterSignpost}
+                                itemRenderer={(item, itemProps) =>
+                                    renderSignpost(
+                                        item,
+                                        itemProps,
+                                        filterBySignpost,
+                                        signposts || [],
+                                        SignpostSelectType.START,
+                                    )
+                                }
+                                onItemSelect={(value) => setFilterBySignpost((filter) => [value, filter[1]])}
+                                noResults={
+                                    <MenuItem
+                                        text='No signposts found'
+                                        roleStructure='listoption'
+                                    />
+                                }
+                                disabled={isSignpostsDisabled}
+                                filterable
+                            >
+                                <Button
+                                    text={filterBySignpost[0]?.op_code ?? `Start signpost...`}
+                                    endIcon={IconNames.CARET_DOWN}
+                                    disabled={isSignpostsDisabled}
+                                />
+                            </Select>
+
+                            <Button
+                                icon={IconNames.CROSS}
+                                onClick={() => setFilterBySignpost((filter) => [null, filter[1]])}
+                                disabled={isSignpostsDisabled}
+                                aria-label={
+                                    filterBySignpost[0] ? `Remove start signpost` : 'No start signpost selected'
+                                }
+                            />
+                        </ButtonGroup>
+
+                        <ButtonGroup className='signpost-group'>
+                            <Select<Signpost>
+                                items={signposts || []}
+                                itemPredicate={filterSignpost}
+                                itemRenderer={(item, itemProps) =>
+                                    renderSignpost(
+                                        item,
+                                        itemProps,
+                                        filterBySignpost,
+                                        signposts || [],
+                                        SignpostSelectType.END,
+                                    )
+                                }
+                                onItemSelect={(value) => setFilterBySignpost((filter) => [filter[0], value])}
+                                noResults={
+                                    <MenuItem
+                                        text='No signposts found'
+                                        roleStructure='listoption'
+                                    />
+                                }
+                                disabled={isSignpostsDisabled}
+                                filterable
+                            >
+                                <Button
+                                    text={filterBySignpost[1]?.op_code ?? `End signpost...`}
+                                    endIcon={IconNames.CARET_DOWN}
+                                    disabled={isSignpostsDisabled}
+                                />
+                            </Select>
+
+                            <Button
+                                icon={IconNames.CROSS}
+                                onClick={() => setFilterBySignpost((filter) => [filter[0], null])}
+                                disabled={isSignpostsDisabled}
+                                aria-label={filterBySignpost[1] ? `Remove end signpost` : 'No end signpost selected'}
+                            />
+                        </ButtonGroup>
+                    </FormGroup>
+
+                    <FormGroup className='toggle-filters'>
+                        <Switch
+                            label='Hide host ops'
+                            onChange={() => setHideHostOps(!hideHostOps)}
+                            checked={hideHostOps}
+                            className='option-switch'
+                            // TODO: Host Ops are missing when stackByIn0 is disabled
+                            disabled={!stackByIn0 && isStackedView}
                         />
-                    </Select>
+                    </FormGroup>
+                </div>
 
-                    <Button
-                        variant={ButtonVariant.OUTLINED}
-                        icon={IconNames.CROSS}
-                        onClick={() => setFilterBySignpost(null)}
-                        disabled={isSignpostsDisabled}
-                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
-                    />
-
+                <div className='filters'>
                     <SearchField
                         onQueryChanged={(value) => updateColumnFilter('op_code', value)}
                         placeholder='Filter by operation name'
@@ -555,22 +616,53 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 };
 
 interface RenderSignpostProps<T> {
-    (item: T, itemProps: ItemRendererProps, selectedItem: T | null): React.JSX.Element | null;
+    (
+        item: T,
+        itemProps: ItemRendererProps,
+        selectedSignposts: (T | null)[],
+        allSignposts: T[],
+        selectType: SignpostSelectType,
+    ): React.JSX.Element | null;
 }
 
 const renderSignpost: RenderSignpostProps<Signpost> = (
     signpost,
     { handleClick, handleFocus, modifiers, query },
-    activeSignpost,
+    selectedSignposts,
+    allSignposts,
+    selectType,
 ) => {
     if (!modifiers.matchesPredicate) {
         return null;
     }
 
+    // Check if the current signpost should be disabled based on selectType and filterBySignpost
+    let isOutsideRange = false;
+    const [startSignpost, endSignpost] = selectedSignposts;
+    const currentIndex = allSignposts.findIndex((s) => s.id === signpost.id);
+
+    if (selectType === SignpostSelectType.START) {
+        // For start select: only disable items after the end signpost
+        if (endSignpost) {
+            const endIndex = allSignposts.findIndex((s) => s.id === endSignpost.id) - 1;
+            if (endIndex !== -1) {
+                isOutsideRange = currentIndex > endIndex;
+            }
+        }
+    } else if (selectType === SignpostSelectType.END) {
+        // For end select: only disable items before the start signpost
+        if (startSignpost) {
+            const startIndex = allSignposts.findIndex((s) => s.id === startSignpost.id) + 1;
+            if (startIndex !== -1) {
+                isOutsideRange = currentIndex < startIndex;
+            }
+        }
+    }
+
     return (
         <MenuItem
-            active={signpost.id === activeSignpost?.id}
-            disabled={modifiers.disabled}
+            active={modifiers.active}
+            disabled={modifiers.disabled || isOutsideRange}
             key={signpost.id}
             onClick={handleClick}
             onFocus={handleFocus}

@@ -65,6 +65,7 @@ const NUMBER_KEYS_TO_PARSE = [
     'flops_percent',
 ];
 
+// TODO: Check if we still need this formatting step because we're using typed data
 export const formatCell = (
     row: TypedPerfTableRow,
     header: TableHeader,
@@ -124,11 +125,11 @@ export const formatCell = (
         );
     }
 
-    if (NUMBER_KEYS_TO_PARSE.includes(key) && value) {
+    if (NUMBER_KEYS_TO_PARSE.includes(key)) {
         value = typeof value === 'string' ? parseFloat(value) : value;
     }
 
-    if (value == null || value === '') {
+    if (value == null || value === '' || Number.isNaN(value)) {
         return '';
     }
 

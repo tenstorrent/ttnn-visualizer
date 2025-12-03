@@ -302,14 +302,16 @@ export interface PerformanceReportResponse {
 const fetchPerformanceReport = async (
     name: string | null,
     stackByIn0: boolean,
-    signpost: Signpost | null,
+    startSignpost: Signpost | null,
+    endSignpost: Signpost | null,
     hideHostOps: boolean,
 ) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
         params: {
             name,
             stack_by_in0: stackByIn0,
-            signpost: signpost?.op_code,
+            start_signpost: startSignpost?.op_code,
+            end_signpost: endSignpost?.op_code,
             hide_host_ops: hideHostOps,
         },
     });
@@ -827,20 +829,21 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
-    const signpost = useAtomValue(filterBySignpostAtom);
+    const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
 
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
             name !== null
-                ? fetchPerformanceReport(name, stackByIn0, signpost, hideHostOps)
+                ? fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps)
                 : Promise.resolve(EMPTY_PERF_RETURN),
         queryKey: [
             'get-performance-report',
             name,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
+            `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
+            `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
             `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
         ],
         enabled: name !== null,
@@ -857,7 +860,7 @@ export const usePerformanceReport = (name: string | null) => {
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
-    const signpost = useAtomValue(filterBySignpostAtom);
+    const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
 
     const reportNames = useMemo(() => {
@@ -871,7 +874,9 @@ export const usePerformanceComparisonReport = () => {
             }
 
             const results = await Promise.all(
-                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, signpost, hideHostOps)),
+                reportNames.map((name) =>
+                    fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps),
+                ),
             );
 
             return results;
@@ -880,7 +885,8 @@ export const usePerformanceComparisonReport = () => {
             'get-performance-comparison-report',
             reportNames,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
+            `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
+            `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
             `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
         ],
         staleTime: Infinity,

@@ -58,8 +58,29 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         display: flex;
         flex-wrap: nowrap;
         gap: 5px;
-        margin-bottom: 15px;
         align-items: center;
+        margin-bottom: 15px;
+
+        .signpost-filters {
+            margin-bottom: 0;
+        }
+
+        .toggle-filters {
+            margin-bottom: 0;
+
+            .option-switch {
+                margin-top: 20px;
+            }
+        }
+
+        .signpost-group {
+            column-gap: 5px;
+            margin-right: 5px;
+
+            &:last-child {
+                margin-right: 10px;
+            }
+        }
 
         .option-switch {
             margin-bottom: 0;
@@ -197,8 +218,8 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         td {
             padding: 1rem 0.25rem;
 
-            &.no-wrap {
-                white-space: nowrap;
+            &.pre-wrap {
+                white-space: pre-wrap;
             }
 
             &.break-word {

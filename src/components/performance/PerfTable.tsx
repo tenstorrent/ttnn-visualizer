@@ -292,9 +292,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                     <td
                                         key={header.key}
                                         className={classNames({
-                                            'no-wrap':
-                                                header.key === ColumnHeaders.op_code ||
-                                                header.key === ColumnHeaders.op_to_op_gap,
+                                            'pre-wrap': header.key === ColumnHeaders.op_code,
                                         })}
                                     >
                                         {getTotalsForFooter(header, data, hideHostOps)}
@@ -330,7 +328,7 @@ const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[], hide
 
         return hideHostOps
             ? `${deviceOpsCount} device ops`
-            : `${data.length} ops (${deviceOpsCount} device ops + ${hostOpsCount} host ops)`;
+            : `${data.length} ops\n(${deviceOpsCount} device ops + ${hostOpsCount} host ops)`;
     }
 
     if (header.key === ColumnHeaders.op_to_op_gap) {

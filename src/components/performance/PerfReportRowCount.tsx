@@ -14,10 +14,9 @@ interface PerfReportRowCountProps {
 
 const PerfReportRowCount = ({ filteredCount, total, delta, useNormalisedData }: PerfReportRowCountProps): string => {
     const isStackedView = useAtomValue(isStackedViewAtom);
-    const hasSignpostFilter = useAtomValue(filterBySignpostAtom);
+    const signpostFilterCount = useAtomValue(filterBySignpostAtom).filter((signpost) => signpost !== null).length;
 
-    // Signpost filter adds an extra row for the initial signpost, but only in standard view
-    const computedTotal = hasSignpostFilter && !isStackedView ? total + 1 : total;
+    const computedTotal = signpostFilterCount > 0 && !isStackedView ? total + signpostFilterCount : total;
 
     // Delta doesn't apply to stacked view
     const computedDelta = isStackedView ? 0 : delta;
