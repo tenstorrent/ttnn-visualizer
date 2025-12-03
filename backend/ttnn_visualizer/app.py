@@ -307,6 +307,7 @@ def main():
 
     # Display mode information first (using config only, no DB needed)
     if args.tt_metal_home:
+        os.environ["TT_METAL_HOME"] = args.tt_metal_home
         config.TT_METAL_HOME = args.tt_metal_home
 
         if not os.getenv("APP_DATA_DIRECTORY"):
