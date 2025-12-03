@@ -56,14 +56,14 @@ export enum ColumnHeaders {
 }
 
 export const TableHeaders: StackedTableHeader[] = [
-    { label: 'Percent', key: ColumnHeaders.Percent, unit: '%', decimals: 1, sortable: true },
+    { label: 'Percent', key: ColumnHeaders.Percent, unit: '%', decimals: 2, sortable: true },
     { label: 'Op Code', key: ColumnHeaders.OpCodeJoined, sortable: true, filterable: true },
-    { label: 'Device Time', key: ColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 1, sortable: true },
+    { label: 'Device Time', key: ColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 2, sortable: true },
     { label: 'Ops Count', key: ColumnHeaders.OpsCount, sortable: true },
-    { label: 'Min FLOPS', key: ColumnHeaders.FlopsMin, unit: '%', decimals: 1, sortable: true },
-    { label: 'Max FLOPS', key: ColumnHeaders.FlopsMax, unit: '%', decimals: 1, sortable: true },
-    { label: 'Mean FLOPS', key: ColumnHeaders.FlopsMean, unit: '%', decimals: 1, sortable: true },
-    { label: 'Std FLOPS', key: ColumnHeaders.FlopsStd, unit: '%', decimals: 1, sortable: true },
+    { label: 'Min FLOPS', key: ColumnHeaders.FlopsMin, unit: '%', decimals: 2, sortable: true },
+    { label: 'Max FLOPS', key: ColumnHeaders.FlopsMax, unit: '%', decimals: 2, sortable: true },
+    { label: 'Mean FLOPS', key: ColumnHeaders.FlopsMean, unit: '%', decimals: 2, sortable: true },
+    { label: 'Std FLOPS', key: ColumnHeaders.FlopsStd, unit: '%', decimals: 2, sortable: true },
 ];
 
 export const FilterableStackedColumnKeys = TableHeaders.filter((column) => column.filterable).map(

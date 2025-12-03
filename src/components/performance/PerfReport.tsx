@@ -35,6 +35,7 @@ import {
     hideHostOpsAtom,
     isStackedViewAtom,
     mathFilterListAtom,
+    noMergeDevicesAtom,
     rawOpCodeFilterListAtom,
     stackByIn0Atom,
 } from '../../store/app';
@@ -83,6 +84,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
     const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
+    const [noMergeDevices, setNoMergeDevices] = useAtom(noMergeDevicesAtom);
     const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
@@ -373,6 +375,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             className='option-switch'
                             // TODO: Host Ops are missing when stackByIn0 is disabled
                             disabled={!stackByIn0 && isStackedView}
+                        />
+
+                        <Switch
+                            label="Don't merge devices"
+                            onChange={() => setNoMergeDevices(!noMergeDevices)}
+                            checked={noMergeDevices}
+                            className='option-switch'
                         />
                     </FormGroup>
                 </div>

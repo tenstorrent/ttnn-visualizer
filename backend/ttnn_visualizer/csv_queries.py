@@ -398,6 +398,7 @@ class OpsPerformanceReportQueries:
         "total_percent",
         "bound",
         "op_code",
+        "device",
         "device_time",
         "op_to_op_gap",
         "cores",
@@ -445,6 +446,7 @@ class OpsPerformanceReportQueries:
     DEFAULT_NO_HOST_OPS = False
     DEFAULT_NO_STACKED_REPORT = False
     DEFAULT_NO_STACK_BY_IN0 = True
+    DEFAULT_NO_MERGE_DEVICES = False
 
     @classmethod
     def generate_report(cls, instance, **kwargs):
@@ -457,12 +459,14 @@ class OpsPerformanceReportQueries:
         ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
         stack_by_in0 = kwargs.get("stack_by_in0", cls.DEFAULT_NO_STACK_BY_IN0)
         no_host_ops = kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS)
+        no_merge_devices = kwargs.get("no_merge_devices", cls.DEFAULT_NO_MERGE_DEVICES)
 
         if start_signpost or end_signpost:
             ignore_signposts = False
 
         # perf_report currently generates a PNG alongside the CSV using the same temp name - we'll just delete it afterwards
-        stacked_png_file = os.path.splitext(csv_output_file)[0] + ".png"
+        stacked_png_file = csv_stacked_output_file + ".png"
+        stacked_csv_file = csv_stacked_output_file + ".csv"
 
         try:
             perf_report.generate_perf_report(
@@ -480,6 +484,7 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_NO_STACKED_REPORT,
                 stack_by_in0,
                 csv_stacked_output_file,
+                no_merge_devices,
             )
         except Exception as e:
             logger.error(f"Error generating performance report: {e}")
@@ -556,9 +561,9 @@ class OpsPerformanceReportQueries:
 
         stacked_report = []
 
-        if os.path.exists(csv_stacked_output_file):
+        if os.path.exists(stacked_csv_file):
             try:
-                with open(csv_stacked_output_file, newline="") as csvfile:
+                with open(stacked_csv_file, newline="") as csvfile:
                     reader = csv.reader(csvfile, delimiter=",")
                     next(reader, None)
 
@@ -581,11 +586,9 @@ class OpsPerformanceReportQueries:
             except csv.Error as e:
                 raise DataFormatError() from e
             finally:
-                os.unlink(csv_stacked_output_file)
+                os.unlink(stacked_csv_file)
                 if os.path.exists(stacked_png_file):
                     os.unlink(stacked_png_file)
-
-                    stacked_report.append(processed_row)
 
         return {
             "report": report,

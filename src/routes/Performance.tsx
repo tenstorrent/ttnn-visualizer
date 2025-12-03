@@ -243,7 +243,6 @@ export default function Performance() {
 const HIGH_DISPATCH_THRESHOLD = 6.5;
 
 interface RowAttributes {
-    device: number | null;
     buffer_type: BufferType | null;
     layout: DeviceOperationLayoutTypes | null;
 }
@@ -269,7 +268,6 @@ const getRowAttributes = (row: PerfTableRow): RowAttributes => {
     const matchIn0 = regex.exec(row.input_0_memory);
 
     return {
-        device: matchIn0?.[1] ? parseInt(matchIn0[1], 10) : null,
         buffer_type: getBufferType(matchIn0?.[2]),
         layout: matchIn0?.[3] ? (matchIn0[3] as DeviceOperationLayoutTypes) : null,
     };
@@ -287,6 +285,7 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
             high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
             id: parseInt(row.id, 10),
             total_percent: parseFloat(row.total_percent),
+            device: parseInt(row.device, 10) ?? null,
             device_time: parseFloat(row.device_time),
             op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
             cores: parseInt(row.cores, 10),

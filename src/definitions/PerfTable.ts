@@ -35,6 +35,7 @@ export interface PerfTableRow {
     bound: BoundType;
     op_code: string;
     raw_op_code: string;
+    device: string;
     device_time: string;
     op_to_op_gap: string;
     cores: string;
@@ -66,6 +67,7 @@ export interface TypedPerfTableRow
         | 'id'
         | 'global_call_count'
         | 'total_percent'
+        | 'device'
         | 'device_time'
         | 'op_to_op_gap'
         | 'cores'
@@ -79,6 +81,7 @@ export interface TypedPerfTableRow
     id: number | null;
     global_call_count: number | null;
     total_percent: number | null;
+    device: number | null;
     device_time: number | null;
     op_to_op_gap: number | null;
     cores: number | null;
@@ -88,9 +91,8 @@ export interface TypedPerfTableRow
     flops_percent: number | null;
     bound: BoundType | null;
     pm_ideal_ns: number | null;
-    // Next three extracted from input_0_memory
+    // Next two extracted from input_0_memory
     buffer_type: BufferType | null;
-    device: number | null;
     layout: DeviceOperationLayoutTypes | null;
 }
 
