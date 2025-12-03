@@ -9,6 +9,7 @@ import {
     ButtonGroup,
     ButtonVariant,
     Callout,
+    FormGroup,
     Intent,
     MenuItem,
     PopoverPosition,
@@ -281,8 +282,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 </div>
 
                 <div className='filters'>
-                    <ButtonGroup className='signpost-filters'>
-                        <ButtonGroup>
+                    <FormGroup
+                        className='signpost-filters'
+                        subLabel='Filter by signpost delimiters'
+                    >
+                        <ButtonGroup className='signpost-group'>
                             <Select<Signpost>
                                 items={signposts || []}
                                 itemPredicate={filterSignpost}
@@ -322,7 +326,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             />
                         </ButtonGroup>
 
-                        <ButtonGroup>
+                        <ButtonGroup className='signpost-group'>
                             <Select<Signpost>
                                 items={signposts || []}
                                 itemPredicate={filterSignpost}
@@ -359,16 +363,18 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 aria-label={filterBySignpost[1] ? `Remove end signpost` : 'No end signpost selected'}
                             />
                         </ButtonGroup>
-                    </ButtonGroup>
+                    </FormGroup>
 
-                    <Switch
-                        label='Hide host ops'
-                        onChange={() => setHideHostOps(!hideHostOps)}
-                        checked={hideHostOps}
-                        className='option-switch'
-                        // TODO: Host Ops are missing when stackByIn0 is disabled
-                        disabled={!stackByIn0 && isStackedView}
-                    />
+                    <FormGroup className='toggle-filters'>
+                        <Switch
+                            label='Hide host ops'
+                            onChange={() => setHideHostOps(!hideHostOps)}
+                            checked={hideHostOps}
+                            className='option-switch'
+                            // TODO: Host Ops are missing when stackByIn0 is disabled
+                            disabled={!stackByIn0 && isStackedView}
+                        />
+                    </FormGroup>
                 </div>
 
                 <div className='filters'>
