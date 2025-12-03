@@ -281,7 +281,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 </div>
 
                 <div className='filters'>
-                    <ButtonGroup>
+                    <ButtonGroup className='signpost-filters'>
                         <ButtonGroup>
                             <Select<Signpost>
                                 items={signposts || []}
