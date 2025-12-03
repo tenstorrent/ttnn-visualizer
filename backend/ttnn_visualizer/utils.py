@@ -21,6 +21,22 @@ logger = logging.getLogger(__name__)
 LAST_SYNCED_FILE_NAME = ".last-synced"
 
 
+def get_app_data_directory(tt_metal_home: Optional[str], application_dir: str) -> str:
+    """
+    Calculate the APP_DATA_DIRECTORY based on TT_METAL_HOME or fallback to application_dir.
+
+    Args:
+        tt_metal_home: Path to TT-Metal home directory, or None
+        application_dir: Fallback application directory path
+
+    Returns:
+        Path to the app data directory
+    """
+    if tt_metal_home and tt_metal_home.strip():
+        return str(Path(tt_metal_home).expanduser() / "generated" / "ttnn-visualizer")
+    return application_dir
+
+
 def find_gunicorn_path() -> tuple[str, Optional[str]]:
     """
     Find the gunicorn executable, prioritizing the same bin directory as ttnn-visualizer.

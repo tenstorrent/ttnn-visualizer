@@ -4,7 +4,11 @@
 
 from unittest.mock import mock_open, patch
 
-from ttnn_visualizer.utils import find_gunicorn_path, is_running_in_container
+from ttnn_visualizer.utils import (
+    find_gunicorn_path,
+    get_app_data_directory,
+    is_running_in_container,
+)
 
 
 @patch("sys.argv", ["/home/user/.local/bin/ttnn-visualizer"])
@@ -292,3 +296,67 @@ def test_no_container_detection(mock_getenv, mock_file, mock_exists):
     result = is_running_in_container()
 
     assert result is False
+
+
+# Tests for get_app_data_directory()
+
+
+def test_get_app_data_directory_with_tt_metal_home():
+    """Test that get_app_data_directory returns correct path when tt_metal_home is provided."""
+    tt_metal_home = "/path/to/tt-metal"
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/path/to/tt-metal/generated/ttnn-visualizer"
+
+
+def test_get_app_data_directory_with_none():
+    """Test that get_app_data_directory returns application_dir when tt_metal_home is None."""
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/default/app/dir"
+
+
+def test_get_app_data_directory_with_empty_string():
+    """Test that get_app_data_directory treats empty string as falsy and returns application_dir."""
+    tt_metal_home = ""
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/default/app/dir"
+
+
+def test_get_app_data_directory_with_special_characters():
+    """Test that get_app_data_directory handles paths with special characters correctly."""
+    tt_metal_home = "/path/with spaces/and-dashes/tt-metal"
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/path/with spaces/and-dashes/tt-metal/generated/ttnn-visualizer"
+
+
+def test_get_app_data_directory_with_relative_path():
+    """Test that get_app_data_directory handles relative paths correctly."""
+    tt_metal_home = "../relative/path/tt-metal"
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "../relative/path/tt-metal/generated/ttnn-visualizer"
+
+
+def test_get_app_data_directory_with_trailing_slash():
+    """Test that get_app_data_directory handles paths with trailing slashes correctly."""
+    tt_metal_home = "/path/to/tt-metal/"
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    # Path.join handles trailing slashes correctly
+    assert result == "/path/to/tt-metal/generated/ttnn-visualizer"
