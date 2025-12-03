@@ -32,8 +32,8 @@ def get_app_data_directory(tt_metal_home: Optional[str], application_dir: str) -
     Returns:
         Path to the app data directory
     """
-    if tt_metal_home:
-        return str(Path(tt_metal_home) / "generated" / "ttnn-visualizer")
+    if tt_metal_home and tt_metal_home.strip():
+        return str(Path(tt_metal_home).expanduser() / "generated" / "ttnn-visualizer")
     return application_dir
 
 
