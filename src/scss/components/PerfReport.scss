@@ -57,9 +57,13 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     .filters {
         display: flex;
         flex-wrap: nowrap;
-        gap: 8px;
+        gap: 5px;
         align-items: center;
         margin-bottom: 15px;
+
+        .signpost-filters {
+            gap: 5px;
+        }
 
         .option-switch {
             margin-bottom: 0;
@@ -197,8 +201,8 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         td {
             padding: 1rem 0.25rem;
 
-            &.no-wrap {
-                white-space: nowrap;
+            &.pre-wrap {
+                white-space: pre-wrap;
             }
 
             &.break-word {
