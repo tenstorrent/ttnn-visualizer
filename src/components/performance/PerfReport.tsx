@@ -286,7 +286,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 <div className='filters'>
                     <FormGroup
                         className='signpost-filters'
-                        subLabel='Filter by signpost delimiters'
+                        subLabel='Filter between signposts'
                     >
                         <ButtonGroup className='signpost-group'>
                             <Select<Signpost>
@@ -382,11 +382,21 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             />
 
                             <Switch
-                                label='Show multi device'
+                                label='Skip multi device merge'
                                 onChange={() => setNoMergeDevices(!noMergeDevices)}
                                 checked={noMergeDevices}
                                 className='option-switch'
                             />
+
+                            {isStackedView && (
+                                <Switch
+                                    label='Stack by input 0'
+                                    onChange={() => setStackByIn0(!stackByIn0)}
+                                    checked={stackByIn0}
+                                    className='option-switch'
+                                    disabled={!isStackedView}
+                                />
+                            )}
                         </ButtonGroup>
                     </FormGroup>
                 </div>
@@ -501,27 +511,19 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             )}
                         </>
                     )}
-
-                    {isStackedView && (
-                        <Switch
-                            label='Stack by input 0'
-                            onChange={() => setStackByIn0(!stackByIn0)}
-                            checked={stackByIn0}
-                            className='option-switch'
-                            disabled={!isStackedView}
-                        />
-                    )}
                 </div>
 
-                <Callout
-                    className='multi-device-note'
-                    intent={Intent.PRIMARY}
-                    icon={IconNames.INFO_SIGN}
-                    compact
-                >
-                    Multi device operations are merged into single rows using <u>average duration</u> for collective
-                    operations (AllGather, ReduceScatter, AllReduce) and <u>maximum duration</u> for all others.
-                </Callout>
+                {!noMergeDevices && (
+                    <Callout
+                        className='multi-device-note'
+                        intent={Intent.PRIMARY}
+                        icon={IconNames.INFO_SIGN}
+                        compact
+                    >
+                        Multi device operations are merged into single rows using <u>average duration</u> for collective
+                        operations (AllGather, ReduceScatter, AllReduce) and <u>maximum duration</u> for all others.
+                    </Callout>
+                )}
 
                 <Tabs
                     selectedTabId={selectedTabId}
