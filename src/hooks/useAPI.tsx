@@ -4,7 +4,6 @@
 
 import axios, { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import Papa, { ParseResult } from 'papaparse';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
@@ -366,7 +365,7 @@ interface MetaData {
 
 interface FetchDeviceLogRawResult {
     deviceMeta: MetaData;
-    deviceLog: ParseResult<Record<string, string>[]>;
+    // deviceLog: ParseResult<Record<string, string>[]>;
 }
 
 const fetchDeviceLogRaw = async (name: string | null): Promise<FetchDeviceLogRawResult> => {
@@ -383,21 +382,9 @@ const fetchDeviceLogRaw = async (name: string | null): Promise<FetchDeviceLogRaw
         return { architecture, frequency };
     }
 
-    return new Promise<FetchDeviceLogRawResult>((resolve, reject) => {
-        const rows = data.split('\n');
-        const csv = rows.slice(1); // Remove the first row
-        const deviceMeta = parseArchAndFreq(rows[0]);
-        const headers = csv!
-            .shift()!
-            .split(/,\s{1,2}/)
-            .join(','); // headers without spaces
-        const processedCsv = [headers, ...csv].join('\n');
-        Papa.parse<Record<string, string>[]>(processedCsv, {
-            header: true,
-            complete: (deviceLog) => resolve({ deviceMeta, deviceLog }),
-            error: (error: Error) => reject(error),
-        });
-    });
+    const rows = data.split('\n');
+
+    return { deviceMeta: parseArchAndFreq(rows[0]) };
 };
 
 const fetchClusterDescription = async (): Promise<ClusterModel> => {
