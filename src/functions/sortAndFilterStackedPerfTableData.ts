@@ -30,6 +30,19 @@ const sortAndFilterStackedPerfTableData = (
 
     let filteredRows = data || [];
 
+    // TODO: This should be moved to tt-perf-report as the printed report differs from the output csv
+    filteredRows = filteredRows.sort((a, b) => {
+        // First sort by device
+        const deviceCompare = (a.device?.toString() || '').localeCompare(b.device?.toString() || '');
+        if (deviceCompare !== 0) {
+            return deviceCompare;
+        }
+        // Then sort by percent
+        const percentA = typeof a.percent === 'number' ? a.percent : 0;
+        const percentB = typeof b.percent === 'number' ? b.percent : 0;
+        return percentB - percentA;
+    });
+
     if (filters && isFiltersActive(filters) && FilterableStackedColumnKeys) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
@@ -50,12 +63,12 @@ const sortAndFilterStackedPerfTableData = (
     if (rawOpCodeFilter?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) =>
-                row?.op_code !== null &&
+                row?.op_code_joined !== null &&
                 rawOpCodeFilter.some((filterValue) =>
                     stackByIn0
-                        ? filterValue.toLowerCase() === row.op_code.toLowerCase()
+                        ? filterValue.toLowerCase() === row.op_code_joined.toLowerCase()
                         : // TODO: This split is currently needed but we should store the data differently
-                          filterValue.toLowerCase() === row.op_code.split(' ')[0].toLowerCase(),
+                          filterValue.toLowerCase() === row.op_code_joined.split(' ')[0].toLowerCase(),
                 ),
         );
     }
