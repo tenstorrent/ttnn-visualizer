@@ -67,9 +67,13 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
 
         .toggle-filters {
             margin-bottom: 0;
+        }
+
+        .toggle-group {
+            column-gap: 5px;
 
             .option-switch {
-                margin-top: 5px;
+                margin-top: 7px;
             }
         }
 

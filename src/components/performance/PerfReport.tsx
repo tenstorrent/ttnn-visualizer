@@ -371,21 +371,23 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         className='toggle-filters'
                         subLabel='Data options'
                     >
-                        <Switch
-                            label='Hide host ops'
-                            onChange={() => setHideHostOps(!hideHostOps)}
-                            checked={hideHostOps}
-                            className='option-switch'
-                            // TODO: Host Ops are missing when stackByIn0 is disabled
-                            disabled={!stackByIn0 && isStackedView}
-                        />
+                        <ButtonGroup className='toggle-group'>
+                            <Switch
+                                label='Hide host ops'
+                                onChange={() => setHideHostOps(!hideHostOps)}
+                                checked={hideHostOps}
+                                className='option-switch'
+                                // TODO: Host Ops are missing when stackByIn0 is disabled
+                                disabled={!stackByIn0 && isStackedView}
+                            />
 
-                        <Switch
-                            label="Don't merge devices"
-                            onChange={() => setNoMergeDevices(!noMergeDevices)}
-                            checked={noMergeDevices}
-                            className='option-switch'
-                        />
+                            <Switch
+                                label='Show multi device'
+                                onChange={() => setNoMergeDevices(!noMergeDevices)}
+                                checked={noMergeDevices}
+                                className='option-switch'
+                            />
+                        </ButtonGroup>
                     </FormGroup>
                 </div>
 
