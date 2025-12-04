@@ -565,14 +565,25 @@ class OpsPerformanceReportQueries:
             try:
                 with open(stacked_csv_file, newline="") as csvfile:
                     reader = csv.reader(csvfile, delimiter=",")
-                    next(reader, None)
+                    header = next(reader, None)
+
+                    # Dynamically map columns based on actual CSV headers
+                    # When no_merge_devices is True, there's an additional "Device" column
+                    column_mapping = {}
+                    if header:
+                        for index, col_name in enumerate(header):
+                            normalized_name = (
+                                col_name.lower()
+                                .replace(" ", "_")
+                                .replace("%", "percent")
+                            )
+                            column_mapping[index] = normalized_name
 
                     for row in reader:
-                        processed_row = {
-                            column: row[index]
-                            for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
-                            if index < len(row)
-                        }
+                        processed_row = {}
+                        for index, value in enumerate(row):
+                            if index in column_mapping:
+                                processed_row[column_mapping[index]] = value
 
                         if "op_code" in processed_row and any(
                             processed_row["op_code"] in signpost["op_code"]

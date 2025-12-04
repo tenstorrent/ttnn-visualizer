@@ -20,7 +20,8 @@ export interface StackedTableHeader {
 
 export interface StackedPerfRow {
     percent: string;
-    op_code: string;
+    op_code_joined: string;
+    device: string;
     device_time_sum_us: string;
     ops_count: string;
     flops_min: string;
@@ -33,9 +34,17 @@ export interface StackedPerfRow {
 export interface TypedStackedPerfRow
     extends Omit<
         StackedPerfRow,
-        'percent' | 'device_time_sum_us' | 'ops_count' | 'flops_min' | 'flops_max' | 'flops_mean' | 'flops_std'
+        | 'percent'
+        | 'device'
+        | 'device_time_sum_us'
+        | 'ops_count'
+        | 'flops_min'
+        | 'flops_max'
+        | 'flops_mean'
+        | 'flops_std'
     > {
     percent: number | null;
+    device: number | null;
     device_time_sum_us: number | null;
     ops_count: number | null;
     flops_min: number | null;
@@ -46,7 +55,8 @@ export interface TypedStackedPerfRow
 
 export enum ColumnHeaders {
     Percent = 'percent',
-    OpCodeJoined = 'op_code',
+    OpCodeJoined = 'op_code_joined',
+    Device = 'device',
     DeviceTimeSumUs = 'device_time_sum_us',
     OpsCount = 'ops_count',
     FlopsMin = 'flops_min',
@@ -58,6 +68,7 @@ export enum ColumnHeaders {
 export const TableHeaders: StackedTableHeader[] = [
     { label: 'Percent', key: ColumnHeaders.Percent, unit: '%', decimals: 2, sortable: true },
     { label: 'Op Code', key: ColumnHeaders.OpCodeJoined, sortable: true, filterable: true },
+    { label: 'Device', key: ColumnHeaders.Device, sortable: true },
     { label: 'Device Time', key: ColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 2, sortable: true },
     { label: 'Ops Count', key: ColumnHeaders.OpsCount, sortable: true },
     { label: 'Min FLOPS', key: ColumnHeaders.FlopsMin, unit: '%', decimals: 2, sortable: true },

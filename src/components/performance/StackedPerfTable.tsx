@@ -6,6 +6,7 @@ import { FC, Fragment, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtomValue } from 'jotai';
 import {
     ColumnHeaders,
     StackedTableHeader,
@@ -21,6 +22,7 @@ import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import LoadingSpinner from '../LoadingSpinner';
 import { PATTERN_COUNT } from '../../definitions/Performance';
+import { noMergeDevicesAtom } from '../../store/app';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -39,6 +41,12 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
+    const noMergeDevices = useAtomValue(noMergeDevicesAtom);
+
+    // TODO: Perhaps there's a better way to handle this
+    const computedTableHeaders = !noMergeDevices
+        ? TableHeaders.filter((header) => header.key !== ColumnHeaders.Device)
+        : TableHeaders;
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         return [...sortTableFields(stackedData as [])];
@@ -70,7 +78,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
                         <tr>
-                            {TableHeaders.map((h) => {
+                            {computedTableHeaders.map((h) => {
                                 const targetSortDirection =
                                     // eslint-disable-next-line no-nested-ternary
                                     sortingColumn === h.key
@@ -126,7 +134,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                         {tableFields?.map((row, i) => (
                             <Fragment key={`row-${i}`}>
                                 <tr>
-                                    {TableHeaders.map((h: StackedTableHeader) => (
+                                    {computedTableHeaders.map((h: StackedTableHeader) => (
                                         <td
                                             key={h.key}
                                             className={classNames('cell')}
@@ -138,7 +146,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
                                 {stackedComparisonData.map((comparisonDataset, datasetIndex) => {
                                     const matchingRow = comparisonDataset.find(
-                                        (stackedRow) => stackedRow.op_code === row.op_code,
+                                        (stackedRow) => stackedRow.op_code_joined === row.op_code_joined,
                                     );
 
                                     return (
@@ -149,7 +157,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                                 `pattern-${datasetIndex >= PATTERN_COUNT ? datasetIndex - PATTERN_COUNT : datasetIndex}`,
                                             )}
                                         >
-                                            {TableHeaders.map((h: StackedTableHeader) => (
+                                            {computedTableHeaders.map((h: StackedTableHeader) => (
                                                 <td
                                                     key={`comparison-${h.key}`}
                                                     className='cell'
@@ -170,7 +178,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                         <tr>
                             {stackedData &&
                                 stackedData?.length > 0 &&
-                                TableHeaders.map((header) => (
+                                computedTableHeaders.map((header) => (
                                     <td
                                         key={`footer-${header.key}`}
                                         className={classNames({
