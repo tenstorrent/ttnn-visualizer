@@ -363,28 +363,11 @@ interface MetaData {
     frequency: number | null;
 }
 
-interface FetchDeviceLogRawResult {
-    deviceMeta: MetaData;
-    // deviceLog: ParseResult<Record<string, string>[]>;
-}
-
-const fetchDeviceLogRaw = async (name: string | null): Promise<FetchDeviceLogRawResult> => {
-    const { data } = await axiosInstance.get<string>('/api/performance/device-log/raw', {
+const fetchDeviceMeta = async (name: string | null) => {
+    const { data } = await axiosInstance.get<MetaData>('/api/performance/device-log/meta', {
         params: { name },
     });
-
-    function parseArchAndFreq(input: string): MetaData {
-        const archMatch = input.match(/ARCH:\s*([\w\d_]+)/);
-        const freqMatch = input.match(/CHIP_FREQ\[MHz\]:\s*(\d+)/);
-        const architecture = archMatch ? (archMatch[1] as DeviceArchitecture) : null;
-        const frequency = freqMatch ? parseInt(freqMatch[1], 10) : null;
-
-        return { architecture, frequency };
-    }
-
-    const rows = data.split('\n');
-
-    return { deviceMeta: parseArchAndFreq(rows[0]) };
+    return data;
 };
 
 const fetchClusterDescription = async (): Promise<ClusterModel> => {
@@ -805,12 +788,11 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     }, [range, response, useRange]);
 };
 
-export const useDeviceLog = (name?: string | null) => {
+export const usePerfMeta = (name?: string | null) => {
     const key = name || null;
-
     return useQuery({
-        queryFn: () => fetchDeviceLogRaw(key),
-        queryKey: ['get-device-log-raw', key],
+        queryFn: () => fetchDeviceMeta(key),
+        queryKey: ['get-device-log-meta', key],
         staleTime: Infinity,
     });
 };

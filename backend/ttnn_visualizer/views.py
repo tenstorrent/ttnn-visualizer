@@ -751,6 +751,7 @@ def get_performance_results_report(instance: Instance):
     return Response(orjson.dumps(report), mimetype="application/json")
 
 
+# this is no longer used atm. keeping for now until confirmed "not needed"
 @api.route("/performance/device-log/raw", methods=["GET"])
 @with_instance
 def get_performance_data_raw(instance: Instance):
@@ -771,6 +772,46 @@ def get_performance_data_raw(instance: Instance):
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=profile_log_device.csv"},
     )
+
+
+@api.route("/performance/device-log/meta", methods=["GET"])
+@with_instance
+def get_performance_device_meta(instance: Instance):
+    def get_first_line(file_path: Path) -> str:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.readline().strip()
+
+    def parse_arch_and_freq(line: str):
+        arch_match = re.search(r"ARCH:\s*([\w\d_]+)", line)
+        freq_match = re.search(r"CHIP_FREQ\[MHz\]:\s*(\d+)", line)
+
+        architecture = arch_match.group(1) if arch_match else None
+        frequency = int(freq_match.group(1)) if freq_match else None
+
+        return {
+            "architecture": architecture,
+            "frequency": frequency,
+        }
+
+    if not instance.performance_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+
+    file_path = Path(
+        instance.performance_path,
+        DeviceLogProfilerQueries.DEVICE_LOG_FILE,
+    )
+
+    if not file_path.exists():
+        return Response(status=HTTPStatus.NOT_FOUND)
+
+    try:
+        first_line = get_first_line(file_path)
+        meta = parse_arch_and_freq(first_line)
+        return jsonify({"deviceMeta": meta})
+
+    except Exception as e:
+        logger.exception("Failed to parse device meta")
+        return Response(str(e), status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
 @api.route("/performance/npe/manifest", methods=["GET"])

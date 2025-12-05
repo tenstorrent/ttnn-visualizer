@@ -6,7 +6,7 @@ import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreCount from '../../functions/getCoreCount';
-import { useDeviceLog } from '../../hooks/useAPI';
+import { usePerfMeta } from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
 import 'styles/components/PerfDeviceArchitecture.scss';
 
@@ -18,9 +18,9 @@ interface PerfDeviceArchitectureProps {
 }
 
 const PerfDeviceArchitecture = ({ data, reportName }: PerfDeviceArchitectureProps) => {
-    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog(reportName);
+    const { data: deviceMeta, isLoading: isLoadingDeviceLog } = usePerfMeta(reportName);
 
-    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
+    const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
     const maxCores = data ? getCoreCount(architecture, data) : 0;
 
     return (

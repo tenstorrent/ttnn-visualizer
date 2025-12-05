@@ -15,7 +15,7 @@ import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from
 import PerfDeviceTimeChart from './PerfDeviceTimeChart';
 import getCoreCount from '../../functions/getCoreCount';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
-import { useDeviceLog } from '../../hooks/useAPI';
+import { usePerfMeta } from '../../hooks/useAPI';
 
 interface NonFilterablePerfChartsProps {
     chartData: TypedPerfTableRow[];
@@ -31,10 +31,10 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     const performanceReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
-    const { data: deviceLog } = useDeviceLog();
+    const { data: deviceMeta } = usePerfMeta();
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
-    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
+    const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
     const maxCores = getCoreCount(architecture, datasets[0] ?? []);
 
     const matmulData = useMemo(
