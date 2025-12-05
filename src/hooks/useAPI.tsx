@@ -279,19 +279,6 @@ const fetchDevices = async (reportName: string) => {
     return [...new Map(meta.map((device) => [device.device_id, device])).values()];
 };
 
-// Not currently used
-// const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
-//     const { data } = await axiosInstance.get<string>('/api/performance/perf-results/raw');
-
-//     return new Promise((resolve, reject) => {
-//         Papa.parse<Record<string, string>>(data, {
-//             complete: (results) => resolve(results),
-//             error: (error: Error) => reject(error),
-//             header: true,
-//         });
-//     });
-// };
-
 export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
