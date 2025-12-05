@@ -91,7 +91,6 @@ The following separate and independent dependencies are utilized by this project
 - @testing-library/dom - MIT - https://github.com/testing-library/dom-testing-library/blob/main/LICENSE
 - @testing-library/jest-dom - MIT - https://github.com/testing-library/jest-dom/blob/main/LICENSE
 - @testing-library/react - MIT - https://github.com/testing-library/react-testing-library/blob/main/LICENSE
-- @types/papaparse - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react-dom - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react-plotly.js - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
@@ -130,7 +129,6 @@ The following separate and independent dependencies are utilized by this project
 - mini-svg-data-uri - MIT - https://github.com/tigt/mini-svg-data-uri/blob/master/LICENSE
 - normalize.css - MIT - https://github.com/necolas/normalize.css/blob/master/LICENSE.md
 - only-allow - MIT - https://github.com/pnpm/only-allow/blob/master/LICENSE
-- papaparse - MIT - https://github.com/mholt/PapaParse/blob/master/LICENSE
 - plotly.js - MIT - https://github.com/plotly/plotly.js/blob/master/LICENSE
 - prettier - MIT - https://github.com/prettier/eslint-config-prettier/blob/main/LICENSE
 - react - MIT - https://github.com/facebook/react/blob/main/LICENSE
