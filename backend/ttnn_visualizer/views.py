@@ -793,8 +793,15 @@ def get_performance_device_meta(instance: Instance):
             "frequency": frequency,
         }
 
+    name = request.args.get("name", None)
+
     if not instance.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
+
+    if name and not current_app.config["SERVER_MODE"]:
+        performance_path = Path(instance.performance_path).parent / name
+        instance.performance_path = str(performance_path)
+        logger.info(f"************ Performance path set to {instance.performance_path}")
 
     file_path = Path(
         instance.performance_path,
