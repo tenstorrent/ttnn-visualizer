@@ -288,16 +288,19 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                         <tr>
                             {visibleHeaders.length > 0 &&
                                 data?.length > 0 &&
-                                visibleHeaders.map((header) => (
-                                    <td
-                                        key={header.key}
-                                        className={classNames({
-                                            'pre-wrap': header.key === ColumnHeaders.op_code,
-                                        })}
-                                    >
-                                        {getTotalsForFooter(header, data, hideHostOps)}
-                                    </td>
-                                ))}
+                                visibleHeaders
+                                    .filter((header) => header?.footerSpan !== 0)
+                                    .map((header) => (
+                                        <td
+                                            key={header.key}
+                                            className={classNames({
+                                                'pre-wrap': header.key === ColumnHeaders.op_code,
+                                            })}
+                                            colSpan={header.footerSpan ?? undefined}
+                                        >
+                                            {getTotalsForFooter(header, data, hideHostOps)}
+                                        </td>
+                                    ))}
                         </tr>
                     </tfoot>
                 </table>

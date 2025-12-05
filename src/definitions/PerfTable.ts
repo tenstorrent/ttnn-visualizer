@@ -17,6 +17,7 @@ export interface TableHeader {
     decimals?: number;
     sortable?: boolean;
     filterable?: boolean;
+    footerSpan?: number;
 }
 
 enum BoundType {
@@ -165,9 +166,9 @@ export const TableHeaders: TableHeader[] = [
     { label: 'ID', key: ColumnHeaders.id, sortable: true },
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
-    { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true },
-    { label: 'Device ID', key: ColumnHeaders.device },
-    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true },
+    { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true, footerSpan: 3 },
+    { label: 'Device ID', key: ColumnHeaders.device, footerSpan: 0 },
+    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true, footerSpan: 0 },
     { label: 'Layout', key: ColumnHeaders.layout, sortable: true, filterable: true },
     { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
     { label: 'Op-to-Op Gap', key: ColumnHeaders.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
