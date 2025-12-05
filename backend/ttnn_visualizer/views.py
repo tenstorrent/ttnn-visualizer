@@ -807,7 +807,7 @@ def get_performance_device_meta(instance: Instance):
     try:
         first_line = get_first_line(file_path)
         meta = parse_arch_and_freq(first_line)
-        return jsonify({"deviceMeta": meta})
+        return jsonify(meta)
 
     except Exception as e:
         logger.exception("Failed to parse device meta")
