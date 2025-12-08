@@ -127,6 +127,14 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     let operationList = response.data;
     let retryCount = 0;
 
+    const getDeviceOperationNameList = (operation: OperationDescription) => {
+        return operation.device_operations
+            .filter((op) => {
+                return op.node_type === NodeType.function_start && isDeviceOperation(op.params.name);
+            })
+            .map((op) => op.params.name);
+    };
+
     // TODO: Figure out why we sometimes get a string back instead of an array so we don't need this hack
     while (!Array.isArray(operationList) && retryCount < MAX_RETRY_COUNT) {
         // eslint-disable-next-line no-console
@@ -175,6 +183,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             outputs,
             inputs,
             arguments: argumentsWithParsedValues,
+            deviceOperationNameList: getDeviceOperationNameList(operation),
         } as OperationDescription;
     });
 };
@@ -211,6 +220,26 @@ const useGetAllBuffers = (bufferType: BufferType | null) => {
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport?.path],
         staleTime: Infinity,
     });
+};
+
+export const useGetUniqueDeviceOperationsList = (): string[] => {
+    const { data: operations } = useOperationsList();
+
+    return useMemo(() => {
+        if (!operations || operations.length === 0) {
+            return [];
+        }
+
+        const deviceOperationSet = new Set<string>();
+
+        for (const operation of operations) {
+            for (const deviceOperation of operation.deviceOperationNameList) {
+                deviceOperationSet.add(deviceOperation);
+            }
+        }
+
+        return Array.from(deviceOperationSet);
+    }, [operations]);
 };
 
 /**
@@ -541,11 +570,7 @@ export const useGetDeviceOperationsListByOp = () => {
         return (
             operations
                 ?.map((operation) => {
-                    const ops = operation.device_operations
-                        .filter((op) => op.node_type === NodeType.function_start)
-                        .map((deviceOperation) => deviceOperation.params.name)
-                        .filter((opName) => isDeviceOperation(opName));
-                    return { id: operation.id, name: operation.name, ops };
+                    return { id: operation.id, name: operation.name, ops: operation.deviceOperationNameList };
                 })
                 .filter((data) => {
                     return data.ops.length > 0;
@@ -617,7 +642,6 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     }, [operations, devices]);
 };
 
-// Unused
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const response = usePerformanceReport(activePerformanceReport?.reportName || null);
