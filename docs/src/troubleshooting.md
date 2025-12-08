@@ -23,7 +23,7 @@ deactivate
 rm -rf myenv
 ```
 
-Then [follow the steps](./running-from-source.md#back-end) for creating virtual environment and reinstalling dependencies
+Then {ref}`follow the steps <back-end>` for creating virtual environment and reinstalling dependencies
 
 ## Fix for missing distutils package
 
