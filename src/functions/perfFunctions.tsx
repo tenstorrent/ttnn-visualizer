@@ -212,6 +212,10 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
             }
         }
 
+        if (row.bound === BoundType.HOST) {
+            return CellColour.Red;
+        }
+
         const dramP = row.dram_percent;
         const flopsP = row.flops_percent;
 
@@ -225,10 +229,6 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
                     return CellColour.Yellow;
                 }
             }
-        }
-
-        if (keyValue === BoundType.HOST) {
-            return CellColour.Red;
         }
 
         return DEFAULT_COLOUR;
