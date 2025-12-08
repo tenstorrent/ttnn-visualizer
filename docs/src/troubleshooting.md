@@ -32,3 +32,15 @@ With the virtualenv activated run:
 ```shell
 pip install --upgrade setuptools
 ```
+
+
+## Fix for 'Event synchronization is not supported during trace capture' error
+
+Report generation is not compatible with TTNN tracer. If you see this error,
+it likely means that TTNN tracer has been enabled in the model. This is not
+a setting in TT-Metal or TTNN, but rather a hard-coded value in several of the model
+demos.
+
+TTNN Visualizer can not be used with models that have `enable_trace = True`. Please
+disable tracer in the model by changing it to `enable_trace = False`, in order to
+generate reports for TTNN Visualizer.
