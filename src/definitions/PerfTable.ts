@@ -19,12 +19,12 @@ export interface TableHeader {
     filterable?: boolean;
 }
 
-enum BoundType {
-    BOTH,
-    DRAM,
-    FLOP,
-    SLOW,
-    HOST,
+export enum BoundType {
+    BOTH = 'BOTH',
+    DRAM = 'DRAM',
+    FLOP = 'FLOP',
+    SLOW = 'SLOW',
+    HOST = 'HOST',
 }
 
 export interface PerfTableRow {
@@ -172,10 +172,10 @@ export const TableHeaders: TableHeader[] = [
     { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
     { label: 'Op-to-Op Gap', key: ColumnHeaders.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
     { label: 'Cores', key: ColumnHeaders.cores, colour: 'green', sortable: true },
-    { label: 'DRAM', key: ColumnHeaders.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
-    { label: 'DRAM %', key: ColumnHeaders.dram_percent, colour: 'yellow', unit: '%', sortable: true },
-    { label: 'FLOPs', key: ColumnHeaders.flops, unit: 'TFLOPs', sortable: true },
-    { label: 'FLOPs %', key: ColumnHeaders.flops_percent, unit: '%', sortable: true },
+    { label: 'DRAM', key: ColumnHeaders.dram, colour: 'yellow', unit: 'GB/s', decimals: 1, sortable: true },
+    { label: 'DRAM %', key: ColumnHeaders.dram_percent, colour: 'yellow', unit: '%', decimals: 1, sortable: true },
+    { label: 'FLOPs', key: ColumnHeaders.flops, unit: 'TFLOPs', decimals: 1, sortable: true },
+    { label: 'FLOPs %', key: ColumnHeaders.flops_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
 ];
 
