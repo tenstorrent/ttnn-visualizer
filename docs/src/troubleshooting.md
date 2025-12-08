@@ -41,9 +41,6 @@ it likely means that trace capture has been enabled in TTNN. This is not
 a setting in TT-Metal or TTNN, but rather a hard-coded value in several of the models
 and demos.
 
-TTNN Visualizer can not be used with models or demos that use trace capture. Please
-disable trace capture in order to generate reports for TTNN Visualizer.
-
 How trace capture is enabled depends on the model or demo. In some cases you will see
 `enable_trace = True` in the Python code. In other cases it may be enabled by a
 `--enable_trace` CLI arg. Some tests use the PyTest `parametrize` decorator to run the
