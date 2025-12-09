@@ -9,7 +9,7 @@ import { OpType } from './Performance';
 export type TableKeys = keyof TypedPerfTableRow;
 export type TableFilter = Partial<Record<TableKeys, string>> | null;
 
-export interface TableHeader {
+export interface TableColumn {
     label: string;
     key: TableKeys;
     colour?: string;
@@ -162,7 +162,7 @@ export enum ColumnHeaders {
     global_call_count = 'global_call_count',
 }
 
-export const TableHeaders: TableHeader[] = [
+export const TableColumns: TableColumn[] = [
     { label: 'ID', key: ColumnHeaders.id, sortable: true },
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
@@ -180,7 +180,7 @@ export const TableHeaders: TableHeader[] = [
     { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
 ];
 
-export const FilterableColumnKeys = TableHeaders.filter((column) => column.filterable).map((column) => column.key);
+export const FilterableColumnKeys = TableColumns.filter((column) => column.filterable).map((column) => column.key);
 
 export const ComparisonKeys: TableKeys[] = [
     ColumnHeaders.op_code,
