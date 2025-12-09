@@ -51,7 +51,7 @@ export const formatStackedCell = (
     let formatted: string | boolean | string[];
     const value = row[key];
 
-    if (value == null || value === '') {
+    if (value === null || value === '') {
         return '';
     }
 

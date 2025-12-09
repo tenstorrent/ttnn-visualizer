@@ -74,7 +74,7 @@ export const formatCell = (
     let formatted: string | boolean | string[];
     let value = row[key];
 
-    if (value == null || value === '' || Number.isNaN(value)) {
+    if (value === null || value === '' || Number.isNaN(value)) {
         return '';
     }
 
