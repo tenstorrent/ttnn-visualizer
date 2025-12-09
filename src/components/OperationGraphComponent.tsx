@@ -467,7 +467,7 @@ const OperationGraphInfoComponent: React.FC<{
     return (
         <div className='operation-graph-props'>
             <h2 className='operation-name'>
-                {operation?.name} ({operation?.operationFileIdentifier})
+                {currentOperationId} {operation?.name} ({operation?.operationFileIdentifier})
             </h2>
             <ul className='device-operation-list'>
                 {operation?.deviceOperationNameList.map((deviceOp, index) => (
