@@ -6,7 +6,14 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { ColumnHeaders, MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import {
+    BoundType,
+    ColumnHeaders,
+    MathFidelity,
+    TableHeader,
+    TableKeys,
+    TypedPerfTableRow,
+} from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
@@ -54,17 +61,6 @@ const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
-const NUMBER_KEYS_TO_PARSE = [
-    'device_time',
-    'op_to_op_gap',
-    'cores',
-    'total_percent',
-    'dram',
-    'dram_percent',
-    'flops',
-    'flops_percent',
-];
-
 // TODO: Check if we still need this formatting step because we're using typed data
 export const formatCell = (
     row: TypedPerfTableRow,
@@ -74,11 +70,16 @@ export const formatCell = (
 ): React.JSX.Element | string => {
     const { key, unit, decimals } = header;
     const isSignpost = row.op_type === OpType.SIGNPOST;
-    const isHost = isHostOp(row.raw_op_code);
+    const isHost = isHostOp(row.bound);
     let formatted: string | boolean | string[];
     let value = row[key];
 
+    if (value === null || value === '' || Number.isNaN(value)) {
+        return '';
+    }
+
     if (isSignpost) {
+        // Signposts only have a few meaningful columns
         if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code) {
             return '';
         }
@@ -87,15 +88,14 @@ export const formatCell = (
     }
 
     if (isHost) {
+        // Host Ops only have a few meaningful columns
         if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code && key !== ColumnHeaders.bound) {
             return '';
         }
     }
 
     if (key === ColumnHeaders.buffer_type) {
-        return typeof value === 'number' && Number.isInteger(value) && value in BufferTypeLabel
-            ? BufferTypeLabel[value as number]
-            : '';
+        return BufferTypeLabel[value as number];
     }
 
     if (key === ColumnHeaders.high_dispatch) {
@@ -125,18 +125,7 @@ export const formatCell = (
         );
     }
 
-    if (NUMBER_KEYS_TO_PARSE.includes(key)) {
-        value = typeof value === 'string' ? parseFloat(value) : value;
-    }
-
-    if (value == null || value === '' || Number.isNaN(value)) {
-        return '';
-    }
-
-    if (typeof value === 'string' && value.includes('Matmul')) {
-        // there was a logic here to do something clever with Matmul size, removing it for now
-        formatted = `${value}`;
-    } else if (typeof value === 'number') {
+    if (typeof value === 'number') {
         formatted = formatSize(value, decimals);
     } else {
         formatted = value.toString();
@@ -188,16 +177,20 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     }
 
     if (key === ColumnHeaders.bound) {
-        if (keyValue === 'DRAM') {
+        if (keyValue === BoundType.HOST) {
             return CellColour.Green;
         }
 
-        if (keyValue === 'FLOP') {
+        if (keyValue === BoundType.FLOP) {
             return CellColour.Green;
         }
 
-        if (keyValue === 'SLOW') {
+        if (keyValue === BoundType.SLOW) {
             return CellColour.Yellow;
+        }
+
+        if (keyValue === BoundType.DRAM) {
+            return CellColour.Green;
         }
     }
 
@@ -207,21 +200,35 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         key === ColumnHeaders.flops ||
         key === ColumnHeaders.flops_percent
     ) {
-        const dramP = row.dram_percent;
-        const flopsP = row.flops_percent;
-
-        if (dramP != null && flopsP != null) {
-            if (dramP > flopsP) {
-                if (key === ColumnHeaders.dram || key === ColumnHeaders.dram_percent) {
-                    return CellColour.Yellow;
-                }
-            } else if (key === ColumnHeaders.flops || key === ColumnHeaders.flops_percent) {
-                return CellColour.Yellow;
+        if (row.bound === BoundType.DRAM) {
+            if (key === ColumnHeaders.dram || key === ColumnHeaders.dram_percent) {
+                return CellColour.Green;
             }
         }
 
-        if (keyValue === 'HOST') {
+        if (row.bound === BoundType.FLOP) {
+            if (key === ColumnHeaders.flops || key === ColumnHeaders.flops_percent) {
+                return CellColour.Green;
+            }
+        }
+
+        if (row.bound === BoundType.HOST) {
             return CellColour.Red;
+        }
+
+        const dramP = row.dram_percent;
+        const flopsP = row.flops_percent;
+
+        if (row.bound === BoundType.SLOW) {
+            if (dramP != null && flopsP != null) {
+                if (dramP > flopsP) {
+                    if (key === ColumnHeaders.dram || key === ColumnHeaders.dram_percent) {
+                        return CellColour.Yellow;
+                    }
+                } else if (key === ColumnHeaders.flops || key === ColumnHeaders.flops_percent) {
+                    return CellColour.Yellow;
+                }
+            }
         }
 
         return DEFAULT_COLOUR;
@@ -260,8 +267,8 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.op_to_op_gap && typeof keyValue === 'string') {
-        return getOpToOpGapColour(keyValue);
+    if (key === ColumnHeaders.op_to_op_gap) {
+        return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : FALLBACK_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something
@@ -284,10 +291,8 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
     return DEFAULT_COLOUR;
 };
 
-export const getOpToOpGapColour = (value: string): CellColour => {
-    const parsedValue = parseFloat(value) || 0;
-
-    return parsedValue > 6.5 ? CellColour.Red : FALLBACK_COLOUR;
+export const getOpToOpGapColour = (value: number): CellColour => {
+    return value > 6.5 ? CellColour.Red : FALLBACK_COLOUR;
 };
 
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
@@ -424,7 +429,7 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
     return Math.max(...arrays.map((arr) => arr.length), 0) + 1;
 }
 
-export const isHostOp = (op: string) => op.includes('(torch)');
+export const isHostOp = (bound: BoundType | null) => bound === BoundType.HOST;
 
 export const getStandardViewCounts = (
     data: TypedPerfTableRow[],

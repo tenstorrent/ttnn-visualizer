@@ -326,7 +326,7 @@ const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[], hide
     }
 
     if (header.key === ColumnHeaders.op_code) {
-        const hostOpsCount = data.filter((row) => isHostOp(row.raw_op_code)).length;
+        const hostOpsCount = data.filter((row) => isHostOp(row.bound)).length;
         const deviceOpsCount = data.length - hostOpsCount;
 
         return hideHostOps
