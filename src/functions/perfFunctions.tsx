@@ -125,7 +125,7 @@ export const formatCell = (
         );
     }
 
-    if (typeof value === 'number') {
+    if (typeof value === 'number' && key !== ColumnHeaders.id) {
         formatted = formatSize(value, decimals);
     } else {
         formatted = value?.toString() || '';
@@ -164,7 +164,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     const keyValue = row[key];
     const percentage = row.total_percent;
 
-    if (percentage != null && percentage < MIN_PERCENTAGE) {
+    if (row.op_type === OpType.DEVICE_OP && percentage != null && percentage < MIN_PERCENTAGE) {
         return FALLBACK_COLOUR;
     }
 
