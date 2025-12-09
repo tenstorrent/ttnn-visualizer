@@ -9,7 +9,7 @@ import { OpType } from './Performance';
 export type TableKeys = keyof TypedPerfTableRow;
 export type TableFilter = Partial<Record<TableKeys, string>> | null;
 
-export interface TableHeader {
+export interface TableColumn {
     label: string;
     key: TableKeys;
     colour?: string;
@@ -17,6 +17,7 @@ export interface TableHeader {
     decimals?: number;
     sortable?: boolean;
     filterable?: boolean;
+    footerSpan?: number;
 }
 
 export enum BoundType {
@@ -161,13 +162,13 @@ export enum ColumnHeaders {
     global_call_count = 'global_call_count',
 }
 
-export const TableHeaders: TableHeader[] = [
+export const TableColumns: TableColumn[] = [
     { label: 'ID', key: ColumnHeaders.id, sortable: true },
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
-    { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true },
-    { label: 'Device ID', key: ColumnHeaders.device },
-    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true },
+    { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true, footerSpan: 3 },
+    { label: 'Device ID', key: ColumnHeaders.device, footerSpan: 0 },
+    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true, footerSpan: 0 },
     { label: 'Layout', key: ColumnHeaders.layout, sortable: true, filterable: true },
     { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
     { label: 'Op-to-Op Gap', key: ColumnHeaders.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
@@ -179,7 +180,7 @@ export const TableHeaders: TableHeader[] = [
     { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
 ];
 
-export const FilterableColumnKeys = TableHeaders.filter((column) => column.filterable).map((column) => column.key);
+export const FilterableColumnKeys = TableColumns.filter((column) => column.filterable).map((column) => column.key);
 
 export const ComparisonKeys: TableKeys[] = [
     ColumnHeaders.op_code,

@@ -10,7 +10,7 @@ import {
     BoundType,
     ColumnHeaders,
     MathFidelity,
-    TableHeader,
+    TableColumn,
     TableKeys,
     TypedPerfTableRow,
 } from '../definitions/PerfTable';
@@ -64,11 +64,11 @@ const MIN_PERCENTAGE = 0.5;
 // TODO: Check if we still need this formatting step because we're using typed data
 export const formatCell = (
     row: TypedPerfTableRow,
-    header: TableHeader,
+    column: TableColumn,
     operations?: OperationDescription[],
     highlight?: string | null,
 ): React.JSX.Element | string => {
-    const { key, unit, decimals } = header;
+    const { key, unit, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
     const isHost = isHostOp(row.bound);
     let formatted: string | boolean | string[];
@@ -128,7 +128,7 @@ export const formatCell = (
     if (typeof value === 'number') {
         formatted = formatSize(value, decimals);
     } else {
-        formatted = value.toString();
+        formatted = value?.toString() || '';
     }
 
     if (unit) {

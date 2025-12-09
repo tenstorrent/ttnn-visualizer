@@ -11,9 +11,9 @@ import { useAtomValue } from 'jotai';
 import {
     ColumnHeaders,
     ComparisonKeys,
+    TableColumn,
+    TableColumns,
     TableFilter,
-    TableHeader,
-    TableHeaders,
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
@@ -78,22 +78,22 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         [comparisonData, sortTableFields],
     );
 
-    const visibleHeaders = [
-        ...TableHeaders.slice(0, OP_ID_INSERTION_POINT),
+    const visibleColumns = [
+        ...TableColumns.slice(0, OP_ID_INSERTION_POINT),
         ...(opIdsMap.length > 0 ? [{ label: 'OP', key: ColumnHeaders.OP, sortable: true }] : []),
-        ...TableHeaders.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...TableColumns.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
         ...(hiliteHighDispatch ? [{ label: 'Slow', key: ColumnHeaders.high_dispatch }] : []),
-        ...TableHeaders.slice(HIGH_DISPATCH_INSERTION_POINT),
+        ...TableColumns.slice(HIGH_DISPATCH_INSERTION_POINT),
         ...(npeManifest && npeManifest.length > 0 ? [{ label: 'NPE', key: ColumnHeaders.global_call_count }] : []),
-    ] as TableHeader[];
+    ] as TableColumn[];
 
     const cellFormattingProxy = (
         row: TypedPerfTableRow,
-        header: TableHeader,
+        column: TableColumn,
         operations?: OperationDescription[],
         highlight?: string | null,
     ) => {
-        const { key } = header;
+        const { key } = column;
 
         if (key === ColumnHeaders.global_call_count) {
             // TODO: this is an inefficient way of doing things but its also temporary. will update next iteration
@@ -121,7 +121,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             return null;
         }
 
-        return formatCell(row, header, operations, highlight);
+        return formatCell(row, column, operations, highlight);
     };
 
     if (!data) {
@@ -150,7 +150,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
                         <tr>
-                            {visibleHeaders.map((h) => {
+                            {visibleColumns.map((h) => {
                                 const targetSortDirection =
                                     // eslint-disable-next-line no-nested-ternary
                                     sortingColumn === h.key
@@ -224,7 +224,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                         'signpost-op': row.op_type === OpType.SIGNPOST,
                                     })}
                                 >
-                                    {visibleHeaders.map((h) => (
+                                    {visibleColumns.map((h) => (
                                         <td
                                             key={h.key}
                                             className={classNames('cell', {
@@ -251,7 +251,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
                                             )}
                                         >
-                                            {visibleHeaders.map((h) => (
+                                            {visibleColumns.map((h) => (
                                                 <td
                                                     key={h.key}
                                                     className={classNames('cell', {
@@ -269,7 +269,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                 {provideMatmulAdvice && row.op_code.includes('Matmul') && (
                                     <tr>
                                         <td
-                                            colSpan={visibleHeaders.length}
+                                            colSpan={visibleColumns.length}
                                             className='cell advice'
                                         >
                                             <ul>
@@ -286,18 +286,21 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
                     <tfoot className='table-footer'>
                         <tr>
-                            {visibleHeaders.length > 0 &&
+                            {visibleColumns.length > 0 &&
                                 data?.length > 0 &&
-                                visibleHeaders.map((header) => (
-                                    <td
-                                        key={header.key}
-                                        className={classNames({
-                                            'pre-wrap': header.key === ColumnHeaders.op_code,
-                                        })}
-                                    >
-                                        {getTotalsForFooter(header, data, hideHostOps)}
-                                    </td>
-                                ))}
+                                visibleColumns
+                                    .filter((header) => header?.footerSpan !== 0)
+                                    .map((header) => (
+                                        <td
+                                            key={header.key}
+                                            className={classNames({
+                                                'pre-wrap': header.key === ColumnHeaders.op_code,
+                                            })}
+                                            colSpan={header.footerSpan ?? undefined}
+                                        >
+                                            {getTotalsForFooter(header, data, hideHostOps)}
+                                        </td>
+                                    ))}
                         </tr>
                     </tfoot>
                 </table>
@@ -310,19 +313,19 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     );
 };
 
-const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[], hideHostOps: boolean): string => {
-    if (header.key === ColumnHeaders.total_percent) {
+const getTotalsForFooter = (column: TableColumn, data: TypedPerfTableRow[], hideHostOps: boolean): string => {
+    if (column.key === ColumnHeaders.total_percent) {
         return `100 %`;
     }
 
-    if (header.key === ColumnHeaders.device_time) {
+    if (column.key === ColumnHeaders.device_time) {
         return `${formatSize(
             data?.reduce((acc, curr) => acc + (curr.device_time || 0), 0),
             2,
         )} µs`;
     }
 
-    if (header.key === ColumnHeaders.op_code) {
+    if (column.key === ColumnHeaders.op_code) {
         const hostOpsCount = data.filter((row) => isHostOp(row.bound)).length;
         const deviceOpsCount = data.length - hostOpsCount;
 
@@ -331,7 +334,7 @@ const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[], hide
             : `${data.length} ops\n(${deviceOpsCount} device ops + ${hostOpsCount} host ops)`;
     }
 
-    if (header.key === ColumnHeaders.op_to_op_gap) {
+    if (column.key === ColumnHeaders.op_to_op_gap) {
         return `${formatSize(
             data?.reduce((acc, curr) => acc + (curr.op_to_op_gap || 0), 0),
             2,

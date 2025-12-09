@@ -7,7 +7,7 @@ import HighlightedText from '../components/HighlightedText';
 import { formatSize } from './math';
 import {
     StackedColumnHeaders,
-    StackedTableHeader,
+    StackedTableColumn,
     StackedTableKeys,
     TypedStackedPerfRow,
 } from '../definitions/StackedPerfTable';
@@ -44,10 +44,10 @@ const FALLBACK_COLOUR = CellColour.Grey;
 
 export const formatStackedCell = (
     row: TypedStackedPerfRow,
-    header: StackedTableHeader,
+    column: StackedTableColumn,
     highlight?: string | null,
 ): React.JSX.Element | string => {
-    const { key, unit, decimals } = header;
+    const { key, unit, decimals } = column;
     let formatted: string | boolean | string[];
     const value = row[key];
 

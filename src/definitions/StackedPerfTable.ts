@@ -8,7 +8,7 @@ export type StackedTableKeys = Partial<keyof StackedPerfRow>;
 
 export type StackedTableFilter = Record<StackedTableKeys, string> | null;
 
-export interface StackedTableHeader {
+export interface StackedTableColumn {
     label: string;
     key: StackedTableKeys;
     colour?: string;
@@ -55,7 +55,7 @@ export enum StackedColumnHeaders {
     FlopsStd = 'flops_std',
 }
 
-export const TableHeaders: StackedTableHeader[] = [
+export const StackedTableColumns: StackedTableColumn[] = [
     { label: 'Percent', key: StackedColumnHeaders.Percent, unit: '%', decimals: 2, sortable: true },
     { label: 'Op Code', key: StackedColumnHeaders.OpCodeJoined, sortable: true, filterable: true },
     { label: 'Device Time', key: StackedColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 2, sortable: true },
@@ -66,6 +66,6 @@ export const TableHeaders: StackedTableHeader[] = [
     { label: 'Std FLOPS', key: StackedColumnHeaders.FlopsStd, unit: '%', decimals: 2, sortable: true },
 ];
 
-export const FilterableStackedColumnKeys = TableHeaders.filter((column) => column.filterable).map(
+export const FilterableStackedColumnKeys = StackedTableColumns.filter((column) => column.filterable).map(
     (column) => column.key,
 );
