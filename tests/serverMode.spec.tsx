@@ -11,7 +11,7 @@ import Home from '../src/routes/Home';
 import Performance from '../src/routes/Performance';
 import mockPerformanceReport from './data/mockPerformanceReport.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
-import mockDeviceLog from './data/mockDeviceLog.json';
+import mockDeviceMeta from './data/mockDeviceMeta.json';
 import mockInstance from './data/mockInstance.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import { TestProviders } from './helpers/TestProviders';
@@ -24,7 +24,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetClusterDescription: () => ({ data: null }),
     usePerformanceReport: () => ({ data: mockPerformanceReport }),
     usePerformanceComparisonReport: () => ({ data: null }),
-    useDeviceLog: () => ({ data: mockDeviceLog }),
+    usePerfMeta: () => ({ data: mockDeviceMeta }),
     usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
     usePerformanceRange: () => ({ data: null }),
     useInstance: () => ({ data: mockInstance }),

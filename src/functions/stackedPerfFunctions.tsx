@@ -5,7 +5,12 @@
 import React from 'react';
 import HighlightedText from '../components/HighlightedText';
 import { formatSize } from './math';
-import { StackedTableHeader, StackedTableKeys, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
+import {
+    StackedColumnHeaders,
+    StackedTableColumn,
+    StackedTableKeys,
+    TypedStackedPerfRow,
+} from '../definitions/StackedPerfTable';
 
 export enum CellColour {
     White = 'white',
@@ -19,7 +24,6 @@ export enum CellColour {
     Grey = 'grey',
 }
 
-const PERCENTAGE_KEYS = ['percent', 'flops_min', 'flops_max', 'flops_mean', 'flops_std'];
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
     Matmul: CellColour.Magenta,
@@ -40,19 +44,19 @@ const FALLBACK_COLOUR = CellColour.Grey;
 
 export const formatStackedCell = (
     row: TypedStackedPerfRow,
-    header: StackedTableHeader,
+    column: StackedTableColumn,
     highlight?: string | null,
 ): React.JSX.Element | string => {
-    const { key, unit, decimals } = header;
+    const { key, unit, decimals } = column;
     let formatted: string | boolean | string[];
     const value = row[key];
 
-    if (value == null || value === '') {
+    if (value === null || value === '') {
         return '';
     }
 
-    if (typeof value === 'number' && PERCENTAGE_KEYS.includes(key)) {
-        formatted = formatSize(value, decimals ?? 0);
+    if (typeof value === 'number') {
+        formatted = formatSize(value, decimals);
     } else {
         formatted = value.toString();
     }
@@ -85,18 +89,18 @@ export const getCellMarkup = (text: string, colour?: CellColour, highlight?: str
 export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): CellColour => {
     const value = row[key];
 
-    if (PERCENTAGE_KEYS.includes(key) && typeof value === 'number') {
-        return value > 0 ? DEFAULT_COLOUR : FALLBACK_COLOUR;
-    }
-
-    if (key === 'op_code') {
+    if (key === StackedColumnHeaders.OpCodeJoined) {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : FALLBACK_COLOUR;
     }
 
-    if (key === 'ops_count' || key === 'device_time_sum_us') {
+    if (key === StackedColumnHeaders.OpsCount || key === StackedColumnHeaders.DeviceTimeSumUs) {
         return DEFAULT_COLOUR;
+    }
+
+    if (typeof value === 'number') {
+        return value > 0 ? DEFAULT_COLOUR : FALLBACK_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something

@@ -20,7 +20,7 @@ dependencies = [
     "pydantic==2.10.3",
     "python-dotenv==1.0.1",
     "PyYAML==6.0.2",
-    "tt-perf-report==1.1.12",
+    "tt-perf-report==1.1.14",
     "uvicorn==0.30.1",
     "zstd==1.5.7.0"
 ]

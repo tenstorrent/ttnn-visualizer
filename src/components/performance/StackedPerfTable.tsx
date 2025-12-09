@@ -6,12 +6,11 @@ import { FC, Fragment, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtomValue } from 'jotai';
 import {
-    ColumnHeaders,
-    StackedTableHeader,
-    TableHeaders,
+    StackedColumnHeaders,
+    StackedTableColumn,
     TypedStackedPerfRow,
+    stackedTableColumns,
 } from '../../definitions/StackedPerfTable';
 import 'styles/components/PerfReport.scss';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
@@ -22,7 +21,6 @@ import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import LoadingSpinner from '../LoadingSpinner';
 import { PATTERN_COUNT } from '../../definitions/Performance';
-import { noMergeDevicesAtom } from '../../store/app';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -41,12 +39,6 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
-    const noMergeDevices = useAtomValue(noMergeDevicesAtom);
-
-    // TODO: Perhaps there's a better way to handle this
-    const computedTableHeaders = !noMergeDevices
-        ? TableHeaders.filter((header) => header.key !== ColumnHeaders.Device)
-        : TableHeaders;
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         return [...sortTableFields(stackedData as [])];
@@ -78,10 +70,10 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
                         <tr>
-                            {computedTableHeaders.map((h) => {
+                            {stackedTableColumns.map((column) => {
                                 const targetSortDirection =
                                     // eslint-disable-next-line no-nested-ternary
-                                    sortingColumn === h.key
+                                    sortingColumn === column.key
                                         ? sortDirection === SortingDirection.ASC
                                             ? SortingDirection.DESC
                                             : SortingDirection.ASC
@@ -89,22 +81,21 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
                                 return (
                                     <th
-                                        key={h.key}
+                                        key={column.key}
                                         className='cell-header'
                                     >
-                                        {h.sortable ? (
+                                        {column.sortable ? (
                                             <Button
-                                                onClick={() => changeSorting(h.key)(targetSortDirection)}
+                                                onClick={() => changeSorting(column.key)(targetSortDirection)}
                                                 variant={ButtonVariant.MINIMAL}
                                                 size={Size.SMALL}
                                             >
-                                                <span className='header-label'>{h.label}</span>
-
-                                                {sortingColumn === h.key ? (
+                                                <span className='header-label'>{column.label}</span>
+                                                {sortingColumn === column.key ? (
                                                     <Icon
                                                         className={classNames(
                                                             {
-                                                                'is-active': sortingColumn === h.key,
+                                                                'is-active': sortingColumn === column.key,
                                                             },
                                                             'sort-icon',
                                                         )}
@@ -122,7 +113,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                                 )}
                                             </Button>
                                         ) : (
-                                            <span className='header-label no-button'>{h.label}</span>
+                                            <span className='header-label no-button'>{column.label}</span>
                                         )}
                                     </th>
                                 );
@@ -134,12 +125,12 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                         {tableFields?.map((row, i) => (
                             <Fragment key={`row-${i}`}>
                                 <tr>
-                                    {computedTableHeaders.map((h: StackedTableHeader) => (
+                                    {stackedTableColumns.map((column: StackedTableColumn) => (
                                         <td
-                                            key={h.key}
+                                            key={column.key}
                                             className={classNames('cell')}
                                         >
-                                            {formatStackedCell(row, h, filters?.[h.key])}
+                                            {formatStackedCell(row, column, filters?.[column.key])}
                                         </td>
                                     ))}
                                 </tr>
@@ -157,13 +148,13 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                                 `pattern-${datasetIndex >= PATTERN_COUNT ? datasetIndex - PATTERN_COUNT : datasetIndex}`,
                                             )}
                                         >
-                                            {computedTableHeaders.map((h: StackedTableHeader) => (
+                                            {stackedTableColumns.map((column: StackedTableColumn) => (
                                                 <td
-                                                    key={`comparison-${h.key}`}
+                                                    key={`comparison-${column.key}`}
                                                     className='cell'
                                                 >
                                                     {matchingRow
-                                                        ? formatStackedCell(matchingRow, h, filters?.[h.key])
+                                                        ? formatStackedCell(matchingRow, column, filters?.[column.key])
                                                         : ''}
                                                 </td>
                                             ))}
@@ -178,14 +169,14 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                         <tr>
                             {stackedData &&
                                 stackedData?.length > 0 &&
-                                computedTableHeaders.map((header) => (
+                                stackedTableColumns.map((column) => (
                                     <td
-                                        key={`footer-${header.key}`}
+                                        key={`footer-${column.key}`}
                                         className={classNames({
-                                            'no-wrap': header.key === ColumnHeaders.OpCodeJoined,
+                                            'no-wrap': column.key === StackedColumnHeaders.OpCodeJoined,
                                         })}
                                     >
-                                        {getTotalsForFooter(header, stackedData)}
+                                        {getTotalsForFooter(column, stackedData)}
                                     </td>
                                 ))}
                         </tr>
@@ -200,23 +191,23 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
     );
 };
 
-const getTotalsForFooter = (header: StackedTableHeader, data: TypedStackedPerfRow[]): string => {
-    if (header.key === ColumnHeaders.Percent) {
+const getTotalsForFooter = (column: StackedTableColumn, data: TypedStackedPerfRow[]): string => {
+    if (column.key === StackedColumnHeaders.Percent) {
         return `100 %`;
     }
 
-    if (header.key === ColumnHeaders.DeviceTimeSumUs) {
+    if (column.key === StackedColumnHeaders.DeviceTimeSumUs) {
         return `${formatSize(
             data?.reduce((acc, curr) => acc + (curr.device_time_sum_us || 0), 0),
             2,
         )} µs`;
     }
 
-    if (header.key === ColumnHeaders.OpCodeJoined) {
+    if (column.key === StackedColumnHeaders.OpCodeJoined) {
         return `${data.length} op types`;
     }
 
-    if (header.key === ColumnHeaders.OpsCount) {
+    if (column.key === StackedColumnHeaders.OpsCount) {
         return `${data?.reduce((acc, curr) => acc + (curr.ops_count || 0), 0)}`;
     }
 

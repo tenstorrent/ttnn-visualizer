@@ -4,7 +4,6 @@
 
 import axios, { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import Papa, { ParseResult } from 'papaparse';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
@@ -128,6 +127,14 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     let operationList = response.data;
     let retryCount = 0;
 
+    const getDeviceOperationNameList = (operation: OperationDescription) => {
+        return operation.device_operations
+            .filter((op) => {
+                return op.node_type === NodeType.function_start && isDeviceOperation(op.params.name);
+            })
+            .map((op) => op.params.name);
+    };
+
     // TODO: Figure out why we sometimes get a string back instead of an array so we don't need this hack
     while (!Array.isArray(operationList) && retryCount < MAX_RETRY_COUNT) {
         // eslint-disable-next-line no-console
@@ -176,6 +183,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             outputs,
             inputs,
             arguments: argumentsWithParsedValues,
+            deviceOperationNameList: getDeviceOperationNameList(operation),
         } as OperationDescription;
     });
 };
@@ -212,6 +220,26 @@ const useGetAllBuffers = (bufferType: BufferType | null) => {
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport?.path],
         staleTime: Infinity,
     });
+};
+
+export const useGetUniqueDeviceOperationsList = (): string[] => {
+    const { data: operations } = useOperationsList();
+
+    return useMemo(() => {
+        if (!operations || operations.length === 0) {
+            return [];
+        }
+
+        const deviceOperationSet = new Set<string>();
+
+        for (const operation of operations) {
+            for (const deviceOperation of operation.deviceOperationNameList) {
+                deviceOperationSet.add(deviceOperation);
+            }
+        }
+
+        return Array.from(deviceOperationSet);
+    }, [operations]);
 };
 
 /**
@@ -280,19 +308,6 @@ const fetchDevices = async (reportName: string) => {
 
     return [...new Map(meta.map((device) => [device.device_id, device])).values()];
 };
-
-// Not currently used
-// const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
-//     const { data } = await axiosInstance.get<string>('/api/performance/perf-results/raw');
-
-//     return new Promise((resolve, reject) => {
-//         Papa.parse<Record<string, string>>(data, {
-//             complete: (results) => resolve(results),
-//             error: (error: Error) => reject(error),
-//             header: true,
-//         });
-//     });
-// };
 
 export interface PerformanceReportResponse {
     report: PerfTableRow[];
@@ -367,40 +382,11 @@ interface MetaData {
     frequency: number | null;
 }
 
-interface FetchDeviceLogRawResult {
-    deviceMeta: MetaData;
-    deviceLog: ParseResult<Record<string, string>[]>;
-}
-
-const fetchDeviceLogRaw = async (name: string | null): Promise<FetchDeviceLogRawResult> => {
-    const { data } = await axiosInstance.get<string>('/api/performance/device-log/raw', {
+const fetchDeviceMeta = async (name: string | null) => {
+    const { data } = await axiosInstance.get<MetaData>('/api/performance/device-log/meta', {
         params: { name },
     });
-
-    function parseArchAndFreq(input: string): MetaData {
-        const archMatch = input.match(/ARCH:\s*([\w\d_]+)/);
-        const freqMatch = input.match(/CHIP_FREQ\[MHz\]:\s*(\d+)/);
-        const architecture = archMatch ? (archMatch[1] as DeviceArchitecture) : null;
-        const frequency = freqMatch ? parseInt(freqMatch[1], 10) : null;
-
-        return { architecture, frequency };
-    }
-
-    return new Promise<FetchDeviceLogRawResult>((resolve, reject) => {
-        const rows = data.split('\n');
-        const csv = rows.slice(1); // Remove the first row
-        const deviceMeta = parseArchAndFreq(rows[0]);
-        const headers = csv!
-            .shift()!
-            .split(/,\s{1,2}/)
-            .join(','); // headers without spaces
-        const processedCsv = [headers, ...csv].join('\n');
-        Papa.parse<Record<string, string>[]>(processedCsv, {
-            header: true,
-            complete: (deviceLog) => resolve({ deviceMeta, deviceLog }),
-            error: (error: Error) => reject(error),
-        });
-    });
+    return data;
 };
 
 const fetchClusterDescription = async (): Promise<ClusterModel> => {
@@ -544,11 +530,7 @@ export const useGetDeviceOperationsListByOp = () => {
         return (
             operations
                 ?.map((operation) => {
-                    const ops = operation.device_operations
-                        .filter((op) => op.node_type === NodeType.function_start)
-                        .map((deviceOperation) => deviceOperation.params.name)
-                        .filter((opName) => isDeviceOperation(opName));
-                    return { id: operation.id, name: operation.name, ops };
+                    return { id: operation.id, name: operation.name, ops: operation.deviceOperationNameList };
                 })
                 .filter((data) => {
                     return data.ops.length > 0;
@@ -620,7 +602,6 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     }, [operations, devices]);
 };
 
-// Unused
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const response = usePerformanceReport(activePerformanceReport?.reportName || null);
@@ -821,12 +802,11 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     }, [range, response, useRange]);
 };
 
-export const useDeviceLog = (name?: string | null) => {
+export const usePerfMeta = (name?: string | null) => {
     const key = name || null;
-
     return useQuery({
-        queryFn: () => fetchDeviceLogRaw(key),
-        queryKey: ['get-device-log-raw', key],
+        queryFn: () => fetchDeviceMeta(key),
+        queryKey: ['get-device-log-meta', key],
         staleTime: Infinity,
     });
 };

@@ -8,7 +8,7 @@ export type StackedTableKeys = Partial<keyof StackedPerfRow>;
 
 export type StackedTableFilter = Record<StackedTableKeys, string> | null;
 
-export interface StackedTableHeader {
+export interface StackedTableColumn {
     label: string;
     key: StackedTableKeys;
     colour?: string;
@@ -53,7 +53,7 @@ export interface TypedStackedPerfRow
     flops_std: number | null;
 }
 
-export enum ColumnHeaders {
+export enum StackedColumnHeaders {
     Percent = 'percent',
     OpCodeJoined = 'op_code_joined',
     Device = 'device',
@@ -65,18 +65,17 @@ export enum ColumnHeaders {
     FlopsStd = 'flops_std',
 }
 
-export const TableHeaders: StackedTableHeader[] = [
-    { label: 'Percent', key: ColumnHeaders.Percent, unit: '%', decimals: 2, sortable: true },
-    { label: 'Op Code', key: ColumnHeaders.OpCodeJoined, sortable: true, filterable: true },
-    { label: 'Device', key: ColumnHeaders.Device, sortable: true },
-    { label: 'Device Time', key: ColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 2, sortable: true },
-    { label: 'Ops Count', key: ColumnHeaders.OpsCount, sortable: true },
-    { label: 'Min FLOPS', key: ColumnHeaders.FlopsMin, unit: '%', decimals: 2, sortable: true },
-    { label: 'Max FLOPS', key: ColumnHeaders.FlopsMax, unit: '%', decimals: 2, sortable: true },
-    { label: 'Mean FLOPS', key: ColumnHeaders.FlopsMean, unit: '%', decimals: 2, sortable: true },
-    { label: 'Std FLOPS', key: ColumnHeaders.FlopsStd, unit: '%', decimals: 2, sortable: true },
+export const stackedTableColumns: StackedTableColumn[] = [
+    { label: 'Percent', key: StackedColumnHeaders.Percent, unit: '%', decimals: 2, sortable: true },
+    { label: 'Op Code', key: StackedColumnHeaders.OpCodeJoined, sortable: true, filterable: true },
+    { label: 'Device Time', key: StackedColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 2, sortable: true },
+    { label: 'Ops Count', key: StackedColumnHeaders.OpsCount, sortable: true },
+    { label: 'Min FLOPS', key: StackedColumnHeaders.FlopsMin, unit: '%', decimals: 2, sortable: true },
+    { label: 'Max FLOPS', key: StackedColumnHeaders.FlopsMax, unit: '%', decimals: 2, sortable: true },
+    { label: 'Mean FLOPS', key: StackedColumnHeaders.FlopsMean, unit: '%', decimals: 2, sortable: true },
+    { label: 'Std FLOPS', key: StackedColumnHeaders.FlopsStd, unit: '%', decimals: 2, sortable: true },
 ];
 
-export const FilterableStackedColumnKeys = TableHeaders.filter((column) => column.filterable).map(
-    (column) => column.key,
-);
+export const FilterableStackedColumnKeys = stackedTableColumns
+    .filter((column) => column.filterable)
+    .map((column) => column.key);

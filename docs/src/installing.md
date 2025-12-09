@@ -48,7 +48,7 @@ Network-on-chip performance estimator data can be loaded separately on the `/npe
 
 To generate this data for your model, refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe/blob/main/docs/src/getting_started.md).
 
-{#installing-from-pypi}
+(installing-from-pypi)=
 ## Installing from PyPI
 
 TT-NN Visualizer can be installed from [PyPI](https://pypi.org/project/ttnn-visualizer/):
