@@ -23,7 +23,7 @@ import {
 } from '@blueprintjs/core';
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { TableFilter, TableKeys, TypedPerfTableRow, filterableColumnKeys } from '../../definitions/PerfTable';
 import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
@@ -98,7 +98,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState(true);
     const [filters, setFilters] = useState<TableFilter>(
-        Object.fromEntries(FilterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
+        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
             string
         >,

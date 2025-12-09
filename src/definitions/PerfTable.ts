@@ -164,7 +164,7 @@ export enum ColumnHeaders {
     global_call_count = 'global_call_count',
 }
 
-export const TableColumns: TableColumn[] = [
+export const tableColumns: TableColumn[] = [
     { label: 'ID', key: ColumnHeaders.id, sortable: true },
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
@@ -182,9 +182,9 @@ export const TableColumns: TableColumn[] = [
     { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
 ];
 
-export const FilterableColumnKeys = TableColumns.filter((column) => column.filterable).map((column) => column.key);
+export const filterableColumnKeys = tableColumns.filter((column) => column.filterable).map((column) => column.key);
 
-export const ComparisonKeys: TableKeys[] = [
+export const comparisonKeys: TableKeys[] = [
     ColumnHeaders.op_code,
     ColumnHeaders.bound,
     ColumnHeaders.total_percent,
