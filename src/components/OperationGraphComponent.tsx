@@ -470,11 +470,9 @@ const OperationGraphInfoComponent: React.FC<{
                 {operation?.name} ({operation?.operationFileIdentifier})
             </h2>
             <ul className='device-operation-list'>
-                {operationList
-                    .find((op) => op.id === currentOperationId)
-                    ?.deviceOperationNameList.map((deviceOp, index) => (
-                        <li key={`device-op-${index}`}>{deviceOp}()</li>
-                    ))}
+                {operation?.deviceOperationNameList.map((deviceOp, index) => (
+                    <li key={`device-op-${index}`}>{deviceOp}()</li>
+                ))}
             </ul>
             <Button
                 className='navigate-button'
