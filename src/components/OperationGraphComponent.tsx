@@ -472,8 +472,8 @@ const OperationGraphInfoComponent: React.FC<{
             <ul className='device-operation-list'>
                 {operationList
                     .find((op) => op.id === currentOperationId)
-                    ?.deviceOperationNameList.map((deviceOp) => (
-                        <li>{deviceOp}()</li>
+                    ?.deviceOperationNameList.map((deviceOp, index) => (
+                        <li key={`device-op-${index}`}>{deviceOp}()</li>
                     ))}
             </ul>
             <Button
