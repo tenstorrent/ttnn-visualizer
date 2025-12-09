@@ -7,7 +7,7 @@ import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import {
-    ColumnHeaders,
+    StackedColumnHeaders,
     StackedTableHeader,
     TableHeaders,
     TypedStackedPerfRow,
@@ -174,7 +174,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                     <td
                                         key={`footer-${header.key}`}
                                         className={classNames({
-                                            'no-wrap': header.key === ColumnHeaders.OpCodeJoined,
+                                            'no-wrap': header.key === StackedColumnHeaders.OpCodeJoined,
                                         })}
                                     >
                                         {getTotalsForFooter(header, stackedData)}
@@ -193,22 +193,22 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 };
 
 const getTotalsForFooter = (header: StackedTableHeader, data: TypedStackedPerfRow[]): string => {
-    if (header.key === ColumnHeaders.Percent) {
+    if (header.key === StackedColumnHeaders.Percent) {
         return `100 %`;
     }
 
-    if (header.key === ColumnHeaders.DeviceTimeSumUs) {
+    if (header.key === StackedColumnHeaders.DeviceTimeSumUs) {
         return `${formatSize(
             data?.reduce((acc, curr) => acc + (curr.device_time_sum_us || 0), 0),
             2,
         )} µs`;
     }
 
-    if (header.key === ColumnHeaders.OpCodeJoined) {
+    if (header.key === StackedColumnHeaders.OpCodeJoined) {
         return `${data.length} op types`;
     }
 
-    if (header.key === ColumnHeaders.OpsCount) {
+    if (header.key === StackedColumnHeaders.OpsCount) {
         return `${data?.reduce((acc, curr) => acc + (curr.ops_count || 0), 0)}`;
     }
 
