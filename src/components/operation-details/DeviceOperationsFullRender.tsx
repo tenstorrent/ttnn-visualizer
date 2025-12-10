@@ -27,7 +27,7 @@ const DeviceOperationsFullRender: React.FC<{
     onLegendClick: (address: number, tensorId?: number) => void;
 }> = ({ deviceOperations, details, onLegendClick }) => {
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    // We dont need this for now so commenting out
+    // We don't need this for now so commenting out
     // I would like this to stay as this might come back as needed
     // const inputIds = details.inputs.map((tensor) => tensor?.id);
     // const inputs = useGetTensorSizesById(inputIds);
