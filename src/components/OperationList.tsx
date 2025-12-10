@@ -65,7 +65,6 @@ const OperationList = () => {
 
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
-
     const filteredOperationsList = useMemo(() => {
         if (operationsWithRange) {
             let operations = [...operationsWithRange];
