@@ -20,7 +20,7 @@ export interface StackedTableColumn {
 
 export interface StackedPerfRow {
     percent: string;
-    op_code_joined: string;
+    op_code: string;
     device: string;
     device_time_sum_us: string;
     ops_count: string;
@@ -55,7 +55,7 @@ export interface TypedStackedPerfRow
 
 export enum StackedColumnHeaders {
     Percent = 'percent',
-    OpCodeJoined = 'op_code_joined',
+    OpCode = 'op_code',
     Device = 'device',
     DeviceTimeSumUs = 'device_time_sum_us',
     OpsCount = 'ops_count',
@@ -67,7 +67,7 @@ export enum StackedColumnHeaders {
 
 export const stackedTableColumns: StackedTableColumn[] = [
     { label: 'Percent', key: StackedColumnHeaders.Percent, unit: '%', decimals: 2, sortable: true },
-    { label: 'Op Code', key: StackedColumnHeaders.OpCodeJoined, sortable: true, filterable: true },
+    { label: 'Op Code', key: StackedColumnHeaders.OpCode, sortable: true, filterable: true },
     { label: 'Device Time', key: StackedColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 2, sortable: true },
     { label: 'Ops Count', key: StackedColumnHeaders.OpsCount, sortable: true },
     { label: 'Min FLOPS', key: StackedColumnHeaders.FlopsMin, unit: '%', decimals: 2, sortable: true },
@@ -76,6 +76,6 @@ export const stackedTableColumns: StackedTableColumn[] = [
     { label: 'Std FLOPS', key: StackedColumnHeaders.FlopsStd, unit: '%', decimals: 2, sortable: true },
 ];
 
-export const FilterableStackedColumnKeys = stackedTableColumns
+export const filterableStackedColumnKeys = stackedTableColumns
     .filter((column) => column.filterable)
     .map((column) => column.key);

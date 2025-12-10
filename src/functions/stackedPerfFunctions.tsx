@@ -89,7 +89,7 @@ export const getCellMarkup = (text: string, colour?: CellColour, highlight?: str
 export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): CellColour => {
     const value = row[key];
 
-    if (key === StackedColumnHeaders.OpCodeJoined) {
+    if (key === StackedColumnHeaders.OpCode) {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : FALLBACK_COLOUR;

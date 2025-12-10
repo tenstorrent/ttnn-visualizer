@@ -3,10 +3,10 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import {
-    FilterableStackedColumnKeys,
     StackedTableFilter,
     StackedTableKeys,
     TypedStackedPerfRow,
+    filterableStackedColumnKeys,
 } from '../definitions/StackedPerfTable';
 
 const isFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
@@ -43,32 +43,31 @@ const sortAndFilterStackedPerfTableData = (
         return percentB - percentA;
     });
 
-    if (filters && isFiltersActive(filters) && FilterableStackedColumnKeys) {
+    if (filters && isFiltersActive(filters) && filterableStackedColumnKeys) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&
                 Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
-                        const bufferValue = getCellText(row, key as StackedTableKeys);
+                        const cellText = getCellText(row, key as StackedTableKeys);
 
-                        return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
+                        return !cellText.toLowerCase().includes(filterValue.toLowerCase());
                     });
 
             return !isFilteredOut;
         });
     }
 
-    // In the stacked data the op_code field is named just "op_code" not "raw_op_code"
     if (rawOpCodeFilter?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) =>
-                row?.op_code_joined !== null &&
+                row?.op_code !== null &&
                 rawOpCodeFilter.some((filterValue) =>
                     stackByIn0
-                        ? filterValue.toLowerCase() === row.op_code_joined.toLowerCase()
+                        ? filterValue.toLowerCase() === row.op_code.toLowerCase()
                         : // TODO: This split is currently needed but we should store the data differently
-                          filterValue.toLowerCase() === row.op_code_joined.split(' ')[0].toLowerCase(),
+                          filterValue.toLowerCase() === row.op_code.split(' ')[0].toLowerCase(),
                 ),
         );
     }

@@ -44,10 +44,10 @@ import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableDa
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
-    FilterableStackedColumnKeys,
     StackedTableFilter,
     StackedTableKeys,
     TypedStackedPerfRow,
+    filterableStackedColumnKeys,
 } from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import HighlightedText from '../HighlightedText';
@@ -104,7 +104,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         >,
     );
     const [stackedFilters, setStackedFilters] = useState<StackedTableFilter>(
-        Object.fromEntries(FilterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
+        Object.fromEntries(filterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
             StackedTableKeys,
             string
         >,
@@ -408,32 +408,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         searchQuery={filters?.op_code || ''}
                     />
 
-                    <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
-                        keyName='buffer_type'
-                        options={processedRows || []}
-                        labelFormatter={(value: BufferType | null) =>
-                            value !== null ? BufferTypeLabel[value] : 'No value'
-                        }
-                        placeholder='Select Buffer Type...'
-                        values={activeBufferTypeFilterList}
-                        updateHandler={setActiveBufferTypeFilterList}
-                    />
-
                     <MultiSelectField<TypedPerfTableRow, 'raw_op_code'>
                         keyName='raw_op_code'
                         options={getRawOpCodeOptions(processedRows) || []}
                         placeholder='Select Op Codes...'
                         values={activeRawOpCodeFilterList}
                         updateHandler={setActiveRawOpCodeFilterList}
-                    />
-
-                    <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
-                        keyName='math_fidelity'
-                        options={processedRows || []}
-                        placeholder='Select Math Fidelity...'
-                        values={activeMathFilterList}
-                        updateHandler={setActiveMathFilterList}
-                        disabled={isStackedView}
                     />
                 </div>
 
@@ -462,6 +442,26 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 <div className='data-options'>
                     {!isStackedView && (
                         <>
+                            <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
+                                keyName='buffer_type'
+                                options={processedRows || []}
+                                labelFormatter={(value: BufferType | null) =>
+                                    value !== null ? BufferTypeLabel[value] : 'No value'
+                                }
+                                placeholder='Select Buffer Type...'
+                                values={activeBufferTypeFilterList}
+                                updateHandler={setActiveBufferTypeFilterList}
+                            />
+
+                            <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
+                                keyName='math_fidelity'
+                                options={processedRows || []}
+                                placeholder='Select Math Fidelity...'
+                                values={activeMathFilterList}
+                                updateHandler={setActiveMathFilterList}
+                                disabled={isStackedView}
+                            />
+
                             <Switch
                                 label='Matmul optimization analysis'
                                 onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}

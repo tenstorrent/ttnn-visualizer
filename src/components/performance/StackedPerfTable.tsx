@@ -137,7 +137,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
                                 {stackedComparisonData.map((comparisonDataset, datasetIndex) => {
                                     const matchingRow = comparisonDataset.find(
-                                        (stackedRow) => stackedRow.op_code_joined === row.op_code_joined,
+                                        (stackedRow) => stackedRow.op_code === row.op_code,
                                     );
 
                                     return (
@@ -173,7 +173,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                     <td
                                         key={`footer-${column.key}`}
                                         className={classNames({
-                                            'no-wrap': column.key === StackedColumnHeaders.OpCodeJoined,
+                                            'no-wrap': column.key === StackedColumnHeaders.OpCode,
                                         })}
                                     >
                                         {getTotalsForFooter(column, stackedData)}
@@ -203,7 +203,7 @@ const getTotalsForFooter = (column: StackedTableColumn, data: TypedStackedPerfRo
         )} µs`;
     }
 
-    if (column.key === StackedColumnHeaders.OpCodeJoined) {
+    if (column.key === StackedColumnHeaders.OpCode) {
         return `${data.length} op types`;
     }
 
