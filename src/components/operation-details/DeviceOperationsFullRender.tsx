@@ -28,7 +28,7 @@ const DeviceOperationsFullRender: React.FC<{
 }> = ({ deviceOperations, details, onLegendClick }) => {
     const selectedAddress = useAtomValue(selectedAddressAtom);
     // We dont need this for now so commenting out
-    // i would liek this to stay as this might comeback as needed
+    // I would like this to stay as this might come back as needed
     // const inputIds = details.inputs.map((tensor) => tensor?.id);
     // const inputs = useGetTensorSizesById(inputIds);
     const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
