@@ -50,8 +50,8 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
     const computedTableColumns = useMemo<StackedTableColumn[]>(
         () =>
             noMergeDevices
-                ? stackedTableColumns.filter((column) => column.key !== StackedColumnHeaders.Device)
-                : stackedTableColumns,
+                ? stackedTableColumns
+                : stackedTableColumns.filter((column) => column.key !== StackedColumnHeaders.Device),
         [noMergeDevices],
     );
 
