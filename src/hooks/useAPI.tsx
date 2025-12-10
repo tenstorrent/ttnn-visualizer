@@ -833,13 +833,10 @@ export const usePerformanceReport = (name: string | null) => {
         ],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
+        staleTime: Infinity,
     });
 
-    return useMemo(
-        () => response,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [response.data, response.error],
-    );
+    return response;
 };
 
 export const usePerformanceComparisonReport = () => {
