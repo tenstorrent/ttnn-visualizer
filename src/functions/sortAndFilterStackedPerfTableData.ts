@@ -32,8 +32,10 @@ const sortAndFilterStackedPerfTableData = (
 
     // TODO: This should be moved to tt-perf-report as the printed report differs from the output csv
     filteredRows = filteredRows.sort((a, b) => {
-        // First sort by device
-        const deviceCompare = (a.device?.toString() || '').localeCompare(b.device?.toString() || '');
+        // First sort by device (numeric comparison)
+        const deviceA = a.device ?? Number.MAX_SAFE_INTEGER;
+        const deviceB = b.device ?? Number.MAX_SAFE_INTEGER;
+        const deviceCompare = deviceA - deviceB;
         if (deviceCompare !== 0) {
             return deviceCompare;
         }
