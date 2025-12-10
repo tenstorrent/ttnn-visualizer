@@ -17,7 +17,6 @@ import { AllocationDetails, processMemoryAllocations } from '../../functions/pro
 import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
-import { useGetTensorSizesById } from '../../hooks/useAPI';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1MemorySize';
 
 // TODO: this component definitely needs to be broken down into smaller components
@@ -28,10 +27,11 @@ const DeviceOperationsFullRender: React.FC<{
     onLegendClick: (address: number, tensorId?: number) => void;
 }> = ({ deviceOperations, details, onLegendClick }) => {
     const selectedAddress = useAtomValue(selectedAddressAtom);
-
-    const inputIds = details.inputs.map((tensor) => tensor?.id);
-    const inputs = useGetTensorSizesById(inputIds);
-    const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations, inputs);
+    // We dont need this for now so commenting out
+    // i would liek this to stay as this might comeback as needed
+    // const inputIds = details.inputs.map((tensor) => tensor?.id);
+    // const inputs = useGetTensorSizesById(inputIds);
+    const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
 
     const formatDeviceOpParameters = useCallback(
         (node: Node) => {
