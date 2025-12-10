@@ -22,7 +22,7 @@ import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import LoadingSpinner from '../LoadingSpinner';
 import { PATTERN_COUNT } from '../../definitions/Performance';
-import { noMergeDevicesAtom } from '../../store/app';
+import { mergeDevicesAtom } from '../../store/app';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -41,7 +41,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
-    const noMergeDevices = useAtomValue(noMergeDevicesAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         return [...sortTableFields(stackedData as [])];
@@ -49,10 +49,10 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
     const computedTableColumns = useMemo<StackedTableColumn[]>(
         () =>
-            noMergeDevices
-                ? stackedTableColumns
-                : stackedTableColumns.filter((column) => column.key !== StackedColumnHeaders.Device),
-        [noMergeDevices],
+            mergeDevices
+                ? stackedTableColumns.filter((column) => column.key !== StackedColumnHeaders.Device)
+                : stackedTableColumns,
+        [mergeDevices],
     );
 
     if (!data) {

@@ -10,7 +10,7 @@ import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, noMergeDevicesAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
@@ -22,7 +22,7 @@ interface PerfKernelDurationUtilizationChartProps {
 function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDurationUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
-    const noMergeDevices = useAtomValue(noMergeDevicesAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const chartData = useMemo(
         () =>
@@ -57,7 +57,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
 
     return (
         <>
-            {maxYValue > 1 && !noMergeDevices && <PerfMultiDeviceNotice />}
+            {maxYValue > 1 && mergeDevices && <PerfMultiDeviceNotice />}
             <PerfChart
                 title='Utilization vs Device Kernel Duration'
                 chartData={chartData}

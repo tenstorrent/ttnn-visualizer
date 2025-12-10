@@ -35,7 +35,7 @@ import {
     hideHostOpsAtom,
     isStackedViewAtom,
     mathFilterListAtom,
-    noMergeDevicesAtom,
+    mergeDevicesAtom,
     rawOpCodeFilterListAtom,
     stackByIn0Atom,
 } from '../../store/app';
@@ -84,7 +84,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
     const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
-    const [noMergeDevices, setNoMergeDevices] = useAtom(noMergeDevicesAtom);
+    const [mergeDevices, setMergeDevices] = useAtom(mergeDevicesAtom);
     const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
@@ -382,9 +382,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             />
 
                             <Switch
-                                label='Skip multi device merge'
-                                onChange={() => setNoMergeDevices(!noMergeDevices)}
-                                checked={noMergeDevices}
+                                label='Merge device rows'
+                                onChange={() => setMergeDevices(!mergeDevices)}
+                                checked={mergeDevices}
                                 className='option-switch'
                             />
 
@@ -512,7 +512,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     )}
                 </div>
 
-                {!noMergeDevices && (
+                {mergeDevices && (
                     <Callout
                         className='multi-device-note'
                         intent={Intent.PRIMARY}

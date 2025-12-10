@@ -459,7 +459,7 @@ class OpsPerformanceReportQueries:
     DEFAULT_NO_HOST_OPS = False
     DEFAULT_NO_STACKED_REPORT = False
     DEFAULT_NO_STACK_BY_IN0 = True
-    DEFAULT_NO_MERGE_DEVICES = False
+    DEFAULT_MERGE_DEVICES = True
 
     @classmethod
     def generate_report(cls, instance, **kwargs):
@@ -473,7 +473,7 @@ class OpsPerformanceReportQueries:
         print_signposts = kwargs.get("print_signposts", cls.DEFAULT_PRINT_SIGNPOSTS)
         stack_by_in0 = kwargs.get("stack_by_in0", cls.DEFAULT_NO_STACK_BY_IN0)
         no_host_ops = kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS)
-        no_merge_devices = kwargs.get("no_merge_devices", cls.DEFAULT_NO_MERGE_DEVICES)
+        merge_devices = kwargs.get("merge_devices", cls.DEFAULT_MERGE_DEVICES)
 
         if start_signpost or end_signpost:
             ignore_signposts = False
@@ -499,7 +499,7 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_NO_STACKED_REPORT,
                 stack_by_in0,
                 csv_stacked_output_file,
-                no_merge_devices,
+                not merge_devices,
             )
         except Exception as e:
             logger.error(f"Error generating performance report: {e}")
@@ -582,10 +582,10 @@ class OpsPerformanceReportQueries:
                     reader = csv.reader(csvfile, delimiter=",")
                     next(reader, None)
 
-                    # Use the appropriate column list based on no_merge_devices flag
+                    # Use the appropriate column list based on merge_devices flag
                     stacked_columns = (
                         cls.STACKED_REPORT_COLUMNS_WITH_DEVICE
-                        if no_merge_devices
+                        if not merge_devices
                         else cls.STACKED_REPORT_COLUMNS
                     )
 
