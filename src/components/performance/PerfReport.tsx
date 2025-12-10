@@ -394,7 +394,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     onChange={() => setStackByIn0(!stackByIn0)}
                                     checked={stackByIn0}
                                     className='option-switch'
-                                    disabled={!isStackedView}
                                 />
                             )}
                         </ButtonGroup>
