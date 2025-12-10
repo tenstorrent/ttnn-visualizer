@@ -3,10 +3,10 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import {
-    FilterableColumnKeys,
     TableFilter,
     TableKeys,
     TypedPerfTableRow,
+    filterableColumnKeys,
     signpostRowDefaults,
 } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
@@ -63,7 +63,7 @@ const sortAndFilterPerfTableData = (
         ];
     }
 
-    if (isFiltersActive(filters) && FilterableColumnKeys) {
+    if (isFiltersActive(filters) && filterableColumnKeys) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&

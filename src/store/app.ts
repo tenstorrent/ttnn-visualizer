@@ -74,6 +74,7 @@ export const hideHostOpsAtom = atom<boolean>(true);
 export const mathFilterListAtom = atom<TypedPerfTableRow['math_fidelity'][]>([]);
 export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>([]);
 export const bufferTypeFilterListAtom = atom<TypedPerfTableRow['buffer_type'][]>([]);
+export const mergeDevicesAtom = atom<boolean>(true);
 
 // NPE
 export const altCongestionColorsAtom = atomWithStorage<boolean>('altCongestionColorsAtom', false);

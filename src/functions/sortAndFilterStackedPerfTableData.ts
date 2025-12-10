@@ -3,10 +3,10 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import {
-    FilterableStackedColumnKeys,
     StackedTableFilter,
     StackedTableKeys,
     TypedStackedPerfRow,
+    filterableStackedColumnKeys,
 } from '../definitions/StackedPerfTable';
 
 const isFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
@@ -30,23 +30,37 @@ const sortAndFilterStackedPerfTableData = (
 
     let filteredRows = data || [];
 
-    if (filters && isFiltersActive(filters) && FilterableStackedColumnKeys) {
+    // TODO: This should be moved to tt-perf-report as the printed report differs from the output csv
+    filteredRows = filteredRows.sort((a, b) => {
+        // First sort by device (numeric comparison)
+        const deviceA = a.device ?? Number.MAX_SAFE_INTEGER;
+        const deviceB = b.device ?? Number.MAX_SAFE_INTEGER;
+        const deviceCompare = deviceA - deviceB;
+        if (deviceCompare !== 0) {
+            return deviceCompare;
+        }
+        // Then sort by percent
+        const percentA = typeof a.percent === 'number' ? a.percent : 0;
+        const percentB = typeof b.percent === 'number' ? b.percent : 0;
+        return percentB - percentA;
+    });
+
+    if (filters && isFiltersActive(filters) && filterableStackedColumnKeys) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&
                 Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
-                        const bufferValue = getCellText(row, key as StackedTableKeys);
+                        const cellText = getCellText(row, key as StackedTableKeys);
 
-                        return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
+                        return !cellText.toLowerCase().includes(filterValue.toLowerCase());
                     });
 
             return !isFilteredOut;
         });
     }
 
-    // In the stacked data the op_code field is named just "op_code" not "raw_op_code"
     if (rawOpCodeFilter?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) =>
