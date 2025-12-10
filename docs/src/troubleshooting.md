@@ -1,6 +1,6 @@
 # Troubleshooting
 
-## Fix for 'no keys found' error
+## No SSH keys found
 
 <img width="492" alt="Screenshot 2025-01-30 at 1 55 10 PM" src="https://github.com/user-attachments/assets/3f7f9983-f92d-4900-9321-9d46c6355c36" />
 
@@ -16,7 +16,7 @@ If your key isn't present, run the following on your local machine:
 ssh-add
 ```
 
-## Fix for python not finding modules
+## Unable to find Python modules
 
 ```shell
 deactivate
@@ -25,7 +25,7 @@ rm -rf myenv
 
 Then {ref}`follow the steps <back-end>` for creating virtual environment and reinstalling dependencies
 
-## Fix for missing distutils package
+## Missing distutils package
 
 With the virtualenv activated run:
 
@@ -34,7 +34,7 @@ pip install --upgrade setuptools
 ```
 
 
-## Fix for 'Event synchronization is not supported during trace capture' error
+## Event synchronization is not supported during trace capture
 
 Report generation in TTNN is not compatible with trace capture. If you see this error,
 it likely means that trace capture has been enabled in TTNN. This is not
