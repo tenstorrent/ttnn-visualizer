@@ -5,7 +5,7 @@
 import React, { Fragment, JSX, useCallback } from 'react';
 import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtomValue } from 'jotai/index';
+import { useAtomValue } from 'jotai';
 import classNames from 'classnames';
 import { DeviceOperationTypes, Node, NodeType, Tensor } from '../../model/APIData';
 import 'styles/components/DeviceOperationFullRender.scss';
