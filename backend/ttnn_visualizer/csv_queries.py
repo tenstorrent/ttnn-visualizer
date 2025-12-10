@@ -431,6 +431,18 @@ class OpsPerformanceReportQueries:
         "flops_std",
     ]
 
+    STACKED_REPORT_COLUMNS_WITH_DEVICE = [
+        "percent",
+        "op_code",
+        "device",
+        "device_time_sum_us",
+        "ops_count",
+        "flops_min",
+        "flops_max",
+        "flops_mean",
+        "flops_std",
+    ]
+
     PASSTHROUGH_COLUMNS = {
         "pm_ideal_ns": "PM IDEAL [ns]",
     }
@@ -570,10 +582,17 @@ class OpsPerformanceReportQueries:
                     reader = csv.reader(csvfile, delimiter=",")
                     next(reader, None)
 
+                    # Use the appropriate column list based on no_merge_devices flag
+                    stacked_columns = (
+                        cls.STACKED_REPORT_COLUMNS_WITH_DEVICE
+                        if no_merge_devices
+                        else cls.STACKED_REPORT_COLUMNS
+                    )
+
                     for row in reader:
                         processed_row = {
                             column: row[index]
-                            for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
+                            for index, column in enumerate(stacked_columns)
                             if index < len(row)
                         }
 

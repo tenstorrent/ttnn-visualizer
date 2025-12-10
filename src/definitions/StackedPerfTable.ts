@@ -68,6 +68,7 @@ export enum StackedColumnHeaders {
 export const stackedTableColumns: StackedTableColumn[] = [
     { label: 'Percent', key: StackedColumnHeaders.Percent, unit: '%', decimals: 2, sortable: true },
     { label: 'Op Code', key: StackedColumnHeaders.OpCode, sortable: true, filterable: true },
+    { label: 'Device', key: StackedColumnHeaders.Device, decimals: 0, sortable: true },
     { label: 'Device Time', key: StackedColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 2, sortable: true },
     { label: 'Ops Count', key: StackedColumnHeaders.OpsCount, sortable: true },
     { label: 'Min FLOPS', key: StackedColumnHeaders.FlopsMin, unit: '%', decimals: 2, sortable: true },

@@ -6,6 +6,7 @@ import { FC, Fragment, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtomValue } from 'jotai';
 import {
     StackedColumnHeaders,
     StackedTableColumn,
@@ -21,6 +22,7 @@ import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import LoadingSpinner from '../LoadingSpinner';
 import { PATTERN_COUNT } from '../../definitions/Performance';
+import { noMergeDevicesAtom } from '../../store/app';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -39,10 +41,19 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
+    const noMergeDevices = useAtomValue(noMergeDevicesAtom);
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         return [...sortTableFields(stackedData as [])];
     }, [stackedData, sortTableFields]);
+
+    const computedTableColumns = useMemo<StackedTableColumn[]>(
+        () =>
+            noMergeDevices
+                ? stackedTableColumns.filter((column) => column.key !== StackedColumnHeaders.Device)
+                : stackedTableColumns,
+        [noMergeDevices],
+    );
 
     if (!data) {
         return <LoadingSpinner />;
@@ -70,7 +81,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
                         <tr>
-                            {stackedTableColumns.map((column) => {
+                            {computedTableColumns.map((column) => {
                                 const targetSortDirection =
                                     // eslint-disable-next-line no-nested-ternary
                                     sortingColumn === column.key
@@ -125,7 +136,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                         {tableFields?.map((row, i) => (
                             <Fragment key={`row-${i}`}>
                                 <tr>
-                                    {stackedTableColumns.map((column: StackedTableColumn) => (
+                                    {computedTableColumns.map((column: StackedTableColumn) => (
                                         <td
                                             key={column.key}
                                             className={classNames('cell')}
@@ -148,7 +159,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                                 `pattern-${datasetIndex >= PATTERN_COUNT ? datasetIndex - PATTERN_COUNT : datasetIndex}`,
                                             )}
                                         >
-                                            {stackedTableColumns.map((column: StackedTableColumn) => (
+                                            {computedTableColumns.map((column: StackedTableColumn) => (
                                                 <td
                                                     key={`comparison-${column.key}`}
                                                     className='cell'
@@ -169,7 +180,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                         <tr>
                             {stackedData &&
                                 stackedData?.length > 0 &&
-                                stackedTableColumns.map((column) => (
+                                computedTableColumns.map((column) => (
                                     <td
                                         key={`footer-${column.key}`}
                                         className={classNames({
