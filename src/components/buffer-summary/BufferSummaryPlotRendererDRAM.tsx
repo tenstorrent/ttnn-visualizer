@@ -96,18 +96,15 @@ function BufferSummaryPlotRendererDRAM({
         [segmentedChartData],
     );
 
-    const {
-        itemCount: restoredItemCount,
-        scrollOffset: restoredOffset,
-        measurementsCache: restoredMeasurementsCache,
-    } = useMemo(() => getListState(), [getListState]) ?? {};
+    const { scrollOffset: restoredOffset, measurementsCache: restoredMeasurementsCache } =
+        useMemo(() => getListState(), [getListState]) ?? {};
 
     const virtualizer = useVirtualizer({
         estimateSize: () => OPERATION_EL_HEIGHT,
         getScrollElement: () => scrollElementRef.current,
         overscan: 20,
         initialMeasurementsCache: restoredMeasurementsCache,
-        count: restoredItemCount || uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
     });
 
@@ -137,7 +134,6 @@ function BufferSummaryPlotRendererDRAM({
     useEffect(() => {
         return () => {
             updateListState({
-                itemCount: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
                 scrollOffset: scrollOffsetRef.current || 0,
                 measurementsCache: measurementsCacheRef.current,
             });

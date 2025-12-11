@@ -106,7 +106,6 @@ const TensorList = () => {
     ]);
 
     const {
-        itemCount: restoredItemCount,
         scrollOffset: restoredOffset,
         measurementsCache: restoredMeasurementsCache,
         expandedItems: restoredExpandedItems,
@@ -117,7 +116,7 @@ const TensorList = () => {
         getScrollElement: () => scrollElementRef.current,
         overscan: 10,
         initialMeasurementsCache: restoredMeasurementsCache,
-        count: restoredItemCount || filteredTensorsList?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: filteredTensorsList?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
     });
 
@@ -201,7 +200,6 @@ const TensorList = () => {
     useEffect(() => {
         return () =>
             updateListState({
-                itemCount: filteredTensorsList?.length || PLACEHOLDER_ARRAY_SIZE,
                 scrollOffset: scrollOffsetRef.current || 0,
                 measurementsCache: measurementsCacheRef.current,
                 expandedItems: expandedItemsRef.current,
