@@ -14,7 +14,8 @@ import Collapsible from './Collapsible';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
-import { useOperationsList } from '../hooks/useAPI';
+import 'styles/components/OperationsListComponent.scss';
+import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import { activePerformanceReportAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
@@ -26,6 +27,7 @@ import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import { ScrollLocations } from '../definitions/ScrollPositions';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 import useScrollShade from '../hooks/useScrollShade';
+import SimpleMultiselect from './SimpleMultiselect';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -65,6 +67,13 @@ const OperationList = () => {
 
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
+    const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
+    const [selectedDeviceOperations, setSelectedDeviceOperations] = useState<string[]>([]);
+
+    const filterDeviceOperations = (list: string[]) => {
+        setSelectedDeviceOperations(list);
+    };
+
     const filteredOperationsList = useMemo(() => {
         if (operationsWithRange) {
             let operations = [...operationsWithRange];
@@ -72,6 +81,12 @@ const OperationList = () => {
             if (filterQuery) {
                 operations = operationsWithRange?.filter((operation) =>
                     getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
+                );
+            }
+
+            if (selectedDeviceOperations.length) {
+                operations = operations.filter((operation) =>
+                    operation.deviceOperationNameList.some((opName) => selectedDeviceOperations.includes(opName)),
                 );
             }
 
@@ -93,7 +108,14 @@ const OperationList = () => {
         }
 
         return [];
-    }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration]);
+    }, [
+        //
+        operationsWithRange,
+        filterQuery,
+        selectedDeviceOperations,
+        shouldSortByID,
+        shouldSortDuration,
+    ]);
 
     const {
         itemCount: restoredItemCount,
@@ -246,7 +268,7 @@ const OperationList = () => {
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
-        <fieldset className='list-wrap'>
+        <fieldset className='list-wrap operations-list-component'>
             <legend>Operations</legend>
 
             <div className='list-controls'>
@@ -338,6 +360,12 @@ const OperationList = () => {
                         />
                     </Tooltip>
                 </ButtonGroup>
+
+                <SimpleMultiselect
+                    label='Device Operations'
+                    optionList={uniqueDeviceOperationNames || []}
+                    onUpdateHandler={filterDeviceOperations}
+                />
 
                 {!isLoading && (
                     <p className='result-count'>
@@ -446,6 +474,12 @@ const OperationList = () => {
                                                         />
                                                     </>
                                                 )}
+
+                                                <ul className='device-operations-list'>
+                                                    {operation.deviceOperationNameList.map((op: string, index) => {
+                                                        return <li key={operation.id + op + index}>{op}()</li>;
+                                                    })}
+                                                </ul>
 
                                                 {activePerformanceReport && (
                                                     <OperationListPerfData operation={operation} />
