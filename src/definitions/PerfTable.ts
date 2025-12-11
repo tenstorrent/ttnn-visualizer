@@ -62,23 +62,22 @@ export interface PerfTableRow {
     missing?: boolean;
 }
 
-export interface TypedPerfTableRow
-    extends Omit<
-        PerfTableRow,
-        | 'id'
-        | 'global_call_count'
-        | 'total_percent'
-        | 'device'
-        | 'device_time'
-        | 'op_to_op_gap'
-        | 'cores'
-        | 'dram'
-        | 'dram_percent'
-        | 'flops'
-        | 'flops_percent'
-        | 'bound'
-        | 'pm_ideal_ns'
-    > {
+export interface TypedPerfTableRow extends Omit<
+    PerfTableRow,
+    | 'id'
+    | 'global_call_count'
+    | 'total_percent'
+    | 'device'
+    | 'device_time'
+    | 'op_to_op_gap'
+    | 'cores'
+    | 'dram'
+    | 'dram_percent'
+    | 'flops'
+    | 'flops_percent'
+    | 'bound'
+    | 'pm_ideal_ns'
+> {
     id: number | null;
     global_call_count: number | null;
     total_percent: number | null;
