@@ -380,12 +380,14 @@ export const useNPETimelineFile = (fileName: string | undefined) => {
 interface MetaData {
     architecture: DeviceArchitecture | null;
     frequency: number | null;
+    max_cores: number | null;
 }
 
 const fetchDeviceMeta = async (name: string | null) => {
     const { data } = await axiosInstance.get<MetaData>('/api/performance/device-log/meta', {
         params: { name },
     });
+
     return data;
 };
 
