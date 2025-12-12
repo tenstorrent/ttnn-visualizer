@@ -20,8 +20,12 @@ import { NPEValidationError, validateNpeData } from '../definitions/NPEData';
 const NPE: FC = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    const { data: loadedData, isLoading: isLoadingNPE, error: httpError } = useNpe(npeFileName);
-    const { data: loadedTimeline, isLoading: isLoadingTimeline } = useNPETimelineFile(filepath);
+    const { data: loadedData, isLoading: isLoadingNPE, error: httpError } = useNpe(filepath ? null : npeFileName);
+    const {
+        data: loadedTimeline,
+        isLoading: isLoadingTimeline,
+        error: timelineHttpError,
+    } = useNPETimelineFile(filepath);
     const [demoData, setDemoData] = useState<NPEData | null>(null);
     const [selectedDemo, setSelectedDemo] = useState<NPEDemoData | null>(null);
 
@@ -35,16 +39,23 @@ const NPE: FC = () => {
         if (isLoading) {
             return NPEValidationError.OK;
         }
-        if (httpError?.status === HttpStatusCode.UnprocessableEntity) {
+
+        if (
+            httpError?.status === HttpStatusCode.UnprocessableEntity ||
+            timelineHttpError?.status === HttpStatusCode.UnprocessableEntity
+        ) {
             return NPEValidationError.INVALID_JSON;
         }
 
         if (httpError?.status !== undefined && httpError?.status >= HttpStatusCode.BadRequest) {
             return NPEValidationError.DEFAULT;
         }
+        if (timelineHttpError?.status !== undefined && timelineHttpError?.status >= HttpStatusCode.BadRequest) {
+            return NPEValidationError.DEFAULT;
+        }
 
         return validateNpeData(npeData);
-    }, [isLoading, httpError?.status, npeData]);
+    }, [isLoading, httpError?.status, timelineHttpError?.status, npeData]);
 
     useEffect(() => {
         if (loadedData || loadedTimeline) {
