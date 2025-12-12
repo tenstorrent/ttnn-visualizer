@@ -788,13 +788,16 @@ def get_performance_device_meta(instance: Instance):
     def parse_arch_and_freq(line: str):
         arch_match = re.search(r"ARCH:\s*([\w\d_]+)", line)
         freq_match = re.search(r"CHIP_FREQ\[MHz\]:\s*(\d+)", line)
+        cores_match = re.search(r"Max Compute Cores:\s*(\d+)", line)
 
         architecture = arch_match.group(1) if arch_match else None
         frequency = int(freq_match.group(1)) if freq_match else None
+        max_cores = int(cores_match.group(1)) if cores_match else None
 
         return {
             "architecture": architecture,
             "frequency": frequency,
+            "max_cores": max_cores,
         }
 
     name = request.args.get("name", None)
