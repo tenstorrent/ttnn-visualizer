@@ -96,7 +96,6 @@ const OperationList = () => {
     }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration]);
 
     const {
-        itemCount: restoredItemCount,
         scrollOffset: restoredOffset,
         measurementsCache: restoredMeasurementsCache,
         expandedItems: restoredExpandedItems,
@@ -107,7 +106,7 @@ const OperationList = () => {
         getScrollElement: () => scrollElementRef.current,
         overscan: 10,
         initialMeasurementsCache: restoredMeasurementsCache,
-        count: restoredItemCount || filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
         // TODO: Can help prevent stuttering when scrolling back up but needs more research
         // measureElement: (element, _entry, instance) => {
@@ -236,7 +235,6 @@ const OperationList = () => {
     useEffect(() => {
         return () => {
             updateListState({
-                itemCount: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
                 scrollOffset: scrollOffsetRef.current || 0,
                 measurementsCache: measurementsCacheRef.current,
                 expandedItems: expandedItemsRef.current,
