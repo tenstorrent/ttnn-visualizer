@@ -10,7 +10,7 @@ import { usePerfMeta } from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
 import 'styles/components/PerfDeviceArchitecture.scss';
 
-const NO_META_DATA = 'n/a';
+const NO_META_DATA = 'Unknown';
 
 interface PerfDeviceArchitectureProps {
     data: TypedPerfTableRow[];
@@ -21,7 +21,7 @@ const PerfDeviceArchitecture = ({ data, reportName }: PerfDeviceArchitectureProp
     const { data: deviceMeta, isLoading: isLoadingDeviceLog } = usePerfMeta(reportName);
 
     const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
-    const maxCores = data ? getCoreCount(architecture, data) : 0;
+    const maxCores = deviceMeta?.max_cores ?? getCoreCount(architecture, data) ?? 0;
 
     return (
         <div className='meta-data'>
