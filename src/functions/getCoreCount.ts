@@ -5,6 +5,7 @@
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { TypedPerfTableRow } from '../definitions/PerfTable';
 
+// Core counts don't match documentation exactly because there are 1 or 2 rows of harvested cores, so they are not considered as working cores
 const CORE_COUNT = {
     grayskull: 108,
     wormhole_b0: 64,
