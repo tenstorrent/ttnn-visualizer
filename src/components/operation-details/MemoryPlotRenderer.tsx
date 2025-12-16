@@ -44,7 +44,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
 
     const range = isZoomedIn ? plotZoomRange : [0, memorySize];
-    const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
+    const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: ',.0r' };
 
     const markerLines: Partial<Shape>[] =
         markers?.map((marker: PlotMarker) => ({
@@ -60,7 +60,6 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 width: 2,
                 dash: 'solid',
             },
-
             label: {
                 text: marker.label,
                 textposition: 'bottom left',
