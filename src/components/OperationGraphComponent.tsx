@@ -36,7 +36,7 @@ const OperationGraph: React.FC<{
     const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
     const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
     const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
-    const [filterDeallocate, setFilterDeallocate] = useState<boolean>(false);
+    const [filterOutDeallocate, setFilterOutDeallocate] = useState<boolean>(true);
 
     const networkRef = useRef<Network | null>(null);
     const currentOpIdRef = useRef<number>(currentOperationId);
@@ -73,7 +73,7 @@ const OperationGraph: React.FC<{
             new DataSet(
                 operationList
                     .filter((op) => connectedNodeIds.has(op.id))
-                    .filter((op) => !filterDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
+                    .filter((op) => !filterOutDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
                     .map((op) => ({
                         id: op.id,
                         label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
@@ -82,7 +82,7 @@ const OperationGraph: React.FC<{
                         deviceOpFilter: op.deviceOperationNameList.join(' '),
                     })),
             ),
-        [operationList, connectedNodeIds, filterDeallocate],
+        [operationList, connectedNodeIds, filterOutDeallocate],
     );
 
     const focusOnNode = useCallback(
@@ -388,8 +388,8 @@ const OperationGraph: React.FC<{
                         aria-label='Next result'
                     />
                     <Switch
-                        checked={filterDeallocate}
-                        onChange={() => setFilterDeallocate(!filterDeallocate)}
+                        checked={filterOutDeallocate}
+                        onChange={() => setFilterOutDeallocate(!filterOutDeallocate)}
                         label='Hide deallocate ops'
                         disabled={isLoading}
                     />
