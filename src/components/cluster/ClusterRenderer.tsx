@@ -71,9 +71,14 @@ function ClusterRenderer() {
             );
         } else {
             return (
-                <div className='cluster-view-wrap'>
+                <div className='cluster-view-renderer'>
                     {header}
-                    <p>Topology is not supported for your current setup. This will be supported in future releases</p>
+                    <div className='cluster-view-wrap'>
+                        <p>
+                            Topology rendering is not supported for your current setup. This will be supported in future
+                            releases
+                        </p>
+                    </div>
                 </div>
             );
         }
