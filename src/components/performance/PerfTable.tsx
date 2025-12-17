@@ -97,7 +97,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
         if (key === ColumnHeaders.global_call_count) {
             // TODO: this is an inefficient way of doing things but its also temporary. will update next iteration
-            const value = parseInt(String(row[key]), 10) || 0;
+            const value = parseInt(String(row[key]), 10) || -1; // apparently npe is using 0 as a default value as opposed to no value.
             const manifestRecord = npeManifest?.find((el) => {
                 return el.global_call_count === value;
             });

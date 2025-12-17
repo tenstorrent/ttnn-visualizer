@@ -433,13 +433,15 @@ const fetchNpeOpTrace = async () => {
     return response?.data;
 };
 
-export const useNpe = (fileName: string | null) =>
-    useQuery<NPEData, AxiosError>({
+export const useNpe = (fileName: string | null) => {
+    return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNpeOpTrace(),
         queryKey: ['fetch-npe', fileName],
         retry: false,
         staleTime: 30000,
+        enabled: fileName !== null,
     });
+};
 
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
