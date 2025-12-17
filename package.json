@@ -72,7 +72,7 @@
     "socket.io-client": "^4.8.1",
     "tinycolor2": "^1.6.0",
     "vis-data": "^7.1.10",
-    "vis-network": "^9.1.13"
+    "vis-network": "^10.0.2"
   },
   "devDependencies": {
     "@blueprintjs/node-build-scripts": "^9.2.8",
