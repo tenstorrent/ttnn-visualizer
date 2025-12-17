@@ -56,7 +56,7 @@ export const MemoryLegendElement: React.FC<{
     );
 
     const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
-    const numCoresLabel = numCores && numCores > 1 ? ` x ${numCores}` : '';
+    const numCoresLabel = numCores && numCores > 1 ? ` x ${numCores} cores` : '';
     return (
         <Component
             key={chunk.address}
