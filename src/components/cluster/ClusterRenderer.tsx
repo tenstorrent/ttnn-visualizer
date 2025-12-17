@@ -61,13 +61,22 @@ function ClusterRenderer() {
     let chipsObject = data.chips;
     // fallback for an empty chips object
     if ((!chipsObject || Object.keys(chipsObject).length === 0) && mmioChips.length) {
-        chipsObject = mmioChips.reduce(
-            (acc, chipId: number, index: number) => {
-                acc[chipId] = [index, 0, 0, 0];
-                return acc;
-            },
-            {} as { [p: number]: ClusterCoordinates },
-        );
+        if (mmioChips.length <= 2) {
+            chipsObject = mmioChips.reduce(
+                (acc, chipId: number, index: number) => {
+                    acc[chipId] = [index, 0, 0, 0];
+                    return acc;
+                },
+                {} as { [p: number]: ClusterCoordinates },
+            );
+        } else {
+            return (
+                <div className='cluster-view-wrap'>
+                    {header}
+                    <p>Topology is not supported for your current setup. This will be supported in future releases</p>
+                </div>
+            );
+        }
     }
 
     const chips = Object.entries(chipsObject).map(([ClusterChipId, coords]) => {
