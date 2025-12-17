@@ -52,10 +52,14 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         >,
     );
 
-    const isMultiDevice = buffersByOperation.some((op) => {
-        const deviceIds = new Set(op.buffers.map((buffer) => buffer.device_id));
-        return deviceIds.size > 1;
-    });
+    const isMultiDevice = useMemo(
+        () =>
+            buffersByOperation.some((op) => {
+                const deviceIds = new Set(op.buffers.map((buffer) => buffer.device_id));
+                return deviceIds.size > 1;
+            }),
+        [buffersByOperation],
+    );
 
     // TODO: move this to a hook. eventually
     const uniqueBuffersByOperationList = useMemo(() => {
