@@ -37,7 +37,6 @@ const OperationGraph: React.FC<{
     const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
     const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
     const [filterOutDeallocate, setFilterOutDeallocate] = useState<boolean>(true);
-
     const networkRef = useRef<Network | null>(null);
     const currentOpIdRef = useRef<number>(currentOperationId);
 
@@ -197,27 +196,31 @@ const OperationGraph: React.FC<{
                                 size: 20,
                                 labelHighlightBold: false,
                                 shape: 'box',
+                                fixed: false,
                             },
                             edges: {
                                 font: { color: '#f5e2ba', size: 20, strokeColor: '#000' },
                                 color: '#f5e2ba',
                                 arrows: { to: { enabled: true, scaleFactor: 0.5 } },
                                 smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
+                                physics: true,
                             },
                             autoResize: true,
                             layout: {
                                 hierarchical: {
                                     enabled: true,
                                     levelSeparation: 200,
-                                    nodeSpacing: 200,
-                                    treeSpacing: 300,
+                                    nodeSpacing: 700,
+                                    treeSpacing: 700,
                                     blockShifting: true,
                                     edgeMinimization: true,
                                     direction: 'UD',
                                     sortMethod: 'directed',
                                     shakeTowards: 'leaves',
+                                    improvedLayout: true,
                                 },
                             },
+
                             interaction: {
                                 hover: true,
                                 keyboard: true,
@@ -429,7 +432,9 @@ const OperationGraph: React.FC<{
                 ref={containerRef}
             />
 
-            <aside className='aside'>Scroll to zoom. Drag to pan. Click a node to see operation details.</aside>
+            <aside className='aside'>
+                Scroll to zoom. Drag to pan. Click a node to see operation details. Drag a node.
+            </aside>
         </div>
     );
 };
