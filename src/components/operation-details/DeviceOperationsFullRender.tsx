@@ -291,7 +291,7 @@ const DeviceOperationsFullRender: React.FC<{
                                 _node={node}
                                 memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
                                 key={index}
-                                title={`Buffer deallocate ${formatSize(bufferSize)} ${buffer.type} x ${cores}`}
+                                title={`Buffer deallocate ${formatSize(bufferSize)} ${buffer.type} x ${cores} cores`}
                             />
                         );
                     } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
@@ -364,7 +364,7 @@ const DeviceOperationsFullRender: React.FC<{
     return (
         <div className='device-operations-full-render-wrap'>
             <h3 className='peak-load monospace'>
-                Peak L1 memory load per bank: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
+                Peak L1 memory load per core: <span className='format-numbers'>{formatSize(peakMemoryLoad)} bytes</span>
             </h3>
             <div className='device-operations-full-render'>
                 <span className='memory-info monospace '>
@@ -377,7 +377,8 @@ const DeviceOperationsFullRender: React.FC<{
             {/* we are rendering peak load twice if there are more than 20 device operations ei a lot of them */}
             {deviceOperations.length > 20 && (
                 <h3 className='peak-load monospace'>
-                    Peak L1 memory load per bank: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
+                    Peak L1 memory load per core:{' '}
+                    <span className='format-numbers'>{formatSize(peakMemoryLoad)} bytes</span>
                 </h3>
             )}
         </div>
