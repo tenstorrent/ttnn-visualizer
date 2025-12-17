@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { formatSize, getCoresInRange, toHex } from '../functions/math';
+import { formatUnit, getCoresInRange, toHex } from '../functions/math';
 import {
     BufferData,
     Chunk,
@@ -415,7 +415,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         const cbColor = '#e2defc';
         const cbHoverTemplate = `
 <span style="color:${cbColor};font-size:20px;">&#9632;</span>
-${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cbCondensed.size)}
+${cbCondensed.address} (${toHex(cbCondensed.address)}) <br />${formatUnit(cbCondensed.size, 'byte')}
 <br><br>CBs Summary
 <extra></extra>`;
 
@@ -436,7 +436,7 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
         const bufferColor = '#fcdefa';
         const bufferHoverTemplate = `
 <span style="color:${bufferColor};font-size:20px;">&#9632;</span>
-${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${formatSize(bufferCondensed.size)}
+${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br /> ${formatUnit(bufferCondensed.size, 'byte')}
 <br><br>Buffers Summary
 <extra></extra>`;
         const bufferChartData = this.getChartData([bufferCondensed], {
