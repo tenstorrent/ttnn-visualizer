@@ -58,7 +58,7 @@ const FeedbackButton = () => {
                 icon={IconNames.INFO_SIGN}
                 isOpen={isDialogOpen}
                 usePortal
-                className='feedback-dialog'
+                className='bp6-dark'
                 onClose={handleCloseDialog}
             >
                 <DialogBody>
