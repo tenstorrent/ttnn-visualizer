@@ -2,13 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
-import { scrollPositionsAtom } from '../store/app';
+import { operationListFilterAtom, scrollPositionsAtom } from '../store/app';
 import { ScrollLocations, ScrollPosition, VirtualListState } from '../definitions/ScrollPositions';
 
 const useRestoreScrollPosition = (key?: ScrollLocations) => {
     const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsAtom);
+    const setOperationListFilter = useSetAtom(operationListFilterAtom);
 
     const updateListState = useCallback(
         (state: Partial<VirtualListState>) => {
@@ -45,7 +46,8 @@ const useRestoreScrollPosition = (key?: ScrollLocations) => {
 
     const resetListStates = useCallback(() => {
         setScrollPositions(null);
-    }, [setScrollPositions]);
+        setOperationListFilter('');
+    }, [setScrollPositions, setOperationListFilter]);
 
     return {
         getListState,
