@@ -9,7 +9,7 @@ import { TypedPerfTableRow } from '../definitions/PerfTable';
 const CORE_COUNT = {
     grayskull: 108,
     wormhole_b0: 64,
-    // blackhole: 120/140 - https://tenstorrent.com/hardware/wormhole has two models, need to confirm logic
+    blackhole: 130, // Mohamed: 130 for BH p150 and 120 for BH p100. P150 is more popular so 130 is good
 };
 
 function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[]): number {
