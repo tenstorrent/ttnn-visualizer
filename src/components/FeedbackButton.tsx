@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AnchorButton, Button, Dialog, DialogBody, DialogFooter, Intent } from '@blueprintjs/core';
+import { AnchorButton, Button, Classes, Dialog, DialogBody, DialogFooter, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useEffect, useState } from 'react';
@@ -57,7 +57,8 @@ const FeedbackButton = () => {
                 title='Improving TT-NN Visualizer'
                 icon={IconNames.INFO_SIGN}
                 isOpen={isDialogOpen}
-                usePortal={false}
+                usePortal
+                className={Classes.DARK}
                 onClose={handleCloseDialog}
             >
                 <DialogBody>
