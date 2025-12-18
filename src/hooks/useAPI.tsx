@@ -22,6 +22,7 @@ import {
     OperationDetailsData,
     ReportMetaData,
     Tensor,
+    TensorWithSize,
     defaultBuffer,
     defaultOperationDetailsData,
     defaultTensorData,
@@ -1009,6 +1010,21 @@ export const usePerfFolderList = () => {
     });
 };
 
+export const useTensorsById = () => {
+    const data = useCreateTensorsByOperationByIdList();
+    return useMemo(() => {
+        const tensorById = new Map<number, TensorWithSize>();
+        data.forEach((tensorsMap) => {
+            tensorsMap.forEach((tensor) => {
+                if (tensor.id) {
+                    tensorById.set(tensor.id, tensor);
+                }
+            });
+        });
+        return tensorById;
+    }, [data]);
+};
+
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
     const { data: buffersByOperation } = useBuffers(bufferType);
     const { data: operations } = useOperationsList();
@@ -1067,7 +1083,7 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
             continue;
         }
 
-        const tensorsByBufferAddress = new Map<number, Tensor>();
+        const tensorsByBufferAddress = new Map<number, TensorWithSize>();
 
         for (const buffer of buffers) {
             const addr = buffer.address;
@@ -1081,6 +1097,7 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
                 tensorsByBufferAddress.set(addr, {
                     ...tensor,
                     buffer_type: buffer.buffer_type,
+                    size: buffer.size,
                 });
             }
         }
