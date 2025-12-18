@@ -415,6 +415,6 @@ const TensorList = () => {
 };
 
 const getTensorFilterName = (tensor: Tensor) =>
-    `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier ? tensor.operationIdentifier : ''}`;
+    `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier ? `(${tensor.operationIdentifier})` : ''}`;
 
 export default TensorList;
