@@ -189,18 +189,19 @@ def open_browser(host, port, instance_id=None):
             time.sleep(0.5)
 
     if not server_ready:
-        print(
-            f"Warning: Server not ready after {max_attempts} attempts. Opening browser anyway..."
-        )
+        print(f"Warning: Server not ready after {max_attempts} attempts.")
+    else:
+        print(f"Launching browser with url: {url}")
 
-    print(f"Launching browser with url: {url}")
-    try:
-        if os.name == "posix" and "DISPLAY" in os.environ:  # Checks for non-headless
-            subprocess.run(["xdg-open", url], check=True)
-        else:
-            webbrowser.open(url)
-    except webbrowser.Error as e:
-        print(f"Could not open the default browser: {e}")
+        try:
+            if (
+                os.name == "posix" and "DISPLAY" in os.environ
+            ):  # Checks for non-headless
+                subprocess.run(["xdg-open", url], check=True)
+            else:
+                webbrowser.open(url)
+        except webbrowser.Error as e:
+            print(f"Could not open the default browser: {e}")
 
 
 def parse_args():
