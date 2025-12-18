@@ -1010,18 +1010,18 @@ export const usePerfFolderList = () => {
     });
 };
 
-export const useTensorsById = () => {
+export const useTensorListById = () => {
     const data = useCreateTensorsByOperationByIdList();
     return useMemo(() => {
-        const tensorById = new Map<number, TensorWithSize>();
-        data.forEach((tensorsMap) => {
-            tensorsMap.forEach((tensor) => {
-                if (tensor.id) {
-                    tensorById.set(tensor.id, tensor);
+        const tensorListById = new Map<number, TensorWithSize>();
+        for (const tensorsById of data.values()) {
+            for (const [tensorId, tensor] of tensorsById) {
+                if (!tensorListById.has(tensorId) && tensorId != null) {
+                    tensorListById.set(tensorId, tensor);
                 }
-            });
-        });
-        return tensorById;
+            }
+        }
+        return tensorListById;
     }, [data]);
 };
 
