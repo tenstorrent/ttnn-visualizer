@@ -9,10 +9,13 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from os import environ
 from pathlib import Path
 from typing import cast
+from urllib.error import URLError
+from urllib.request import urlopen
 
 import flask
 from dotenv import load_dotenv
@@ -172,14 +175,33 @@ def open_browser(host, port, instance_id=None):
     if instance_id:
         url = f"{url}?instanceId={instance_id}"
 
-    print(f"Launching browser with url: {url}")
-    try:
-        if os.name == "posix" and "DISPLAY" in os.environ:  # Checks for non-headless
-            subprocess.run(["xdg-open", url], check=True)
-        else:
-            webbrowser.open(url)
-    except webbrowser.Error as e:
-        print(f"Could not open the default browser: {e}")
+    max_attempts = 10
+    attempt = 0
+    server_ready = False
+
+    print(f"Waiting for server to be ready at {url}...")
+    while attempt < max_attempts and not server_ready:
+        try:
+            urlopen(url, timeout=1)
+            server_ready = True
+        except (URLError, ConnectionError, OSError):
+            attempt += 1
+            time.sleep(0.5)
+
+    if not server_ready:
+        print(f"❌ Server not ready after {max_attempts} attempts.")
+    else:
+        print(f"Launching browser with url: {url}")
+
+        try:
+            if (
+                os.name == "posix" and "DISPLAY" in os.environ
+            ):  # Checks for non-headless
+                subprocess.run(["xdg-open", url], check=True)
+            else:
+                webbrowser.open(url)
+        except webbrowser.Error as e:
+            print(f"Could not open the default browser: {e}")
 
 
 def parse_args():
@@ -382,7 +404,7 @@ def main():
         flask_env = os.getenv("FLASK_ENV", "development")
         port = config.PORT if flask_env == "production" else config.DEV_SERVER_PORT
         host = config.HOST if flask_env == "production" else config.DEV_SERVER_HOST
-        threading.Timer(2, open_browser, [host, port, instance_id]).start()
+        threading.Thread(target=open_browser, args=[host, port, instance_id]).start()
     try:
         subprocess.run(gunicorn_args)
     except KeyboardInterrupt:
