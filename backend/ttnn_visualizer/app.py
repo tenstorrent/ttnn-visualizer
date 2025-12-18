@@ -189,7 +189,7 @@ def open_browser(host, port, instance_id=None):
             time.sleep(0.5)
 
     if not server_ready:
-        print(f"Warning: Server not ready after {max_attempts} attempts.")
+        print(f"❌ Server not ready after {max_attempts} attempts.")
     else:
         print(f"Launching browser with url: {url}")
 
