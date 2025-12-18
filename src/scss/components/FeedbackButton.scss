@@ -48,3 +48,7 @@ $button-rotation: -90deg; // Rotate the button to face upwards
         transform: translateX($hide-offset) rotate($button-rotation);
     }
 }
+
+.feedback-dialog {
+    color: #000;
+}

@@ -57,7 +57,8 @@ const FeedbackButton = () => {
                 title='Improving TT-NN Visualizer'
                 icon={IconNames.INFO_SIGN}
                 isOpen={isDialogOpen}
-                usePortal={false}
+                usePortal
+                className='feedback-dialog'
                 onClose={handleCloseDialog}
             >
                 <DialogBody>
