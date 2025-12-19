@@ -107,8 +107,8 @@ const TensorList = () => {
 
             if (shouldSortByDuration !== SortingOptions.OFF) {
                 tensors.sort((a, b) => {
-                    const sizeA = a.address ? tensorListById.get(a.address)?.size : undefined;
-                    const sizeB = b.address ? tensorListById.get(b.address)?.size : undefined;
+                    const sizeA = a.address ? tensorListById.get(a.id)?.size : undefined;
+                    const sizeB = b.address ? tensorListById.get(b.id)?.size : undefined;
 
                     if (!isValidNumber(sizeA) || !isValidNumber(sizeB)) {
                         return 0;
