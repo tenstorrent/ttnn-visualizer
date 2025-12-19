@@ -185,13 +185,45 @@ class DatabaseQueries:
     def query_tensors(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Tensor, None, None]:
-        rows = self._query_table("tensors", filters)
+        # Build the base query with joins to get size
+        query = """
+            SELECT t.*, b.max_size_per_bank as size
+            FROM tensors t
+            LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
+            LEFT JOIN buffers b ON b.operation_id = ot.operation_id
+                AND t.address = b.address
+                AND t.device_id = b.device_id
+            WHERE 1=1
+        """
+        params = []
+
+        # Apply filters to tensors table
+        if filters:
+            for column, value in filters.items():
+                if value is None:
+                    continue
+
+                if isinstance(value, list):
+                    if len(value) == 0:
+                        continue
+                    placeholders = ", ".join(["?"] * len(value))
+                    query += f" AND t.{column} IN ({placeholders})"
+                    params.extend(value)
+                else:
+                    query += f" AND t.{column} = ?"
+                    params.append(value)
+
+        rows = self.query_runner.execute_query(query, params)
         for row in rows:
+            # Extract size (last column) and tensor data (all columns except last)
+            tensor_row = row[:-1]  # All columns except size
+            size = row[-1]  # size column
+
             device_addresses = []
 
             try:
                 device_tensors = self._query_table(
-                    "device_tensors", filters={"tensor_id": row[0]}
+                    "device_tensors", filters={"tensor_id": tensor_row[0]}
                 )
             except sqlite3.OperationalError as err:
                 if str(err).startswith("no such table"):
@@ -204,7 +236,7 @@ class DatabaseQueries:
                         device_addresses.append(None)
                     device_addresses.append(device_tensor[2])
 
-            yield Tensor(*row, device_addresses)
+            yield Tensor(*tensor_row, device_addresses, size=size)
 
     def query_input_tensors(
         self, filters: Optional[Dict[str, Any]] = None
