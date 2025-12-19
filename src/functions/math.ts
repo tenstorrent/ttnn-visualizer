@@ -130,3 +130,23 @@ export const getCoresInRange = (rangeString: string): number => {
 
     return (x2 - x1 + 1) * (y2 - y1 + 1);
 };
+
+/**
+ * Convert bytes to human readable format
+ * @param bytes
+ * @param numAfterComma
+ */
+export const convertBytes = (bytes: number, numAfterComma = 0) => {
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+
+    if (bytes === 0) {
+        return '0 B';
+    }
+    if (bytes < 1) {
+        return `${bytes.toFixed(numAfterComma)} B`;
+    }
+
+    const denominationIndex = Math.floor(Math.log(bytes) / Math.log(1024));
+    const fractionDigits = denominationIndex > 1 ? 2 : numAfterComma; // MB and up always requires decimals
+    return `${(bytes / 1024 ** denominationIndex).toFixed(fractionDigits)} ${sizes[denominationIndex]}`;
+};
