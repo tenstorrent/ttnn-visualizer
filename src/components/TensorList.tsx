@@ -49,7 +49,7 @@ const TensorList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllTensorsAtom);
     const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const [shouldSortByDuration, setShouldSortByDuration] = useState<SortingOptions>(SortingOptions.OFF);
+    const [shouldSortBySize, setShouldSortBySize] = useState<SortingOptions>(SortingOptions.OFF);
 
     const [filterQuery, setFilterQuery] = useState('');
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
@@ -119,7 +119,7 @@ const TensorList = () => {
                 tensors = tensors.filter((tensor) => nonDeallocatedTensorList.get(tensor.id));
             }
 
-            if (shouldSortByDuration !== SortingOptions.OFF) {
+            if (shouldSortBySize !== SortingOptions.OFF) {
                 tensors.sort((a, b) => {
                     const sizeA = a.size;
                     const sizeB = b.size;
@@ -142,7 +142,7 @@ const TensorList = () => {
                     const numA = sizeA as number;
                     const numB = sizeB as number;
 
-                    return shouldSortByDuration === SortingOptions.ASCENDING ? numA - numB : numB - numA;
+                    return shouldSortBySize === SortingOptions.ASCENDING ? numA - numB : numB - numA;
                 });
             }
 
@@ -157,7 +157,7 @@ const TensorList = () => {
         showHighConsumerTensors,
         showLateDeallocatedTensors,
         nonDeallocatedTensorList,
-        shouldSortByDuration,
+        shouldSortBySize,
     ]);
 
     const {
@@ -217,7 +217,6 @@ const TensorList = () => {
         expandedItemsRef.current = expandedItems;
     }, [expandedItems]);
 
-    // Restore expanded items on mount
     useEffect(() => {
         // Update stored list state on unmount
         return () => {
@@ -346,7 +345,7 @@ const TensorList = () => {
                     >
                         <Button
                             onClick={() =>
-                                setShouldSortByDuration((current) => {
+                                setShouldSortBySize((current) => {
                                     if (current === SortingOptions.OFF) {
                                         return SortingOptions.ASCENDING;
                                     }
@@ -359,13 +358,12 @@ const TensorList = () => {
                                 })
                             }
                             icon={
-                                shouldSortByDuration === SortingOptions.ASCENDING ||
-                                shouldSortByDuration === SortingOptions.OFF
+                                shouldSortBySize === SortingOptions.ASCENDING || shouldSortBySize === SortingOptions.OFF
                                     ? IconNames.SORT_NUMERICAL
                                     : IconNames.SORT_NUMERICAL_DESC
                             }
-                            active={shouldSortByDuration !== SortingOptions.OFF}
-                            variant={shouldSortByDuration !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
+                            active={shouldSortBySize !== SortingOptions.OFF}
+                            variant={shouldSortBySize !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
                             aria-label='Sort tensors by size'
                         />
                     </Tooltip>

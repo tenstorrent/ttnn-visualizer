@@ -25,9 +25,7 @@ export interface Operation {
     operationFileIdentifier: string;
     error: OperationError | null;
 }
-export interface TensorWithSize extends Tensor {
-    size: number | null;
-}
+
 export interface Tensor {
     address: number | null;
     id: number;
@@ -60,6 +58,10 @@ export interface Tensor {
         };
     } | null;
     io: 'input' | 'output' | null;
+}
+
+export interface TensorWithSize extends Tensor {
+    size: number | null;
 }
 
 export interface BufferData {
