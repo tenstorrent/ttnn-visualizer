@@ -47,6 +47,7 @@ export const fileTransferProgressAtom = atom<FileProgress>({
 
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);
+export const operationListFilterAtom = atom('');
 
 // Operation details route
 export const isFullStackTraceAtom = atom(false);
