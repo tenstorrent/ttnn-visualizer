@@ -13,11 +13,11 @@ export const formatSize = (number: number, decimals?: number): string => {
     return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: decimals }).format(number);
 };
 
-export const formatUnit = (value: number, unit: string): string => {
+export const formatUnit = (value: number, unit: string, unitDisplay: 'long' | 'short' | 'narrow' = 'long'): string => {
     return new Intl.NumberFormat(LOCALE, {
         style: 'unit',
         unit,
-        unitDisplay: 'long',
+        unitDisplay,
     }).format(value);
 };
 

@@ -11,7 +11,12 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
-import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
+import {
+    useGetTensorDeallocationReportByOperation,
+    useOperationsList,
+    useTensorListById,
+    useTensors,
+} from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import { Tensor } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
@@ -23,7 +28,7 @@ import 'styles/components/ListView.scss';
 import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
-import { toReadableShape, toReadableType } from '../functions/math';
+import { convertBytes, toReadableShape, toReadableType } from '../functions/math';
 import MultiSelectField from './MultiSelectField';
 import { ScrollLocations } from '../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
@@ -34,10 +39,17 @@ const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
 const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
+enum SortingOptions {
+    OFF,
+    ASCENDING,
+    DESCENDING,
+}
+
 const TensorList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllTensorsAtom);
     const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const [shouldSortByDuration, setShouldSortByDuration] = useState<SortingOptions>(SortingOptions.OFF);
 
     const [filterQuery, setFilterQuery] = useState('');
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
@@ -53,6 +65,7 @@ const TensorList = () => {
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
         useScrollShade();
     const scrollElementRef = useRef<HTMLDivElement>(null);
+    const tensorListById = useTensorListById();
 
     const tensorsWithRange = useMemo(() => {
         if (fetchedTensors && selectedOperationRange) {
@@ -92,6 +105,23 @@ const TensorList = () => {
                 tensors = tensors.filter((tensor) => nonDeallocatedTensorList.get(tensor.id));
             }
 
+            if (shouldSortByDuration !== SortingOptions.OFF) {
+                tensors.sort((a, b) => {
+                    const sizeA = a.address ? tensorListById.get(a.address)?.size : undefined;
+                    const sizeB = b.address ? tensorListById.get(b.address)?.size : undefined;
+
+                    if (!isValidNumber(sizeA) || !isValidNumber(sizeB)) {
+                        return 0;
+                    }
+
+                    if (shouldSortByDuration === SortingOptions.ASCENDING) {
+                        return sizeA - sizeB;
+                    }
+
+                    return sizeB - sizeA;
+                });
+            }
+
             return tensors;
         }
 
@@ -103,6 +133,8 @@ const TensorList = () => {
         showHighConsumerTensors,
         showLateDeallocatedTensors,
         nonDeallocatedTensorList,
+        shouldSortByDuration,
+        tensorListById,
     ]);
 
     const {
@@ -138,7 +170,6 @@ const TensorList = () => {
     const handleToggleCollapsible = useCallback((operationId: number) => {
         setExpandedItems((currentExpanded) => {
             const newList = currentExpanded || [];
-
             return newList.includes(operationId)
                 ? newList.filter((id) => id !== operationId)
                 : [...newList, operationId];
@@ -147,7 +178,6 @@ const TensorList = () => {
 
     const handleExpandAllToggle = useCallback(() => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
-
         setExpandedItems(
             !shouldCollapseAll && filteredTensorsList ? filteredTensorsList.map((tensor) => tensor.id) : [],
         );
@@ -156,6 +186,14 @@ const TensorList = () => {
     // Restore expanded items on mount
     useEffect(() => {
         setExpandedItems(restoredExpandedItems || []);
+
+        // Update stored list state on unmount
+        return () =>
+            updateListState({
+                scrollOffset: scrollOffsetRef.current || 0,
+                measurementsCache: measurementsCacheRef.current,
+                expandedItems: expandedItemsRef.current,
+            });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -172,16 +210,13 @@ const TensorList = () => {
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
-
         if (initialTensorId && virtualizer) {
             const operationIndex =
                 fetchedTensors?.findIndex((tensor: Tensor) => tensor.id === parseInt(initialTensorId, 10)) || 0;
-
             // Looks better if we scroll to the previous index
             virtualizer.scrollToIndex(operationIndex - 1, {
                 align: 'start',
             });
-
             // Navigating to the same page replaces the entry in the browser history
             navigate(ROUTES.OPERATIONS, { replace: true });
         }
@@ -195,16 +230,6 @@ const TensorList = () => {
             updateScrollShade(scrollElementRef.current);
         }
     }, [virtualHeight, updateScrollShade, resetScrollShade]);
-
-    // Update stored list state on unmount
-    useEffect(() => {
-        return () =>
-            updateListState({
-                scrollOffset: scrollOffsetRef.current || 0,
-                measurementsCache: measurementsCacheRef.current,
-                expandedItems: expandedItemsRef.current,
-            });
-    }, [updateListState, filteredTensorsList]);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
@@ -288,6 +313,30 @@ const TensorList = () => {
                         />
                     </Tooltip>
 
+                    <Button
+                        onClick={() =>
+                            setShouldSortByDuration((current) => {
+                                if (current === SortingOptions.OFF) {
+                                    return SortingOptions.ASCENDING;
+                                }
+
+                                if (current === SortingOptions.DESCENDING) {
+                                    return SortingOptions.OFF;
+                                }
+
+                                return SortingOptions.DESCENDING;
+                            })
+                        }
+                        icon={
+                            shouldSortByDuration === SortingOptions.ASCENDING ||
+                            shouldSortByDuration === SortingOptions.OFF
+                                ? IconNames.SORT_NUMERICAL
+                                : IconNames.SORT_NUMERICAL_DESC
+                        }
+                        variant={shouldSortByDuration !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
+                        aria-label='Sort tensors by size'
+                    />
+
                     <MultiSelectField<Tensor, 'buffer_type'>
                         keyName='buffer_type'
                         options={tensorsWithRange || []}
@@ -332,6 +381,7 @@ const TensorList = () => {
                             virtualItems.map((virtualRow) => {
                                 const tensor = filteredTensorsList[virtualRow.index];
                                 const isLateDeallocated = nonDeallocatedTensorList.get(tensor.id);
+                                const matchedTensor = tensorListById.get(tensor.address || -1);
 
                                 return (
                                     <li
@@ -386,6 +436,13 @@ const TensorList = () => {
                                                                 title='Tensor has an opportunity for earlier deallocation'
                                                             />
                                                         </Tooltip>
+                                                    ) : null}
+
+                                                    {matchedTensor ? (
+                                                        <>
+                                                            <small>{matchedTensor.size}</small>
+                                                            <small>{convertBytes(matchedTensor.size)}</small>
+                                                        </>
                                                     ) : null}
                                                 </ListItem>
                                             }
