@@ -340,30 +340,35 @@ const TensorList = () => {
                         />
                     </Tooltip>
 
-                    <Button
-                        onClick={() =>
-                            setShouldSortByDuration((current) => {
-                                if (current === SortingOptions.OFF) {
-                                    return SortingOptions.ASCENDING;
-                                }
+                    <Tooltip
+                        content='Sort by tensor size'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() =>
+                                setShouldSortByDuration((current) => {
+                                    if (current === SortingOptions.OFF) {
+                                        return SortingOptions.ASCENDING;
+                                    }
 
-                                if (current === SortingOptions.DESCENDING) {
-                                    return SortingOptions.OFF;
-                                }
+                                    if (current === SortingOptions.DESCENDING) {
+                                        return SortingOptions.OFF;
+                                    }
 
-                                return SortingOptions.DESCENDING;
-                            })
-                        }
-                        icon={
-                            shouldSortByDuration === SortingOptions.ASCENDING ||
-                            shouldSortByDuration === SortingOptions.OFF
-                                ? IconNames.SORT_NUMERICAL
-                                : IconNames.SORT_NUMERICAL_DESC
-                        }
-                        active={shouldSortByDuration !== SortingOptions.OFF}
-                        variant={shouldSortByDuration !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
-                        aria-label='Sort tensors by size'
-                    />
+                                    return SortingOptions.DESCENDING;
+                                })
+                            }
+                            icon={
+                                shouldSortByDuration === SortingOptions.ASCENDING ||
+                                shouldSortByDuration === SortingOptions.OFF
+                                    ? IconNames.SORT_NUMERICAL
+                                    : IconNames.SORT_NUMERICAL_DESC
+                            }
+                            active={shouldSortByDuration !== SortingOptions.OFF}
+                            variant={shouldSortByDuration !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
+                            aria-label='Sort tensors by size'
+                        />
+                    </Tooltip>
 
                     <MultiSelectField<Tensor, 'buffer_type'>
                         keyName='buffer_type'
