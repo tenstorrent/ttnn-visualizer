@@ -5,9 +5,11 @@
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { TypedPerfTableRow } from '../definitions/PerfTable';
 
+// Core counts don't match documentation exactly because there are 1 or 2 rows of harvested cores, so they are not considered as working cores
 const CORE_COUNT = {
     grayskull: 108,
     wormhole_b0: 64,
+    blackhole: 130, // Mohamed: 130 for BH p150 and 120 for BH p100. P150 is more popular so 130 is good
 };
 
 function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[]): number {

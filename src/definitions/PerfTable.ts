@@ -9,7 +9,7 @@ import { OpType } from './Performance';
 export type TableKeys = keyof TypedPerfTableRow;
 export type TableFilter = Partial<Record<TableKeys, string>> | null;
 
-export interface TableHeader {
+export interface TableColumn {
     label: string;
     key: TableKeys;
     colour?: string;
@@ -17,14 +17,15 @@ export interface TableHeader {
     decimals?: number;
     sortable?: boolean;
     filterable?: boolean;
+    footerSpan?: number;
 }
 
-enum BoundType {
-    BOTH,
-    DRAM,
-    FLOP,
-    SLOW,
-    HOST,
+export enum BoundType {
+    BOTH = 'BOTH',
+    DRAM = 'DRAM',
+    FLOP = 'FLOP',
+    SLOW = 'SLOW',
+    HOST = 'HOST',
 }
 
 export interface PerfTableRow {
@@ -35,6 +36,7 @@ export interface PerfTableRow {
     bound: BoundType;
     op_code: string;
     raw_op_code: string;
+    device: string;
     device_time: string;
     op_to_op_gap: string;
     cores: string;
@@ -66,6 +68,7 @@ export interface TypedPerfTableRow
         | 'id'
         | 'global_call_count'
         | 'total_percent'
+        | 'device'
         | 'device_time'
         | 'op_to_op_gap'
         | 'cores'
@@ -79,6 +82,7 @@ export interface TypedPerfTableRow
     id: number | null;
     global_call_count: number | null;
     total_percent: number | null;
+    device: number | null;
     device_time: number | null;
     op_to_op_gap: number | null;
     cores: number | null;
@@ -88,9 +92,8 @@ export interface TypedPerfTableRow
     flops_percent: number | null;
     bound: BoundType | null;
     pm_ideal_ns: number | null;
-    // Next three extracted from input_0_memory
+    // Next two extracted from input_0_memory
     buffer_type: BufferType | null;
-    device: number | null;
     layout: DeviceOperationLayoutTypes | null;
 }
 
@@ -161,27 +164,27 @@ export enum ColumnHeaders {
     global_call_count = 'global_call_count',
 }
 
-export const TableHeaders: TableHeader[] = [
+export const tableColumns: TableColumn[] = [
     { label: 'ID', key: ColumnHeaders.id, sortable: true },
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
-    { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true },
-    { label: 'Device ID', key: ColumnHeaders.device },
-    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true },
+    { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true, footerSpan: 3 },
+    { label: 'Device ID', key: ColumnHeaders.device, footerSpan: 0 },
+    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true, footerSpan: 0 },
     { label: 'Layout', key: ColumnHeaders.layout, sortable: true, filterable: true },
     { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
     { label: 'Op-to-Op Gap', key: ColumnHeaders.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
     { label: 'Cores', key: ColumnHeaders.cores, colour: 'green', sortable: true },
-    { label: 'DRAM', key: ColumnHeaders.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
-    { label: 'DRAM %', key: ColumnHeaders.dram_percent, colour: 'yellow', unit: '%', sortable: true },
-    { label: 'FLOPs', key: ColumnHeaders.flops, unit: 'TFLOPs', sortable: true },
-    { label: 'FLOPs %', key: ColumnHeaders.flops_percent, unit: '%', sortable: true },
+    { label: 'DRAM', key: ColumnHeaders.dram, colour: 'yellow', unit: 'GB/s', decimals: 1, sortable: true },
+    { label: 'DRAM %', key: ColumnHeaders.dram_percent, colour: 'yellow', unit: '%', decimals: 1, sortable: true },
+    { label: 'FLOPs', key: ColumnHeaders.flops, unit: 'TFLOPs', decimals: 1, sortable: true },
+    { label: 'FLOPs %', key: ColumnHeaders.flops_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
 ];
 
-export const FilterableColumnKeys = TableHeaders.filter((column) => column.filterable).map((column) => column.key);
+export const filterableColumnKeys = tableColumns.filter((column) => column.filterable).map((column) => column.key);
 
-export const ComparisonKeys: TableKeys[] = [
+export const comparisonKeys: TableKeys[] = [
     ColumnHeaders.op_code,
     ColumnHeaders.bound,
     ColumnHeaders.total_percent,

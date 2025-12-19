@@ -28,25 +28,25 @@ To run a test with custom input data, you can use the following command with sui
 pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py::test_function[param]
 ```
 
-For more information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/get_started/get_started.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/get_started.html) documentation.
-
-The final output should be a folder including at least a `config.json` and a `db.sqlite` file.
+The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/reports/` which should include at least a `config.json` and a `db.sqlite` file.
 
 <img width="909" alt="Screenshot 2024-12-13 at 12 29 24 PM" src="https://github.com/user-attachments/assets/ab31892a-2779-4fe1-9ad5-0f35f8329f9a" />
 
+For more information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/get_started/get_started.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/get_started.html) documentation.
+
 ### Performance reports
 
-TT-NN Visualizer supports the reading of TT-Metalium performance reports. The expected output should be a folder containing a `profile_log_device.csv` file, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
-
-Consult the TT-Metalium documentation on [how to generate a performance report](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
+TT-NN Visualizer supports the reading of TT-Metalium performance reports. The expected output should be a folder within `${TT_METAL_HOME}/generated/profiler/reports/` containing a `profile_log_device.csv` file, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
 
 <img width="916" alt="Screenshot 2024-12-13 at 12 29 44 PM" src="https://github.com/user-attachments/assets/8209f500-7913-41dc-8952-c1307e7720c3" />
+
+Consult the TT-Metalium documentation on [how to generate a performance report](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
 
 ### NPE
 
 Network-on-chip performance estimator data can be loaded separately on the `/npe` route.
 
-To generate this data for your model, refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe/blob/main/docs/src/getting_started.md).
+Refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe/blob/main/docs/src/getting_started.md) for more details.
 
 (installing-from-pypi)=
 ## Installing from PyPI

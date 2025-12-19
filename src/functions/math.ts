@@ -102,7 +102,7 @@ export const isEqual = <T>(value: T, other: T): boolean => {
     });
 };
 export const toReadableShape = (input: string) => {
-    const match = input.match(/Shape\((\[.*\])\)/);
+    const match = input.match(/(?:Shape|torch\.Size)\((\[.*\])\)/);
     if (!match) {
         return input;
     }

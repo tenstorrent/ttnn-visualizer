@@ -43,7 +43,7 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                                             <span
                                                 className={classNames(
                                                     'monospace',
-                                                    getOpToOpGapColour(perf.perfData.op_to_op_gap),
+                                                    getOpToOpGapColour(parseFloat(perf.perfData.op_to_op_gap)),
                                                 )}
                                             >
                                                 {formatSize(parseFloat(perf.perfData.op_to_op_gap))} µs

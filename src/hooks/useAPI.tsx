@@ -38,6 +38,7 @@ import {
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
     hideHostOpsAtom,
+    mergeDevicesAtom,
     selectedOperationRangeAtom,
     stackByIn0Atom,
 } from '../store/app';
@@ -51,6 +52,7 @@ import createToastNotification from '../functions/createToastNotification';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
+import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -126,6 +128,14 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     let operationList = response.data;
     let retryCount = 0;
 
+    const getDeviceOperationNameList = (operation: OperationDescription) => {
+        return operation.device_operations
+            .filter((op) => {
+                return op.node_type === NodeType.function_start && isDeviceOperation(op.params.name);
+            })
+            .map((op) => op.params.name);
+    };
+
     // TODO: Figure out why we sometimes get a string back instead of an array so we don't need this hack
     while (!Array.isArray(operationList) && retryCount < MAX_RETRY_COUNT) {
         // eslint-disable-next-line no-console
@@ -174,6 +184,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             outputs,
             inputs,
             arguments: argumentsWithParsedValues,
+            deviceOperationNameList: getDeviceOperationNameList(operation),
         } as OperationDescription;
     });
 };
@@ -212,6 +223,26 @@ const useGetAllBuffers = (bufferType: BufferType | null) => {
     });
 };
 
+export const useGetUniqueDeviceOperationsList = (): string[] => {
+    const { data: operations } = useOperationsList();
+
+    return useMemo(() => {
+        if (!operations || operations.length === 0) {
+            return [];
+        }
+
+        const deviceOperationSet = new Set<string>();
+
+        for (const operation of operations) {
+            for (const deviceOperation of operation.deviceOperationNameList) {
+                deviceOperationSet.add(deviceOperation);
+            }
+        }
+
+        return Array.from(deviceOperationSet);
+    }, [operations]);
+};
+
 /**
  * @description returns start address of the first L1 small buffer. this is interim solution until BE can collect to devices table
  */
@@ -221,7 +252,7 @@ export const useGetL1SmallMarker = (): number => {
     return useMemo(() => {
         const addresses = buffers?.map((buffer) => {
             return buffer.address;
-        }) || [0];
+        }) || [L1_DEFAULT_MEMORY_SIZE];
 
         let min = Infinity;
         for (let i = 0; i < addresses.length; i++) {
@@ -229,7 +260,7 @@ export const useGetL1SmallMarker = (): number => {
                 min = addresses[i];
             }
         }
-        return min === Infinity ? 0 : min;
+        return min === Infinity ? L1_DEFAULT_MEMORY_SIZE : min;
     }, [buffers]);
 };
 
@@ -291,6 +322,7 @@ const fetchPerformanceReport = async (
     startSignpost: Signpost | null,
     endSignpost: Signpost | null,
     hideHostOps: boolean,
+    mergeDevices: boolean,
 ) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
         params: {
@@ -299,6 +331,7 @@ const fetchPerformanceReport = async (
             start_signpost: startSignpost?.op_code,
             end_signpost: endSignpost?.op_code,
             hide_host_ops: hideHostOps,
+            merge_devices: mergeDevices,
         },
     });
 
@@ -348,12 +381,14 @@ export const useNPETimelineFile = (fileName: string | undefined) => {
 interface MetaData {
     architecture: DeviceArchitecture | null;
     frequency: number | null;
+    max_cores: number | null;
 }
 
 const fetchDeviceMeta = async (name: string | null) => {
     const { data } = await axiosInstance.get<MetaData>('/api/performance/device-log/meta', {
         params: { name },
     });
+
     return data;
 };
 
@@ -399,13 +434,15 @@ const fetchNpeOpTrace = async () => {
     return response?.data;
 };
 
-export const useNpe = (fileName: string | null) =>
-    useQuery<NPEData, AxiosError>({
+export const useNpe = (fileName: string | null) => {
+    return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNpeOpTrace(),
         queryKey: ['fetch-npe', fileName],
         retry: false,
         staleTime: 30000,
+        enabled: fileName !== null,
     });
+};
 
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
@@ -498,11 +535,7 @@ export const useGetDeviceOperationsListByOp = () => {
         return (
             operations
                 ?.map((operation) => {
-                    const ops = operation.device_operations
-                        .filter((op) => op.node_type === NodeType.function_start)
-                        .map((deviceOperation) => deviceOperation.params.name)
-                        .filter((opName) => isDeviceOperation(opName));
-                    return { id: operation.id, name: operation.name, ops };
+                    return { id: operation.id, name: operation.name, ops: operation.deviceOperationNameList };
                 })
                 .filter((data) => {
                     return data.ops.length > 0;
@@ -574,7 +607,6 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     }, [operations, devices]);
 };
 
-// Unused
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const response = usePerformanceReport(activePerformanceReport?.reportName || null);
@@ -788,11 +820,12 @@ export const usePerformanceReport = (name: string | null) => {
     const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
             name !== null
-                ? fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps)
+                ? fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps, mergeDevices)
                 : Promise.resolve(EMPTY_PERF_RETURN),
         queryKey: [
             'get-performance-report',
@@ -801,16 +834,14 @@ export const usePerformanceReport = (name: string | null) => {
             `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
             `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
             `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
+            `mergeDevices:${mergeDevices ? 'true' : 'false'}`,
         ],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
+        staleTime: Infinity,
     });
 
-    return useMemo(
-        () => response,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [response.data, response.error],
-    );
+    return response;
 };
 
 export const usePerformanceComparisonReport = () => {
@@ -818,6 +849,7 @@ export const usePerformanceComparisonReport = () => {
     const stackByIn0 = useAtomValue(stackByIn0Atom);
     const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -831,7 +863,7 @@ export const usePerformanceComparisonReport = () => {
 
             const results = await Promise.all(
                 reportNames.map((name) =>
-                    fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps),
+                    fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps, mergeDevices),
                 ),
             );
 
@@ -844,6 +876,7 @@ export const usePerformanceComparisonReport = () => {
             `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
             `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
             `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
+            `mergeDevices:${mergeDevices ? 'true' : 'false'}`,
         ],
         staleTime: Infinity,
         enabled: !!reportNames,

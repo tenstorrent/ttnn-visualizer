@@ -6,7 +6,6 @@ import { VirtualItem } from '@tanstack/react-virtual';
 
 export interface VirtualListState {
     scrollOffset: number;
-    itemCount: number;
     measurementsCache: VirtualItem[];
     expandedItems: number[];
 }
