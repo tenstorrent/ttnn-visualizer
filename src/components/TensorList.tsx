@@ -183,20 +183,6 @@ const TensorList = () => {
         );
     }, [filteredTensorsList, shouldCollapseAll, setShouldCollapseAll]);
 
-    // Restore expanded items on mount
-    useEffect(() => {
-        setExpandedItems(restoredExpandedItems || []);
-
-        // Update stored list state on unmount
-        return () =>
-            updateListState({
-                scrollOffset: scrollOffsetRef.current || 0,
-                measurementsCache: measurementsCacheRef.current,
-                expandedItems: expandedItemsRef.current,
-            });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     // Keep stored refs updated
     useEffect(() => {
         scrollOffsetRef.current = virtualizer.scrollOffset;
@@ -207,6 +193,24 @@ const TensorList = () => {
     useEffect(() => {
         expandedItemsRef.current = expandedItems;
     }, [expandedItems]);
+
+    // Restore expanded items on mount
+    useEffect(() => {
+        // Update stored list state on unmount
+        return () => {
+            updateListState({
+                scrollOffset: scrollOffsetRef.current || 0,
+                measurementsCache: measurementsCacheRef.current,
+                expandedItems: expandedItemsRef.current,
+            });
+        };
+    }, [updateListState]);
+
+    // Restore expanded items on mount
+    useEffect(() => {
+        setExpandedItems(restoredExpandedItems || []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
