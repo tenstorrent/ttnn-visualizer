@@ -26,7 +26,7 @@ export interface Operation {
     error: OperationError | null;
 }
 export interface TensorWithSize extends Tensor {
-    size: number;
+    size: number | null;
 }
 export interface Tensor {
     address: number | null;

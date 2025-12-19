@@ -132,21 +132,28 @@ export const getCoresInRange = (rangeString: string): number => {
 };
 
 /**
- * Convert bytes to human readable format
- * @param bytes
- * @param numAfterComma
+ * Convert bytes to human readable format using binary units (1024-based)
+ * Appropriate for memory sizes (L1, DRAM, etc.) as memory is organized in powers of 2
+ * @param bytes - The number of bytes to convert
+ * @param decimals - Number of decimal places (default: 0 for B/KiB, 2 for MiB+)
+ * @example convertBytes(1024) // "1 KiB"
+ * @example convertBytes(163840) // "160 KiB"
+ * @example convertBytes(22370304) // "21.33 MiB"
  */
-export const convertBytes = (bytes: number, numAfterComma = 0) => {
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+export const convertBytes = (bytes: number, decimals = 0) => {
+    const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
 
     if (bytes === 0) {
-        return '0 B';
+        return `0 ${sizes[0]}`;
     }
+
     if (bytes < 1) {
-        return `${bytes.toFixed(numAfterComma)} B`;
+        return `${formatSize(bytes, decimals)} ${sizes[0]}`;
     }
 
     const denominationIndex = Math.floor(Math.log(bytes) / Math.log(1024));
-    const fractionDigits = denominationIndex > 1 ? 2 : numAfterComma; // MB and up always requires decimals
-    return `${(bytes / 1024 ** denominationIndex).toFixed(fractionDigits)} ${sizes[denominationIndex]}`;
+    const fractionDigits = denominationIndex > 1 ? 2 : decimals; // MiB and up always requires decimals
+    const value = formatSize(bytes / 1024 ** denominationIndex, fractionDigits);
+
+    return `${value} ${sizes[denominationIndex]}`;
 };

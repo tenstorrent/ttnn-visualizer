@@ -18,7 +18,7 @@ import {
     useTensors,
 } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import { Tensor } from '../model/APIData';
+import { Tensor, TensorWithSize } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
 import { selectedOperationRangeAtom, shouldCollapseAllTensorsAtom, tensorBufferTypeFiltersAtom } from '../store/app';
@@ -81,12 +81,26 @@ const TensorList = () => {
         return fetchedTensors;
     }, [fetchedTensors, selectedOperationRange]);
 
+    const tensorsWithSize: TensorWithSize[] = useMemo(() => {
+        if (!tensorsWithRange) {
+            return [];
+        }
+
+        return tensorsWithRange.map((tensor) => {
+            const matchedTensor = tensorListById.get(tensor.id);
+            return {
+                ...tensor,
+                size: matchedTensor?.size ?? null,
+            };
+        });
+    }, [tensorsWithRange, tensorListById]);
+
     const filteredTensorsList = useMemo(() => {
-        if (tensorsWithRange) {
-            let tensors = [...tensorsWithRange];
+        if (tensorsWithSize) {
+            let tensors = [...tensorsWithSize];
 
             if (filterQuery) {
-                tensors = tensorsWithRange?.filter((tensor) =>
+                tensors = tensorsWithSize?.filter((tensor) =>
                     getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
                 );
             }
@@ -107,18 +121,28 @@ const TensorList = () => {
 
             if (shouldSortByDuration !== SortingOptions.OFF) {
                 tensors.sort((a, b) => {
-                    const sizeA = a.address ? tensorListById.get(a.id)?.size : undefined;
-                    const sizeB = b.address ? tensorListById.get(b.id)?.size : undefined;
+                    const sizeA = a.size;
+                    const sizeB = b.size;
 
-                    if (!isValidNumber(sizeA) || !isValidNumber(sizeB)) {
-                        return 0;
+                    const isAValid = isValidNumber(sizeA);
+                    const isBValid = isValidNumber(sizeB);
+
+                    // Invalid values always go to the bottom, regardless of sort direction
+                    if (!isAValid && !isBValid) {
+                        return 0; // Both invalid - maintain their order
+                    }
+                    if (!isAValid) {
+                        return 1; // a is invalid - push to bottom (a after b)
+                    }
+                    if (!isBValid) {
+                        return -1; // b is invalid - push to bottom (a before b)
                     }
 
-                    if (shouldSortByDuration === SortingOptions.ASCENDING) {
-                        return sizeA - sizeB;
-                    }
+                    // Both values are valid - sort by size according to direction
+                    const numA = sizeA as number;
+                    const numB = sizeB as number;
 
-                    return sizeB - sizeA;
+                    return shouldSortByDuration === SortingOptions.ASCENDING ? numA - numB : numB - numA;
                 });
             }
 
@@ -127,14 +151,13 @@ const TensorList = () => {
 
         return [];
     }, [
-        tensorsWithRange,
+        tensorsWithSize,
         filterQuery,
         bufferTypeFilters,
         showHighConsumerTensors,
         showLateDeallocatedTensors,
         nonDeallocatedTensorList,
         shouldSortByDuration,
-        tensorListById,
     ]);
 
     const {
@@ -337,6 +360,7 @@ const TensorList = () => {
                                 ? IconNames.SORT_NUMERICAL
                                 : IconNames.SORT_NUMERICAL_DESC
                         }
+                        active={shouldSortByDuration !== SortingOptions.OFF}
                         variant={shouldSortByDuration !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
                         aria-label='Sort tensors by size'
                     />
@@ -385,7 +409,6 @@ const TensorList = () => {
                             virtualItems.map((virtualRow) => {
                                 const tensor = filteredTensorsList[virtualRow.index];
                                 const isLateDeallocated = nonDeallocatedTensorList.get(tensor.id);
-                                const matchedTensor = tensorListById.get(tensor.id);
 
                                 return (
                                     <li
@@ -442,11 +465,8 @@ const TensorList = () => {
                                                         </Tooltip>
                                                     ) : null}
 
-                                                    {matchedTensor ? (
-                                                        <>
-                                                            <small>{matchedTensor.size}</small>
-                                                            <small>{convertBytes(matchedTensor.size)}</small>
-                                                        </>
+                                                    {isValidNumber(tensor.size) ? (
+                                                        <small>{convertBytes(tensor.size)}</small>
                                                     ) : null}
                                                 </ListItem>
                                             }
