@@ -151,7 +151,8 @@ export const convertBytes = (bytes: number, decimals = 0) => {
         return `${formatSize(bytes, decimals)} ${sizes[0]}`;
     }
 
-    const denominationIndex = Math.floor(Math.log(bytes) / Math.log(1024));
+    const maxIndex = sizes.length - 1;
+    const denominationIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), maxIndex);
     const fractionDigits = denominationIndex > 1 ? 2 : decimals; // MiB and up always requires decimals
     const value = formatSize(bytes / 1024 ** denominationIndex, fractionDigits);
 
