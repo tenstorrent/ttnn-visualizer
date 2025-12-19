@@ -381,7 +381,7 @@ const TensorList = () => {
                             virtualItems.map((virtualRow) => {
                                 const tensor = filteredTensorsList[virtualRow.index];
                                 const isLateDeallocated = nonDeallocatedTensorList.get(tensor.id);
-                                const matchedTensor = tensorListById.get(tensor.address || -1);
+                                const matchedTensor = tensorListById.get(tensor.id);
 
                                 return (
                                     <li
