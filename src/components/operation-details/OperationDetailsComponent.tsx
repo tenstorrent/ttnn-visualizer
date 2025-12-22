@@ -82,10 +82,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     } = useOperationDetails(operationId);
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
-    const { createToast, resetToasts } = useBufferFocus();
+    const { createToast, clearBufferFocus } = useBufferFocus();
 
     const onClickOutside = () => {
-        resetToasts();
+        clearBufferFocus();
     };
 
     const operation = operations?.find((op) => op.id === operationId);

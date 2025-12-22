@@ -5,7 +5,7 @@
 import 'styles/components/BufferSummaryRow.scss';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
-import { useAtom } from 'jotai/index';
+import { useAtomValue } from 'jotai/index';
 import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
 import { Buffer, Tensor } from '../../model/APIData';
@@ -48,10 +48,10 @@ const BufferSummaryRow = ({
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
-    const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
-    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
+    const selectedTensor = useAtomValue(selectedTensorAtom);
+    const selectedAddress = useAtomValue(selectedAddressAtom);
 
-    const { createToast, resetToasts } = useBufferFocus();
+    const { clearBufferFocus, updateFocusedBuffer } = useBufferFocus();
 
     const interactivityList = useMemo(() => {
         return buffers.map((buffer) => {
@@ -137,24 +137,10 @@ const BufferSummaryRow = ({
     const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const { interactiveBuffer } = findBufferForInteraction(event);
         if (interactiveBuffer) {
-            setFocusedBuffer(interactiveBuffer.buffer, interactiveBuffer.tensor);
+            updateFocusedBuffer(interactiveBuffer.buffer, interactiveBuffer.tensor);
         } else {
-            clearFocusedBuffer();
+            clearBufferFocus();
         }
-    };
-
-    const clearFocusedBuffer = () => {
-        resetToasts();
-    };
-
-    const setFocusedBuffer = (buffer: Buffer, tensor?: Tensor) => {
-        if (!buffer) {
-            clearFocusedBuffer();
-            return;
-        }
-        setSelectedTensor(tensor?.id === selectedTensor ? null : (tensor?.id ?? null));
-        setSelectedAddress(tensor?.address === selectedTensor ? null : (tensor?.address ?? buffer.address));
-        createToast(tensor?.address ?? buffer.address, tensor?.id);
     };
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {

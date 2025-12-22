@@ -6,10 +6,10 @@ import { useEffect } from 'react';
 import useBufferFocus from '../hooks/useBufferFocus';
 
 function useClearSelectedBuffer() {
-    const { resetToasts } = useBufferFocus();
+    const { clearBufferFocus } = useBufferFocus();
 
     useEffect(() => {
-        resetToasts();
+        clearBufferFocus();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 }

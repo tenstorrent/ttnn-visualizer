@@ -29,7 +29,7 @@ function BufferSummary() {
         true,
     );
     const { data: operationsList } = useOperationsList();
-    const { activeToast, resetToasts } = useBufferFocus();
+    const { activeToast, clearBufferFocus } = useBufferFocus();
 
     useEffect(() => {
         const scrollRefs = [plotRef, tableRef];
@@ -87,7 +87,7 @@ function BufferSummary() {
                 // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
                 <div
                     className='outside-click'
-                    onClick={resetToasts}
+                    onClick={clearBufferFocus}
                 />
             )}
 

@@ -4,10 +4,11 @@
 
 import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAtomValue } from 'jotai';
-import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
+import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, FocusMode, Table2 } from '@blueprintjs/table';
 import { Checkbox, HotkeysProvider, Icon, InputGroup, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { FocusedRegion } from '@blueprintjs/table/lib/esm/common/cellTypes';
+import { useAtomValue } from 'jotai';
 import { BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
@@ -20,6 +21,8 @@ import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
 import { selectedTensorAtom } from '../../store/app';
 import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
+import isValidNumber from '../../functions/isValidNumber';
+import useBufferFocus from '../../hooks/useBufferFocus';
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperation[];
@@ -39,6 +42,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
     const [mergedByDevice, setMergedByDevice] = useState(true);
+
+    const { clearBufferFocus, updateFocusedBuffer } = useBufferFocus();
 
     const tableRef = useRef<Table2 | null>(null);
     const filterableColumnKeys = useMemo(
@@ -217,7 +222,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         }, []);
 
         if (tableRef?.current?.scrollToRegion && matchingBuffers.length) {
-            tableRef.current.scrollToRegion({ rows: [matchingBuffers[0], matchingBuffers[0]] });
+            // tableRef.current.scrollToRegion({ rows: [matchingBuffers[0], matchingBuffers[0]] });
         }
 
         return matchingBuffers;
@@ -239,7 +244,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     <Checkbox
                         checked={showOnlySelected}
                         onChange={() => setShowOnlySelected(!showOnlySelected)}
-                        disabled={selectedTensor === null}
+                        disabled={selectedRows.length === 0}
                     >
                         Show selected tensor rows ({selectedRows.length})
                     </Checkbox>
@@ -257,6 +262,27 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     columnWidths={[200, 120, 120, 140, 120, 120, 100]}
                     ref={tableRef}
                     getCellClipboardData={(row, col) => getCellText(tableFields[row], Columns[col].key)}
+                    focusMode={FocusMode.CELL}
+                    onFocusedRegion={(selection: FocusedRegion) => {
+                        if (selection.type !== FocusMode.CELL) {
+                            return;
+                        }
+
+                        const selectedId = tableFields[selection.row].tensor_id;
+
+                        if (selection.col === 1 && selectedId !== selectedTensor) {
+                            if (isValidNumber(selectedId)) {
+                                updateFocusedBuffer(
+                                    tableFields[selection.row],
+                                    tensorListByOperation
+                                        .get(tableFields[selection.row].operation_id)
+                                        ?.get(tableFields[selection.row].address),
+                                );
+                            } else {
+                                clearBufferFocus();
+                            }
+                        }
+                    }}
                 >
                     {createColumns()}
                 </BlueprintTable>
@@ -271,7 +297,7 @@ const getCellText = (buffer: SummaryTableBuffer, key: ColumnKeys) => {
     let textValue = buffer[key]?.toString() || '';
 
     if (key === 'tensor_id') {
-        textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '';
+        textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : 'Buffer';
     }
 
     if (key === 'operation_id') {
@@ -301,6 +327,15 @@ const getCellContent = (
 ) => {
     const buffer = tableFields[rowIndex] as SummaryTableBuffer;
     const textValue = getCellText(buffer, key);
+
+    if (key === 'address') {
+        return (
+            <HighlightedText
+                text={buffer.address.toString()}
+                filter={filters[key]}
+            />
+        );
+    }
 
     if (key === 'tensor_id') {
         return (

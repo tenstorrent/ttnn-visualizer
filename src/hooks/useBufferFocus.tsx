@@ -7,13 +7,14 @@ import { useAtom, useSetAtom } from 'jotai';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import ToastTensorMessage from '../components/operation-details/ToastTensorMessage';
 import { activeToastAtom, selectedAddressAtom, selectedTensorAtom } from '../store/app';
+import { Buffer, Tensor } from '../model/APIData';
 
 const useBufferFocus = () => {
     const [activeToast, setActiveToast] = useAtom(activeToastAtom);
-    const setSelectedTensor = useSetAtom(selectedTensorAtom);
+    const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
     const setSelectedAddress = useSetAtom(selectedAddressAtom);
 
-    const resetToasts = () => {
+    const clearBufferFocus = () => {
         setSelectedTensor(null);
         setSelectedAddress(null);
         setActiveToast(null);
@@ -41,7 +42,7 @@ const useBufferFocus = () => {
                 position: 'bottom-right',
                 hideProgressBar: true,
                 closeOnClick: true,
-                onClick: resetToasts,
+                onClick: clearBufferFocus,
                 theme: 'light',
             },
         ) as number;
@@ -49,7 +50,18 @@ const useBufferFocus = () => {
         setActiveToast(toastInstance);
     };
 
-    return { activeToast, resetToasts, setActiveToast, createToast };
+    const updateFocusedBuffer = (buffer?: Buffer, tensor?: Tensor) => {
+        if (!buffer) {
+            clearBufferFocus();
+            return;
+        }
+
+        setSelectedTensor(tensor?.id === selectedTensor ? null : (tensor?.id ?? null));
+        setSelectedAddress(tensor?.address === selectedTensor ? null : (tensor?.address ?? buffer.address));
+        createToast(tensor?.address ?? buffer.address, tensor?.id);
+    };
+
+    return { activeToast, clearBufferFocus, setActiveToast, createToast, updateFocusedBuffer };
 };
 
 export default useBufferFocus;
