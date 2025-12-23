@@ -281,7 +281,8 @@ const getCellText = (buffer: SummaryTableBuffer, key: ColumnKeys) => {
     let textValue = buffer[key]?.toString() || '';
 
     if (key === 'tensor_id') {
-        textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '';
+        // Using a space character to ensure the table cell height remains consistent
+        textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '\u00A0';
     }
 
     if (key === 'operation_id') {
@@ -307,9 +308,7 @@ const getCellContent = (key: ColumnKeys, rowIndex: number, rows: SummaryTableBuf
     const buffer = rows[rowIndex] as SummaryTableBuffer;
     const textValue = getCellText(buffer, key);
 
-    if (key === 'address') {
-        return formatSize(buffer.address);
-    }
+    // TODO: Format address but also allow easy filtering
 
     if (key === 'size') {
         return formatSize(buffer.size);
