@@ -196,8 +196,9 @@ class DatabaseQueries:
                     b.max_size_per_bank as size,
                     GROUP_CONCAT(dt.device_id || ':' || dt.address, ',') as device_tensors_data
                 FROM tensors t
+                LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
                 LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
-                LEFT JOIN buffers b ON b.operation_id = ot.operation_id
+                LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
                     AND t.address = b.address
                     AND t.device_id = b.device_id
                 LEFT JOIN device_tensors dt ON dt.tensor_id = t.tensor_id
@@ -210,8 +211,9 @@ class DatabaseQueries:
                     b.max_size_per_bank as size,
                     NULL as device_tensors_data
                 FROM tensors t
+                LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
                 LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
-                LEFT JOIN buffers b ON b.operation_id = ot.operation_id
+                LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
                     AND t.address = b.address
                     AND t.device_id = b.device_id
                 WHERE 1=1
