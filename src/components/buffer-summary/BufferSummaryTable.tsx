@@ -266,7 +266,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     enableRowResizing={false}
                     cellRendererDependencies={[sortDirection, sortingColumn, tableRows, tableRows.length]}
                     ref={tableRef}
-                    getCellClipboardData={(row, col) => getCellText(tableRows[row], Columns[col].key)}
+                    getCellClipboardData={(row, col) => getCellText(tableRows[row], tableColumns[col].key)}
                 >
                     {createColumns()}
                 </BlueprintTable>
