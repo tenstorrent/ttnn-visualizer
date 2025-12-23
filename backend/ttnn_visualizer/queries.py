@@ -185,16 +185,37 @@ class DatabaseQueries:
     def query_tensors(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Tensor, None, None]:
-        # Build the base query with joins to get size
-        query = """
-            SELECT t.*, b.max_size_per_bank as size
-            FROM tensors t
-            LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
-            LEFT JOIN buffers b ON b.operation_id = ot.operation_id
-                AND t.address = b.address
-                AND t.device_id = b.device_id
-            WHERE 1=1
-        """
+        # Check if device_tensors table exists
+        device_tensors_exists = self._check_table_exists("device_tensors")
+
+        # Build the base query with joins to get size and optionally device_tensors
+        if device_tensors_exists:
+            query = """
+                SELECT 
+                    t.*, 
+                    b.max_size_per_bank as size,
+                    GROUP_CONCAT(dt.device_id || ':' || dt.address, ',') as device_tensors_data
+                FROM tensors t
+                LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
+                LEFT JOIN buffers b ON b.operation_id = ot.operation_id
+                    AND t.address = b.address
+                    AND t.device_id = b.device_id
+                LEFT JOIN device_tensors dt ON dt.tensor_id = t.tensor_id
+                WHERE 1=1
+            """
+        else:
+            query = """
+                SELECT 
+                    t.*, 
+                    b.max_size_per_bank as size,
+                    NULL as device_tensors_data
+                FROM tensors t
+                LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
+                LEFT JOIN buffers b ON b.operation_id = ot.operation_id
+                    AND t.address = b.address
+                    AND t.device_id = b.device_id
+                WHERE 1=1
+            """
         params = []
 
         # Apply filters to tensors table
@@ -213,28 +234,35 @@ class DatabaseQueries:
                     query += f" AND t.{column} = ?"
                     params.append(value)
 
+        query += " GROUP BY t.tensor_id"
+
         rows = self.query_runner.execute_query(query, params)
         for row in rows:
-            # Extract size (last column) and tensor data (all columns except last)
-            tensor_row = row[:-1]  # All columns except size
-            size = row[-1]  # size column
+            # Extract size and device_tensors_data (last two columns) and tensor data
+            tensor_row = row[:-2]  # All tensor columns
+            size = row[-2]  # size column
+            device_tensors_data = row[-1]  # device_tensors_data column
 
             device_addresses = []
 
-            try:
-                device_tensors = self._query_table(
-                    "device_tensors", filters={"tensor_id": tensor_row[0]}
-                )
-            except sqlite3.OperationalError as err:
-                if str(err).startswith("no such table"):
-                    pass
-                else:
-                    raise err
-            else:
-                for device_tensor in sorted(device_tensors, key=lambda x: x[1]):
-                    while len(device_addresses) < device_tensor[1]:
+            if device_tensors_data:
+                # Parse the concatenated device_id:address pairs
+                pairs = device_tensors_data.split(",")
+                device_tensor_list = []
+                for pair in pairs:
+                    if pair:
+                        device_id_str, address_str = pair.split(":")
+                        device_id = int(device_id_str)
+                        address = int(address_str)
+                        device_tensor_list.append((device_id, address))
+
+                # Sort by device_id and build the list with proper indexing
+                for device_id, address in sorted(
+                    device_tensor_list, key=lambda x: x[0]
+                ):
+                    while len(device_addresses) < device_id:
                         device_addresses.append(None)
-                    device_addresses.append(device_tensor[2])
+                    device_addresses.append(address)
 
             yield Tensor(*tensor_row, device_addresses, size=size)
 
