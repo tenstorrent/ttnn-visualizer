@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { toast } from 'react-toastify';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import ToastTensorMessage from '../components/operation-details/ToastTensorMessage';
 import { activeToastAtom, selectedAddressAtom, selectedTensorAtom } from '../store/app';
@@ -12,7 +12,7 @@ import { Buffer, Tensor } from '../model/APIData';
 const useBufferFocus = () => {
     const [activeToast, setActiveToast] = useAtom(activeToastAtom);
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
-    const setSelectedAddress = useSetAtom(selectedAddressAtom);
+    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
 
     const clearBufferFocus = () => {
         setSelectedTensor(null);
@@ -50,6 +50,13 @@ const useBufferFocus = () => {
         setActiveToast(toastInstance);
     };
 
+    // TODO: Refactor so we don't need both updateFocussedBufferOpDetails and updateFocusedBuffer
+    const updateFocussedBufferOpDetails = (address?: number, tensorId?: number): void => {
+        setSelectedAddress(address ?? null);
+        setSelectedTensor(tensorId ?? null);
+        createToast(address, tensorId);
+    };
+
     const updateFocusedBuffer = (buffer?: Buffer, tensor?: Tensor) => {
         if (!buffer) {
             clearBufferFocus();
@@ -61,7 +68,16 @@ const useBufferFocus = () => {
         createToast(tensor?.address ?? buffer.address, tensor?.id);
     };
 
-    return { activeToast, clearBufferFocus, setActiveToast, createToast, updateFocusedBuffer };
+    return {
+        activeToast,
+        clearBufferFocus,
+        setActiveToast,
+        createToast,
+        updateFocusedBuffer,
+        updateFocussedBufferOpDetails,
+        selectedTensor,
+        selectedAddress,
+    };
 };
 
 export default useBufferFocus;

@@ -8,7 +8,6 @@ import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, FocusMode, Ta
 import { Checkbox, HotkeysProvider, Icon, InputGroup, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { FocusedRegion } from '@blueprintjs/table/lib/esm/common/cellTypes';
-import { useAtomValue } from 'jotai';
 import { BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
@@ -19,9 +18,7 @@ import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
-import { selectedTensorAtom } from '../../store/app';
 import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
-import isValidNumber from '../../functions/isValidNumber';
 import useBufferFocus from '../../hooks/useBufferFocus';
 
 interface BufferSummaryTableProps {
@@ -38,12 +35,11 @@ interface SummaryTableBuffer extends BufferData {
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
-    const selectedTensor = useAtomValue(selectedTensorAtom);
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
     const [mergedByDevice, setMergedByDevice] = useState(true);
 
-    const { clearBufferFocus, updateFocusedBuffer } = useBufferFocus();
+    const { updateFocusedBuffer, selectedTensor } = useBufferFocus();
 
     const tableRef = useRef<Table2 | null>(null);
     const filterableColumnKeys = useMemo(
@@ -271,16 +267,12 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                         const selectedId = tableFields[selection.row].tensor_id;
 
                         if (selection.col === 1 && selectedId !== selectedTensor) {
-                            if (isValidNumber(selectedId)) {
-                                updateFocusedBuffer(
-                                    tableFields[selection.row],
-                                    tensorListByOperation
-                                        .get(tableFields[selection.row].operation_id)
-                                        ?.get(tableFields[selection.row].address),
-                                );
-                            } else {
-                                clearBufferFocus();
-                            }
+                            updateFocusedBuffer(
+                                tableFields[selection.row],
+                                tensorListByOperation
+                                    .get(tableFields[selection.row].operation_id)
+                                    ?.get(tableFields[selection.row].address),
+                            );
                         }
                     }}
                 >

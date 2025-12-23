@@ -5,13 +5,11 @@
 import 'styles/components/BufferSummaryRow.scss';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
-import { useAtomValue } from 'jotai/index';
 import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatUnit, toHex, toReadableShape, toReadableType } from '../../functions/math';
-import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
@@ -48,10 +46,7 @@ const BufferSummaryRow = ({
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
-    const selectedTensor = useAtomValue(selectedTensorAtom);
-    const selectedAddress = useAtomValue(selectedAddressAtom);
-
-    const { clearBufferFocus, updateFocusedBuffer } = useBufferFocus();
+    const { clearBufferFocus, updateFocusedBuffer, selectedTensor, selectedAddress } = useBufferFocus();
 
     const interactivityList = useMemo(() => {
         return buffers.map((buffer) => {

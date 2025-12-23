@@ -23,8 +23,6 @@ import { L1RenderZoomoutConfiguration, PlotMouseEventCustom } from '../../defini
 import {
     isFullStackTraceAtom,
     renderMemoryLayoutAtom,
-    selectedAddressAtom,
-    selectedTensorAtom,
     showDeallocationReportAtom,
     showHexAtom,
     showMemoryRegionsAtom,
@@ -52,8 +50,6 @@ interface OperationDetailsProps {
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const [renderMemoryLayoutPattern, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
-    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
-    const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const [showFullStackTrace, setShowFullStackTrace] = useAtom(isFullStackTraceAtom);
@@ -82,7 +78,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     } = useOperationDetails(operationId);
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
-    const { createToast, clearBufferFocus } = useBufferFocus();
+    const { clearBufferFocus, updateFocussedBufferOpDetails, selectedAddress, selectedTensor } = useBufferFocus();
 
     const onClickOutside = () => {
         clearBufferFocus();
@@ -164,33 +160,27 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const { plotZoomRangeStart, plotZoomRangeEnd } = calculatePlotZoomRange();
 
-    const updateBufferFocus = (address?: number, tensorId?: number): void => {
-        setSelectedAddress(address ?? null);
-        setSelectedTensorId(tensorId ?? null);
-        createToast(address, tensorId);
-    };
-
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id);
+        updateFocussedBufferOpDetails(address, tensor?.id);
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id);
+        updateFocussedBufferOpDetails(address, tensor?.id);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id);
+        updateFocussedBufferOpDetails(address, tensor?.id);
     };
 
     const onTensorClick = (address?: number, tensorId?: number): void => {
-        updateBufferFocus(address, tensorId);
+        updateFocussedBufferOpDetails(address, tensorId);
     };
 
     const onLegendClick = (address: number, tensorId?: number) => {
-        updateBufferFocus(address, tensorId);
+        updateFocussedBufferOpDetails(address, tensorId);
     };
 
     const inputOutputList = details.inputs.concat(details.outputs);
@@ -205,7 +195,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                {(selectedAddress || isValidNumber(selectedTensorId)) && (
+                {(selectedAddress || isValidNumber(selectedTensor)) && (
                     // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
                     <div
                         className='outside-click'
@@ -301,10 +291,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <p className='no-buffer-type-selected'>No buffer types selected.</p>
                         )}
 
-                        {selectedTensorId ? (
+                        {selectedTensor ? (
                             <ProducerConsumersData
                                 selectedTensor={
-                                    inputOutputList.find((t) => t.id === selectedTensorId) ||
+                                    inputOutputList.find((t) => t.id === selectedTensor) ||
                                     details.getTensorForAddress(selectedAddress ?? 0)
                                 }
                                 details={details}
