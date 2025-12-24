@@ -112,6 +112,7 @@ class TestSerializers(unittest.TestCase):
                         "address": 1000,
                         "buffer_type": 0,
                         "device_addresses": [25],
+                        "size": None,
                     }
                 ],
                 "outputs": [
@@ -132,6 +133,7 @@ class TestSerializers(unittest.TestCase):
                         "address": 1000,
                         "buffer_type": 0,
                         "device_addresses": [25],
+                        "size": None,
                     }
                 ],
                 "error": None,
@@ -320,6 +322,7 @@ class TestSerializers(unittest.TestCase):
                     "address": 1000,
                     "buffer_type": 0,
                     "device_addresses": [25],
+                    "size": None,
                 }
             ]
         }
@@ -343,10 +346,10 @@ class TestSerializers(unittest.TestCase):
                     "address": 1000,
                     "buffer_type": 0,
                     "device_addresses": [25],
+                    "size": None,
                 }
             ]
         }
-
         self.assertEqual(inputs_dict, expected_inputs)
         self.assertEqual(outputs_dict, expected_outputs)
 
@@ -423,6 +426,7 @@ class TestSerializers(unittest.TestCase):
                     "producers": [2],
                     "shape": "shape1",
                     "device_addresses": [200, 300],
+                    "size": None,
                 }
             ],
             "l1_sizes": [256],
@@ -445,6 +449,7 @@ class TestSerializers(unittest.TestCase):
                     "producers": [2],
                     "shape": "shape1",
                     "device_addresses": [200, 300],
+                    "size": None,
                 }
             ],
             "stack_trace": "trace1",
@@ -563,6 +568,7 @@ class TestSerializers(unittest.TestCase):
                 "consumers": [3],
                 "producers": [2],
                 "device_addresses": [500, 1500],
+                "size": None,
             },
             {
                 "id": 2,
@@ -580,6 +586,7 @@ class TestSerializers(unittest.TestCase):
                 "consumers": [],
                 "producers": [],
                 "device_addresses": [2000, 2500],
+                "size": None,
             },
         ]
 

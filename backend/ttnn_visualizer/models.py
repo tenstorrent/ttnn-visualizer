@@ -113,6 +113,7 @@ class Tensor(SerializeableDataclass):
     address: int
     buffer_type: BufferType
     device_addresses: list[int]
+    size: Optional[int] = None
 
     def __post_init__(self):
         self.memory_config = parse_memory_config(self.memory_config)
