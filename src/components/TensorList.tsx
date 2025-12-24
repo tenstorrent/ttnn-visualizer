@@ -11,14 +11,9 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
-import {
-    useGetTensorDeallocationReportByOperation,
-    useOperationsList,
-    useTensorListById,
-    useTensors,
-} from '../hooks/useAPI';
+import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import { Tensor, TensorWithSize } from '../model/APIData';
+import { Tensor } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
 import { selectedOperationRangeAtom, shouldCollapseAllTensorsAtom, tensorBufferTypeFiltersAtom } from '../store/app';
@@ -65,7 +60,7 @@ const TensorList = () => {
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
         useScrollShade();
     const scrollElementRef = useRef<HTMLDivElement>(null);
-    const tensorListById = useTensorListById();
+    // const tensorListById = useTensorListById();
 
     const tensorsWithRange = useMemo(() => {
         if (fetchedTensors && selectedOperationRange) {
@@ -81,26 +76,12 @@ const TensorList = () => {
         return fetchedTensors;
     }, [fetchedTensors, selectedOperationRange]);
 
-    const tensorsWithSize: TensorWithSize[] = useMemo(() => {
-        if (!tensorsWithRange) {
-            return [];
-        }
-
-        return tensorsWithRange.map((tensor) => {
-            const matchedTensor = tensorListById.get(tensor.id);
-            return {
-                ...tensor,
-                size: matchedTensor?.size ?? null,
-            };
-        });
-    }, [tensorsWithRange, tensorListById]);
-
     const filteredTensorsList = useMemo(() => {
-        if (tensorsWithSize) {
-            let tensors = [...tensorsWithSize];
+        if (tensorsWithRange) {
+            let tensors = [...tensorsWithRange];
 
             if (filterQuery) {
-                tensors = tensorsWithSize?.filter((tensor) =>
+                tensors = tensorsWithRange?.filter((tensor) =>
                     getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
                 );
             }
@@ -151,13 +132,13 @@ const TensorList = () => {
 
         return [];
     }, [
-        tensorsWithSize,
+        tensorsWithRange,
         filterQuery,
         bufferTypeFilters,
         showHighConsumerTensors,
         showLateDeallocatedTensors,
-        nonDeallocatedTensorList,
         shouldSortBySize,
+        nonDeallocatedTensorList,
     ]);
 
     const {
@@ -469,7 +450,7 @@ const TensorList = () => {
                                                     ) : null}
 
                                                     {isValidNumber(tensor.size) ? (
-                                                        <small>{convertBytes(tensor.size)}</small>
+                                                        <span className='tensor-size'>{convertBytes(tensor.size)}</span>
                                                     ) : null}
                                                 </ListItem>
                                             }

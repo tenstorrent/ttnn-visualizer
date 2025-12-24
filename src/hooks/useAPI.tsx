@@ -22,7 +22,6 @@ import {
     OperationDetailsData,
     ReportMetaData,
     Tensor,
-    TensorWithSize,
     defaultBuffer,
     defaultOperationDetailsData,
     defaultTensorData,
@@ -1011,47 +1010,6 @@ export const usePerfFolderList = () => {
     });
 };
 
-export const useTensorListById = () => {
-    const { data: buffersByOperation } = useBuffers(null);
-    const { data: tensors } = useTensors();
-    return useMemo(() => {
-        const bufferMapByOperation = new Map<number, Buffer[]>();
-        buffersByOperation?.forEach((operationBuffers) => {
-            bufferMapByOperation.set(operationBuffers.id, operationBuffers.buffers);
-        });
-        const tensorListById = new Map<number, TensorWithSize>();
-        if (!tensors || !buffersByOperation) {
-            return tensorListById;
-        }
-
-        for (const tensor of tensors) {
-            if (tensor.address !== null && tensor.address !== undefined) {
-                if (tensor.id != null && !tensorListById.has(tensor.id)) {
-                    const bufferlist = bufferMapByOperation.get(tensor.producers[0])!;
-                    tensorListById.set(tensor.id, {
-                        ...tensor,
-                        size: bufferlist?.find((buffer) => buffer.address === tensor.address)?.size || 0,
-                    });
-                }
-            }
-        }
-
-        return tensorListById;
-    }, [buffersByOperation, tensors]);
-    // const data = useCreateTensorsByOperationByIdList();
-    // return useMemo(() => {
-    //     const tensorListById = new Map<number, TensorWithSize>();
-    //     for (const tensorsById of data.values()) {
-    //         for (const [tensorId, tensor] of tensorsById) {
-    //             if (!tensorListById.has(tensorId) && tensorId != null) {
-    //                 tensorListById.set(tensorId, tensor);
-    //             }
-    //         }
-    //     }
-    //     return tensorListById;
-    // }, [data]);
-};
-
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
     const { data: buffersByOperation } = useBuffers(bufferType);
     const { data: operations } = useOperationsList();
@@ -1110,7 +1068,7 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
             continue;
         }
 
-        const tensorsByBufferAddress = new Map<number, TensorWithSize>();
+        const tensorsByBufferAddress = new Map<number, Tensor>();
 
         for (const buffer of buffers) {
             const addr = buffer.address;
@@ -1124,7 +1082,6 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
                 tensorsByBufferAddress.set(addr, {
                     ...tensor,
                     buffer_type: buffer.buffer_type,
-                    size: buffer.size,
                 });
             }
         }
