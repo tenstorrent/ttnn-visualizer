@@ -53,6 +53,7 @@ import createToastNotification from '../functions/createToastNotification';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
+import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -252,7 +253,7 @@ export const useGetL1SmallMarker = (): number => {
     return useMemo(() => {
         const addresses = buffers?.map((buffer) => {
             return buffer.address;
-        }) || [0];
+        }) || [L1_DEFAULT_MEMORY_SIZE];
 
         let min = Infinity;
         for (let i = 0; i < addresses.length; i++) {
@@ -260,7 +261,7 @@ export const useGetL1SmallMarker = (): number => {
                 min = addresses[i];
             }
         }
-        return min === Infinity ? 0 : min;
+        return min === Infinity ? L1_DEFAULT_MEMORY_SIZE : min;
     }, [buffers]);
 };
 

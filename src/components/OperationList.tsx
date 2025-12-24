@@ -16,7 +16,12 @@ import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import { activePerformanceReportAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
+import {
+    activePerformanceReportAtom,
+    operationListFilterAtom,
+    selectedOperationRangeAtom,
+    shouldCollapseAllOperationsAtom,
+} from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
@@ -42,7 +47,7 @@ const OperationList = () => {
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
-    const [filterQuery, setFilterQuery] = useState('');
+    const [filterQuery, setFilterQuery] = useAtom(operationListFilterAtom);
     const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
@@ -194,7 +199,7 @@ const OperationList = () => {
 
         if (initialOperationId) {
             const operationIndex =
-                fetchedOperations?.findIndex(
+                filteredOperationsList?.findIndex(
                     (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
                 ) || 0;
 
@@ -203,7 +208,7 @@ const OperationList = () => {
             // Navigating to the same page replaces the entry in the browser history
             navigate(ROUTES.OPERATIONS, { replace: true });
         }
-    }, [fetchedOperations, location.state?.previousOperationId, navigate]);
+    }, [filteredOperationsList, location.state?.previousOperationId, navigate]);
 
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
