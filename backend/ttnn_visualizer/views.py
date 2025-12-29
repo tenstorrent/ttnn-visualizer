@@ -11,7 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import orjson
 import yaml
@@ -39,6 +39,7 @@ from ttnn_visualizer.file_uploads import (
 from ttnn_visualizer.instances import get_instances, update_instance
 from ttnn_visualizer.models import (
     Instance,
+    InstanceTable,
     RemoteConnection,
     RemoteReportFolder,
     StatusMessage,
@@ -83,6 +84,43 @@ def test_ssh_connection(connection) -> bool:
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__)
+
+
+def create_indexes_async(profiler_path: str, instance_id: Optional[str] = None):
+    """
+    Create database indexes asynchronously for a profiler report.
+
+    Args:
+        profiler_path: Path to the db.sqlite file
+        instance_id: Optional instance ID. If provided, will use it to get the instance.
+                     If not provided, will create a temporary instance from profiler_path.
+    """
+
+    def _create_indexes():
+        try:
+            if instance_id:
+                # Use instance_id to get the instance from database
+                instance_data = InstanceTable.query.filter_by(
+                    instance_id=instance_id
+                ).first()
+                if instance_data:
+                    instance = instance_data.to_pydantic()
+                else:
+                    # Fallback: create temporary instance from profiler_path
+                    instance = Instance(instance_id="", profiler_path=profiler_path)
+            else:
+                # Create temporary instance from profiler_path
+                instance = Instance(instance_id="", profiler_path=profiler_path)
+
+            with DatabaseQueries(instance) as db:
+                db.create_indexes()
+        except Exception as e:
+            logger.warning(f"Failed to create indexes on database {profiler_path}: {e}")
+
+    # Submit to thread pool executor to run asynchronously
+    executor = ThreadPoolExecutor(max_workers=1)
+    executor.submit(_create_indexes)
+    executor.shutdown(wait=False)
 
 
 @api.route("/operations", methods=["GET"])
@@ -929,25 +967,7 @@ def create_profiler_files():
 
     # Create indexes asynchronously after upload
     if profiler_path:
-
-        def create_indexes_async():
-            try:
-                instance_data = InstanceTable.query.filter_by(
-                    instance_id=instance_id
-                ).first()
-                if instance_data:
-                    instance = instance_data.to_pydantic()
-                    with DatabaseQueries(instance) as db:
-                        db.create_indexes()
-            except Exception as e:
-                logger.warning(
-                    f"Failed to create indexes on database {profiler_path}: {e}"
-                )
-
-        # Submit to thread pool executor to run asynchronously
-        executor = ThreadPoolExecutor(max_workers=1)
-        executor.submit(create_indexes_async)
-        executor.shutdown(wait=False)
+        create_indexes_async(str(profiler_path), instance_id)
 
     config_file = profiler_directory / parent_folder_name / "config.json"
     report_name = None
@@ -1314,6 +1334,18 @@ def sync_remote_folder():
         )
 
         remote_profiler_folder.lastSynced = int(time.time())
+
+        # Create indexes asynchronously after remote sync
+        profiler_folder = Path(remote_profiler_folder.remotePath).name
+        db_path = Path(
+            remote_dir,
+            connection.host,
+            current_app.config["PROFILER_DIRECTORY_NAME"],
+            profiler_folder,
+            "db.sqlite",
+        )
+        if db_path.exists():
+            create_indexes_async(str(db_path), instance_id)
 
         return Response(
             orjson.dumps(remote_profiler_folder.model_dump()),
