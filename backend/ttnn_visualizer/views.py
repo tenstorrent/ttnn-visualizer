@@ -8,6 +8,7 @@ import logging
 import re
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
@@ -925,6 +926,28 @@ def create_profiler_files():
         clear_remote=True,
         profiler_path=str(profiler_path) if profiler_path else None,
     )
+
+    # Create indexes asynchronously after upload
+    if profiler_path:
+
+        def create_indexes_async():
+            try:
+                instance_data = InstanceTable.query.filter_by(
+                    instance_id=instance_id
+                ).first()
+                if instance_data:
+                    instance = instance_data.to_pydantic()
+                    with DatabaseQueries(instance) as db:
+                        db.create_indexes()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to create indexes on database {profiler_path}: {e}"
+                )
+
+        # Submit to thread pool executor to run asynchronously
+        executor = ThreadPoolExecutor(max_workers=1)
+        executor.submit(create_indexes_async)
+        executor.shutdown(wait=False)
 
     config_file = profiler_directory / parent_folder_name / "config.json"
     report_name = None

@@ -337,6 +337,29 @@ class DatabaseQueries:
         rows = self.query_runner.execute_query(query, [address, operation_id])
         return Buffer(*rows[0]) if rows else None
 
+    def create_indexes(self):
+        """Create indexes on the database for improved query performance."""
+        # SQLite execute() only handles one statement, so we use executescript() for multiple statements
+        query = """
+            CREATE INDEX IF NOT EXISTS idx_buffers_address ON buffers (address);
+            CREATE INDEX IF NOT EXISTS idx_buffers_operation_id ON buffers (operation_id);
+            CREATE INDEX IF NOT EXISTS idx_buffers_device_id ON buffers (device_id);
+            CREATE INDEX IF NOT EXISTS idx_buffers_max_size_per_bank ON buffers (max_size_per_bank);
+            CREATE INDEX IF NOT EXISTS idx_buffers_buffer_type ON buffers (buffer_type);
+            CREATE INDEX IF NOT EXISTS idx_output_tensors_tensor_id ON output_tensors (tensor_id);
+            CREATE INDEX IF NOT EXISTS idx_input_tensors_tensor_id ON input_tensors (tensor_id);
+        """
+        cursor = self.query_runner.connection.cursor()
+        try:
+            cursor.executescript(query)
+            # Create device_tensors index only if table exists
+            if self._check_table_exists("device_tensors"):
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_device_tensors_tensor_id ON device_tensors (tensor_id);"
+                )
+        finally:
+            cursor.close()
+
     def __enter__(self):
         return self
 
