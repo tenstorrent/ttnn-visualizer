@@ -16,7 +16,15 @@ from typing import List, Optional
 import orjson
 import yaml
 import zstd
-from flask import Blueprint, Response, current_app, jsonify, request, session
+from flask import (
+    Blueprint,
+    Response,
+    copy_current_request_context,
+    current_app,
+    jsonify,
+    request,
+    session,
+)
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     NPEQueries,
@@ -56,6 +64,7 @@ from ttnn_visualizer.serializers import (
     serialize_tensors,
 )
 from ttnn_visualizer.sftp_operations import (
+    REPORT_DATA_DIRECTORY,
     check_remote_path_exists,
     check_remote_path_for_reports,
     get_cluster_desc,
@@ -95,27 +104,33 @@ def create_indexes_async(profiler_path: str, instance_id: Optional[str] = None):
         instance_id: Optional instance ID. If provided, will use it to get the instance.
                      If not provided, will create a temporary instance from profiler_path.
     """
+    # Copy the application context to use in the async thread
+    app = current_app._get_current_object()
 
+    @copy_current_request_context
     def _create_indexes():
-        try:
-            if instance_id:
-                # Use instance_id to get the instance from database
-                instance_data = InstanceTable.query.filter_by(
-                    instance_id=instance_id
-                ).first()
-                if instance_data:
-                    instance = instance_data.to_pydantic()
+        with app.app_context():
+            try:
+                if instance_id:
+                    # Use instance_id to get the instance from database
+                    instance_data = InstanceTable.query.filter_by(
+                        instance_id=instance_id
+                    ).first()
+                    if instance_data:
+                        instance = instance_data.to_pydantic()
+                    else:
+                        # Fallback: create temporary instance from profiler_path
+                        instance = Instance(instance_id="", profiler_path=profiler_path)
                 else:
-                    # Fallback: create temporary instance from profiler_path
+                    # Create temporary instance from profiler_path
                     instance = Instance(instance_id="", profiler_path=profiler_path)
-            else:
-                # Create temporary instance from profiler_path
-                instance = Instance(instance_id="", profiler_path=profiler_path)
 
-            with DatabaseQueries(instance) as db:
-                db.create_indexes()
-        except Exception as e:
-            logger.warning(f"Failed to create indexes on database {profiler_path}: {e}")
+                with DatabaseQueries(instance) as db:
+                    db.create_indexes()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to create indexes on database {profiler_path}: {e}"
+                )
 
     # Submit to thread pool executor to run asynchronously
     executor = ThreadPoolExecutor(max_workers=1)
@@ -1336,8 +1351,10 @@ def sync_remote_folder():
         remote_profiler_folder.lastSynced = int(time.time())
 
         # Create indexes asynchronously after remote sync
+        # Match the path construction used in sync_remote_profiler_folders
         profiler_folder = Path(remote_profiler_folder.remotePath).name
         db_path = Path(
+            REPORT_DATA_DIRECTORY,
             remote_dir,
             connection.host,
             current_app.config["PROFILER_DIRECTORY_NAME"],
