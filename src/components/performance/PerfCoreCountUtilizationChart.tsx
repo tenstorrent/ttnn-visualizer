@@ -9,7 +9,7 @@ import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
@@ -23,6 +23,7 @@ interface PerfCoreCountUtilizationChartProps {
 function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCountUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const chartDataDuration = useMemo(
         () =>
@@ -80,7 +81,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
 
     return (
         <>
-            {maxY2Value > 1 && <PerfMultiDeviceNotice />}
+            {maxY2Value > 1 && mergeDevices && <PerfMultiDeviceNotice />}
             <PerfChart
                 title='Core Count + Utilization'
                 chartData={[...chartDataDuration, ...chartDataUtilization]}

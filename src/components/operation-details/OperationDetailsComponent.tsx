@@ -44,6 +44,7 @@ import useBufferFocus from '../../hooks/useBufferFocus';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
+import { formatSize } from '../../functions/math';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -410,7 +411,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
                                         }
                                         labelRenderer={(value) => {
-                                            return showHex ? `0x${value.toString(16).toUpperCase()}` : `${value}`;
+                                            return showHex
+                                                ? `0x${value.toString(16).toUpperCase()}`
+                                                : formatSize(value);
                                         }}
                                         value={[zoomRangeStart, zoomRangeEnd]}
                                         onChange={(value: number[]) => {

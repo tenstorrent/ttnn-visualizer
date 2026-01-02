@@ -17,7 +17,7 @@ export type AllocationDetails = {
 
 export function processMemoryAllocations(
     graph: Node[],
-    _inputs: { id: number; size: number | null }[],
+    // _inputs: { id: number; size: number | null }[],
 ): {
     peakMemoryLoad: number;
     memoryAllocationList: AllocationDetails[];

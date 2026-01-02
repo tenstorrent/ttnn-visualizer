@@ -36,8 +36,7 @@ const OperationGraph: React.FC<{
     const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
     const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
     const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
-    const [filterDeallocate, setFilterDeallocate] = useState<boolean>(false);
-
+    const [filterOutDeallocate, setFilterOutDeallocate] = useState<boolean>(true);
     const networkRef = useRef<Network | null>(null);
     const currentOpIdRef = useRef<number>(currentOperationId);
 
@@ -73,7 +72,7 @@ const OperationGraph: React.FC<{
             new DataSet(
                 operationList
                     .filter((op) => connectedNodeIds.has(op.id))
-                    .filter((op) => !filterDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
+                    .filter((op) => !filterOutDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
                     .map((op) => ({
                         id: op.id,
                         label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
@@ -82,7 +81,7 @@ const OperationGraph: React.FC<{
                         deviceOpFilter: op.deviceOperationNameList.join(' '),
                     })),
             ),
-        [operationList, connectedNodeIds, filterDeallocate],
+        [operationList, connectedNodeIds, filterOutDeallocate],
     );
 
     const focusOnNode = useCallback(
@@ -197,27 +196,31 @@ const OperationGraph: React.FC<{
                                 size: 20,
                                 labelHighlightBold: false,
                                 shape: 'box',
+                                fixed: false,
                             },
                             edges: {
                                 font: { color: '#f5e2ba', size: 20, strokeColor: '#000' },
                                 color: '#f5e2ba',
                                 arrows: { to: { enabled: true, scaleFactor: 0.5 } },
                                 smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
+                                physics: true,
                             },
                             autoResize: true,
                             layout: {
                                 hierarchical: {
                                     enabled: true,
                                     levelSeparation: 200,
-                                    nodeSpacing: 200,
-                                    treeSpacing: 300,
+                                    nodeSpacing: 700,
+                                    treeSpacing: 700,
                                     blockShifting: true,
                                     edgeMinimization: true,
                                     direction: 'UD',
                                     sortMethod: 'directed',
                                     shakeTowards: 'leaves',
+                                    improvedLayout: true,
                                 },
                             },
+
                             interaction: {
                                 hover: true,
                                 keyboard: true,
@@ -388,8 +391,8 @@ const OperationGraph: React.FC<{
                         aria-label='Next result'
                     />
                     <Switch
-                        checked={filterDeallocate}
-                        onChange={() => setFilterDeallocate(!filterDeallocate)}
+                        checked={filterOutDeallocate}
+                        onChange={() => setFilterOutDeallocate(!filterOutDeallocate)}
                         label='Hide deallocate ops'
                         disabled={isLoading}
                     />
@@ -429,7 +432,9 @@ const OperationGraph: React.FC<{
                 ref={containerRef}
             />
 
-            <aside className='aside'>Scroll to zoom. Drag to pan. Click a node to see operation details.</aside>
+            <aside className='aside'>
+                Scroll to zoom. Drag to pan. Click a node to see operation details. Drag a node.
+            </aside>
         </div>
     );
 };

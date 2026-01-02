@@ -52,6 +52,11 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         >,
     );
 
+    const isMultiDevice = useMemo(() => {
+        const allDeviceIds = new Set(buffersByOperation.flatMap((op) => op.buffers.map((buffer) => buffer.device_id)));
+        return allDeviceIds.size > 1;
+    }, [buffersByOperation]);
+
     // TODO: move this to a hook. eventually
     const uniqueBuffersByOperationList = useMemo(() => {
         return buffersByOperation.map((operation) => {
@@ -223,8 +228,9 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             <div className='buffer-summary-table'>
                 <div className='aside-container'>
                     <Checkbox
-                        checked={mergedByDevice}
+                        checked={isMultiDevice && mergedByDevice}
                         onChange={() => setMergedByDevice(!mergedByDevice)}
+                        disabled={!isMultiDevice}
                     >
                         Merge buffers across devices
                     </Checkbox>

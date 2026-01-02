@@ -23,7 +23,7 @@ import {
 } from '@blueprintjs/core';
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { TableFilter, TableKeys, TypedPerfTableRow, filterableColumnKeys } from '../../definitions/PerfTable';
 import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
@@ -35,6 +35,7 @@ import {
     hideHostOpsAtom,
     isStackedViewAtom,
     mathFilterListAtom,
+    mergeDevicesAtom,
     rawOpCodeFilterListAtom,
     stackByIn0Atom,
 } from '../../store/app';
@@ -43,10 +44,10 @@ import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableDa
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
-    FilterableStackedColumnKeys,
     StackedTableFilter,
     StackedTableKeys,
     TypedStackedPerfRow,
+    filterableStackedColumnKeys,
 } from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import HighlightedText from '../HighlightedText';
@@ -83,6 +84,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
     const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
+    const [mergeDevices, setMergeDevices] = useAtom(mergeDevicesAtom);
     const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
@@ -96,13 +98,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState(true);
     const [filters, setFilters] = useState<TableFilter>(
-        Object.fromEntries(FilterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
+        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
             string
         >,
     );
     const [stackedFilters, setStackedFilters] = useState<StackedTableFilter>(
-        Object.fromEntries(FilterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
+        Object.fromEntries(filterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
             StackedTableKeys,
             string
         >,
@@ -284,7 +286,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 <div className='filters'>
                     <FormGroup
                         className='signpost-filters'
-                        subLabel='Filter by signpost delimiters'
+                        subLabel='Filter between signposts'
                     >
                         <ButtonGroup className='signpost-group'>
                             <Select<Signpost>
@@ -365,15 +367,36 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         </ButtonGroup>
                     </FormGroup>
 
-                    <FormGroup className='toggle-filters'>
-                        <Switch
-                            label='Hide host ops'
-                            onChange={() => setHideHostOps(!hideHostOps)}
-                            checked={hideHostOps}
-                            className='option-switch'
-                            // TODO: Host Ops are missing when stackByIn0 is disabled
-                            disabled={!stackByIn0 && isStackedView}
-                        />
+                    <FormGroup
+                        className='toggle-filters'
+                        subLabel='Data options'
+                    >
+                        <ButtonGroup className='toggle-group'>
+                            <Switch
+                                label='Hide host ops'
+                                onChange={() => setHideHostOps(!hideHostOps)}
+                                checked={hideHostOps}
+                                className='option-switch'
+                                // TODO: Host Ops are missing when stackByIn0 is disabled
+                                disabled={!stackByIn0 && isStackedView}
+                            />
+
+                            <Switch
+                                label='Merge device rows'
+                                onChange={() => setMergeDevices(!mergeDevices)}
+                                checked={mergeDevices}
+                                className='option-switch'
+                            />
+
+                            {isStackedView && (
+                                <Switch
+                                    label='Stack by input 0'
+                                    onChange={() => setStackByIn0(!stackByIn0)}
+                                    checked={stackByIn0}
+                                    className='option-switch'
+                                />
+                            )}
+                        </ButtonGroup>
                     </FormGroup>
                 </div>
 
@@ -384,32 +407,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         searchQuery={filters?.op_code || ''}
                     />
 
-                    <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
-                        keyName='buffer_type'
-                        options={processedRows || []}
-                        labelFormatter={(value: BufferType | null) =>
-                            value !== null ? BufferTypeLabel[value] : 'No value'
-                        }
-                        placeholder='Select Buffer Type...'
-                        values={activeBufferTypeFilterList}
-                        updateHandler={setActiveBufferTypeFilterList}
-                    />
-
                     <MultiSelectField<TypedPerfTableRow, 'raw_op_code'>
                         keyName='raw_op_code'
                         options={getRawOpCodeOptions(processedRows) || []}
                         placeholder='Select Op Codes...'
                         values={activeRawOpCodeFilterList}
                         updateHandler={setActiveRawOpCodeFilterList}
-                    />
-
-                    <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
-                        keyName='math_fidelity'
-                        options={processedRows || []}
-                        placeholder='Select Math Fidelity...'
-                        values={activeMathFilterList}
-                        updateHandler={setActiveMathFilterList}
-                        disabled={isStackedView}
                     />
                 </div>
 
@@ -438,6 +441,26 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 <div className='data-options'>
                     {!isStackedView && (
                         <>
+                            <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
+                                keyName='buffer_type'
+                                options={processedRows || []}
+                                labelFormatter={(value: BufferType | null) =>
+                                    value !== null ? BufferTypeLabel[value] : 'No value'
+                                }
+                                placeholder='Select Buffer Type...'
+                                values={activeBufferTypeFilterList}
+                                updateHandler={setActiveBufferTypeFilterList}
+                            />
+
+                            <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
+                                keyName='math_fidelity'
+                                options={processedRows || []}
+                                placeholder='Select Math Fidelity...'
+                                values={activeMathFilterList}
+                                updateHandler={setActiveMathFilterList}
+                                disabled={isStackedView}
+                            />
+
                             <Switch
                                 label='Matmul optimization analysis'
                                 onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
@@ -487,27 +510,19 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             )}
                         </>
                     )}
-
-                    {isStackedView && (
-                        <Switch
-                            label='Stack by input 0'
-                            onChange={() => setStackByIn0(!stackByIn0)}
-                            checked={stackByIn0}
-                            className='option-switch'
-                            disabled={!isStackedView}
-                        />
-                    )}
                 </div>
 
-                <Callout
-                    className='multi-device-note'
-                    intent={Intent.PRIMARY}
-                    icon={IconNames.INFO_SIGN}
-                    compact
-                >
-                    Multi device operations are merged into single rows using <u>average duration</u> for collective
-                    operations (AllGather, ReduceScatter, AllReduce) and <u>maximum duration</u> for all others.
-                </Callout>
+                {mergeDevices && (
+                    <Callout
+                        className='multi-device-note'
+                        intent={Intent.PRIMARY}
+                        icon={IconNames.INFO_SIGN}
+                        compact
+                    >
+                        Multi device operations are merged into single rows using <u>average duration</u> for collective
+                        operations (AllGather, ReduceScatter, AllReduce) and <u>maximum duration</u> for all others.
+                    </Callout>
+                )}
 
                 <Tabs
                     selectedTabId={selectedTabId}

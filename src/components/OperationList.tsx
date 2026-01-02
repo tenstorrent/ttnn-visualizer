@@ -17,7 +17,12 @@ import 'styles/components/ListView.scss';
 import 'styles/components/OperationsListComponent.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import { activePerformanceReportAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
+import {
+    activePerformanceReportAtom,
+    operationListFilterAtom,
+    selectedOperationRangeAtom,
+    shouldCollapseAllOperationsAtom,
+} from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
@@ -43,7 +48,7 @@ const OperationList = () => {
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
-    const [filterQuery, setFilterQuery] = useState('');
+    const [filterQuery, setFilterQuery] = useAtom(operationListFilterAtom);
     const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
@@ -117,7 +122,6 @@ const OperationList = () => {
     ]);
 
     const {
-        itemCount: restoredItemCount,
         scrollOffset: restoredOffset,
         measurementsCache: restoredMeasurementsCache,
         expandedItems: restoredExpandedItems,
@@ -128,7 +132,7 @@ const OperationList = () => {
         getScrollElement: () => scrollElementRef.current,
         overscan: 10,
         initialMeasurementsCache: restoredMeasurementsCache,
-        count: restoredItemCount || filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
         // TODO: Can help prevent stuttering when scrolling back up but needs more research
         // measureElement: (element, _entry, instance) => {
@@ -216,7 +220,7 @@ const OperationList = () => {
 
         if (initialOperationId) {
             const operationIndex =
-                fetchedOperations?.findIndex(
+                filteredOperationsList?.findIndex(
                     (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
                 ) || 0;
 
@@ -225,7 +229,7 @@ const OperationList = () => {
             // Navigating to the same page replaces the entry in the browser history
             navigate(ROUTES.OPERATIONS, { replace: true });
         }
-    }, [fetchedOperations, location.state?.previousOperationId, navigate]);
+    }, [filteredOperationsList, location.state?.previousOperationId, navigate]);
 
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
@@ -257,7 +261,6 @@ const OperationList = () => {
     useEffect(() => {
         return () => {
             updateListState({
-                itemCount: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
                 scrollOffset: scrollOffsetRef.current || 0,
                 measurementsCache: measurementsCacheRef.current,
                 expandedItems: expandedItemsRef.current,

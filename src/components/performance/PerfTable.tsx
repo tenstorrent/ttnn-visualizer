@@ -10,11 +10,11 @@ import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
 import {
     ColumnHeaders,
-    ComparisonKeys,
     TableColumn,
-    TableColumns,
     TableFilter,
     TypedPerfTableRow,
+    comparisonKeys,
+    tableColumns,
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
@@ -79,11 +79,11 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     );
 
     const visibleColumns = [
-        ...TableColumns.slice(0, OP_ID_INSERTION_POINT),
+        ...tableColumns.slice(0, OP_ID_INSERTION_POINT),
         ...(opIdsMap.length > 0 ? [{ label: 'OP', key: ColumnHeaders.OP, sortable: true }] : []),
-        ...TableColumns.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...tableColumns.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
         ...(hiliteHighDispatch ? [{ label: 'Slow', key: ColumnHeaders.high_dispatch }] : []),
-        ...TableColumns.slice(HIGH_DISPATCH_INSERTION_POINT),
+        ...tableColumns.slice(HIGH_DISPATCH_INSERTION_POINT),
         ...(npeManifest && npeManifest.length > 0 ? [{ label: 'NPE', key: ColumnHeaders.global_call_count }] : []),
     ] as TableColumn[];
 
@@ -97,7 +97,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
         if (key === ColumnHeaders.global_call_count) {
             // TODO: this is an inefficient way of doing things but its also temporary. will update next iteration
-            const value = parseInt(String(row[key]), 10) || 0;
+            const value = parseInt(String(row[key]), 10) || -1; // apparently npe is using 0 as a default value as opposed to no value.
             const manifestRecord = npeManifest?.find((el) => {
                 return el.global_call_count === value;
             });
@@ -259,7 +259,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                         'break-word': h.key === ColumnHeaders.op_code,
                                                     })}
                                                 >
-                                                    {ComparisonKeys.includes(h.key) &&
+                                                    {comparisonKeys.includes(h.key) &&
                                                         dataset[i] &&
                                                         formatCell(dataset[i], h, operationsList, filters?.[h.key])}
                                                 </td>

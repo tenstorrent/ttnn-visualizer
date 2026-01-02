@@ -44,7 +44,8 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
 
     const range = isZoomedIn ? plotZoomRange : [0, memorySize];
-    const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
+    // If we need more flexibility on the tickformat front, we can expand this to accept a prop instead of defaulting to the below
+    const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: ',.0r' };
 
     const markerLines: Partial<Shape>[] =
         markers?.map((marker: PlotMarker) => ({

@@ -36,6 +36,7 @@ export interface PerfTableRow {
     bound: BoundType;
     op_code: string;
     raw_op_code: string;
+    device: string;
     device_time: string;
     op_to_op_gap: string;
     cores: string;
@@ -67,6 +68,7 @@ export interface TypedPerfTableRow
         | 'id'
         | 'global_call_count'
         | 'total_percent'
+        | 'device'
         | 'device_time'
         | 'op_to_op_gap'
         | 'cores'
@@ -80,6 +82,7 @@ export interface TypedPerfTableRow
     id: number | null;
     global_call_count: number | null;
     total_percent: number | null;
+    device: number | null;
     device_time: number | null;
     op_to_op_gap: number | null;
     cores: number | null;
@@ -89,9 +92,8 @@ export interface TypedPerfTableRow
     flops_percent: number | null;
     bound: BoundType | null;
     pm_ideal_ns: number | null;
-    // Next three extracted from input_0_memory
+    // Next two extracted from input_0_memory
     buffer_type: BufferType | null;
-    device: number | null;
     layout: DeviceOperationLayoutTypes | null;
 }
 
@@ -162,7 +164,7 @@ export enum ColumnHeaders {
     global_call_count = 'global_call_count',
 }
 
-export const TableColumns: TableColumn[] = [
+export const tableColumns: TableColumn[] = [
     { label: 'ID', key: ColumnHeaders.id, sortable: true },
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
@@ -180,9 +182,9 @@ export const TableColumns: TableColumn[] = [
     { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
 ];
 
-export const FilterableColumnKeys = TableColumns.filter((column) => column.filterable).map((column) => column.key);
+export const filterableColumnKeys = tableColumns.filter((column) => column.filterable).map((column) => column.key);
 
-export const ComparisonKeys: TableKeys[] = [
+export const comparisonKeys: TableKeys[] = [
     ColumnHeaders.op_code,
     ColumnHeaders.bound,
     ColumnHeaders.total_percent,
