@@ -364,7 +364,6 @@ const OperationList = () => {
                     </Tooltip>
                 </ButtonGroup>
 
-                {/* Removed as this is not working correctly */}
                 <SimpleMultiselect
                     label='Device Operations'
                     optionList={uniqueDeviceOperationNames || []}
@@ -481,7 +480,7 @@ const OperationList = () => {
 
                                                 <ul className='device-operations-list'>
                                                     {operation.deviceOperationNameList.map((op: string, index) => {
-                                                        return <li key={operation.id + op + index}>{op}()</li>;
+                                                        return <li key={`${operation.id}-${op}-${index}`}>{op}()</li>;
                                                     })}
                                                 </ul>
 
