@@ -15,7 +15,7 @@ import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
 import 'styles/components/OperationsListComponent.scss';
-import { useOperationsList } from '../hooks/useAPI';
+import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import {
     activePerformanceReportAtom,
@@ -32,6 +32,7 @@ import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import { ScrollLocations } from '../definitions/ScrollPositions';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 import useScrollShade from '../hooks/useScrollShade';
+import SimpleMultiselect from './SimpleMultiselect';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -71,12 +72,12 @@ const OperationList = () => {
 
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
-    // const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
-    // const [selectedDeviceOperations, setSelectedDeviceOperations] = useState<string[]>([]);
+    const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
+    const [selectedDeviceOperations, setSelectedDeviceOperations] = useState<string[]>([]);
 
-    // const filterDeviceOperations = (list: string[]) => {
-    //     setSelectedDeviceOperations(list);
-    // };
+    const filterDeviceOperations = (list: string[]) => {
+        setSelectedDeviceOperations(list);
+    };
 
     const filteredOperationsList = useMemo(() => {
         if (operationsWithRange) {
@@ -88,11 +89,11 @@ const OperationList = () => {
                 );
             }
 
-            // if (selectedDeviceOperations.length) {
-            //     operations = operations.filter((operation) =>
-            //         operation.deviceOperationNameList.some((opName) => selectedDeviceOperations.includes(opName)),
-            //     );
-            // }
+            if (selectedDeviceOperations.length) {
+                operations = operations.filter((operation) =>
+                    operation.deviceOperationNameList.some((opName) => selectedDeviceOperations.includes(opName)),
+                );
+            }
 
             if (isSortingModeActive(shouldSortByID)) {
                 operations = operations.sort((a, b) => a.id - b.id);
@@ -116,7 +117,7 @@ const OperationList = () => {
         //
         operationsWithRange,
         filterQuery,
-        // selectedDeviceOperations,
+        selectedDeviceOperations,
         shouldSortByID,
         shouldSortDuration,
     ]);
@@ -364,11 +365,11 @@ const OperationList = () => {
                 </ButtonGroup>
 
                 {/* Removed as this is not working correctly */}
-                {/* <SimpleMultiselect */}
-                {/*    label='Device Operations' */}
-                {/*    optionList={uniqueDeviceOperationNames || []} */}
-                {/*    onUpdateHandler={filterDeviceOperations} */}
-                {/* /> */}
+                <SimpleMultiselect
+                    label='Device Operations'
+                    optionList={uniqueDeviceOperationNames || []}
+                    onUpdateHandler={filterDeviceOperations}
+                />
 
                 {!isLoading && (
                     <p className='result-count'>

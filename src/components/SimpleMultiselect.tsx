@@ -56,11 +56,17 @@ const SimpleMultiselect = ({
             itemRenderer={renderOption}
             onItemSelect={handleItemSelect}
             selectedItems={selected}
+            itemDisabled={(item) => selected.includes(item)}
             placeholder={label}
             tagRenderer={(item) => item}
             onRemove={handleItemRemove}
             resetOnSelect
             disabled={false}
+            query=''
+            onQueryChange={() => {}}
+            tagInputProps={{
+                inputProps: { readOnly: true },
+            }}
         />
     );
 };
