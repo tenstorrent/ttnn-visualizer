@@ -15,7 +15,6 @@ const renderOption: ItemRenderer<string> = (item, { modifiers, handleClick }) =>
     return (
         <MenuItem
             key={item}
-            active={modifiers.active}
             disabled={modifiers.disabled}
             icon={IconNames.CUBE}
             text={item}
