@@ -403,7 +403,7 @@ const OperationList = () => {
                         {filteredOperationsList?.length ? (
                             virtualItems.map((virtualRow) => {
                                 const operation = filteredOperationsList[virtualRow.index];
-                                // if (operation) {
+
                                 return (
                                     <li
                                         className={classNames('list-item-container', {
@@ -499,8 +499,6 @@ const OperationList = () => {
                                         </Collapsible>
                                     </li>
                                 );
-                                // }
-                                // return null;
                             })
                         ) : (
                             <>

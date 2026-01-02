@@ -41,7 +41,7 @@ const SimpleMultiselect = ({
         }
     };
 
-    const handleItemRemove = (item: string, index: number) => {
+    const handleItemRemove = (_item: string, index: number) => {
         setSelected((prev) => {
             const list = prev.filter((_, i) => i !== index);
             onUpdateHandler(list);
