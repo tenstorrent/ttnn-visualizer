@@ -2,9 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-@use 'styles/definitions/colours' as *;
-@use 'styles/definitions/variables' as variables;
-
 .operations-list-component {
     .device-operations-list {
         font-size: 11px;

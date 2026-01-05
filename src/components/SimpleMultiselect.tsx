@@ -4,24 +4,7 @@
 
 import { useState } from 'react';
 import { ItemRenderer, MultiSelect } from '@blueprintjs/select';
-import { MenuItem } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-
-const renderOption: ItemRenderer<string> = (item, { modifiers, handleClick }) => {
-    if (!modifiers.matchesPredicate) {
-        return null;
-    }
-
-    return (
-        <MenuItem
-            key={item}
-            disabled={modifiers.disabled}
-            icon={IconNames.CUBE}
-            text={item}
-            onClick={handleClick}
-        />
-    );
-};
+import { Checkbox } from '@blueprintjs/core';
 
 const SimpleMultiselect = ({
     label,
@@ -34,11 +17,14 @@ const SimpleMultiselect = ({
 }) => {
     const [selected, setSelected] = useState<string[]>([]);
     const handleItemSelect = (item: string) => {
+        let list: string[] = [];
         if (!selected.includes(item)) {
-            const list = [...selected, item];
-            setSelected(list);
-            onUpdateHandler(list);
+            list = [...selected, item];
+        } else {
+            list = selected.filter((v) => v !== item);
         }
+        setSelected(list);
+        onUpdateHandler(list);
     };
 
     const handleItemRemove = (_item: string, index: number) => {
@@ -49,13 +35,27 @@ const SimpleMultiselect = ({
         });
     };
 
+    const renderOption: ItemRenderer<string> = (item, { modifiers, handleClick }) => {
+        if (!modifiers.matchesPredicate) {
+            return null;
+        }
+
+        return (
+            <Checkbox
+                key={item}
+                checked={selected.includes(item)}
+                label={item}
+                onClick={handleClick}
+            />
+        );
+    };
+
     return (
         <MultiSelect<string>
             items={optionList}
             itemRenderer={renderOption}
             onItemSelect={handleItemSelect}
             selectedItems={selected}
-            itemDisabled={(item) => selected.includes(item)}
             placeholder={label}
             tagRenderer={(item) => item}
             onRemove={handleItemRemove}
