@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { ItemRenderer, MultiSelect } from '@blueprintjs/select';
-import { Checkbox } from '@blueprintjs/core';
+import { Checkbox, MenuItem } from '@blueprintjs/core';
 
 const SimpleMultiselect = ({
     label,
@@ -61,6 +61,7 @@ const SimpleMultiselect = ({
             onRemove={handleItemRemove}
             resetOnSelect
             disabled={false}
+            noResults={RenderNoResults}
             query=''
             onQueryChange={() => {}}
             tagInputProps={{
@@ -69,4 +70,12 @@ const SimpleMultiselect = ({
         />
     );
 };
+
+const RenderNoResults = (
+    <MenuItem
+        text='No results.'
+        roleStructure='listoption'
+        disabled
+    />
+);
 export default SimpleMultiselect;
