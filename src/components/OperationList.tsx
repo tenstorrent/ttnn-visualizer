@@ -73,10 +73,10 @@ const OperationList = () => {
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
     const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
-    const [selectedDeviceOperations, setSelectedDeviceOperations] = useState<string[]>([]);
+    const [selectedDeviceOperations, setSelectedDeviceOperations] = useState<Set<string>>(new Set());
 
     const filterDeviceOperations = (list: string[]) => {
-        setSelectedDeviceOperations(list);
+        setSelectedDeviceOperations(new Set(list));
     };
 
     const filteredOperationsList = useMemo(() => {
@@ -89,9 +89,9 @@ const OperationList = () => {
                 );
             }
 
-            if (selectedDeviceOperations.length) {
+            if (selectedDeviceOperations.size > 0) {
                 operations = operations.filter((operation) =>
-                    operation.deviceOperationNameList.some((opName) => selectedDeviceOperations.includes(opName)),
+                    operation.deviceOperationNameList.some((opName) => selectedDeviceOperations.has(opName)),
                 );
             }
 
