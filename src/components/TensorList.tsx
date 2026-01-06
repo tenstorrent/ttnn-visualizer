@@ -315,7 +315,13 @@ const TensorList = () => {
                     </Tooltip>
 
                     <Tooltip
-                        content='Sort by tensor size'
+                        content={
+                            shouldSortBySize === SortingOptions.OFF
+                                ? 'Sort by size (ascending)'
+                                : shouldSortBySize === SortingOptions.ASCENDING
+                                    ? 'Sort by size (descending)'
+                                    : 'Clear size sorting'
+                        }
                         placement={PopoverPosition.TOP}
                     >
                         <Button
