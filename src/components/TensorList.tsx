@@ -316,11 +316,12 @@ const TensorList = () => {
 
                     <Tooltip
                         content={
+                            // eslint-disable-next-line no-nested-ternary
                             shouldSortBySize === SortingOptions.OFF
                                 ? 'Sort by size (ascending)'
                                 : shouldSortBySize === SortingOptions.ASCENDING
-                                    ? 'Sort by size (descending)'
-                                    : 'Clear size sorting'
+                                  ? 'Sort by size (descending)'
+                                  : 'Clear size sorting'
                         }
                         placement={PopoverPosition.TOP}
                     >

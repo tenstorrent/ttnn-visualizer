@@ -15,7 +15,7 @@ import { ScrollLocations } from '../definitions/ScrollPositions';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 import { formatSize } from '../functions/math';
-import { useOperationsList } from '../hooks/useAPI';
+import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/useAPI';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
 import { OperationDescription } from '../model/APIData';
@@ -28,10 +28,11 @@ import {
 import Collapsible from './Collapsible';
 import ListItem from './ListItem';
 import LoadingSpinner from './LoadingSpinner';
+import StackTrace from './operation-details/StackTrace';
 import OperationArguments from './OperationArguments';
 import OperationListPerfData from './OperationListPerfData';
 import SearchField from './SearchField';
-import StackTrace from './operation-details/StackTrace';
+import SimpleMultiselect from './SimpleMultiselect';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
