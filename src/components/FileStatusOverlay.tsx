@@ -9,11 +9,12 @@ import ProgressBar from './ProgressBar';
 import 'styles/components/FileStatusOverlay.scss';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
+import { formatPercentage } from '../functions/math';
 
 const FileStatusOverlay: React.FC = () => {
-    const formatPercentage = (percentage: number) => percentage.toFixed(2).padStart(5, '0');
     const [progress] = useAtom(fileTransferProgressAtom);
     const { currentFileName, finishedFiles, numberOfFiles, percentOfCurrent, status } = progress;
+
     return (
         <Overlay
             isOpen={[FileStatus.STARTED, FileStatus.COMPRESSING, FileStatus.DOWNLOADING, FileStatus.UPLOADING].includes(
@@ -24,15 +25,19 @@ const FileStatusOverlay: React.FC = () => {
             canOutsideClickClose={false}
         >
             <div className='overlay'>
-                <h2>File Transfer Progress</h2>
-                {currentFileName && <p>Current File: {currentFileName}</p>}
+                <h2 className='heading'>File Transfer Progress</h2>
                 {numberOfFiles && (
                     <p>
                         Files Transferred: {finishedFiles}/{numberOfFiles}
                     </p>
                 )}
-                <p>Current File Progress: {formatPercentage(percentOfCurrent)}%</p>
+                {currentFileName && (
+                    <p>
+                        Current File: <u>{currentFileName}</u>
+                    </p>
+                )}
                 {status && <p>Status: {status.valueOf()}</p>}
+                <p>{formatPercentage(percentOfCurrent, 0)}</p>
             </div>
 
             <ProgressBar

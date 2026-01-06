@@ -43,6 +43,7 @@ const IGNORED_DIRS = [
     'node_modules',
     'ttnn_env',
     'docs/output',
+    'myenv',
 ];
 const NON_COMPLIANT_FILES = [];
 
@@ -51,9 +52,17 @@ const isFileType = (filePath, extensions) => extensions.includes(path.extname(fi
 const checkLicenseString = (filePath, licenseType) => {
     const content = fs.readFileSync(filePath, 'utf8');
 
-    if (!content.includes(licenseType)) {
-        NON_COMPLIANT_FILES.push(filePath);
+    if (content.includes(licenseType)) {
+        return;
     }
+
+    for (let year = CURRENT_YEAR - 1; year >= 2020; year -= 1) {
+        const priorYearLicense = licenseType.replace(String(CURRENT_YEAR), String(year));
+        if (content.includes(priorYearLicense)) {
+            return;
+        }
+    }
+    NON_COMPLIANT_FILES.push(filePath);
 };
 
 const checkLicenseObject = (filePath, licenseType) => {
