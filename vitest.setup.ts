@@ -32,3 +32,60 @@ Object.defineProperty(window.HTMLImageElement.prototype, 'src', {
     },
     get: ORIGINAL_SRC?.get,
 });
+
+// Mock DataTransfer for tests
+class MockDataTransfer {
+    items: DataTransferItemList & { add: (file: File) => void };
+
+    files: FileList;
+
+    types: readonly string[] = [];
+
+    dropEffect: 'none' | 'copy' | 'link' | 'move' = 'none';
+
+    effectAllowed: 'none' | 'copy' | 'copyLink' | 'copyMove' | 'link' | 'linkMove' | 'move' | 'all' | 'uninitialized' =
+        'uninitialized';
+
+    constructor() {
+        const itemsList: File[] = [];
+        let itemsLength = 0;
+        this.items = {
+            ...itemsList,
+            get length() {
+                return itemsLength;
+            },
+            add: (file: File): void => {
+                itemsList.push(file);
+                itemsLength = itemsList.length;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (this.files as any) = itemsList;
+            },
+            clear: (): void => {
+                itemsList.length = 0;
+                itemsLength = 0;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (this.files as any) = itemsList;
+            },
+            remove: (index: number): void => {
+                itemsList.splice(index, 1);
+                itemsLength = itemsList.length;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (this.files as any) = itemsList;
+            },
+        } as unknown as DataTransferItemList & { add: (file: File) => void };
+        this.files = [] as unknown as FileList;
+    }
+
+    static setData(): void {}
+
+    static getData(): string {
+        return '';
+    }
+
+    static clearData(): void {}
+
+    static setDragImage(): void {}
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(global as any).DataTransfer = MockDataTransfer;

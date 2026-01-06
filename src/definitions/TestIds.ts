@@ -8,6 +8,8 @@ export const TEST_IDS = Object.freeze({
     LOCAL_SYNC_DISABLED: 'local-sync-disabled',
     LOCAL_PROFILER_UPLOAD: 'local-profiler-upload',
     LOCAL_PERFORMANCE_UPLOAD: 'local-performance-upload',
+    LOCAL_PROFILER_STATUS: 'local-profiler-status',
+    LOCAL_PERFORMANCE_STATUS: 'local-performance-status',
 
     // Remote folder selector
     REMOTE_FOLDER_SELECTOR_BUTTON: 'remote-folder-selector-button',

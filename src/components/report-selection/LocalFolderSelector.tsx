@@ -312,6 +312,7 @@ const LocalFolderOptions: FC = () => {
                         {profilerFolder && !isUploadingReport && (
                             <div
                                 className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}
+                                data-testid={TEST_IDS.LOCAL_PROFILER_STATUS}
                             >
                                 <Icon
                                     className='connection-status-icon'
@@ -359,6 +360,7 @@ const LocalFolderOptions: FC = () => {
                         {performanceFolder && !isUploadingPerformance && (
                             <div
                                 className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
+                                data-testid={TEST_IDS.LOCAL_PERFORMANCE_STATUS}
                             >
                                 <Icon
                                     className='connection-status-icon'
