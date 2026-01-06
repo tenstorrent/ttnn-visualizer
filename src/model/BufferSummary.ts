@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { TensorWithSize } from './APIData';
+import { Tensor } from './APIData';
 
-export type TensorsByOperationByAddress = Map<number, Map<number, TensorWithSize>>;
+export type TensorsByOperationByAddress = Map<number, Map<number, Tensor>>;
 
 export interface TensorDeallocationReport {
     id: number;

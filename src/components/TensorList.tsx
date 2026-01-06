@@ -60,7 +60,6 @@ const TensorList = () => {
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
         useScrollShade();
     const scrollElementRef = useRef<HTMLDivElement>(null);
-    // const tensorListById = useTensorListById();
 
     const tensorsWithRange = useMemo(() => {
         if (fetchedTensors && selectedOperationRange) {
