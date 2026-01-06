@@ -140,7 +140,7 @@ export const getCoresInRange = (rangeString: string): number => {
  * @example convertBytes(163840) // "160 KiB"
  * @example convertBytes(22370304) // "21.33 MiB"
  */
-export const convertBytes = (bytes: number, decimals = 0) => {
+export const convertBytes = (bytes: number, decimals = 0): string => {
     const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
 
     if (bytes === 0) {

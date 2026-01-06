@@ -2,45 +2,40 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useLocation, useNavigate } from 'react-router-dom';
-import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
-import SearchField from './SearchField';
-import Collapsible from './Collapsible';
-import OperationArguments from './OperationArguments';
-import LoadingSpinner from './LoadingSpinner';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import 'styles/components/ListView.scss';
-import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
+import { ScrollLocations } from '../definitions/ScrollPositions';
+import { SortingOptions } from '../definitions/SortingOptions';
+import { StackTraceLanguage } from '../definitions/StackTrace';
+import { formatSize } from '../functions/math';
+import { useOperationsList } from '../hooks/useAPI';
+import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
+import useScrollShade from '../hooks/useScrollShade';
+import { OperationDescription } from '../model/APIData';
 import {
     activePerformanceReportAtom,
     operationListFilterAtom,
     selectedOperationRangeAtom,
     shouldCollapseAllOperationsAtom,
 } from '../store/app';
-import { OperationDescription } from '../model/APIData';
+import Collapsible from './Collapsible';
 import ListItem from './ListItem';
-import { formatSize } from '../functions/math';
+import LoadingSpinner from './LoadingSpinner';
+import OperationArguments from './OperationArguments';
 import OperationListPerfData from './OperationListPerfData';
+import SearchField from './SearchField';
 import StackTrace from './operation-details/StackTrace';
-import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
-import { ScrollLocations } from '../definitions/ScrollPositions';
-import { StackTraceLanguage } from '../definitions/StackTrace';
-import useScrollShade from '../hooks/useScrollShade';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
-
-enum SortingOptions {
-    OFF,
-    ASCENDING,
-    DESCENDING,
-}
 
 const OperationList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);

@@ -2,43 +2,38 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import classNames from 'classnames';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom, useAtomValue } from 'jotai';
-import SearchField from './SearchField';
-import LoadingSpinner from './LoadingSpinner';
-import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
-import ROUTES from '../definitions/Routes';
-import { Tensor } from '../model/APIData';
-import { BufferTypeLabel } from '../model/BufferType';
-import Collapsible from './Collapsible';
-import { selectedOperationRangeAtom, shouldCollapseAllTensorsAtom, tensorBufferTypeFiltersAtom } from '../store/app';
-import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import classNames from 'classnames';
+import { useAtom, useAtomValue } from 'jotai';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import 'styles/components/ListView.scss';
-import BufferDetails from './BufferDetails';
-import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
-import { convertBytes, toReadableShape, toReadableType } from '../functions/math';
-import MultiSelectField from './MultiSelectField';
+import ROUTES from '../definitions/Routes';
 import { ScrollLocations } from '../definitions/ScrollPositions';
+import { SortingOptions } from '../definitions/SortingOptions';
+import isValidNumber from '../functions/isValidNumber';
+import { convertBytes, toReadableShape, toReadableType } from '../functions/math';
+import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
+import { Tensor } from '../model/APIData';
+import { BufferTypeLabel } from '../model/BufferType';
+import { selectedOperationRangeAtom, shouldCollapseAllTensorsAtom, tensorBufferTypeFiltersAtom } from '../store/app';
+import BufferDetails from './BufferDetails';
+import Collapsible from './Collapsible';
+import ListItem from './ListItem';
+import LoadingSpinner from './LoadingSpinner';
+import MultiSelectField from './MultiSelectField';
+import SearchField from './SearchField';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
 const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
-
-enum SortingOptions {
-    OFF,
-    ASCENDING,
-    DESCENDING,
-}
 
 const TensorList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllTensorsAtom);
