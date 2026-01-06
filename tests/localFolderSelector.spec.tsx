@@ -13,13 +13,16 @@ import { ReportFolder } from '../src/definitions/Reports';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import testForPortal from './helpers/testForPortal';
-import createFile, { MOCK_FOLDER } from './helpers/createFile';
+import createMockFile, { MOCK_FOLDER } from './helpers/createMockFile';
 
 // Scrub the markup after each test
 afterEach(cleanup);
 
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
 const SELECT_REPORT_TEXT = 'Select a report...';
+
+// Data is mutated in the mock of useLocal - eventually this should be set per test as needed
+const mockPerfFolderList = [...mockPerformanceReportFolders];
 
 vi.mock('../src/hooks/useLocal', async () => {
     const actual = await import('../src/hooks/useLocal');
@@ -46,8 +49,6 @@ vi.mock('../src/hooks/useLocal', async () => {
         }),
     };
 });
-
-const mockPerfFolderList = [...mockPerformanceReportFolders];
 
 vi.mock('../src/hooks/useAPI', async () => {
     const actual = await import('../src/hooks/useAPI');
@@ -158,8 +159,8 @@ it('handles invalid memory report upload', async () => {
         </TestProviders>,
     );
 
-    const mockDb = createFile('wrong.sqlite', 'text/x-sqlite3');
-    const mockConfig = createFile('nope.json', 'application/json');
+    const mockDb = createMockFile('wrong.sqlite', 'text/x-sqlite3');
+    const mockConfig = createMockFile('nope.json', 'application/json');
 
     const input = screen.getByTestId(TEST_IDS.LOCAL_PROFILER_UPLOAD);
 
@@ -183,8 +184,8 @@ it('handles valid memory report upload', async () => {
         </TestProviders>,
     );
 
-    const mockDb = createFile('db.sqlite', 'text/x-sqlite3');
-    const mockConfig = createFile('config.json', 'application/json');
+    const mockDb = createMockFile('db.sqlite', 'text/x-sqlite3');
+    const mockConfig = createMockFile('config.json', 'application/json');
 
     const input = screen.getByTestId(TEST_IDS.LOCAL_PROFILER_UPLOAD);
 
@@ -214,8 +215,8 @@ it('handles invalid performance report upload', async () => {
         </TestProviders>,
     );
 
-    const mockDb = createFile('db.sqlite', 'text/x-sqlite3');
-    const mockConfig = createFile('config.json', 'application/json');
+    const mockDb = createMockFile('db.sqlite', 'text/x-sqlite3');
+    const mockConfig = createMockFile('config.json', 'application/json');
 
     const input = screen.getByTestId(TEST_IDS.LOCAL_PERFORMANCE_UPLOAD);
 
@@ -237,9 +238,9 @@ it('handles valid performance report upload', async () => {
         </TestProviders>,
     );
 
-    const mockTracy = createFile('tracy_profile_log_host.tracy', 'text/tracy');
-    const mockOps = createFile('ops_perf_results_2025_05_02_01_23_09.csv', 'text/csv');
-    const mockDevice = createFile('profile_log_device.csv', 'text/csv');
+    const mockTracy = createMockFile('tracy_profile_log_host.tracy', 'text/tracy');
+    const mockOps = createMockFile('ops_perf_results_2025_05_02_01_23_09.csv', 'text/csv');
+    const mockDevice = createMockFile('profile_log_device.csv', 'text/csv');
 
     const input = screen.getByTestId(TEST_IDS.LOCAL_PERFORMANCE_UPLOAD);
 
@@ -276,9 +277,9 @@ it.skip('deletes memory report and updates state', async () => {
         </TestProviders>,
     );
     const { reportName } = mockProfilerFolderList[0];
-    const prolfilerSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[0];
+    const profilerSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[0];
 
-    prolfilerSelect.click();
+    profilerSelect.click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
     mockProfilerFolderList.forEach((folder: ReportFolder) => {
         expect(screen.getByText(folder.reportName)).not.toBeNull();
@@ -298,7 +299,7 @@ it.skip('deletes memory report and updates state', async () => {
     );
 
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(2);
-    prolfilerSelect.click();
+    profilerSelect.click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
     mockProfilerFolderList.forEach((folder: ReportFolder) => {
         expect(screen.getByText(folder.reportName)).not.toBeNull();

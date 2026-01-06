@@ -54,19 +54,19 @@ class MockDataTransfer {
             get length() {
                 return itemsLength;
             },
-            add: (file: File) => {
+            add: (file: File): void => {
                 itemsList.push(file);
                 itemsLength = itemsList.length;
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (this.files as any) = itemsList;
             },
-            clear: () => {
+            clear: (): void => {
                 itemsList.length = 0;
                 itemsLength = 0;
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (this.files as any) = itemsList;
             },
-            remove: (index: number) => {
+            remove: (index: number): void => {
                 itemsList.splice(index, 1);
                 itemsLength = itemsList.length;
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any

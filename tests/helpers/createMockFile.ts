@@ -4,7 +4,7 @@
 
 export const MOCK_FOLDER = 'mock_folder';
 
-function createFile(fileName: string, type: string): File {
+function createMockFile(fileName: string, type: string): File {
     const file = new File([''], fileName, { type });
 
     Object.defineProperty(file, 'webkitRelativePath', {
@@ -15,4 +15,4 @@ function createFile(fileName: string, type: string): File {
     return file;
 }
 
-export default createFile;
+export default createMockFile;
