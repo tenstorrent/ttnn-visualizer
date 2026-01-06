@@ -17,12 +17,7 @@ import 'styles/components/ListView.scss';
 import 'styles/components/OperationsListComponent.scss';
 import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import {
-    activePerformanceReportAtom,
-    operationListFilterAtom,
-    selectedOperationRangeAtom,
-    shouldCollapseAllOperationsAtom,
-} from '../store/app';
+import { operationListFilterAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
@@ -47,7 +42,6 @@ enum SortingOptions {
 const OperationList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     const [filterQuery, setFilterQuery] = useAtom(operationListFilterAtom);
     const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
@@ -477,25 +471,8 @@ const OperationList = () => {
                                                         />
                                                     </>
                                                 )}
-                                                {/* removing this temporarily until a better solution is created */}
-                                                {/* {operation.deviceOperationNameList && */}
-                                                {/*    operation.deviceOperationNameList.length && ( */}
-                                                {/*        <ul className='device-operations-list'> */}
-                                                {/*            {operation.deviceOperationNameList.map( */}
-                                                {/*                (op: string, index) => { */}
-                                                {/*                    return ( */}
-                                                {/*                        <li key={`${operation.id}-${op}-${index}`}> */}
-                                                {/*                            {op}() */}
-                                                {/*                        </li> */}
-                                                {/*                    ); */}
-                                                {/*                }, */}
-                                                {/*            )} */}
-                                                {/*        </ul> */}
-                                                {/*    )} */}
 
-                                                {activePerformanceReport && (
-                                                    <OperationListPerfData operation={operation} />
-                                                )}
+                                                <OperationListPerfData operation={operation} />
 
                                                 {operation.arguments && (
                                                     <OperationArguments
