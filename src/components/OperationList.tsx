@@ -477,20 +477,21 @@ const OperationList = () => {
                                                         />
                                                     </>
                                                 )}
-                                                {operation.deviceOperationNameList &&
-                                                    operation.deviceOperationNameList.length && (
-                                                        <ul className='device-operations-list'>
-                                                            {operation.deviceOperationNameList.map(
-                                                                (op: string, index) => {
-                                                                    return (
-                                                                        <li key={`${operation.id}-${op}-${index}`}>
-                                                                            {op}()
-                                                                        </li>
-                                                                    );
-                                                                },
-                                                            )}
-                                                        </ul>
-                                                    )}
+                                                {/* removing this temporarily until a better solution is created */}
+                                                {/* {operation.deviceOperationNameList && */}
+                                                {/*    operation.deviceOperationNameList.length && ( */}
+                                                {/*        <ul className='device-operations-list'> */}
+                                                {/*            {operation.deviceOperationNameList.map( */}
+                                                {/*                (op: string, index) => { */}
+                                                {/*                    return ( */}
+                                                {/*                        <li key={`${operation.id}-${op}-${index}`}> */}
+                                                {/*                            {op}() */}
+                                                {/*                        </li> */}
+                                                {/*                    ); */}
+                                                {/*                }, */}
+                                                {/*            )} */}
+                                                {/*        </ul> */}
+                                                {/*    )} */}
 
                                                 {activePerformanceReport && (
                                                     <OperationListPerfData operation={operation} />
