@@ -65,6 +65,13 @@ const OperationList = () => {
 
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
+    const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
+    const [selectedDeviceOperations, setSelectedDeviceOperations] = useState<Set<string>>(new Set());
+
+    const filterDeviceOperations = (list: string[]) => {
+        setSelectedDeviceOperations(new Set(list));
+    };
+
     const filteredOperationsList = useMemo(() => {
         if (operationsWithRange) {
             let operations = [...operationsWithRange];
@@ -72,6 +79,12 @@ const OperationList = () => {
             if (filterQuery) {
                 operations = operationsWithRange?.filter((operation) =>
                     getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
+                );
+            }
+
+            if (selectedDeviceOperations.size > 0) {
+                operations = operations.filter((operation) =>
+                    operation.deviceOperationNameList.some((opName) => selectedDeviceOperations.has(opName)),
                 );
             }
 
@@ -93,7 +106,14 @@ const OperationList = () => {
         }
 
         return [];
-    }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration]);
+    }, [
+        //
+        operationsWithRange,
+        filterQuery,
+        selectedDeviceOperations,
+        shouldSortByID,
+        shouldSortDuration,
+    ]);
 
     const {
         scrollOffset: restoredOffset,
@@ -244,7 +264,7 @@ const OperationList = () => {
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
-        <fieldset className='list-wrap'>
+        <fieldset className='list-wrap operations-list-component'>
             <legend>Operations</legend>
 
             <div className='list-controls'>
@@ -336,6 +356,12 @@ const OperationList = () => {
                         />
                     </Tooltip>
                 </ButtonGroup>
+
+                <SimpleMultiselect
+                    label='Device Operations'
+                    optionList={uniqueDeviceOperationNames || []}
+                    onUpdateHandler={filterDeviceOperations}
+                />
 
                 {!isLoading && (
                     <p className='result-count'>
@@ -444,6 +470,21 @@ const OperationList = () => {
                                                         />
                                                     </>
                                                 )}
+                                                {/* removing this temporarily until a better solution is created */}
+                                                {/* {operation.deviceOperationNameList && */}
+                                                {/*    operation.deviceOperationNameList.length && ( */}
+                                                {/*        <ul className='device-operations-list'> */}
+                                                {/*            {operation.deviceOperationNameList.map( */}
+                                                {/*                (op: string, index) => { */}
+                                                {/*                    return ( */}
+                                                {/*                        <li key={`${operation.id}-${op}-${index}`}> */}
+                                                {/*                            {op}() */}
+                                                {/*                        </li> */}
+                                                {/*                    ); */}
+                                                {/*                }, */}
+                                                {/*            )} */}
+                                                {/*        </ul> */}
+                                                {/*    )} */}
 
                                                 {activePerformanceReport && (
                                                     <OperationListPerfData operation={operation} />
