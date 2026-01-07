@@ -23,7 +23,7 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                 perfDeviceOperations.map(
                     (perf, index) =>
                         perf.perfData && (
-                            <Fragment key={`${operation.id + perf.operationName + perf.id}${index}`}>
+                            <Fragment key={`${operation.id}${perf.operationName}${perf.id}${index}`}>
                                 <strong>{perf.perfData?.raw_op_code}</strong>
                                 <div>
                                     <span className={classNames('monospace', getCoreColour(perf.perfData?.cores))}>
@@ -55,20 +55,15 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                             </Fragment>
                         ),
                 )}
-            {perfDeviceOperations.length === 0 && (
+            {perfDeviceOperations.length === 0 && operation.deviceOperationNameList.length > 0 && (
                 <div>
-                    {operation.deviceOperationNameList.length > 0 && (
-                        <>
-                            {operation.deviceOperationNameList.map((op: string, index) => {
-                                return (
-                                    <Fragment key={`${operation.id}-${op}-${index}`}>
-                                        <strong>{op}</strong>
-                                        <br />
-                                    </Fragment>
-                                );
-                            })}
-                        </>
-                    )}
+                    {operation.deviceOperationNameList.map((op: string, index) => {
+                        return (
+                            <div key={`${operation.id}-${op}-${index}`}>
+                                <strong>{op}</strong>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </div>
