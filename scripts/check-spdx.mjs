@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
@@ -6,17 +5,17 @@
 import fs from 'fs';
 import path from 'path';
 
-const CURRENT_YEAR = new Date().getFullYear();
+const NON_COMPLIANT_FILES = [];
+
+// License formats (regex patterns that accept any 4-digit year)
 const BRAND = 'Tenstorrent AI ULC';
 const LICENSE = 'Apache-2.0';
-
-// License formats
-const SPDX_JS_LICENSE = `// SPDX-License-Identifier: ${LICENSE}
-//
-// SPDX-FileCopyrightText: © ${CURRENT_YEAR} ${BRAND}`;
-const SPDX_PYTHON_LICENSE = `# SPDX-License-Identifier: ${LICENSE}
-#
-# SPDX-FileCopyrightText: © ${CURRENT_YEAR} ${BRAND}`;
+const SPDX_JS_LICENSE = new RegExp(
+    `// SPDX-License-Identifier: ${LICENSE}\\n//\\n// SPDX-FileCopyrightText: © \\d{4} ${BRAND}`,
+);
+const SPDX_PYTHON_LICENSE = new RegExp(
+    `# SPDX-License-Identifier: ${LICENSE}\\n#\\n# SPDX-FileCopyrightText: © \\d{4} ${BRAND}`,
+);
 const SPDX_PACKAGE_JSON_LICENSE = {
     license: LICENSE,
     author: {
@@ -45,23 +44,22 @@ const IGNORED_DIRS = [
     'docs/output',
     'myenv',
 ];
-const NON_COMPLIANT_FILES = [];
 
 const isFileType = (filePath, extensions) => extensions.includes(path.extname(filePath).toLowerCase());
 
 const checkLicenseString = (filePath, licenseType) => {
     const content = fs.readFileSync(filePath, 'utf8');
 
-    if (content.includes(licenseType)) {
-        return;
-    }
-
-    for (let year = CURRENT_YEAR - 1; year >= 2020; year -= 1) {
-        const priorYearLicense = licenseType.replace(String(CURRENT_YEAR), String(year));
-        if (content.includes(priorYearLicense)) {
+    if (licenseType instanceof RegExp) {
+        if (licenseType.test(content)) {
+            return;
+        }
+    } else {
+        if (content.includes(licenseType)) {
             return;
         }
     }
+
     NON_COMPLIANT_FILES.push(filePath);
 };
 
@@ -110,10 +108,10 @@ function walkDirectory(dir) {
 walkDirectory(process.cwd());
 
 if (NON_COMPLIANT_FILES.length > 0) {
-    console.error(`${NON_COMPLIANT_FILES.length} files missing the SPDX-License-Identifier string:`);
+    console.error(`${NON_COMPLIANT_FILES.length} files missing or have an incorrect SPDX-License-Identifier string:`);
     NON_COMPLIANT_FILES.forEach((file) => console.log(file));
     process.exit(1);
 } else {
-    console.log('All scanned files contain the SPDX-License-Identifier string.');
+    console.log('All scanned files contain the correct SPDX-License-Identifier string.');
     process.exit(0);
 }
