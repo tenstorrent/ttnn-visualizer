@@ -50,17 +50,12 @@ const isFileType = (filePath, extensions) => extensions.includes(path.extname(fi
 const checkLicenseString = (filePath, licenseType) => {
     const content = fs.readFileSync(filePath, 'utf8');
 
-    if (licenseType instanceof RegExp) {
-        if (licenseType.test(content)) {
-            return;
-        }
-    } else {
-        if (content.includes(licenseType)) {
-            return;
-        }
-    }
+    const isCompliant =
+        licenseType instanceof RegExp ? licenseType.test(content) : content.includes(licenseType);
 
-    NON_COMPLIANT_FILES.push(filePath);
+    if (!isCompliant) {
+        NON_COMPLIANT_FILES.push(filePath);
+    }
 };
 
 const checkLicenseObject = (filePath, licenseType) => {
