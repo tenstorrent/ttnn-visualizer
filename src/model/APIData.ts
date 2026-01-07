@@ -58,6 +58,7 @@ export interface Tensor {
         };
     } | null;
     io: 'input' | 'output' | null;
+    size: number | null;
 }
 
 export interface BufferData {
@@ -145,6 +146,7 @@ export const defaultTensorData: Tensor = {
     producerNames: [],
     consumerNames: [],
     comparison: null,
+    size: null,
 };
 
 export const defaultBuffer: BufferData = {
