@@ -65,6 +65,8 @@ function Layout() {
     // Loads the active reports into global state when the instance changes
     useEffect(() => {
         if (instance?.active_report) {
+            const isRemote = instance?.profiler_path?.includes('/remote');
+
             resetListStates();
 
             setActiveProfilerReport(
@@ -85,14 +87,10 @@ function Layout() {
             );
             setActiveNpe(instance.active_report?.npe_name ?? null);
             setProfilerReportLocation(
-                instance?.profiler_path?.includes('/remote') && instance?.remote_profiler_folder
-                    ? ReportLocation.REMOTE
-                    : ReportLocation.LOCAL,
+                isRemote && instance?.remote_profiler_folder ? ReportLocation.REMOTE : ReportLocation.LOCAL,
             );
             setPerformanceReportLocation(
-                instance?.performance_path?.includes('/remote') && instance?.remote_performance_folder
-                    ? ReportLocation.REMOTE
-                    : ReportLocation.LOCAL,
+                isRemote && instance?.remote_performance_folder ? ReportLocation.REMOTE : ReportLocation.LOCAL,
             );
         }
     }, [

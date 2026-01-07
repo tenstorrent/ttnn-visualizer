@@ -922,6 +922,7 @@ def create_profiler_files():
     update_instance(
         instance_id=instance_id,
         profiler_name=parent_folder_name,
+        profiler_is_remote=False,
         clear_remote=True,
         profiler_path=str(profiler_path) if profiler_path else None,
     )
@@ -991,6 +992,7 @@ def create_performance_files():
     update_instance(
         instance_id=instance_id,
         performance_name=parent_folder_name,
+        performance_is_remote=False,
         clear_remote=True,
         performance_path=performance_path,
     )
@@ -1325,6 +1327,7 @@ def use_remote_folder():
         )
         kwargs["remote_profiler_folder"] = remote_profiler_folder
         kwargs["profiler_name"] = remote_profiler_folder.remotePath.split("/")[-1]
+        kwargs["profiler_is_remote"] = True
 
     if performance:
         remote_performance_folder = RemoteReportFolder.model_validate(
@@ -1333,6 +1336,7 @@ def use_remote_folder():
         )
         kwargs["remote_performance_folder"] = remote_performance_folder
         kwargs["performance_name"] = remote_performance_folder.reportName
+        kwargs["performance_is_remote"] = True
 
     update_instance(**kwargs)
 
@@ -1365,7 +1369,11 @@ def update_current_instance():
         update_instance(
             instance_id=update_data.get("instance_id"),
             profiler_name=update_data["active_report"].get("profiler_name"),
+            profiler_is_remote=update_data["active_report"].get("profiler_is_remote"),
             performance_name=update_data["active_report"].get("performance_name"),
+            performance_is_remote=update_data["active_report"].get(
+                "performance_is_remote"
+            ),
             npe_name=update_data["active_report"].get("npe_name"),
             # Doesn't handle remote at the moment
             remote_connection=None,

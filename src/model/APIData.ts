@@ -90,7 +90,14 @@ export interface Instance {
     profiler_path: string | null;
     performance_path: string | null;
     npe_path: string | null;
-    active_report: { performance_name?: string; profiler_name?: string; npe_name?: string } | null;
+    active_report: {
+        profiler_name?: string;
+        profiler_is_remote?: boolean;
+        performance_name?: string;
+        performance_is_remote?: boolean;
+        npe_name?: string;
+        npe_is_remote?: boolean;
+    } | null;
     remote_connection: RemoteConnection | null;
     remote_profiler_folder: RemoteFolder | null;
     remote_performance_folder: RemoteFolder | null;

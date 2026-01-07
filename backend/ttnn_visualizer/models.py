@@ -200,8 +200,11 @@ class StatusMessage(SerializeableModel):
 
 class ActiveReports(SerializeableModel):
     profiler_name: Optional[str] = None
+    profiler_is_remote: Optional[bool] = None
     performance_name: Optional[str] = None
+    performance_is_remote: Optional[bool] = None
     npe_name: Optional[str] = None
+    npe_is_remote: Optional[bool] = None
 
 
 class RemoteReportFolder(SerializeableModel):

@@ -25,8 +25,11 @@ _sentinel = object()
 def update_existing_instance(
     instance_data,
     profiler_name,
+    profiler_is_remote,
     performance_name,
+    performance_is_remote,
     npe_name,
+    npe_is_remote,
     remote_connection,
     remote_profiler_folder,
     remote_performance_folder,
@@ -40,14 +43,17 @@ def update_existing_instance(
     # First ifs are explicit deletes and elifs are updates
     if profiler_name == "":
         active_report.pop("profiler_name", None)
+        active_report.pop("profiler_is_remote", None)
     elif profiler_name is not None:
         active_report["profiler_name"] = profiler_name
+        active_report["profiler_is_remote"] = profiler_is_remote
 
     if performance_name == "":
         active_report.pop("performance_name", None)
+        active_report.pop("performance_is_remote", None)
     elif performance_name is not None:
-
         active_report["performance_name"] = performance_name
+        active_report["performance_is_remote"] = performance_is_remote
     if npe_name == "":
         active_report.pop("npe_name", None)
     elif npe_name is not None:
@@ -178,8 +184,11 @@ def create_new_instance(
 def update_instance(
     instance_id,
     profiler_name=None,
+    profiler_is_remote=None,
     performance_name=None,
+    performance_is_remote=None,
     npe_name=None,
+    npe_is_remote=None,
     remote_connection=None,
     remote_profiler_folder=None,
     remote_performance_folder=None,
@@ -195,8 +204,11 @@ def update_instance(
             update_existing_instance(
                 instance_data,
                 profiler_name,
+                profiler_is_remote,
                 performance_name,
+                performance_is_remote,
                 npe_name,
+                npe_is_remote,
                 remote_connection,
                 remote_profiler_folder,
                 remote_performance_folder,
@@ -209,8 +221,11 @@ def update_instance(
             instance_data = create_new_instance(
                 instance_id,
                 profiler_name,
+                profiler_is_remote,
                 performance_name,
+                performance_is_remote,
                 npe_name,
+                npe_is_remote,
                 remote_connection,
                 remote_profiler_folder,
                 remote_performance_folder,
@@ -231,8 +246,11 @@ def update_instance(
 def get_or_create_instance(
     instance_id,
     profiler_name=None,
+    profiler_is_remote=None,
     performance_name=None,
+    performance_is_remote=None,
     npe_name=None,
+    npe_is_remote,
     remote_connection=None,
     remote_profiler_folder=None,
 ):
@@ -265,16 +283,22 @@ def get_or_create_instance(
         # Update the instance if any new data is provided
         if (
             profiler_name
+            or profiler_is_remote
             or performance_name
+            or performance_is_remote
             or npe_name
+            or npe_is_remote
             or remote_connection
             or remote_profiler_folder
         ):
             update_instance(
                 instance_id=instance_id,
                 profiler_name=profiler_name,
+                profiler_is_remote=profiler_is_remote,
                 performance_name=performance_name,
+                performance_is_remote=performance_is_remote,
                 npe_name=npe_name,
+                npe_is_remote=npe_is_remote,
                 remote_connection=remote_connection,
                 remote_profiler_folder=remote_profiler_folder,
             )
