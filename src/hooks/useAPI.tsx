@@ -772,7 +772,7 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     });
 };
 
-export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
+export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
