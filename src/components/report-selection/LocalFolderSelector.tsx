@@ -105,24 +105,27 @@ const LocalFolderOptions: FC = () => {
     const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
+    const isProfilerLocal = profilerReportLocation === ReportLocation.LOCAL;
+    const isPerformanceLocal = performanceReportLocation === ReportLocation.LOCAL;
+
     const folderPickerValue = useMemo(
         () =>
             activeProfilerReport &&
             reportFolderList?.some((folder: ReportFolder) => folder.path.includes(activeProfilerReport.path)) &&
-            profilerReportLocation === ReportLocation.LOCAL
+            isProfilerLocal
                 ? activeProfilerReport.path
                 : null,
-        [activeProfilerReport, reportFolderList, profilerReportLocation],
+        [activeProfilerReport, reportFolderList, isProfilerLocal],
     );
 
     const perfFolderPickerValue = useMemo(
         () =>
             activePerformanceReport &&
             perfFolderList?.some((folder: ReportFolder) => folder.path.includes(activePerformanceReport.path)) &&
-            performanceReportLocation === ReportLocation.LOCAL
+            isPerformanceLocal
                 ? activePerformanceReport.path
                 : null,
-        [activePerformanceReport, perfFolderList, performanceReportLocation],
+        [activePerformanceReport, perfFolderList, isPerformanceLocal],
     );
 
     const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
@@ -287,7 +290,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={reportFolderList}
-                    value={profilerReportLocation === ReportLocation.LOCAL ? folderPickerValue : null}
+                    value={isProfilerLocal ? folderPickerValue : null}
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
@@ -337,7 +340,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={perfFolderList}
-                    value={performanceReportLocation === ReportLocation.LOCAL ? perfFolderPickerValue : null}
+                    value={isPerformanceLocal ? perfFolderPickerValue : null}
                     valueLabel={activePerformanceReport?.reportName ?? null}
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}

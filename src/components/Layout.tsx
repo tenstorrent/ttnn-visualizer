@@ -50,6 +50,9 @@ function Layout() {
     const location = useLocation();
     const { resetListStates } = useRestoreScrollPosition();
 
+    const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
+    const isPerformanceRemote = instance?.active_report?.performance_location === ReportLocation.REMOTE;
+
     const appVersion = import.meta.env.APP_VERSION;
     const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
     const state = location.state as { background?: Location };
@@ -57,7 +60,7 @@ function Layout() {
     // TODO: Resolve naming issue here with profiler_name/performance_name being the path
     const profilerReportPath = instance?.active_report?.profiler_name || null;
     const profilerReportName =
-        (profilerReportLocation === ReportLocation.REMOTE && profilerReportPath) || instance?.remote_profiler_folder
+        (isProfilerRemote && profilerReportPath) || instance?.remote_profiler_folder
             ? getRemoteReportName(remoteFolders, profilerReportPath) || ''
             : getLocalReportName(reports, profilerReportPath) || '';
     const perfReportPath = instance?.active_report?.performance_name || null;
@@ -65,9 +68,6 @@ function Layout() {
     // Loads the active reports into global state when the instance changes
     useEffect(() => {
         if (instance?.active_report) {
-            const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
-            const isPerformanceRemote = instance?.active_report?.performance_location === ReportLocation.REMOTE;
-
             resetListStates();
 
             setActiveProfilerReport(
@@ -100,7 +100,9 @@ function Layout() {
         instance,
         profilerReportPath,
         profilerReportName,
+        isProfilerRemote,
         perfReportPath,
+        isPerformanceRemote,
         setActiveProfilerReport,
         setActivePerformanceReport,
         setActiveNpe,
