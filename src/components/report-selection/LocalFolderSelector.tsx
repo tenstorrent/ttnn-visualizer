@@ -213,7 +213,7 @@ const LocalFolderOptions: FC = () => {
     const handleSelectProfiler = async (folder: ReportFolder) => {
         await updateInstance({
             ...instance,
-            active_report: { profiler_name: folder.path, profiler_is_remote: false },
+            active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
         });
 
         if (hasBeenNormalised(folder)) {
@@ -241,7 +241,7 @@ const LocalFolderOptions: FC = () => {
     const handleSelectPerformance = async (folder: ReportFolder) => {
         await updateInstance({
             ...instance,
-            active_report: { performance_name: folder.path, performance_is_remote: false },
+            active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
         });
 
         createToastNotification('Active performance report', folder.reportName);

@@ -24,6 +24,11 @@ class BufferType(enum.Enum):
     TRACE = 4
 
 
+class ReportLocation(enum.Enum):
+    LOCAL = "local"
+    REMOTE = "remote"
+
+
 @dataclasses.dataclass
 class Operation(SerializeableDataclass):
     operation_id: int
@@ -200,11 +205,11 @@ class StatusMessage(SerializeableModel):
 
 class ActiveReports(SerializeableModel):
     profiler_name: Optional[str] = None
-    profiler_is_remote: Optional[bool] = None
+    profiler_location: Optional[ReportLocation] = None
     performance_name: Optional[str] = None
-    performance_is_remote: Optional[bool] = None
+    performance_location: Optional[ReportLocation] = None
     npe_name: Optional[str] = None
-    npe_is_remote: Optional[bool] = None
+    npe_location: Optional[ReportLocation] = None
 
 
 class RemoteReportFolder(SerializeableModel):
