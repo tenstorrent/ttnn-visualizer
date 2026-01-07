@@ -15,15 +15,15 @@ interface OperationListPerfDataProps {
 
 const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
     const perfData = useGetDeviceOperationListPerf();
+    const perfDeviceOperations = perfData?.filter((perf: DeviceOperationMapping) => perf.id === operation.id) || [];
 
     return (
         <div className='perf-data'>
-            {perfData
-                ?.filter((perf: DeviceOperationMapping) => perf.id === operation.id)
-                .map(
-                    (perf) =>
+            {perfDeviceOperations.length > 0 &&
+                perfDeviceOperations.map(
+                    (perf, index) =>
                         perf.perfData && (
-                            <Fragment key={perf.id + perf.operationName}>
+                            <Fragment key={`${operation.id}${perf.operationName}${perf.id}${index}`}>
                                 <strong>{perf.perfData?.raw_op_code}</strong>
                                 <div>
                                     <span className={classNames('monospace', getCoreColour(perf.perfData?.cores))}>
@@ -55,6 +55,17 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                             </Fragment>
                         ),
                 )}
+            {perfDeviceOperations.length === 0 && operation.deviceOperationNameList.length > 0 && (
+                <div>
+                    {operation.deviceOperationNameList.map((op: string, index) => {
+                        return (
+                            <div key={`${operation.id}-${op}-${index}`}>
+                                <strong>{op}</strong>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 };

@@ -592,16 +592,11 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
             return [];
         }
         const result = operations.flatMap((operation) =>
-            operation.device_operations
-                .filter(
-                    (op) =>
-                        op.node_type === NodeType.function_start && op.params.name && isDeviceOperation(op.params.name),
-                )
-                .map((deviceOperation) => ({
-                    name: deviceOperation.params.name,
-                    id: operation.id,
-                    operationName: operation.name,
-                })),
+            operation.deviceOperationNameList.map((name) => ({
+                name,
+                id: operation.id,
+                operationName: operation.name,
+            })),
         );
         return collapseMultideviceOPs(result, devices.length);
     }, [operations, devices]);

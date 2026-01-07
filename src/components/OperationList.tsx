@@ -19,12 +19,7 @@ import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/us
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
 import { OperationDescription } from '../model/APIData';
-import {
-    activePerformanceReportAtom,
-    operationListFilterAtom,
-    selectedOperationRangeAtom,
-    shouldCollapseAllOperationsAtom,
-} from '../store/app';
+import { operationListFilterAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import Collapsible from './Collapsible';
 import ListItem from './ListItem';
 import LoadingSpinner from './LoadingSpinner';
@@ -41,7 +36,6 @@ const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo e
 const OperationList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     const [filterQuery, setFilterQuery] = useAtom(operationListFilterAtom);
     const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
@@ -471,25 +465,8 @@ const OperationList = () => {
                                                         />
                                                     </>
                                                 )}
-                                                {/* removing this temporarily until a better solution is created */}
-                                                {/* {operation.deviceOperationNameList && */}
-                                                {/*    operation.deviceOperationNameList.length && ( */}
-                                                {/*        <ul className='device-operations-list'> */}
-                                                {/*            {operation.deviceOperationNameList.map( */}
-                                                {/*                (op: string, index) => { */}
-                                                {/*                    return ( */}
-                                                {/*                        <li key={`${operation.id}-${op}-${index}`}> */}
-                                                {/*                            {op}() */}
-                                                {/*                        </li> */}
-                                                {/*                    ); */}
-                                                {/*                }, */}
-                                                {/*            )} */}
-                                                {/*        </ul> */}
-                                                {/*    )} */}
 
-                                                {activePerformanceReport && (
-                                                    <OperationListPerfData operation={operation} />
-                                                )}
+                                                <OperationListPerfData operation={operation} />
 
                                                 {operation.arguments && (
                                                     <OperationArguments
