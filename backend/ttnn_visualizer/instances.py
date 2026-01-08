@@ -59,6 +59,7 @@ def update_existing_instance(
         active_report.pop("npe_location", None)
     elif npe_name is not None:
         active_report["npe_name"] = npe_name
+        active_report["npe_location"] = npe_location
 
     instance_data.active_report = active_report
 
@@ -124,8 +125,11 @@ def commit_and_log_session(instance_data, instance_id):
 def create_new_instance(
     instance_id,
     profiler_name,
+    profiler_location,
     performance_name,
+    performance_location,
     npe_name,
+    npe_location,
     remote_connection,
     remote_profiler_folder,
     remote_performance_folder,
@@ -137,10 +141,14 @@ def create_new_instance(
     active_report = {}
     if profiler_name:
         active_report["profiler_name"] = profiler_name
+        active_report["profiler_location"] = profiler_location
+
     if performance_name:
         active_report["performance_name"] = performance_name
+        active_report["performance_location"] = performance_location
     if npe_name:
         active_report["npe_name"] = npe_name
+        active_report["npe_location"] = npe_location
 
     if clear_remote:
         remote_connection = None
