@@ -5,13 +5,15 @@
 import { FC, useEffect, useMemo, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
-
-import { useAtom } from 'jotai';
 import { useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
+import { useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification from '../../functions/createToastNotification';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import useRemoteConnection from '../../hooks/useRemote';
 import {
     activePerformanceReportAtom,
@@ -22,8 +24,6 @@ import {
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
-import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
-import { ReportLocation } from '../../definitions/Reports';
 import RemoteSyncButton from './RemoteSyncButton';
 
 const RemoteSyncConfigurator: FC = () => {
@@ -352,10 +352,15 @@ const RemoteSyncConfigurator: FC = () => {
                                     fetchedPerformanceFolders,
                                 );
                             }
-                            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                        } catch (err) {
-                            // eslint-disable-next-line no-alert
-                            alert('Unable to connect to remote server.');
+                        } catch (err: unknown) {
+                            // eslint-disable-next-line no-nested-ternary
+                            const message = axios.isAxiosError(err)
+                                ? err.response?.data
+                                : err instanceof Error
+                                  ? err.message
+                                  : String(err);
+
+                            createToastNotification('Folder sync error', message, true);
                         } finally {
                             setIsFetching(false);
                         }
