@@ -178,9 +178,15 @@ const RemoteSyncConfigurator: FC = () => {
                     }
                 }
             }
-        } catch {
-            // eslint-disable-next-line no-alert
-            alert('Unable to sync remote folder');
+        } catch (err: unknown) {
+            // eslint-disable-next-line no-nested-ternary
+            const message = axios.isAxiosError(err)
+                ? err.response?.data
+                : err instanceof Error
+                  ? err.message
+                  : String(err);
+
+            createToastNotification('Folder sync error', message, true);
         } finally {
             setIsSyncingReportFolder(false);
         }
@@ -226,9 +232,15 @@ const RemoteSyncConfigurator: FC = () => {
                     }
                 }
             }
-        } catch {
-            // eslint-disable-next-line no-alert
-            alert('Unable to sync remote folder');
+        } catch (err: unknown) {
+            // eslint-disable-next-line no-nested-ternary
+            const message = axios.isAxiosError(err)
+                ? err.response?.data
+                : err instanceof Error
+                  ? err.message
+                  : String(err);
+
+            createToastNotification('Folder sync error', message, true);
         } finally {
             setIsSyncingPerformanceFolder(false);
         }
@@ -360,7 +372,7 @@ const RemoteSyncConfigurator: FC = () => {
                                   ? err.message
                                   : String(err);
 
-                            createToastNotification('Folder sync error', message, true);
+                            createToastNotification('Folder list sync error', message, true);
                         } finally {
                             setIsFetching(false);
                         }
