@@ -5,7 +5,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Classes, PopoverPosition } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
-import { useAtom, useSetAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import 'styles/components/ToastOverrides.scss';
@@ -41,8 +41,8 @@ function Layout() {
     const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
     const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
-    const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
-    const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
+    const setProfilerReportLocation = useSetAtom(profilerReportLocationAtom);
+    const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
 
     const remote = useRemoteConnection();
     const { data: instance } = useInstance();
@@ -162,9 +162,6 @@ function Layout() {
             <main>
                 <ModalAwareOutlet />
                 {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
-
-                <p>Profiler: {profilerReportLocation}</p>
-                <p>Performance: {performanceReportLocation}</p>
             </main>
 
             <FooterInfobar />
