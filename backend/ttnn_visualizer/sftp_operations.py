@@ -781,7 +781,7 @@ def get_remote_performance_folders(
     else:
         error = "Performance path is not configured for this connection"
         logger.error(error)
-        # raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
 
     if not performance_paths:
         error = f"No performance reports found at {remote_connection.performancePath}"
@@ -793,6 +793,7 @@ def get_remote_performance_folders(
         remote_folder_data.append(
             get_remote_performance_folder(remote_connection, path)
         )
+
     return remote_folder_data
 
 
@@ -810,7 +811,7 @@ def get_remote_profiler_folders(
     else:
         error = f"No profiler reports found at {remote_connection.profilerPath}"
         logger.info(error)
-        # raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
 
     remote_folder_data = []
     for config_path in remote_config_paths:
