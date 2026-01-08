@@ -682,6 +682,9 @@ def find_folders_by_files(
     remote_connection: RemoteConnection, root_folder: str, file_names: List[str]
 ) -> List[str]:
     """Given a remote path, return a list of top-level folders that contain any of the specified files."""
+    if not root_folder:
+        return []
+
     matched_folders: List[str] = []
 
     # Build SSH command to find directories in root_folder
