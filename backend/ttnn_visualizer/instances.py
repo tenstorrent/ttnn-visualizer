@@ -56,6 +56,7 @@ def update_existing_instance(
         active_report["performance_location"] = performance_location
     if npe_name == "":
         active_report.pop("npe_name", None)
+        active_report.pop("npe_location", None)
     elif npe_name is not None:
         active_report["npe_name"] = npe_name
 

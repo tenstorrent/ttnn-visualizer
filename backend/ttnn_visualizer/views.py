@@ -1376,6 +1376,8 @@ def update_current_instance():
                 "performance_location"
             ),
             npe_name=update_data["active_report"].get("npe_name"),
+            # Don't currently use npe_location
+            # npe_location=update_data["active_report"].get("npe_location"),
             # Doesn't handle remote at the moment
             remote_connection=None,
             remote_profiler_folder=None,

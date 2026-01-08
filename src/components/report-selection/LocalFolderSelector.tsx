@@ -214,6 +214,7 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectProfiler = async (folder: ReportFolder) => {
+        // Backend handles updating only the specific parts of active_report
         await updateInstance({
             ...instance,
             active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
@@ -242,6 +243,7 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectPerformance = async (folder: ReportFolder) => {
+        // Backend handles updating only the specific parts of active_report
         await updateInstance({
             ...instance,
             active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },

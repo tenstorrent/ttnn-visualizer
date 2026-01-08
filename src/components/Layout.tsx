@@ -51,7 +51,6 @@ function Layout() {
     const { resetListStates } = useRestoreScrollPosition();
 
     const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
-    const isPerformanceRemote = instance?.active_report?.performance_location === ReportLocation.REMOTE;
 
     const appVersion = import.meta.env.APP_VERSION;
     const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
@@ -73,27 +72,14 @@ function Layout() {
                   reportName: profilerReportName,
               }
             : null;
-
-        // eslint-disable-next-line no-nested-ternary
-        const activeProfilerLocation = activeProfilerReport
-            ? isProfilerRemote && instance?.remote_profiler_folder
-                ? ReportLocation.REMOTE
-                : ReportLocation.LOCAL
-            : null;
-
+        const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
         const activePerfReport = perfReportPath
             ? {
                   path: perfReportPath,
                   reportName: perfReportPath,
               }
             : null;
-
-        // eslint-disable-next-line no-nested-ternary
-        const activePerfLocation = activePerfReport
-            ? isPerformanceRemote && instance?.remote_performance_folder
-                ? ReportLocation.REMOTE
-                : ReportLocation.LOCAL
-            : null;
+        const activePerfLocation = instance?.active_report?.performance_location ?? null;
 
         return {
             profiler: activeProfilerReport,
@@ -102,7 +88,7 @@ function Layout() {
             performanceLocation: activePerfLocation,
             npe: instance?.active_report?.npe_name ?? null,
         };
-    }, [instance, profilerReportPath, profilerReportName, isProfilerRemote, perfReportPath, isPerformanceRemote]);
+    }, [instance, profilerReportPath, profilerReportName, perfReportPath]);
 
     // Loads the active reports into global state when the instance changes
     useEffect(() => {
