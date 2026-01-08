@@ -9,7 +9,7 @@ import { useAtom, useSetAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import 'styles/components/ToastOverrides.scss';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
@@ -42,7 +42,7 @@ function Layout() {
     const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
-    const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
+    const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
 
     const remote = useRemoteConnection();
     const { data: instance } = useInstance();
@@ -65,51 +65,64 @@ function Layout() {
             : getLocalReportName(reports, profilerReportPath) || '';
     const perfReportPath = instance?.active_report?.performance_name || null;
 
+    // Memoize active report objects to prevent unnecessary recalculations
+    const activeReports = useMemo(() => {
+        const activeProfilerReport = profilerReportPath
+            ? {
+                  path: profilerReportPath,
+                  reportName: profilerReportName,
+              }
+            : null;
+
+        // eslint-disable-next-line no-nested-ternary
+        const activeProfilerLocation = activeProfilerReport
+            ? isProfilerRemote && instance?.remote_profiler_folder
+                ? ReportLocation.REMOTE
+                : ReportLocation.LOCAL
+            : null;
+
+        const activePerfReport = perfReportPath
+            ? {
+                  path: perfReportPath,
+                  reportName: perfReportPath,
+              }
+            : null;
+
+        // eslint-disable-next-line no-nested-ternary
+        const activePerfLocation = activePerfReport
+            ? isPerformanceRemote && instance?.remote_performance_folder
+                ? ReportLocation.REMOTE
+                : ReportLocation.LOCAL
+            : null;
+
+        return {
+            profiler: activeProfilerReport,
+            profilerLocation: activeProfilerLocation,
+            performance: activePerfReport,
+            performanceLocation: activePerfLocation,
+            npe: instance?.active_report?.npe_name ?? null,
+        };
+    }, [instance, profilerReportPath, profilerReportName, isProfilerRemote, perfReportPath, isPerformanceRemote]);
+
     // Loads the active reports into global state when the instance changes
     useEffect(() => {
-        if (instance?.active_report) {
-            resetListStates();
+        resetListStates();
 
-            setActiveProfilerReport(
-                profilerReportPath
-                    ? {
-                          path: profilerReportPath,
-                          reportName: profilerReportName,
-                      }
-                    : null,
-            );
-            setActivePerformanceReport(
-                perfReportPath
-                    ? {
-                          path: perfReportPath,
-                          reportName: perfReportPath,
-                      }
-                    : null,
-            );
-            setActiveNpe(instance.active_report?.npe_name ?? null);
-            setProfilerReportLocation(
-                isProfilerRemote && instance?.remote_profiler_folder ? ReportLocation.REMOTE : ReportLocation.LOCAL,
-            );
-            setPerformanceReportLocation(
-                isPerformanceRemote && instance?.remote_performance_folder
-                    ? ReportLocation.REMOTE
-                    : ReportLocation.LOCAL,
-            );
-        }
+        setActiveProfilerReport(activeReports.profiler);
+        setProfilerReportLocation(activeReports.profilerLocation);
+
+        setActivePerformanceReport(activeReports.performance);
+        setPerformanceReportLocation(activeReports.performanceLocation);
+
+        setActiveNpe(activeReports.npe);
     }, [
-        instance,
-        profilerReportPath,
-        profilerReportName,
-        isProfilerRemote,
-        perfReportPath,
-        isPerformanceRemote,
-        setActiveProfilerReport,
-        setActivePerformanceReport,
-        setActiveNpe,
-        profilerReportLocation,
-        setProfilerReportLocation,
-        setPerformanceReportLocation,
+        activeReports,
         resetListStates,
+        setActiveProfilerReport,
+        setProfilerReportLocation,
+        setActivePerformanceReport,
+        setPerformanceReportLocation,
+        setActiveNpe,
     ]);
 
     return (
@@ -149,6 +162,9 @@ function Layout() {
             <main>
                 <ModalAwareOutlet />
                 {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
+
+                <p>Profiler: {profilerReportLocation}</p>
+                <p>Performance: {performanceReportLocation}</p>
             </main>
 
             <FooterInfobar />

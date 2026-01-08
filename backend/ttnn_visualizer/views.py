@@ -40,6 +40,7 @@ from ttnn_visualizer.models import (
     Instance,
     RemoteConnection,
     RemoteReportFolder,
+    ReportLocation,
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
@@ -922,7 +923,7 @@ def create_profiler_files():
     update_instance(
         instance_id=instance_id,
         profiler_name=parent_folder_name,
-        profiler_location=False,
+        profiler_location=ReportLocation.LOCAL.value,
         clear_remote=True,
         profiler_path=str(profiler_path) if profiler_path else None,
     )
@@ -992,7 +993,7 @@ def create_performance_files():
     update_instance(
         instance_id=instance_id,
         performance_name=parent_folder_name,
-        performance_location=False,
+        performance_location=ReportLocation.LOCAL.value,
         clear_remote=True,
         performance_path=performance_path,
     )
@@ -1327,7 +1328,7 @@ def use_remote_folder():
         )
         kwargs["remote_profiler_folder"] = remote_profiler_folder
         kwargs["profiler_name"] = remote_profiler_folder.remotePath.split("/")[-1]
-        kwargs["profiler_location"] = True
+        kwargs["profiler_location"] = ReportLocation.REMOTE.value
 
     if performance:
         remote_performance_folder = RemoteReportFolder.model_validate(
@@ -1336,7 +1337,7 @@ def use_remote_folder():
         )
         kwargs["remote_performance_folder"] = remote_performance_folder
         kwargs["performance_name"] = remote_performance_folder.reportName
-        kwargs["performance_location"] = True
+        kwargs["performance_location"] = ReportLocation.REMOTE.value
 
     update_instance(**kwargs)
 
