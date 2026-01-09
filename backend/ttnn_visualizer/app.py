@@ -177,19 +177,22 @@ def open_browser(host, port, instance_id=None):
 
     max_attempts = 10
     attempt = 0
-    server_ready = False
+    app_ready = False
 
-    print(f"Waiting for server to be ready at {url}...")
-    while attempt < max_attempts and not server_ready:
+    print(f"Waiting for application to be ready at {url}...")
+    while attempt < max_attempts and not app_ready:
         try:
             urlopen(url, timeout=1)
-            server_ready = True
+            app_ready = True
         except (URLError, ConnectionError, OSError):
             attempt += 1
+            logger.warning(f"Retrying {url}...")
             time.sleep(0.5)
 
-    if not server_ready:
-        print(f"❌ Server not ready after {max_attempts} attempts.")
+    if not app_ready:
+        print(
+            f"❌ Application not ready after {max_attempts} attempts - is the front end running?"
+        )
     else:
         print(f"Launching browser with url: {url}")
 
