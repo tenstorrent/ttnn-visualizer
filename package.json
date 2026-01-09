@@ -22,7 +22,7 @@
     "build": "vite build",
     "dev:server": "VITE_SERVER_MODE=1 vite",
     "dev": "vite",
-    "flask:lint": "isort --check-only backend/ttnn_visualizer && black --fix backend/ttnn_visualizer",
+    "flask:lint": "isort --check-only backend/ttnn_visualizer && black backend/ttnn_visualizer",
     "flask:mypy": "PYTHONPATH=backend mypy backend/ttnn_visualizer",
     "flask:start-debug": "DEBUG=true PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:start": "PYTHONPATH=backend python -m ttnn_visualizer.app",
