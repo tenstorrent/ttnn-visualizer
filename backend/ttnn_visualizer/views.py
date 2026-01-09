@@ -67,6 +67,7 @@ from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.utils import (
     create_path_resolver,
     get_cluster_descriptor_path,
+    get_mesh_descriptor_paths,
     read_last_synced_file,
     str_to_bool,
     timer,
@@ -1132,6 +1133,27 @@ def get_cluster_descriptor(instance: Instance):
 
         if not local_path:
             return jsonify({"error": "cluster_descriptor.yaml not found"}), 404
+
+        try:
+            with open(local_path) as cluster_desc_file:
+                yaml_data = yaml.safe_load(cluster_desc_file)
+                return jsonify(yaml_data)  # yaml_data is not compatible with orjson
+        except yaml.YAMLError as e:
+            return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
+
+    return jsonify({"error": "Cluster descriptor not found"}), 404
+
+
+@api.route("/mesh-descriptor", methods=["GET"])
+@with_instance
+def get_meshr_descriptor(instance: Instance):
+    if instance.remote_connection:
+        pass
+    else:
+        local_path = get_mesh_descriptor_paths(instance)
+
+        if not local_path:
+            return jsonify({"error": "mesh.yaml not found"}), 404
 
         try:
             with open(local_path) as cluster_desc_file:
