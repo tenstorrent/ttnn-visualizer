@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.67.1",
+  "version": "0.67.2",
   "type": "module",
   "description": "A tool for visualizing the Tenstorrent Neural Network model (TT-NN)",
   "repository": {
@@ -23,6 +23,7 @@
     "dev:server": "VITE_SERVER_MODE=1 vite",
     "dev": "vite",
     "flask:lint": "isort --check-only backend/ttnn_visualizer && black --check backend/ttnn_visualizer",
+    "flask:format": "isort backend/ttnn_visualizer && black backend/ttnn_visualizer",
     "flask:mypy": "PYTHONPATH=backend mypy backend/ttnn_visualizer",
     "flask:start-debug": "DEBUG=true PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:start": "PYTHONPATH=backend python -m ttnn_visualizer.app",
@@ -138,6 +139,6 @@
     ],
     "**/*.scss": "npx stylelint --fix",
     "**/*.{js,jsx,ts,tsx,css,scss}": "pnpm run format",
-    "backend/ttnn_visualizer/**/*.py": "pnpm run flask:lint"
+    "backend/ttnn_visualizer/**/*.py": "pnpm run flask:format"
   }
 }

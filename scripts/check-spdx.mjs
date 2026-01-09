@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
@@ -50,8 +51,7 @@ const isFileType = (filePath, extensions) => extensions.includes(path.extname(fi
 const checkLicenseString = (filePath, licenseType) => {
     const content = fs.readFileSync(filePath, 'utf8');
 
-    const isCompliant =
-        licenseType instanceof RegExp ? licenseType.test(content) : content.includes(licenseType);
+    const isCompliant = licenseType instanceof RegExp ? licenseType.test(content) : content.includes(licenseType);
 
     if (!isCompliant) {
         NON_COMPLIANT_FILES.push(filePath);
@@ -103,7 +103,9 @@ function walkDirectory(dir) {
 walkDirectory(process.cwd());
 
 if (NON_COMPLIANT_FILES.length > 0) {
-    console.error(`${NON_COMPLIANT_FILES.length} files that are missing or have an incorrect SPDX-License-Identifier string:`);
+    console.error(
+        `${NON_COMPLIANT_FILES.length} files that are missing or have an incorrect SPDX-License-Identifier string:`,
+    );
     NON_COMPLIANT_FILES.forEach((file) => console.log(file));
     process.exit(1);
 } else {
