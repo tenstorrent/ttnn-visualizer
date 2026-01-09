@@ -76,8 +76,8 @@ def remote_exception_handler(func):
 
             # Return user-friendly error message about SSH keys
             user_message = (
-                "SSH authentication failed. This application requires SSH key-based authentication. "
-                "Please ensure your SSH public key is added to the authorized_keys file on the remote server. "
+                "SSH authentication failed. This application requires SSH key-based authentication."
+                "Please ensure your SSH public key is added to the authorized_keys file on the remote server."
                 "Password authentication is not supported."
             )
 
@@ -95,7 +95,7 @@ def remote_exception_handler(func):
             current_app.logger.error(f"No projects: {str(err)}")
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
-                message=f"No projects found at remote location: {str(err)}",
+                message=f"No remote projects found: {str(err)}",
             )
         except NoValidConnectionsError as err:
             current_app.logger.warning(
@@ -131,6 +131,15 @@ def remote_exception_handler(func):
 
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED, message=message
+            )
+        except Exception as err:
+            # Catch any other unhandled exceptions
+            current_app.logger.exception(
+                f"Unexpected error during remote operation for {connection}: {str(err)}"
+            )
+            raise RemoteConnectionException(
+                status=ConnectionTestStates.FAILED,
+                message=f"An unexpected error occurred: {str(err)}",
             )
 
     return remote_handler

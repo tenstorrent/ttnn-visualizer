@@ -58,9 +58,7 @@ const useRemoteConnection = () => {
             return [];
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/performance', {
-            connection,
-        });
+        const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/performance', connection);
 
         return response.data;
     };

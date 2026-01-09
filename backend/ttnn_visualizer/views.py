@@ -1044,10 +1044,18 @@ def create_npe_files():
 
 @api.route("/remote/profiler", methods=["POST"])
 def get_remote_folders_profiler():
-    connection = RemoteConnection.model_validate(request.json, strict=False)
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
+        )
+
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
+
     try:
         remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
-            RemoteConnection.model_validate(connection, strict=False)
+            connection
         )
 
         for rf in remote_folders:
@@ -1074,16 +1082,18 @@ def get_remote_folders_profiler():
 
 @api.route("/remote/performance", methods=["POST"])
 def get_remote_folders_performance():
-    request_body = request.get_json()
-    connection = RemoteConnection.model_validate(
-        request_body.get("connection"), strict=False
-    )
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
+        )
+
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
 
     try:
         remote_performance_folders: List[RemoteReportFolder] = (
-            get_remote_performance_folders(
-                RemoteConnection.model_validate(connection, strict=False)
-            )
+            get_remote_performance_folders(connection)
         )
 
         for rf in remote_performance_folders:
@@ -1146,6 +1156,12 @@ def get_cluster_descriptor(instance: Instance):
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
     connection_data = request.json
+
+    if not connection_data:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
+        )
+
     connection = RemoteConnection.model_validate(connection_data)
     statuses = []
 
@@ -1304,14 +1320,16 @@ def sync_remote_folder():
 @api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
     data = request.get_json(force=True)
-    connection = data.get("connection", None)
-    profiler = data.get("profiler", None)
-    performance = data.get("performance", None)
+    connection_data = data.get("connection")
+    profiler = data.get("profiler")
+    performance = data.get("performance")
 
-    if not connection or not (profiler or performance):
-        return Response(status=HTTPStatus.BAD_REQUEST)
+    if not connection_data or not (profiler or performance):
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection or report data"
+        )
 
-    connection = RemoteConnection.model_validate(connection, strict=False)
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
 
     kwargs = {
         "instance_id": request.args.get("instanceId"),
