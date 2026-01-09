@@ -77,7 +77,7 @@ def remote_exception_handler(func):
             # Return user-friendly error message about SSH keys
             user_message = (
                 "SSH authentication failed. This application requires SSH key-based authentication."
-                "Please ensure your SSH public key is added to the authorized_keys file on the remote server."
+                " Please ensure your SSH public key is added to the authorized_keys file on the remote server."
                 "Password authentication is not supported."
             )
 
