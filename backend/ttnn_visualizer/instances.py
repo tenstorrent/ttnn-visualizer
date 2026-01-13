@@ -19,6 +19,14 @@ logger = getLogger(__name__)
 from flask import current_app, jsonify
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+# Active report dictionary keys
+KEY_PROFILER_NAME = "profiler_name"
+KEY_PROFILER_LOCATION = "profiler_location"
+KEY_PERFORMANCE_NAME = "performance_name"
+KEY_PERFORMANCE_LOCATION = "performance_location"
+KEY_NPE_NAME = "npe_name"
+KEY_NPE_LOCATION = "npe_location"
+
 _sentinel = object()
 
 
@@ -42,24 +50,24 @@ def update_existing_instance(
 
     # First ifs are explicit deletes and elifs are updates
     if profiler_name == "":
-        active_report.pop("profiler_name", None)
-        active_report.pop("profiler_location", None)
+        active_report.pop(KEY_PROFILER_NAME, None)
+        active_report.pop(KEY_PROFILER_LOCATION, None)
     elif profiler_name is not None:
-        active_report["profiler_name"] = profiler_name
-        active_report["profiler_location"] = profiler_location
+        active_report[KEY_PROFILER_NAME] = profiler_name
+        active_report[KEY_PROFILER_LOCATION] = profiler_location
 
     if performance_name == "":
-        active_report.pop("performance_name", None)
-        active_report.pop("performance_location", None)
+        active_report.pop(KEY_PERFORMANCE_NAME, None)
+        active_report.pop(KEY_PERFORMANCE_LOCATION, None)
     elif performance_name is not None:
-        active_report["performance_name"] = performance_name
-        active_report["performance_location"] = performance_location
+        active_report[KEY_PERFORMANCE_NAME] = performance_name
+        active_report[KEY_PERFORMANCE_LOCATION] = performance_location
     if npe_name == "":
-        active_report.pop("npe_name", None)
-        active_report.pop("npe_location", None)
+        active_report.pop(KEY_NPE_NAME, None)
+        active_report.pop(KEY_NPE_LOCATION, None)
     elif npe_name is not None:
-        active_report["npe_name"] = npe_name
-        active_report["npe_location"] = npe_location
+        active_report[KEY_NPE_NAME] = npe_name
+        active_report[KEY_NPE_LOCATION] = npe_location
 
     instance_data.active_report = active_report
 
@@ -76,9 +84,9 @@ def update_existing_instance(
     if profiler_path is not _sentinel:
         instance_data.profiler_path = profiler_path
     else:
-        if active_report.get("profiler_name"):
+        if active_report.get(KEY_PROFILER_NAME):
             instance_data.profiler_path = get_profiler_path(
-                profiler_name=active_report["profiler_name"],
+                profiler_name=active_report[KEY_PROFILER_NAME],
                 current_app=current_app,
                 remote_connection=remote_connection,
             )
@@ -86,9 +94,9 @@ def update_existing_instance(
     if performance_path is not _sentinel:
         instance_data.performance_path = performance_path
     else:
-        if active_report.get("performance_name"):
+        if active_report.get(KEY_PERFORMANCE_NAME):
             instance_data.performance_path = get_performance_path(
-                performance_name=active_report["performance_name"],
+                performance_name=active_report[KEY_PERFORMANCE_NAME],
                 current_app=current_app,
                 remote_connection=remote_connection,
             )
@@ -96,9 +104,9 @@ def update_existing_instance(
     if npe_path is not _sentinel:
         instance_data.npe_path = npe_path
     else:
-        if active_report.get("npe_name"):
+        if active_report.get(KEY_NPE_NAME):
             instance_data.npe_path = get_npe_path(
-                npe_name=active_report["npe_name"], current_app=current_app
+                npe_name=active_report[KEY_NPE_NAME], current_app=current_app
             )
 
 
@@ -140,15 +148,15 @@ def create_new_instance(
 ):
     active_report = {}
     if profiler_name:
-        active_report["profiler_name"] = profiler_name
-        active_report["profiler_location"] = profiler_location
+        active_report[KEY_PROFILER_NAME] = profiler_name
+        active_report[KEY_PROFILER_LOCATION] = profiler_location
 
     if performance_name:
-        active_report["performance_name"] = performance_name
-        active_report["performance_location"] = performance_location
+        active_report[KEY_PERFORMANCE_NAME] = performance_name
+        active_report[KEY_PERFORMANCE_LOCATION] = performance_location
     if npe_name:
-        active_report["npe_name"] = npe_name
-        active_report["npe_location"] = npe_location
+        active_report[KEY_NPE_NAME] = npe_name
+        active_report[KEY_NPE_LOCATION] = npe_location
 
     if clear_remote:
         remote_connection = None
@@ -162,7 +170,7 @@ def create_new_instance(
             profiler_path
             if profiler_path is not _sentinel
             else get_profiler_path(
-                active_report["profiler_name"],
+                active_report[KEY_PROFILER_NAME],
                 current_app=current_app,
                 remote_connection=remote_connection,
             )
@@ -392,9 +400,9 @@ def create_instance_from_local_paths(profiler_path, performance_path):
     instance_data = InstanceTable(
         instance_id=create_random_instance_id(),
         active_report={
-            "profiler_name": profiler_name,
-            "performance_name": performance_name,
-            "npe_name": None,
+            KEY_PROFILER_NAME: profiler_name,
+            KEY_PERFORMANCE_NAME: performance_name,
+            KEY_NPE_NAME: None,
         },
         profiler_path=f"{_profiler_path}/db.sqlite" if profiler_path else None,
         performance_path=performance_path if performance_path else None,
