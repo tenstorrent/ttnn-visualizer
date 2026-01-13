@@ -25,6 +25,7 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
+import { updateInstance, useInstance } from '../../hooks/useAPI';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
@@ -36,7 +37,6 @@ const RemoteSyncConfigurator: FC = () => {
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
 
-    const [isRemoteOffline, setIsRemoteOffline] = useState(false);
     const [isFetching, setIsFetching] = useState(false);
     const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(
         remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection),
@@ -58,14 +58,28 @@ const RemoteSyncConfigurator: FC = () => {
               )
             : remotePerformanceFolderList[0],
     );
+    const { data: instance } = useInstance();
 
-    const updateSelectedConnection = (connection: RemoteConnection) => {
+    const updateSelectedConnection = async (connection: RemoteConnection) => {
         remote.persistentState.selectedConnection = connection;
         setReportFolders(remote.persistentState.getSavedReportFolders(connection));
         setRemotePerformanceFolders(remote.persistentState.getSavedPerformanceFolders(connection));
 
-        setSelectedReportFolder(remote.persistentState.getSavedReportFolders(connection)[0]);
-        setSelectedPerformanceFolder(remote.persistentState.getSavedPerformanceFolders(connection)[0]);
+        const activeReport = { ...instance?.active_report };
+
+        if (selectedReportFolder && profilerReportLocation === ReportLocation.REMOTE) {
+            setSelectedReportFolder(undefined);
+            setActiveProfilerReport(null);
+            activeReport.profiler_name = ''; // Empty string will clear the active report on the backend
+        }
+
+        if (selectedPerformanceFolder && performanceReportLocation === ReportLocation.REMOTE) {
+            setSelectedPerformanceFolder(undefined);
+            setActivePerformanceReport(null);
+            activeReport.performance_name = ''; // Empty string will clear the active report on the backend
+        }
+
+        await updateInstance({ ...instance, active_report: activeReport });
     };
 
     const updateSavedReportFolders = (connection: RemoteConnection, updatedFolders: RemoteFolder[]) => {
@@ -297,13 +311,13 @@ const RemoteSyncConfigurator: FC = () => {
             >
                 <AddRemoteConnection
                     disabled={isDisabled}
-                    onAddConnection={(newConnection) => {
+                    onAddConnection={async (newConnection) => {
                         remote.persistentState.savedConnectionList = [
                             ...remote.persistentState.savedConnectionList,
                             newConnection,
                         ];
 
-                        updateSelectedConnection(newConnection);
+                        await updateSelectedConnection(newConnection);
                     }}
                 />
             </FormGroup>
@@ -318,17 +332,16 @@ const RemoteSyncConfigurator: FC = () => {
                     connectionList={remote.persistentState.savedConnectionList}
                     disabled={isDisabled}
                     loading={isFetching}
-                    offline={isRemoteOffline}
-                    onEditConnection={(updatedConnection, oldConnection) => {
+                    onEditConnection={async (updatedConnection, oldConnection) => {
                         const updatedConnections = [...remote.persistentState.savedConnectionList];
 
                         updatedConnections[findConnectionIndex(oldConnection)] = updatedConnection;
                         remote.persistentState.savedConnectionList = updatedConnections;
                         remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
 
-                        updateSelectedConnection(updatedConnection);
+                        await updateSelectedConnection(updatedConnection);
                     }}
-                    onRemoveConnection={(connection) => {
+                    onRemoveConnection={async (connection) => {
                         const updatedConnections = [...remote.persistentState.savedConnectionList];
 
                         updatedConnections.splice(findConnectionIndex(connection), 1);
@@ -336,13 +349,10 @@ const RemoteSyncConfigurator: FC = () => {
                         remote.persistentState.deleteSavedReportFolders(connection);
                         remote.persistentState.deleteSavedPerformanceFolders(connection);
 
-                        updateSelectedConnection(updatedConnections[0]);
-                        setSelectedReportFolder(undefined);
-                        setSelectedPerformanceFolder(undefined);
+                        await updateSelectedConnection(updatedConnections[0]);
                     }}
-                    onSelectConnection={(connection) => {
-                        updateSelectedConnection(connection);
-                        setIsRemoteOffline(false);
+                    onSelectConnection={async (connection) => {
+                        await updateSelectedConnection(connection);
                     }}
                     onSyncRemoteFolderList={async () => {
                         try {
