@@ -1150,19 +1150,23 @@ def get_meshr_descriptor(instance: Instance):
     if instance.remote_connection:
         pass
     else:
-        local_path = get_mesh_descriptor_paths(instance)
+        paths = get_mesh_descriptor_paths(instance)
+        if not paths:
+            return jsonify({"error": "mesh.yaml not found"}), 404
+
+        local_path = paths[0]
 
         if not local_path:
             return jsonify({"error": "mesh.yaml not found"}), 404
 
         try:
-            with open(local_path) as cluster_desc_file:
-                yaml_data = yaml.safe_load(cluster_desc_file)
+            with open(local_path) as mesh_descriptor_path:
+                yaml_data = yaml.safe_load(mesh_descriptor_path)
                 return jsonify(yaml_data)  # yaml_data is not compatible with orjson
         except yaml.YAMLError as e:
             return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
 
-    return jsonify({"error": "Cluster descriptor not found"}), 404
+    return jsonify({"error": "Mesh descriptor not found"}), 404
 
 
 @api.route("/remote/test", methods=["POST"])
