@@ -246,12 +246,14 @@ const RemoteSyncConfigurator: FC = () => {
         }
     };
 
+    const isProfilerRemote = profilerReportLocation === ReportLocation.REMOTE;
+    const isPerformanceRemote = performanceReportLocation === ReportLocation.REMOTE;
     const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
     const isDisabled = isFetching || isLoading || disableRemoteSync;
 
     // Populates the selectedReportFolder if there is a stored activeProfilerReport
     useEffect(() => {
-        if (activeProfilerReport && profilerReportLocation === ReportLocation.REMOTE) {
+        if (activeProfilerReport && isProfilerRemote) {
             const matchedFolder = reportFolderList.find((folder) =>
                 folder.remotePath?.includes(activeProfilerReport.path),
             );
@@ -259,7 +261,7 @@ const RemoteSyncConfigurator: FC = () => {
             setSelectedReportFolder(matchedFolder);
         }
 
-        if (activePerformanceReport && performanceReportLocation === ReportLocation.REMOTE) {
+        if (activePerformanceReport && isPerformanceRemote) {
             const matchedFolder = remotePerformanceFolderList.find((folder) =>
                 folder.reportName?.includes(activePerformanceReport.reportName),
             );
@@ -273,6 +275,8 @@ const RemoteSyncConfigurator: FC = () => {
         activePerformanceReport,
         remotePerformanceFolderList,
         performanceReportLocation,
+        isProfilerRemote,
+        isPerformanceRemote,
     ]);
 
     const isSelectedReportFolderOutdated = useMemo(
@@ -386,7 +390,7 @@ const RemoteSyncConfigurator: FC = () => {
                 subLabel='Select a memory report'
             >
                 <RemoteFolderSelector
-                    remoteFolder={profilerReportLocation === ReportLocation.REMOTE ? selectedReportFolder : undefined}
+                    remoteFolder={isProfilerRemote ? selectedReportFolder : undefined}
                     remoteFolderList={reportFolderList}
                     loading={isLoading || isFetching}
                     disabled={isDisabled}
@@ -413,16 +417,15 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                     type='profiler'
                 >
-                    {(profilerReportLocation === ReportLocation.REMOTE || isSyncingReportFolder) &&
-                        selectedReportFolder && (
-                            <RemoteSyncButton
-                                isDisabled={isDisabled}
-                                selectedReportFolder={selectedReportFolder}
-                                isSyncingReportFolder={isSyncingReportFolder}
-                                isSelectedReportFolderOutdated={isSelectedReportFolderOutdated}
-                                handleClick={syncSelectedReportFolder}
-                            />
-                        )}
+                    {(isProfilerRemote || isSyncingReportFolder) && selectedReportFolder && (
+                        <RemoteSyncButton
+                            isDisabled={isDisabled}
+                            selectedReportFolder={selectedReportFolder}
+                            isSyncingReportFolder={isSyncingReportFolder}
+                            isSelectedReportFolderOutdated={isSelectedReportFolderOutdated}
+                            handleClick={syncSelectedReportFolder}
+                        />
+                    )}
                 </RemoteFolderSelector>
             </FormGroup>
 
@@ -432,9 +435,7 @@ const RemoteSyncConfigurator: FC = () => {
                 subLabel='Select a performance report'
             >
                 <RemoteFolderSelector
-                    remoteFolder={
-                        performanceReportLocation === ReportLocation.REMOTE ? selectedPerformanceFolder : undefined
-                    }
+                    remoteFolder={isPerformanceRemote ? selectedPerformanceFolder : undefined}
                     remoteFolderList={remotePerformanceFolderList}
                     loading={isLoading || isFetching}
                     disabled={isDisabled}
@@ -462,16 +463,15 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                     type='performance'
                 >
-                    {(performanceReportLocation === ReportLocation.REMOTE || isSyncingPerformanceFolder) &&
-                        selectedPerformanceFolder && (
-                            <RemoteSyncButton
-                                isDisabled={isDisabled}
-                                selectedReportFolder={selectedPerformanceFolder}
-                                isSyncingReportFolder={isSyncingPerformanceFolder}
-                                isSelectedReportFolderOutdated={isSelectedPerfFolderOutdated}
-                                handleClick={syncSelectedPerfReportFolder}
-                            />
-                        )}
+                    {(isPerformanceRemote || isSyncingPerformanceFolder) && selectedPerformanceFolder && (
+                        <RemoteSyncButton
+                            isDisabled={isDisabled}
+                            selectedReportFolder={selectedPerformanceFolder}
+                            isSyncingReportFolder={isSyncingPerformanceFolder}
+                            isSelectedReportFolderOutdated={isSelectedPerfFolderOutdated}
+                            handleClick={syncSelectedPerfReportFolder}
+                        />
+                    )}
                 </RemoteFolderSelector>
             </FormGroup>
         </>

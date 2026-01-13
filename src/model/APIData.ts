@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
+import { ReportLocation } from '../definitions/Reports';
 import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
 import { BufferType } from './BufferType';
 
@@ -90,7 +91,14 @@ export interface Instance {
     profiler_path: string | null;
     performance_path: string | null;
     npe_path: string | null;
-    active_report: { performance_name?: string; profiler_name?: string; npe_name?: string } | null;
+    active_report: {
+        profiler_name?: string;
+        profiler_location?: ReportLocation;
+        performance_name?: string;
+        performance_location?: ReportLocation;
+        npe_name?: string;
+        npe_location?: ReportLocation;
+    } | null;
     remote_connection: RemoteConnection | null;
     remote_profiler_folder: RemoteFolder | null;
     remote_performance_folder: RemoteFolder | null;

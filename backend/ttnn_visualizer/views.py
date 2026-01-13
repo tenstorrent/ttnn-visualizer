@@ -40,6 +40,7 @@ from ttnn_visualizer.models import (
     Instance,
     RemoteConnection,
     RemoteReportFolder,
+    ReportLocation,
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
@@ -922,6 +923,7 @@ def create_profiler_files():
     update_instance(
         instance_id=instance_id,
         profiler_name=parent_folder_name,
+        profiler_location=ReportLocation.LOCAL.value,
         clear_remote=True,
         profiler_path=str(profiler_path) if profiler_path else None,
     )
@@ -991,6 +993,7 @@ def create_performance_files():
     update_instance(
         instance_id=instance_id,
         performance_name=parent_folder_name,
+        performance_location=ReportLocation.LOCAL.value,
         clear_remote=True,
         performance_path=performance_path,
     )
@@ -1033,7 +1036,11 @@ def create_npe_files():
     instance_id = request.args.get("instanceId")
     npe_path = str(paths[0])
     update_instance(
-        instance_id=instance_id, npe_name=npe_name, clear_remote=True, npe_path=npe_path
+        instance_id=instance_id,
+        npe_name=npe_name,
+        npe_location=ReportLocation.LOCAL.value,
+        clear_remote=True,
+        npe_path=npe_path,
     )
 
     session["npe_paths"] = session.get("npe_paths", []) + [str(npe_path)]
@@ -1325,6 +1332,7 @@ def use_remote_folder():
         )
         kwargs["remote_profiler_folder"] = remote_profiler_folder
         kwargs["profiler_name"] = remote_profiler_folder.remotePath.split("/")[-1]
+        kwargs["profiler_location"] = ReportLocation.REMOTE.value
 
     if performance:
         remote_performance_folder = RemoteReportFolder.model_validate(
@@ -1333,6 +1341,7 @@ def use_remote_folder():
         )
         kwargs["remote_performance_folder"] = remote_performance_folder
         kwargs["performance_name"] = remote_performance_folder.reportName
+        kwargs["performance_location"] = ReportLocation.REMOTE.value
 
     update_instance(**kwargs)
 
@@ -1365,8 +1374,14 @@ def update_current_instance():
         update_instance(
             instance_id=update_data.get("instance_id"),
             profiler_name=update_data["active_report"].get("profiler_name"),
+            profiler_location=update_data["active_report"].get("profiler_location"),
             performance_name=update_data["active_report"].get("performance_name"),
+            performance_location=update_data["active_report"].get(
+                "performance_location"
+            ),
             npe_name=update_data["active_report"].get("npe_name"),
+            # NPE is always local right now
+            npe_location=ReportLocation.LOCAL.value,
             # Doesn't handle remote at the moment
             remote_connection=None,
             remote_profiler_folder=None,

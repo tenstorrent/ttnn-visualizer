@@ -5,11 +5,11 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Classes, PopoverPosition } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
-import { useAtom, useSetAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import 'styles/components/ToastOverrides.scss';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
@@ -41,7 +41,7 @@ function Layout() {
     const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
     const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
-    const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
+    const setProfilerReportLocation = useSetAtom(profilerReportLocationAtom);
     const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
 
     const remote = useRemoteConnection();
@@ -50,6 +50,8 @@ function Layout() {
     const location = useLocation();
     const { resetListStates } = useRestoreScrollPosition();
 
+    const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
+
     const appVersion = import.meta.env.APP_VERSION;
     const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
     const state = location.state as { background?: Location };
@@ -57,56 +59,56 @@ function Layout() {
     // TODO: Resolve naming issue here with profiler_name/performance_name being the path
     const profilerReportPath = instance?.active_report?.profiler_name || null;
     const profilerReportName =
-        (profilerReportLocation === ReportLocation.REMOTE && profilerReportPath) || instance?.remote_profiler_folder
+        (isProfilerRemote && profilerReportPath) || instance?.remote_profiler_folder
             ? getRemoteReportName(remoteFolders, profilerReportPath) || ''
             : getLocalReportName(reports, profilerReportPath) || '';
     const perfReportPath = instance?.active_report?.performance_name || null;
 
+    // Memoize active report objects to prevent unnecessary recalculations
+    const activeReports = useMemo(() => {
+        const activeProfilerReport = profilerReportPath
+            ? {
+                  path: profilerReportPath,
+                  reportName: profilerReportName,
+              }
+            : null;
+        const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
+        const activePerfReport = perfReportPath
+            ? {
+                  path: perfReportPath,
+                  reportName: perfReportPath,
+              }
+            : null;
+        const activePerfLocation = instance?.active_report?.performance_location ?? null;
+
+        return {
+            profiler: activeProfilerReport,
+            profilerLocation: activeProfilerLocation,
+            performance: activePerfReport,
+            performanceLocation: activePerfLocation,
+            npe: instance?.active_report?.npe_name ?? null,
+        };
+    }, [instance, profilerReportPath, profilerReportName, perfReportPath]);
+
     // Loads the active reports into global state when the instance changes
     useEffect(() => {
-        if (instance?.active_report) {
-            resetListStates();
+        resetListStates();
 
-            setActiveProfilerReport(
-                profilerReportPath
-                    ? {
-                          path: profilerReportPath,
-                          reportName: profilerReportName,
-                      }
-                    : null,
-            );
-            setActivePerformanceReport(
-                perfReportPath
-                    ? {
-                          path: perfReportPath,
-                          reportName: perfReportPath,
-                      }
-                    : null,
-            );
-            setActiveNpe(instance.active_report?.npe_name ?? null);
-            setProfilerReportLocation(
-                instance?.profiler_path?.includes('/remote') && instance?.remote_profiler_folder
-                    ? ReportLocation.REMOTE
-                    : ReportLocation.LOCAL,
-            );
-            setPerformanceReportLocation(
-                instance?.performance_path?.includes('/remote') && instance?.remote_performance_folder
-                    ? ReportLocation.REMOTE
-                    : ReportLocation.LOCAL,
-            );
-        }
+        setActiveProfilerReport(activeReports.profiler);
+        setProfilerReportLocation(activeReports.profilerLocation);
+
+        setActivePerformanceReport(activeReports.performance);
+        setPerformanceReportLocation(activeReports.performanceLocation);
+
+        setActiveNpe(activeReports.npe);
     }, [
-        instance,
-        profilerReportPath,
-        profilerReportName,
-        perfReportPath,
-        setActiveProfilerReport,
-        setActivePerformanceReport,
-        setActiveNpe,
-        profilerReportLocation,
-        setProfilerReportLocation,
-        setPerformanceReportLocation,
+        activeReports,
         resetListStates,
+        setActiveProfilerReport,
+        setProfilerReportLocation,
+        setActivePerformanceReport,
+        setPerformanceReportLocation,
+        setActiveNpe,
     ]);
 
     return (
