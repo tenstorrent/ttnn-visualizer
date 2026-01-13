@@ -1036,7 +1036,11 @@ def create_npe_files():
     instance_id = request.args.get("instanceId")
     npe_path = str(paths[0])
     update_instance(
-        instance_id=instance_id, npe_name=npe_name, clear_remote=True, npe_path=npe_path
+        instance_id=instance_id,
+        npe_name=npe_name,
+        npe_location=ReportLocation.LOCAL.value,
+        clear_remote=True,
+        npe_path=npe_path,
     )
 
     session["npe_paths"] = session.get("npe_paths", []) + [str(npe_path)]
@@ -1376,8 +1380,8 @@ def update_current_instance():
                 "performance_location"
             ),
             npe_name=update_data["active_report"].get("npe_name"),
-            # Don't currently use npe_location
-            # npe_location=update_data["active_report"].get("npe_location"),
+            # NPE is always local right now
+            npe_location=ReportLocation.LOCAL.value,
             # Doesn't handle remote at the moment
             remote_connection=None,
             remote_profiler_folder=None,

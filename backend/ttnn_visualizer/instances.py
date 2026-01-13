@@ -52,20 +52,20 @@ def update_existing_instance(
     if profiler_name == "":
         active_report.pop(KEY_PROFILER_NAME, None)
         active_report.pop(KEY_PROFILER_LOCATION, None)
-    elif profiler_name is not None:
+    elif profiler_name is not None and profiler_location is not None:
         active_report[KEY_PROFILER_NAME] = profiler_name
         active_report[KEY_PROFILER_LOCATION] = profiler_location
 
     if performance_name == "":
         active_report.pop(KEY_PERFORMANCE_NAME, None)
         active_report.pop(KEY_PERFORMANCE_LOCATION, None)
-    elif performance_name is not None:
+    elif performance_name is not None and performance_location is not None:
         active_report[KEY_PERFORMANCE_NAME] = performance_name
         active_report[KEY_PERFORMANCE_LOCATION] = performance_location
     if npe_name == "":
         active_report.pop(KEY_NPE_NAME, None)
         active_report.pop(KEY_NPE_LOCATION, None)
-    elif npe_name is not None:
+    elif npe_name is not None and npe_location is not None:
         active_report[KEY_NPE_NAME] = npe_name
         active_report[KEY_NPE_LOCATION] = npe_location
 
@@ -147,14 +147,16 @@ def create_new_instance(
     npe_path=_sentinel,
 ):
     active_report = {}
-    if profiler_name:
+
+    if profiler_name and profiler_location is not None:
         active_report[KEY_PROFILER_NAME] = profiler_name
         active_report[KEY_PROFILER_LOCATION] = profiler_location
 
-    if performance_name:
+    if performance_name and performance_location is not None:
         active_report[KEY_PERFORMANCE_NAME] = performance_name
         active_report[KEY_PERFORMANCE_LOCATION] = performance_location
-    if npe_name:
+
+    if npe_name and npe_location is not None:
         active_report[KEY_NPE_NAME] = npe_name
         active_report[KEY_NPE_LOCATION] = npe_location
 
@@ -300,11 +302,11 @@ def get_or_create_instance(
         # Update the instance if any new data is provided
         if (
             profiler_name
-            or profiler_location
+            or profiler_location is not None
             or performance_name
-            or performance_location
+            or performance_location is not None
             or npe_name
-            or npe_location
+            or npe_location is not None
             or remote_connection
             or remote_profiler_folder
         ):
