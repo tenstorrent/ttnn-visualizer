@@ -105,24 +105,27 @@ const LocalFolderOptions: FC = () => {
     const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
+    const isProfilerLocal = profilerReportLocation === ReportLocation.LOCAL;
+    const isPerformanceLocal = performanceReportLocation === ReportLocation.LOCAL;
+
     const folderPickerValue = useMemo(
         () =>
             activeProfilerReport &&
             reportFolderList?.some((folder: ReportFolder) => folder.path.includes(activeProfilerReport.path)) &&
-            profilerReportLocation === ReportLocation.LOCAL
+            isProfilerLocal
                 ? activeProfilerReport.path
                 : null,
-        [activeProfilerReport, reportFolderList, profilerReportLocation],
+        [activeProfilerReport, reportFolderList, isProfilerLocal],
     );
 
     const perfFolderPickerValue = useMemo(
         () =>
             activePerformanceReport &&
             perfFolderList?.some((folder: ReportFolder) => folder.path.includes(activePerformanceReport.path)) &&
-            performanceReportLocation === ReportLocation.LOCAL
+            isPerformanceLocal
                 ? activePerformanceReport.path
                 : null,
-        [activePerformanceReport, perfFolderList, performanceReportLocation],
+        [activePerformanceReport, perfFolderList, isPerformanceLocal],
     );
 
     const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
@@ -211,9 +214,10 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectProfiler = async (folder: ReportFolder) => {
+        // Backend handles updating only the specific parts of active_report
         await updateInstance({
             ...instance,
-            active_report: { profiler_name: folder.path },
+            active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
         });
 
         if (hasBeenNormalised(folder)) {
@@ -239,7 +243,11 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectPerformance = async (folder: ReportFolder) => {
-        await updateInstance({ ...instance, active_report: { performance_name: folder.path } });
+        // Backend handles updating only the specific parts of active_report
+        await updateInstance({
+            ...instance,
+            active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
+        });
 
         createToastNotification('Active performance report', folder.reportName);
         setActivePerformanceReport(folder);
@@ -284,7 +292,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={reportFolderList}
-                    value={profilerReportLocation === ReportLocation.LOCAL ? folderPickerValue : null}
+                    value={isProfilerLocal ? folderPickerValue : null}
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
@@ -334,7 +342,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={perfFolderList}
-                    value={performanceReportLocation === ReportLocation.LOCAL ? perfFolderPickerValue : null}
+                    value={isPerformanceLocal ? perfFolderPickerValue : null}
                     valueLabel={activePerformanceReport?.reportName ?? null}
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}

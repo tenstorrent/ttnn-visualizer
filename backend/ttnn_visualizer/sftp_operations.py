@@ -626,7 +626,7 @@ def check_remote_path_for_reports(remote_connection):
             remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
         )
     else:
-        logger.info("No profiler path configured; skipping check.")
+        logger.info("No profiler path configured; skipping check")
 
     remote_performance_paths = []
     if remote_connection.performancePath:
@@ -634,7 +634,7 @@ def check_remote_path_for_reports(remote_connection):
             remote_connection, remote_connection.performancePath, [TEST_PROFILER_FILE]
         )
     else:
-        logger.info("No performance path configured; skipping check.")
+        logger.info("No performance path configured; skipping check")
 
     errors = []
     if not remote_profiler_paths and remote_connection.profilerPath:
@@ -757,8 +757,23 @@ def find_folders_by_files(
             # This line should never be reached as handle_ssh_subprocess_error raises an exception
             return []
         else:
-            logger.error(f"Error finding folders: {e.stderr}")
-            return []
+            stderr = e.stderr.lower() if e.stderr else ""
+            # Check for permission denied errors
+            if "permission denied" in stderr:
+                error_msg = (
+                    f"Permission denied accessing '{root_folder}'. "
+                    f"The user '{remote_connection.username}' does not have read access to this directory. "
+                    "Please check directory permissions on the remote server or choose a different path."
+                )
+                logger.error(f"Error finding folders: {e.stderr}")
+                raise RemoteConnectionException(
+                    message=error_msg,
+                    status=ConnectionTestStates.FAILED,
+                    detail=e.stderr.strip() if e.stderr else None,
+                )
+            else:
+                logger.error(f"Error finding folders: {e.stderr}")
+                return []
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout finding folders in: {root_folder}")
         return []
@@ -784,7 +799,7 @@ def get_remote_performance_folders(
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
 
     if not performance_paths:
-        error = f"No performance reports found at {remote_connection.performancePath}"
+        error = f"Performance path: {remote_connection.performancePath}"
         logger.info(error)
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
 
@@ -802,10 +817,10 @@ def get_remote_profiler_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
     """Return a list of remote folders containing a config.json file."""
-    remote_config_paths = []
+    profiler_paths = []
 
     if remote_connection.profilerPath:
-        remote_config_paths = find_folders_by_files(
+        profiler_paths = find_folders_by_files(
             remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
         )
     else:
@@ -813,10 +828,15 @@ def get_remote_profiler_folders(
         logger.info(error)
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
 
+    if not profiler_paths:
+        error = f"Profiler path: {remote_connection.profilerPath}"
+        logger.info(error)
+        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+
     remote_folder_data = []
-    for config_path in remote_config_paths:
+    for path in profiler_paths:
         remote_folder = get_remote_profiler_folder_from_config_path(
-            remote_connection, str(Path(config_path).joinpath(TEST_CONFIG_FILE))
+            remote_connection, str(Path(path).joinpath(TEST_CONFIG_FILE))
         )
         remote_folder_data.append(remote_folder)
 
