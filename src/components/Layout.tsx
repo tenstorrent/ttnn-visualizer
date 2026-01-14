@@ -155,7 +155,7 @@ function Layout() {
 
             <ToastContainer
                 position={'bottom-right' as ToastPosition}
-                autoClose={1000}
+                autoClose={5000}
                 newestOnTop={false}
                 pauseOnHover={false}
                 draggable={false}
