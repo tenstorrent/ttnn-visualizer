@@ -1146,9 +1146,12 @@ def get_cluster_descriptor(instance: Instance):
 
 @api.route("/mesh-descriptor", methods=["GET"])
 @with_instance
-def get_meshr_descriptor(instance: Instance):
+def get_mesh_descriptor(instance: Instance):
     if instance.remote_connection:
-        pass
+        return (
+            jsonify({"error": "Remote mesh descriptor is not yet supported"}),
+            HTTPStatus.NOT_IMPLEMENTED,
+        )
     else:
         paths = get_mesh_descriptor_paths(instance)
         if not paths:
