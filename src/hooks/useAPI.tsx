@@ -6,6 +6,7 @@ import axios, { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
+import { debounce } from 'lodash';
 import { NumberRange } from '@blueprintjs/core';
 import Ajv from 'ajv';
 import axiosInstance from '../libs/axiosInstance';
@@ -895,17 +896,30 @@ export const useInstance = () => {
         initialData: null,
     });
 };
+
+const debouncedCreateToast = debounce(
+    (a: DeviceArchitecture) => createToastNotification(`Unsupported architecture`, a, ToastType.WARNING),
+    5000,
+    {
+        leading: true,
+        trailing: false,
+    },
+);
+
 export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
     switch (arch) {
         case DeviceArchitecture.WORMHOLE:
             return archWormhole as ChipDesign;
         case DeviceArchitecture.BLACKHOLE:
             return archBlackhole as ChipDesign;
-        default:
+        default: {
             // eslint-disable-next-line no-console
             console.error(`Unsupported arch: ${arch}`);
-            createToastNotification(`Unsupported architecture`, arch, ToastType.WARNING);
+            // Avoids creating multiple toasts for this error
+            debouncedCreateToast(arch);
+
             return {} as ChipDesign;
+        }
     }
 };
 

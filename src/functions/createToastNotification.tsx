@@ -20,16 +20,8 @@ export default function createToastNotification(message: string, fileName: strin
         />
     );
 
-    // prevent duplicate toasts by setting an id
-    const toastId = `${message}-${fileName}`;
-
-    const args: ToastOptions = {
-        toastId,
-    };
-
-    if (toast.isActive(toastId)) {
-        return;
-    }
+    // Moved args to the ToastContainer level but keeping this here in the short term in case we need to restore any (e.g. because bugs)
+    const args: ToastOptions = {};
 
     if (type) {
         toast[type](template, args);
