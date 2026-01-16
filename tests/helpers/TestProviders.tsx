@@ -5,8 +5,7 @@
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { HelmetProvider } from 'react-helmet-async';
-import { ToastContainer } from 'react-toastify';
-import { PopoverPosition } from '@blueprintjs/core';
+import { Theme, ToastContainer, ToastPosition } from 'react-toastify';
 import { QueryProvider } from './queryClientProvider';
 import { AtomProvider, AtomProviderInitialValues } from './atomProvider';
 
@@ -31,12 +30,12 @@ export function TestProviders({ initialAtomValues = [], children }: TestProvider
                             {/* TODO: Look how Layout is used in app so we don't have to specifically add ToastContainer here */}
                             {children}
                             <ToastContainer
-                                position={PopoverPosition.TOP_RIGHT}
+                                position={'bottom-right' as ToastPosition}
                                 autoClose={false}
                                 newestOnTop={false}
                                 closeOnClick
                                 closeButton={false}
-                                theme='light'
+                                theme={'light' as Theme}
                             />
                         </>
                     </AtomProvider>
