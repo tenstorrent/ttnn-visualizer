@@ -26,9 +26,6 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.10
         version: 5.90.10(react@18.3.1)
-      '@tanstack/react-query-devtools':
-        specifier: ^5.90.2
-        version: 5.90.2(@tanstack/react-query@5.90.10(react@18.3.1))(react@18.3.1)
       '@tanstack/react-virtual':
         specifier: ^3.13.12
         version: 3.13.12(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -38,24 +35,12 @@ importers:
       axios:
         specifier: ^1.13.2
         version: 1.13.2
-      css-select:
-        specifier: ^5.2.2
-        version: 5.2.2
-      dom-serializer:
-        specifier: ^2.0.0
-        version: 2.0.0
-      immutable:
-        specifier: ^5.1.4
-        version: 5.1.4
       jotai:
         specifier: ^2.15.1
         version: 2.15.1(@babel/core@7.28.5)(@babel/template@7.27.2)(@types/react@18.3.27)(react@18.3.1)
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
-      mini-svg-data-uri:
-        specifier: ^1.4.4
-        version: 1.4.4
       normalize.css:
         specifier: ^8.0.1
         version: 8.0.1
@@ -105,6 +90,9 @@ importers:
       '@eslint/js':
         specifier: ^9.39.1
         version: 9.39.1
+      '@tanstack/react-query-devtools':
+        specifier: ^5.90.2
+        version: 5.90.2(@tanstack/react-query@5.90.10(react@18.3.1))(react@18.3.1)
       '@testing-library/dom':
         specifier: ^10.4.1
         version: 10.4.1
@@ -198,12 +186,18 @@ importers:
       husky:
         specifier: ^9.1.7
         version: 9.1.7
+      immutable:
+        specifier: ^5.1.4
+        version: 5.1.4
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
       lint-staged:
         specifier: ^15.5.2
         version: 15.5.2
+      mini-svg-data-uri:
+        specifier: ^1.4.4
+        version: 1.4.4
       only-allow:
         specifier: ^1.2.1
         version: 1.2.1
@@ -4588,7 +4582,6 @@ packages:
     engines: {node: '>=0.6.0', teleport: '>=0.2.0'}
     deprecated: |-
       You or someone you depend on is using Q, the JavaScript Promise library that gave JavaScript developers strong feelings about promises. They can almost certainly migrate to the native JavaScript promise now. Thank you literally everyone for joining me in this bet against the odds. Be excellent to each other.
-
       (For a CapTP with native promises, see @endo/eventual-send and @endo/captp)
 
   qified@0.5.2:

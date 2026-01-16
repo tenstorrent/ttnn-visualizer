@@ -60,6 +60,12 @@ export interface ClusterModel {
     boards: ClusterBoard[];
 }
 
+export interface MeshData {
+    chips: {
+        [key: ChipId]: ClusterCoordinates;
+    };
+}
+
 type EthernetConnections = [{ chip: ChipId; chan: EthChannel }, { chip: ChipId; chan: EthChannel }][];
 
 export interface DeviceDescriptorJSON {

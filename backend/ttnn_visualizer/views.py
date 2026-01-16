@@ -68,6 +68,7 @@ from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.utils import (
     create_path_resolver,
     get_cluster_descriptor_path,
+    get_mesh_descriptor_paths,
     read_last_synced_file,
     str_to_bool,
     timer,
@@ -1051,10 +1052,18 @@ def create_npe_files():
 
 @api.route("/remote/profiler", methods=["POST"])
 def get_remote_folders_profiler():
-    connection = RemoteConnection.model_validate(request.json, strict=False)
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
+        )
+
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
+
     try:
         remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
-            RemoteConnection.model_validate(connection, strict=False)
+            connection
         )
 
         for rf in remote_folders:
@@ -1081,16 +1090,18 @@ def get_remote_folders_profiler():
 
 @api.route("/remote/performance", methods=["POST"])
 def get_remote_folders_performance():
-    request_body = request.get_json()
-    connection = RemoteConnection.model_validate(
-        request_body.get("connection"), strict=False
-    )
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
+        )
+
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
 
     try:
         remote_performance_folders: List[RemoteReportFolder] = (
-            get_remote_performance_folders(
-                RemoteConnection.model_validate(connection, strict=False)
-            )
+            get_remote_performance_folders(connection)
         )
 
         for rf in remote_performance_folders:
@@ -1150,9 +1161,43 @@ def get_cluster_descriptor(instance: Instance):
     return jsonify({"error": "Cluster descriptor not found"}), 404
 
 
+@api.route("/mesh-descriptor", methods=["GET"])
+@with_instance
+def get_mesh_descriptor(instance: Instance):
+    if instance.remote_connection:
+        return (
+            jsonify({"error": "Remote mesh descriptor is not yet supported"}),
+            HTTPStatus.NOT_IMPLEMENTED,
+        )
+    else:
+        paths = get_mesh_descriptor_paths(instance)
+        if not paths:
+            return jsonify({"error": "mesh.yaml not found"}), 404
+
+        local_path = paths[0]
+
+        if not local_path:
+            return jsonify({"error": "mesh.yaml not found"}), 404
+
+        try:
+            with open(local_path) as mesh_descriptor_path:
+                yaml_data = yaml.safe_load(mesh_descriptor_path)
+                return jsonify(yaml_data)  # yaml_data is not compatible with orjson
+        except yaml.YAMLError as e:
+            return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
+
+    return jsonify({"error": "Mesh descriptor not found"}), 404
+
+
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
     connection_data = request.json
+
+    if not connection_data:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
+        )
+
     connection = RemoteConnection.model_validate(connection_data)
     statuses = []
 
@@ -1311,14 +1356,16 @@ def sync_remote_folder():
 @api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
     data = request.get_json(force=True)
-    connection = data.get("connection", None)
-    profiler = data.get("profiler", None)
-    performance = data.get("performance", None)
+    connection_data = data.get("connection")
+    profiler = data.get("profiler")
+    performance = data.get("performance")
 
-    if not connection or not (profiler or performance):
-        return Response(status=HTTPStatus.BAD_REQUEST)
+    if not connection_data or not (profiler or performance):
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection or report data"
+        )
 
-    connection = RemoteConnection.model_validate(connection, strict=False)
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
 
     kwargs = {
         "instance_id": request.args.get("instanceId"),

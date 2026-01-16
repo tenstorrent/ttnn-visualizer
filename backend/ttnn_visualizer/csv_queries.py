@@ -329,7 +329,9 @@ class OpsPerformanceQueries:
             performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
         )
         if not perf_files:
-            raise FileNotFoundError("No performance results file found.")
+            raise FileNotFoundError(
+                f"No performance results file found at {performance_path}"
+            )
 
         # Use the latest file
         latest_file = max(perf_files, key=os.path.getctime)
