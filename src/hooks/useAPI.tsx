@@ -46,7 +46,7 @@ import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
-import { ChipDesign, ClusterModel } from '../model/ClusterModel';
+import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
@@ -394,6 +394,15 @@ const fetchDeviceMeta = async (name: string | null) => {
 
 const fetchClusterDescription = async (): Promise<ClusterModel> => {
     const { data } = await axiosInstance.get<ClusterModel>('/api/cluster-descriptor');
+    try {
+        const { data: meshData } = await axiosInstance.get<MeshData>('/api/mesh-descriptor');
+        if (meshData?.chips) {
+            data.chips = meshData.chips;
+        }
+    } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('mesh-descriptor not found', err);
+    }
     return data;
 };
 

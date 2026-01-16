@@ -27,6 +27,8 @@ import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance, useInstance } from '../../hooks/useAPI';
 
+const GENERIC_ERROR_MESSAGE = 'An unknown error occurred.';
+
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
     const queryClient = useQueryClient();
@@ -193,12 +195,7 @@ const RemoteSyncConfigurator: FC = () => {
                 }
             }
         } catch (err: unknown) {
-            // eslint-disable-next-line no-nested-ternary
-            const message = axios.isAxiosError(err)
-                ? err.response?.data
-                : err instanceof Error
-                  ? err.message
-                  : String(err);
+            const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
 
             createToastNotification('Folder sync error', message, true);
         } finally {
@@ -247,12 +244,7 @@ const RemoteSyncConfigurator: FC = () => {
                 }
             }
         } catch (err: unknown) {
-            // eslint-disable-next-line no-nested-ternary
-            const message = axios.isAxiosError(err)
-                ? err.response?.data
-                : err instanceof Error
-                  ? err.message
-                  : String(err);
+            const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
 
             createToastNotification('Folder sync error', message, true);
         } finally {
@@ -379,12 +371,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 );
                             }
                         } catch (err: unknown) {
-                            // eslint-disable-next-line no-nested-ternary
-                            const message = axios.isAxiosError(err)
-                                ? err.response?.data
-                                : err instanceof Error
-                                  ? err.message
-                                  : String(err);
+                            const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
 
                             createToastNotification('Folder list sync error', message, true);
                         } finally {

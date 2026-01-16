@@ -39,12 +39,11 @@ const FeedbackButton = () => {
     return (
         <>
             <Button
-                className={classNames('feedback-button', {
+                className={classNames('feedback-button bp6-intent-none', {
                     'animate-in': isInitialState,
                     'user-is-interacting': isUserInteracting,
                 })}
                 text='Feedback'
-                intent={Intent.PRIMARY}
                 endIcon={IconNames.COMMENT}
                 onClick={() => setIsDialogOpen(true)}
                 onMouseEnter={handleHover}
