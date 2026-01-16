@@ -112,7 +112,6 @@
     "jsdom": "^26.1.0",
     "lint-staged": "^15.5.2",
     "mini-svg-data-uri": "^1.4.4",
-    "mini-svg-data-uri": "^1.4.4",
     "only-allow": "^1.2.1",
     "prettier": "^3.6.2",
     "sass": "^1.94.1",
