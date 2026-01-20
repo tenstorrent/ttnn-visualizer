@@ -11,6 +11,12 @@
     text-rendering: optimizelegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+
+    --graph-input-node: #a8e6a3;
+    --graph-output-node: #f6bc42;
+    --graph-input-edge: #6bcf8e;
+    --graph-output-edge: #f6bc42;
+    --graph-faded: #e0e0e0;
 }
 
 ::-webkit-scrollbar-track {
