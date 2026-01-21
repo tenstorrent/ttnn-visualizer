@@ -75,8 +75,8 @@ $row-background: $tt-grey-2;
 
         &:first-child {
             min-width: 160px; // Stops cells from being too narrow
-            width: 160px; // Keeps first column width consistent
             word-break: normal;
+            width: 160px; // Keeps first column width consistent when other columns have a lot of content
         }
     }
 }
