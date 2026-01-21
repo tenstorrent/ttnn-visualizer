@@ -67,20 +67,16 @@ $row-background: $tt-grey-2;
         padding: 6px 12px;
         vertical-align: top;
         text-align: left;
-    }
 
-    td {
         // Stops lengthy config values breaking the layout - https://github.com/tenstorrent/ttnn-visualizer/issues/809
+        // Having this as the default behaviour because all our tables currently require this
+        // and use vertical headings (first column) instead of horizontal headings (first row)
         word-break: break-word;
-    }
 
-    &.has-vertical-headings {
-        tr {
-            td {
-                &:first-child {
-                    font-weight: 700;
-                }
-            }
+        &:first-child {
+            min-width: 160px; // Stops cells from being too narrow
+            word-break: normal;
+            width: 160px; // Keeps first column width consistent when other columns have a lot of content
         }
     }
 }

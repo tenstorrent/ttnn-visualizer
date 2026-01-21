@@ -31,7 +31,7 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
 
     if (argument?.parsedValue) {
         return (
-            <table className='ttnn-table alt-two-tone-rows buffer-table'>
+            <table className='ttnn-table alt-two-tone-rows arguments-table'>
                 <tbody>
                     {argument.parsedValue &&
                         Object.entries(argument.parsedValue)?.map(([key, value]) => (
