@@ -27,7 +27,7 @@ const GRAPH_COLORS = {
     outputNode: cssVar(`--graph-output-node`),
     inputEdge: cssVar(`--graph-input-edge`),
     outputEdge: cssVar(`--graph-output-edge`),
-    faded: cssVar(`--graph-faded`),
+    normal: cssVar(`--graph-normal`),
 };
 
 const OperationGraph: React.FC<{
@@ -151,7 +151,7 @@ const OperationGraph: React.FC<{
 
                     return {
                         id: node.id,
-                        color: { background: GRAPH_COLORS.faded },
+                        color: { background: GRAPH_COLORS.normal },
                     };
                 }),
             );
@@ -166,7 +166,7 @@ const OperationGraph: React.FC<{
                         return { id: edge.id, color: GRAPH_COLORS.outputEdge };
                     }
 
-                    return { id: edge.id, color: GRAPH_COLORS.faded };
+                    return { id: edge.id, color: GRAPH_COLORS.normal };
                 }),
             );
         },
