@@ -81,9 +81,11 @@ const RemoteSyncConfigurator: FC = () => {
             activeReport.performance_name = ''; // Empty string will clear the active report on the backend
         }
 
-        await updateInstance({
-            active_report: activeReport,
-        });
+        if (Object.keys(activeReport).length > 0) {
+            await updateInstance({
+                active_report: activeReport,
+            });
+        }
     };
 
     const updateSavedReportFolders = (connection: RemoteConnection, updatedFolders: RemoteFolder[]) => {
