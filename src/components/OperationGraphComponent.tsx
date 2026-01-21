@@ -60,6 +60,7 @@ const OperationGraph: React.FC<{
                                 to: consumerId,
                                 arrows: 'to',
                                 label: `${toReadableShape(tensor.shape)}`,
+                                color: GRAPH_COLORS.normal,
                             }) as Edge,
                     ),
                 ),
@@ -108,10 +109,12 @@ const OperationGraph: React.FC<{
         }),
         [nodes],
     );
+
     const colorHighlightIO = useCallback(
         (selectedNodeId: IdType) => {
             const allNodes = nodes.get();
-            const allEdges = edges;
+
+            const allEdges = edgesDataSetRef.current.get();
 
             const inputNodeIds = new Set<IdType | undefined>();
             const outputNodeIds = new Set<IdType | undefined>();
@@ -156,21 +159,32 @@ const OperationGraph: React.FC<{
                 }),
             );
 
-            edgesDataSetRef.current.update(
-                allEdges.map((edge) => {
+            const edgesToUpdate = allEdges
+                .map((edge) => {
                     if (inputEdgeIds.has(edge.id)) {
-                        return { id: edge.id, color: GRAPH_COLORS.inputEdge };
+                        return {
+                            id: edge.id,
+                            color: GRAPH_COLORS.inputEdge,
+                        };
                     }
-
                     if (outputEdgeIds.has(edge.id)) {
-                        return { id: edge.id, color: GRAPH_COLORS.outputEdge };
+                        return {
+                            id: edge.id,
+                            color: GRAPH_COLORS.outputEdge,
+                        };
                     }
-
-                    return { id: edge.id, color: GRAPH_COLORS.normal };
-                }),
-            );
+                    if (edge.color !== GRAPH_COLORS.normal) {
+                        return {
+                            id: edge.id,
+                            color: GRAPH_COLORS.normal,
+                        };
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+            edgesDataSetRef.current.update(edgesToUpdate);
         },
-        [edges, nodes],
+        [nodes],
     );
 
     const focusOnNode = useCallback(
@@ -191,10 +205,10 @@ const OperationGraph: React.FC<{
                     // eslint-disable-next-line no-console
                     console.error('Error selecting node', e);
                 }
-                colorHighlightIO(nodeId);
             }
         },
-        [colorHighlightIO, scale],
+
+        [scale],
     );
 
     const updateScale = useCallback(
@@ -325,6 +339,12 @@ const OperationGraph: React.FC<{
                     });
 
                     networkRef.current.on('click', (params) => {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            focusOnNode(nodeId);
+                            colorHighlightIO(nodeId);
+                            return;
+                        }
                         if (params.edges.length > 0) {
                             const edgeId = params.edges[0];
                             const edge = edges.find((e) => e.id === edgeId);

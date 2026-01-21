@@ -5,6 +5,7 @@
 import { atomWithStorage } from 'jotai/utils';
 import { atom } from 'jotai';
 import { NumberRange, TabId } from '@blueprintjs/core';
+import { Id } from 'react-toastify';
 import { FileProgress, FileStatus } from '../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../definitions/Devices';
 import { TAB_IDS } from '../definitions/BufferSummary';
@@ -23,7 +24,7 @@ export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const hasClusterDescriptionAtom = atom<boolean>(false);
 
-export const activeToastAtom = atom<number | null>(null);
+export const activeToastAtom = atom<Id | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorAtom = atom<number | null>(null);
 

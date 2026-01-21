@@ -7,7 +7,7 @@ import { useAtomValue } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { Icon, Intent, Switch } from '@blueprintjs/core';
 import { Fragment } from 'react/jsx-runtime';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
@@ -26,6 +26,7 @@ import { BufferType } from '../../model/BufferType';
 import { FragmentationEntry } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
 import { useGetL1SmallMarker, useGetL1StartMarker } from '../../hooks/useAPI';
+import useScrollShade from '../../hooks/useScrollShade';
 
 interface L1PlotsProps {
     operationDetails: OperationDetails;
@@ -58,6 +59,10 @@ function L1Plots({
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation, bufferChartDataByOperation } =
         operationDetails.memoryData();
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
+        useScrollShade();
+    const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
+    const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const { chartData: previousChartData } = previousOperationDetails.memoryData();
     const {
@@ -92,12 +97,11 @@ function L1Plots({
     const MEMORY_PADDING_L1 = (plotZoomRangeEnd - plotZoomRangeStart) * MEMORY_ZOOM_PADDING_RATIO;
     const MEMORY_PADDING_L1_SMALL = (l1SmallZoomEnd - l1SmallZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
 
-    const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
-
     const { memorySizeL1, getGroupedMemoryReport } = operationDetails;
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const groupedMemoryReport = getGroupedMemoryReport(BufferType.L1);
+    const isLengthyLegend = memoryReport.length > MAX_LEGEND_LENGTH;
 
     const memoryReportWithCB: FragmentationEntry[] = [
         ...memoryReport,
@@ -134,6 +138,22 @@ function L1Plots({
               },
           ]
         : [];
+
+    const handleUserScrolling = useCallback(() => {
+        if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
+        }
+    }, [updateScrollShade]);
+
+    useEffect(() => {
+        if (scrollElementRef?.current) {
+            if (scrollElementRef.current.scrollTop === 0) {
+                resetScrollShade();
+            } else {
+                updateScrollShade(scrollElementRef.current);
+            }
+        }
+    }, [updateScrollShade, resetScrollShade]);
 
     return (
         <>
@@ -259,8 +279,12 @@ function L1Plots({
 
             <div
                 className={classNames('legend', {
-                    'lengthy-legend': memoryReport.length > MAX_LEGEND_LENGTH,
+                    'lengthy-legend': isLengthyLegend,
+                    [shadeClasses.top]: hasScrolledFromTop && isLengthyLegend,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && isLengthyLegend,
                 })}
+                ref={scrollElementRef}
+                onScroll={handleUserScrolling}
             >
                 {showMemoryRegions && l1StartMarker && l1StartMarker !== 0 && (
                     <MemoryLegendElement

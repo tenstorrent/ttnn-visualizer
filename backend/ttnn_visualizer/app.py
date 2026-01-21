@@ -359,9 +359,9 @@ def main():
                 )
                 instance_id = session.instance_id
             except InvalidReportPath:
-                sys.exit("Invalid report path")
+                sys.exit(f"❌ Invalid profiler path: {args.profiler_path}")
             except InvalidProfilerPath:
-                sys.exit("Invalid profiler path")
+                sys.exit(f"❌ Invalid performance path: {args.performance_path}")
 
         # Clean up this temporary app - workers will create their own
         del app

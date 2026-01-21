@@ -25,7 +25,7 @@ export enum ColumnHeaders {
     tensor_id = 'Tensor',
     address = 'Address',
     hexAddress = 'Address (hex)',
-    size = 'Size (bytes)',
+    size = 'Size',
     buffer_type = 'Buffer Type',
     device_id = 'Device Id',
 }
