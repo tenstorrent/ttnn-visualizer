@@ -8,6 +8,7 @@ import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import Ajv from 'ajv';
+import { debounce } from 'lodash';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
@@ -48,7 +49,7 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
-import createToastNotification from '../functions/createToastNotification';
+import createToastNotification, { ToastType } from '../functions/createToastNotification';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
@@ -304,7 +305,11 @@ const fetchDevices = async (reportName: string) => {
 
     if (meta.length === 0) {
         // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
-        createToastNotification('Data integrity warning: No device information provided.', `/${reportName}`, true);
+        createToastNotification(
+            'Data integrity warning: No device information provided.',
+            `/${reportName}`,
+            ToastType.WARNING,
+        );
     }
 
     return [...new Map(meta.map((device) => [device.device_id, device])).values()];
@@ -900,16 +905,30 @@ export const useInstance = () => {
         initialData: null,
     });
 };
+
+const debouncedCreateToast = debounce(
+    (a: DeviceArchitecture) => createToastNotification(`Unsupported architecture`, a, ToastType.WARNING),
+    1000,
+    {
+        leading: true,
+        trailing: false,
+    },
+);
+
 export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
     switch (arch) {
         case DeviceArchitecture.WORMHOLE:
             return archWormhole as ChipDesign;
         case DeviceArchitecture.BLACKHOLE:
             return archBlackhole as ChipDesign;
-        default:
+        default: {
             // eslint-disable-next-line no-console
             console.error(`Unsupported arch: ${arch}`);
+            // Avoids creating multiple toasts for this error
+            debouncedCreateToast(arch);
+
             return {} as ChipDesign;
+        }
     }
 };
 

@@ -4,7 +4,7 @@
 
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import { ReportFolder } from '../definitions/Reports';
-import createToastNotification from './createToastNotification';
+import createToastNotification, { ToastType } from './createToastNotification';
 
 const getErroredReportFolderLabel = (folder: ReportFolder | RemoteFolder): string => {
     if (folder.reportName) {
@@ -64,7 +64,7 @@ const createDataIntegrityWarning = (folder: ReportFolder | RemoteFolder) => {
     return createToastNotification(
         'Data integrity warning: Missing path or report name',
         getErroredReportFolderLabel(folder),
-        true,
+        ToastType.WARNING,
     );
 };
 

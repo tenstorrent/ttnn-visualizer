@@ -3,11 +3,10 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Link, useLocation } from 'react-router-dom';
-import { Classes, PopoverPosition } from '@blueprintjs/core';
+import { Classes } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useSetAtom } from 'jotai';
-import { ToastContainer, cssTransition } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.min.css';
+import { Theme, ToastContainer, ToastPosition, cssTransition } from 'react-toastify';
 import 'styles/components/ToastOverrides.scss';
 import { useEffect, useMemo } from 'react';
 import {
@@ -64,7 +63,6 @@ function Layout() {
             : getLocalReportName(reports, profilerReportPath) || '';
     const perfReportPath = instance?.active_report?.performance_name || null;
 
-    // Memoize active report objects to prevent unnecessary recalculations
     const activeReports = useMemo(() => {
         const activeProfilerReport = profilerReportPath
             ? {
@@ -155,12 +153,14 @@ function Layout() {
             <FeedbackButton />
 
             <ToastContainer
-                position={PopoverPosition.TOP_RIGHT}
-                autoClose={false}
+                position={'bottom-right' as ToastPosition}
+                autoClose={5000}
                 newestOnTop={false}
+                pauseOnHover={false}
+                draggable={false}
                 closeOnClick
                 closeButton={false}
-                theme='light'
+                theme={'light' as Theme}
                 transition={BounceIn}
             />
         </div>

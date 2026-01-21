@@ -1411,15 +1411,19 @@ def get_instance(instance: Instance):
 
 
 @api.route("/instance", methods=["PUT"])
-def update_current_instance():
+@with_instance
+def update_current_instance(instance: Instance):
     try:
         update_data = request.get_json()
 
         if not update_data:
             return Response(status=HTTPStatus.BAD_REQUEST, response="No data provided.")
 
+        # Use current instance unless a different one is specified
+        instance_id = update_data.get("instance_id") or instance.instance_id
+
         update_instance(
-            instance_id=update_data.get("instance_id"),
+            instance_id=instance_id,
             profiler_name=update_data["active_report"].get("profiler_name"),
             profiler_location=update_data["active_report"].get("profiler_location"),
             performance_name=update_data["active_report"].get("performance_name"),

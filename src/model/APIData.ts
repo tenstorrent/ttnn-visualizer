@@ -86,19 +86,21 @@ export interface OperationDetailsData extends Operation {
     l1_sizes: number[];
 }
 
+export interface ActiveReport {
+    profiler_name?: string;
+    profiler_location?: ReportLocation;
+    performance_name?: string;
+    performance_location?: ReportLocation;
+    npe_name?: string;
+    npe_location?: ReportLocation;
+}
+
 export interface Instance {
     instance_id: string;
     profiler_path: string | null;
     performance_path: string | null;
     npe_path: string | null;
-    active_report: {
-        profiler_name?: string;
-        profiler_location?: ReportLocation;
-        performance_name?: string;
-        performance_location?: ReportLocation;
-        npe_name?: string;
-        npe_location?: ReportLocation;
-    } | null;
+    active_report: ActiveReport | null;
     remote_connection: RemoteConnection | null;
     remote_profiler_folder: RemoteFolder | null;
     remote_performance_folder: RemoteFolder | null;
