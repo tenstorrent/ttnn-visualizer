@@ -15,7 +15,7 @@ import 'styles/components/BufferSummaryTable.scss';
 import HighlightedText from '../HighlightedText';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { formatSize, toHex } from '../../functions/math';
+import { convertBytes, toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
 import { selectedTensorAtom } from '../../store/app';
@@ -311,7 +311,7 @@ const getCellContent = (key: ColumnKeys, rowIndex: number, rows: SummaryTableBuf
     // TODO: Format address but also allow easy filtering
 
     if (key === 'size') {
-        return formatSize(buffer.size);
+        return convertBytes(buffer.size, 2);
     }
 
     if (key === 'tensor_id') {

@@ -2,29 +2,29 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Theme, ToastPosition, toast } from 'react-toastify';
+import { ToastOptions, toast } from 'react-toastify';
 import ToastFileChange from '../components/ToastFileChange';
 
-export default function createToastNotification(message: string, fileName: string, isError?: boolean) {
+export enum ToastType {
+    INFO = 'info',
+    SUCCESS = 'success',
+    WARNING = 'warning',
+    ERROR = 'error',
+}
+
+export default function createToastNotification(message: string, fileName: string, type?: ToastType) {
     const template = (
         <ToastFileChange
             message={message}
             fileName={fileName}
         />
     );
-    const args = {
-        position: 'bottom-right' as ToastPosition,
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: false,
-        draggable: true,
-        progress: undefined,
-        theme: 'light' as Theme,
-    };
 
-    if (isError) {
-        toast.error(template, args);
+    // Moved args to the ToastContainer level but keeping this here in the short term in case we need to restore any (e.g. because bugs)
+    const args: ToastOptions = {};
+
+    if (type) {
+        toast[type](template, args);
     } else {
         toast(template, args);
     }

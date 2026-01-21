@@ -15,7 +15,6 @@ interface RemoteConnectionSelectorProps {
     connection?: RemoteConnection;
     disabled: boolean;
     loading: boolean;
-    offline: boolean;
     onSelectConnection: (connection: RemoteConnection) => void;
     onEditConnection: (updatedConnection: RemoteConnection, currentConnection?: RemoteConnection) => void;
     onRemoveConnection: (connection: RemoteConnection) => void;
@@ -27,7 +26,6 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     connection,
     disabled,
     loading,
-    offline,
     onSelectConnection,
     onEditConnection,
     onRemoveConnection,
@@ -56,7 +54,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                     onItemSelect={onSelectConnection}
                 >
                     <Button
-                        icon={offline ? IconNames.BAN_CIRCLE : IconNames.CLOUD}
+                        icon={IconNames.CLOUD}
                         endIcon={IconNames.CARET_DOWN}
                         disabled={disabled}
                         text={formatConnectionString(selectedConnection)}
@@ -103,7 +101,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
             </div>
 
             <Button
-                icon={IconNames.LOCATE}
+                icon={IconNames.REFRESH}
                 disabled={disabled || !selectedConnection}
                 loading={loading}
                 text='Fetch remote folders list'

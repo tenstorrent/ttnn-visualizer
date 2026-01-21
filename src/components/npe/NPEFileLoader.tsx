@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { activeNpeOpTraceAtom } from '../../store/app';
-import createToastNotification from '../../functions/createToastNotification';
+import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import 'styles/components/NPEFileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -52,7 +52,7 @@ const NPEFileLoader: React.FC = () => {
         } else {
             const fileName = file.name;
             setActiveNpe(sanitiseFileName(fileName));
-            createToastNotification('Active NPE', fileName);
+            createToastNotification('Active NPE', fileName, ToastType.SUCCESS);
             setUploadStatus(ConnectionTestStates.OK);
             setErrorMessage(`${fileName} uploaded successfully`);
         }
