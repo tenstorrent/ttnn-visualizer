@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Edge, Network } from 'vis-network';
+import { Edge, IdType, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
 import { Button, ButtonVariant, Intent, Label, PopoverPosition, Slider, Switch, Tooltip } from '@blueprintjs/core';
@@ -15,11 +15,20 @@ import LoadingSpinner from './LoadingSpinner';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
-import { toReadableShape, toReadableType } from '../functions/math';
+import { toReadableShape } from '../functions/math';
 import SearchField from './SearchField';
+import { cssVar } from '../functions/colour';
 
 type OperationList = OperationDescription[];
 const DEALLOCATE_OP_NAME = 'ttnn.deallocate';
+
+const GRAPH_COLORS = {
+    inputNode: cssVar(`--graph-input-node`),
+    outputNode: cssVar(`--graph-output-node`),
+    inputEdge: cssVar(`--graph-input-edge`),
+    outputEdge: cssVar(`--graph-output-edge`),
+    normal: cssVar(`--graph-normal`),
+};
 
 const OperationGraph: React.FC<{
     operationList: OperationList;
@@ -50,7 +59,8 @@ const OperationGraph: React.FC<{
                                 from: op.id,
                                 to: consumerId,
                                 arrows: 'to',
-                                label: `${toReadableShape(tensor.shape)} \n ${toReadableType(tensor.dtype)}`,
+                                label: `${toReadableShape(tensor.shape)}`,
+                                color: GRAPH_COLORS.normal,
                             }) as Edge,
                     ),
                 ),
@@ -83,6 +93,99 @@ const OperationGraph: React.FC<{
             ),
         [operationList, connectedNodeIds, filterOutDeallocate],
     );
+    const edgesDataSetRef = useRef<DataSet<Edge>>(new DataSet());
+
+    useEffect(() => {
+        const ds = edgesDataSetRef.current;
+
+        ds.clear();
+        ds.add(edges);
+    }, [edges]);
+
+    const data = useMemo(
+        () => ({
+            nodes,
+            edges: edgesDataSetRef.current,
+        }),
+        [nodes],
+    );
+
+    const colorHighlightIO = useCallback(
+        (selectedNodeId: IdType) => {
+            const allNodes = nodes.get();
+
+            const allEdges = edgesDataSetRef.current.get();
+
+            const inputNodeIds = new Set<IdType | undefined>();
+            const outputNodeIds = new Set<IdType | undefined>();
+            const inputEdgeIds = new Set<IdType | undefined>();
+            const outputEdgeIds = new Set<IdType | undefined>();
+
+            for (const edge of allEdges) {
+                if (edge.to === selectedNodeId) {
+                    inputNodeIds.add(edge.from);
+                    inputEdgeIds.add(edge.id);
+                }
+
+                if (edge.from === selectedNodeId) {
+                    outputNodeIds.add(edge.to);
+                    outputEdgeIds.add(edge.id);
+                }
+            }
+            nodes.update(
+                allNodes.map((node) => {
+                    if (node.id === selectedNodeId) {
+                        return node;
+                    }
+
+                    if (inputNodeIds.has(node.id)) {
+                        return {
+                            id: node.id,
+                            color: { background: GRAPH_COLORS.inputNode },
+                        };
+                    }
+
+                    if (outputNodeIds.has(node.id)) {
+                        return {
+                            id: node.id,
+                            color: { background: GRAPH_COLORS.outputNode },
+                        };
+                    }
+
+                    return {
+                        id: node.id,
+                        color: { background: GRAPH_COLORS.normal },
+                    };
+                }),
+            );
+
+            const edgesToUpdate = allEdges
+                .map((edge) => {
+                    if (inputEdgeIds.has(edge.id)) {
+                        return {
+                            id: edge.id,
+                            color: GRAPH_COLORS.inputEdge,
+                        };
+                    }
+                    if (outputEdgeIds.has(edge.id)) {
+                        return {
+                            id: edge.id,
+                            color: GRAPH_COLORS.outputEdge,
+                        };
+                    }
+                    if (edge.color !== GRAPH_COLORS.normal) {
+                        return {
+                            id: edge.id,
+                            color: GRAPH_COLORS.normal,
+                        };
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+            edgesDataSetRef.current.update(edgesToUpdate);
+        },
+        [nodes],
+    );
 
     const focusOnNode = useCallback(
         (nodeId: number | null) => {
@@ -104,7 +207,8 @@ const OperationGraph: React.FC<{
                 }
             }
         },
-        [networkRef, scale],
+
+        [scale],
     );
 
     const updateScale = useCallback(
@@ -171,6 +275,7 @@ const OperationGraph: React.FC<{
         setFilteredNodeIdList(nodeIdList);
         return nodeIdList[0] || null;
     };
+
     useEffect(() => {
         setIsLoading(true);
 
@@ -178,59 +283,52 @@ const OperationGraph: React.FC<{
         setTimeout(() => {
             if (containerRef.current) {
                 requestAnimationFrame(() => {
-                    networkRef.current = new Network(
-                        containerRef.current!,
-                        {
-                            nodes,
-                            edges,
+                    networkRef.current = new Network(containerRef.current!, data, {
+                        nodes: {
+                            font: { color: '#202020' },
+                            color: {
+                                background: '#ccd2f9',
+                                border: 'none',
+                                hover: { background: '#9ca8f2', border: 'none' },
+                                highlight: { background: '#74c5df', border: '#f6bc42' },
+                            },
+                            size: 20,
+                            labelHighlightBold: false,
+                            shape: 'box',
+                            fixed: false,
                         },
-                        {
-                            nodes: {
-                                font: { color: '#202020' },
-                                color: {
-                                    background: '#ccd2f9',
-                                    border: 'none',
-                                    hover: { background: '#9ca8f2', border: 'none' },
-                                    highlight: { background: '#74c5df', border: '#f6bc42' },
-                                },
-                                size: 20,
-                                labelHighlightBold: false,
-                                shape: 'box',
-                                fixed: false,
+                        edges: {
+                            font: { color: '#f5e2ba', size: 20, strokeColor: '#000' },
+                            color: '#f5e2ba',
+                            arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                            smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
+                            physics: true,
+                        },
+                        autoResize: true,
+                        layout: {
+                            hierarchical: {
+                                enabled: true,
+                                levelSeparation: 200,
+                                nodeSpacing: 700,
+                                treeSpacing: 700,
+                                blockShifting: true,
+                                edgeMinimization: true,
+                                direction: 'UD',
+                                sortMethod: 'directed',
+                                shakeTowards: 'leaves',
                             },
-                            edges: {
-                                font: { color: '#f5e2ba', size: 20, strokeColor: '#000' },
-                                color: '#f5e2ba',
-                                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-                                smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
-                                physics: true,
-                            },
-                            autoResize: true,
-                            layout: {
-                                hierarchical: {
-                                    enabled: true,
-                                    levelSeparation: 200,
-                                    nodeSpacing: 700,
-                                    treeSpacing: 700,
-                                    blockShifting: true,
-                                    edgeMinimization: true,
-                                    direction: 'UD',
-                                    sortMethod: 'directed',
-                                    shakeTowards: 'leaves',
-                                },
-                                improvedLayout: true,
-                            },
+                            improvedLayout: true,
+                        },
 
-                            interaction: {
-                                hover: true,
-                                keyboard: true,
-                                dragView: true,
-                                zoomView: true,
-                                zoomSpeed: 0.2,
-                            },
-                            physics: { enabled: false },
+                        interaction: {
+                            hover: true,
+                            keyboard: true,
+                            dragView: true,
+                            zoomView: true,
+                            zoomSpeed: 0.2,
                         },
-                    );
+                        physics: { enabled: false },
+                    });
 
                     networkRef.current.once('afterDrawing', () => {
                         networkRef.current?.moveTo({ scale });
@@ -241,6 +339,12 @@ const OperationGraph: React.FC<{
                     });
 
                     networkRef.current.on('click', (params) => {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            focusOnNode(nodeId);
+                            colorHighlightIO(nodeId);
+                            return;
+                        }
                         if (params.edges.length > 0) {
                             const edgeId = params.edges[0];
                             const edge = edges.find((e) => e.id === edgeId);
@@ -279,7 +383,7 @@ const OperationGraph: React.FC<{
             networkRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [edges, nodes]);
+    }, [edges, nodes, data]);
 
     const getNextOperationId = (currentId: number | null) => {
         if (nodes === null || currentId === null) {
@@ -489,7 +593,7 @@ const OperationGraphInfoComponent: React.FC<{
             </Button>
 
             <h3>Inputs:</h3>
-            <div className='tensors'>
+            <div className='inputs tensors'>
                 {operation?.inputs.map((tensor, index) => (
                     <TensorDetailsComponent
                         tensor={tensor}
@@ -498,7 +602,7 @@ const OperationGraphInfoComponent: React.FC<{
                 ))}
             </div>
             <h3>Outputs:</h3>
-            <div className='tensors'>
+            <div className='outputs tensors'>
                 {operation?.outputs.map((tensor, index) => (
                     <TensorDetailsComponent
                         tensor={tensor}
