@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { toast } from 'react-toastify';
+import { Id, toast } from 'react-toastify';
 import { useAtom, useSetAtom } from 'jotai';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import ToastTensorMessage from '../components/operation-details/ToastTensorMessage';
@@ -31,20 +31,18 @@ const useBufferFocus = () => {
             colour = getBufferColor(address);
         }
 
-        const toastInstance = toast(
+        const toastInstance: Id = toast(
             <ToastTensorMessage
                 tensorId={tensorId}
                 address={address}
                 colour={colour}
             />,
             {
-                position: 'bottom-right',
+                autoClose: false,
                 hideProgressBar: true,
-                closeOnClick: true,
                 onClick: resetToasts,
-                theme: 'light',
             },
-        ) as number;
+        );
 
         setActiveToast(toastInstance);
     };

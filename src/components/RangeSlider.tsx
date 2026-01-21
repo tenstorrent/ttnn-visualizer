@@ -30,7 +30,7 @@ import {
 import { OperationDescription } from '../model/APIData';
 import { PerfTableRow } from '../definitions/PerfTable';
 import LoadingSpinner from './LoadingSpinner';
-import createToastNotification from '../functions/createToastNotification';
+import createToastNotification, { ToastType } from '../functions/createToastNotification';
 
 const RANGE_STEP = 25;
 
@@ -162,7 +162,7 @@ function Range() {
             createToastNotification(
                 'Performance data format is not supported, use TT-NN Visualizer v0.49.0',
                 activePerformanceReport?.reportName,
-                true,
+                ToastType.WARNING,
             );
         }
     }, [perfDataError, activePerformanceReport]);
