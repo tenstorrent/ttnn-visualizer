@@ -217,8 +217,8 @@ const OperationGraph: React.FC<{
                                     direction: 'UD',
                                     sortMethod: 'directed',
                                     shakeTowards: 'leaves',
-                                    improvedLayout: true,
                                 },
+                                improvedLayout: true,
                             },
 
                             interaction: {
