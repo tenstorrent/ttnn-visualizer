@@ -7,6 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useEffect, useState } from 'react';
 import 'styles/components/FeedbackButton.scss';
+import { cssVar } from '../functions/colour';
 
 const FeedbackButton = () => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -91,9 +92,8 @@ const FeedbackButton = () => {
 };
 
 const getFeedbackAnimationDurationMs = () => {
-    const root = document.documentElement;
-    const duration = getComputedStyle(root).getPropertyValue('--feedback-animation-duration').trim();
-    const delay = getComputedStyle(root).getPropertyValue('--feedback-animation-delay').trim();
+    const duration = cssVar('--feedback-animation-duration');
+    const delay = cssVar('--feedback-animation-delay');
 
     return parseFloat(duration) * 1000 + parseFloat(delay) * 1000;
 };
