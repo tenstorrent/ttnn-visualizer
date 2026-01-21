@@ -25,7 +25,8 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
-import { updateInstance, useInstance } from '../../hooks/useAPI';
+import { updateInstance } from '../../hooks/useAPI';
+import { ActiveReport } from '../../model/APIData';
 
 const GENERIC_ERROR_MESSAGE = 'An unknown error occurred.';
 
@@ -60,14 +61,13 @@ const RemoteSyncConfigurator: FC = () => {
               )
             : remotePerformanceFolderList[0],
     );
-    const { data: instance } = useInstance();
 
     const updateSelectedConnection = async (connection: RemoteConnection) => {
         remote.persistentState.selectedConnection = connection;
         setReportFolders(remote.persistentState.getSavedReportFolders(connection));
         setRemotePerformanceFolders(remote.persistentState.getSavedPerformanceFolders(connection));
 
-        const activeReport = { ...instance?.active_report };
+        const activeReport: ActiveReport = {};
 
         if (selectedReportFolder && profilerReportLocation === ReportLocation.REMOTE) {
             setSelectedReportFolder(undefined);
@@ -81,7 +81,13 @@ const RemoteSyncConfigurator: FC = () => {
             activeReport.performance_name = ''; // Empty string will clear the active report on the backend
         }
 
-        await updateInstance({ active_report: activeReport });
+        // await updateInstance({
+        //     active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
+        // });
+
+        await updateInstance({
+            active_report: activeReport,
+        });
     };
 
     const updateSavedReportFolders = (connection: RemoteConnection, updatedFolders: RemoteFolder[]) => {
