@@ -10,7 +10,7 @@ import axios from 'axios';
 import { useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
-import createToastNotification from '../../functions/createToastNotification';
+import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
@@ -143,7 +143,7 @@ const RemoteSyncConfigurator: FC = () => {
             path: folder.remotePath,
             reportName: folder.reportName,
         });
-        createToastNotification('Active memory report', folder.reportName);
+        createToastNotification('Active memory report', folder.reportName, ToastType.SUCCESS);
     };
 
     const updatePerformanceSelection = (folder: RemoteFolder) => {
@@ -153,7 +153,7 @@ const RemoteSyncConfigurator: FC = () => {
             path: folder.remotePath,
             reportName: folder.reportName,
         });
-        createToastNotification('Active performance report', folder.reportName);
+        createToastNotification('Active performance report', folder.reportName, ToastType.SUCCESS);
     };
 
     const syncSelectedReportFolder = async (folder?: RemoteFolder) => {
@@ -197,7 +197,7 @@ const RemoteSyncConfigurator: FC = () => {
         } catch (err: unknown) {
             const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
 
-            createToastNotification('Folder sync error', message, true);
+            createToastNotification('Folder sync error', message, ToastType.ERROR);
         } finally {
             setIsSyncingReportFolder(false);
         }
@@ -246,7 +246,7 @@ const RemoteSyncConfigurator: FC = () => {
         } catch (err: unknown) {
             const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
 
-            createToastNotification('Folder sync error', message, true);
+            createToastNotification('Folder sync error', message, ToastType.ERROR);
         } finally {
             setIsSyncingPerformanceFolder(false);
         }
@@ -373,7 +373,7 @@ const RemoteSyncConfigurator: FC = () => {
                         } catch (err: unknown) {
                             const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
 
-                            createToastNotification('Folder list sync error', message, true);
+                            createToastNotification('Folder list sync error', message, ToastType.ERROR);
                         } finally {
                             setIsFetching(false);
                         }

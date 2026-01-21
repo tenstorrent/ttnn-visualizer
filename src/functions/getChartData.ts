@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { getBufferColor, getTensorColor } from './colorGenerator';
-import { formatUnit, toHex, toReadableShape, toReadableType } from './math';
+import { convertBytes, toHex, toReadableShape, toReadableType } from './math';
 import { BufferPage, Chunk, ColoredChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
 import { TensorMemoryLayout } from './parseMemoryConfig';
@@ -101,7 +101,7 @@ export default function getChartData(
                     ? overrides?.hovertemplate
                     : `
 <span style="color:${color};font-size:20px;">&#9632;</span>
-${address} (${toHex(address)}) <br />${formatUnit(size, 'byte')}
+${address} (${toHex(address)}) <br />${convertBytes(size, 2)}
 ${tensor ? `<br>${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} Tensor${tensor.id}<br>${tensorMemoryLayout || ''}` : ''}
 ${
     options?.lateDeallocation && chunk.lateDeallocation
