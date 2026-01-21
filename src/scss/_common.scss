@@ -74,7 +74,8 @@ $row-background: $tt-grey-2;
         word-break: break-word;
 
         &:first-child {
-            width: 160px;
+            min-width: 160px; // Stops cells from being too narrow
+            width: 160px; // Keeps first column width consistent
             word-break: normal;
         }
     }
