@@ -81,10 +81,6 @@ const RemoteSyncConfigurator: FC = () => {
             activeReport.performance_name = ''; // Empty string will clear the active report on the backend
         }
 
-        // await updateInstance({
-        //     active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
-        // });
-
         await updateInstance({
             active_report: activeReport,
         });
