@@ -34,7 +34,7 @@ const OperationGraph: React.FC<{
     operationList: OperationList;
     operationId?: number;
 }> = ({ operationList, operationId }) => {
-    const focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
+    let focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
 
     const containerRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
@@ -76,6 +76,12 @@ const OperationGraph: React.FC<{
         });
         return ids;
     }, [edges]);
+
+    if (currentOperationId !== null && !connectedNodeIds.has(currentOperationId)) {
+        const val = connectedNodeIds.values().next().value;
+        focusNodeId = val;
+        setCurrentOperationId(val);
+    }
 
     const nodes = useMemo(
         () =>
