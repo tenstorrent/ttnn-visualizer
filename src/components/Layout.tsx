@@ -63,7 +63,6 @@ function Layout() {
             : getLocalReportName(reports, profilerReportPath) || '';
     const perfReportPath = instance?.active_report?.performance_name || null;
 
-    // Memoize active report objects to prevent unnecessary recalculations
     const activeReports = useMemo(() => {
         const activeProfilerReport = profilerReportPath
             ? {
