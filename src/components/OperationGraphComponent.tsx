@@ -49,24 +49,33 @@ const OperationGraph: React.FC<{
     const networkRef = useRef<Network | null>(null);
     const currentOpIdRef = useRef<number>(currentOperationId);
 
-    const edges = useMemo(
-        () =>
-            operationList.flatMap((op) =>
-                op.outputs.flatMap((tensor) =>
-                    tensor.consumers.map(
-                        (consumerId) =>
-                            ({
-                                from: op.id,
-                                to: consumerId,
-                                arrows: 'to',
-                                label: `${toReadableShape(tensor.shape)}`,
-                                color: GRAPH_COLORS.normal,
-                            }) as Edge,
-                    ),
-                ),
+    const edges = useMemo((): Edge[] => {
+        const edgeMap = new Map<string, Edge>();
+        return operationList.flatMap((op) =>
+            op.outputs.flatMap((tensor) =>
+                tensor.consumers.map((consumerId) => {
+                    const edge = {
+                        from: op.id,
+                        to: consumerId,
+                        arrows: 'to',
+                        label: toReadableShape(tensor.shape),
+                        color: GRAPH_COLORS.normal,
+                    } as Edge;
+
+                    if (edgeMap.has(`${edge.from}-${edge.to}`)) {
+                        // If an edge already exists, make it curved to avoid overlap
+                        return {
+                            ...edge,
+                            smooth: { type: 'curvedCCW', roundness: 0.2 },
+                        } as Edge;
+                    }
+                    edgeMap.set(`${edge.from}-${edge.to}`, edge);
+
+                    return edge;
+                }),
             ),
-        [operationList],
-    );
+        );
+    }, [operationList]);
 
     const connectedNodeIds = useMemo(() => {
         const ids = new Set<number>();
@@ -304,8 +313,8 @@ const OperationGraph: React.FC<{
                             fixed: false,
                         },
                         edges: {
-                            font: { color: '#f5e2ba', size: 20, strokeColor: '#000' },
-                            color: '#f5e2ba',
+                            font: { color: '#f5e2ba', size: 18, strokeColor: '#000' },
+                            color: '#fff',
                             arrows: { to: { enabled: true, scaleFactor: 0.5 } },
                             smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
                             physics: true,
@@ -331,7 +340,7 @@ const OperationGraph: React.FC<{
                             keyboard: true,
                             dragView: true,
                             zoomView: true,
-                            zoomSpeed: 0.2,
+                            zoomSpeed: 0.15,
                         },
                         physics: { enabled: false },
                     });
