@@ -54,6 +54,7 @@ import { normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
+import ENDPOINTS from '../definitions/Endpoints';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -100,9 +101,12 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         return defaultOperationDetailsData;
     }
     try {
-        const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(`/api/operations/${id}`, {
-            maxRedirects: 1,
-        });
+        const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(
+            `${ENDPOINTS.operationsList}/${id}`,
+            {
+                maxRedirects: 1,
+            },
+        );
         return {
             ...operationDetails,
             operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
@@ -123,7 +127,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
 
 const fetchOperations = async (): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
-    const response = await axiosInstance.get<OperationDescription[]>('/api/operations');
+    const response = await axiosInstance.get<OperationDescription[]>(ENDPOINTS.operationsList);
     const operationList = response.data;
 
     const getDeviceOperationNameList = (operation: OperationDescription) => {
