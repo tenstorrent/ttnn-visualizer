@@ -7,7 +7,6 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from stat import S_ISDIR
 from threading import Thread
 from typing import List, Optional
 
@@ -207,6 +206,12 @@ def get_cluster_desc(remote_connection: RemoteConnection):
         return read_remote_file(remote_connection, cluster_path)
     else:
         return None
+
+
+@remote_exception_handler
+def get_mesh_desc(remote_connection: RemoteConnection):
+    # this needs an actual implementation
+    return None
 
 
 def is_excluded(file_path, exclude_patterns):
