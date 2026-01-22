@@ -48,6 +48,7 @@ const OperationGraph: React.FC<{
     const [filterOutDeallocate, setFilterOutDeallocate] = useState<boolean>(true);
     const networkRef = useRef<Network | null>(null);
     const currentOpIdRef = useRef<number>(currentOperationId);
+    const [compactView, setCompactView] = useState<boolean>(false);
 
     const edges = useMemo(
         () =>
@@ -318,7 +319,7 @@ const OperationGraph: React.FC<{
                                 nodeSpacing: 700,
                                 treeSpacing: 700,
                                 blockShifting: true,
-                                edgeMinimization: true,
+                                edgeMinimization: !compactView,
                                 direction: 'UD',
                                 sortMethod: 'directed',
                                 shakeTowards: 'leaves',
@@ -389,7 +390,7 @@ const OperationGraph: React.FC<{
             networkRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [edges, nodes, data]);
+    }, [edges, nodes, data, compactView]);
 
     const getNextOperationId = (currentId: number | null) => {
         if (nodes === null || currentId === null) {
@@ -504,6 +505,12 @@ const OperationGraph: React.FC<{
                         checked={filterOutDeallocate}
                         onChange={() => setFilterOutDeallocate(!filterOutDeallocate)}
                         label='Hide deallocate ops'
+                        disabled={isLoading}
+                    />
+                    <Switch
+                        checked={compactView}
+                        onChange={() => setCompactView(!compactView)}
+                        label='Compact view'
                         disabled={isLoading}
                     />
                 </div>
