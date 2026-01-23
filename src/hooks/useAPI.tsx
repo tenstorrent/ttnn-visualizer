@@ -42,6 +42,7 @@ import {
     mergeDevicesAtom,
     selectedOperationRangeAtom,
     stackByIn0Atom,
+    tracingModeAtom,
 } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
@@ -328,6 +329,7 @@ const fetchPerformanceReport = async (
     endSignpost: Signpost | null,
     hideHostOps: boolean,
     mergeDevices: boolean,
+    tracingMode: boolean,
 ) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
         params: {
@@ -337,6 +339,7 @@ const fetchPerformanceReport = async (
             end_signpost: endSignpost?.op_code,
             hide_host_ops: hideHostOps,
             merge_devices: mergeDevices,
+            tracing_mode: tracingMode,
         },
     });
 
@@ -830,11 +833,20 @@ export const usePerformanceReport = (name: string | null) => {
     const stackByIn0 = useAtomValue(stackByIn0Atom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
+    const tracingMode = useAtomValue(tracingModeAtom);
 
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
             name !== null
-                ? fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps, mergeDevices)
+                ? fetchPerformanceReport(
+                      name,
+                      stackByIn0,
+                      startSignpost,
+                      endSignpost,
+                      hideHostOps,
+                      mergeDevices,
+                      tracingMode,
+                  )
                 : Promise.resolve(EMPTY_PERF_RETURN),
         queryKey: [
             'get-performance-report',
@@ -844,6 +856,7 @@ export const usePerformanceReport = (name: string | null) => {
             `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
             `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
             `mergeDevices:${mergeDevices ? 'true' : 'false'}`,
+            `tracingMode:${tracingMode ? 'true' : 'false'}`,
         ],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
@@ -859,6 +872,7 @@ export const usePerformanceComparisonReport = () => {
     const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
+    const tracingMode = useAtomValue(tracingModeAtom);
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -872,7 +886,15 @@ export const usePerformanceComparisonReport = () => {
 
             const results = await Promise.all(
                 reportNames.map((name) =>
-                    fetchPerformanceReport(name, stackByIn0, startSignpost, endSignpost, hideHostOps, mergeDevices),
+                    fetchPerformanceReport(
+                        name,
+                        stackByIn0,
+                        startSignpost,
+                        endSignpost,
+                        hideHostOps,
+                        mergeDevices,
+                        tracingMode,
+                    ),
                 ),
             );
 
@@ -886,6 +908,7 @@ export const usePerformanceComparisonReport = () => {
             `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
             `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
             `mergeDevices:${mergeDevices ? 'true' : 'false'}`,
+            `tracingMode:${tracingMode ? 'true' : 'false'}`,
         ],
         staleTime: Infinity,
         enabled: !!reportNames,
