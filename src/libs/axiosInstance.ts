@@ -57,7 +57,7 @@ axiosInstance.interceptors.request.use(
 );
 
 interface RetryConfig extends AxiosRequestConfig {
-    __retryCount?: number;
+    retryCount?: number;
 }
 
 const MAX_RETRIES = 3;
@@ -68,7 +68,7 @@ axiosInstance.interceptors.response.use(
         const isOperationsEndpoint = response.config.url?.endsWith(ENDPOINTS.operationsList);
 
         if (response.config.method === 'get' && isOperationsEndpoint && !Array.isArray(response.data)) {
-            const retryCount = (response.config as RetryConfig).__retryCount || 0;
+            const retryCount = (response.config as RetryConfig).retryCount || 0;
 
             if (retryCount < MAX_RETRIES) {
                 const backoffDelay = Math.min(500 * 2 ** retryCount, 2500);
@@ -85,7 +85,7 @@ axiosInstance.interceptors.response.use(
 
                 const newConfig = {
                     ...response.config,
-                    __retryCount: retryCount + 1,
+                    retryCount: retryCount + 1,
                 };
 
                 return axiosInstance.request(newConfig);
