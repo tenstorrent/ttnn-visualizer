@@ -65,7 +65,7 @@ const MAX_RETRIES = 3;
 // Response interceptor to validate data integrity and auto-retry for large JSON responses
 axiosInstance.interceptors.response.use(
     async (response) => {
-        const isOperationsEndpoint = response.config.url?.includes(ENDPOINTS.operationsList);
+        const isOperationsEndpoint = response.config.url?.endsWith(ENDPOINTS.operationsList);
 
         if (response.config.method === 'get' && isOperationsEndpoint && !Array.isArray(response.data)) {
             const retryCount = (response.config as RetryConfig).__retryCount || 0;
