@@ -31,10 +31,18 @@ export interface StackedPerfRow {
     op_type: OpType;
 }
 
-export interface TypedStackedPerfRow extends Omit<
-    StackedPerfRow,
-    'percent' | 'device' | 'device_time_sum_us' | 'ops_count' | 'flops_min' | 'flops_max' | 'flops_mean' | 'flops_std'
-> {
+export interface TypedStackedPerfRow
+    extends Omit<
+        StackedPerfRow,
+        | 'percent'
+        | 'device'
+        | 'device_time_sum_us'
+        | 'ops_count'
+        | 'flops_min'
+        | 'flops_max'
+        | 'flops_mean'
+        | 'flops_std'
+    > {
     percent: number | null;
     device: number | null;
     device_time_sum_us: number | null;
