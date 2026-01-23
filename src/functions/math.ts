@@ -13,7 +13,11 @@ export const formatSize = (number: number, decimals?: number): string => {
     return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: decimals }).format(number);
 };
 
-export const formatUnit = (value: number, unit: string, unitDisplay: 'long' | 'short' | 'narrow' = 'long'): string => {
+export const formatUnit = (
+    value: number,
+    unit: string,
+    unitDisplay: Intl.NumberFormatOptions['unitDisplay'] = 'long',
+): string => {
     return new Intl.NumberFormat(LOCALE, {
         style: 'unit',
         unit,
@@ -101,6 +105,7 @@ export const isEqual = <T>(value: T, other: T): boolean => {
         return isEqual(valueObj[key], otherObj[key]);
     });
 };
+
 export const toReadableShape = (input: string) => {
     const match = input.match(/(?:Shape|torch\.Size)\((\[.*\])\)/);
     if (!match) {
@@ -108,6 +113,7 @@ export const toReadableShape = (input: string) => {
     }
     return match[1];
 };
+
 export const toReadableType = (input: string) => {
     return input.replace(/^DataType\./, '');
 };
@@ -140,7 +146,7 @@ export const getCoresInRange = (rangeString: string): number => {
  * @example convertBytes(163840) // "160 KiB"
  * @example convertBytes(22370304) // "21.33 MiB"
  */
-export const convertBytes = (bytes: number, decimals = 0): string => {
+export const formatMemorySize = (bytes: number, decimals = 0): string => {
     const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
 
     if (bytes === 0) {
