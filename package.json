@@ -113,7 +113,7 @@
     "lint-staged": "^15.5.2",
     "mini-svg-data-uri": "^1.4.4",
     "only-allow": "^1.2.2",
-    "prettier": "^3.8.1",
+    "prettier": "^3.6.2",
     "sass": "^1.97.2",
     "stylelint": "^16.26.1",
     "stylelint-config-standard-scss": "^13.1.0",

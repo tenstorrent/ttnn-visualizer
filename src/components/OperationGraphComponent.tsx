@@ -90,10 +90,8 @@ const OperationGraph: React.FC<{
     if (currentOperationId !== null && !connectedNodeIds.has(currentOperationId)) {
         const val = connectedNodeIds.values().next().value;
 
-        if (val) {
-            focusNodeId = val;
-            setCurrentOperationId(val);
-        }
+        focusNodeId = val;
+        setCurrentOperationId(val);
     }
 
     const nodes = useMemo(

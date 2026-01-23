@@ -202,7 +202,7 @@ importers:
         specifier: ^1.2.2
         version: 1.2.2
       prettier:
-        specifier: ^3.8.1
+        specifier: ^3.6.2
         version: 3.8.1
       sass:
         specifier: ^1.97.2
