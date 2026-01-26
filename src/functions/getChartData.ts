@@ -107,13 +107,13 @@ export default function getChartData(
                           tensor
                               ? `<br />${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${
                                     tensorMemoryLayout ? toReadableLayout(tensorMemoryLayout) : ''
-                                }<br />Tensor ${tensor.id} ${
+                                }<br />Tensor ${tensor.id}${
                                     options?.lateDeallocation && chunk.lateDeallocation
-                                        ? `- Can deallocate earlier`
+                                        ? ` - Can deallocate earlier`
                                         : ''
                                 }`
                               : ''
-                      } <extra></extra>`,
+                      }<extra></extra>`,
             hoverlabel: {
                 align: 'right',
                 bgcolor: 'white',
