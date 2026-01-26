@@ -201,13 +201,17 @@ const BufferSummaryRow = ({
                                 ? toReadableShape(interactiveBuffer.tensor.shape)
                                 : ''}{' '}
                             {interactiveBuffer.tensor?.dtype ? toReadableType(interactiveBuffer.tensor.dtype) : ''}{' '}
-                            {interactiveBuffer.tensor?.id ? `Tensor ${interactiveBuffer.tensor.id}` : ''}
-                            {interactiveBuffer.tensor?.memory_config?.memory_layout ? (
+                            {interactiveBuffer.tensor?.memory_config?.memory_layout
+                                ? toReadableLayout(interactiveBuffer.tensor?.memory_config?.memory_layout)
+                                : null}
+                            {interactiveBuffer.tensor?.id ? (
                                 <>
                                     <br />
-                                    {toReadableLayout(interactiveBuffer.tensor?.memory_config?.memory_layout)}
+                                    Tensor {interactiveBuffer.tensor.id}
                                 </>
-                            ) : null}
+                            ) : (
+                                ''
+                            )}
                             {missingDeallocationNotice}
                         </strong>
                     </div>
