@@ -15,9 +15,10 @@ import LoadingSpinner from './LoadingSpinner';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
-import { toReadableShape } from '../functions/math';
+import { toReadableShape, toReadableType } from '../functions/math';
 import SearchField from './SearchField';
 import { cssVar } from '../functions/colour';
+import MemoryTag from './MemoryTag';
 
 type OperationList = OperationDescription[];
 const DEALLOCATE_OP_NAME = 'ttnn.deallocate';
@@ -559,10 +560,13 @@ const OperationGraph: React.FC<{
 const TensorDetailsComponent: React.FC<{ tensor: Tensor }> = ({ tensor }) => {
     return (
         <div className='tensor-details'>
-            <h3>{toReadableShape(tensor.shape)}</h3>
-            <div>{tensor.dtype}</div>
+            <h3 className='tensor-header'>
+                <span>{tensor.buffer_type !== null && <MemoryTag memory={BufferType[tensor.buffer_type]} />}</span>{' '}
+                {toReadableShape(tensor.shape)} Tensor {tensor.id}{' '}
+            </h3>
+
+            <div>{toReadableType(tensor.dtype)}</div>
             <div>{tensor.layout}</div>
-            <div>{tensor.buffer_type !== null && BufferType[tensor.buffer_type]}</div>
             <div>{tensor.operationIdentifier && [tensor.operationIdentifier]}</div>
             {tensor?.memory_config
                 ? Object.entries(tensor.memory_config).map(([key, value]) => (

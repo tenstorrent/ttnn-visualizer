@@ -94,6 +94,13 @@
                 flex-direction: column;
                 gap: 5px;
 
+                .tensor-header {
+                    display: flex;
+                    flex-direction: row;
+                    gap: 5px;
+                    align-items: center;
+                }
+
                 > table {
                     margin-left: 7px;
                 }
