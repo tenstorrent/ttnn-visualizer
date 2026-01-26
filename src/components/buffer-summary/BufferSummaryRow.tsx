@@ -10,7 +10,8 @@ import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { formatMemorySize, toHex, toReadableShape, toReadableType } from '../../functions/math';
+import { formatMemorySize, toHex } from '../../functions/math';
+import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
@@ -204,7 +205,7 @@ const BufferSummaryRow = ({
                             {interactiveBuffer.tensor?.memory_config?.memory_layout ? (
                                 <>
                                     <br />
-                                    {interactiveBuffer.tensor?.memory_config?.memory_layout}
+                                    {toReadableLayout(interactiveBuffer.tensor?.memory_config?.memory_layout)}
                                 </>
                             ) : null}
                             {missingDeallocationNotice}

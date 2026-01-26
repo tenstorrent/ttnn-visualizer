@@ -106,18 +106,6 @@ export const isEqual = <T>(value: T, other: T): boolean => {
     });
 };
 
-export const toReadableShape = (input: string) => {
-    const match = input.match(/(?:Shape|torch\.Size)\((\[.*\])\)/);
-    if (!match) {
-        return input;
-    }
-    return match[1];
-};
-
-export const toReadableType = (input: string) => {
-    return input.replace(/^DataType\./, '');
-};
-
 /**
  @description Count the number of cores in a range string
  @param {string} rangeString - The range string to parse {[(x=0,y=0) - (x=7,y=7)]}
