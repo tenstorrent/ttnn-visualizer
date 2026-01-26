@@ -54,7 +54,7 @@ import { normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
-import ENDPOINTS from '../definitions/Endpoints';
+import Endpoints from '../definitions/Endpoints';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -71,13 +71,13 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
 
 export const fetchInstance = async (): Promise<Instance | null> => {
     // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.get<Instance>('/api/instance').catch();
+    const response = await axiosInstance.get<Instance>(Endpoints.INSTANCE).catch();
     return response?.data;
 };
 
 export const updateInstance = async (payload: Partial<Instance>): Promise<Instance | null> => {
     // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.put<Instance>('/api/instance', payload).catch();
+    const response = await axiosInstance.put<Instance>(Endpoints.INSTANCE, payload).catch();
     return response?.data;
 };
 
@@ -86,7 +86,7 @@ export const fetchBufferPages = async (
     address?: number | string,
     bufferType?: BufferType,
 ): Promise<BufferPage[]> => {
-    const response = await axiosInstance.get<BufferPage[]>(`/api/buffer-pages`, {
+    const response = await axiosInstance.get<BufferPage[]>(Endpoints.BUFFER_PAGES, {
         params: {
             operation_id: operationId,
             address,
@@ -102,7 +102,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     }
     try {
         const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(
-            `${ENDPOINTS.operationsList}/${id}`,
+            `${Endpoints.OPERATIONS_LIST}/${id}`,
             {
                 maxRedirects: 1,
             },
@@ -127,7 +127,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
 
 const fetchOperations = async (): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
-    const response = await axiosInstance.get<OperationDescription[]>(ENDPOINTS.operationsList);
+    const response = await axiosInstance.get<OperationDescription[]>(Endpoints.OPERATIONS_LIST);
     const operationList = response.data;
 
     const getDeviceOperationNameList = (operation: OperationDescription) => {
@@ -186,7 +186,7 @@ const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<B
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<BuffersByOperation[]>('/api/operation-buffers', {
+    const { data: buffers } = await axiosInstance.get<BuffersByOperation[]>(Endpoints.OPERATION_BUFFERS, {
         params,
     });
 
@@ -198,7 +198,7 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<Buffer[]>
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<Buffer[]>('/api/buffers', {
+    const { data: buffers } = await axiosInstance.get<Buffer[]>(Endpoints.BUFFER, {
         params,
     });
 
@@ -271,7 +271,7 @@ export const useGetL1StartMarker = (): number => {
 };
 
 export const fetchOperationBuffers = async (operationId: number) => {
-    const { data: buffers } = await axiosInstance.get(`/api/operation-buffers/${operationId}`);
+    const { data: buffers } = await axiosInstance.get(`${Endpoints.OPERATION_BUFFERS}/${operationId}`);
 
     return buffers;
 };
@@ -286,13 +286,13 @@ export const useOperationBuffers = (operationId: number) => {
 };
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
-    const { data: meta } = await axiosInstance.get<ReportMetaData>('/api/config');
+    const { data: meta } = await axiosInstance.get<ReportMetaData>(Endpoints.CONFIG);
 
     return meta;
 };
 
 const fetchDevices = async (reportName: string) => {
-    const { data: meta } = await axiosInstance.get<DeviceInfo[]>('/api/devices');
+    const { data: meta } = await axiosInstance.get<DeviceInfo[]>(Endpoints.DEVICES);
 
     if (meta.length === 0) {
         // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
@@ -320,16 +320,19 @@ const fetchPerformanceReport = async (
     hideHostOps: boolean,
     mergeDevices: boolean,
 ) => {
-    const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: {
-            name,
-            stack_by_in0: stackByIn0,
-            start_signpost: startSignpost?.op_code,
-            end_signpost: endSignpost?.op_code,
-            hide_host_ops: hideHostOps,
-            merge_devices: mergeDevices,
+    const { data } = await axiosInstance.get<PerformanceReportResponse>(
+        `${Endpoints.PERFORMANCE}/perf-results/report`,
+        {
+            params: {
+                name,
+                stack_by_in0: stackByIn0,
+                start_signpost: startSignpost?.op_code,
+                end_signpost: endSignpost?.op_code,
+                hide_host_ops: hideHostOps,
+                merge_devices: mergeDevices,
+            },
         },
-    });
+    );
 
     return data;
 };
@@ -337,7 +340,7 @@ const fetchPerformanceReport = async (
 const fetchNPEManifest = async (): Promise<NPEManifestEntry[]> => {
     const ajv = new Ajv();
     const validateNPEManifest = ajv.compile(npeManifestSchema);
-    const { data } = await axiosInstance.get<NPEManifestEntry[]>(`/api/performance/npe/manifest`);
+    const { data } = await axiosInstance.get<NPEManifestEntry[]>(`${Endpoints.PERFORMANCE}/npe/manifest`);
     const valid = validateNPEManifest(data);
     if (!valid) {
         // eslint-disable-next-line no-console
@@ -358,7 +361,7 @@ export const useGetNPEManifest = () => {
 };
 
 const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
-    const { data } = await axiosInstance.get<NPEData>(`/api/performance/npe/timeline`, {
+    const { data } = await axiosInstance.get<NPEData>(`${Endpoints.PERFORMANCE}/npe/timeline`, {
         params: { filename: fileName },
     });
 
@@ -381,7 +384,7 @@ interface MetaData {
 }
 
 const fetchDeviceMeta = async (name: string | null) => {
-    const { data } = await axiosInstance.get<MetaData>('/api/performance/device-log/meta', {
+    const { data } = await axiosInstance.get<MetaData>(`${Endpoints.PERFORMANCE}/device-log/meta`, {
         params: { name },
     });
 
@@ -389,9 +392,9 @@ const fetchDeviceMeta = async (name: string | null) => {
 };
 
 const fetchClusterDescription = async (): Promise<ClusterModel> => {
-    const { data } = await axiosInstance.get<ClusterModel>('/api/cluster-descriptor');
+    const { data } = await axiosInstance.get<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR);
     try {
-        const { data: meshData } = await axiosInstance.get<MeshData>('/api/mesh-descriptor');
+        const { data: meshData } = await axiosInstance.get<MeshData>(Endpoints.MESH_DESCRIPTOR);
         if (meshData?.chips) {
             data.chips = meshData.chips;
         }
@@ -435,7 +438,7 @@ export const useOperationListRange = (): NumberRange | null => {
 };
 
 const fetchNpeOpTrace = async () => {
-    const response = await axiosInstance.get<NPEData>('/api/npe');
+    const response = await axiosInstance.get<NPEData>(Endpoints.NPE);
     return response?.data;
 };
 
@@ -693,7 +696,7 @@ export const useBufferPages = (operationId: number, address?: number | string, b
 
 export const fetchTensors = async (): Promise<Tensor[]> => {
     try {
-        const { data: tensorList } = await axiosInstance.get<Tensor[]>('/api/tensors', {
+        const { data: tensorList } = await axiosInstance.get<Tensor[]>(Endpoints.TENSOR_LIST, {
             maxRedirects: 1,
         });
 
@@ -755,7 +758,7 @@ export const fetchNextUseOfBuffer = async (address: number | null, consumers: nu
     }
 
     const { data: buffer } = await axiosInstance.get(
-        `/api/buffer?address=${address}&operation_id=${consumers[consumers.length - 1]}`,
+        `${Endpoints.BUFFER}?address=${address}&operation_id=${consumers[consumers.length - 1]}`,
     );
 
     buffer.next_usage = buffer.operation_id - consumers[consumers.length - 1];
@@ -983,13 +986,13 @@ export const useNodeType = (arch: DeviceArchitecture) => {
 export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
 
 const fetchReportFolderList = async () => {
-    const { data } = await axiosInstance.get('/api/profiler');
+    const { data } = await axiosInstance.get(Endpoints.PROFILER);
 
     return data.map(normaliseReportFolder);
 };
 
 export const deleteProfiler = async (report: string) => {
-    const { data } = await axiosInstance.delete(`/api/profiler/${report}`);
+    const { data } = await axiosInstance.delete(`${Endpoints.PROFILER}/${report}`);
 
     return data;
 };
@@ -1005,13 +1008,13 @@ export const useReportFolderList = () => {
 export const PERFORMANCE_FOLDER_QUERY_KEY = 'fetch-performance-folder-list';
 
 const fetchPerfFolderList = async () => {
-    const { data } = await axiosInstance.get('/api/performance');
+    const { data } = await axiosInstance.get(Endpoints.PERFORMANCE);
 
     return data;
 };
 
 export const deletePerformance = async (report: string) => {
-    const { data } = await axiosInstance.delete(`/api/performance/${report}`);
+    const { data } = await axiosInstance.delete(`${Endpoints.PERFORMANCE}/${report}`);
 
     return data;
 };

@@ -4,7 +4,7 @@
 
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import getServerConfig from '../functions/getServerConfig';
-import ENDPOINTS from '../definitions/Endpoints';
+import Endpoints from '../definitions/Endpoints';
 
 const serverConfig = getServerConfig();
 const baseURL = serverConfig?.BASE_PATH;
@@ -65,7 +65,7 @@ const MAX_RETRIES = 3;
 // Response interceptor to validate data integrity and auto-retry for large JSON responses
 axiosInstance.interceptors.response.use(
     async (response) => {
-        const isOperationsEndpoint = response.config.url?.endsWith(ENDPOINTS.operationsList);
+        const isOperationsEndpoint = response.config.url?.endsWith(Endpoints.OPERATIONS_LIST);
 
         if (response.config.method === 'get' && isOperationsEndpoint && !Array.isArray(response.data)) {
             const retryCount = (response.config as RetryConfig).retryCount || 0;
