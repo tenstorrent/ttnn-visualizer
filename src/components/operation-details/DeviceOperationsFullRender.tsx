@@ -14,7 +14,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
 import { AllocationDetails, processMemoryAllocations } from '../../functions/processMemoryAllocations';
-import { convertBytes, prettyPrintAddress, toReadableShape } from '../../functions/math';
+import { formatMemorySize, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1MemorySize';
@@ -71,7 +71,7 @@ const DeviceOperationsFullRender: React.FC<{
                         <span className='address'>
                             {tensorSquare} {address !== undefined && `${prettyPrintAddress(address, 0)}`}
                         </span>
-                        <span> {convertBytes(parseInt(buffer.params.size, 10), 2)}</span>
+                        <span> {formatMemorySize(parseInt(buffer.params.size, 10), 2)}</span>
                         <span>
                             <MemoryTag memory={buffer.params.type} />
                         </span>
@@ -157,9 +157,9 @@ const DeviceOperationsFullRender: React.FC<{
                             peak: memoryDetails.total_memory === peakMemoryLoad,
                         })}
                     >
-                        <span className='format-numbers'>{convertBytes(memoryDetails.total_cb, 2)}</span>
-                        <span className='format-numbers'>{convertBytes(memoryDetails.total_buffer, 2)}</span>
-                        <span className='format-numbers'>{convertBytes(memoryDetails.total_memory, 2)}</span>
+                        <span className='format-numbers'>{formatMemorySize(memoryDetails.total_cb, 2)}</span>
+                        <span className='format-numbers'>{formatMemorySize(memoryDetails.total_buffer, 2)}</span>
+                        <span className='format-numbers'>{formatMemorySize(memoryDetails.total_memory, 2)}</span>
                     </span>
                 ) : undefined;
                 if (nodeType === NodeType.function_start) {
@@ -291,7 +291,7 @@ const DeviceOperationsFullRender: React.FC<{
                                 _node={node}
                                 memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
                                 key={index}
-                                title={`Buffer deallocate ${convertBytes(bufferSize)} ${buffer.type} x ${cores} cores`}
+                                title={`Buffer deallocate ${formatMemorySize(bufferSize)} ${buffer.type} x ${cores} cores`}
                             />
                         );
                     } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
@@ -364,7 +364,8 @@ const DeviceOperationsFullRender: React.FC<{
     return (
         <div className='device-operations-full-render-wrap'>
             <h3 className='peak-load monospace'>
-                Peak L1 memory load per core: <span className='format-numbers'>{convertBytes(peakMemoryLoad, 2)}</span>
+                Peak L1 memory load per core:{' '}
+                <span className='format-numbers'>{formatMemorySize(peakMemoryLoad, 2)}</span>
             </h3>
             <div className='device-operations-full-render'>
                 <span className='memory-info monospace'>
@@ -378,7 +379,7 @@ const DeviceOperationsFullRender: React.FC<{
             {deviceOperations.length > 20 && (
                 <h3 className='peak-load monospace'>
                     Peak L1 memory load per core:{' '}
-                    <span className='format-numbers'>{convertBytes(peakMemoryLoad, 2)}</span>
+                    <span className='format-numbers'>{formatMemorySize(peakMemoryLoad, 2)}</span>
                 </h3>
             )}
         </div>

@@ -16,7 +16,7 @@ import ROUTES from '../definitions/Routes';
 import { ScrollLocations } from '../definitions/ScrollPositions';
 import { SortingOptions } from '../definitions/SortingOptions';
 import isValidNumber from '../functions/isValidNumber';
-import { convertBytes, toReadableShape, toReadableType } from '../functions/math';
+import { formatMemorySize, toReadableShape, toReadableType } from '../functions/math';
 import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
@@ -451,7 +451,9 @@ const TensorList = () => {
                                                     ) : null}
 
                                                     {isValidNumber(tensor.size) ? (
-                                                        <span className='tensor-size'>{convertBytes(tensor.size)}</span>
+                                                        <span className='tensor-size'>
+                                                            {formatMemorySize(tensor.size)}
+                                                        </span>
                                                     ) : null}
                                                 </ListItem>
                                             }

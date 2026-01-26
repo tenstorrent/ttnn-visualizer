@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { convertBytes, prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
+import { formatMemorySize, prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 
@@ -109,7 +109,7 @@ export const MemoryLegendElement: React.FC<{
                     'L1 START'
                 ) : (
                     <>
-                        {convertBytes(chunk.size, 2)}
+                        {formatMemorySize(chunk.size, 2)}
                         {numCoresLabel}
                     </>
                 )}
