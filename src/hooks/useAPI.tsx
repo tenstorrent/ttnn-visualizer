@@ -93,6 +93,7 @@ export const fetchBufferPages = async (
             buffer_type: bufferType,
         },
     });
+
     return response.data;
 };
 
@@ -107,6 +108,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
                 maxRedirects: 1,
             },
         );
+
         return {
             ...operationDetails,
             operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
@@ -155,9 +157,11 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
 
         const inputs = operation.inputs.map((tensor) => {
             const cachedTensor = tensorList.get(tensor.id);
+
             if (cachedTensor) {
                 return { ...cachedTensor, io: 'input' };
             }
+
             return { ...tensor, io: 'input' };
         });
 
@@ -198,7 +202,7 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<Buffer[]>
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<Buffer[]>(Endpoints.BUFFER, {
+    const { data: buffers } = await axiosInstance.get<Buffer[]>(Endpoints.BUFFERS_LIST, {
         params,
     });
 

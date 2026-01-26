@@ -4,6 +4,7 @@
 
 enum Endpoints {
     BUFFER = '/api/buffer',
+    BUFFERS_LIST = '/api/buffers',
     BUFFER_PAGES = '/api/buffer-pages',
     CLUSTER_DESCRIPTOR = '/api/cluster-descriptor',
     CONFIG = '/api/config',
