@@ -144,6 +144,7 @@ const createHoverTemplate = (
     color?: string,
     options?: { lateDeallocation?: boolean; showHex?: boolean },
 ): string => {
+    const square = `<span style="color:${color};font-size:22px">&#9632;</span>`;
     const formattedAddress = options?.showHex ? toHex(address) : address;
     const formattedSize = formatMemorySize(size);
     const canDeallocateText =
@@ -152,5 +153,5 @@ const createHoverTemplate = (
         ? `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensorMemoryLayout ? toReadableLayout(tensorMemoryLayout) : ''}<br />Tensor ${tensor.id}${canDeallocateText}`
         : '';
 
-    return `<span style="color:${color};font-size:20px">&#9632;</span> ${formattedAddress} (${formattedSize})<br />${tensorDetails}<extra></extra>`;
+    return `${square} ${formattedAddress} (${formattedSize})<br />${tensorDetails}<extra></extra>`;
 };
