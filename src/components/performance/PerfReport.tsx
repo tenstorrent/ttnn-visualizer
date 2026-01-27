@@ -391,7 +391,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             />
 
                             <Tooltip
-                                content='Tracing mode will remove sorting of operations by execution order'
+                                content='Tracing mode will sort operations based on start time rather than their execution order'
                                 position={PopoverPosition.TOP}
                             >
                                 <Switch
