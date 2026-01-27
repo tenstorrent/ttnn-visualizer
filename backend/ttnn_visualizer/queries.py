@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import dataclasses
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Union
@@ -88,14 +89,24 @@ class DatabaseQueries:
 
         return bool(rows)
 
+    def _get_table_columns(self, table_name: str) -> List[str]:
+        """
+        Gets the list of column names for a table.
+        """
+        query = f"PRAGMA table_info({table_name})"
+        rows = self.query_runner.execute_query(query)
+        return [row[1] for row in rows]  # row[1] is the column name
+
     def _query_table(
         self,
         table_name: str,
         filters: Optional[Dict[str, Union[Any, List[Any]]]] = None,
         additional_conditions: Optional[str] = None,
         additional_params: Optional[List[Any]] = None,
+        columns: Optional[List[str]] = None,
     ) -> List[Any]:
-        query = f"SELECT * FROM {table_name} WHERE 1=1"
+        columns_str = ", ".join(columns) if columns else "*"
+        query = f"SELECT {columns_str} FROM {table_name} WHERE 1=1"
         params = []
 
         if filters:
@@ -285,7 +296,19 @@ class DatabaseQueries:
     def query_devices(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Device, None, None]:
-        rows = self._query_table("devices", filters)
+        # Get the expected Device model field names in order
+        device_fields = [field.name for field in dataclasses.fields(Device)]
+
+        # Get all columns from the devices table
+        all_columns = self._get_table_columns("devices")
+
+        # Filter out num_storage_cores if it exists (for backwards compatibility)
+        # and ensure columns are in the order expected by the Device model
+        available_columns = set(all_columns) - {"num_storage_cores"}
+        columns = [col for col in device_fields if col in available_columns]
+
+        rows = self._query_table("devices", filters, columns=columns)
+
         for row in rows:
             yield Device(*row)
 
