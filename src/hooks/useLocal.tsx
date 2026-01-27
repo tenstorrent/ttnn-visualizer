@@ -7,6 +7,7 @@ import { AxiosProgressEvent } from 'axios';
 import axiosInstance from '../libs/axiosInstance';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
+import Endpoints from '../definitions/Endpoints';
 
 export interface UploadProgress {
     progress?: number;
@@ -109,7 +110,7 @@ const useLocalConnection = () => {
         }
 
         return axiosInstance
-            .post('/api/local/upload/profiler', formData, {
+            .post(`${Endpoints.LOCAL}/upload/profiler`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
@@ -153,7 +154,7 @@ const useLocalConnection = () => {
         }
 
         return axiosInstance
-            .post('/api/local/upload/performance', formData, {
+            .post(`${Endpoints.LOCAL}/upload/performance`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
@@ -192,7 +193,7 @@ const useLocalConnection = () => {
         });
 
         return axiosInstance
-            .post('/api/local/upload/npe', formData, {
+            .post(`${Endpoints.LOCAL}/upload/npe`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },

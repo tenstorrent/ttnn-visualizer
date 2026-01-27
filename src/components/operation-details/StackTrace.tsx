@@ -21,7 +21,10 @@ import { StackTraceLanguage } from '../../definitions/StackTrace';
 hljs.registerLanguage(StackTraceLanguage.PYTHON, python);
 hljs.registerLanguage(StackTraceLanguage.CPP, cpp);
 
+// Disabling because "Lookbehind is not supported in KaiOS 2.5"
+// eslint-disable-next-line compat/compat
 const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
+// eslint-disable-next-line compat/compat
 const LINE_NUMBER_REGEX = /(?<=line )(\d*)(?=,)/m;
 
 interface StackTraceProps {
