@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
 import { useInstance } from '../hooks/useAPI';
@@ -17,12 +17,19 @@ interface ProtectedRouteProps {
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     const { data: instance, isLoading } = useInstance();
     const location = useLocation();
+    const [hasCreatedInstance, setHasCreatedInstance] = useState<boolean>(false);
 
     const currentRoute = RouteRequirements[location.pathname];
     const needsProfiler = currentRoute?.needsProfilerReport ?? false;
     const needsPerformance = currentRoute?.needsPerformanceReport ?? false;
 
-    if (isLoading || instance === undefined) {
+    useEffect(() => {
+        if (instance) {
+            setHasCreatedInstance(true);
+        }
+    }, [instance]);
+
+    if (isLoading && !hasCreatedInstance) {
         return (
             <div className='session-loader'>
                 <LoadingSpinner />
