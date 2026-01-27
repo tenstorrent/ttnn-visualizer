@@ -128,6 +128,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         {
             renderPattern: renderMemoryLayoutPattern,
             lateDeallocation: showDeallocationReport,
+            showHex,
         },
     );
 

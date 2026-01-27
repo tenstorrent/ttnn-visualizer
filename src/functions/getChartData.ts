@@ -13,7 +13,7 @@ export default function getChartData(
     memory: Chunk[],
     getTensorForAddress: (id: number) => Tensor | null,
     overrides?: { color?: string; colorVariance?: number; hovertemplate?: string },
-    options?: { renderPattern?: boolean; lateDeallocation?: boolean },
+    options?: { renderPattern?: boolean; lateDeallocation?: boolean; showHex?: boolean },
 ): Partial<PlotDataCustom>[] {
     return memory.map((chunk) => {
         const { address, size } = chunk;
@@ -101,8 +101,7 @@ export default function getChartData(
             hovertemplate:
                 overrides?.hovertemplate !== undefined
                     ? overrides?.hovertemplate
-                    : `<span style="color:${color};font-size:20px;">&#9632;</span> ${address} (${toHex(address)})` +
-                      `<br />${formatMemorySize(size, 2)}` +
+                    : `<span style="color:${color};font-size:20px;">&#9632;</span> ${options?.showHex ? toHex(address) : address} (${formatMemorySize(size, 2)})` +
                       `${
                           tensor
                               ? `<br />${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${
