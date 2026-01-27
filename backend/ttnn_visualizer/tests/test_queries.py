@@ -119,7 +119,6 @@ class TestDatabaseQueries(unittest.TestCase):
             address_at_first_l1_cb_buffer int,
             num_banks_per_storage_core int,
             num_compute_cores int,
-            num_storage_cores int,
             total_l1_memory int,
             total_l1_for_tensors int,
             total_l1_for_interleaved_buffers int,
@@ -336,7 +335,7 @@ class TestDatabaseQueries(unittest.TestCase):
 
     def test_query_devices(self):
         self.connection.execute(
-            "INSERT INTO devices VALUES (1, 4, 4, 2, 2, 1024, 4, 256, 0, 0, 1, 2, 2, 4096, 2048, 2048, 2048, 256)"
+            "INSERT INTO devices VALUES (1, 4, 4, 2, 2, 1024, 4, 256, 0, 0, 1, 2, 4096, 2048, 2048, 2048, 256)"
         )
         results = list(self.db_queries.query_devices(filters={"device_id": 1}))
         self.assertEqual(len(results), 1)

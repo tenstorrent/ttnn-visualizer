@@ -322,7 +322,6 @@ export interface DeviceInfo {
     l1_num_banks: number;
     num_banks_per_storage_core: number;
     num_compute_cores: number;
-    num_storage_cores: number;
     num_x_compute_cores: number;
     num_x_cores: number;
     num_y_compute_cores: number;
