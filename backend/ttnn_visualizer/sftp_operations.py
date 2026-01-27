@@ -208,12 +208,6 @@ def get_cluster_desc(remote_connection: RemoteConnection):
         return None
 
 
-@remote_exception_handler
-def get_mesh_desc(remote_connection: RemoteConnection):
-    # this needs an actual implementation
-    return None
-
-
 def is_excluded(file_path, exclude_patterns):
     """Check if a file path should be excluded based on patterns."""
     for pattern in exclude_patterns:

@@ -58,7 +58,6 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_exists,
     check_remote_path_for_reports,
     get_cluster_desc,
-    get_mesh_desc,
     get_remote_performance_folders,
     get_remote_profiler_folders,
     read_remote_file,
@@ -1165,50 +1164,25 @@ def get_cluster_descriptor(instance: Instance):
 @api.route("/mesh-descriptor", methods=["GET"])
 @with_instance
 def get_mesh_descriptor(instance: Instance):
-    if instance.remote_connection:
-        try:
-            mesh_desc_file = get_mesh_desc(instance.remote_connection)
-            if not mesh_desc_file:
-                return jsonify({"error": "mesh.yaml not found"}), HTTPStatus.NOT_FOUND
+    paths = get_mesh_descriptor_paths(instance)
 
-            yaml_data = yaml.safe_load(mesh_desc_file.decode("utf-8"))
-            return jsonify(yaml_data), HTTPStatus.OK
+    if not paths:
+        return (
+            jsonify(
+                {"error": "physical_chip_mesh_coordinate_mapping_1_of_1.yaml not found"}
+            ),
+            HTTPStatus.NOT_FOUND,
+        )
 
-        except yaml.YAMLError as e:
-            return (
-                jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
-                HTTPStatus.BAD_REQUEST,
-            )
-
-        except RemoteConnectionException as e:
-            return jsonify({"error": e.message}), e.http_status
-
-        except Exception as e:
-            return (
-                jsonify({"error": f"An unexpected error occurred: {str(e)}"}),
-                HTTPStatus.BAD_REQUEST,
-            )
-    else:
-        paths = get_mesh_descriptor_paths(instance)
-        if not paths:
-            return jsonify({"error": "mesh.yaml not found"}), HTTPStatus.NOT_FOUND
-
-        local_path = paths[0]
-
-        if not local_path:
-            return jsonify({"error": "mesh.yaml not found"}), HTTPStatus.NOT_FOUND
-
-        try:
-            with open(local_path) as mesh_descriptor_path:
-                yaml_data = yaml.safe_load(mesh_descriptor_path)
-                return jsonify(yaml_data)  # yaml_data is not compatible with orjson
-        except yaml.YAMLError as e:
-            return (
-                jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
-                HTTPStatus.BAD_REQUEST,
-            )
-
-    return jsonify({"error": "Mesh descriptor not found"}), HTTPStatus.NOT_FOUND
+    try:
+        with open(paths[0]) as mesh_descriptor_path:
+            yaml_data = yaml.safe_load(mesh_descriptor_path)
+            return jsonify(yaml_data)  # yaml_data is not compatible with orjson
+    except yaml.YAMLError as e:
+        return (
+            jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
+            HTTPStatus.BAD_REQUEST,
+        )
 
 
 @api.route("/remote/test", methods=["POST"])
