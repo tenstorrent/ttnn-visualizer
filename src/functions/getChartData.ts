@@ -101,18 +101,7 @@ export default function getChartData(
             hovertemplate:
                 overrides?.hovertemplate !== undefined
                     ? overrides?.hovertemplate
-                    : `<span style="color:${color};font-size:20px;">&#9632;</span> ${options?.showHex ? toHex(address) : address} (${formatMemorySize(size, 2)})` +
-                      `${
-                          tensor
-                              ? `<br />${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${
-                                    tensorMemoryLayout ? toReadableLayout(tensorMemoryLayout) : ''
-                                }<br />Tensor ${tensor.id}${
-                                    options?.lateDeallocation && chunk.lateDeallocation
-                                        ? ` - Can deallocate earlier`
-                                        : ''
-                                }`
-                              : ''
-                      }<extra></extra>`,
+                    : createHoverTemplate(address, size, chunk, tensor, tensorMemoryLayout, color, options),
             hoverlabel: {
                 align: 'right',
                 bgcolor: 'white',
@@ -144,4 +133,24 @@ export const pageDataToChunkArray = (data: BufferPage[]): ColoredChunk[] => {
             color: range.color,
         };
     });
+};
+
+const createHoverTemplate = (
+    address: number,
+    size: number,
+    chunk: Chunk,
+    tensor: Tensor | null,
+    tensorMemoryLayout: TensorMemoryLayout | undefined,
+    color?: string,
+    options?: { lateDeallocation?: boolean; showHex?: boolean },
+): string => {
+    const formattedAddress = options?.showHex ? toHex(address) : address;
+    const formattedSize = formatMemorySize(size);
+    const canDeallocateText =
+        options?.lateDeallocation && chunk.lateDeallocation ? ' - <u>Could deallocate earlier</u>' : '';
+    const tensorDetails = tensor
+        ? `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensorMemoryLayout ? toReadableLayout(tensorMemoryLayout) : ''}<br />Tensor ${tensor.id}${canDeallocateText}`
+        : '';
+
+    return `<span style="color:${color};font-size:20px">&#9632;</span> ${formattedAddress} (${formattedSize})<br />${tensorDetails}<extra></extra>`;
 };
