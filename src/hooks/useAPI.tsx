@@ -900,7 +900,6 @@ export const useInstance = () => {
     return useQuery({
         queryFn: () => fetchInstance(),
         queryKey: ['fetch-instance', activeProfilerReport?.path, activePerformanceReport?.path, activeNpe],
-        initialData: null,
     });
 };
 
