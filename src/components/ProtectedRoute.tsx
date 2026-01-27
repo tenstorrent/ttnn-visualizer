@@ -31,9 +31,9 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 
     if (isLoading && !hasCreatedInstance) {
         return (
-            <div className='session-loader'>
+            <div className='instance-loader'>
                 <LoadingSpinner />
-                <p>Currently fetching session...</p>
+                <p>Fetching instance...</p>
             </div>
         );
     }
