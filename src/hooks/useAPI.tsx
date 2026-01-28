@@ -8,7 +8,6 @@ import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import Ajv from 'ajv';
-import { debounce } from 'lodash';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
@@ -903,15 +902,6 @@ export const useInstance = () => {
     });
 };
 
-const debouncedCreateToast = debounce(
-    (a: DeviceArchitecture) => createToastNotification(`Unsupported architecture`, a, ToastType.WARNING),
-    1000,
-    {
-        leading: true,
-        trailing: false,
-    },
-);
-
 export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
     switch (arch) {
         case DeviceArchitecture.WORMHOLE:
@@ -921,9 +911,6 @@ export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
         default: {
             // eslint-disable-next-line no-console
             console.error(`Unsupported arch: ${arch}`);
-            // Avoids creating multiple toasts for this error
-            debouncedCreateToast(arch);
-
             return {} as ChipDesign;
         }
     }
