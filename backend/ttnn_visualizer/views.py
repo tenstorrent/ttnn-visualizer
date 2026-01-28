@@ -735,6 +735,7 @@ def get_performance_results_report(instance: Instance):
     stack_by_in0 = str_to_bool(request.args.get("stack_by_in0", "true"))
     hide_host_ops = str_to_bool(request.args.get("hide_host_ops", "true"))
     merge_devices = str_to_bool(request.args.get("merge_devices", "true"))
+    tracing_mode = str_to_bool(request.args.get("tracing_mode", "false"))
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -750,6 +751,7 @@ def get_performance_results_report(instance: Instance):
             end_signpost=end_signpost,
             hide_host_ops=hide_host_ops,
             merge_devices=merge_devices,
+            tracing_mode=tracing_mode,
         )
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
