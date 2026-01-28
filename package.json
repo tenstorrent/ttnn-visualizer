@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.69.0",
+  "version": "0.70.0",
   "type": "module",
   "description": "A tool for visualizing the Tenstorrent Neural Network model (TT-NN)",
   "repository": {
@@ -57,7 +57,6 @@
     "ajv": "^8.17.1",
     "axios": "^1.13.3",
     "jotai": "^2.16.2",
-    "lodash": "^4.17.23",
     "normalize.css": "^8.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -80,7 +79,6 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@types/lodash": "^4.17.23",
     "@types/react": "^18.3.27",
     "@types/react-dom": "^18.3.7",
     "@types/react-plotly.js": "^2.6.4",

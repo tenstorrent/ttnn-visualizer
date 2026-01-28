@@ -7,7 +7,6 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from stat import S_ISDIR
 from threading import Thread
 from typing import List, Optional
 

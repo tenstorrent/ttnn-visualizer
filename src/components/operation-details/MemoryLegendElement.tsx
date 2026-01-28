@@ -9,7 +9,8 @@ import { IconNames } from '@blueprintjs/icons';
 import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { formatMemorySize, prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
+import { formatMemorySize, prettyPrintAddress, toHex } from '../../functions/math';
+import { toReadableShape, toReadableType } from '../../functions/formatting';
 import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 

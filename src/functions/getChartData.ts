@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { getBufferColor, getTensorColor } from './colorGenerator';
-import { formatMemorySize, toHex, toReadableShape, toReadableType } from './math';
+import { formatMemorySize, toHex } from './math';
+import { toReadableShape, toReadableType } from './formatting';
 import { BufferPage, Chunk, ColoredChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
 import { TensorMemoryLayout } from './parseMemoryConfig';
@@ -12,7 +13,7 @@ export default function getChartData(
     memory: Chunk[],
     getTensorForAddress: (id: number) => Tensor | null,
     overrides?: { color?: string; colorVariance?: number; hovertemplate?: string },
-    options?: { renderPattern?: boolean; lateDeallocation?: boolean },
+    options?: { renderPattern?: boolean; lateDeallocation?: boolean; showHex?: boolean },
 ): Partial<PlotDataCustom>[] {
     return memory.map((chunk) => {
         const { address, size } = chunk;
@@ -68,6 +69,7 @@ export default function getChartData(
                 };
             }
         }
+
         if (options?.lateDeallocation && chunk.lateDeallocation) {
             pattern = {
                 shape: '/',
@@ -76,6 +78,7 @@ export default function getChartData(
                 fgcolor: 'rgba(0, 0, 0, 0.6)',
             };
         }
+
         return {
             x: [address + size / 2],
             y: [1],
@@ -95,31 +98,13 @@ export default function getChartData(
                 size,
                 tensor,
             },
-            hoverinfo: 'none',
             hovertemplate:
                 overrides?.hovertemplate !== undefined
                     ? overrides?.hovertemplate
-                    : `
-<span style="color:${color};font-size:20px;">&#9632;</span>
-${address} (${toHex(address)}) <br />${formatMemorySize(size, 2)}
-${tensor ? `<br>${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} Tensor${tensor.id}<br>${tensorMemoryLayout || ''}` : ''}
-${
-    options?.lateDeallocation && chunk.lateDeallocation
-        ? `<br><span style="font-weight:bold;">Opportunity to deallocate earlier</span>`
-        : ''
-}
-<extra></extra>`,
-
+                    : createHoverTemplate(address, size, chunk, tensor, tensorMemoryLayout, color, options),
             hoverlabel: {
                 align: 'right',
                 bgcolor: 'white',
-                padding: {
-                    t: 10,
-                    b: 10,
-                    l: 10,
-                    r: 10,
-                },
-
                 font: {
                     color: 'black',
                     weight: 'bold',
@@ -148,4 +133,25 @@ export const pageDataToChunkArray = (data: BufferPage[]): ColoredChunk[] => {
             color: range.color,
         };
     });
+};
+
+const createHoverTemplate = (
+    address: number,
+    size: number,
+    chunk: Chunk,
+    tensor: Tensor | null,
+    tensorMemoryLayout: TensorMemoryLayout | undefined,
+    color?: string,
+    options?: { lateDeallocation?: boolean; showHex?: boolean },
+): string => {
+    const square = `<span style="color:${color};font-size:22px">&#9632;</span>`;
+    const formattedAddress = options?.showHex ? toHex(address) : address;
+    const formattedSize = formatMemorySize(size);
+    const canDeallocateText =
+        options?.lateDeallocation && chunk.lateDeallocation ? ' - <u>Opportunity to deallocate earlier</u>' : '';
+    const tensorDetails = tensor
+        ? `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)}<br />${tensorMemoryLayout || ''}<br />Tensor ${tensor.id}${canDeallocateText}`
+        : '';
+
+    return `${square} ${formattedAddress} (${formattedSize})<br />${tensorDetails}<extra></extra>`;
 };
