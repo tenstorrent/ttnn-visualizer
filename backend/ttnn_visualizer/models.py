@@ -50,7 +50,6 @@ class Device(SerializeableDataclass):
     address_at_first_l1_cb_buffer: int
     num_banks_per_storage_core: int
     num_compute_cores: int
-    num_storage_cores: int
     total_l1_memory: int
     total_l1_for_tensors: int
     total_l1_for_interleaved_buffers: int
