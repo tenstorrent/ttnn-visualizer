@@ -428,13 +428,9 @@ def get_mesh_descriptor_paths(instance):
         return []
 
     parent = Path(instance.profiler_path).parent
-    pattern = re.compile(r"physical_chip_mesh_coordinate_mapping_[1-8]_of_[1-8]\.yaml")
+    glob_pattern = "physical_chip_mesh_coordinate_mapping_[0-9]_of_[0-9].yaml"
 
-    return sorted(
-        str(path)
-        for path in parent.iterdir()
-        if path.is_file() and pattern.fullmatch(path.name)
-    )
+    return sorted(str(path) for path in parent.glob(glob_pattern) if path.is_file())
 
 
 def read_last_synced_file(directory: str) -> Optional[int]:
