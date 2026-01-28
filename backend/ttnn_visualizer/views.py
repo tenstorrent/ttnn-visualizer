@@ -735,6 +735,7 @@ def get_performance_results_report(instance: Instance):
     stack_by_in0 = str_to_bool(request.args.get("stack_by_in0", "true"))
     hide_host_ops = str_to_bool(request.args.get("hide_host_ops", "true"))
     merge_devices = str_to_bool(request.args.get("merge_devices", "true"))
+    tracing_mode = str_to_bool(request.args.get("tracing_mode", "false"))
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -750,6 +751,7 @@ def get_performance_results_report(instance: Instance):
             end_signpost=end_signpost,
             hide_host_ops=hide_host_ops,
             merge_devices=merge_devices,
+            tracing_mode=tracing_mode,
         )
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
@@ -1164,29 +1166,25 @@ def get_cluster_descriptor(instance: Instance):
 @api.route("/mesh-descriptor", methods=["GET"])
 @with_instance
 def get_mesh_descriptor(instance: Instance):
-    if instance.remote_connection:
+    paths = get_mesh_descriptor_paths(instance)
+
+    if not paths:
         return (
-            jsonify({"error": "Remote mesh descriptor is not yet supported"}),
-            HTTPStatus.NOT_IMPLEMENTED,
+            jsonify(
+                {"error": "physical_chip_mesh_coordinate_mapping_1_of_1.yaml not found"}
+            ),
+            HTTPStatus.NOT_FOUND,
         )
-    else:
-        paths = get_mesh_descriptor_paths(instance)
-        if not paths:
-            return jsonify({"error": "mesh.yaml not found"}), 404
 
-        local_path = paths[0]
-
-        if not local_path:
-            return jsonify({"error": "mesh.yaml not found"}), 404
-
-        try:
-            with open(local_path) as mesh_descriptor_path:
-                yaml_data = yaml.safe_load(mesh_descriptor_path)
-                return jsonify(yaml_data)  # yaml_data is not compatible with orjson
-        except yaml.YAMLError as e:
-            return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
-
-    return jsonify({"error": "Mesh descriptor not found"}), 404
+    try:
+        with open(paths[0]) as mesh_descriptor_path:
+            yaml_data = yaml.safe_load(mesh_descriptor_path)
+            return jsonify(yaml_data)  # yaml_data is not compatible with orjson
+    except yaml.YAMLError as e:
+        return (
+            jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
+            HTTPStatus.BAD_REQUEST,
+        )
 
 
 @api.route("/remote/test", methods=["POST"])

@@ -65,9 +65,7 @@ class TestSerializers(unittest.TestCase):
                 [25],
             ),
         ]
-        devices = [
-            Device(1, 4, 4, 2, 2, 256, 4, 64, 0, 0, 1, 2, 512, 256, 128, 64, 1, 512)
-        ]
+        devices = [Device(1, 4, 4, 2, 2, 256, 4, 64, 0, 0, 1, 2, 256, 128, 64, 1, 512)]
         producers_consumers = [ProducersConsumers(1, [2], [3])]
         device_operations = [DeviceOperation(1, '[{"counter": 1, "op_id": 1}]')]
 
@@ -195,10 +193,8 @@ class TestSerializers(unittest.TestCase):
 
     def test_serialize_devices(self):
         devices = [
-            Device(1, 4, 4, 2, 2, 256, 4, 64, 0, 0, 1, 2, 512, 256, 128, 64, 1, 512),
-            Device(
-                2, 8, 8, 4, 4, 512, 8, 128, 1, 1, 2, 4, 1024, 512, 256, 128, 2, 1024
-            ),
+            Device(1, 4, 4, 2, 2, 256, 4, 64, 0, 0, 1, 2, 256, 128, 64, 1, 512),
+            Device(2, 8, 8, 4, 4, 512, 8, 128, 1, 1, 2, 4, 512, 256, 128, 2, 1024),
         ]
 
         result = serialize_devices(devices)
@@ -213,7 +209,6 @@ class TestSerializers(unittest.TestCase):
                 "l1_num_banks": 4,
                 "num_banks_per_storage_core": 1,
                 "num_compute_cores": 2,
-                "num_storage_cores": 512,
                 "num_x_compute_cores": 2,
                 "num_x_cores": 4,
                 "num_y_compute_cores": 2,
@@ -233,7 +228,6 @@ class TestSerializers(unittest.TestCase):
                 "l1_num_banks": 8,
                 "num_banks_per_storage_core": 2,
                 "num_compute_cores": 4,
-                "num_storage_cores": 1024,
                 "num_x_compute_cores": 4,
                 "num_x_cores": 8,
                 "num_y_compute_cores": 4,
@@ -373,9 +367,7 @@ class TestSerializers(unittest.TestCase):
                 [200, 300],
             )
         ]
-        devices = [
-            Device(1, 4, 4, 2, 2, 256, 4, 64, 0, 0, 1, 2, 512, 256, 128, 64, 1, 512)
-        ]
+        devices = [Device(1, 4, 4, 2, 2, 256, 4, 64, 0, 0, 1, 2, 256, 128, 64, 1, 512)]
         producers_consumers = [ProducersConsumers(1, [2], [3])]
         device_operations = [DeviceOperation(1, '[{"counter": 1, "op_id": 1}]')]
 

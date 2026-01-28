@@ -38,6 +38,7 @@ import {
     mergeDevicesAtom,
     rawOpCodeFilterListAtom,
     stackByIn0Atom,
+    tracingModeAtom,
 } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
@@ -85,6 +86,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
     const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
     const [mergeDevices, setMergeDevices] = useAtom(mergeDevicesAtom);
+    const [tracingMode, setTracingMode] = useAtom(tracingModeAtom);
     const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
@@ -387,6 +389,18 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 checked={mergeDevices}
                                 className='option-switch'
                             />
+
+                            <Tooltip
+                                content='Tracing mode will skip sorting operations based on execution order'
+                                position={PopoverPosition.TOP}
+                            >
+                                <Switch
+                                    label='Tracing mode'
+                                    onChange={() => setTracingMode(!tracingMode)}
+                                    checked={tracingMode}
+                                    className='option-switch'
+                                />
+                            </Tooltip>
 
                             {isStackedView && (
                                 <Switch
