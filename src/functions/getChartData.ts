@@ -4,7 +4,7 @@
 
 import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatMemorySize, toHex } from './math';
-import { toReadableLayout, toReadableShape, toReadableType } from './formatting';
+import { toReadableShape, toReadableType } from './formatting';
 import { BufferPage, Chunk, ColoredChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
 import { TensorMemoryLayout } from './parseMemoryConfig';
@@ -148,9 +148,9 @@ const createHoverTemplate = (
     const formattedAddress = options?.showHex ? toHex(address) : address;
     const formattedSize = formatMemorySize(size);
     const canDeallocateText =
-        options?.lateDeallocation && chunk.lateDeallocation ? ' - <u>Could deallocate earlier</u>' : '';
+        options?.lateDeallocation && chunk.lateDeallocation ? ' - <u>Opportunity to deallocate earlier</u>' : '';
     const tensorDetails = tensor
-        ? `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensorMemoryLayout ? toReadableLayout(tensorMemoryLayout) : ''}<br />Tensor ${tensor.id}${canDeallocateText}`
+        ? `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)}<br />${tensorMemoryLayout || ''}<br />Tensor ${tensor.id}${canDeallocateText}`
         : '';
 
     return `${square} ${formattedAddress} (${formattedSize})<br />${tensorDetails}<extra></extra>`;
