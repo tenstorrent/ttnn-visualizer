@@ -5,7 +5,8 @@
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { Operation, OperationDescription, Tensor } from '../model/APIData';
-import { toHex, toReadableShape, toReadableType } from '../functions/math';
+import { toHex } from '../functions/math';
+import { toReadableShape, toReadableType } from '../functions/formatting';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';

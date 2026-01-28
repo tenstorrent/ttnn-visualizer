@@ -26,6 +26,7 @@ import { TensorDeallocationReport } from './BufferSummary';
 export interface OperationDetailsOptions {
     renderPattern: boolean;
     lateDeallocation: boolean;
+    showHex: boolean;
 }
 
 export class OperationDetails implements Partial<OperationDetailsData> {
@@ -67,6 +68,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     private options: OperationDetailsOptions = {
         renderPattern: false,
         lateDeallocation: false,
+        showHex: false,
     };
 
     constructor(
@@ -93,7 +95,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         // DEBUG
         // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
-        this.options = options || { renderPattern: false, lateDeallocation: false };
+        this.options = options || { renderPattern: false, lateDeallocation: false, showHex: false };
         this.memoryConfig = memoryConfig;
 
         this.inputs.forEach((tensor) => {

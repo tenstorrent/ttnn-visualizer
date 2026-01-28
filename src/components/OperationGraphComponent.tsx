@@ -15,7 +15,7 @@ import LoadingSpinner from './LoadingSpinner';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
-import { toReadableShape, toReadableType } from '../functions/math';
+import { toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
 import { cssVar } from '../functions/colour';
 import MemoryTag from './MemoryTag';
@@ -213,7 +213,7 @@ const OperationGraph: React.FC<{
                     animation: { duration: 500, easingFunction: 'easeInOutCubic' },
                 });
 
-                // Node might not exist if it's a decallocate op and we are filtering them out
+                // Node might not exist if it's a deallocate op and we are filtering them out
                 try {
                     networkRef.current.selectNodes([nodeId], true);
                     setCurrentOperationId(nodeId);
