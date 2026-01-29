@@ -8,25 +8,25 @@ import ROUTES from '../definitions/Routes';
 import { RouteRequirements } from '../definitions/RouteObjectList';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ProtectedRoute.scss';
-import { useRestoreInstance } from '../hooks/useRestoreInstance';
+import useRestoreInstance from '../hooks/useRestoreInstance';
 
 interface ProtectedRouteProps {
     children: ReactNode;
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-    const { instance, isLoading, hasCreatedInstance } = useRestoreInstance();
+    const { instance, isLoading, hasRestoredInstance } = useRestoreInstance();
     const location = useLocation();
 
     const currentRoute = RouteRequirements[location.pathname];
     const needsProfiler = currentRoute?.needsProfilerReport ?? false;
     const needsPerformance = currentRoute?.needsPerformanceReport ?? false;
 
-    if (isLoading && !hasCreatedInstance) {
+    if (isLoading && !hasRestoredInstance) {
         return (
             <div className='instance-loader'>
                 <LoadingSpinner />
-                <p>Fetching/restoring instance...</p>
+                <p>Initializing instance...</p>
             </div>
         );
     }
