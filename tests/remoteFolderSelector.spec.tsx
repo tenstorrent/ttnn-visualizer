@@ -12,6 +12,7 @@ import remoteConnection from './data/remoteConnection.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
 import mockRemotePerformanceFolderList from './data/mockRemotePerformanceFolderList.json';
+import mockInstance from './data/mockInstance.json';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -32,6 +33,9 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     }),
     usePerfFolderList: () => ({
         data: mockPerformanceReportFolders,
+    }),
+    useInstance: () => ({
+        data: mockInstance,
     }),
 }));
 
@@ -194,6 +198,9 @@ it.skip('handles localStorage parsing errors gracefully', () => {
 it('handles API errors gracefully', () => {
     // Mock error state
     vi.mock('../src/hooks/useAPI.tsx', () => ({
+        useInstance: () => ({
+            data: mockInstance,
+        }),
         usePerfFolderList: () => ({
             data: null,
             isLoading: false,

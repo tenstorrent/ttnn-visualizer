@@ -2,24 +2,39 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use 'sass:color';
+@use '../definitions/colours' as *;
+
 :root {
     --feedback-animation-duration: 2.2s;
     --feedback-animation-delay: 1s;
 }
 
-$initial-position: -35px; // Aligns button to the right edge of the screen
 $initial-offset: 35px;
-$animate-out-offset: 3px;
-$hide-offset: 20px;
+$animate-out-offset: -3px;
+$hide-offset: 8px;
 $button-rotation: -90deg; // Rotate the button to face upwards
 
 .feedback-button {
     position: fixed;
-    top: 50vh;
-    right: $initial-position;
+    top: 42vh;
+    right: -3px;
     z-index: 10;
+    background-color: $tt-blue-accent;
+    border-radius: 2px 2px 0 0;
+    font-size: 16px;
     transform: translateX($hide-offset) rotate($button-rotation);
     transition: transform 0.3s ease-in-out;
+    transform-origin: right bottom;
+
+    &:hover,
+    &:focus {
+        background-color: color.adjust($tt-blue, $lightness: -12%);
+    }
+
+    &:active {
+        background-color: color.adjust($tt-blue, $lightness: -15%);
+    }
 
     &.animate-in {
         transform: translateX($initial-offset) rotate($button-rotation);

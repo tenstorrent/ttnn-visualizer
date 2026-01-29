@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../mixins/scrollShade' as scrollShade;
 
 .operation-details-component {
     .core-view-buttons {
@@ -58,6 +59,8 @@
         margin-bottom: 20px;
         margin-top: 20px;
         padding-right: 15px;
+
+        @include scrollShade.scroll-shade(10px);
 
         &.nested-legend {
             padding-left: 18px;

@@ -5,6 +5,7 @@
 import { atomWithStorage } from 'jotai/utils';
 import { atom } from 'jotai';
 import { NumberRange, TabId } from '@blueprintjs/core';
+import { Id } from 'react-toastify';
 import { FileProgress, FileStatus } from '../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../definitions/Devices';
 import { TAB_IDS } from '../definitions/BufferSummary';
@@ -23,7 +24,7 @@ export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const hasClusterDescriptionAtom = atom<boolean>(false);
 
-export const activeToastAtom = atom<number | null>(null);
+export const activeToastAtom = atom<Id | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorAtom = atom<number | null>(null);
 
@@ -47,6 +48,7 @@ export const fileTransferProgressAtom = atom<FileProgress>({
 
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);
+export const operationListFilterAtom = atom('');
 
 // Operation details route
 export const isFullStackTraceAtom = atom(false);
@@ -75,6 +77,7 @@ export const mathFilterListAtom = atom<TypedPerfTableRow['math_fidelity'][]>([])
 export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>([]);
 export const bufferTypeFilterListAtom = atom<TypedPerfTableRow['buffer_type'][]>([]);
 export const mergeDevicesAtom = atom<boolean>(true);
+export const tracingModeAtom = atom<boolean>(false);
 
 // NPE
 export const altCongestionColorsAtom = atomWithStorage<boolean>('altCongestionColorsAtom', false);

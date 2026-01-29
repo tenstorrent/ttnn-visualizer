@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType, SelectedNode } from '../../model/NPEModel';
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
-import { formatPercentage, formatUnit } from '../../functions/math';
+import { formatMemorySize, formatPercentage } from '../../functions/math';
 import 'styles/components/ActiveTransferDetails.scss';
 import { altCongestionColorsAtom } from '../../store/app';
 
@@ -132,7 +132,7 @@ const ActiveTransferDetails = ({
                                                             : `${transfer.dst[0].join('-')} - ${transfer.dst[transfer.dst.length - 1].join('-')}`}
                                                     </span>
                                                 </div>
-                                                <div>{formatUnit(transfer.total_bytes, 'byte')}</div>
+                                                <div>{formatMemorySize(transfer.total_bytes, 2)}</div>
                                                 <div>{transfer.noc_event_type}</div>
                                                 {transfer.route[0].injection_rate.toFixed(2)} b/cycle
                                                 <div className='transfer-properties'>

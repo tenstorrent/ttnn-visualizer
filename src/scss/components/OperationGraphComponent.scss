@@ -88,11 +88,17 @@
             }
 
             .tensor-details {
-                border-left: 3px solid $tt-grey-5;
+                border-left: 3px solid transparent;
                 padding-left: 10px;
                 display: flex;
                 flex-direction: column;
                 gap: 5px;
+
+                .tensor-header {
+                    display: flex;
+                    gap: 5px;
+                    align-items: center;
+                }
 
                 > table {
                     margin-left: 7px;
@@ -100,6 +106,18 @@
 
                 > div {
                     margin-left: 15px;
+                }
+            }
+
+            &.inputs {
+                .tensor-details {
+                    border-left-color: var(--graph-input-edge);
+                }
+            }
+
+            &.outputs {
+                .tensor-details {
+                    border-left-color: var(--graph-output-edge);
                 }
             }
         }

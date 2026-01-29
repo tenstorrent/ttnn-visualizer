@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import dataclasses
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Union
@@ -88,14 +89,24 @@ class DatabaseQueries:
 
         return bool(rows)
 
+    def _get_table_columns(self, table_name: str) -> List[str]:
+        """
+        Gets the list of column names for a table.
+        """
+        query = f"PRAGMA table_info({table_name})"
+        rows = self.query_runner.execute_query(query)
+        return [row[1] for row in rows]  # row[1] is the column name
+
     def _query_table(
         self,
         table_name: str,
         filters: Optional[Dict[str, Union[Any, List[Any]]]] = None,
         additional_conditions: Optional[str] = None,
         additional_params: Optional[List[Any]] = None,
+        columns: Optional[List[str]] = None,
     ) -> List[Any]:
-        query = f"SELECT * FROM {table_name} WHERE 1=1"
+        columns_str = ", ".join(columns) if columns else "*"
+        query = f"SELECT {columns_str} FROM {table_name} WHERE 1=1"
         params = []
 
         if filters:
@@ -185,26 +196,88 @@ class DatabaseQueries:
     def query_tensors(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Tensor, None, None]:
-        rows = self._query_table("tensors", filters)
+        # Check if device_tensors table exists
+        device_tensors_exists = self._check_table_exists("device_tensors")
+
+        # Build the base query with joins to get size and optionally device_tensors
+        if device_tensors_exists:
+            query = """
+                SELECT 
+                    t.*, 
+                    b.max_size_per_bank as size,
+                    GROUP_CONCAT(dt.device_id || ':' || dt.address, ',') as device_tensors_data
+                FROM tensors t
+                LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
+                LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
+                LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
+                    AND t.address = b.address
+                    AND t.device_id = b.device_id
+                LEFT JOIN device_tensors dt ON dt.tensor_id = t.tensor_id
+                WHERE 1=1
+            """
+        else:
+            query = """
+                SELECT 
+                    t.*, 
+                    b.max_size_per_bank as size,
+                    NULL as device_tensors_data
+                FROM tensors t
+                LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
+                LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
+                LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
+                    AND t.address = b.address
+                    AND t.device_id = b.device_id
+                WHERE 1=1
+            """
+        params = []
+
+        # Apply filters to tensors table
+        if filters:
+            for column, value in filters.items():
+                if value is None:
+                    continue
+
+                if isinstance(value, list):
+                    if len(value) == 0:
+                        continue
+                    placeholders = ", ".join(["?"] * len(value))
+                    query += f" AND t.{column} IN ({placeholders})"
+                    params.extend(value)
+                else:
+                    query += f" AND t.{column} = ?"
+                    params.append(value)
+
+        query += " GROUP BY t.tensor_id"
+
+        rows = self.query_runner.execute_query(query, params)
         for row in rows:
+            # Extract size and device_tensors_data (last two columns) and tensor data
+            tensor_row = row[:-2]  # All tensor columns
+            size = row[-2]  # size column
+            device_tensors_data = row[-1]  # device_tensors_data column
+
             device_addresses = []
 
-            try:
-                device_tensors = self._query_table(
-                    "device_tensors", filters={"tensor_id": row[0]}
-                )
-            except sqlite3.OperationalError as err:
-                if str(err).startswith("no such table"):
-                    pass
-                else:
-                    raise err
-            else:
-                for device_tensor in sorted(device_tensors, key=lambda x: x[1]):
-                    while len(device_addresses) < device_tensor[1]:
-                        device_addresses.append(None)
-                    device_addresses.append(device_tensor[2])
+            if device_tensors_data:
+                # Parse the concatenated device_id:address pairs
+                pairs = device_tensors_data.split(",")
+                device_tensor_list = []
+                for pair in pairs:
+                    if pair:
+                        device_id_str, address_str = pair.split(":")
+                        device_id = int(device_id_str)
+                        address = int(address_str)
+                        device_tensor_list.append((device_id, address))
 
-            yield Tensor(*row, device_addresses)
+                # Sort by device_id and build the list with proper indexing
+                for device_id, address in sorted(
+                    device_tensor_list, key=lambda x: x[0]
+                ):
+                    while len(device_addresses) < device_id:
+                        device_addresses.append(None)
+                    device_addresses.append(address)
+
+            yield Tensor(*tensor_row, device_addresses, size=size)
 
     def query_input_tensors(
         self, filters: Optional[Dict[str, Any]] = None
@@ -223,7 +296,19 @@ class DatabaseQueries:
     def query_devices(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Device, None, None]:
-        rows = self._query_table("devices", filters)
+        # Get the expected Device model field names in order
+        device_fields = [field.name for field in dataclasses.fields(Device)]
+
+        # Get all columns from the devices table
+        all_columns = self._get_table_columns("devices")
+
+        # Filter out num_storage_cores if it exists (for backwards compatibility)
+        # and ensure columns are in the order expected by the Device model
+        available_columns = set(all_columns) - {"num_storage_cores"}
+        columns = [col for col in device_fields if col in available_columns]
+
+        rows = self._query_table("devices", filters, columns=columns)
+
         for row in rows:
             yield Device(*row)
 

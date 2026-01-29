@@ -10,7 +10,8 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
-import { prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
+import { prettyPrintAddress, toHex } from '../../functions/math';
+import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
@@ -132,7 +133,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 <p>
                     {tensor.memory_config?.memory_layout && (
                         <>
-                            Memory layout:<strong> {tensor.memory_config.memory_layout}</strong>
+                            Memory layout:<strong> {toReadableLayout(tensor.memory_config.memory_layout)}</strong>
                         </>
                     )}
                 </p>

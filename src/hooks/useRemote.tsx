@@ -8,6 +8,7 @@ import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definition
 import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
+import Endpoints from '../definitions/Endpoints';
 
 const FAILED_NO_CONNECTION = {
     status: ConnectionTestStates.FAILED,
@@ -30,7 +31,7 @@ const useRemoteConnection = () => {
             return [FAILED_NO_PATH];
         }
 
-        const { data: connectionTestStates } = await axiosInstance.post('/api/remote/test', connection);
+        const { data: connectionTestStates } = await axiosInstance.post(`${Endpoints.REMOTE}/test`, connection);
 
         return connectionTestStates;
     };
@@ -44,7 +45,7 @@ const useRemoteConnection = () => {
             return [];
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/profiler', connection);
+        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/profiler`, connection);
 
         return response.data.map(normaliseReportFolder) as RemoteFolder[];
     };
@@ -58,9 +59,7 @@ const useRemoteConnection = () => {
             return [];
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/performance', {
-            connection,
-        });
+        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/performance`, connection);
 
         return response.data;
     };
@@ -78,7 +77,7 @@ const useRemoteConnection = () => {
             throw new Error('No remote folder provided');
         }
 
-        return axiosInstance.post<RemoteFolder>('/api/remote/sync', {
+        return axiosInstance.post<RemoteFolder>(`${Endpoints.REMOTE}/sync`, {
             connection,
             profiler: profilerRemoteFolder,
             performance: performanceRemoteFolder,
@@ -90,7 +89,7 @@ const useRemoteConnection = () => {
         profilerRemoteFolder?: RemoteFolder,
         performanceRemoteFolder?: RemoteFolder,
     ) => {
-        return axiosInstance.post<MountRemoteFolder>('/api/remote/use', {
+        return axiosInstance.post<MountRemoteFolder>(`${Endpoints.REMOTE}/use`, {
             connection,
             profiler: profilerRemoteFolder,
             performance: performanceRemoteFolder,
@@ -142,7 +141,7 @@ const useRemoteConnection = () => {
     const readRemoteFile = async (filePath: string) => {
         try {
             const response = await axiosInstance.post(
-                '/api/remote/read',
+                `${Endpoints.REMOTE}/read`,
                 { filePath },
                 {
                     headers: {

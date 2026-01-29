@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
+import { ReportLocation } from '../definitions/Reports';
 import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
 import { BufferType } from './BufferType';
 
@@ -58,6 +59,7 @@ export interface Tensor {
         };
     } | null;
     io: 'input' | 'output' | null;
+    size: number | null;
 }
 
 export interface BufferData {
@@ -84,12 +86,21 @@ export interface OperationDetailsData extends Operation {
     l1_sizes: number[];
 }
 
+export interface ActiveReport {
+    profiler_name?: string;
+    profiler_location?: ReportLocation;
+    performance_name?: string;
+    performance_location?: ReportLocation;
+    npe_name?: string;
+    npe_location?: ReportLocation;
+}
+
 export interface Instance {
     instance_id: string;
     profiler_path: string | null;
     performance_path: string | null;
     npe_path: string | null;
-    active_report: { performance_name?: string; profiler_name?: string; npe_name?: string } | null;
+    active_report: ActiveReport | null;
     remote_connection: RemoteConnection | null;
     remote_profiler_folder: RemoteFolder | null;
     remote_performance_folder: RemoteFolder | null;
@@ -145,6 +156,7 @@ export const defaultTensorData: Tensor = {
     producerNames: [],
     consumerNames: [],
     comparison: null,
+    size: null,
 };
 
 export const defaultBuffer: BufferData = {
@@ -310,7 +322,6 @@ export interface DeviceInfo {
     l1_num_banks: number;
     num_banks_per_storage_core: number;
     num_compute_cores: number;
-    num_storage_cores: number;
     num_x_compute_cores: number;
     num_x_cores: number;
     num_y_compute_cores: number;

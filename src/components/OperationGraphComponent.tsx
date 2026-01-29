@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Edge, Network } from 'vis-network';
+import { Edge, IdType, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
 import { Button, ButtonVariant, Intent, Label, PopoverPosition, Slider, Switch, Tooltip } from '@blueprintjs/core';
@@ -15,17 +15,27 @@ import LoadingSpinner from './LoadingSpinner';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
-import { toReadableShape, toReadableType } from '../functions/math';
+import { toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
+import { cssVar } from '../functions/colour';
+import MemoryTag from './MemoryTag';
 
 type OperationList = OperationDescription[];
 const DEALLOCATE_OP_NAME = 'ttnn.deallocate';
+
+const GRAPH_COLORS = {
+    inputNode: cssVar(`--graph-input-node`),
+    outputNode: cssVar(`--graph-output-node`),
+    inputEdge: cssVar(`--graph-input-edge`),
+    outputEdge: cssVar(`--graph-output-edge`),
+    normal: cssVar(`--graph-normal`),
+};
 
 const OperationGraph: React.FC<{
     operationList: OperationList;
     operationId?: number;
 }> = ({ operationList, operationId }) => {
-    const focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
+    let focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
 
     const containerRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
@@ -36,28 +46,38 @@ const OperationGraph: React.FC<{
     const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
     const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
     const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
-    const [filterDeallocate, setFilterDeallocate] = useState<boolean>(false);
-
+    const [filterOutDeallocate, setFilterOutDeallocate] = useState<boolean>(true);
     const networkRef = useRef<Network | null>(null);
     const currentOpIdRef = useRef<number>(currentOperationId);
+    const [compactView, setCompactView] = useState<boolean>(false);
 
-    const edges = useMemo(
-        () =>
-            operationList.flatMap((op) =>
-                op.outputs.flatMap((tensor) =>
-                    tensor.consumers.map(
-                        (consumerId) =>
-                            ({
-                                from: op.id,
-                                to: consumerId,
-                                arrows: 'to',
-                                label: `${toReadableShape(tensor.shape)} \n ${toReadableType(tensor.dtype)}`,
-                            }) as Edge,
-                    ),
-                ),
+    const edges = useMemo((): Edge[] => {
+        const edgeMap = new Map<string, Edge>();
+        return operationList.flatMap((op) =>
+            op.outputs.flatMap((tensor) =>
+                tensor.consumers.map((consumerId) => {
+                    const edge = {
+                        from: op.id,
+                        to: consumerId,
+                        arrows: 'to',
+                        label: toReadableShape(tensor.shape),
+                        color: GRAPH_COLORS.normal,
+                    } as Edge;
+
+                    if (edgeMap.has(`${edge.from}-${edge.to}`)) {
+                        // If an edge already exists, make it curved to avoid overlap
+                        return {
+                            ...edge,
+                            smooth: { type: 'curvedCCW', roundness: 0.2 },
+                        } as Edge;
+                    }
+                    edgeMap.set(`${edge.from}-${edge.to}`, edge);
+
+                    return edge;
+                }),
             ),
-        [operationList],
-    );
+        );
+    }, [operationList]);
 
     const connectedNodeIds = useMemo(() => {
         const ids = new Set<number>();
@@ -68,12 +88,19 @@ const OperationGraph: React.FC<{
         return ids;
     }, [edges]);
 
+    if (currentOperationId !== null && !connectedNodeIds.has(currentOperationId)) {
+        const val = connectedNodeIds.values().next().value;
+
+        focusNodeId = val;
+        setCurrentOperationId(val);
+    }
+
     const nodes = useMemo(
         () =>
             new DataSet(
                 operationList
                     .filter((op) => connectedNodeIds.has(op.id))
-                    .filter((op) => !filterDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
+                    .filter((op) => !filterOutDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
                     .map((op) => ({
                         id: op.id,
                         label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
@@ -82,7 +109,100 @@ const OperationGraph: React.FC<{
                         deviceOpFilter: op.deviceOperationNameList.join(' '),
                     })),
             ),
-        [operationList, connectedNodeIds, filterDeallocate],
+        [operationList, connectedNodeIds, filterOutDeallocate],
+    );
+    const edgesDataSetRef = useRef<DataSet<Edge>>(new DataSet());
+
+    useEffect(() => {
+        const ds = edgesDataSetRef.current;
+
+        ds.clear();
+        ds.add(edges);
+    }, [edges]);
+
+    const data = useMemo(
+        () => ({
+            nodes,
+            edges: edgesDataSetRef.current,
+        }),
+        [nodes],
+    );
+
+    const colorHighlightIO = useCallback(
+        (selectedNodeId: IdType) => {
+            const allNodes = nodes.get();
+
+            const allEdges = edgesDataSetRef.current.get();
+
+            const inputNodeIds = new Set<IdType | undefined>();
+            const outputNodeIds = new Set<IdType | undefined>();
+            const inputEdgeIds = new Set<IdType | undefined>();
+            const outputEdgeIds = new Set<IdType | undefined>();
+
+            for (const edge of allEdges) {
+                if (edge.to === selectedNodeId) {
+                    inputNodeIds.add(edge.from);
+                    inputEdgeIds.add(edge.id);
+                }
+
+                if (edge.from === selectedNodeId) {
+                    outputNodeIds.add(edge.to);
+                    outputEdgeIds.add(edge.id);
+                }
+            }
+            nodes.update(
+                allNodes.map((node) => {
+                    if (node.id === selectedNodeId) {
+                        return node;
+                    }
+
+                    if (inputNodeIds.has(node.id)) {
+                        return {
+                            id: node.id,
+                            color: { background: GRAPH_COLORS.inputNode },
+                        };
+                    }
+
+                    if (outputNodeIds.has(node.id)) {
+                        return {
+                            id: node.id,
+                            color: { background: GRAPH_COLORS.outputNode },
+                        };
+                    }
+
+                    return {
+                        id: node.id,
+                        color: { background: GRAPH_COLORS.normal },
+                    };
+                }),
+            );
+
+            const edgesToUpdate = allEdges
+                .map((edge) => {
+                    if (inputEdgeIds.has(edge.id)) {
+                        return {
+                            id: edge.id,
+                            color: GRAPH_COLORS.inputEdge,
+                        };
+                    }
+                    if (outputEdgeIds.has(edge.id)) {
+                        return {
+                            id: edge.id,
+                            color: GRAPH_COLORS.outputEdge,
+                        };
+                    }
+                    if (edge.color !== GRAPH_COLORS.normal) {
+                        return {
+                            id: edge.id,
+                            color: GRAPH_COLORS.normal,
+                        };
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+            edgesDataSetRef.current.update(edgesToUpdate);
+        },
+        [nodes],
     );
 
     const focusOnNode = useCallback(
@@ -93,7 +213,7 @@ const OperationGraph: React.FC<{
                     animation: { duration: 500, easingFunction: 'easeInOutCubic' },
                 });
 
-                // Node might not exist if it's a decallocate op and we are filtering them out
+                // Node might not exist if it's a deallocate op and we are filtering them out
                 try {
                     networkRef.current.selectNodes([nodeId], true);
                     setCurrentOperationId(nodeId);
@@ -105,7 +225,8 @@ const OperationGraph: React.FC<{
                 }
             }
         },
-        [networkRef, scale],
+
+        [scale],
     );
 
     const updateScale = useCallback(
@@ -172,6 +293,7 @@ const OperationGraph: React.FC<{
         setFilteredNodeIdList(nodeIdList);
         return nodeIdList[0] || null;
     };
+
     useEffect(() => {
         setIsLoading(true);
 
@@ -179,55 +301,52 @@ const OperationGraph: React.FC<{
         setTimeout(() => {
             if (containerRef.current) {
                 requestAnimationFrame(() => {
-                    networkRef.current = new Network(
-                        containerRef.current!,
-                        {
-                            nodes,
-                            edges,
+                    networkRef.current = new Network(containerRef.current!, data, {
+                        nodes: {
+                            font: { color: '#202020' },
+                            color: {
+                                background: '#ccd2f9',
+                                border: 'none',
+                                hover: { background: '#9ca8f2', border: 'none' },
+                                highlight: { background: '#74c5df', border: '#f6bc42' },
+                            },
+                            size: 20,
+                            labelHighlightBold: false,
+                            shape: 'box',
+                            fixed: false,
                         },
-                        {
-                            nodes: {
-                                font: { color: '#202020' },
-                                color: {
-                                    background: '#ccd2f9',
-                                    border: 'none',
-                                    hover: { background: '#9ca8f2', border: 'none' },
-                                    highlight: { background: '#74c5df', border: '#f6bc42' },
-                                },
-                                size: 20,
-                                labelHighlightBold: false,
-                                shape: 'box',
-                            },
-                            edges: {
-                                font: { color: '#f5e2ba', size: 20, strokeColor: '#000' },
-                                color: '#f5e2ba',
-                                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-                                smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
-                            },
-                            autoResize: true,
-                            layout: {
-                                hierarchical: {
-                                    enabled: true,
-                                    levelSeparation: 200,
-                                    nodeSpacing: 200,
-                                    treeSpacing: 300,
-                                    blockShifting: true,
-                                    edgeMinimization: true,
-                                    direction: 'UD',
-                                    sortMethod: 'directed',
-                                    shakeTowards: 'leaves',
-                                },
-                            },
-                            interaction: {
-                                hover: true,
-                                keyboard: true,
-                                dragView: true,
-                                zoomView: true,
-                                zoomSpeed: 0.2,
-                            },
-                            physics: { enabled: false },
+                        edges: {
+                            font: { color: '#f5e2ba', size: 18, strokeColor: '#000' },
+                            color: '#fff',
+                            arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                            smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
+                            physics: true,
                         },
-                    );
+                        autoResize: true,
+                        layout: {
+                            hierarchical: {
+                                enabled: true,
+                                levelSeparation: 200,
+                                nodeSpacing: 700,
+                                treeSpacing: 700,
+                                blockShifting: true,
+                                edgeMinimization: !compactView,
+                                direction: 'UD',
+                                sortMethod: 'directed',
+                                shakeTowards: 'leaves',
+                            },
+                            improvedLayout: true,
+                        },
+
+                        interaction: {
+                            hover: true,
+                            keyboard: true,
+                            dragView: true,
+                            zoomView: true,
+                            zoomSpeed: 0.15,
+                        },
+                        physics: { enabled: false },
+                    });
 
                     networkRef.current.once('afterDrawing', () => {
                         networkRef.current?.moveTo({ scale });
@@ -238,6 +357,12 @@ const OperationGraph: React.FC<{
                     });
 
                     networkRef.current.on('click', (params) => {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            focusOnNode(nodeId);
+                            colorHighlightIO(nodeId);
+                            return;
+                        }
                         if (params.edges.length > 0) {
                             const edgeId = params.edges[0];
                             const edge = edges.find((e) => e.id === edgeId);
@@ -276,7 +401,7 @@ const OperationGraph: React.FC<{
             networkRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [edges, nodes]);
+    }, [edges, nodes, data, compactView]);
 
     const getNextOperationId = (currentId: number | null) => {
         if (nodes === null || currentId === null) {
@@ -388,9 +513,15 @@ const OperationGraph: React.FC<{
                         aria-label='Next result'
                     />
                     <Switch
-                        checked={filterDeallocate}
-                        onChange={() => setFilterDeallocate(!filterDeallocate)}
+                        checked={filterOutDeallocate}
+                        onChange={() => setFilterOutDeallocate(!filterOutDeallocate)}
                         label='Hide deallocate ops'
+                        disabled={isLoading}
+                    />
+                    <Switch
+                        checked={compactView}
+                        onChange={() => setCompactView(!compactView)}
+                        label='Compact view'
                         disabled={isLoading}
                     />
                 </div>
@@ -429,7 +560,9 @@ const OperationGraph: React.FC<{
                 ref={containerRef}
             />
 
-            <aside className='aside'>Scroll to zoom. Drag to pan. Click a node to see operation details.</aside>
+            <aside className='aside'>
+                Scroll to zoom. Drag to pan. Click a node to see operation details. Drag a node.
+            </aside>
         </div>
     );
 };
@@ -437,10 +570,13 @@ const OperationGraph: React.FC<{
 const TensorDetailsComponent: React.FC<{ tensor: Tensor }> = ({ tensor }) => {
     return (
         <div className='tensor-details'>
-            <h3>{toReadableShape(tensor.shape)}</h3>
-            <div>{tensor.dtype}</div>
+            <h3 className='tensor-header'>
+                <span>{tensor.buffer_type !== null && <MemoryTag memory={BufferType[tensor.buffer_type]} />}</span>{' '}
+                {toReadableShape(tensor.shape)} Tensor {tensor.id}{' '}
+            </h3>
+
+            <div>{toReadableType(tensor.dtype)}</div>
             <div>{tensor.layout}</div>
-            <div>{tensor.buffer_type !== null && BufferType[tensor.buffer_type]}</div>
             <div>{tensor.operationIdentifier && [tensor.operationIdentifier]}</div>
             {tensor?.memory_config
                 ? Object.entries(tensor.memory_config).map(([key, value]) => (
@@ -484,7 +620,7 @@ const OperationGraphInfoComponent: React.FC<{
             </Button>
 
             <h3>Inputs:</h3>
-            <div className='tensors'>
+            <div className='inputs tensors'>
                 {operation?.inputs.map((tensor, index) => (
                     <TensorDetailsComponent
                         tensor={tensor}
@@ -493,7 +629,7 @@ const OperationGraphInfoComponent: React.FC<{
                 ))}
             </div>
             <h3>Outputs:</h3>
-            <div className='tensors'>
+            <div className='outputs tensors'>
                 {operation?.outputs.map((tensor, index) => (
                     <TensorDetailsComponent
                         tensor={tensor}

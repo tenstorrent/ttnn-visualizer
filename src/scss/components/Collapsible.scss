@@ -67,6 +67,10 @@
         gap: 5px;
         margin-bottom: 10px;
 
+        &:empty {
+            margin-bottom: 0;
+        }
+
         @include perf.perf-report-colours;
     }
 }

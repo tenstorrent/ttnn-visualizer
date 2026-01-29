@@ -329,7 +329,9 @@ class OpsPerformanceQueries:
             performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
         )
         if not perf_files:
-            raise FileNotFoundError("No performance results file found.")
+            raise FileNotFoundError(
+                f"No performance results file found at {performance_path}"
+            )
 
         # Use the latest file
         latest_file = max(perf_files, key=os.path.getctime)
@@ -474,6 +476,7 @@ class OpsPerformanceReportQueries:
         stack_by_in0 = kwargs.get("stack_by_in0", cls.DEFAULT_NO_STACK_BY_IN0)
         no_host_ops = kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS)
         merge_devices = kwargs.get("merge_devices", cls.DEFAULT_MERGE_DEVICES)
+        tracing_mode = kwargs.get("tracing_mode", cls.DEFAULT_TRACING_MODE)
 
         if start_signpost or end_signpost:
             ignore_signposts = False
@@ -493,7 +496,7 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_ID_RANGE,
                 csv_output_file,
                 cls.DEFAULT_NO_ADVICE,
-                cls.DEFAULT_TRACING_MODE,
+                tracing_mode,
                 cls.DEFAULT_RAW_OP_CODES,
                 no_host_ops,
                 cls.DEFAULT_NO_STACKED_REPORT,

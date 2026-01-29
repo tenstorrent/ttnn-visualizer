@@ -5,13 +5,14 @@
 import 'styles/components/BufferSummaryRow.scss';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
-import { useAtom } from 'jotai/index';
+import { useAtom, useAtomValue } from 'jotai/index';
 import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { formatSize, toHex, toReadableShape, toReadableType } from '../../functions/math';
-import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
+import { formatMemorySize, toHex } from '../../functions/math';
+import { toReadableShape, toReadableType } from '../../functions/formatting';
+import { selectedAddressAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
@@ -50,6 +51,7 @@ const BufferSummaryRow = ({
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
+    const showHex = useAtomValue(showHexAtom);
 
     const { createToast, resetToasts } = useBufferFocus();
 
@@ -164,21 +166,25 @@ const BufferSummaryRow = ({
             const x = interactiveBuffer.position / scaleX;
             const { color } = interactiveBuffer;
 
-            const missingDeallocationNotice = interactiveBuffer.notDeallocated ? (
+            const tensorId = interactiveBuffer.tensor ? `Tensor ${interactiveBuffer.tensor.id}` : '';
+            const tensor = interactiveBuffer.notDeallocated ? (
                 <>
+                    <Icon
+                        intent={Intent.WARNING}
+                        icon={IconNames.WARNING_SIGN}
+                    />{' '}
+                    {interactiveBuffer.tensor ? `Tensor ${interactiveBuffer.tensor.id} -` : ''} Opportunity to
+                    deallocate earlier
                     <br />
                     Last consumer is{' '}
                     <u>
                         {interactiveBuffer.consumerOperationId} {interactiveBuffer.consumerName}
                     </u>
                     <br />
-                    <Icon
-                        intent={Intent.WARNING}
-                        icon={IconNames.WARNING_SIGN}
-                    />{' '}
-                    Opportunity to deallocate earlier
                 </>
-            ) : null;
+            ) : (
+                tensorId
+            );
 
             setTooltip({
                 x,
@@ -187,21 +193,18 @@ const BufferSummaryRow = ({
                     <div>
                         <strong>
                             <span style={{ fontSize: '20px', color, marginRight: '2px' }}>&#9632;</span>
-                            {interactiveBuffer.buffer.address} ({toHex(interactiveBuffer.buffer.address)})<br />
-                            Size: {formatSize(interactiveBuffer.buffer.size)}
-                            <br />
+                            {showHex ? toHex(interactiveBuffer.buffer.address) : interactiveBuffer.buffer.address} (
+                            {formatMemorySize(interactiveBuffer.buffer.size, 2)})<br />
                             {interactiveBuffer.tensor?.shape
                                 ? toReadableShape(interactiveBuffer.tensor.shape)
                                 : ''}{' '}
                             {interactiveBuffer.tensor?.dtype ? toReadableType(interactiveBuffer.tensor.dtype) : ''}{' '}
-                            {interactiveBuffer.tensor?.id ? `Tensor ${interactiveBuffer.tensor.id}` : ''}
-                            {interactiveBuffer.tensor?.memory_config?.memory_layout ? (
-                                <>
-                                    <br />
-                                    {interactiveBuffer.tensor?.memory_config?.memory_layout}
-                                </>
-                            ) : null}
-                            {missingDeallocationNotice}
+                            <br />
+                            {interactiveBuffer.tensor?.memory_config?.memory_layout
+                                ? interactiveBuffer.tensor?.memory_config?.memory_layout
+                                : null}
+                            <br />
+                            {tensor}
                         </strong>
                     </div>
                 ),

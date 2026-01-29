@@ -50,6 +50,7 @@ import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHan
 import { altCongestionColorsAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import NPEZoneFilterComponent from './NPEZoneFilterComponent';
+import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -212,6 +213,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const { architecture, cores, dram, eth, pcie } = useNodeType(npeData.common_info.arch as DeviceArchitecture);
     const width = architecture.grid?.x_size || 10;
     const height = architecture.grid?.y_size || 12;
+
+    useEffect(() => {
+        if (architecture.arch_name === undefined) {
+            createToastNotification(`Unsupported architecture`, npeData.common_info.arch, ToastType.WARNING);
+        }
+    }, [architecture.arch_name, npeData.common_info.arch]);
 
     useEffect(() => {
         resetRouteColors();

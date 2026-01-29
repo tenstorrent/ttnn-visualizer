@@ -423,6 +423,16 @@ def get_cluster_descriptor_path(instance):
     return str(cluster_descriptor_path)
 
 
+def get_mesh_descriptor_paths(instance):
+    if not instance.profiler_path:
+        return []
+
+    parent = Path(instance.profiler_path).parent
+    glob_pattern = "physical_chip_mesh_coordinate_mapping_[0-9]_of_[0-9].yaml"
+
+    return sorted(str(path) for path in parent.glob(glob_pattern) if path.is_file())
+
+
 def read_last_synced_file(directory: str) -> Optional[int]:
     """Reads the '.last-synced' file in the specified directory and returns the timestamp as an integer, or None if not found."""
     last_synced_path = Path(directory) / LAST_SYNCED_FILE_NAME

@@ -43,7 +43,7 @@ const FORM_GROUP = {
 const FILE_DOWNLOAD_IN_PROGRESS = {
     currentFileName: 'example_test_file_1.txt',
     numberOfFiles: 3,
-    percentOfCurrent: 25,
+    percentOfCurrent: 0,
     finishedFiles: 1,
     status: FileStatus.DOWNLOADING,
 };
@@ -69,6 +69,10 @@ export default function Styleguide() {
 
         const calculateRemainingTime = setInterval(() => {
             setTimeRemaining((prev) => prev - TIME_REMAINING_INTERVAL);
+            setUpdateFileTransferProgress((status) => ({
+                ...status,
+                percentOfCurrent: status.percentOfCurrent + (TIME_REMAINING_INTERVAL / autoCloseTime) * 75,
+            }));
         }, TIME_REMAINING_INTERVAL);
 
         setTimeout(() => {

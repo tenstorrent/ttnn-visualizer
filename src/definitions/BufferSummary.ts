@@ -15,6 +15,7 @@ export enum TAB_IDS {
 export interface ColumnDefinition {
     name: string;
     key: ColumnKeys;
+    width: number;
     sortable?: boolean;
     filterable?: boolean;
 }
@@ -31,43 +32,52 @@ export enum ColumnHeaders {
 
 export type ColumnKeys = keyof typeof ColumnHeaders;
 
+const DEFAULT_COLUMN_WIDTH = 120;
+
 export const Columns: ColumnDefinition[] = [
     {
         name: ColumnHeaders.operation_id,
         key: 'operation_id',
         sortable: true,
         filterable: true,
+        width: 200,
     },
     {
         name: ColumnHeaders.tensor_id,
         key: 'tensor_id',
         sortable: true,
         filterable: true,
+        width: DEFAULT_COLUMN_WIDTH,
     },
     {
         name: ColumnHeaders.address,
         key: 'address',
         sortable: true,
         filterable: true,
+        width: DEFAULT_COLUMN_WIDTH,
     },
     {
         name: ColumnHeaders.hexAddress,
         key: 'hexAddress',
         sortable: true,
         filterable: true,
+        width: 140,
     },
     {
         name: ColumnHeaders.size,
         key: 'size',
         sortable: true,
+        width: DEFAULT_COLUMN_WIDTH,
     },
     {
         name: ColumnHeaders.buffer_type,
         key: 'buffer_type',
+        width: DEFAULT_COLUMN_WIDTH,
     },
     {
         name: ColumnHeaders.device_id,
         key: 'device_id',
+        width: 100,
     },
 ];
 

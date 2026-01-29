@@ -40,6 +40,7 @@ from ttnn_visualizer.models import (
     Instance,
     RemoteConnection,
     RemoteReportFolder,
+    ReportLocation,
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
@@ -67,6 +68,7 @@ from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.utils import (
     create_path_resolver,
     get_cluster_descriptor_path,
+    get_mesh_descriptor_paths,
     read_last_synced_file,
     str_to_bool,
     timer,
@@ -733,6 +735,7 @@ def get_performance_results_report(instance: Instance):
     stack_by_in0 = str_to_bool(request.args.get("stack_by_in0", "true"))
     hide_host_ops = str_to_bool(request.args.get("hide_host_ops", "true"))
     merge_devices = str_to_bool(request.args.get("merge_devices", "true"))
+    tracing_mode = str_to_bool(request.args.get("tracing_mode", "false"))
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -748,6 +751,7 @@ def get_performance_results_report(instance: Instance):
             end_signpost=end_signpost,
             hide_host_ops=hide_host_ops,
             merge_devices=merge_devices,
+            tracing_mode=tracing_mode,
         )
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
@@ -788,13 +792,16 @@ def get_performance_device_meta(instance: Instance):
     def parse_arch_and_freq(line: str):
         arch_match = re.search(r"ARCH:\s*([\w\d_]+)", line)
         freq_match = re.search(r"CHIP_FREQ\[MHz\]:\s*(\d+)", line)
+        cores_match = re.search(r"Max Compute Cores:\s*(\d+)", line)
 
         architecture = arch_match.group(1) if arch_match else None
         frequency = int(freq_match.group(1)) if freq_match else None
+        max_cores = int(cores_match.group(1)) if cores_match else None
 
         return {
             "architecture": architecture,
             "frequency": frequency,
+            "max_cores": max_cores,
         }
 
     name = request.args.get("name", None)
@@ -919,6 +926,7 @@ def create_profiler_files():
     update_instance(
         instance_id=instance_id,
         profiler_name=parent_folder_name,
+        profiler_location=ReportLocation.LOCAL.value,
         clear_remote=True,
         profiler_path=str(profiler_path) if profiler_path else None,
     )
@@ -988,6 +996,7 @@ def create_performance_files():
     update_instance(
         instance_id=instance_id,
         performance_name=parent_folder_name,
+        performance_location=ReportLocation.LOCAL.value,
         clear_remote=True,
         performance_path=performance_path,
     )
@@ -1030,7 +1039,11 @@ def create_npe_files():
     instance_id = request.args.get("instanceId")
     npe_path = str(paths[0])
     update_instance(
-        instance_id=instance_id, npe_name=npe_name, clear_remote=True, npe_path=npe_path
+        instance_id=instance_id,
+        npe_name=npe_name,
+        npe_location=ReportLocation.LOCAL.value,
+        clear_remote=True,
+        npe_path=npe_path,
     )
 
     session["npe_paths"] = session.get("npe_paths", []) + [str(npe_path)]
@@ -1041,10 +1054,18 @@ def create_npe_files():
 
 @api.route("/remote/profiler", methods=["POST"])
 def get_remote_folders_profiler():
-    connection = RemoteConnection.model_validate(request.json, strict=False)
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
+        )
+
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
+
     try:
         remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
-            RemoteConnection.model_validate(connection, strict=False)
+            connection
         )
 
         for rf in remote_folders:
@@ -1071,16 +1092,18 @@ def get_remote_folders_profiler():
 
 @api.route("/remote/performance", methods=["POST"])
 def get_remote_folders_performance():
-    request_body = request.get_json()
-    connection = RemoteConnection.model_validate(
-        request_body.get("connection"), strict=False
-    )
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
+        )
+
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
 
     try:
         remote_performance_folders: List[RemoteReportFolder] = (
-            get_remote_performance_folders(
-                RemoteConnection.model_validate(connection, strict=False)
-            )
+            get_remote_performance_folders(connection)
         )
 
         for rf in remote_performance_folders:
@@ -1140,9 +1163,39 @@ def get_cluster_descriptor(instance: Instance):
     return jsonify({"error": "Cluster descriptor not found"}), 404
 
 
+@api.route("/mesh-descriptor", methods=["GET"])
+@with_instance
+def get_mesh_descriptor(instance: Instance):
+    paths = get_mesh_descriptor_paths(instance)
+
+    if not paths:
+        return (
+            jsonify(
+                {"error": "physical_chip_mesh_coordinate_mapping_1_of_1.yaml not found"}
+            ),
+            HTTPStatus.NOT_FOUND,
+        )
+
+    try:
+        with open(paths[0]) as mesh_descriptor_path:
+            yaml_data = yaml.safe_load(mesh_descriptor_path)
+            return jsonify(yaml_data)  # yaml_data is not compatible with orjson
+    except yaml.YAMLError as e:
+        return (
+            jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
+            HTTPStatus.BAD_REQUEST,
+        )
+
+
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
     connection_data = request.json
+
+    if not connection_data:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
+        )
+
     connection = RemoteConnection.model_validate(connection_data)
     statuses = []
 
@@ -1301,14 +1354,16 @@ def sync_remote_folder():
 @api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
     data = request.get_json(force=True)
-    connection = data.get("connection", None)
-    profiler = data.get("profiler", None)
-    performance = data.get("performance", None)
+    connection_data = data.get("connection")
+    profiler = data.get("profiler")
+    performance = data.get("performance")
 
-    if not connection or not (profiler or performance):
-        return Response(status=HTTPStatus.BAD_REQUEST)
+    if not connection_data or not (profiler or performance):
+        return Response(
+            status=HTTPStatus.BAD_REQUEST, response="Missing connection or report data"
+        )
 
-    connection = RemoteConnection.model_validate(connection, strict=False)
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
 
     kwargs = {
         "instance_id": request.args.get("instanceId"),
@@ -1322,6 +1377,7 @@ def use_remote_folder():
         )
         kwargs["remote_profiler_folder"] = remote_profiler_folder
         kwargs["profiler_name"] = remote_profiler_folder.remotePath.split("/")[-1]
+        kwargs["profiler_location"] = ReportLocation.REMOTE.value
 
     if performance:
         remote_performance_folder = RemoteReportFolder.model_validate(
@@ -1330,6 +1386,7 @@ def use_remote_folder():
         )
         kwargs["remote_performance_folder"] = remote_performance_folder
         kwargs["performance_name"] = remote_performance_folder.reportName
+        kwargs["performance_location"] = ReportLocation.REMOTE.value
 
     update_instance(**kwargs)
 
@@ -1352,18 +1409,28 @@ def get_instance(instance: Instance):
 
 
 @api.route("/instance", methods=["PUT"])
-def update_current_instance():
+@with_instance
+def update_current_instance(instance: Instance):
     try:
         update_data = request.get_json()
 
         if not update_data:
             return Response(status=HTTPStatus.BAD_REQUEST, response="No data provided.")
 
+        # Use current instance unless a different one is specified
+        instance_id = update_data.get("instance_id") or instance.instance_id
+
         update_instance(
-            instance_id=update_data.get("instance_id"),
+            instance_id=instance_id,
             profiler_name=update_data["active_report"].get("profiler_name"),
+            profiler_location=update_data["active_report"].get("profiler_location"),
             performance_name=update_data["active_report"].get("performance_name"),
+            performance_location=update_data["active_report"].get(
+                "performance_location"
+            ),
             npe_name=update_data["active_report"].get("npe_name"),
+            # NPE is always local right now
+            npe_location=ReportLocation.LOCAL.value,
             # Doesn't handle remote at the moment
             remote_connection=None,
             remote_profiler_folder=None,

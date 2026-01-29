@@ -24,6 +24,11 @@ class BufferType(enum.Enum):
     TRACE = 4
 
 
+class ReportLocation(enum.Enum):
+    LOCAL = "local"
+    REMOTE = "remote"
+
+
 @dataclasses.dataclass
 class Operation(SerializeableDataclass):
     operation_id: int
@@ -45,7 +50,6 @@ class Device(SerializeableDataclass):
     address_at_first_l1_cb_buffer: int
     num_banks_per_storage_core: int
     num_compute_cores: int
-    num_storage_cores: int
     total_l1_memory: int
     total_l1_for_tensors: int
     total_l1_for_interleaved_buffers: int
@@ -113,6 +117,7 @@ class Tensor(SerializeableDataclass):
     address: int
     buffer_type: BufferType
     device_addresses: list[int]
+    size: Optional[int] = None
 
     def __post_init__(self):
         self.memory_config = parse_memory_config(self.memory_config)
@@ -199,8 +204,11 @@ class StatusMessage(SerializeableModel):
 
 class ActiveReports(SerializeableModel):
     profiler_name: Optional[str] = None
+    profiler_location: Optional[ReportLocation] = None
     performance_name: Optional[str] = None
+    performance_location: Optional[ReportLocation] = None
     npe_name: Optional[str] = None
+    npe_location: Optional[ReportLocation] = None
 
 
 class RemoteReportFolder(SerializeableModel):

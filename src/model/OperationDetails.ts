@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { formatSize, getCoresInRange, toHex } from '../functions/math';
+import { formatMemorySize, getCoresInRange, toHex } from '../functions/math';
 import {
     BufferData,
     Chunk,
@@ -26,6 +26,7 @@ import { TensorDeallocationReport } from './BufferSummary';
 export interface OperationDetailsOptions {
     renderPattern: boolean;
     lateDeallocation: boolean;
+    showHex: boolean;
 }
 
 export class OperationDetails implements Partial<OperationDetailsData> {
@@ -67,6 +68,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     private options: OperationDetailsOptions = {
         renderPattern: false,
         lateDeallocation: false,
+        showHex: false,
     };
 
     constructor(
@@ -93,7 +95,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         // DEBUG
         // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
-        this.options = options || { renderPattern: false, lateDeallocation: false };
+        this.options = options || { renderPattern: false, lateDeallocation: false, showHex: false };
         this.memoryConfig = memoryConfig;
 
         this.inputs.forEach((tensor) => {
@@ -415,7 +417,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         const cbColor = '#e2defc';
         const cbHoverTemplate = `
 <span style="color:${cbColor};font-size:20px;">&#9632;</span>
-${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cbCondensed.size)}
+${cbCondensed.address} (${toHex(cbCondensed.address)}) <br />${formatMemorySize(cbCondensed.size, 2)}
 <br><br>CBs Summary
 <extra></extra>`;
 
@@ -436,7 +438,7 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
         const bufferColor = '#fcdefa';
         const bufferHoverTemplate = `
 <span style="color:${bufferColor};font-size:20px;">&#9632;</span>
-${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${formatSize(bufferCondensed.size)}
+${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br /> ${formatMemorySize(bufferCondensed.size, 2)}
 <br><br>Buffers Summary
 <extra></extra>`;
         const bufferChartData = this.getChartData([bufferCondensed], {

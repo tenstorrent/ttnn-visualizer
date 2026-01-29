@@ -18,7 +18,7 @@ import {
 } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
-import createToastNotification from '../../functions/createToastNotification';
+import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getServerConfig from '../../functions/getServerConfig';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import {
@@ -27,7 +27,6 @@ import {
     deletePerformance,
     deleteProfiler,
     updateInstance,
-    useInstance,
     usePerfFolderList,
     useReportFolderList,
 } from '../../hooks/useAPI';
@@ -96,7 +95,6 @@ const LocalFolderOptions: FC = () => {
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
     const { data: reportFolderList } = useReportFolderList();
-    const { data: instance } = useInstance();
 
     const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
@@ -105,24 +103,27 @@ const LocalFolderOptions: FC = () => {
     const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
+    const isProfilerLocal = profilerReportLocation === ReportLocation.LOCAL;
+    const isPerformanceLocal = performanceReportLocation === ReportLocation.LOCAL;
+
     const folderPickerValue = useMemo(
         () =>
             activeProfilerReport &&
             reportFolderList?.some((folder: ReportFolder) => folder.path.includes(activeProfilerReport.path)) &&
-            profilerReportLocation === ReportLocation.LOCAL
+            isProfilerLocal
                 ? activeProfilerReport.path
                 : null,
-        [activeProfilerReport, reportFolderList, profilerReportLocation],
+        [activeProfilerReport, reportFolderList, isProfilerLocal],
     );
 
     const perfFolderPickerValue = useMemo(
         () =>
             activePerformanceReport &&
             perfFolderList?.some((folder: ReportFolder) => folder.path.includes(activePerformanceReport.path)) &&
-            performanceReportLocation === ReportLocation.LOCAL
+            isPerformanceLocal
                 ? activePerformanceReport.path
                 : null,
-        [activePerformanceReport, perfFolderList, performanceReportLocation],
+        [activePerformanceReport, perfFolderList, isPerformanceLocal],
     );
 
     const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
@@ -164,7 +165,7 @@ const LocalFolderOptions: FC = () => {
 
             setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveProfilerReport(updatedReport);
-            createToastNotification('Active memory report', updatedReport.reportName);
+            createToastNotification('Active memory report', updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);
             setProfilerFolder(connectionStatus);
         }
@@ -202,7 +203,7 @@ const LocalFolderOptions: FC = () => {
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
             setPerformanceReportLocation(ReportLocation.LOCAL);
             setActivePerformanceReport({ path: fileName, reportName: fileName });
-            createToastNotification('Active performance report', fileName);
+            createToastNotification('Active performance report', fileName, ToastType.SUCCESS);
         }
 
         queryClient.clear();
@@ -211,16 +212,16 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectProfiler = async (folder: ReportFolder) => {
+        // Backend handles updating only the specific parts of active_report
         await updateInstance({
-            ...instance,
-            active_report: { profiler_name: folder.path },
+            active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
         });
 
         if (hasBeenNormalised(folder)) {
             createDataIntegrityWarning(folder);
         }
 
-        createToastNotification('Active memory report', folder.reportName ?? '');
+        createToastNotification('Active memory report', folder.reportName ?? '', ToastType.SUCCESS);
         setActiveProfilerReport(folder);
         setProfilerReportLocation(ReportLocation.LOCAL);
     };
@@ -229,7 +230,7 @@ const LocalFolderOptions: FC = () => {
         await deleteProfiler(folder.path);
         await queryClient.invalidateQueries({ queryKey: [PROFILER_FOLDER_QUERY_KEY] });
 
-        createToastNotification('Memory report deleted', folder.reportName);
+        createToastNotification('Memory report deleted', folder.reportName, ToastType.INFO);
 
         if (activeProfilerReport?.path === folder.path) {
             setActiveProfilerReport(null);
@@ -239,9 +240,12 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectPerformance = async (folder: ReportFolder) => {
-        await updateInstance({ ...instance, active_report: { performance_name: folder.path } });
+        // Backend handles updating only the specific parts of active_report
+        await updateInstance({
+            active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
+        });
 
-        createToastNotification('Active performance report', folder.reportName);
+        createToastNotification('Active performance report', folder.reportName, ToastType.SUCCESS);
         setActivePerformanceReport(folder);
         setPerformanceReportLocation(ReportLocation.LOCAL);
     };
@@ -250,7 +254,7 @@ const LocalFolderOptions: FC = () => {
         await deletePerformance(folder.path);
         await queryClient.invalidateQueries({ queryKey: [PERFORMANCE_FOLDER_QUERY_KEY] });
 
-        createToastNotification(`Performance report deleted`, folder.reportName);
+        createToastNotification(`Performance report deleted`, folder.reportName, ToastType.INFO);
 
         if (activePerformanceReport?.path === folder.path) {
             setActivePerformanceReport(null);
@@ -284,7 +288,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={reportFolderList}
-                    value={profilerReportLocation === ReportLocation.LOCAL ? folderPickerValue : null}
+                    value={isProfilerLocal ? folderPickerValue : null}
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
@@ -312,6 +316,7 @@ const LocalFolderOptions: FC = () => {
                         {profilerFolder && !isUploadingReport && (
                             <div
                                 className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}
+                                data-testid={TEST_IDS.LOCAL_PROFILER_STATUS}
                             >
                                 <Icon
                                     className='connection-status-icon'
@@ -333,7 +338,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={perfFolderList}
-                    value={performanceReportLocation === ReportLocation.LOCAL ? perfFolderPickerValue : null}
+                    value={isPerformanceLocal ? perfFolderPickerValue : null}
                     valueLabel={activePerformanceReport?.reportName ?? null}
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}
@@ -359,6 +364,7 @@ const LocalFolderOptions: FC = () => {
                         {performanceFolder && !isUploadingPerformance && (
                             <div
                                 className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
+                                data-testid={TEST_IDS.LOCAL_PERFORMANCE_STATUS}
                             >
                                 <Icon
                                     className='connection-status-icon'
