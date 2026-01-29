@@ -123,7 +123,7 @@ const DeviceOperationsFullRender: React.FC<{
                         }
                         position={PopoverPosition.TOP}
                     >
-                        <span className='standard-flex-layout'>
+                        <span className='standard-flex-layout has-tooltip'>
                             {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
                         </span>
                     </Tooltip>
