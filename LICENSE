@@ -87,6 +87,8 @@ The following separate and independent dependencies are utilized by this project
 - @eslint/eslintrc - MIT - https://github.com/eslint/eslintrc/blob/main/LICENSE
 - @eslint/js - MIT - https://github.com/eslint/eslint/blob/main/LICENSE
 - @eslint/rewrite - Apache-2.0 - https://github.com/eslint/rewrite/blob/main/LICENSE
+- @tanstack/react-query - MIT - https://github.com/TanStack/query/blob/main/LICENSE
+- @tanstack/react-query-devtools - MIT - https://github.com/TanStack/query/blob/main/LICENSE
 - @tanstack/react-virtual - MIT - https://github.com/TanStack/virtual/blob/main/LICENSE
 - @testing-library/dom - MIT - https://github.com/testing-library/dom-testing-library/blob/main/LICENSE
 - @testing-library/jest-dom - MIT - https://github.com/testing-library/jest-dom/blob/main/LICENSE
