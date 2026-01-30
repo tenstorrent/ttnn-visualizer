@@ -83,7 +83,7 @@ const useRestoreInstance = () => {
         instance,
         hasRestoredInstance,
         reports,
-        remote,
+        remote.persistentState,
     ]);
 
     return {
