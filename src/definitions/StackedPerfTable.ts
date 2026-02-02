@@ -4,63 +4,10 @@
 
 import { OpType } from './Performance';
 
-export type StackedTableKeys = Partial<keyof StackedPerfRow>;
-
-export type StackedTableFilter = Record<StackedTableKeys, string> | null;
-
-export interface StackedTableColumn {
-    label: string;
-    key: StackedTableKeys;
-    colour?: string;
-    unit?: string;
-    decimals?: number;
-    sortable?: boolean;
-    filterable?: boolean;
-}
-
 enum OperationCategories {
     Compute = 'Compute',
     DM = 'DM',
     TM = 'TM',
-}
-
-export interface StackedPerfRow {
-    ['%']: string;
-    ['OP Code Joined']: string;
-    Device: string;
-    Device_Time_Sum_us: string;
-    Ops_count: string;
-    Op_Category: OperationCategories;
-    Flops_min: string;
-    Flops_max: string;
-    Flops_mean: string;
-    Flops_std: string;
-    Flops_weighted_mean: string;
-    op_type: OpType;
-}
-
-export interface TypedStackedPerfRow
-    extends Omit<
-        StackedPerfRow,
-        | '%'
-        | 'Device'
-        | 'Device_Time_Sum_us'
-        | 'Ops_count'
-        | 'Flops_min'
-        | 'Flops_max'
-        | 'Flops_mean'
-        | 'Flops_std'
-        | 'Flops_weighted_mean'
-    > {
-    ['%']: number | null;
-    Device: number | null;
-    Device_Time_Sum_us: number | null;
-    Ops_count: number | null;
-    Flops_min: number | null;
-    Flops_max: number | null;
-    Flops_mean: number | null;
-    Flops_std: number | null;
-    Flops_weighted_mean: number | null;
 }
 
 export enum StackedColumnHeaders {
@@ -75,6 +22,61 @@ export enum StackedColumnHeaders {
     FlopsMean = 'Flops_mean',
     FlopsStd = 'Flops_std',
     FlopsWeightedMean = 'Flops_weighted_mean',
+}
+
+export type StackedTableKeys = Partial<keyof StackedPerfRow>;
+
+export type StackedTableFilter = Record<StackedTableKeys, string> | null;
+
+export interface StackedTableColumn {
+    label: string;
+    key: StackedTableKeys;
+    colour?: string;
+    unit?: string;
+    decimals?: number;
+    sortable?: boolean;
+    filterable?: boolean;
+}
+
+export interface StackedPerfRow {
+    [StackedColumnHeaders.Percent]: string;
+    [StackedColumnHeaders.OpCode]: string;
+    [StackedColumnHeaders.Device]: string;
+    [StackedColumnHeaders.DeviceTimeSumUs]: string;
+    [StackedColumnHeaders.OpsCount]: string;
+    [StackedColumnHeaders.OpCategory]: OperationCategories;
+    [StackedColumnHeaders.FlopsMin]: string;
+    [StackedColumnHeaders.FlopsMax]: string;
+    [StackedColumnHeaders.FlopsMean]: string;
+    [StackedColumnHeaders.FlopsStd]: string;
+    [StackedColumnHeaders.FlopsWeightedMean]: string;
+    op_type: OpType;
+}
+
+export interface TypedStackedPerfRow
+    extends Omit<
+        StackedPerfRow,
+        | StackedColumnHeaders.Percent
+        | StackedColumnHeaders.Device
+        | StackedColumnHeaders.DeviceTimeSumUs
+        | StackedColumnHeaders.OpsCount
+        | StackedColumnHeaders.OpCategory
+        | StackedColumnHeaders.FlopsMin
+        | StackedColumnHeaders.FlopsMax
+        | StackedColumnHeaders.FlopsMean
+        | StackedColumnHeaders.FlopsStd
+        | StackedColumnHeaders.FlopsWeightedMean
+    > {
+    [StackedColumnHeaders.Percent]: number | null;
+    [StackedColumnHeaders.Device]: number | null;
+    [StackedColumnHeaders.DeviceTimeSumUs]: number | null;
+    [StackedColumnHeaders.OpsCount]: number | null;
+    [StackedColumnHeaders.FlopsMin]: number | null;
+    [StackedColumnHeaders.FlopsMax]: number | null;
+    [StackedColumnHeaders.FlopsMean]: number | null;
+    [StackedColumnHeaders.FlopsStd]: number | null;
+    [StackedColumnHeaders.FlopsWeightedMean]: number | null;
+    [StackedColumnHeaders.OpCategory]: OperationCategories;
 }
 
 export const stackedTableColumns: StackedTableColumn[] = [

@@ -148,7 +148,9 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
                                 {stackedComparisonData.map((comparisonDataset, datasetIndex) => {
                                     const matchingRow = comparisonDataset.find(
-                                        (stackedRow) => stackedRow.op_code === row.op_code,
+                                        (stackedRow) =>
+                                            stackedRow[StackedColumnHeaders.OpCode] ===
+                                            row[StackedColumnHeaders.OpCode],
                                     );
 
                                     return (
@@ -209,7 +211,7 @@ const getTotalsForFooter = (column: StackedTableColumn, data: TypedStackedPerfRo
 
     if (column.key === StackedColumnHeaders.DeviceTimeSumUs) {
         return `${formatSize(
-            data?.reduce((acc, curr) => acc + (curr.device_time_sum_us || 0), 0),
+            data?.reduce((acc, curr) => acc + (curr[StackedColumnHeaders.DeviceTimeSumUs] || 0), 0),
             2,
         )} µs`;
     }
@@ -219,7 +221,7 @@ const getTotalsForFooter = (column: StackedTableColumn, data: TypedStackedPerfRo
     }
 
     if (column.key === StackedColumnHeaders.OpsCount) {
-        return `${data?.reduce((acc, curr) => acc + (curr.ops_count || 0), 0)}`;
+        return `${data?.reduce((acc, curr) => acc + (curr[StackedColumnHeaders.OpsCount] || 0), 0)}`;
     }
 
     return '';
