@@ -477,11 +477,14 @@ class OpsPerformanceReportQueries:
     def generate_report(cls, instance, **kwargs):
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
-        csv_summary_file = tempfile.NamedTemporaryFile()
+        csv_summary_file = tempfile.NamedTemporaryFile(delete=False)
         csv_output_file = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         # The perf_report library creates files with format: {csv_summary_name}.csv and {csv_summary_name}.png
         summary_csv_path = f"{csv_summary_file.name}.csv"
         summary_png_path = f"{csv_summary_file.name}.png"
+        csv_summary_file.close()
+        csv_output_file.close()
+
         start_signpost = kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST)
         end_signpost = kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST)
         ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
@@ -613,8 +616,9 @@ class OpsPerformanceReportQueries:
                             if index < len(row)
                         }
 
-                        if "OP CODE" in processed_row and any(
-                            processed_row["OP CODE"] in signpost["OP CODE"]
+                        if "OP Code Joined" in processed_row and any(
+                            processed_row["OP Code Joined"]
+                            in signpost["OP Code Joined"]
                             for signpost in signposts
                         ):
                             processed_row["op_type"] = "signpost"
@@ -630,6 +634,9 @@ class OpsPerformanceReportQueries:
                     os.unlink(summary_csv_path)
                 if os.path.exists(summary_png_path):
                     os.unlink(summary_png_path)
+                # Clean up the original temp file that was just used for its name
+                if os.path.exists(csv_summary_file.name):
+                    os.unlink(csv_summary_file.name)
 
         return {
             "report": report,
