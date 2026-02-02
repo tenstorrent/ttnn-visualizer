@@ -477,15 +477,11 @@ class OpsPerformanceReportQueries:
     def generate_report(cls, instance, **kwargs):
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
-        csv_report_name = f"perf_{next(tempfile._get_candidate_names())}"
-        csv_summary_name = f"perf_summary_{next(tempfile._get_candidate_names())}"
-        csv_output_file = tempfile.NamedTemporaryFile(
-            suffix=".csv", prefix=csv_report_name, delete=False
-        )
+        csv_summary_file = tempfile.NamedTemporaryFile()
+        csv_output_file = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         # The perf_report library creates files with format: {csv_summary_name}.csv and {csv_summary_name}.png
-        summary_csv_path = f"{csv_summary_name}.csv"
-        summary_png_path = f"{csv_summary_name}.png"
-
+        summary_csv_path = f"{csv_summary_file.name}.csv"
+        summary_png_path = f"{csv_summary_file.name}.png"
         start_signpost = kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST)
         end_signpost = kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST)
         ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
@@ -516,7 +512,7 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_NO_SUMMARY,
                 cls.DEFAULT_GROUP_BY,
                 cls.DEFAULT_CLASSIC_COLORS,
-                csv_summary_name,
+                csv_summary_file.name,
                 cls.DEFAULT_NO_STACKED_REPORT,
                 stack_by_in0,
                 cls.DEFAULT_STACKED_CSV_FILE,
