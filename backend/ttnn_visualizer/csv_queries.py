@@ -423,26 +423,30 @@ class OpsPerformanceReportQueries:
     ]
 
     STACKED_REPORT_COLUMNS = [
-        "percent",
-        "op_code",
-        "device_time_sum_us",
-        "ops_count",
-        "flops_min",
-        "flops_max",
-        "flops_mean",
-        "flops_std",
+        "%",
+        "OP Code Joined",
+        "Device_Time_Sum_us",
+        "Ops_count",
+        "Op_Category",
+        "Flops_min",
+        "Flops_max",
+        "Flops_mean",
+        "Flops_std",
+        "Flops_weighted_mean",
     ]
 
     STACKED_REPORT_COLUMNS_WITH_DEVICE = [
-        "percent",
-        "op_code",
-        "device",
-        "device_time_sum_us",
-        "ops_count",
-        "flops_min",
-        "flops_max",
-        "flops_mean",
-        "flops_std",
+        "%",
+        "OP Code Joined",
+        "Device",
+        "Device_Time_Sum_us",
+        "Ops_count",
+        "Op_Category",
+        "Flops_min",
+        "Flops_max",
+        "Flops_mean",
+        "Flops_std",
+        "Flops_weighted_mean",
     ]
 
     PASSTHROUGH_COLUMNS = {
@@ -455,6 +459,7 @@ class OpsPerformanceReportQueries:
     DEFAULT_PRINT_SIGNPOSTS = True
     DEFAULT_MIN_PERCENTAGE = 0.5
     DEFAULT_ID_RANGE = None
+    DEFAULT_ARCH = None
     DEFAULT_NO_ADVICE = False
     DEFAULT_TRACING_MODE = False
     DEFAULT_RAW_OP_CODES = True
@@ -462,13 +467,25 @@ class OpsPerformanceReportQueries:
     DEFAULT_NO_STACKED_REPORT = False
     DEFAULT_NO_STACK_BY_IN0 = True
     DEFAULT_MERGE_DEVICES = True
+    DEFAULT_STACKED_CSV_FILE = None  # Stacked report CSV output file
+    DEFAULT_NO_SUMMARY = False
+    DEFAULT_SUMMARY_FILE = None  # Stacked report output file
+    DEFAULT_CLASSIC_COLORS = False  # Colour scheme for plotted stacked report
+    DEFAULT_GROUP_BY = None  # Group by method for stacked report
 
     @classmethod
     def generate_report(cls, instance, **kwargs):
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
-        csv_output_file = tempfile.mktemp(suffix=".csv")
-        csv_stacked_output_file = tempfile.mktemp(suffix=".csv")
+        csv_report_name = f"perf_{next(tempfile._get_candidate_names())}"
+        csv_summary_name = f"perf_summary_{next(tempfile._get_candidate_names())}"
+        csv_output_file = tempfile.NamedTemporaryFile(
+            suffix=".csv", prefix=csv_report_name, delete=False
+        )
+        # The perf_report library creates files with format: {csv_summary_name}.csv and {csv_summary_name}.png
+        summary_csv_path = f"{csv_summary_name}.csv"
+        summary_png_path = f"{csv_summary_name}.png"
+
         start_signpost = kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST)
         end_signpost = kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST)
         ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
@@ -481,10 +498,6 @@ class OpsPerformanceReportQueries:
         if start_signpost or end_signpost:
             ignore_signposts = False
 
-        # perf_report currently generates a PNG alongside the CSV using the same temp name - we'll just delete it afterwards
-        stacked_png_file = csv_stacked_output_file + ".png"
-        stacked_csv_file = csv_stacked_output_file + ".csv"
-
         try:
             perf_report.generate_perf_report(
                 [csv_file],
@@ -494,14 +507,19 @@ class OpsPerformanceReportQueries:
                 print_signposts,
                 cls.DEFAULT_MIN_PERCENTAGE,
                 cls.DEFAULT_ID_RANGE,
-                csv_output_file,
+                cls.DEFAULT_ARCH,
+                csv_output_file.name,
                 cls.DEFAULT_NO_ADVICE,
                 tracing_mode,
                 cls.DEFAULT_RAW_OP_CODES,
                 no_host_ops,
+                cls.DEFAULT_NO_SUMMARY,
+                cls.DEFAULT_GROUP_BY,
+                cls.DEFAULT_CLASSIC_COLORS,
+                csv_summary_name,
                 cls.DEFAULT_NO_STACKED_REPORT,
                 stack_by_in0,
-                csv_stacked_output_file,
+                cls.DEFAULT_STACKED_CSV_FILE,
                 not merge_devices,
             )
         except Exception as e:
@@ -533,9 +551,9 @@ class OpsPerformanceReportQueries:
 
         report = []
 
-        if os.path.exists(csv_output_file):
+        if os.path.exists(csv_output_file.name):
             try:
-                with open(csv_output_file, newline="") as csvfile:
+                with open(csv_output_file.name, newline="") as csvfile:
                     reader = csv.reader(csvfile, delimiter=",")
                     next(reader, None)
                     for row in reader:
@@ -575,13 +593,13 @@ class OpsPerformanceReportQueries:
             except csv.Error as e:
                 raise DataFormatError() from e
             finally:
-                os.unlink(csv_output_file)
+                os.unlink(csv_output_file.name)
 
         stacked_report = []
 
-        if os.path.exists(stacked_csv_file):
+        if os.path.exists(summary_csv_path):
             try:
-                with open(stacked_csv_file, newline="") as csvfile:
+                with open(summary_csv_path, newline="") as csvfile:
                     reader = csv.reader(csvfile, delimiter=",")
                     next(reader, None)
 
@@ -599,8 +617,8 @@ class OpsPerformanceReportQueries:
                             if index < len(row)
                         }
 
-                        if "op_code" in processed_row and any(
-                            processed_row["op_code"] in signpost["op_code"]
+                        if "OP CODE" in processed_row and any(
+                            processed_row["OP CODE"] in signpost["OP CODE"]
                             for signpost in signposts
                         ):
                             processed_row["op_type"] = "signpost"
@@ -611,9 +629,11 @@ class OpsPerformanceReportQueries:
             except csv.Error as e:
                 raise DataFormatError() from e
             finally:
-                os.unlink(stacked_csv_file)
-                if os.path.exists(stacked_png_file):
-                    os.unlink(stacked_png_file)
+                # Clean up the files created by perf_report library
+                if os.path.exists(summary_csv_path):
+                    os.unlink(summary_csv_path)
+                if os.path.exists(summary_png_path):
+                    os.unlink(summary_png_path)
 
         return {
             "report": report,
