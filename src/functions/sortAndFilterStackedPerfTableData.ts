@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import {
+    StackedColumnHeaders,
     StackedTableFilter,
     StackedTableKeys,
     TypedStackedPerfRow,
@@ -33,15 +34,15 @@ const sortAndFilterStackedPerfTableData = (
     // TODO: This should be moved to tt-perf-report as the printed report differs from the output csv
     filteredRows = filteredRows.sort((a, b) => {
         // First sort by device (numeric comparison)
-        const deviceA = a.device ?? Number.MAX_SAFE_INTEGER;
-        const deviceB = b.device ?? Number.MAX_SAFE_INTEGER;
+        const deviceA = a[StackedColumnHeaders.Device] ?? Number.MAX_SAFE_INTEGER;
+        const deviceB = b[StackedColumnHeaders.Device] ?? Number.MAX_SAFE_INTEGER;
         const deviceCompare = deviceA - deviceB;
         if (deviceCompare !== 0) {
             return deviceCompare;
         }
         // Then sort by percent
-        const percentA = typeof a.percent === 'number' ? a.percent : 0;
-        const percentB = typeof b.percent === 'number' ? b.percent : 0;
+        const percentA = typeof a[StackedColumnHeaders.Percent] === 'number' ? a[StackedColumnHeaders.Percent] : 0;
+        const percentB = typeof b[StackedColumnHeaders.Percent] === 'number' ? b[StackedColumnHeaders.Percent] : 0;
         return percentB - percentA;
     });
 
@@ -64,12 +65,12 @@ const sortAndFilterStackedPerfTableData = (
     if (rawOpCodeFilter?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) =>
-                row?.op_code !== null &&
+                row?.[StackedColumnHeaders.OpCode] !== null &&
                 rawOpCodeFilter.some((filterValue) =>
                     stackByIn0
-                        ? filterValue.toLowerCase() === row.op_code.toLowerCase()
+                        ? filterValue.toLowerCase() === row[StackedColumnHeaders.OpCode].toLowerCase()
                         : // TODO: This split is currently needed but we should store the data differently
-                          filterValue.toLowerCase() === row.op_code.split(' ')[0].toLowerCase(),
+                          filterValue.toLowerCase() === row[StackedColumnHeaders.OpCode].split(' ')[0].toLowerCase(),
                 ),
         );
     }

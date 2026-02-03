@@ -33,7 +33,7 @@ import getServerConfig from '../functions/getServerConfig';
 import { OpType, PerfTabIds } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
-import { StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
+import { StackedColumnHeaders, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
@@ -302,12 +302,31 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
 const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
     rows.map((row) => ({
         ...row,
-        percent: row.percent ? parseFloat(row.percent) : null,
-        device: row.device ? parseInt(row.device, 10) : null,
-        device_time_sum_us: row.device_time_sum_us ? parseFloat(row.device_time_sum_us) : null,
-        ops_count: row.ops_count ? parseFloat(row.ops_count) : null,
-        flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
-        flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
-        flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
-        flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
+        [StackedColumnHeaders.Percent]: row[StackedColumnHeaders.Percent]
+            ? parseFloat(row[StackedColumnHeaders.Percent])
+            : null,
+        [StackedColumnHeaders.Device]: row[StackedColumnHeaders.Device]
+            ? parseInt(row[StackedColumnHeaders.Device], 10)
+            : null,
+        [StackedColumnHeaders.DeviceTimeSumUs]: row[StackedColumnHeaders.DeviceTimeSumUs]
+            ? parseFloat(row[StackedColumnHeaders.DeviceTimeSumUs])
+            : null,
+        [StackedColumnHeaders.OpsCount]: row[StackedColumnHeaders.OpsCount]
+            ? parseFloat(row[StackedColumnHeaders.OpsCount])
+            : null,
+        [StackedColumnHeaders.FlopsMin]: row[StackedColumnHeaders.FlopsMin]
+            ? parseFloat(row[StackedColumnHeaders.FlopsMin])
+            : null,
+        [StackedColumnHeaders.FlopsMax]: row[StackedColumnHeaders.FlopsMax]
+            ? parseFloat(row[StackedColumnHeaders.FlopsMax])
+            : null,
+        [StackedColumnHeaders.FlopsMean]: row[StackedColumnHeaders.FlopsMean]
+            ? parseFloat(row[StackedColumnHeaders.FlopsMean])
+            : null,
+        [StackedColumnHeaders.FlopsStd]: row[StackedColumnHeaders.FlopsStd]
+            ? parseFloat(row[StackedColumnHeaders.FlopsStd])
+            : null,
+        [StackedColumnHeaders.FlopsWeightedMean]: row[StackedColumnHeaders.FlopsWeightedMean]
+            ? parseFloat(row[StackedColumnHeaders.FlopsWeightedMean])
+            : null,
     }));
