@@ -193,6 +193,8 @@ def open_browser(host, port, instance_id=None):
         print(
             f"❌ Application not ready after {max_attempts} attempts - is the front end running?"
         )
+
+        sys.exit(1)
     else:
         print(f"Launching browser with url: {url}")
 
