@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
 from ttnn_visualizer.utils import (
     get_app_data_directory,
+    get_report_data_directory,
     is_running_in_container,
     str_to_bool,
 )
@@ -36,20 +37,21 @@ class DefaultConfig(object):
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed
-    REPORT_DATA_DIRECTORY = os.getenv(
-        "REPORT_DATA_DIRECTORY", Path(__file__).parent.absolute().joinpath("data")
-    )
-    LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
-    REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
-    PROFILER_DIRECTORY_NAME = "profiler-reports"
-    PERFORMANCE_DIRECTORY_NAME = "performance-reports"
-    NPE_DIRECTORY_NAME = "npe-reports"
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
     TT_METAL_HOME = os.getenv("TT_METAL_HOME", None)
     APP_DATA_DIRECTORY = os.getenv(
         "APP_DATA_DIRECTORY",
         get_app_data_directory(TT_METAL_HOME, APPLICATION_DIR),
     )
+    REPORT_DATA_DIRECTORY = os.getenv(
+        "REPORT_DATA_DIRECTORY",
+        get_report_data_directory(TT_METAL_HOME, APPLICATION_DIR),
+    )
+    LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
+    REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
+    PROFILER_DIRECTORY_NAME = "profiler-reports"
+    PERFORMANCE_DIRECTORY_NAME = "performance-reports"
+    NPE_DIRECTORY_NAME = "npe-reports"
 
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
