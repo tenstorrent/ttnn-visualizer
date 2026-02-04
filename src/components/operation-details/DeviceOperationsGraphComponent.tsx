@@ -7,9 +7,10 @@ import { DataSet, Network } from 'vis-network/standalone';
 import { Edge } from 'vis-network';
 import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Node, NodeType } from '../../model/APIData';
+import { Node } from '../../model/APIData';
 import { getTensorColor } from '../../functions/colorGenerator';
 import 'styles/components/DeviceOperationsGraphComponent.scss';
+import { toReadableShape } from '../../functions/formatting';
 
 export interface GraphComponentProps {
     data: Node[];
@@ -46,9 +47,9 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
     );
 
     const formatOperationName = (item: Node) => {
-        const prefix = item.node_type === 'function_start' ? 'Start ' : '';
-        const suffix = item.node_type === 'function_end' ? 'end' : '';
-        return item.params.name ? `${prefix + item.params.name}() ${suffix}` : item.node_type;
+        // const prefix = item.node_type === 'function_start' ? 'Start ' : '';
+        // const suffix = item.node_type === 'function_end' ? 'end' : '';
+        return item.params.name ? `${item.params.name}()` : '';
     };
     const getTensorSquare = (tensorId: number | null) => {
         return (
@@ -65,19 +66,10 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
 
     const generateTooltipContent = (node: Node) => {
         const tensorSquare = getTensorSquare(node.params.tensor_id);
-        const result = Object.entries(node.params).map(([key, value]) => (
-            <div key={key}>
-                <strong>{key}:</strong> {value}
-                <br />
-            </div>
-        ));
         return (
             <>
-                ID: {node.id}
                 {tensorSquare}
                 <strong>{formatOperationName(node)}</strong>
-                <br />
-                {result.map((item) => item)}
             </>
         );
     };
@@ -87,32 +79,71 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
             if (!container) {
                 return;
             }
-            const deviceOpList: Node[] = [];
-            const nodes = new DataSet(
-                data.map((node) => {
-                    // keeping the level implementation just in case, we may want to add a toggle
-                    if (node.node_type === NodeType.function_start) {
-                        deviceOpList.push(node);
-                    }
-                    if (node.node_type === NodeType.function_end) {
-                        deviceOpList.pop();
+
+            const consumersByTensorId = new Map<number, number[]>();
+            const producersByTensorId = new Map<number, number>();
+
+            const ops = data
+                .filter((op) => op.node_type === 'function_start')
+                .map((op) => {
+                    const inputTensors = op.inputs.filter((input) => input.node_type === 'tensor') || [];
+                    const outputTensors = op.outputs.filter((output) => output.node_type === 'tensor') || [];
+
+                    outputTensors.forEach((tensor) => {
+                        const tid = Number(tensor.params.tensor_id);
+                        producersByTensorId.set(tid, op.id);
+                    });
+
+                    inputTensors.forEach((tensor) => {
+                        const tid = Number(tensor.params.tensor_id);
+                        const existing = consumersByTensorId.get(tid) || [];
+                        existing.push(op.id);
+                        consumersByTensorId.set(tid, existing);
+                    });
+
+                    return { ...op, graphInputs: inputTensors, graphOutputs: outputTensors };
+                });
+
+            const nodeList = ops.map((node) => ({
+                id: node.id,
+                label: ` ${formatOperationName(node)}`,
+                shape: 'box',
+            }));
+
+            const edgesArray: Edge[] = [];
+
+            ops.forEach((consumer) => {
+                consumer.graphInputs.forEach((tensor) => {
+                    const tid = Number(tensor.params.tensor_id);
+                    const producerId = producersByTensorId.get(tid);
+                    if (producerId === undefined) {
+                        return;
                     }
 
-                    return {
-                        id: node.id,
-                        label: `${node.id} ${formatOperationName(node)}`,
-                        shape: 'box',
-                        // level,
-                    };
-                }),
+                    edgesArray.push({
+                        id: `${producerId}->${consumer.id}#${tid}`,
+                        from: producerId,
+                        to: consumer.id,
+                        label: `${toReadableShape(tensor.params.shape)}`,
+                    });
+                });
+            });
+
+            // dedupe works now
+            const seen = new Set<string>();
+            const dedupedEdges = edgesArray.filter((e) =>
+                seen.has(String(e.id)) ? false : (seen.add(String(e.id)), true),
             );
 
-            const edges: Edge[] = data.flatMap((item) =>
-                item.connections.map((connection) => ({
-                    from: item.id,
-                    to: connection,
-                })),
-            );
+            const edges = new DataSet(dedupedEdges);
+
+            const ids = new Set<string>();
+            edges.forEach(({ from, to }) => {
+                ids.add(String(from));
+                ids.add(String(to));
+            });
+
+            const nodes = new DataSet(nodeList.filter((op) => ids.has(String(op.id))));
 
             const networkData = { nodes, edges };
 
@@ -127,25 +158,36 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     },
                     size: 20,
                     labelHighlightBold: false,
+                    fixed: false,
                 },
                 edges: {
-                    font: { color: '#f5e2ba', size: 20, strokeColor: '#000' },
+                    font: {
+                        color: '#f5e2ba',
+                        size: 18,
+                        strokeColor: '#000',
+                        smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
+                        // align: 'middle',
+                        // align: 'top',
+                        physics: true,
+                    },
                     color: '#f5e2ba',
-                    arrows: { to: { enabled: true, scaleFactor: 1 } },
+                    smooth: false,
+                    arrows: { to: { enabled: true, scaleFactor: 0.5 } },
                 },
                 autoResize: true,
                 layout: {
                     hierarchical: {
                         enabled: true,
-                        levelSeparation: 200,
+                        levelSeparation: 100,
                         nodeSpacing: 300,
-                        treeSpacing: 1,
+                        treeSpacing: 300,
                         blockShifting: true,
-                        edgeMinimization: true,
+                        edgeMinimization: false,
                         direction: 'UD',
-                        sortMethod: 'hubsize',
-                        shakeTowards: 'roots',
+                        sortMethod: 'directed',
+                        shakeTowards: 'leaves',
                     },
+                    improvedLayout: true,
                 },
                 interaction: {
                     dragNodes: true,
@@ -189,10 +231,6 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                 if (params.nodes.length > 0) {
                     const nodeId = params.nodes[0];
                     focusOnNode(nodeId);
-                } else if (params.edges.length > 0) {
-                    const edgeId = params.edges[0];
-                    const edge = edges.find((e) => e.id === edgeId);
-                    focusOnNode((edge?.to as number) || null, true);
                 }
             });
         },
