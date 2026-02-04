@@ -12,7 +12,7 @@ enum OperationCategories {
 
 export enum StackedColumnHeaders {
     Percent = '%',
-    OpCode = 'OP Code Joined',
+    OpCode = 'op_code',
     Device = 'Device',
     DeviceTimeSumUs = 'Device_Time_Sum_us',
     OpsCount = 'Ops_count',
@@ -22,6 +22,12 @@ export enum StackedColumnHeaders {
     FlopsMean = 'Flops_mean',
     FlopsStd = 'Flops_std',
     FlopsWeightedMean = 'Flops_weighted_mean',
+}
+
+export enum StackedGroupBy {
+    CATEGORY = 'category',
+    MEMORY = 'memory',
+    OP = 'operation',
 }
 
 export type StackedTableKeys = Partial<keyof StackedPerfRow>;

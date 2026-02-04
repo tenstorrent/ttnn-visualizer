@@ -23,7 +23,7 @@ const sortAndFilterStackedPerfTableData = (
     data: TypedStackedPerfRow[],
     filters: StackedTableFilter,
     rawOpCodeFilter: string[],
-    stackByIn0: boolean,
+    isGroupedByMemory: boolean,
 ): TypedStackedPerfRow[] => {
     if (data?.length === 0) {
         return data;
@@ -67,7 +67,7 @@ const sortAndFilterStackedPerfTableData = (
             (row) =>
                 row?.[StackedColumnHeaders.OpCode] !== null &&
                 rawOpCodeFilter.some((filterValue) =>
-                    stackByIn0
+                    isGroupedByMemory
                         ? filterValue.toLowerCase() === row[StackedColumnHeaders.OpCode].toLowerCase()
                         : // TODO: This split is currently needed but we should store the data differently
                           filterValue.toLowerCase() === row[StackedColumnHeaders.OpCode].split(' ')[0].toLowerCase(),
