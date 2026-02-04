@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 TEST_CONFIG_FILE = "config.json"
 TEST_PROFILER_FILE = "profile_log_device.csv"
-# REPORT_DATA_DIRECTORY is now obtained from app.config, not hardcoded
 
 
 def start_background_task(task, *args):
