@@ -489,10 +489,10 @@ class OpsPerformanceReportQueries:
         end_signpost = kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST)
         ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
         print_signposts = kwargs.get("print_signposts", cls.DEFAULT_PRINT_SIGNPOSTS)
-        stack_by_in0 = kwargs.get("stack_by_in0", cls.DEFAULT_NO_STACK_BY_IN0)
         no_host_ops = kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS)
         merge_devices = kwargs.get("merge_devices", cls.DEFAULT_MERGE_DEVICES)
         tracing_mode = kwargs.get("tracing_mode", cls.DEFAULT_TRACING_MODE)
+        group_by = kwargs.get("group_by", cls.DEFAULT_GROUP_BY)
 
         if start_signpost or end_signpost:
             ignore_signposts = False
@@ -513,11 +513,11 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_RAW_OP_CODES,
                 no_host_ops,
                 cls.DEFAULT_NO_SUMMARY,
-                cls.DEFAULT_GROUP_BY,
+                group_by,
                 cls.DEFAULT_CLASSIC_COLORS,
                 csv_summary_file.name,
                 cls.DEFAULT_NO_STACKED_REPORT,
-                stack_by_in0,
+                cls.DEFAULT_NO_STACK_BY_IN0,
                 cls.DEFAULT_STACKED_CSV_FILE,
                 not merge_devices,
             )
@@ -616,9 +616,12 @@ class OpsPerformanceReportQueries:
                             if index < len(row)
                         }
 
-                        if "OP Code Joined" in processed_row and any(
-                            processed_row["OP Code Joined"]
-                            in signpost["OP Code Joined"]
+                        if "OP Code Joined" in processed_row:
+                            processed_row["op_code"] = processed_row["OP Code Joined"]
+                            del processed_row["OP Code Joined"]
+
+                        if "OP Code op_code" in processed_row and any(
+                            processed_row["op_code"] in signpost["op_code"]
                             for signpost in signposts
                         ):
                             processed_row["op_type"] = "signpost"
