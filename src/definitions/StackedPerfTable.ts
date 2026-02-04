@@ -25,9 +25,9 @@ export enum StackedColumnHeaders {
 }
 
 export enum StackedGroupBy {
-    OP = 'operation',
-    MEMORY = 'memory',
     CATEGORY = 'category',
+    MEMORY = 'memory',
+    OP = 'operation',
 }
 
 export type StackedTableKeys = Partial<keyof StackedPerfRow>;
