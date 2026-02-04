@@ -21,11 +21,8 @@ import { StackTraceLanguage } from '../../definitions/StackTrace';
 hljs.registerLanguage(StackTraceLanguage.PYTHON, python);
 hljs.registerLanguage(StackTraceLanguage.CPP, cpp);
 
-// Disabling because "Lookbehind is not supported in KaiOS 2.5"
-// eslint-disable-next-line compat/compat
-const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
-// eslint-disable-next-line compat/compat
-const LINE_NUMBER_REGEX = /(?<=line )(\d*)(?=,)/m;
+const FILE_PATH_REGEX = /File "(.*)"/m;
+const LINE_NUMBER_REGEX = /line (\d*),/m;
 
 interface StackTraceProps {
     title?: string;
@@ -69,7 +66,7 @@ function StackTrace({
         let highlightedFileContents = hljs.highlight(stackTrace, { language }).value;
 
         if (filePathMatches) {
-            setFilePath(filePathMatches[0]);
+            setFilePath(filePathMatches[1]);
         }
 
         let line = 1;
@@ -88,13 +85,13 @@ function StackTrace({
     const fileWithHighlights = useMemo(() => {
         const lineNumberMatches = LINE_NUMBER_REGEX.exec(stackTrace);
 
-        if (fileContents && lineNumberMatches?.[0]) {
+        if (fileContents && lineNumberMatches?.[1]) {
             let highlightedFileContents = hljs.highlight(fileContents, { language }).value;
 
             let line = 1;
             highlightedFileContents = highlightedFileContents.replace(/^/gm, () => {
                 const classes =
-                    line === parseInt(lineNumberMatches?.[0], 10) ? 'ttnn-line highlighted-line' : 'ttnn-line';
+                    line === parseInt(lineNumberMatches?.[1], 10) ? 'ttnn-line highlighted-line' : 'ttnn-line';
                 return `<div class="${classes}"><span class="line-number">${line++}</span>`;
             });
             highlightedFileContents = highlightedFileContents.replace(

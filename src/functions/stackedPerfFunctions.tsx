@@ -51,14 +51,14 @@ export const formatStackedCell = (
     let formatted: string | boolean | string[];
     const value = row[key];
 
-    if (value === null || value === '') {
+    if (value === null || value === '' || value === undefined) {
         return '';
     }
 
     if (typeof value === 'number') {
         formatted = formatSize(value, decimals);
     } else {
-        formatted = value.toString();
+        formatted = value;
     }
 
     if (unit) {
@@ -90,7 +90,9 @@ export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): 
     const value = row[key];
 
     if (key === StackedColumnHeaders.OpCode) {
-        const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.op_code.includes(opCodeKey));
+        const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) =>
+            row[StackedColumnHeaders.OpCode].includes(opCodeKey),
+        );
 
         return match ? OPERATION_COLOURS[match] : FALLBACK_COLOUR;
     }
@@ -103,6 +105,10 @@ export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): 
         return value > 0 ? DEFAULT_COLOUR : FALLBACK_COLOUR;
     }
 
+    if (key === StackedColumnHeaders.OpCategory) {
+        return DEFAULT_COLOUR;
+    }
+
     // Shouldn't get to this point but need to return something
-    return FALLBACK_COLOUR;
+    return DEFAULT_COLOUR;
 };

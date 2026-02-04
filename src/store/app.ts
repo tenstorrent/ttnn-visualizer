@@ -15,6 +15,7 @@ import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { TableFilter, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
+import { StackedGroupBy } from '../definitions/StackedPerfTable';
 
 // Unsorted
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
@@ -68,7 +69,6 @@ export const comparisonPerformanceReportListAtom = atom<string[] | null>(null);
 export const perfSelectedTabAtom = atom<TabId>(PerfTabIds.TABLE);
 export const perfTableFiltersAtom = atom<TableFilter | null>(null);
 export const isStackedViewAtom = atom(false);
-export const stackByIn0Atom = atom(true);
 export const filterBySignpostAtom = atom<(Signpost | null)[]>([null, null]);
 export const selectedDeviceAtom = atom<number | null>(DEFAULT_DEVICE_ID); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
 export const renderMemoryLayoutAtom = atom<boolean>(false);
@@ -78,6 +78,7 @@ export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>(
 export const bufferTypeFilterListAtom = atom<TypedPerfTableRow['buffer_type'][]>([]);
 export const mergeDevicesAtom = atom<boolean>(true);
 export const tracingModeAtom = atom<boolean>(false);
+export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
 
 // NPE
 export const altCongestionColorsAtom = atomWithStorage<boolean>('altCongestionColorsAtom', false);

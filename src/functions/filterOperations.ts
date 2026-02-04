@@ -4,3 +4,6 @@
 
 export const isDeviceOperation = (name: string): boolean =>
     !name.includes('(torch)') && !name.includes('::') && !name.includes('ttnn.') && name !== '';
+
+export const isExtendedDeviceOperation = (name: string): boolean =>
+    !name.includes('(torch)') && (!name.includes('::') || name.includes('Tensor::')) && !name.includes('ttnn.');
