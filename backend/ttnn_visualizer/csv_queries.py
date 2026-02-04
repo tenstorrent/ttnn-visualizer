@@ -616,11 +616,12 @@ class OpsPerformanceReportQueries:
                             if index < len(row)
                         }
 
+                        # Map "OP Code Joined" to "op_code" for consistency with non-stacked report
                         if "OP Code Joined" in processed_row:
                             processed_row["op_code"] = processed_row["OP Code Joined"]
                             del processed_row["OP Code Joined"]
 
-                        if "OP Code op_code" in processed_row and any(
+                        if "op_code" in processed_row and any(
                             processed_row["op_code"] in signpost["op_code"]
                             for signpost in signposts
                         ):
