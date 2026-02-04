@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 TEST_CONFIG_FILE = "config.json"
 TEST_PROFILER_FILE = "profile_log_device.csv"
-REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
 
 
 def start_background_task(task, *args):
@@ -853,7 +852,7 @@ def sync_remote_profiler_folders(
     """Main function to sync test folders, handles both compressed and individual syncs."""
     profiler_folder = Path(remote_folder_path).name
     destination_dir = Path(
-        REPORT_DATA_DIRECTORY,
+        current_app.config["REPORT_DATA_DIRECTORY"],
         path_prefix,
         remote_connection.host,
         current_app.config["PROFILER_DIRECTORY_NAME"],
@@ -877,7 +876,7 @@ def sync_remote_performance_folders(
     remote_folder_path = performance.remotePath
     profile_folder = Path(remote_folder_path).name
     destination_dir = Path(
-        REPORT_DATA_DIRECTORY,
+        current_app.config["REPORT_DATA_DIRECTORY"],
         path_prefix,
         remote_connection.host,
         current_app.config["PERFORMANCE_DIRECTORY_NAME"],

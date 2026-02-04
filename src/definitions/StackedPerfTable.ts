@@ -4,6 +4,32 @@
 
 import { OpType } from './Performance';
 
+enum OperationCategories {
+    Compute = 'Compute',
+    DM = 'DM',
+    TM = 'TM',
+}
+
+export enum StackedColumnHeaders {
+    Percent = '%',
+    OpCode = 'op_code',
+    Device = 'Device',
+    DeviceTimeSumUs = 'Device_Time_Sum_us',
+    OpsCount = 'Ops_count',
+    OpCategory = 'Op_Category',
+    FlopsMin = 'Flops_min',
+    FlopsMax = 'Flops_max',
+    FlopsMean = 'Flops_mean',
+    FlopsStd = 'Flops_std',
+    FlopsWeightedMean = 'Flops_weighted_mean',
+}
+
+export enum StackedGroupBy {
+    CATEGORY = 'category',
+    MEMORY = 'memory',
+    OP = 'operation',
+}
+
 export type StackedTableKeys = Partial<keyof StackedPerfRow>;
 
 export type StackedTableFilter = Record<StackedTableKeys, string> | null;
@@ -19,50 +45,44 @@ export interface StackedTableColumn {
 }
 
 export interface StackedPerfRow {
-    percent: string;
-    op_code: string;
-    device: string;
-    device_time_sum_us: string;
-    ops_count: string;
-    flops_min: string;
-    flops_max: string;
-    flops_mean: string;
-    flops_std: string;
+    [StackedColumnHeaders.Percent]: string;
+    [StackedColumnHeaders.OpCode]: string;
+    [StackedColumnHeaders.Device]: string;
+    [StackedColumnHeaders.DeviceTimeSumUs]: string;
+    [StackedColumnHeaders.OpsCount]: string;
+    [StackedColumnHeaders.OpCategory]: OperationCategories;
+    [StackedColumnHeaders.FlopsMin]: string;
+    [StackedColumnHeaders.FlopsMax]: string;
+    [StackedColumnHeaders.FlopsMean]: string;
+    [StackedColumnHeaders.FlopsStd]: string;
+    [StackedColumnHeaders.FlopsWeightedMean]: string;
     op_type: OpType;
 }
 
 export interface TypedStackedPerfRow
     extends Omit<
         StackedPerfRow,
-        | 'percent'
-        | 'device'
-        | 'device_time_sum_us'
-        | 'ops_count'
-        | 'flops_min'
-        | 'flops_max'
-        | 'flops_mean'
-        | 'flops_std'
+        | StackedColumnHeaders.Percent
+        | StackedColumnHeaders.Device
+        | StackedColumnHeaders.DeviceTimeSumUs
+        | StackedColumnHeaders.OpsCount
+        | StackedColumnHeaders.OpCategory
+        | StackedColumnHeaders.FlopsMin
+        | StackedColumnHeaders.FlopsMax
+        | StackedColumnHeaders.FlopsMean
+        | StackedColumnHeaders.FlopsStd
+        | StackedColumnHeaders.FlopsWeightedMean
     > {
-    percent: number | null;
-    device: number | null;
-    device_time_sum_us: number | null;
-    ops_count: number | null;
-    flops_min: number | null;
-    flops_max: number | null;
-    flops_mean: number | null;
-    flops_std: number | null;
-}
-
-export enum StackedColumnHeaders {
-    Percent = 'percent',
-    OpCode = 'op_code',
-    Device = 'device',
-    DeviceTimeSumUs = 'device_time_sum_us',
-    OpsCount = 'ops_count',
-    FlopsMin = 'flops_min',
-    FlopsMax = 'flops_max',
-    FlopsMean = 'flops_mean',
-    FlopsStd = 'flops_std',
+    [StackedColumnHeaders.Percent]: number | null;
+    [StackedColumnHeaders.Device]: number | null;
+    [StackedColumnHeaders.DeviceTimeSumUs]: number | null;
+    [StackedColumnHeaders.OpsCount]: number | null;
+    [StackedColumnHeaders.FlopsMin]: number | null;
+    [StackedColumnHeaders.FlopsMax]: number | null;
+    [StackedColumnHeaders.FlopsMean]: number | null;
+    [StackedColumnHeaders.FlopsStd]: number | null;
+    [StackedColumnHeaders.FlopsWeightedMean]: number | null;
+    [StackedColumnHeaders.OpCategory]: OperationCategories;
 }
 
 export const stackedTableColumns: StackedTableColumn[] = [
@@ -71,10 +91,18 @@ export const stackedTableColumns: StackedTableColumn[] = [
     { label: 'Device', key: StackedColumnHeaders.Device, decimals: 0, sortable: true },
     { label: 'Device Time', key: StackedColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 2, sortable: true },
     { label: 'Ops Count', key: StackedColumnHeaders.OpsCount, sortable: true },
+    { label: 'Op Category', key: StackedColumnHeaders.OpCategory, sortable: true, filterable: true },
     { label: 'Min FLOPS', key: StackedColumnHeaders.FlopsMin, unit: '%', decimals: 2, sortable: true },
     { label: 'Max FLOPS', key: StackedColumnHeaders.FlopsMax, unit: '%', decimals: 2, sortable: true },
     { label: 'Mean FLOPS', key: StackedColumnHeaders.FlopsMean, unit: '%', decimals: 2, sortable: true },
     { label: 'Std FLOPS', key: StackedColumnHeaders.FlopsStd, unit: '%', decimals: 2, sortable: true },
+    {
+        label: 'Weighted Mean FLOPS',
+        key: StackedColumnHeaders.FlopsWeightedMean,
+        unit: '%',
+        decimals: 2,
+        sortable: true,
+    },
 ];
 
 export const filterableStackedColumnKeys = stackedTableColumns

@@ -28,7 +28,12 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
-from ttnn_visualizer.utils import find_gunicorn_path, get_app_data_directory
+from ttnn_visualizer.utils import (
+    find_gunicorn_path,
+    get_app_data_directory,
+    get_report_data_directory,
+    migrate_old_data_directory,
+)
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -123,7 +128,10 @@ def extensions(app: flask.Flask):
     if app.config["USE_WEBSOCKETS"]:
         socketio.init_app(app)
 
+    # Create app data and report directories
     Path(app.config["APP_DATA_DIRECTORY"]).mkdir(parents=True, exist_ok=True)
+    Path(app.config["LOCAL_DATA_DIRECTORY"]).mkdir(parents=True, exist_ok=True)
+    Path(app.config["REMOTE_DATA_DIRECTORY"]).mkdir(parents=True, exist_ok=True)
     db.init_app(app)
 
     if app.config["USE_WEBSOCKETS"]:
@@ -344,6 +352,29 @@ def main():
                 Path(config.APP_DATA_DIRECTORY) / f"ttnn_{config.DB_VERSION}.db"
             )
             config.SQLALCHEMY_DATABASE_URI = f"sqlite:///{_db_file_path}"
+
+    # Check for and migrate old data from site-packages if needed
+    # Only migrate if environment variables are not explicitly set
+    if not os.getenv("APP_DATA_DIRECTORY") and not os.getenv("REPORT_DATA_DIRECTORY"):
+        # Calculate what the old directories would have been (in site-packages)
+        old_app_data_dir = config.APPLICATION_DIR
+        old_report_data_dir = str(
+            Path(config.APPLICATION_DIR).joinpath("ttnn_visualizer", "data")
+        )
+
+        # Get new directories (already calculated in config)
+        new_app_data_dir = config.APP_DATA_DIRECTORY
+        new_report_data_dir = config.REPORT_DATA_DIRECTORY
+
+        # Only migrate if we're not in TT-Metal mode (migration doesn't apply there)
+        if not config.TT_METAL_HOME:
+            migrate_old_data_directory(
+                old_app_data_dir,
+                old_report_data_dir,
+                new_app_data_dir,
+                new_report_data_dir,
+                config.DB_VERSION,
+            )
 
     display_mode_info_without_db(config)
 
