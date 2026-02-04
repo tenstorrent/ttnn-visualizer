@@ -20,14 +20,14 @@ import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
 import { toReadableShape } from '../../functions/formatting';
 
-type BufferDetailsArgs = {
+type BufferDetails = {
     buffer?: Node;
     tensorId?: number;
     optionalOutput?: JSX.Element;
     details: OperationDetails;
 };
 
-function renderBufferDetails({ buffer, tensorId, optionalOutput, details }: BufferDetailsArgs) {
+const renderBufferDetails = ({ buffer, tensorId, optionalOutput, details }: BufferDetails) => {
     // TODO: this will need grouping of same sized buffers. its impractical to render 32 lines that are the same
     if (buffer === undefined) {
         return null;
@@ -74,9 +74,9 @@ function renderBufferDetails({ buffer, tensorId, optionalOutput, details }: Buff
             {optionalOutput && optionalOutput}
         </div>
     );
-}
+};
 
-function renderTensorArgLabel(node: Node, details: OperationDetails, buffers: JSX.Element | null) {
+const renderTensorLabel = (node: Node, details: OperationDetails, buffers: JSX.Element | JSX.Element[] | null) => {
     const layout = node.buffer?.[0]?.params.layout;
     const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
 
@@ -115,7 +115,7 @@ function renderTensorArgLabel(node: Node, details: OperationDetails, buffers: JS
             {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
         </span>
     );
-}
+};
 
 function createBuffersRender(node: Node, details: OperationDetails) {
     const deviceIds = node.buffer?.filter((b) => b).map((b) => b.params.device_id) || [];
@@ -135,21 +135,18 @@ function createBuffersRender(node: Node, details: OperationDetails) {
     }
 
     return (
-        // eslint-disable-next-line react/jsx-no-useless-fragment
-        <>
-            {node.buffer?.map((buffer, index) => (
-                <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
-                    {renderBufferDetails({ buffer, tensorId: node.params.tensor_id, details })}
-                </Fragment>
-            ))}
-        </>
+        node.buffer?.map((buffer, index) => (
+            <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
+                {renderBufferDetails({ buffer, tensorId: node.params.tensor_id, details })}
+            </Fragment>
+        )) || null
     );
 }
 
 function formatDeviceOpParametersImpl(node: Node, details: OperationDetails) {
     if (node.node_type === NodeType.tensor) {
         const buffers = node.buffer ? createBuffersRender(node, details) : null;
-        return renderTensorArgLabel(node, details, buffers);
+        return renderTensorLabel(node, details, buffers);
     }
 
     if (node.node_type === NodeType.circular_buffer_deallocate_all) {
@@ -159,10 +156,10 @@ function formatDeviceOpParametersImpl(node: Node, details: OperationDetails) {
     return node.node_type;
 }
 
-function renderMemoryInfo(
+const renderMemoryInfo = (
     memoryDetails: AllocationDetails | undefined,
     peakMemoryLoad: number,
-): JSX.Element | undefined {
+): JSX.Element | undefined => {
     if (!memoryDetails) {
         return undefined;
     }
@@ -178,7 +175,7 @@ function renderMemoryInfo(
             <span className='format-numbers'>{formatMemorySize(memoryDetails.total_memory, 2)}</span>
         </span>
     );
-}
+};
 
 function useDeviceOperationsFullRenderModel(args: {
     deviceOperations: Node[];
@@ -286,23 +283,20 @@ function useDeviceOperationsFullRenderModel(args: {
                             key={index}
                             title='Buffer allocate'
                         >
-                            {/* eslint-disable-next-line react/jsx-no-useless-fragment */}
-                            <>
-                                <MemoryLegendElement
-                                    chunk={{
-                                        address: parseInt(buffer.address, 10),
-                                        size: bufferSize,
-                                    }}
-                                    numCores={cores}
-                                    key={buffer.address}
-                                    memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
-                                    selectedTensorAddress={selectedAddress}
-                                    operationDetails={details}
-                                    onLegendClick={onLegendClick}
-                                    bufferType={buffer.type}
-                                    layout={buffer.layout}
-                                />
-                            </>
+                            <MemoryLegendElement
+                                chunk={{
+                                    address: parseInt(buffer.address, 10),
+                                    size: bufferSize,
+                                }}
+                                numCores={cores}
+                                key={buffer.address}
+                                memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
+                                selectedTensorAddress={selectedAddress}
+                                operationDetails={details}
+                                onLegendClick={onLegendClick}
+                                bufferType={buffer.type}
+                                layout={buffer.layout}
+                            />
                         </DeviceOperationNode>
                     );
                 } else if (nodeType === NodeType.buffer_deallocate) {
