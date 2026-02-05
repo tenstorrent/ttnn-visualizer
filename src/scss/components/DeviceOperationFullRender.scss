@@ -21,7 +21,7 @@
 
     &.has-tooltip {
         cursor: help;
-        text-decoration: underline dotted;
+        text-decoration: underline dotted $tt-teal 2px;
     }
 }
 
