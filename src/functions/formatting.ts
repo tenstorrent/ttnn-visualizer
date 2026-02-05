@@ -19,3 +19,7 @@ export const toReadableType = (input: string) => {
 export const toReadableLayout = (input: TensorMemoryLayout) => {
     return input.replace(/^TensorMemoryLayout::/, '');
 };
+
+export const capitalizeString = (input: string) => {
+    return input.charAt(0).toUpperCase() + input.slice(1).toLowerCase();
+};

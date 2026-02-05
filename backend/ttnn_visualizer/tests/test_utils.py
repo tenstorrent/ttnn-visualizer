@@ -2,11 +2,13 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+from pathlib import Path
 from unittest.mock import mock_open, patch
 
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     get_app_data_directory,
+    get_report_data_directory,
     is_running_in_container,
 )
 
@@ -311,24 +313,34 @@ def test_get_app_data_directory_with_tt_metal_home():
     assert result == "/path/to/tt-metal/generated/ttnn-visualizer"
 
 
-def test_get_app_data_directory_with_none():
-    """Test that get_app_data_directory returns application_dir when tt_metal_home is None."""
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=False)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_app_data_directory_with_none(mock_home, mock_container, mock_getenv):
+    """Test that get_app_data_directory returns ~/.ttnn-visualizer/app when tt_metal_home is None."""
+    mock_getenv.return_value = None  # No APP_DATA_DIRECTORY env var
     tt_metal_home = None
     application_dir = "/default/app/dir"
 
     result = get_app_data_directory(tt_metal_home, application_dir)
 
-    assert result == "/default/app/dir"
+    assert result == "/home/testuser/.ttnn-visualizer/app"
 
 
-def test_get_app_data_directory_with_empty_string():
-    """Test that get_app_data_directory treats empty string as falsy and returns application_dir."""
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=False)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_app_data_directory_with_empty_string(
+    mock_home, mock_container, mock_getenv
+):
+    """Test that get_app_data_directory returns ~/.ttnn-visualizer/app when tt_metal_home is empty."""
+    mock_getenv.return_value = None  # No APP_DATA_DIRECTORY env var
     tt_metal_home = ""
     application_dir = "/default/app/dir"
 
     result = get_app_data_directory(tt_metal_home, application_dir)
 
-    assert result == "/default/app/dir"
+    assert result == "/home/testuser/.ttnn-visualizer/app"
 
 
 def test_get_app_data_directory_with_special_characters():
@@ -360,3 +372,83 @@ def test_get_app_data_directory_with_trailing_slash():
 
     # Path.join handles trailing slashes correctly
     assert result == "/path/to/tt-metal/generated/ttnn-visualizer"
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=False)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_app_data_directory_with_env_var(mock_home, mock_container, mock_getenv):
+    """Test that get_app_data_directory respects APP_DATA_DIRECTORY environment variable."""
+    mock_getenv.side_effect = lambda key, default=None: (
+        "/custom/app/data" if key == "APP_DATA_DIRECTORY" else None
+    )
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/custom/app/data"
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=True)
+@patch("os.geteuid", return_value=0)
+def test_get_app_data_directory_in_container_as_root(
+    mock_geteuid, mock_container, mock_getenv
+):
+    """Test that get_app_data_directory returns /var/lib/ttnn-visualizer/app when running as root in container."""
+    mock_getenv.return_value = None  # No APP_DATA_DIRECTORY env var
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/var/lib/ttnn-visualizer/app"
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=True)
+@patch("os.geteuid", return_value=1000)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_app_data_directory_in_container_as_non_root(
+    mock_home, mock_geteuid, mock_container, mock_getenv
+):
+    """Test that get_app_data_directory returns ~/.ttnn-visualizer/app when running as non-root in container."""
+    mock_getenv.return_value = None  # No APP_DATA_DIRECTORY env var
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/home/testuser/.ttnn-visualizer/app"
+
+
+# Tests for get_report_data_directory()
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=False)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_report_data_directory_default(mock_home, mock_container, mock_getenv):
+    """Test that get_report_data_directory returns ~/.ttnn-visualizer/reports by default."""
+    mock_getenv.return_value = None  # No REPORT_DATA_DIRECTORY env var
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_report_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/home/testuser/.ttnn-visualizer/reports"
+
+
+@patch("os.getenv")
+def test_get_report_data_directory_with_env_var(mock_getenv):
+    """Test that get_report_data_directory respects REPORT_DATA_DIRECTORY environment variable."""
+    mock_getenv.side_effect = lambda key, default=None: (
+        "/custom/reports" if key == "REPORT_DATA_DIRECTORY" else None
+    )
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_report_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/custom/reports"

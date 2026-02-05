@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shutil
+import sqlite3
 import sys
 import time
 from functools import wraps
@@ -23,18 +24,271 @@ LAST_SYNCED_FILE_NAME = ".last-synced"
 
 def get_app_data_directory(tt_metal_home: Optional[str], application_dir: str) -> str:
     """
-    Calculate the APP_DATA_DIRECTORY based on TT_METAL_HOME or fallback to application_dir.
+    Calculate the APP_DATA_DIRECTORY with sensible defaults.
+
+    Priority:
+    1. TT_METAL_HOME (if set) -> {tt_metal_home}/generated/ttnn-visualizer
+    2. Environment variable APP_DATA_DIRECTORY (if set)
+    3. Container detection -> /var/lib/ttnn-visualizer/app (root) or ~/.ttnn-visualizer/app (non-root)
+    4. Regular user -> ~/.ttnn-visualizer/app
 
     Args:
         tt_metal_home: Path to TT-Metal home directory, or None
-        application_dir: Fallback application directory path
+        application_dir: Fallback application directory path (legacy, used for migration detection)
 
     Returns:
         Path to the app data directory
     """
+    # Priority 1: TT_METAL_HOME mode
     if tt_metal_home and tt_metal_home.strip():
         return str(Path(tt_metal_home).expanduser() / "generated" / "ttnn-visualizer")
-    return application_dir
+
+    # Priority 2: Explicit environment variable
+    if env_dir := os.getenv("APP_DATA_DIRECTORY"):
+        return env_dir
+
+    # Priority 3: Container detection
+    if is_running_in_container():
+        # If running as root in container, use /var/lib
+        try:
+            if os.geteuid() == 0:
+                return "/var/lib/ttnn-visualizer/app"
+        except AttributeError:
+            # Windows doesn't have geteuid(), assume non-root
+            pass
+        # Otherwise use home directory (even in container)
+        return str(Path.home() / ".ttnn-visualizer" / "app")
+
+    # Priority 4: Default for regular users
+    return str(Path.home() / ".ttnn-visualizer" / "app")
+
+
+def get_report_data_directory(
+    tt_metal_home: Optional[str], application_dir: str
+) -> str:
+    """
+    Calculate the REPORT_DATA_DIRECTORY with sensible defaults.
+
+    Uses the same base directory as app data, but points to reports subdirectory.
+    Structure: {base}/reports (where base is ~/.ttnn-visualizer or /var/lib/ttnn-visualizer)
+
+    Args:
+        tt_metal_home: Path to TT-Metal home directory, or None
+        application_dir: Fallback application directory path (legacy, used for migration detection)
+
+    Returns:
+        Path to the report data directory
+    """
+    # Priority 1: Explicit environment variable
+    if env_dir := os.getenv("REPORT_DATA_DIRECTORY"):
+        return env_dir
+
+    # Priority 2: Use same base as app data, but in reports subdirectory
+    app_data_dir = get_app_data_directory(tt_metal_home, application_dir)
+    base_dir = Path(app_data_dir).parent
+    return str(base_dir / "reports")
+
+
+def migrate_old_data_directory(
+    old_app_data_dir: str,
+    old_report_data_dir: str,
+    new_app_data_dir: str,
+    new_report_data_dir: str,
+    db_version: str,
+) -> bool:
+    """
+    Migrate data from old site-packages directory to new user directory.
+
+    Args:
+        old_app_data_dir: Old app data directory (typically in site-packages)
+        old_report_data_dir: Old report data directory (typically in site-packages)
+        new_app_data_dir: New app data directory (typically ~/.ttnn-visualizer/app)
+        new_report_data_dir: New report data directory (typically ~/.ttnn-visualizer/reports)
+        db_version: Database version string (e.g., "0.29.0") to construct database filename
+
+    Returns:
+        True if migration was performed, False otherwise
+    """
+    old_app_path = Path(old_app_data_dir)
+    old_report_path = Path(old_report_data_dir)
+    new_app_path = Path(new_app_data_dir)
+    new_report_path = Path(new_report_data_dir)
+
+    # Construct the database filename
+    db_filename = f"ttnn_{db_version}.db"
+    old_db_path = old_app_path / db_filename
+
+    # Check if old directories exist and have data
+    old_app_has_data = old_db_path.exists()
+    old_report_has_data = old_report_path.exists() and any(old_report_path.iterdir())
+
+    if not old_app_has_data and not old_report_has_data:
+        return False
+
+    # Check if new directories already have data (don't overwrite)
+    new_db_path = new_app_path / db_filename
+    new_app_has_data = new_db_path.exists()
+    new_report_has_data = new_report_path.exists() and any(new_report_path.iterdir())
+
+    if new_app_has_data or new_report_has_data:
+        logger.info(
+            f"New data directories already exist with data, skipping migration. "
+            f"App: {new_app_path}, Reports: {new_report_path}"
+        )
+        return False
+
+    # Check if old directory is actually in site-packages (to avoid migrating from custom locations)
+    old_app_str = str(old_app_path)
+    if "site-packages" not in old_app_str and "dist-packages" not in old_app_str:
+        logger.info(
+            f"Old app data directory is not in site-packages, skipping migration: {old_app_path}"
+        )
+        return False
+
+    print("\n" + "=" * 70)
+    print("📦 DATA DIRECTORY MIGRATION")
+    print("=" * 70)
+    print(f"Detected old data in site-packages directory.")
+    print(f"  Old app data: {old_app_path}")
+    print(f"  Old reports: {old_report_path}")
+    print(f"\nNew location:")
+    print(f"  New app data: {new_app_path}")
+    print(f"  New reports: {new_report_path}")
+    print("\nWould you like to migrate the data? (y/n): ", end="", flush=True)
+
+    try:
+        response = input().strip().lower()
+        if response not in ("y", "yes"):
+            print("Migration cancelled by user.")
+            return False
+    except (EOFError, KeyboardInterrupt):
+        print("\nMigration cancelled.")
+        return False
+
+    # Create new directories
+    new_app_path.mkdir(parents=True, exist_ok=True)
+    new_report_path.mkdir(parents=True, exist_ok=True)
+
+    migrated = False
+
+    # Migrate app data (only the specific database file)
+    if old_app_has_data:
+        print(f"\nMigrating database file from {old_app_path} to {new_app_path}...")
+        try:
+            # Move the database file
+            shutil.move(str(old_db_path), str(new_db_path))
+            print(f"  ✓ Moved {db_filename}")
+            migrated = True
+        except Exception as e:
+            logger.error(f"Error migrating database file: {e}")
+            print(f"  ❌ Error: {e}")
+
+    # Migrate report data (all files and directories)
+    if old_report_has_data:
+        print(f"\nMigrating reports from {old_report_path} to {new_report_path}...")
+        try:
+            for item in old_report_path.iterdir():
+                dest = new_report_path / item.name
+                if item.is_file():
+                    shutil.move(str(item), str(dest))
+                    print(f"  ✓ Moved {item.name}")
+                elif item.is_dir():
+                    shutil.move(str(item), str(dest))
+                    print(f"  ✓ Moved directory {item.name}")
+            migrated = True
+        except Exception as e:
+            logger.error(f"Error migrating report data: {e}")
+            print(f"  ❌ Error: {e}")
+
+    # Update paths in the database after migration
+    # Note: We use the old_report_path for matching even though files are moved,
+    # because the database still contains the old paths that need to be updated
+    if migrated and old_app_has_data:
+        print(f"\nUpdating paths in database...")
+        try:
+            _update_database_paths(new_db_path, old_report_path, new_report_path)
+            print(f"  ✓ Updated paths in database")
+        except Exception as e:
+            logger.error(f"Error updating database paths: {e}")
+            print(f"  ⚠️  Warning: Could not update paths in database: {e}")
+            print(f"     You may need to manually update paths in the instances table.")
+
+    if migrated:
+        print("\n✅ Migration completed successfully!")
+        print(f"   Data has been moved from: {old_app_path}")
+    else:
+        print("\n⚠️  No data was migrated.")
+
+    print("=" * 70 + "\n")
+
+    return migrated
+
+
+def _update_database_paths(
+    db_path: Path, old_report_data_dir: Path, new_report_data_dir: Path
+) -> None:
+    """
+    Update absolute paths in the instances table after migration.
+
+    Args:
+        db_path: Path to the SQLite database file
+        old_report_data_dir: Old report data directory path
+        new_report_data_dir: New report data directory path
+    """
+    # Normalize paths to handle symlinks and ensure consistent format
+    old_report_data_dir = old_report_data_dir.resolve()
+    new_report_data_dir = new_report_data_dir.resolve()
+    old_report_str = str(old_report_data_dir)
+    new_report_str = str(new_report_data_dir)
+
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+
+        # Update profiler_path
+        cursor.execute(
+            """
+            UPDATE instances
+            SET profiler_path = REPLACE(profiler_path, ?, ?)
+            WHERE profiler_path LIKE ? || '%'
+            """,
+            (old_report_str, new_report_str, old_report_str),
+        )
+        profiler_updated = cursor.rowcount
+
+        # Update performance_path
+        cursor.execute(
+            """
+            UPDATE instances
+            SET performance_path = REPLACE(performance_path, ?, ?)
+            WHERE performance_path LIKE ? || '%'
+            """,
+            (old_report_str, new_report_str, old_report_str),
+        )
+        performance_updated = cursor.rowcount
+
+        # Update npe_path
+        cursor.execute(
+            """
+            UPDATE instances
+            SET npe_path = REPLACE(npe_path, ?, ?)
+            WHERE npe_path LIKE ? || '%'
+            """,
+            (old_report_str, new_report_str, old_report_str),
+        )
+        npe_updated = cursor.rowcount
+
+        conn.commit()
+        conn.close()
+
+        if profiler_updated > 0 or performance_updated > 0 or npe_updated > 0:
+            logger.info(
+                f"Updated database paths: {profiler_updated} profiler_path, "
+                f"{performance_updated} performance_path, {npe_updated} npe_path"
+            )
+    except sqlite3.Error as e:
+        logger.error(f"SQLite error updating paths: {e}")
+        raise
 
 
 def find_gunicorn_path() -> tuple[str, Optional[str]]:

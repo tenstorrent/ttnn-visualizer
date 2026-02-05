@@ -37,7 +37,7 @@ import {
     mathFilterListAtom,
     mergeDevicesAtom,
     rawOpCodeFilterListAtom,
-    stackByIn0Atom,
+    stackedGroupByAtom,
     tracingModeAtom,
 } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
@@ -45,6 +45,7 @@ import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableDa
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
+    StackedGroupBy,
     StackedTableFilter,
     StackedTableKeys,
     TypedStackedPerfRow,
@@ -56,6 +57,7 @@ import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { OpType } from '../../definitions/Performance';
+import { capitalizeString } from '../../functions/formatting';
 
 enum SignpostSelectType {
     START,
@@ -71,6 +73,7 @@ interface PerformanceReportProps {
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
+const STACKED_GROUP_BY = [StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP];
 
 const PerformanceReport: FC<PerformanceReportProps> = ({
     data,
@@ -82,11 +85,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
-    const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
     const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
     const [mergeDevices, setMergeDevices] = useAtom(mergeDevicesAtom);
     const [tracingMode, setTracingMode] = useAtom(tracingModeAtom);
+    const [stackedGroupBy, setStackedGroupBy] = useAtom(stackedGroupByAtom);
     const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
@@ -114,6 +117,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
     const isSignpostsDisabled = !signposts || signposts.length === 0;
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
+    const isGroupedByMemory = stackedGroupBy === StackedGroupBy.MEMORY;
 
     const {
         data: [processedRows, ...processedComparisonRows],
@@ -173,8 +177,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     );
 
     const filteredStackedRows = useMemo(
-        () => sortAndFilterStackedPerfTableData(stackedData, stackedFilters, activeRawOpCodeFilterList, stackByIn0),
-        [stackedData, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
+        () =>
+            sortAndFilterStackedPerfTableData(
+                stackedData,
+                stackedFilters,
+                activeRawOpCodeFilterList,
+                isGroupedByMemory,
+            ),
+        [stackedData, stackedFilters, activeRawOpCodeFilterList, isGroupedByMemory],
     );
 
     const filteredComparisonStackedRows = useMemo(
@@ -183,9 +193,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 comparisonStackedData[comparisonIndex],
                 stackedFilters,
                 activeRawOpCodeFilterList,
-                stackByIn0,
+                isGroupedByMemory,
             ),
-        [comparisonIndex, comparisonStackedData, stackedFilters, activeRawOpCodeFilterList, stackByIn0],
+        [comparisonIndex, comparisonStackedData, stackedFilters, activeRawOpCodeFilterList, isGroupedByMemory],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
@@ -379,8 +389,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 onChange={() => setHideHostOps(!hideHostOps)}
                                 checked={hideHostOps}
                                 className='option-switch'
-                                // TODO: Host Ops are missing when stackByIn0 is disabled
-                                disabled={!stackByIn0 && isStackedView}
+                                // TODO: Host Ops are missing when not grouped by memory is disabled
+                                disabled={!isGroupedByMemory && isStackedView}
                             />
 
                             <Switch
@@ -401,17 +411,29 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     className='option-switch'
                                 />
                             </Tooltip>
-
-                            {isStackedView && (
-                                <Switch
-                                    label='Stack by input 0'
-                                    onChange={() => setStackByIn0(!stackByIn0)}
-                                    checked={stackByIn0}
-                                    className='option-switch'
-                                />
-                            )}
                         </ButtonGroup>
                     </FormGroup>
+
+                    {isStackedView && (
+                        <FormGroup
+                            className='toggle-filters'
+                            subLabel='Stacked data grouping'
+                        >
+                            <ButtonGroup className='toggle-group'>
+                                <Select<StackedGroupBy>
+                                    activeItem={stackedGroupBy}
+                                    items={STACKED_GROUP_BY}
+                                    itemRenderer={(item, itemProps) => renderStackedGroupBy(item, itemProps)}
+                                    onItemSelect={(value) => setStackedGroupBy(value)}
+                                >
+                                    <Button
+                                        text={capitalizeString(stackedGroupBy)}
+                                        endIcon={IconNames.CARET_DOWN}
+                                    />
+                                </Select>
+                            </ButtonGroup>
+                        </FormGroup>
+                    )}
                 </div>
 
                 <div className='filters'>
@@ -601,7 +623,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                                       comparisonStackedData[comparisonIndex],
                                                       stackedFilters,
                                                       activeRawOpCodeFilterList,
-                                                      stackByIn0,
+                                                      isGroupedByMemory,
                                                   )
                                                 : filteredStackedRows
                                         }
@@ -613,7 +635,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                                 dataset,
                                                 stackedFilters,
                                                 activeRawOpCodeFilterList,
-                                                stackByIn0,
+                                                isGroupedByMemory,
                                             ),
                                         )}
                                         filters={filters}
@@ -715,6 +737,36 @@ const getRawOpCodeOptions = (rows: TypedPerfTableRow[]): TypedPerfTableRow[] => 
     const options = rows.filter((row) => row.op_type !== OpType.SIGNPOST);
 
     return Array.from(new Set(options));
+};
+
+interface RenderStackedGroupByProps<T> {
+    (item: T, itemProps: ItemRendererProps): React.JSX.Element | null;
+}
+
+const renderStackedGroupBy: RenderStackedGroupByProps<StackedGroupBy> = (
+    value,
+    { handleClick, handleFocus, modifiers, query, id },
+) => {
+    if (!modifiers.matchesPredicate) {
+        return null;
+    }
+
+    return (
+        <MenuItem
+            active={modifiers.active}
+            disabled={modifiers.disabled}
+            key={id}
+            onClick={handleClick}
+            onFocus={handleFocus}
+            roleStructure='listoption'
+            text={
+                <HighlightedText
+                    text={capitalizeString(value)}
+                    filter={query}
+                />
+            }
+        />
+    );
 };
 
 export default PerformanceReport;
