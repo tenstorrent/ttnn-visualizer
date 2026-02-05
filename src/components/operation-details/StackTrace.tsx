@@ -200,7 +200,8 @@ function StackTrace({
                     onClose={toggleViewingFile}
                 >
                     {fileWithHighlights && (
-                        <pre className='stack-trace'>
+                        <div className='stack-trace'>
+                            <p className='stack-trace-path monospace'>{filePath.trim()}</p>
                             <code
                                 className={`language-${language} code-output`}
                                 // eslint-disable-next-line react/no-danger
@@ -208,7 +209,7 @@ function StackTrace({
                                     __html: fileWithHighlights,
                                 }}
                             />
-                        </pre>
+                        </div>
                     )}
                 </Overlay>
             </pre>

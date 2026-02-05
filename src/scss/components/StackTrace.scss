@@ -5,6 +5,8 @@
 @use '../definitions/colours' as *;
 
 .stack-trace {
+    margin-top: 0;
+
     .stack-trace-title {
         font-size: 16px;
         font-weight: bold;
@@ -42,6 +44,13 @@
         }
     }
 
+    .stack-trace-path {
+        color: $tt-grey-5;
+        margin-top: 5px;
+        margin-bottom: 20px;
+        word-break: break-all;
+    }
+
     .code-wrapper {
         flex-basis: 100%;
         flex-shrink: 1;
@@ -74,9 +83,9 @@
             position: absolute;
             text-align: right;
             left: 5px;
-            min-width: 30px;
             font-size: 1em;
             color: $tt-grey-5;
+            min-width: 35px;
         }
 
         &::before {
