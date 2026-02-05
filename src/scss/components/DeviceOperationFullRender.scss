@@ -18,6 +18,11 @@
     justify-content: space-between;
     align-items: center;
     gap: 5px;
+
+    &.has-tooltip {
+        cursor: help;
+        text-decoration: underline dotted $tt-teal 2px;
+    }
 }
 
 .arg-tensor-tooltip {
