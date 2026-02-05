@@ -227,7 +227,7 @@ class SSHClient:
             return result.encode("utf-8")
         except SSHException as e:
             if "No such file" in str(e) or "cannot open" in str(e):
-                return None
+                return f"File at {path} not found."
             raise
 
     def check_path_exists(

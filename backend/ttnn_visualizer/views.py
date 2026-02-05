@@ -1287,7 +1287,8 @@ def read_remote_folder(instance: Instance):
     try:
         content = read_remote_file(remote_connection, remote_path=file_path)
     except RemoteConnectionException as e:
-        return Response(status=e.http_status, response=e.message)
+        return jsonify({"error": str(e)}), e.http_status
+
     return Response(status=200, response=content)
 
 

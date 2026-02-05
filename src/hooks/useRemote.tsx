@@ -150,9 +150,14 @@ const useRemoteConnection = () => {
                 },
             );
 
-            return response.data;
-        } catch (error) {
-            return axios.isAxiosError(error) ? error.message : error;
+            return { data: response.data, error: null };
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                const errorMessage = error.response?.data?.error || error.message || 'Failed to read remote file';
+                return { data: null, error: errorMessage };
+            }
+
+            return { data: null, error: 'An unexpected error occurred' };
         }
     };
 
