@@ -197,6 +197,7 @@ function StackTrace({
 
                 <Overlay
                     isOpen={isViewingSourceFile}
+                    onOpened={() => scrollToLineNumberInFile()}
                     onClose={toggleViewingFile}
                 >
                     {fileWithHighlights && (
@@ -230,5 +231,13 @@ function isTopOfElementInViewport(element: HTMLElement, scrollContainer?: React.
 
     return elementPosition.top > comparisonElementPosition;
 }
+
+const scrollToLineNumberInFile = () => {
+    const lineElement = document.querySelector(`.highlighted-line .line-number`);
+
+    if (lineElement) {
+        lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+};
 
 export default StackTrace;

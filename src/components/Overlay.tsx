@@ -9,6 +9,7 @@ import 'styles/components/Overlay.scss';
 
 interface OverlayProps {
     isOpen: boolean;
+    onOpened?: () => void;
     onClose?: () => void;
     children: ReactNode;
     hideCloseButton?: boolean;
@@ -18,6 +19,7 @@ interface OverlayProps {
 
 function Overlay({
     isOpen,
+    onOpened,
     onClose,
     children,
     hideCloseButton = false,
@@ -27,6 +29,7 @@ function Overlay({
     return (
         <Overlay2
             isOpen={isOpen}
+            onOpened={onOpened}
             onClose={onClose}
             className={Classes.OVERLAY_SCROLL_CONTAINER}
             canEscapeKeyClose={canEscapeKeyClose}
