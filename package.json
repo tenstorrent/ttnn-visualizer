@@ -20,6 +20,7 @@
   "scripts": {
     "build:wheel": "pnpm run build && python -m build --wheel",
     "build": "vite build",
+    "build:docs": "sphinx-build ./docs ./docs/output",
     "dev:server": "VITE_SERVER_MODE=1 vite",
     "dev": "vite",
     "flask:lint": "isort --check-only backend/ttnn_visualizer && black --check backend/ttnn_visualizer",
