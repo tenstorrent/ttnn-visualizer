@@ -14,7 +14,7 @@ Recommended PyTest config when generating your data:
 export TTNN_CONFIG_OVERRIDES='{
     "enable_fast_runtime_mode": false,
     "enable_logging": true,
-    "report_name": "TODO ADD NAME",
+    "report_name": "YOUR REPORT NAME",
     "enable_detailed_buffer_report": true,
     "enable_graph_report": false,
     "enable_detailed_tensor_report": false,
@@ -30,7 +30,7 @@ export TTNN_CONFIG_OVERRIDES='{
 | **enable_detailed_buffer_report** | Enable to visualize the detailed buffer report after every operation. *Needed for full buffer information*. |
 | **enable_graph_report** | Enable to visualize the graph after every operation. *Data not used by the visualizer*. |
 | **enable_detailed_tensor_report** | Enable to visualize the values of input and output tensors of every operation. *Data not used by the visualizer*. |
-| **enable_comparison_mode** | Enable to test the output of operations against their golden implementation. *Data not used by the visualizer*. |
+| **enable_comparison_mode** | Enable to test the output of operations against their golden implementation. *Optional, not always available on models*. |
 
 To run a test with custom input data, you can use the following command with suitable values for `input-path`:
 
