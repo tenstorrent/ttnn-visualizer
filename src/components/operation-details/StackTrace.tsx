@@ -118,9 +118,9 @@ function StackTrace({
         if (selectedConnection && !fileContents && isRemote) {
             setIsFetchingFile(true);
 
-            const response = await readRemoteFile(filePath);
-            setFileContents(response);
+            const { data } = await readRemoteFile(filePath);
 
+            setFileContents(data);
             setIsFetchingFile(false);
             setIsViewingSourceFile(true);
         }
