@@ -57,8 +57,11 @@ sync the individual reports you would like to use.
 1. Open TT-NN Visualizer and navigate to the Reports tab
 2. In the "Remote Sync" section, click the "+ Add New Connection" button
 3. Enter your SSH connection details (hostname, username, and report paths)
-4. Click the "Test Connection" button to ensure a connection can be made
-5. If connection is valid, click the "Add connection" button to save the connection details
+4. Optionally specify an **SSH identity file** (path to your private key, e.g. `~/.ssh/id_ed25519`) if you use a non-default key or have multiple keys.
+5. Click the "Test Connection" button to ensure a connection can be made
+6. If connection is valid, click the "Add connection" button to save the connection details
+
+If authentication fails, the app will show a message explaining that key-based authentication is required: add your public key to `~/.ssh/authorized_keys` on the remote server. Password authentication is not supported. If your key has a passphrase, add it to ssh-agent once (e.g. `ssh-add ~/.ssh/id_ed25519`) so you are not prompted.
 
 Make sure you have sufficient local storage space for the files you want to sync.
 

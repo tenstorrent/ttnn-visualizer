@@ -19,6 +19,14 @@ from ttnn_visualizer.models import RemoteConnection
 
 logger = logging.getLogger(__name__)
 
+# User-facing message for SSH auth failures (key-based auth required, no password).
+_SSH_AUTH_MESSAGE = (
+    "SSH authentication failed. This application requires SSH key-based authentication. "
+    "Add your public key to ~/.ssh/authorized_keys on the remote server. "
+    "Password authentication is not supported. "
+    "If your key has a passphrase, add it to ssh-agent once (e.g. ssh-add) so you are not prompted."
+)
+
 
 class SSHClient:
     """
@@ -32,22 +40,34 @@ class SSHClient:
         self._base_sftp_cmd = self._build_base_sftp_cmd()
 
     def _build_base_ssh_cmd(self) -> List[str]:
-        """Build the base SSH command with common options."""
-        cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
+        """Build the base SSH command with common options. Never prompts for password."""
+        cmd = [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "PasswordAuthentication=no",
+        ]
+        if getattr(self.connection, "identityFile", None):
+            cmd.extend(["-i", self.connection.identityFile])
         if self.connection.port != 22:
             cmd.extend(["-p", str(self.connection.port)])
-
         cmd.append(f"{self.connection.username}@{self.connection.host}")
         return cmd
 
     def _build_base_sftp_cmd(self) -> List[str]:
-        """Build the base SFTP command with common options."""
-        cmd = ["sftp", "-o", "PasswordAuthentication=no"]
-
+        """Build the base SFTP command with common options. Never prompts for password."""
+        cmd = [
+            "sftp",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "PasswordAuthentication=no",
+        ]
+        if getattr(self.connection, "identityFile", None):
+            cmd.extend(["-i", self.connection.identityFile])
         if self.connection.port != 22:
             cmd.extend(["-P", str(self.connection.port)])
-
         cmd.extend(["-b", "-"])  # Read commands from stdin
         cmd.append(f"{self.connection.username}@{self.connection.host}")
         return cmd
@@ -81,9 +101,7 @@ class SSHClient:
                 "host key verification failed",
             ]
         ):
-            raise AuthenticationException(
-                f"SSH authentication failed: {self.connection.username}@{self.connection.host}: Permission denied (publickey,password)"
-            )
+            raise AuthenticationException(_SSH_AUTH_MESSAGE)
 
         # Check for connection failures (including DNS resolution failures)
         elif any(
@@ -154,17 +172,13 @@ class SSHClient:
             return True
         except AuthenticationException as e:
             # Convert to AuthenticationFailedException for proper HTTP 422 response
-            user_message = (
-                "SSH authentication failed. This application requires SSH key-based authentication. "
-                "Please ensure your SSH public key is added to the authorized_keys file on the remote server. "
-                "Password authentication is not supported."
-            )
             logger.info(
                 f"SSH authentication failed for {self.connection.username}@{self.connection.host}"
             )
-            # Get the raw error details from the last SSH operation
             raw_error = getattr(self, "_last_raw_error", None)
-            raise AuthenticationFailedException(message=user_message, detail=raw_error)
+            raise AuthenticationFailedException(
+                message=_SSH_AUTH_MESSAGE, detail=raw_error
+            )
         except NoValidConnectionsError as ssh_err:
             user_message = (
                 f"Unable to establish SSH connection to {self.connection.host}. "

@@ -11,6 +11,8 @@ export interface RemoteConnection {
     port: number;
     profilerPath: string;
     performancePath?: string;
+    /** Optional path to SSH private key (e.g. ~/.ssh/id_ed25519). Key must be in authorized_keys on the server. */
+    identityFile?: string;
 }
 
 export interface RemoteFolder {

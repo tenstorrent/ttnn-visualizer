@@ -194,6 +194,7 @@ class RemoteConnection(SerializeableModel):
     port: int = Field(ge=1, le=65535)
     profilerPath: str
     performancePath: Optional[str] = None
+    identityFile: Optional[str] = None
 
 
 class StatusMessage(SerializeableModel):
