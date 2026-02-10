@@ -5,9 +5,9 @@
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
 import cpp from 'highlight.js/lib/languages/cpp';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
-import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Classes, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
@@ -60,6 +60,7 @@ function StackTrace({
 
     const { readRemoteFile, persistentState } = useRemoteConnection();
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
+    const sourceControlsRef = useRef<null | HTMLDivElement>(null);
 
     const stackTraceWithHighlights = useMemo(() => {
         const filePathMatches = FILE_PATH_REGEX.exec(stackTrace);
@@ -105,6 +106,14 @@ function StackTrace({
         return '';
     }, [fileContents, stackTrace, language]);
 
+    const scrollContainerEl: HTMLDivElement | null = useMemo(
+        () =>
+            sourceControlsRef?.current
+                ? sourceControlsRef.current.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`)
+                : null,
+        [sourceControlsRef],
+    );
+
     const toggleViewingFile = useCallback(() => setIsViewingSourceFile((open) => !open), [setIsViewingSourceFile]);
 
     const handleReadRemoteFile = async () => {
@@ -137,6 +146,54 @@ function StackTrace({
             onExpandChange(isExpanded);
         }
     };
+
+    const scrollToTop = () => {
+        if (scrollContainerEl) {
+            scrollContainerEl.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+
+    const scrollToBottom = () => {
+        if (scrollContainerEl) {
+            scrollContainerEl.scrollTo({ top: scrollContainerEl.scrollHeight, behavior: 'smooth' });
+        }
+    };
+
+    useEffect(() => {
+        if (!scrollContainerEl) {
+            return;
+        }
+
+        const handleScroll = () => {
+            const controlsEl = sourceControlsRef.current;
+
+            if (!controlsEl || !scrollContainerEl) {
+                return;
+            }
+
+            const overlayContentsEl = scrollContainerEl.querySelector(`.${Classes.OVERLAY_CONTENT}`) as HTMLDivElement;
+
+            if (!overlayContentsEl) {
+                return;
+            }
+
+            const { scrollTop } = scrollContainerEl;
+            const overlayStyles = window.getComputedStyle(overlayContentsEl);
+            const overlayContentMarginTop = parseInt(overlayStyles.marginTop, 10) || 0;
+
+            // If the controls have scrolled past the top of the container, make it stick
+            if (scrollTop > overlayContentMarginTop) {
+                controlsEl.style.transform = `translateY(${scrollTop - overlayContentMarginTop}px)`;
+            } else {
+                controlsEl.style.transform = '';
+            }
+        };
+
+        scrollContainerEl.addEventListener('scroll', handleScroll);
+
+        // eslint-disable-next-line consistent-return
+        return () => scrollContainerEl.removeEventListener('scroll', handleScroll);
+    }, [scrollContainerEl, isViewingSourceFile]);
 
     return (
         <div className={classNames('stack-trace', className)}>
@@ -197,21 +254,49 @@ function StackTrace({
 
                 <Overlay
                     isOpen={isViewingSourceFile}
-                    onOpened={() => scrollToLineNumberInFile()}
                     onClose={toggleViewingFile}
                 >
-                    {fileWithHighlights && (
-                        <div className='stack-trace'>
-                            <p className='stack-trace-path monospace'>{filePath.trim()}</p>
-                            <code
-                                className={`language-${language} code-output`}
-                                // eslint-disable-next-line react/no-danger
-                                dangerouslySetInnerHTML={{
-                                    __html: fileWithHighlights,
-                                }}
-                            />
+                    <>
+                        <div
+                            className='source-file-controls'
+                            ref={sourceControlsRef}
+                        >
+                            <div className='buttons'>
+                                <Tooltip content='Scroll to top'>
+                                    <Button
+                                        icon={IconNames.DOUBLE_CHEVRON_UP}
+                                        onClick={() => scrollToTop()}
+                                    />
+                                </Tooltip>
+
+                                <Tooltip content='Locate highlighted line'>
+                                    <Button
+                                        icon={IconNames.LOCATE}
+                                        onClick={() => scrollToLineNumberInFile()}
+                                    />
+                                </Tooltip>
+
+                                <Tooltip content='Scroll to bottom'>
+                                    <Button
+                                        icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                                        onClick={() => scrollToBottom()}
+                                    />
+                                </Tooltip>
+                            </div>
                         </div>
-                    )}
+                        {fileWithHighlights && (
+                            <div className='stack-trace'>
+                                <p className='stack-trace-path monospace'>{filePath.trim()}</p>
+                                <code
+                                    className={`language-${language} code-output`}
+                                    // eslint-disable-next-line react/no-danger
+                                    dangerouslySetInnerHTML={{
+                                        __html: fileWithHighlights,
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </>
                 </Overlay>
             </pre>
         </div>
