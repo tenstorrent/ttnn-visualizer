@@ -173,7 +173,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <FormGroup
                     label='SSH identity file (optional)'
-                    subLabel='Path to private key (e.g. ~/.ssh/id_ed25519). Your public key must be in ~/.ssh/authorized_keys on the server. If the key has a passphrase, add it to ssh-agent (ssh-add) first.'
+                    subLabel='Path to your private key on this machine (e.g. ~/.ssh/id_ed25519). Leave empty for default. The matching public key must be in ~/.ssh/authorized_keys on the server. If the key has a passphrase, run: ssh-add /path/to/key (once, in the same environment where you start this app).'
                     labelFor='remote-ssh-identity'
                 >
                     <InputGroup

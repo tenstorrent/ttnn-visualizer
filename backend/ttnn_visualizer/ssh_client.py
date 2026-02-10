@@ -36,20 +36,24 @@ class SSHClient:
 
     def __init__(self, connection: RemoteConnection):
         self.connection = connection
+        identity = getattr(connection, "identityFile", None)
+        logger.info(
+            "SSHClient connection.identityFile=%r (will use only this key if set)",
+            identity,
+        )
         self._base_ssh_cmd = self._build_base_ssh_cmd()
         self._base_sftp_cmd = self._build_base_sftp_cmd()
 
     def _build_base_ssh_cmd(self) -> List[str]:
         """Build the base SSH command with common options. Never prompts for password."""
-        cmd = [
-            "ssh",
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "PasswordAuthentication=no",
-        ]
-        if getattr(self.connection, "identityFile", None):
-            cmd.extend(["-i", self.connection.identityFile])
+        cmd = ["ssh"]
+        identity = (getattr(self.connection, "identityFile", None) or "").strip()
+        if identity:
+            # Use empty config so only our -i key is tried (ignore ~/.ssh/config IdentityFile).
+            cmd.extend(["-F", "/dev/null"])
+        cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+        if identity:
+            cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
         if self.connection.port != 22:
             cmd.extend(["-p", str(self.connection.port)])
         cmd.append(f"{self.connection.username}@{self.connection.host}")
@@ -57,15 +61,13 @@ class SSHClient:
 
     def _build_base_sftp_cmd(self) -> List[str]:
         """Build the base SFTP command with common options. Never prompts for password."""
-        cmd = [
-            "sftp",
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "PasswordAuthentication=no",
-        ]
-        if getattr(self.connection, "identityFile", None):
-            cmd.extend(["-i", self.connection.identityFile])
+        cmd = ["sftp"]
+        identity = (getattr(self.connection, "identityFile", None) or "").strip()
+        if identity:
+            cmd.extend(["-F", "/dev/null"])
+        cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+        if identity:
+            cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
         if self.connection.port != 22:
             cmd.extend(["-P", str(self.connection.port)])
         cmd.extend(["-b", "-"])  # Read commands from stdin

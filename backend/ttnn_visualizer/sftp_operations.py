@@ -33,15 +33,13 @@ TEST_PROFILER_FILE = "profile_log_device.csv"
 
 def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
     """Build SSH command prefix (never prompts for password). Includes BatchMode=yes and optional identity file."""
-    cmd = [
-        "ssh",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "PasswordAuthentication=no",
-    ]
-    if getattr(remote_connection, "identityFile", None):
-        cmd.extend(["-i", remote_connection.identityFile])
+    cmd = ["ssh"]
+    identity = (getattr(remote_connection, "identityFile", None) or "").strip()
+    if identity:
+        cmd.extend(["-F", "/dev/null"])
+    cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+    if identity:
+        cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
     if remote_connection.port != 22:
         cmd.extend(["-p", str(remote_connection.port)])
     cmd.append(f"{remote_connection.username}@{remote_connection.host}")
@@ -50,15 +48,13 @@ def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
 
 def _sftp_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
     """Build SFTP command prefix (never prompts for password). Includes BatchMode=yes and optional identity file."""
-    cmd = [
-        "sftp",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "PasswordAuthentication=no",
-    ]
-    if getattr(remote_connection, "identityFile", None):
-        cmd.extend(["-i", remote_connection.identityFile])
+    cmd = ["sftp"]
+    identity = (getattr(remote_connection, "identityFile", None) or "").strip()
+    if identity:
+        cmd.extend(["-F", "/dev/null"])
+    cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+    if identity:
+        cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
     if remote_connection.port != 22:
         cmd.extend(["-P", str(remote_connection.port)])
     cmd.extend(["-b", "-", f"{remote_connection.username}@{remote_connection.host}"])
