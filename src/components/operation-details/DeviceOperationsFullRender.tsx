@@ -224,19 +224,19 @@ function useDeviceOperationsFullRenderModel(args: {
                                 icon={IconNames.CUBE_ADD}
                             />
                             {opName} <DeviceID _deviceId={node.operation?.params.device_id} /> (
-                            {node.operation?.inputs.map((arg) => (
+                            {node.operation?.inputs.map((arg, ind) => (
                                 <span
                                     className='params'
-                                    key={`${arg.id} ${node.id}`}
+                                    key={`input ${arg.id} ${node.id} ${ind}`}
                                 >
                                     {formatDeviceOpParameters(arg)}
                                 </span>
                             ))}
                             ) &nbsp;{' => '}
-                            {node.operation?.outputs.map((arg) => (
+                            {node.operation?.outputs.map((arg, ind) => (
                                 <span
                                     className='params'
-                                    key={`${arg.id} ${node.id}`}
+                                    key={`output ${arg.id} ${node.id} ${ind}`}
                                 >
                                     {formatDeviceOpParameters(arg)}
                                 </span>
