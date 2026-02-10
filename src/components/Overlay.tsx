@@ -15,6 +15,7 @@ interface OverlayProps {
     hideCloseButton?: boolean;
     canEscapeKeyClose?: boolean;
     canOutsideClickClose?: boolean;
+    lazy?: boolean;
 }
 
 function Overlay({
@@ -25,6 +26,7 @@ function Overlay({
     hideCloseButton = false,
     canEscapeKeyClose = true,
     canOutsideClickClose = true,
+    lazy,
 }: OverlayProps) {
     return (
         <Overlay2
@@ -34,6 +36,7 @@ function Overlay({
             className={Classes.OVERLAY_SCROLL_CONTAINER}
             canEscapeKeyClose={canEscapeKeyClose}
             canOutsideClickClose={canOutsideClickClose}
+            lazy={lazy}
         >
             <div className={classNames('overlay-contents', Classes.DARK, Classes.CARD, Classes.ELEVATION_4)}>
                 {children}

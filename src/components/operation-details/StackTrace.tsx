@@ -57,6 +57,7 @@ function StackTrace({
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
     const [isViewingSourceFile, setIsViewingSourceFile] = useState(false);
+    const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
 
     const { readRemoteFile, persistentState } = useRemoteConnection();
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
@@ -106,14 +107,6 @@ function StackTrace({
         return '';
     }, [fileContents, stackTrace, language]);
 
-    const scrollContainerEl: HTMLDivElement | null = useMemo(
-        () =>
-            sourceControlsRef?.current
-                ? sourceControlsRef.current.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`)
-                : null,
-        [sourceControlsRef],
-    );
-
     const toggleViewingFile = useCallback(() => setIsViewingSourceFile((open) => !open), [setIsViewingSourceFile]);
 
     const handleReadRemoteFile = async () => {
@@ -161,7 +154,9 @@ function StackTrace({
 
     useEffect(() => {
         if (!scrollContainerEl) {
-            return;
+            if (sourceControlsRef?.current) {
+                setScrollContainerEl(sourceControlsRef.current.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`) || null);
+            }
         }
 
         const handleScroll = () => {
@@ -189,10 +184,9 @@ function StackTrace({
             }
         };
 
-        scrollContainerEl.addEventListener('scroll', handleScroll);
+        scrollContainerEl?.addEventListener('scroll', handleScroll);
 
-        // eslint-disable-next-line consistent-return
-        return () => scrollContainerEl.removeEventListener('scroll', handleScroll);
+        return () => scrollContainerEl?.removeEventListener('scroll', handleScroll);
     }, [scrollContainerEl, isViewingSourceFile]);
 
     return (
@@ -255,6 +249,7 @@ function StackTrace({
                 <Overlay
                     isOpen={isViewingSourceFile}
                     onClose={toggleViewingFile}
+                    lazy={false}
                 >
                     <>
                         <div
@@ -269,7 +264,7 @@ function StackTrace({
                                     />
                                 </Tooltip>
 
-                                <Tooltip content='Locate highlighted line'>
+                                <Tooltip content='Scroll to highlighted line'>
                                     <Button
                                         icon={IconNames.LOCATE}
                                         onClick={() => scrollToLineNumberInFile()}
