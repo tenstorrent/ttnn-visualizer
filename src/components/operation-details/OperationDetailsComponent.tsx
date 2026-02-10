@@ -90,19 +90,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const operation = operations?.find((op) => op.id === operationId);
     const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
+    let details: OperationDetails | null = null;
 
     useEffect(() => {
-        // TODO: look into resetting this value
         if (didInitZoomRange.current) {
             return;
         }
-        if (!isLoading && !isPrevLoading && operationDetails && previousOperationDetails) {
+        if (!isLoading && !isPrevLoading && operationDetails && previousOperationDetails && details !== null) {
             const { plotZoomRangeStart, plotZoomRangeEnd } = calculatePlotZoomRange();
             setZoomRangeStart(plotZoomRangeStart);
             setZoomRangeEnd(plotZoomRangeEnd);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isLoading, isPrevLoading, operationDetails, previousOperationDetails]);
+    }, [details, isLoading, isPrevLoading, operationDetails, previousOperationDetails]);
 
     useEffect(() => {
         didInitZoomRange.current = false;
@@ -120,7 +120,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
     const deallocationReport = lateDeallocationsByOperation.get(operation?.id || -1) || [];
-    const details: OperationDetails | null = new OperationDetails(
+    details = new OperationDetails(
         operationDetails,
         operations,
         deallocationReport,
@@ -247,6 +247,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 label='Buffer zoom'
                                 checked={zoomedInViewMainMemory}
                                 onChange={() => {
+                                    // if (!zoomedInViewMainMemory) {
+                                    //     setZoomRangeStart(plotZoomRangeStart);
+                                    //     setZoomRangeEnd(plotZoomRangeEnd);
+                                    // }
                                     setZoomedInViewMainMemory(!zoomedInViewMainMemory);
                                 }}
                             />
