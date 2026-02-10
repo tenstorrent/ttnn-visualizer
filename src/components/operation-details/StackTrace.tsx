@@ -58,6 +58,7 @@ function StackTrace({
     const [fileContents, setFileContents] = useState('');
     const [isViewingSourceFile, setIsViewingSourceFile] = useState(false);
     const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
+    const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
 
     const { readRemoteFile, persistentState } = useRemoteConnection();
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
@@ -155,30 +156,29 @@ function StackTrace({
     useEffect(() => {
         if (!scrollContainerEl) {
             if (sourceControlsRef?.current) {
-                setScrollContainerEl(sourceControlsRef.current.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`) || null);
+                const scrollEl = sourceControlsRef.current.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`);
+                const overlayEl = scrollEl?.querySelector(`.${Classes.OVERLAY_CONTENT}`);
+
+                setScrollContainerEl(scrollEl || null);
+
+                if (overlayEl) {
+                    const overlayStyles = window.getComputedStyle(overlayEl);
+                    setOverlayTopOffset(parseInt(overlayStyles.marginTop, 10) || 0);
+                }
             }
         }
 
         const handleScroll = () => {
             const controlsEl = sourceControlsRef.current;
 
-            if (!controlsEl || !scrollContainerEl) {
-                return;
-            }
-
-            const overlayContentsEl = scrollContainerEl.querySelector(`.${Classes.OVERLAY_CONTENT}`) as HTMLDivElement;
-
-            if (!overlayContentsEl) {
+            if (!controlsEl || !scrollContainerEl || Number.isNaN(overlayTopOffset)) {
                 return;
             }
 
             const { scrollTop } = scrollContainerEl;
-            const overlayStyles = window.getComputedStyle(overlayContentsEl);
-            const overlayContentMarginTop = parseInt(overlayStyles.marginTop, 10) || 0;
 
-            // If the controls have scrolled past the top of the container, make it stick
-            if (scrollTop > overlayContentMarginTop) {
-                controlsEl.style.transform = `translateY(${scrollTop - overlayContentMarginTop}px)`;
+            if (scrollTop > overlayTopOffset) {
+                controlsEl.style.transform = `translateY(${scrollTop - overlayTopOffset}px)`;
             } else {
                 controlsEl.style.transform = '';
             }
@@ -187,7 +187,7 @@ function StackTrace({
         scrollContainerEl?.addEventListener('scroll', handleScroll);
 
         return () => scrollContainerEl?.removeEventListener('scroll', handleScroll);
-    }, [scrollContainerEl, isViewingSourceFile]);
+    }, [scrollContainerEl, overlayTopOffset, isViewingSourceFile]);
 
     return (
         <div className={classNames('stack-trace', className)}>
