@@ -22,59 +22,9 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
     const networkRef = useRef<Network | null>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
 
-    /**
-     *  keeping the tooltip related code for now since we might start rendering more details
-     */
-    // const [tooltipContent, setTooltipContent] = useState<React.ReactNode>(null);
-    // const focusOnNode = useCallback(
-    //     (nodeId: number | null, center: boolean = false) => {
-    //         if (nodeId === null) {
-    //             return;
-    //         }
-    //         if (networkRef.current) {
-    //             if (center) {
-    //                 networkRef.current.focus(nodeId, {
-    //                     animation: { duration: 500, easingFunction: 'easeInOutCubic' },
-    //                 });
-    //             }
-    //             networkRef.current.selectNodes([nodeId], true);
-    //
-    //             const nodeData = data.find((node) => node.id === nodeId);
-    //             if (nodeData && tooltipRef.current) {
-    //                 setTooltipContent(generateTooltipContent(nodeData));
-    //                 tooltipRef.current.classList.add('visible');
-    //             }
-    //         }
-    //     },
-    //     // eslint-disable-next-line react-hooks/exhaustive-deps
-    //     [data],
-    // );
-
     const formatOperationName = (item: Node) => {
         return item.params.name ? `${item.params.name}()` : '';
     };
-    // const getTensorSquare = (tensorId: number | null) => {
-    //     return (
-    //         tensorId && (
-    //             <div
-    //                 className='memory-color-block'
-    //                 style={{
-    //                     backgroundColor: getTensorColor(tensorId),
-    //                 }}
-    //             />
-    //         )
-    //     );
-    // };
-
-    // const generateTooltipContent = (node: Node) => {
-    //     const tensorSquare = getTensorSquare(node.params.tensor_id);
-    //     return (
-    //         <>
-    //             {tensorSquare}
-    //             <strong>{formatOperationName(node)}</strong>
-    //         </>
-    //     );
-    // };
 
     const initializeGraph = useCallback(
         (container: HTMLDivElement | null) => {
@@ -90,7 +40,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
 
             const tensorShapeById = new Map<number, string>();
 
-            const Ops: Op[] = data
+            const ops: Op[] = data
                 .filter((op) => op.node_type === 'function_start')
                 .map((op) => {
                     const inputTensors = op.inputs?.filter((i) => i.node_type === 'tensor') ?? [];
@@ -98,13 +48,13 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     return { ...op, graphInputs: inputTensors, graphOutputs: outputTensors };
                 });
 
-            const displayedOps = Ops.filter((op) => isExtendedDeviceOperation(op.params.name));
+            const displayedOps = ops.filter((op) => isExtendedDeviceOperation(op.params.name));
             const displayedIds = new Set(displayedOps.map((o) => o.id));
 
             const producersByTensorId = new Map<number, number[]>();
             const consumersByTensorId = new Map<number, number[]>();
 
-            for (const op of Ops) {
+            for (const op of ops) {
                 for (const tensor of op.graphOutputs) {
                     const tensorId = Number(tensor.params.tensor_id);
                     if (tensor.params.shape) {
@@ -153,11 +103,11 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                 const seenEdge = new Set<string>();
 
                 for (const start of displayedOps) {
-                    const q: Array<{ id: number; via?: { tensorId: number; shape?: string } }> = [{ id: start.id }];
+                    const idToConnection: Array<{ id: number; via?: { tensorId: number } }> = [{ id: start.id }];
                     const visited = new Set<number>([start.id]);
 
-                    while (q.length) {
-                        const cur = q.shift()!;
+                    while (idToConnection.length) {
+                        const cur = idToConnection.shift()!;
                         const nexts = edgesByProducer.get(cur.id) ?? [];
 
                         for (const e of nexts) {
@@ -167,7 +117,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                             }
                             visited.add(e.to);
 
-                            const via = cur.via ?? { tensorId: e.tid, shape: e.shape };
+                            const via = cur.via ?? { tensorId: e.tid };
 
                             if (displayedIds.has(e.to) && e.to !== start.id) {
                                 const edgeId = `${start.id}->${e.to}#${via.tensorId}`;
@@ -186,7 +136,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                                 continue;
                             }
 
-                            q.push({ id: e.to, via });
+                            idToConnection.push({ id: e.to, via });
                         }
                     }
                 }
@@ -277,16 +227,6 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     tooltipRef.current.classList.remove('visible');
                 }
             });
-
-            // networkRef.current.on('click', (params) => {
-            //     if (tooltipRef.current) {
-            //         tooltipRef.current.classList.remove('visible');
-            //     }
-            //     if (params.nodes.length > 0) {
-            //         const nodeId = params.nodes[0];
-            //         focusOnNode(nodeId);
-            //     }
-            // });
         },
         [data],
     );
