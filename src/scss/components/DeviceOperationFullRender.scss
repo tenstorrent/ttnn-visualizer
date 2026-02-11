@@ -19,7 +19,7 @@
     align-items: center;
     gap: 5px;
 
-    &.has-tooltip {
+    .has-tooltip {
         border-bottom-color: $tt-teal;
         border-bottom-width: 2px;
         padding-bottom: 2px;
