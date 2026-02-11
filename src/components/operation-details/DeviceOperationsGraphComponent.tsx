@@ -5,6 +5,7 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Network } from 'vis-network/standalone';
 import { DataSet } from 'vis-data';
+import { Edge } from 'vis-network';
 import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Node } from '../../model/APIData';
@@ -17,6 +18,13 @@ export interface GraphComponentProps {
     open: boolean;
     onClose: () => void;
 }
+
+type ConnectedDeviceOperation = Node & {
+    inputs: Node[];
+    outputs: Node[];
+    graphInputs: Node[];
+    graphOutputs: Node[];
+};
 
 const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) => {
     const networkRef = useRef<Network | null>(null);
@@ -31,16 +39,10 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
             if (!container) {
                 return;
             }
-            type Op = (typeof data)[number] & {
-                inputs: Node[];
-                outputs: Node[];
-                graphInputs: Node[];
-                graphOutputs: Node[];
-            };
 
             const tensorShapeById = new Map<number, string>();
 
-            const ops: Op[] = data
+            const ops: ConnectedDeviceOperation[] = data
                 .filter((op) => op.node_type === 'function_start')
                 .map((op) => {
                     const inputTensors = op.inputs?.filter((i) => i.node_type === 'tensor') ?? [];
@@ -95,8 +97,6 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     }
                 }
             }
-
-            type Edge = { id: string; from: number; to: number; label?: string };
 
             function buildCompressedEdges(): Edge[] {
                 const result: Edge[] = [];
@@ -269,9 +269,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     <div
                         className='graph-tooltip'
                         ref={tooltipRef}
-                    >
-                        {/* {tooltipContent} */}
-                    </div>
+                    />
                 </div>
                 <div>
                     <aside>Scroll to zoom. Drag to pan. Drag nodes horizontally.</aside>
