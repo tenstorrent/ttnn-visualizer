@@ -192,14 +192,14 @@ function useDeviceOperationsFullRenderModel(args: {
         [details],
     );
 
-    const renderOperations = useCallback(
-        (ops: Node[]) => {
+    const renderNodes = useCallback(
+        (nodes: Node[]) => {
             const deviceOpList: Node[] = [];
             const stack: JSX.Element[][] = [];
             const output: JSX.Element[] = [];
             let consecutiveCBsOutput = false;
 
-            ops.forEach((node, index) => {
+            nodes.forEach((node, index) => {
                 const nodeType = node.node_type;
 
                 const memoryDetails = memoryAllocationList.find((data) => data.id === node.id);
@@ -224,21 +224,21 @@ function useDeviceOperationsFullRenderModel(args: {
                                 icon={IconNames.CUBE_ADD}
                             />
                             {opName} <DeviceID _deviceId={node.operation?.params.device_id} /> (
-                            {node.operation?.inputs.map((arg, ind) => (
+                            {node.operation?.inputs.map((inputNode, i) => (
                                 <span
                                     className='params'
-                                    key={`input ${arg.id} ${node.id} ${ind}`}
+                                    key={`input ${inputNode.id} ${node.id} ${i}`}
                                 >
-                                    {formatDeviceOpParameters(arg)}
+                                    {formatDeviceOpParameters(inputNode)}
                                 </span>
                             ))}
                             ) &nbsp;{' => '}
-                            {node.operation?.outputs.map((arg, ind) => (
+                            {node.operation?.outputs.map((outputNode, i) => (
                                 <span
                                     className='params'
-                                    key={`output ${arg.id} ${node.id} ${ind}`}
+                                    key={`output ${outputNode.id} ${node.id} ${i}`}
                                 >
-                                    {formatDeviceOpParameters(arg)}
+                                    {formatDeviceOpParameters(outputNode)}
                                 </span>
                             ))}
                         </h4>
@@ -374,7 +374,7 @@ function useDeviceOperationsFullRenderModel(args: {
         selectedAddress,
         memoryAllocationList,
         peakMemoryLoad,
-        renderOperations,
+        renderOperations: renderNodes,
     };
 }
 
