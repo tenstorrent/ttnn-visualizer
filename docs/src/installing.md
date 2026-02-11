@@ -14,13 +14,23 @@ Recommended PyTest config when generating your data:
 export TTNN_CONFIG_OVERRIDES='{
     "enable_fast_runtime_mode": false,
     "enable_logging": true,
-    "report_name": "TODO ADD NAME",
-    "enable_graph_report": false,
+    "report_name": "YOUR REPORT NAME",
     "enable_detailed_buffer_report": true,
     "enable_detailed_tensor_report": false,
+    "enable_graph_report": false,
     "enable_comparison_mode": false
 }'
 ```
+
+| Configuration Option | Description |
+|----------------------|-------------|
+| **enable_fast_runtime_mode** | Disable fast runtime mode to ensure all operations are properly traced. **Must be disabled to enable logging**. |
+| **enable_logging** | Synchronizes main thread after every operation and logs the operation. **Must be enabled**. |
+| **report_name** | Prefix of the folder name where the memory report is output. **Must have a value for data8 to be output to disk**. |
+| **enable_detailed_buffer_report** | Enable to visualize the detailed buffer report after every operation. **Needed for full buffer information**. |
+| **enable_detailed_tensor_report** | Enable to visualize the values of input and output tensors of every operation. **Data not used by the visualizer**. |
+| **enable_graph_report** | Generates an SVG visualization of the computation graph. **Data not used by the visualizer**. |
+| **enable_comparison_mode** | Enable to test the output of operations against their golden implementation. **Optional, not always available on models**. |
 
 To run a test with custom input data, you can use the following command with suitable values for `input-path`:
 
