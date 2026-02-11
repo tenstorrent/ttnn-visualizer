@@ -8,7 +8,7 @@
 .operation-graph-component {
     .operation-graph-container {
         width: 100%;
-        height: calc(100vh - 125px);
+        height: calc(100vh - 160px);
     }
 
     .operation-graph-header {
@@ -54,7 +54,7 @@
         position: fixed;
         z-index: 1;
         width: 450px;
-        height: calc(100% - 80px - 15px - 28px);
+        height: calc(100% - 80px - 15px - 40px);
         right: 0;
         background-color: rgba($tt-grey-2, 0.9);
         overflow: auto;
