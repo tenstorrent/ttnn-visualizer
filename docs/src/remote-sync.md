@@ -18,11 +18,11 @@ Remote sync uses SSH key-based authentication only. The app never asks for a pas
 The pieces:
 1. Key pair – You have a private key (e.g. `~/.ssh/id_ed25519`) and a public key (e.g. `~/.ssh/id_ed25519.pub`). The private key stays on your machine; the public key is what the server trusts.
 
-2. Server – On the remote host, your public key must be in the right place: one line per key in `~/.ssh/authorized_keys` for the user you connect as (e.g. `ctr-smountenay@aus-wh-05` → that user’s `~/.ssh/authorized_keys` on the server).
+2. Server – On the remote host, your public key must be in the right place: one line per key in `~/.ssh/authorized_keys` for the user you connect as.
 
-3. Identity file – The “SSH identity file” in the app is the path to your private key on your machine. If you leave it empty, SSH uses its default (e.g. `~/.ssh/id_ed25519`). If you use a different key or path, enter it here (e.g. `~/.ssh/id_ed25519` or `/Users/you/break_id_ed25519_test`). When you set a custom identity, the app tells SSH to use only that key (and to ignore `~/.ssh/config` for that connection) so the right key is used.
+3. Identity file – The “SSH identity file” in the app is the path to your private key on your machine. If you leave it empty, SSH uses its default (e.g. `~/.ssh/id_ed25519`). If you use a different key or path, enter the path here. When you set a custom identity, the app tells SSH to use only that key (and to ignore `~/.ssh/config` for that connection) so the right key is used.
 
-4. Passphrase – If your private key has a passphrase, SSH would normally prompt for it. The app does not have a place to type that, and the SSH process has no terminal. So you must unlock the key once using ssh-agent; after that, the agent provides the key and no prompt is needed:
+4. Passphrase – If your private key has a passphrase, SSH would normally prompt for it. The app does not have a place to type that, and the SSH process has no terminal. You must unlock the key once using ssh-agent; after that, the agent provides the key and no prompt is needed:
    ```bash
    ssh-add ~/.ssh/id_ed25519
    ```
