@@ -14,6 +14,7 @@ from ttnn_visualizer.exceptions import (
     NoProjectsException,
     NoValidConnectionsError,
     RemoteConnectionException,
+    RemoteFileReadException,
     SSHException,
 )
 from ttnn_visualizer.instances import get_or_create_instance
@@ -132,6 +133,8 @@ def remote_exception_handler(func):
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED, message=message
             )
+        except RemoteFileReadException:
+            raise
         except Exception as err:
             # Catch any other unhandled exceptions
             current_app.logger.exception(

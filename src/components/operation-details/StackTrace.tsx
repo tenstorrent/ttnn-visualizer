@@ -5,7 +5,7 @@
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
 import cpp from 'highlight.js/lib/languages/cpp';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
 import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -56,6 +56,7 @@ function StackTrace({
     const [filePath, setFilePath] = useState('');
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
+    const [errorDetails, setErrorDetails] = useState('');
     const [isViewingSourceFile, setIsViewingSourceFile] = useState(false);
 
     const { readRemoteFile, persistentState } = useRemoteConnection();
@@ -118,9 +119,14 @@ function StackTrace({
         if (selectedConnection && !fileContents && isRemote) {
             setIsFetchingFile(true);
 
-            const { data } = await readRemoteFile(filePath);
+            const { data, error } = await readRemoteFile(filePath);
 
-            setFileContents(data);
+            if (error) {
+                setErrorDetails(error);
+            } else if (data) {
+                setFileContents(data);
+            }
+
             setIsFetchingFile(false);
             setIsViewingSourceFile(true);
         }
@@ -137,6 +143,11 @@ function StackTrace({
             onExpandChange(isExpanded);
         }
     };
+
+    useEffect(() => {
+        setFileContents('');
+        setErrorDetails('');
+    }, [stackTrace]);
 
     return (
         <div className={classNames('stack-trace', className)}>
@@ -199,7 +210,16 @@ function StackTrace({
                     isOpen={isViewingSourceFile}
                     onClose={toggleViewingFile}
                 >
-                    {fileWithHighlights && (
+                    {errorDetails ? (
+                        <div className='stack-trace-error'>
+                            <p className='stack-trace-path monospace'>{filePath.trim()}</p>
+                            <div className='error-details'>
+                                <pre>{errorDetails}</pre>
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {fileWithHighlights && !errorDetails ? (
                         <div className='stack-trace'>
                             <p className='stack-trace-path monospace'>{filePath.trim()}</p>
                             <code
@@ -210,7 +230,7 @@ function StackTrace({
                                 }}
                             />
                         </div>
-                    )}
+                    ) : null}
                 </Overlay>
             </pre>
         </div>

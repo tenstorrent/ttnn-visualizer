@@ -4,6 +4,7 @@
 
 import logging
 import subprocess
+from http import HTTPStatus
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -13,6 +14,7 @@ from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
+    RemoteFileReadException,
     SSHException,
 )
 from ttnn_visualizer.models import RemoteConnection
@@ -217,7 +219,7 @@ class SSHClient:
         :param remote_path: Path to the remote file
         :param timeout: Timeout in seconds
         :return: File contents as bytes, or None if file not found
-        :raises: AuthenticationException, NoValidConnectionsError, SSHException
+        :raises: AuthenticationException, NoValidConnectionsError, SSHException, RemoteFileReadException
         """
         path = Path(remote_path)
         logger.info(f"Reading remote file {path}")
@@ -226,9 +228,11 @@ class SSHClient:
             result = self.execute_command(f"cat '{path}'", timeout=timeout)
             return result.encode("utf-8")
         except SSHException as e:
-            if "No such file" in str(e) or "cannot open" in str(e):
-                return f"File not found."
-            raise
+            raise RemoteFileReadException(
+                message=f"File not found.",
+                http_status_code=HTTPStatus.NOT_FOUND,
+                detail=str(e),
+            )
 
     def check_path_exists(
         self, remote_path: Union[str, Path], timeout: int = 10

@@ -28,6 +28,7 @@ from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     DataFormatError,
     RemoteConnectionException,
+    RemoteFileReadException,
 )
 from ttnn_visualizer.file_uploads import (
     extract_folder_name_from_files,
@@ -1286,7 +1287,7 @@ def read_remote_folder(instance: Instance):
 
     try:
         content = read_remote_file(remote_connection, remote_path=file_path)
-    except RemoteConnectionException as e:
+    except RemoteFileReadException as e:
         return jsonify({"error": str(e)}), e.http_status
 
     return Response(status=200, response=content)

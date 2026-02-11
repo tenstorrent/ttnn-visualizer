@@ -154,6 +154,7 @@ const useRemoteConnection = () => {
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
                 const errorMessage = error.response?.data?.error || error.message || 'Failed to read remote file';
+
                 return { data: null, error: errorMessage };
             }
 
