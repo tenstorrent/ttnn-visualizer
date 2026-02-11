@@ -20,7 +20,7 @@ from ttnn_visualizer.models import RemoteConnection
 logger = logging.getLogger(__name__)
 
 # User-facing message for SSH auth failures (key-based auth required, no password).
-_SSH_AUTH_MESSAGE = (
+SSH_AUTH_FAILURE_MESSAGE = (
     "SSH authentication failed. This application requires SSH key-based authentication. "
     "Add your public key to ~/.ssh/authorized_keys on the remote server. "
     "Password authentication is not supported. "
@@ -103,7 +103,7 @@ class SSHClient:
                 "host key verification failed",
             ]
         ):
-            raise AuthenticationException(_SSH_AUTH_MESSAGE)
+            raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
 
         # Check for connection failures (including DNS resolution failures)
         elif any(
@@ -179,7 +179,7 @@ class SSHClient:
             )
             raw_error = getattr(self, "_last_raw_error", None)
             raise AuthenticationFailedException(
-                message=_SSH_AUTH_MESSAGE, detail=raw_error
+                message=SSH_AUTH_FAILURE_MESSAGE, detail=raw_error
             )
         except NoValidConnectionsError as ssh_err:
             user_message = (

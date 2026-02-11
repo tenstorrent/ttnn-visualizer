@@ -22,7 +22,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
-from ttnn_visualizer.ssh_client import _SSH_AUTH_MESSAGE, SSHClient
+from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE, SSHClient
 from ttnn_visualizer.utils import update_last_synced
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def handle_ssh_subprocess_error(
             "host key verification failed",
         ]
     ):
-        raise AuthenticationException(_SSH_AUTH_MESSAGE)
+        raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
     if any(
         conn_err in stderr
         for conn_err in [

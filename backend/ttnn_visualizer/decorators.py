@@ -17,7 +17,7 @@ from ttnn_visualizer.exceptions import (
     SSHException,
 )
 from ttnn_visualizer.instances import get_or_create_instance
-from ttnn_visualizer.ssh_client import _SSH_AUTH_MESSAGE
+from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ def remote_exception_handler(func):
                 f"SSH authentication failed for {connection.username}@{connection.host}: SSH key authentication required"
             )
             raise AuthenticationFailedException(
-                message=_SSH_AUTH_MESSAGE,
+                message=SSH_AUTH_FAILURE_MESSAGE,
                 status=ConnectionTestStates.FAILED,
             )
         except FileNotFoundError as err:
