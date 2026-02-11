@@ -7,7 +7,7 @@ import python from 'highlight.js/lib/languages/python';
 import cpp from 'highlight.js/lib/languages/cpp';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
-import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Classes, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
@@ -58,9 +58,12 @@ function StackTrace({
     const [fileContents, setFileContents] = useState('');
     const [errorDetails, setErrorDetails] = useState('');
     const [isViewingSourceFile, setIsViewingSourceFile] = useState(false);
+    const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
+    const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
 
     const { readRemoteFile, persistentState } = useRemoteConnection();
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
+    const sourceControlsRef = useRef<null | HTMLDivElement>(null);
 
     const stackTraceWithHighlights = useMemo(() => {
         const filePathMatches = FILE_PATH_REGEX.exec(stackTrace);
@@ -144,6 +147,54 @@ function StackTrace({
         }
     };
 
+    const scrollToTop = () => {
+        if (scrollContainerEl) {
+            scrollContainerEl.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+
+    const scrollToBottom = () => {
+        if (scrollContainerEl) {
+            scrollContainerEl.scrollTo({ top: scrollContainerEl.scrollHeight, behavior: 'smooth' });
+        }
+    };
+
+    useEffect(() => {
+        if (!scrollContainerEl) {
+            if (sourceControlsRef?.current) {
+                const scrollEl = sourceControlsRef.current.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`);
+                const overlayEl = scrollEl?.querySelector(`.${Classes.OVERLAY_CONTENT}`);
+
+                setScrollContainerEl(scrollEl || null);
+
+                if (overlayEl) {
+                    const overlayStyles = window.getComputedStyle(overlayEl);
+                    setOverlayTopOffset(parseInt(overlayStyles.marginTop, 10) || 0);
+                }
+            }
+        }
+
+        const handleScroll = () => {
+            const controlsEl = sourceControlsRef.current;
+
+            if (!controlsEl || !scrollContainerEl || Number.isNaN(overlayTopOffset)) {
+                return;
+            }
+
+            const { scrollTop } = scrollContainerEl;
+
+            if (scrollTop > overlayTopOffset) {
+                controlsEl.style.transform = `translateY(${scrollTop - overlayTopOffset}px)`;
+            } else {
+                controlsEl.style.transform = '';
+            }
+        };
+
+        scrollContainerEl?.addEventListener('scroll', handleScroll);
+
+        return () => scrollContainerEl?.removeEventListener('scroll', handleScroll);
+    }, [scrollContainerEl, overlayTopOffset, isViewingSourceFile]);
+  
     useEffect(() => {
         setFileContents('');
         setErrorDetails('');
@@ -209,8 +260,37 @@ function StackTrace({
                 <Overlay
                     isOpen={isViewingSourceFile}
                     onClose={toggleViewingFile}
+                    lazy={false}
                 >
-                    {errorDetails ? (
+                    <>
+                        <div
+                            className='source-file-controls'
+                            ref={sourceControlsRef}
+                        >
+                            <div className='buttons'>
+                                <Tooltip content='Scroll to top'>
+                                    <Button
+                                        icon={IconNames.DOUBLE_CHEVRON_UP}
+                                        onClick={() => scrollToTop()}
+                                    />
+                                </Tooltip>
+
+                                <Tooltip content='Scroll to highlighted line'>
+                                    <Button
+                                        icon={IconNames.LOCATE}
+                                        onClick={() => scrollToLineNumberInFile()}
+                                    />
+                                </Tooltip>
+
+                                <Tooltip content='Scroll to bottom'>
+                                    <Button
+                                        icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                                        onClick={() => scrollToBottom()}
+                                    />
+                                </Tooltip>
+                            </div>
+                        </div>
+                        {errorDetails ? (
                         <div className='stack-trace-error'>
                             <p className='stack-trace-path monospace'>{filePath.trim()}</p>
                             <div className='error-details'>
@@ -231,6 +311,7 @@ function StackTrace({
                             />
                         </div>
                     ) : null}
+                    </>
                 </Overlay>
             </pre>
         </div>
@@ -251,5 +332,13 @@ function isTopOfElementInViewport(element: HTMLElement, scrollContainer?: React.
 
     return elementPosition.top > comparisonElementPosition;
 }
+
+const scrollToLineNumberInFile = () => {
+    const lineElement = document.querySelector(`.highlighted-line .line-number`);
+
+    if (lineElement) {
+        lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+};
 
 export default StackTrace;
