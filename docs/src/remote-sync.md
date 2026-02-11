@@ -83,7 +83,7 @@ ssh username@hostname
 ```
 You should get a shell without being asked for a password (or passphrase, if you used ssh-add).
 
-### For developers: why the app never prompts
+### Why the app never prompts
 
 The app runs `ssh`/`sftp` via subprocess with no TTY and with `BatchMode=yes`, so the SSH client never prompts for a password or passphrase. If key-based auth isn’t already satisfied (e.g. key in ssh-agent), the connection fails and the app shows an error. When the user sets a custom identity file, the app also passes `-F /dev/null` for that run so SSH does not read `~/.ssh/config`; that way a catch-all `IdentityFile` in config (e.g. `Host * IdentityFile ~/.ssh/id_ed25519`) doesn’t override or conflict with the key the user chose in the UI.
 
