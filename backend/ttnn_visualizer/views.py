@@ -1197,7 +1197,12 @@ def test_remote_folder():
             status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
         )
 
-    connection = RemoteConnection.model_validate(connection_data)
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
+    logger.debug(
+        "test_remote_folder request identityFile=%r, connection.identityFile=%r",
+        connection_data.get("identityFile"),
+        getattr(connection, "identityFile", None),
+    )
     statuses = []
 
     def add_status(status, message, detail=None):
