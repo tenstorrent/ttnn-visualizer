@@ -218,8 +218,8 @@ class SSHClient:
 
         :param remote_path: Path to the remote file
         :param timeout: Timeout in seconds
-        :return: File contents as bytes, or None if file not found
-        :raises: AuthenticationException, NoValidConnectionsError, SSHException, RemoteFileReadException
+        :return: File contents as bytes
+        :raises: RemoteFileReadException
         """
         path = Path(remote_path)
         logger.info(f"Reading remote file {path}")
