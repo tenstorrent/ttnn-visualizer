@@ -2,14 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { DataSet, Network } from 'vis-network/standalone';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { Network } from 'vis-network/standalone';
+import { DataSet } from 'vis-data';
 import { Edge } from 'vis-network';
 import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Node } from '../../model/APIData';
-import { getTensorColor } from '../../functions/colorGenerator';
 import 'styles/components/DeviceOperationsGraphComponent.scss';
+import { isExtendedDeviceOperation } from '../../functions/filterOperations';
 import { toReadableShape } from '../../functions/formatting';
 
 export interface GraphComponentProps {
@@ -18,60 +19,19 @@ export interface GraphComponentProps {
     onClose: () => void;
 }
 
+type ConnectedDeviceOperation = Node & {
+    inputs: Node[];
+    outputs: Node[];
+    graphInputs: Node[];
+    graphOutputs: Node[];
+};
+
 const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) => {
     const networkRef = useRef<Network | null>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
-    const [tooltipContent, setTooltipContent] = useState<React.ReactNode>(null);
-    const focusOnNode = useCallback(
-        (nodeId: number | null, center: boolean = false) => {
-            if (nodeId === null) {
-                return;
-            }
-            if (networkRef.current) {
-                if (center) {
-                    networkRef.current.focus(nodeId, {
-                        animation: { duration: 500, easingFunction: 'easeInOutCubic' },
-                    });
-                }
-                networkRef.current.selectNodes([nodeId], true);
-
-                const nodeData = data.find((node) => node.id === nodeId);
-                if (nodeData && tooltipRef.current) {
-                    setTooltipContent(generateTooltipContent(nodeData));
-                    tooltipRef.current.classList.add('visible');
-                }
-            }
-        },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [data],
-    );
 
     const formatOperationName = (item: Node) => {
-        // const prefix = item.node_type === 'function_start' ? 'Start ' : '';
-        // const suffix = item.node_type === 'function_end' ? 'end' : '';
         return item.params.name ? `${item.params.name}()` : '';
-    };
-    const getTensorSquare = (tensorId: number | null) => {
-        return (
-            tensorId && (
-                <div
-                    className='memory-color-block'
-                    style={{
-                        backgroundColor: getTensorColor(tensorId),
-                    }}
-                />
-            )
-        );
-    };
-
-    const generateTooltipContent = (node: Node) => {
-        const tensorSquare = getTensorSquare(node.params.tensor_id);
-        return (
-            <>
-                {tensorSquare}
-                <strong>{formatOperationName(node)}</strong>
-            </>
-        );
     };
 
     const initializeGraph = useCallback(
@@ -80,70 +40,114 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                 return;
             }
 
-            const consumersByTensorId = new Map<number, number[]>();
-            const producersByTensorId = new Map<number, number>();
+            const tensorShapeById = new Map<number, string>();
 
-            const ops = data
+            const ops: ConnectedDeviceOperation[] = data
                 .filter((op) => op.node_type === 'function_start')
                 .map((op) => {
-                    const inputTensors = op.inputs.filter((input) => input.node_type === 'tensor') || [];
-                    const outputTensors = op.outputs.filter((output) => output.node_type === 'tensor') || [];
-
-                    outputTensors.forEach((tensor) => {
-                        const tid = Number(tensor.params.tensor_id);
-                        producersByTensorId.set(tid, op.id);
-                    });
-
-                    inputTensors.forEach((tensor) => {
-                        const tid = Number(tensor.params.tensor_id);
-                        const existing = consumersByTensorId.get(tid) || [];
-                        existing.push(op.id);
-                        consumersByTensorId.set(tid, existing);
-                    });
-
+                    const inputTensors = op.inputs?.filter((i) => i.node_type === 'tensor') ?? [];
+                    const outputTensors = op.outputs?.filter((o) => o.node_type === 'tensor') ?? [];
                     return { ...op, graphInputs: inputTensors, graphOutputs: outputTensors };
                 });
 
-            const nodeList = ops.map((node) => ({
-                id: node.id,
-                label: ` ${formatOperationName(node)}`,
-                shape: 'box',
-            }));
+            const displayedOps = ops.filter((op) => isExtendedDeviceOperation(op.params.name));
+            const displayedIds = new Set(displayedOps.map((o) => o.id));
 
-            const edgesArray: Edge[] = [];
+            const producersByTensorId = new Map<number, number[]>();
+            const consumersByTensorId = new Map<number, number[]>();
 
-            ops.forEach((consumer) => {
-                consumer.graphInputs.forEach((tensor) => {
-                    const tid = Number(tensor.params.tensor_id);
-                    const producerId = producersByTensorId.get(tid);
-                    if (producerId === undefined) {
-                        return;
+            for (const op of ops) {
+                for (const tensor of op.graphOutputs) {
+                    const tensorId = Number(tensor.params.tensor_id);
+                    if (tensor.params.shape) {
+                        if (!tensorShapeById.has(tensorId)) {
+                            tensorShapeById.set(tensorId, tensor.params.shape);
+                        }
                     }
+                    const arr = producersByTensorId.get(tensorId) ?? [];
+                    arr.push(op.id);
+                    producersByTensorId.set(tensorId, arr);
+                }
+                for (const tensor of op.graphInputs) {
+                    const tensorId = Number(tensor.params.tensor_id);
+                    if (tensor.params.shape) {
+                        if (!tensorShapeById.has(tensorId)) {
+                            tensorShapeById.set(tensorId, tensor.params.shape);
+                        }
+                    }
+                    const arr = consumersByTensorId.get(tensorId) ?? [];
+                    arr.push(op.id);
+                    consumersByTensorId.set(tensorId, arr);
+                }
+            }
 
-                    edgesArray.push({
-                        id: `${producerId}->${consumer.id}#${tid}`,
-                        from: producerId,
-                        to: consumer.id,
-                        label: `${toReadableShape(tensor.params.shape)}`,
-                    });
-                });
-            });
+            const edgesByProducer = new Map<number, Array<{ to: number; tid: number; shape?: string }>>();
 
-            // dedupe works now
-            const seen = new Set<string>();
-            const dedupedEdges = edgesArray.filter((e) =>
-                seen.has(String(e.id)) ? false : (seen.add(String(e.id)), true),
+            for (const [tid, producers] of producersByTensorId.entries()) {
+                const consumers = consumersByTensorId.get(tid) ?? [];
+                for (const from of producers) {
+                    for (const to of consumers) {
+                        if (from === to) {
+                            // eslint-disable-next-line no-continue
+                            continue;
+                        }
+                        const arr = edgesByProducer.get(from) ?? [];
+                        arr.push({ to, tid });
+                        edgesByProducer.set(from, arr);
+                    }
+                }
+            }
+
+            function buildCompressedEdges(): Edge[] {
+                const result: Edge[] = [];
+                const seenEdge = new Set<string>();
+
+                for (const start of displayedOps) {
+                    const idToConnection: Array<{ id: number; via?: { tensorId: number } }> = [{ id: start.id }];
+                    const visited = new Set<number>([start.id]);
+
+                    while (idToConnection.length) {
+                        const cur = idToConnection.shift()!;
+                        const nexts = edgesByProducer.get(cur.id) ?? [];
+
+                        for (const e of nexts) {
+                            if (visited.has(e.to)) {
+                                // eslint-disable-next-line no-continue
+                                continue;
+                            }
+                            visited.add(e.to);
+
+                            const via = cur.via ?? { tensorId: e.tid };
+
+                            if (displayedIds.has(e.to) && e.to !== start.id) {
+                                const edgeId = `${start.id}->${e.to}#${via.tensorId}`;
+                                const shape = tensorShapeById.get(via.tensorId);
+                                const label = shape ? toReadableShape(shape) : `T${via.tensorId}`;
+                                if (!seenEdge.has(edgeId)) {
+                                    seenEdge.add(edgeId);
+                                    result.push({
+                                        id: edgeId,
+                                        from: start.id,
+                                        to: e.to,
+                                        label,
+                                    });
+                                }
+                                // eslint-disable-next-line no-continue
+                                continue;
+                            }
+
+                            idToConnection.push({ id: e.to, via });
+                        }
+                    }
+                }
+
+                return result;
+            }
+
+            const edges = new DataSet(buildCompressedEdges());
+            const nodes = new DataSet(
+                displayedOps.map((op) => ({ id: op.id, label: ` ${formatOperationName(op)}`, shape: 'box' })),
             );
-
-            const edges = new DataSet(dedupedEdges);
-
-            const ids = new Set<string>();
-            edges.forEach(({ from, to }) => {
-                ids.add(String(from));
-                ids.add(String(to));
-            });
-
-            const nodes = new DataSet(nodeList.filter((op) => ids.has(String(op.id))));
 
             const networkData = { nodes, edges };
 
@@ -160,57 +164,57 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     labelHighlightBold: false,
                     fixed: false,
                 },
+
                 edges: {
+                    color: '#f5e2ba',
+                    arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+
                     font: {
                         color: '#f5e2ba',
-                        size: 18,
+                        size: 14,
                         strokeColor: '#000',
-                        smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
-                        // align: 'middle',
-                        // align: 'top',
-                        physics: true,
                     },
-                    color: '#f5e2ba',
-                    smooth: false,
-                    arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                    smooth: {
+                        enabled: true,
+                        type: 'cubicBezier',
+                        // forceDirection: 'vertical',
+                        roundness: 0.35,
+                    },
+                    width: 1,
+                    selectionWidth: 2,
+                    hoverWidth: 2,
                 },
+
                 autoResize: true,
+
                 layout: {
                     hierarchical: {
                         enabled: true,
-                        levelSeparation: 100,
-                        nodeSpacing: 300,
-                        treeSpacing: 300,
-                        blockShifting: true,
-                        edgeMinimization: false,
                         direction: 'UD',
                         sortMethod: 'directed',
+                        levelSeparation: 160,
+                        nodeSpacing: 220,
+                        treeSpacing: 220,
+                        blockShifting: true,
+                        edgeMinimization: true,
                         shakeTowards: 'leaves',
+                        parentCentralization: true,
                     },
                     improvedLayout: true,
                 },
+
                 interaction: {
                     dragNodes: true,
                     dragView: true,
                     zoomView: true,
                     zoomSpeed: 0.4,
+                    hover: true,
                 },
+
                 physics: {
                     enabled: false,
-                    solver: 'forceAtlas2Based',
-                    forceAtlas2Based: {
-                        gravitationalConstant: -30,
-                        centralGravity: 0.01,
-                        springLength: 100,
-                        springConstant: 0.08,
-                    },
-                    stabilization: {
-                        enabled: true,
-                        iterations: 1000,
-                    },
                 },
             };
-
             networkRef.current = new Network(container, networkData, options);
 
             networkRef.current.on('blurNode', () => {
@@ -223,18 +227,8 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     tooltipRef.current.classList.remove('visible');
                 }
             });
-
-            networkRef.current.on('click', (params) => {
-                if (tooltipRef.current) {
-                    tooltipRef.current.classList.remove('visible');
-                }
-                if (params.nodes.length > 0) {
-                    const nodeId = params.nodes[0];
-                    focusOnNode(nodeId);
-                }
-            });
         },
-        [data, focusOnNode],
+        [data],
     );
     useEffect(() => {
         return () => {
@@ -275,15 +269,10 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     <div
                         className='graph-tooltip'
                         ref={tooltipRef}
-                    >
-                        {tooltipContent}
-                    </div>
+                    />
                 </div>
                 <div>
-                    <aside>
-                        Scroll to zoom. Drag to pan. Click an edge to go to connecting node. Click node to see details.
-                        Drag nodes horizontally.
-                    </aside>
+                    <aside>Scroll to zoom. Drag to pan. Drag nodes horizontally.</aside>
                 </div>
             </Card>
         </Overlay2>
