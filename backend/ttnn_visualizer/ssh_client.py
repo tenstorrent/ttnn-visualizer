@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import List, Optional, Union
@@ -50,7 +51,7 @@ class SSHClient:
         identity = (getattr(self.connection, "identityFile", None) or "").strip()
         if identity:
             # Use empty config so only our -i key is tried (ignore ~/.ssh/config IdentityFile).
-            cmd.extend(["-F", "/dev/null"])
+            cmd.extend(["-F", os.devnull])
         cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
         if identity:
             cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
@@ -64,7 +65,7 @@ class SSHClient:
         cmd = ["sftp"]
         identity = (getattr(self.connection, "identityFile", None) or "").strip()
         if identity:
-            cmd.extend(["-F", "/dev/null"])
+            cmd.extend(["-F", os.devnull])
         cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
         if identity:
             cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
