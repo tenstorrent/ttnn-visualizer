@@ -1197,7 +1197,7 @@ def test_remote_folder():
         )
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
-    logger.info(
+    logger.debug(
         "test_remote_folder request identityFile=%r, connection.identityFile=%r",
         connection_data.get("identityFile"),
         getattr(connection, "identityFile", None),
