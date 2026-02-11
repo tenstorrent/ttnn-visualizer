@@ -37,7 +37,7 @@ class SSHClient:
     def __init__(self, connection: RemoteConnection):
         self.connection = connection
         identity = getattr(connection, "identityFile", None)
-        logger.info(
+        logger.debug(
             "SSHClient connection.identityFile=%r (will use only this key if set)",
             identity,
         )
