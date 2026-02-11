@@ -124,6 +124,8 @@ function StackTrace({
 
             const { data, error } = await readRemoteFile(filePath);
 
+            setErrorDetails('');
+
             if (error) {
                 setErrorDetails(error);
             } else if (data) {
