@@ -127,7 +127,7 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     """
     if "*" in file_path:
         # Build SSH command to list files matching the pattern (never prompts for password)
-        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [f"ls -1 {file_path}"]
+        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [f"ls -1 '{file_path}'"]
 
         try:
             result = subprocess.run(ssh_cmd, capture_output=True, text=True, check=True)
