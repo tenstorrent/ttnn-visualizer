@@ -228,9 +228,23 @@ class SSHClient:
             result = self.execute_command(f"cat '{path}'", timeout=timeout)
             return result.encode("utf-8")
         except SSHException as e:
+            msg = str(e).lower()
+            # Map only clear "not found" errors to 404; handle other SSH failures appropriately.
+            if "no such file" in msg or "not found" in msg:
+                raise RemoteFileReadException(
+                    message="File not found.",
+                    http_status_code=HTTPStatus.NOT_FOUND,
+                    detail=str(e),
+                )
+            if "permission denied" in msg or "access denied" in msg:
+                raise RemoteFileReadException(
+                    message="Permission denied when reading remote file.",
+                    http_status_code=HTTPStatus.FORBIDDEN,
+                    detail=str(e),
+                )
             raise RemoteFileReadException(
-                message=f"File not found.",
-                http_status_code=HTTPStatus.NOT_FOUND,
+                message="Failed to read remote file.",
+                http_status_code=HTTPStatus.BAD_GATEWAY,
                 detail=str(e),
             )
 
