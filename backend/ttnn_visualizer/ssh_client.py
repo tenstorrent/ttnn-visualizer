@@ -4,6 +4,7 @@
 
 import logging
 import subprocess
+from http import HTTPStatus
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -13,6 +14,7 @@ from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
+    RemoteFileReadException,
     SSHException,
 )
 from ttnn_visualizer.models import RemoteConnection
@@ -216,8 +218,8 @@ class SSHClient:
 
         :param remote_path: Path to the remote file
         :param timeout: Timeout in seconds
-        :return: File contents as bytes, or None if file not found
-        :raises: AuthenticationException, NoValidConnectionsError, SSHException
+        :return: File contents as bytes
+        :raises: RemoteFileReadException
         """
         path = Path(remote_path)
         logger.info(f"Reading remote file {path}")
@@ -226,9 +228,25 @@ class SSHClient:
             result = self.execute_command(f"cat '{path}'", timeout=timeout)
             return result.encode("utf-8")
         except SSHException as e:
-            if "No such file" in str(e) or "cannot open" in str(e):
-                return None
-            raise
+            msg = str(e).lower()
+            # Map only clear "not found" errors to 404; handle other SSH failures appropriately.
+            if "no such file" in msg or "not found" in msg:
+                raise RemoteFileReadException(
+                    message="File not found.",
+                    http_status_code=HTTPStatus.NOT_FOUND,
+                    detail=str(e),
+                )
+            if "permission denied" in msg or "access denied" in msg:
+                raise RemoteFileReadException(
+                    message="Permission denied when reading remote file.",
+                    http_status_code=HTTPStatus.FORBIDDEN,
+                    detail=str(e),
+                )
+            raise RemoteFileReadException(
+                message="Failed to read remote file.",
+                http_status_code=HTTPStatus.BAD_GATEWAY,
+                detail=str(e),
+            )
 
     def check_path_exists(
         self, remote_path: Union[str, Path], timeout: int = 10

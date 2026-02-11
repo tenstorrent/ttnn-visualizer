@@ -56,6 +56,7 @@ function StackTrace({
     const [filePath, setFilePath] = useState('');
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
+    const [errorDetails, setErrorDetails] = useState('');
     const [isViewingSourceFile, setIsViewingSourceFile] = useState(false);
     const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
     const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
@@ -121,8 +122,15 @@ function StackTrace({
         if (selectedConnection && !fileContents && isRemote) {
             setIsFetchingFile(true);
 
-            const response = await readRemoteFile(filePath);
-            setFileContents(response);
+            const { data, error } = await readRemoteFile(filePath);
+
+            setErrorDetails('');
+
+            if (error) {
+                setErrorDetails(error);
+            } else if (data) {
+                setFileContents(data);
+            }
 
             setIsFetchingFile(false);
             setIsViewingSourceFile(true);
@@ -189,6 +197,11 @@ function StackTrace({
         return () => scrollContainerEl?.removeEventListener('scroll', handleScroll);
     }, [scrollContainerEl, overlayTopOffset, isViewingSourceFile]);
 
+    useEffect(() => {
+        setFileContents('');
+        setErrorDetails('');
+    }, [stackTrace]);
+
     return (
         <div className={classNames('stack-trace', className)}>
             {title && <p className='stack-trace-title'>{title}</p>}
@@ -252,34 +265,45 @@ function StackTrace({
                     lazy={false}
                 >
                     <>
-                        <div
-                            className='source-file-controls'
-                            ref={sourceControlsRef}
-                        >
-                            <div className='buttons'>
-                                <Tooltip content='Scroll to top'>
-                                    <Button
-                                        icon={IconNames.DOUBLE_CHEVRON_UP}
-                                        onClick={() => scrollToTop()}
-                                    />
-                                </Tooltip>
+                        {!errorDetails ? (
+                            <div
+                                className='source-file-controls'
+                                ref={sourceControlsRef}
+                            >
+                                <div className='buttons'>
+                                    <Tooltip content='Scroll to top'>
+                                        <Button
+                                            icon={IconNames.DOUBLE_CHEVRON_UP}
+                                            onClick={() => scrollToTop()}
+                                        />
+                                    </Tooltip>
 
-                                <Tooltip content='Scroll to highlighted line'>
-                                    <Button
-                                        icon={IconNames.LOCATE}
-                                        onClick={() => scrollToLineNumberInFile()}
-                                    />
-                                </Tooltip>
+                                    <Tooltip content='Scroll to highlighted line'>
+                                        <Button
+                                            icon={IconNames.LOCATE}
+                                            onClick={() => scrollToLineNumberInFile()}
+                                        />
+                                    </Tooltip>
 
-                                <Tooltip content='Scroll to bottom'>
-                                    <Button
-                                        icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                                        onClick={() => scrollToBottom()}
-                                    />
-                                </Tooltip>
+                                    <Tooltip content='Scroll to bottom'>
+                                        <Button
+                                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                                            onClick={() => scrollToBottom()}
+                                        />
+                                    </Tooltip>
+                                </div>
                             </div>
-                        </div>
-                        {fileWithHighlights && (
+                        ) : null}
+                        {errorDetails ? (
+                            <div className='stack-trace-error'>
+                                <p className='stack-trace-path monospace'>{filePath.trim()}</p>
+                                <div className='error-details'>
+                                    <pre>{errorDetails}</pre>
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {fileWithHighlights && !errorDetails ? (
                             <div className='stack-trace'>
                                 <p className='stack-trace-path monospace'>{filePath.trim()}</p>
                                 <code
@@ -290,7 +314,7 @@ function StackTrace({
                                     }}
                                 />
                             </div>
-                        )}
+                        ) : null}
                     </>
                 </Overlay>
             </pre>
