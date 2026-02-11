@@ -106,3 +106,22 @@
         }
     }
 }
+
+.source-file-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    opacity: 0.5;
+
+    &:hover {
+        opacity: 1;
+    }
+
+    .buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        align-items: flex-start;
+    }
+}
