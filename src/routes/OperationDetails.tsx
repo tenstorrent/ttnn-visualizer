@@ -13,7 +13,7 @@ export default function OperationDetails() {
     const { operation } = useOperationDetails(intOperationId);
 
     return (
-        operationId && (
+        operation && (
             <>
                 <Helmet
                     title={operation?.name ? `${operationId} ${operation?.name}` : `Not found Operation ${operationId}`}
