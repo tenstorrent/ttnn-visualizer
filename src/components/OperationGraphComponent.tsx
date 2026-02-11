@@ -561,7 +561,8 @@ const OperationGraph: React.FC<{
             />
 
             <aside className='aside'>
-                Scroll to zoom. Drag to pan. Click a node to see operation details. Drag a node.
+                Scroll or pinch graph to zoom. Drag to pan. Click a node to see operation details. Drag a node to move
+                horizontally.
             </aside>
         </div>
     );
