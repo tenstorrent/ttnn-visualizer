@@ -13,11 +13,20 @@
     }
 }
 
-.standard-flex-layout {
+.tensor-details-layout {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 5px;
+    position: relative;
+    top: 1px;
+
+    .has-tooltip {
+        border-bottom-color: $tt-teal;
+        border-bottom-width: 2px;
+        margin-top: 3px;
+        padding-bottom: 2px;
+    }
 }
 
 .arg-tensor-tooltip {
