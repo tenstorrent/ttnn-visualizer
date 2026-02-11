@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { Fragment, JSX, useCallback } from 'react';
-import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Classes, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import classNames from 'classnames';
@@ -106,7 +106,7 @@ const renderTensorLabel = (node: Node, details: OperationDetails, buffers: JSX.E
             }
             position={PopoverPosition.TOP}
         >
-            <span className='standard-flex-layout has-tooltip'>
+            <span className={classNames(Classes.TOOLTIP_INDICATOR, 'standard-flex-layout', 'has-tooltip')}>
                 {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
             </span>
         </Tooltip>
