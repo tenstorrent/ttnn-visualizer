@@ -194,7 +194,7 @@ function StackTrace({
 
         return () => scrollContainerEl?.removeEventListener('scroll', handleScroll);
     }, [scrollContainerEl, overlayTopOffset, isViewingSourceFile]);
-  
+
     useEffect(() => {
         setFileContents('');
         setErrorDetails('');
@@ -263,54 +263,56 @@ function StackTrace({
                     lazy={false}
                 >
                     <>
-                        <div
-                            className='source-file-controls'
-                            ref={sourceControlsRef}
-                        >
-                            <div className='buttons'>
-                                <Tooltip content='Scroll to top'>
-                                    <Button
-                                        icon={IconNames.DOUBLE_CHEVRON_UP}
-                                        onClick={() => scrollToTop()}
-                                    />
-                                </Tooltip>
+                        {!errorDetails ? (
+                            <div
+                                className='source-file-controls'
+                                ref={sourceControlsRef}
+                            >
+                                <div className='buttons'>
+                                    <Tooltip content='Scroll to top'>
+                                        <Button
+                                            icon={IconNames.DOUBLE_CHEVRON_UP}
+                                            onClick={() => scrollToTop()}
+                                        />
+                                    </Tooltip>
 
-                                <Tooltip content='Scroll to highlighted line'>
-                                    <Button
-                                        icon={IconNames.LOCATE}
-                                        onClick={() => scrollToLineNumberInFile()}
-                                    />
-                                </Tooltip>
+                                    <Tooltip content='Scroll to highlighted line'>
+                                        <Button
+                                            icon={IconNames.LOCATE}
+                                            onClick={() => scrollToLineNumberInFile()}
+                                        />
+                                    </Tooltip>
 
-                                <Tooltip content='Scroll to bottom'>
-                                    <Button
-                                        icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                                        onClick={() => scrollToBottom()}
-                                    />
-                                </Tooltip>
+                                    <Tooltip content='Scroll to bottom'>
+                                        <Button
+                                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                                            onClick={() => scrollToBottom()}
+                                        />
+                                    </Tooltip>
+                                </div>
                             </div>
-                        </div>
+                        ) : null}
                         {errorDetails ? (
-                        <div className='stack-trace-error'>
-                            <p className='stack-trace-path monospace'>{filePath.trim()}</p>
-                            <div className='error-details'>
-                                <pre>{errorDetails}</pre>
+                            <div className='stack-trace-error'>
+                                <p className='stack-trace-path monospace'>{filePath.trim()}</p>
+                                <div className='error-details'>
+                                    <pre>{errorDetails}</pre>
+                                </div>
                             </div>
-                        </div>
-                    ) : null}
+                        ) : null}
 
-                    {fileWithHighlights && !errorDetails ? (
-                        <div className='stack-trace'>
-                            <p className='stack-trace-path monospace'>{filePath.trim()}</p>
-                            <code
-                                className={`language-${language} code-output`}
-                                // eslint-disable-next-line react/no-danger
-                                dangerouslySetInnerHTML={{
-                                    __html: fileWithHighlights,
-                                }}
-                            />
-                        </div>
-                    ) : null}
+                        {fileWithHighlights && !errorDetails ? (
+                            <div className='stack-trace'>
+                                <p className='stack-trace-path monospace'>{filePath.trim()}</p>
+                                <code
+                                    className={`language-${language} code-output`}
+                                    // eslint-disable-next-line react/no-danger
+                                    dangerouslySetInnerHTML={{
+                                        __html: fileWithHighlights,
+                                    }}
+                                />
+                            </div>
+                        ) : null}
                     </>
                 </Overlay>
             </pre>
