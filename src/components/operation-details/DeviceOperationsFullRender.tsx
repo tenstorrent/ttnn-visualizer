@@ -106,7 +106,7 @@ const renderTensorLabel = (node: Node, details: OperationDetails, buffers: JSX.E
             }
             position={PopoverPosition.TOP}
         >
-            <span className='standard-flex-layout'>
+            <span className='tensor-details-layout'>
                 {square}{' '}
                 <span className={classNames(Classes.TOOLTIP_INDICATOR, 'has-tooltip')}>
                     Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
@@ -114,7 +114,7 @@ const renderTensorLabel = (node: Node, details: OperationDetails, buffers: JSX.E
             </span>
         </Tooltip>
     ) : (
-        <span className='standard-flex-layout'>
+        <span className='tensor-details-layout'>
             {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
         </span>
     );
