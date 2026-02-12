@@ -128,19 +128,21 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                                 </td>
                             </tr>
 
-                            <tr>
-                                <th>Matches Globally</th>
-                                <td>
-                                    <GoldenTensorComparisonIndicator
-                                        value={tensor.comparison.global.actual_pcc}
-                                        label='Actual PCC:'
-                                    />
-                                    <GoldenTensorComparisonIndicator
-                                        value={tensor.comparison.global.desired_pcc}
-                                        label='Desired PCC:'
-                                    />
-                                </td>
-                            </tr>
+                            {tensor?.comparison?.global ? (
+                                <tr>
+                                    <th>Matches Globally</th>
+                                    <td>
+                                        <GoldenTensorComparisonIndicator
+                                            value={tensor.comparison.global.actual_pcc}
+                                            label='Actual PCC:'
+                                        />
+                                        <GoldenTensorComparisonIndicator
+                                            value={tensor.comparison.global.desired_pcc}
+                                            label='Desired PCC:'
+                                        />
+                                    </td>
+                                </tr>
+                            ) : null}
                         </>
                     ) : null}
                 </tbody>
