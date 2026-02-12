@@ -251,7 +251,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                         onChange={() => setShowOnlySelected(!showOnlySelected)}
                         disabled={selectedTensor === null}
                     >
-                        Show selected tensor rows ({selectedRows.length})
+                        Filter selected tensor rows ({selectedRows.length})
                     </Checkbox>
                     <p className='result-count'>
                         {tableRows.length !== listOfBuffers.length
