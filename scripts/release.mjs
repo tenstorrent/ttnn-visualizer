@@ -8,8 +8,22 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 
 const bumpType = process.argv[2];
+
+const color = {
+    reset: '\x1b[0m',
+    bold: '\x1b[1m',
+
+    red: '\x1b[31m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    cyan: '\x1b[36m',
+
+    gray: '\x1b[90m',
+};
+
 if (!['-patch', '-minor', '-major'].includes(bumpType)) {
-    console.error('Usage: node version-bump.mjs [-patch|-minor|-major]');
+    console.error('❌Usage: node version-bump.mjs [-patch|-minor|-major]');
     process.exit(1);
 }
 
@@ -23,6 +37,31 @@ function bumpVersion(version, type) {
     }
     return `${major}.${minor}.${patch + 1}`;
 }
+
+// eslint-disable-next-line consistent-return
+function getCurrentBranch() {
+    try {
+        return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+    } catch {
+        console.error('❌Error: unable to determine git branch. Are you in a git repo?');
+        process.exit(1);
+    }
+}
+
+const isNotPatch = bumpType === '-minor' || bumpType === '-major';
+
+if (isNotPatch) {
+    const branch = getCurrentBranch();
+    if (branch !== 'dev') {
+        console.error(
+            `🚫 ${color.red}Release (-minor/-major) must be run on "dev" branch.${color.reset}\n` +
+                `${color.blue}Current branch: ${branch} Aborting without changes.${color.reset}`,
+        );
+        process.exit(1);
+    }
+}
+
+execSync('git pull', { stdio: 'inherit' });
 
 const pkgPath = './package.json';
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
@@ -43,4 +82,4 @@ execSync(`git commit -m "v${newVersion}"`, { stdio: 'inherit' });
 execSync(`git tag v${newVersion}`, { stdio: 'inherit' });
 execSync(`git push`, { stdio: 'inherit' });
 execSync(`git push --tags`, { stdio: 'inherit' });
-console.log(`Committed, tagged, and pushed as v${newVersion}`);
+console.log(`${color.green}${color.bold}Committed, tagged, and pushed as v${newVersion}${color.reset}`);
