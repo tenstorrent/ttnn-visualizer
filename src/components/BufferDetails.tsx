@@ -3,9 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { Link } from 'react-router-dom';
 import { Operation, OperationDescription, Tensor } from '../model/APIData';
 import { toHex } from '../functions/math';
 import { toReadableShape, toReadableType } from '../functions/formatting';
@@ -25,8 +23,6 @@ interface BufferDetailsProps {
 }
 
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
-    const navigate = useNavigate();
-
     const { address, dtype, layout, shape } = tensor;
     const firstOperationId = tensor.producers[0];
     const lastOperationId = tensor.consumers[tensor.consumers.length - 1];
@@ -39,21 +35,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                 <tbody>
                     <tr>
                         <th>Tensor Id</th>
-                        <td>
-                            {tensor.id}{' '}
-                            <Button
-                                icon={IconNames.Link}
-                                onClick={() =>
-                                    navigate(`${ROUTES.BUFFERS}`, {
-                                        state: {
-                                            tensorId: tensor.id,
-                                            tensorAddress: tensor.address,
-                                            bufferType: tensor.buffer_type,
-                                        },
-                                    })
-                                }
-                            />
-                        </td>
+                        <td>{tensor.id}</td>
                     </tr>
 
                     <tr>
