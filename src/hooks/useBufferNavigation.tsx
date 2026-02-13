@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useSetAtom } from 'jotai';
 import { Virtualizer } from '@tanstack/react-virtual';
-import { selectedAddressAtom, selectedBufferSummaryTabAtom, selectedTensorAtom } from '../store/app';
+import { selectedBufferSummaryTabAtom } from '../store/app';
 import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { BuffersByOperation } from '../model/APIData';
 import useBufferFocus from './useBufferFocus';
@@ -21,19 +21,15 @@ interface UseBufferNavigationProps {
 
 const useBufferNavigation = ({ buffersByOperation, tensorListByOperation, virtualizer }: UseBufferNavigationProps) => {
     const location = useLocation();
-    const setSelectedTensorId = useSetAtom(selectedTensorAtom);
-    const setSelectedAddress = useSetAtom(selectedAddressAtom);
     const setSelectedTabId = useSetAtom(selectedBufferSummaryTabAtom);
-    const { createToast } = useBufferFocus();
+    const { updateBufferFocus } = useBufferFocus();
 
     useEffect(() => {
         if (location.state?.tensorId) {
             const { tensorId, tensorAddress, bufferType } = location.state;
 
-            setSelectedTensorId(tensorId);
-            setSelectedAddress(tensorAddress ?? null);
+            updateBufferFocus(tensorAddress, tensorId);
             setSelectedTabId(bufferType === BufferType.DRAM ? TAB_IDS.DRAM : TAB_IDS.L1);
-            createToast(tensorAddress, tensorId);
 
             const firstOperationWithTensor = buffersByOperation.findIndex(
                 (operation) =>

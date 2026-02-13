@@ -3,9 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Link, useNavigate } from 'react-router-dom';
-import { Icon } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { Link } from 'react-router-dom';
 import { Operation, OperationDescription, Tensor } from '../model/APIData';
 import { toHex } from '../functions/math';
 import { toReadableShape, toReadableType } from '../functions/formatting';
@@ -17,7 +15,6 @@ import isValidNumber from '../functions/isValidNumber';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
-import { BufferType } from '../model/BufferType';
 
 interface BufferDetailsProps {
     tensor: Tensor;
@@ -26,8 +23,6 @@ interface BufferDetailsProps {
 }
 
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
-    const navigate = useNavigate();
-
     const { address, dtype, layout, shape } = tensor;
     const firstOperationId = tensor.producers[0];
     const lastOperationId = tensor.consumers[tensor.consumers.length - 1];
@@ -60,34 +55,6 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                                 : 'No consumers for this tensor'}
                         </td>
                     </tr>
-
-                    {tensor.buffer_type === BufferType.DRAM || tensor.buffer_type === BufferType.L1 ? (
-                        <tr>
-                            <th />
-                            <td>
-                                <a
-                                    href={`${ROUTES.BUFFERS}`}
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        navigate(`${ROUTES.BUFFERS}`, {
-                                            state: {
-                                                tensorId: tensor.id,
-                                                tensorAddress: tensor.address,
-                                                bufferType: tensor.buffer_type,
-                                            },
-                                        });
-                                    }}
-                                >
-                                    <Icon
-                                        icon={IconNames.LOCATE}
-                                        size={14}
-                                        className='locate-icon'
-                                    />
-                                    Locate in Buffer Summary
-                                </a>
-                            </td>
-                        </tr>
-                    ) : null}
 
                     {/* This is stupid but Typescript is complaining otherwise */}
                     {isValidNumber(nextAllocationOperationId) &&

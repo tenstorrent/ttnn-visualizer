@@ -7,7 +7,6 @@ import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
-import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
@@ -20,8 +19,8 @@ import TensorVisualisationComponent from '../tensor-sharding-visualization/Tenso
 import 'styles/components/TensorDetailsComponent.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
-import { selectedTensorAtom } from '../../store/app';
 import MemoryTag from '../MemoryTag';
+import useBufferFocus from '../../hooks/useBufferFocus';
 
 export interface TensorDetailsComponentProps {
     tensor: Tensor;
@@ -38,12 +37,12 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     operationId,
     zoomRange,
 }) => {
+    const [overlayOpen, setOverlayOpen] = useState(false);
+
     const { address } = tensor;
     const { data: operations } = useOperationsList();
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
-    const selectedTensorId = useAtomValue(selectedTensorAtom);
-
-    const [overlayOpen, setOverlayOpen] = useState(false);
+    const { selectedTensorId } = useBufferFocus();
 
     const shardSpec = tensor.memory_config?.shard_spec;
 
