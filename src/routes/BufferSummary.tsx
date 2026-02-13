@@ -23,6 +23,7 @@ function BufferSummary() {
     const [activeSection, setActiveSection] = useState<SECTION_IDS>(SECTION_IDS.PLOT);
     const [selectedTabId, setSelectedTabId] = useAtom(selectedBufferSummaryTabAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
     // TODO: this requires further optimization
     const { data: buffersByOperation, error: buffersError } = useBuffers(
         selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM,
@@ -30,6 +31,10 @@ function BufferSummary() {
     );
     const { data: operationsList } = useOperationsList();
     const { activeToast, resetToasts } = useBufferFocus();
+
+    const tensorListByOperation = useCreateTensorsByOperationByIdList(
+        selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM,
+    );
 
     useEffect(() => {
         const scrollRefs = [plotRef, tableRef];
@@ -54,9 +59,6 @@ function BufferSummary() {
         return () => window.removeEventListener('scroll', navHighlighter);
     }, []);
 
-    const tensorListByOperation = useCreateTensorsByOperationByIdList(
-        selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM,
-    );
     return (
         <div className='buffer-summary data-padding'>
             <Helmet title='Buffer summary' />
