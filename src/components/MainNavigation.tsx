@@ -144,7 +144,7 @@ function MainNavigation() {
                         aria-label='Buffers'
                         onClick={() => handleNavigate(ROUTES.BUFFERS)}
                         active={hasMatchingPath(ROUTES.BUFFERS)}
-                        icon={IconNames.SMALL_SQUARE}
+                        icon={IconNames.HORIZONTAL_BAR_CHART}
                         disabled={!hasActiveProfiler}
                         variant={ButtonVariant.MINIMAL}
                         size={Size.LARGE}

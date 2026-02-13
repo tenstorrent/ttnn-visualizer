@@ -27,7 +27,7 @@ export const hasClusterDescriptionAtom = atom<boolean>(false);
 
 export const activeToastAtom = atom<Id | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
-export const selectedTensorAtom = atom<number | null>(null);
+export const selectedTensorIdAtom = atom<number | null>(null);
 
 export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);

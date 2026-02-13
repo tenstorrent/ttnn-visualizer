@@ -24,6 +24,7 @@ import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
 
 import { BuffersByOperation } from '../../model/APIData';
+import useBufferNavigation from '../../hooks/useBufferNavigation';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -64,14 +65,6 @@ function BufferSummaryPlotRendererDRAM({
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
 
-    const numberOfOperations = useMemo(
-        () =>
-            uniqueBuffersByOperationList && uniqueBuffersByOperationList.length >= 0
-                ? uniqueBuffersByOperationList.length
-                : PLACEHOLDER_ARRAY_SIZE,
-        [uniqueBuffersByOperationList],
-    );
-
     const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
         if (isZoomedIn) {
             return getSplitBuffers(uniqueBuffersByOperationList);
@@ -79,6 +72,14 @@ function BufferSummaryPlotRendererDRAM({
 
         return [uniqueBuffersByOperationList];
     }, [uniqueBuffersByOperationList, isZoomedIn]);
+
+    const numberOfOperations = useMemo(
+        () =>
+            segmentedChartData[0] && segmentedChartData[0].length >= 0
+                ? segmentedChartData[0].length
+                : PLACEHOLDER_ARRAY_SIZE,
+        [segmentedChartData],
+    );
 
     const zoomedMemoryOptions = useMemo(
         () =>
@@ -99,12 +100,12 @@ function BufferSummaryPlotRendererDRAM({
     const { scrollOffset: restoredOffset, measurementsCache: restoredMeasurementsCache } =
         useMemo(() => getListState(), [getListState]) ?? {};
 
-    const virtualizer = useVirtualizer({
+    const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
         estimateSize: () => OPERATION_EL_HEIGHT,
         getScrollElement: () => scrollElementRef.current,
         overscan: 20,
         initialMeasurementsCache: restoredMeasurementsCache,
-        count: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: segmentedChartData[0]?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
     });
 
@@ -139,6 +140,12 @@ function BufferSummaryPlotRendererDRAM({
             });
         };
     }, [updateListState, uniqueBuffersByOperationList]);
+
+    useBufferNavigation({
+        buffersByOperation: segmentedChartData[0],
+        tensorListByOperation,
+        virtualizer,
+    });
 
     return uniqueBuffersByOperationList && tensorListByOperation ? (
         <div className='buffer-summary-chart'>

@@ -23,8 +23,6 @@ import { L1RenderZoomoutConfiguration, PlotMouseEventCustom } from '../../defini
 import {
     isFullStackTraceAtom,
     renderMemoryLayoutAtom,
-    selectedAddressAtom,
-    selectedTensorAtom,
     showDeallocationReportAtom,
     showHexAtom,
     showMemoryRegionsAtom,
@@ -52,12 +50,11 @@ interface OperationDetailsProps {
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const [renderMemoryLayoutPattern, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
-    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
-    const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const [showFullStackTrace, setShowFullStackTrace] = useAtom(isFullStackTraceAtom);
     const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
+    const { selectedTensorId, selectedAddress } = useBufferFocus();
 
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
@@ -82,7 +79,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     } = useOperationDetails(operationId);
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
-    const { createToast, resetToasts } = useBufferFocus();
+    const { resetToasts, updateBufferFocus } = useBufferFocus();
 
     const onClickOutside = () => {
         resetToasts();
@@ -164,12 +161,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const { plotZoomRangeStart, plotZoomRangeEnd } = calculatePlotZoomRange();
-
-    const updateBufferFocus = (address?: number, tensorId?: number): void => {
-        setSelectedAddress(address ?? null);
-        setSelectedTensorId(tensorId ?? null);
-        createToast(address, tensorId);
-    };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;

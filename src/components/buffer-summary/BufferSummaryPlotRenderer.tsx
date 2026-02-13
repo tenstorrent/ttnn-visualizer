@@ -42,6 +42,7 @@ import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
 
 import { BuffersByOperation } from '../../model/APIData';
+import useBufferNavigation from '../../hooks/useBufferNavigation';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -77,7 +78,7 @@ function BufferSummaryPlotRenderer({
     const { scrollOffset: restoredOffset, measurementsCache: restoredMeasurementsCache } =
         useMemo(() => getListState(), [getListState]) ?? {};
 
-    const virtualizer = useVirtualizer({
+    const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
         estimateSize: () => OPERATION_EL_HEIGHT,
         getScrollElement: () => scrollElementRef.current,
         overscan: 20,
@@ -155,6 +156,12 @@ function BufferSummaryPlotRenderer({
             });
         };
     }, [updateListState, uniqueBuffersByOperationList]);
+
+    useBufferNavigation({
+        buffersByOperation: uniqueBuffersByOperationList,
+        tensorListByOperation,
+        virtualizer,
+    });
 
     const memoryRegionsMarkers = showMemoryRegions
         ? [

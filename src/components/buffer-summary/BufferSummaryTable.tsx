@@ -4,7 +4,6 @@
 
 import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAtomValue } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
 import { Checkbox, HotkeysProvider, Icon, InputGroup, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -18,8 +17,8 @@ import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { formatMemorySize, toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
-import { selectedTensorAtom } from '../../store/app';
 import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
+import useBufferFocus from '../../hooks/useBufferFocus';
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperation[];
@@ -34,13 +33,14 @@ interface SummaryTableBuffer extends BufferData {
 }
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
-    const selectedTensor = useAtomValue(selectedTensorAtom);
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
     const [mergedByDevice, setMergedByDevice] = useState(true);
 
+    const { selectedTensorId } = useBufferFocus();
+    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
     const tableRef = useRef<Table2 | null>(null);
+
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
@@ -175,7 +175,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         let filteredRows = listOfBuffers;
 
         if (showOnlySelected) {
-            filteredRows = listOfBuffers.filter((buffer) => buffer.tensor_id === selectedTensor);
+            filteredRows = listOfBuffers.filter((buffer) => buffer.tensor_id === selectedTensorId);
         }
 
         if (isFiltersActive(filters) && filterableColumnKeys) {
@@ -194,27 +194,19 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 
         // Still some awkward casting here
         return [...sortTableFields(filteredRows as [])];
-    }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensor, showOnlySelected]);
-
-    useEffect(() => {
-        if (selectedTensor) {
-            setUserSelectedRows([]);
-        } else {
-            setShowOnlySelected(false);
-        }
-    }, [selectedTensor]);
+    }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensorId, showOnlySelected]);
 
     const selectedRows = useMemo(() => {
         if (userSelectedRows.length) {
             return userSelectedRows;
         }
 
-        if (!selectedTensor) {
+        if (!selectedTensorId) {
             return [];
         }
 
         const matchingBuffers = tableRows.reduce((arr: number[], buffer, index: number) => {
-            if (buffer?.tensor_id === selectedTensor) {
+            if (buffer?.tensor_id === selectedTensorId) {
                 arr.push(index);
             }
 
@@ -226,7 +218,15 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         }
 
         return matchingBuffers;
-    }, [tableRows, selectedTensor, userSelectedRows]);
+    }, [tableRows, selectedTensorId, userSelectedRows]);
+
+    useEffect(() => {
+        if (selectedTensorId) {
+            setUserSelectedRows([]);
+        } else {
+            setShowOnlySelected(false);
+        }
+    }, [selectedTensorId]);
 
     return tableRows ? (
         <HotkeysProvider>
@@ -249,9 +249,9 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     <Checkbox
                         checked={showOnlySelected}
                         onChange={() => setShowOnlySelected(!showOnlySelected)}
-                        disabled={selectedTensor === null}
+                        disabled={selectedTensorId === null}
                     >
-                        Show selected tensor rows ({selectedRows.length})
+                        Filter selected tensor rows ({selectedRows.length})
                     </Checkbox>
                     <p className='result-count'>
                         {tableRows.length !== listOfBuffers.length
