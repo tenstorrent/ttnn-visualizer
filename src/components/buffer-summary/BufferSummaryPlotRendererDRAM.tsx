@@ -65,14 +65,6 @@ function BufferSummaryPlotRendererDRAM({
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
 
-    const numberOfOperations = useMemo(
-        () =>
-            uniqueBuffersByOperationList && uniqueBuffersByOperationList.length >= 0
-                ? uniqueBuffersByOperationList.length
-                : PLACEHOLDER_ARRAY_SIZE,
-        [uniqueBuffersByOperationList],
-    );
-
     const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
         if (isZoomedIn) {
             return getSplitBuffers(uniqueBuffersByOperationList);
@@ -80,6 +72,14 @@ function BufferSummaryPlotRendererDRAM({
 
         return [uniqueBuffersByOperationList];
     }, [uniqueBuffersByOperationList, isZoomedIn]);
+
+    const numberOfOperations = useMemo(
+        () =>
+            segmentedChartData[0] && segmentedChartData[0].length >= 0
+                ? segmentedChartData[0].length
+                : PLACEHOLDER_ARRAY_SIZE,
+        [segmentedChartData],
+    );
 
     const zoomedMemoryOptions = useMemo(
         () =>
@@ -105,7 +105,7 @@ function BufferSummaryPlotRendererDRAM({
         getScrollElement: () => scrollElementRef.current,
         overscan: 20,
         initialMeasurementsCache: restoredMeasurementsCache,
-        count: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: segmentedChartData[0]?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
     });
 
@@ -142,7 +142,7 @@ function BufferSummaryPlotRendererDRAM({
     }, [updateListState, uniqueBuffersByOperationList]);
 
     useBufferNavigation({
-        buffersByOperation: uniqueBuffersByOperationList,
+        buffersByOperation: segmentedChartData[0],
         tensorListByOperation,
         virtualizer,
     });
