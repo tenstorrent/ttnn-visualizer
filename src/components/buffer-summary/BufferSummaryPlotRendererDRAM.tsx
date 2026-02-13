@@ -142,7 +142,7 @@ function BufferSummaryPlotRendererDRAM({
     }, [updateListState, uniqueBuffersByOperationList]);
 
     useBufferNavigation({
-        uniqueBuffersByOperationList,
+        buffersByOperation: uniqueBuffersByOperationList,
         tensorListByOperation,
         virtualizer,
     });
