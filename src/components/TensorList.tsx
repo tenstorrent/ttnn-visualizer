@@ -475,7 +475,12 @@ const TensorList = () => {
                                                         }
                                                         text='Buffer details'
                                                         intent={Intent.PRIMARY}
-                                                        icon={IconNames.HORIZONTAL_BAR_CHART}
+                                                        icon={
+                                                            <Icon
+                                                                icon={IconNames.HORIZONTAL_BAR_CHART}
+                                                                size={12}
+                                                            />
+                                                        }
                                                         size={Size.SMALL}
                                                         variant={ButtonVariant.OUTLINED}
                                                     />
