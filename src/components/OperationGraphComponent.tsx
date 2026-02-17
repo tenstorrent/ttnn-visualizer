@@ -17,19 +17,11 @@ import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
 import { toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
-import { cssVar } from '../functions/colour';
 import MemoryTag from './MemoryTag';
+import { GRAPH_COLORS } from '../definitions/GRAPH_COLORS';
 
 type OperationList = OperationDescription[];
 const DEALLOCATE_OP_NAME = 'ttnn.deallocate';
-
-const GRAPH_COLORS = {
-    inputNode: cssVar(`--graph-input-node`),
-    outputNode: cssVar(`--graph-output-node`),
-    inputEdge: cssVar(`--graph-input-edge`),
-    outputEdge: cssVar(`--graph-output-edge`),
-    normal: cssVar(`--graph-normal`),
-};
 
 const OperationGraph: React.FC<{
     operationList: OperationList;
