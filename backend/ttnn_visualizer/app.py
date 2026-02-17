@@ -55,6 +55,15 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
+    debug_logging = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
+    log_level = logging.DEBUG if debug_logging else logging.INFO
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    for handler in root_logger.handlers:
+        handler.setLevel(log_level)
+    if not root_logger.handlers:
+        logging.basicConfig(level=log_level)
+
     flask_env = environ.get("FLASK_ENV", "development")
 
     config = cast(DefaultConfig, Config())
@@ -65,8 +74,6 @@ def create_app(settings_override=None):
         static_url_path=f"{config.BASE_PATH}static",
     )
 
-    # logging.basicConfig(level=app.config.get("LOG_LEVEL", "DEBUG"))
-    logging.basicConfig(level=logging.DEBUG)
     app.config.from_object(config)
 
     if settings_override:
