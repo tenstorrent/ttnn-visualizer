@@ -47,7 +47,7 @@ function Range() {
 
     const { data: operations } = useOperationsList();
     const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport?.reportName || null);
-    const { data: clusterData } = useGetClusterDescription();
+    const { data: clusterData, error: clusterError } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
@@ -166,6 +166,12 @@ function Range() {
             );
         }
     }, [perfDataError, activePerformanceReport]);
+
+    useEffect(() => {
+        if (clusterError) {
+            createToastNotification('Cluster description not found', 'Topology unavailable', ToastType.WARNING);
+        }
+    }, [clusterError]);
 
     return selectedOperationRange || selectedPerformanceRange ? (
         <div className='range-slider'>
