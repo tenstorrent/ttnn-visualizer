@@ -159,7 +159,6 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     return file_path
 
 
-@remote_exception_handler
 def get_cluster_desc(instance: Instance):
     report_path = Path(instance.profiler_path).parent
     cluster_path = report_path / "cluster_descriptor.yaml"
@@ -168,7 +167,7 @@ def get_cluster_desc(instance: Instance):
         with open(cluster_path) as cluster_desc_file:
             return yaml.safe_load(cluster_desc_file)
     else:
-        raise FileNotFoundError(f"File not found at {cluster_path}")
+        return None
 
 
 def is_excluded(file_path, exclude_patterns):

@@ -295,14 +295,14 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
     return meta;
 };
 
-const fetchDevices = async (reportName: string) => {
+const fetchDevices = async (reportPath: string) => {
     const { data: meta } = await axiosInstance.get<DeviceInfo[]>(Endpoints.DEVICES);
 
     if (meta.length === 0) {
         // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
         createToastNotification(
             'Data integrity warning: No device information provided.',
-            `/${reportName}`,
+            `${reportPath}`,
             ToastType.WARNING,
         );
     }

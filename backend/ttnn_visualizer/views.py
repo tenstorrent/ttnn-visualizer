@@ -1152,7 +1152,7 @@ def get_cluster_descriptor(instance: Instance):
     except RemoteConnectionException as e:
         return jsonify({"error": e.message}), e.http_status
 
-    except FileNotFoundError as e:
+    except Exception as e:
         return (
             jsonify({"error": f"An unexpected error occurred: {str(e)}"}),
             HTTPStatus.NOT_FOUND,
