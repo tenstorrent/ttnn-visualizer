@@ -11,6 +11,7 @@ from pathlib import Path
 from threading import Thread
 from typing import List, Optional
 
+import yaml
 from flask import current_app
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -21,7 +22,7 @@ from ttnn_visualizer.exceptions import (
     RemoteConnectionException,
     SSHException,
 )
-from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
+from ttnn_visualizer.models import Instance, RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE, SSHClient
 from ttnn_visualizer.utils import update_last_synced
@@ -158,98 +159,16 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     return file_path
 
 
-def get_cluster_desc_path(remote_connection: RemoteConnection) -> Optional[str]:
-    """
-    List all folders matching '/tmp/umd_*' on the remote machine, filter for those containing
-    'cluster_descriptor.yaml', and return the full path to the most recently modified YAML file.
-
-    :param remote_connection: RemoteConnection object containing SSH connection details.
-    :return: Full path to the most recently modified 'cluster_descriptor.yaml' file, or None.
-    """
-    latest_yaml_path = None
-    latest_mod_time = 0
-    cluster_desc_file = "cluster_descriptor.yaml"
-
-    try:
-        # Build SSH command to list folders matching '/tmp/umd_*' (never prompts for password)
-        ssh_cmd = _ssh_cmd_prefix(remote_connection) + ["ls -1d /tmp/umd_* 2>/dev/null"]
-
-        # Execute SSH command to list folders
-        result = subprocess.run(
-            ssh_cmd,
-            capture_output=True,
-            text=True,
-            check=False,  # Don't raise exception on non-zero exit (in case no folders found)
-        )
-
-        # Get the list of folders
-        folder_paths = (
-            result.stdout.strip().splitlines() if result.stdout.strip() else []
-        )
-
-        if not folder_paths:
-            logger.info("No folders found matching the pattern '/tmp/umd_*'")
-            return None
-
-        # Check each folder for 'cluster_descriptor.yaml' and track the most recent one
-        for folder in folder_paths:
-            yaml_file_path = f"{folder}/{cluster_desc_file}"
-
-            # Build SSH command to check if file exists and get its modification time
-            stat_cmd = _ssh_cmd_prefix(remote_connection) + [
-                f"stat -c %Y '{yaml_file_path}' 2>/dev/null"
-            ]
-
-            try:
-                stat_result = subprocess.run(
-                    stat_cmd, capture_output=True, text=True, check=True
-                )
-
-                mod_time = float(stat_result.stdout.strip())
-
-                # Update the latest file if this one is newer
-                if mod_time > latest_mod_time:
-                    latest_mod_time = mod_time
-                    latest_yaml_path = yaml_file_path
-                    logger.info(f"Found newer {cluster_desc_file}: {yaml_file_path}")
-
-            except subprocess.CalledProcessError as e:
-                # Check if it's an SSH-specific error
-                if e.returncode == 255:  # SSH returns 255 for SSH protocol errors
-                    handle_ssh_subprocess_error(e, remote_connection)
-                else:
-                    # File not found or other command error
-                    logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
-                    continue
-            except ValueError:
-                logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
-                continue
-
-        if latest_yaml_path:
-            logger.info(
-                f"Most recently modified {cluster_desc_file}: {latest_yaml_path}"
-            )
-        else:
-            logger.info(
-                f"No {cluster_desc_file} files found in any '/tmp/umd_*' folders"
-            )
-        return latest_yaml_path
-
-    except Exception as e:
-        logger.error(f"Error retrieving {cluster_desc_file} path: {e}")
-        raise RemoteConnectionException(
-            message=f"Failed to get '{cluster_desc_file}' path",
-            status=ConnectionTestStates.FAILED,
-        )
-
-
 @remote_exception_handler
-def get_cluster_desc(remote_connection: RemoteConnection):
-    cluster_path = get_cluster_desc_path(remote_connection)
-    if cluster_path:
-        return read_remote_file(remote_connection, cluster_path)
+def get_cluster_desc(instance: Instance):
+    report_path = Path(instance.profiler_path).parent
+    cluster_path = report_path / "cluster_descriptor.yaml"
+
+    if cluster_path.exists():
+        with open(cluster_path) as cluster_desc_file:
+            return yaml.safe_load(cluster_desc_file)
     else:
-        return None
+        raise FileNotFoundError(f"File not found at {cluster_path}")
 
 
 def is_excluded(file_path, exclude_patterns):

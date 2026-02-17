@@ -399,8 +399,10 @@ const fetchDeviceMeta = async (name: string | null) => {
 
 const fetchClusterDescription = async (): Promise<ClusterModel> => {
     const { data } = await axiosInstance.get<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR);
+
     try {
         const { data: meshData } = await axiosInstance.get<MeshData>(Endpoints.MESH_DESCRIPTOR);
+
         if (meshData?.chips) {
             data.chips = meshData.chips;
         }
@@ -408,6 +410,7 @@ const fetchClusterDescription = async (): Promise<ClusterModel> => {
         // eslint-disable-next-line no-console
         console.error('mesh-descriptor not found', err);
     }
+
     return data;
 };
 
