@@ -1155,7 +1155,7 @@ def get_cluster_descriptor(instance: Instance):
     except Exception as e:
         return (
             jsonify({"error": f"An unexpected error occurred: {str(e)}"}),
-            HTTPStatus.NOT_FOUND,
+            HTTPStatus.INTERNAL_SERVER_ERROR,
         )
 
 

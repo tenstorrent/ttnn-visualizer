@@ -49,12 +49,14 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
-import createToastNotification, { ToastType } from '../functions/createToastNotification';
-import { normaliseReportFolder } from '../functions/validateReportFolder';
+import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import Endpoints from '../definitions/Endpoints';
+import { ReportFolder } from '../definitions/Reports';
+import { RemoteFolder } from '../definitions/RemoteConnection';
+import createToastNotification, { ToastType } from '../functions/createToastNotification';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -295,14 +297,13 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
     return meta;
 };
 
-const fetchDevices = async (reportPath: string) => {
+const fetchDevices = async (report: ReportFolder | RemoteFolder) => {
     const { data: meta } = await axiosInstance.get<DeviceInfo[]>(Endpoints.DEVICES);
 
     if (meta.length === 0) {
-        // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
         createToastNotification(
             'Data integrity warning: No device information provided.',
-            `${reportPath}`,
+            getErroredReportFolderLabel(report),
             ToastType.WARNING,
         );
     }
@@ -754,7 +755,7 @@ export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<DeviceInfo[], AxiosError>({
-        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport?.path) : Promise.resolve([])),
+        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport) : Promise.resolve([])),
         queryKey: ['get-devices', activeProfilerReport?.path],
         retry: false,
         staleTime: Infinity,
