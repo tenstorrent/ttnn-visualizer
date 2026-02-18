@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -22,7 +22,7 @@ import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensor
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
 import { Tensor } from '../model/APIData';
-import { BufferTypeLabel } from '../model/BufferType';
+import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import { selectedOperationRangeAtom, shouldCollapseAllTensorsAtom, tensorBufferTypeFiltersAtom } from '../store/app';
 import BufferDetails from './BufferDetails';
 import Collapsible from './Collapsible';
@@ -459,6 +459,33 @@ const TensorList = () => {
                                                 </ListItem>
                                             }
                                             isOpen={!!expandedItems?.includes(tensor.id)}
+                                            additionalElements={
+                                                tensor.buffer_type === BufferType.DRAM ||
+                                                tensor.buffer_type === BufferType.L1 ? (
+                                                    <Button
+                                                        className='buffer-view'
+                                                        onClick={() =>
+                                                            navigate(`${ROUTES.BUFFERS}`, {
+                                                                state: {
+                                                                    tensorId: tensor.id,
+                                                                    tensorAddress: tensor.address,
+                                                                    bufferType: tensor.buffer_type,
+                                                                },
+                                                            })
+                                                        }
+                                                        text='Buffer details'
+                                                        intent={Intent.PRIMARY}
+                                                        icon={
+                                                            <Icon
+                                                                icon={IconNames.HORIZONTAL_BAR_CHART}
+                                                                size={12}
+                                                            />
+                                                        }
+                                                        size={Size.SMALL}
+                                                        variant={ButtonVariant.OUTLINED}
+                                                    />
+                                                ) : undefined
+                                            }
                                         >
                                             <div className='arguments-wrapper'>
                                                 <BufferDetails
