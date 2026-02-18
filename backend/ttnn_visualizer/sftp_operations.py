@@ -166,7 +166,7 @@ def get_cluster_desc(instance: Instance):
     cluster_path = report_path / "cluster_descriptor.yaml"
 
     if cluster_path.exists():
-        with open(cluster_path) as cluster_desc_file:
+        with open(cluster_path, "r", encoding="utf-8") as cluster_desc_file:
             return yaml.safe_load(cluster_desc_file)
     else:
         return None
