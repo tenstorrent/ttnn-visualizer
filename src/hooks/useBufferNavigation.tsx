@@ -39,7 +39,7 @@ const useBufferNavigation = ({ buffersByOperation, tensorListByOperation, virtua
             );
 
             if (virtualizer && firstOperationWithTensor !== -1) {
-                virtualizer.scrollToIndex(firstOperationWithTensor - 1, { align: 'start' });
+                virtualizer.scrollToIndex(Math.max(0, firstOperationWithTensor - 1), { align: 'start' });
                 location.state = {};
             }
         }
