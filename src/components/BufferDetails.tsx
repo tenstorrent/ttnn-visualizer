@@ -35,7 +35,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                 <tbody>
                     <tr>
                         <th>Tensor Id</th>
-                        <td>{tensor.id} </td>
+                        <td>{tensor.id}</td>
                     </tr>
 
                     <tr>
