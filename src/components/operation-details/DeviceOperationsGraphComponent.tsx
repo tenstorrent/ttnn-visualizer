@@ -288,7 +288,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
 
                 const nodeData = data.find((node) => node.id === nodeId);
                 if (nodeData && tooltipRef.current) {
-                    tooltipRef.current.classList.add('visible');
+                    // tooltipRef.current.classList.add('visible');
                 }
             }
         },
