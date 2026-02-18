@@ -6,21 +6,31 @@ import { useParams } from 'react-router';
 import { Helmet } from 'react-helmet-async';
 import OperationDetailsComponent from '../components/operation-details/OperationDetailsComponent';
 import { useOperationDetails } from '../hooks/useAPI';
+import { OperationDetailsData } from '../model/APIData';
 
 export default function OperationDetails() {
     const { operationId } = useParams();
     const intOperationId = operationId ? parseInt(operationId, 10) : 0;
-    const { operation } = useOperationDetails(intOperationId);
+    const {
+        operationDetails: { data: operationDetails, status },
+    } = useOperationDetails(intOperationId);
 
     return (
-        operationId && (
-            <>
-                <Helmet
-                    title={operation?.name ? `${operationId} ${operation?.name}` : `Not found Operation ${operationId}`}
-                />
-
-                <OperationDetailsComponent operationId={intOperationId} />
-            </>
-        )
+        <>
+            {status === 'success' ? <Helmet title={getTitle(status, intOperationId, operationDetails)} /> : null}
+            <OperationDetailsComponent operationId={intOperationId} />
+        </>
     );
 }
+
+const getTitle = (status: string, operationId: number, operationDetails?: OperationDetailsData) => {
+    if (status === 'error') {
+        return `Not found Operation ${operationId}`;
+    }
+
+    if (status === 'success' && operationDetails) {
+        return `${operationId} ${operationDetails.name}`;
+    }
+
+    return '';
+};
