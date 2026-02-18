@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+/* eslint-disable no-continue */
+
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Network } from 'vis-network/standalone';
 import { DataSet } from 'vis-data';
@@ -31,120 +33,181 @@ const formatOperationName = (item: Node) => {
     return item.params.name ? `${item.params.name}()` : '';
 };
 
+function removeRedundantEdgesViaIntermediateNodes(edges: Edge[]): Edge[] {
+    const outgoing = new Map<number, Edge[]>();
+    for (const e of edges) {
+        const from = Number(e.from);
+        const arr = outgoing.get(from) ?? [];
+        arr.push(e);
+        outgoing.set(from, arr);
+    }
+
+    const canReachWithIntermediate = (from: number, to: number, skipEdgeId: IdType | undefined): boolean => {
+        const nodesWithDepth: Array<{ node: number; depth: number }> = [];
+        const visited = new Set<number>([from]);
+
+        for (const edge of outgoing.get(from) ?? []) {
+            if (edge.id === skipEdgeId) {
+                continue;
+            }
+            const next = Number(edge.to);
+
+            if (next === to) {
+                continue;
+            }
+
+            if (!visited.has(next)) {
+                visited.add(next);
+                nodesWithDepth.push({ node: next, depth: 1 });
+            }
+        }
+
+        while (nodesWithDepth.length) {
+            const pointer = nodesWithDepth.shift()!;
+            const nextEdges = outgoing.get(pointer.node) ?? [];
+            for (const e of nextEdges) {
+                if (e.id === skipEdgeId) {
+                    continue;
+                }
+                const next = Number(e.to);
+
+                if (next === to) {
+                    if (pointer.depth + 1 >= 2) {
+                        return true;
+                    }
+                }
+
+                if (!visited.has(next)) {
+                    visited.add(next);
+                    nodesWithDepth.push({ node: next, depth: pointer.depth + 1 });
+                }
+            }
+        }
+
+        return false;
+    };
+
+    return edges.filter((e) => {
+        const from = Number(e.from);
+        const to = Number(e.to);
+        return !canReachWithIntermediate(from, to, e.id);
+    });
+}
+
 const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) => {
     const networkRef = useRef<Network | null>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
 
-    // const [tooltipContent, setTooltipContent] = useState<React.ReactNode>(null);
+    const ops: ConnectedDeviceOperation[] = useMemo(() => {
+        return (data ?? [])
+            .filter((op) => op.node_type === 'function_start')
+            .map((op) => {
+                const inputTensors = op.inputs?.filter((i) => i.node_type === 'tensor') ?? [];
+                const outputTensors = op.outputs?.filter((o) => o.node_type === 'tensor') ?? [];
+                return { ...op, graphInputs: inputTensors, graphOutputs: outputTensors } as ConnectedDeviceOperation;
+            });
+    }, [data]);
 
-    const tensorShapeById = new Map<number, string>();
+    const displayedOps = useMemo(() => ops.filter((op) => isExtendedDeviceOperation(op.params.name)), [ops]);
+    const displayedIds = useMemo(() => new Set(displayedOps.map((o) => o.id)), [displayedOps]);
 
-    const ops: ConnectedDeviceOperation[] = data
-        .filter((op) => op.node_type === 'function_start')
-        .map((op) => {
-            const inputTensors = op.inputs?.filter((i) => i.node_type === 'tensor') ?? [];
-            const outputTensors = op.outputs?.filter((o) => o.node_type === 'tensor') ?? [];
-            return { ...op, graphInputs: inputTensors, graphOutputs: outputTensors };
-        });
+    const { edgesByProducer, tensorShapeById } = useMemo(() => {
+        const tensorShapeByIdLocal = new Map<number, string>();
+        const producersByTensorId = new Map<number, number[]>();
+        const consumersByTensorId = new Map<number, number[]>();
 
-    const displayedOps = ops.filter((op) => isExtendedDeviceOperation(op.params.name));
-    const displayedIds = new Set(displayedOps.map((o) => o.id));
-
-    const producersByTensorId = new Map<number, number[]>();
-    const consumersByTensorId = new Map<number, number[]>();
-
-    for (const op of ops) {
-        for (const tensor of op.graphOutputs) {
-            const tensorId = Number(tensor.params.tensor_id);
-            if (tensor.params.shape) {
-                if (!tensorShapeById.has(tensorId)) {
-                    tensorShapeById.set(tensorId, tensor.params.shape);
+        for (const op of ops) {
+            for (const tensor of op.graphOutputs) {
+                const tensorId = Number(tensor.params.tensor_id);
+                if (tensor.params.shape && !tensorShapeByIdLocal.has(tensorId)) {
+                    tensorShapeByIdLocal.set(tensorId, tensor.params.shape);
                 }
+                const idList = producersByTensorId.get(tensorId) ?? [];
+                idList.push(op.id);
+                producersByTensorId.set(tensorId, idList);
             }
-            const arr = producersByTensorId.get(tensorId) ?? [];
-            arr.push(op.id);
-            producersByTensorId.set(tensorId, arr);
-        }
-        for (const tensor of op.graphInputs) {
-            const tensorId = Number(tensor.params.tensor_id);
-            if (tensor.params.shape) {
-                if (!tensorShapeById.has(tensorId)) {
-                    tensorShapeById.set(tensorId, tensor.params.shape);
-                }
-            }
-            const arr = consumersByTensorId.get(tensorId) ?? [];
-            arr.push(op.id);
-            consumersByTensorId.set(tensorId, arr);
-        }
-    }
 
-    const edgesByProducer = new Map<number, Array<{ to: number; tid: number; shape?: string }>>();
-
-    for (const [tid, producers] of producersByTensorId.entries()) {
-        const consumers = consumersByTensorId.get(tid) ?? [];
-        for (const from of producers) {
-            for (const to of consumers) {
-                if (from === to) {
-                    // eslint-disable-next-line no-continue
-                    continue;
+            for (const tensor of op.graphInputs) {
+                const tensorId = Number(tensor.params.tensor_id);
+                if (tensor.params.shape && !tensorShapeByIdLocal.has(tensorId)) {
+                    tensorShapeByIdLocal.set(tensorId, tensor.params.shape);
                 }
-                const arr = edgesByProducer.get(from) ?? [];
-                arr.push({ to, tid });
-                edgesByProducer.set(from, arr);
+                const idList = consumersByTensorId.get(tensorId) ?? [];
+                idList.push(op.id);
+                consumersByTensorId.set(tensorId, idList);
             }
         }
-    }
 
-    function buildCompressedEdges(): Edge[] {
+        const edgesByProducerLocal = new Map<number, Array<{ to: number; tid: number }>>();
+        for (const [tid, producers] of producersByTensorId.entries()) {
+            const consumers = consumersByTensorId.get(tid) ?? [];
+            for (const from of producers) {
+                for (const to of consumers) {
+                    if (from === to) {
+                        continue;
+                    }
+                    const connectionList = edgesByProducerLocal.get(from) ?? [];
+                    connectionList.push({ to, tid });
+                    edgesByProducerLocal.set(from, connectionList);
+                }
+            }
+        }
+
+        return { edgesByProducer: edgesByProducerLocal, tensorShapeById: tensorShapeByIdLocal };
+    }, [ops]);
+
+    const buildCompressedEdges = useCallback((): Edge[] => {
         const result: Edge[] = [];
         const seenEdge = new Set<string>();
 
         for (const start of displayedOps) {
-            const idToConnection: Array<{ id: number; via?: { tensorId: number } }> = [{ id: start.id }];
-            const visited = new Set<number>([start.id]);
+            const q: Array<{ id: number; via?: { tensorId: number } }> = [{ id: start.id }];
 
-            while (idToConnection.length) {
-                const cur = idToConnection.shift()!;
+            const visited = new Set<string>([`${start.id}#_`]);
+
+            while (q.length) {
+                const cur = q.shift()!;
                 const nexts = edgesByProducer.get(cur.id) ?? [];
 
                 for (const e of nexts) {
-                    if (visited.has(e.to)) {
-                        // eslint-disable-next-line no-continue
+                    const via = cur.via ?? { tensorId: e.tid };
+                    const visitKey = `${e.to}#${via.tensorId}`;
+                    if (visited.has(visitKey)) {
                         continue;
                     }
-                    visited.add(e.to);
-
-                    const via = cur.via ?? { tensorId: e.tid };
+                    visited.add(visitKey);
 
                     if (displayedIds.has(e.to) && e.to !== start.id) {
                         const edgeId = `${start.id}->${e.to}#${via.tensorId}`;
-                        const shape = tensorShapeById.get(via.tensorId);
-                        const label = shape ? toReadableShape(shape) : `T${via.tensorId}`;
+
                         if (!seenEdge.has(edgeId)) {
                             seenEdge.add(edgeId);
+
+                            const shape = tensorShapeById.get(via.tensorId);
+                            const label = shape ? `T${via.tensorId} ${toReadableShape(shape)}` : `T${via.tensorId}`;
+
                             result.push({
                                 id: edgeId,
                                 from: start.id,
                                 to: e.to,
                                 label,
+                                color: GRAPH_COLORS.normal,
                             });
                         }
-                        // eslint-disable-next-line no-continue
                         continue;
                     }
 
-                    idToConnection.push({ id: e.to, via });
+                    q.push({ id: e.to, via });
                 }
             }
         }
 
-        return result;
-    }
+        return removeRedundantEdgesViaIntermediateNodes(result);
+    }, [displayedOps, displayedIds, edgesByProducer, tensorShapeById]);
 
     const edges = useMemo(() => {
         return new DataSet(buildCompressedEdges());
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [displayedOps, displayedIds]);
+    }, [buildCompressedEdges]);
 
     const nodes = useMemo(() => {
         return new DataSet(
@@ -155,25 +218,24 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
     const colorHighlightIO = useCallback(
         (selectedNodeId: IdType) => {
             const allNodes = nodes.get();
-
-            // const allEdges = edgesDataSetRef.current.get();
+            const allEdges = edges.get();
 
             const inputNodeIds = new Set<IdType | undefined>();
             const outputNodeIds = new Set<IdType | undefined>();
-            const inputEdgeIds = new Set<IdType | undefined>();
-            const outputEdgeIds = new Set<IdType | undefined>();
+            const inputEdgeIds = new Set<IdType>();
+            const outputEdgeIds = new Set<IdType>();
 
-            for (const edge of edges.get()) {
+            for (const edge of allEdges) {
                 if (edge.to === selectedNodeId) {
                     inputNodeIds.add(edge.from);
                     inputEdgeIds.add(edge.id);
                 }
-
                 if (edge.from === selectedNodeId) {
                     outputNodeIds.add(edge.to);
                     outputEdgeIds.add(edge.id);
                 }
             }
+
             nodes.update(
                 allNodes.map((node) => {
                     if (node.id === selectedNodeId) {
@@ -181,58 +243,41 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     }
 
                     if (inputNodeIds.has(node.id)) {
-                        return {
-                            id: node.id,
-                            color: { background: GRAPH_COLORS.inputNode },
-                        };
+                        return { id: node.id, color: { background: GRAPH_COLORS.inputNode } };
                     }
-
                     if (outputNodeIds.has(node.id)) {
-                        return {
-                            id: node.id,
-                            color: { background: GRAPH_COLORS.outputNode },
-                        };
+                        return { id: node.id, color: { background: GRAPH_COLORS.outputNode } };
                     }
-
-                    return {
-                        id: node.id,
-                        color: { background: GRAPH_COLORS.normal },
-                    };
+                    return { id: node.id, color: { background: GRAPH_COLORS.normal } };
                 }),
             );
 
-            const edgesToUpdate = edges
+            const edgesToUpdate = allEdges
                 .map((edge) => {
                     if (inputEdgeIds.has(edge.id)) {
-                        return {
-                            id: edge.id,
-                            color: GRAPH_COLORS.inputEdge,
-                        };
+                        return { id: edge.id, color: GRAPH_COLORS.inputEdge };
                     }
                     if (outputEdgeIds.has(edge.id)) {
-                        return {
-                            id: edge.id,
-                            color: GRAPH_COLORS.outputEdge,
-                        };
+                        return { id: edge.id, color: GRAPH_COLORS.outputEdge };
                     }
                     if (edge.color !== GRAPH_COLORS.normal) {
-                        return {
-                            id: edge.id,
-                            color: GRAPH_COLORS.normal,
-                        };
+                        return { id: edge.id, color: GRAPH_COLORS.normal };
                     }
                     return null;
                 })
-                .filter(Boolean);
+                .filter(Boolean) as Array<{ id: IdType; color: string }>;
+
             edges.update(edgesToUpdate);
         },
         [nodes, edges],
     );
+
     const focusOnNode = useCallback(
         (nodeId: number | null, center: boolean = false) => {
             if (nodeId === null) {
                 return;
             }
+
             if (networkRef.current) {
                 if (center) {
                     networkRef.current.focus(nodeId, {
@@ -243,12 +288,10 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
 
                 const nodeData = data.find((node) => node.id === nodeId);
                 if (nodeData && tooltipRef.current) {
-                    // setTooltipContent(generateTooltipContent(nodeData));
                     tooltipRef.current.classList.add('visible');
                 }
             }
         },
-
         [data],
     );
 
@@ -277,18 +320,8 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                 edges: {
                     color: '#f5e2ba',
                     arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-
-                    font: {
-                        color: '#f5e2ba',
-                        size: 14,
-                        strokeColor: '#000',
-                    },
-                    smooth: {
-                        enabled: true,
-                        type: 'cubicBezier',
-                        // forceDirection: 'vertical',
-                        roundness: 0.35,
-                    },
+                    font: { color: '#f5e2ba', size: 14, strokeColor: '#000' },
+                    smooth: { enabled: true, type: 'cubicBezier', roundness: 0.35 },
                     width: 1,
                     selectionWidth: 2,
                     hoverWidth: 2,
@@ -320,21 +353,17 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     hover: true,
                 },
 
-                physics: {
-                    enabled: false,
-                },
+                physics: { enabled: false },
             };
+
             networkRef.current = new Network(container, networkData, options);
 
             networkRef.current.on('blurNode', () => {
-                if (tooltipRef.current) {
-                    tooltipRef.current.classList.remove('visible');
-                }
+                tooltipRef.current?.classList.remove('visible');
             });
+
             networkRef.current.on('dragStart', () => {
-                if (tooltipRef.current) {
-                    tooltipRef.current.classList.remove('visible');
-                }
+                tooltipRef.current?.classList.remove('visible');
             });
 
             networkRef.current.on('click', (params) => {
@@ -344,19 +373,15 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     colorHighlightIO(nodeId);
                 } else {
                     networkRef.current?.selectNodes([], true);
-                    // setCurrentOperationId(null);
-
-                    // currentOpIdRef.current = null;
                 }
             });
         },
         [colorHighlightIO, edges, focusOnNode, nodes],
     );
+
     useEffect(() => {
         return () => {
-            if (networkRef.current) {
-                networkRef.current.destroy();
-            }
+            networkRef.current?.destroy();
         };
     }, []);
 
@@ -383,6 +408,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                         />
                     </h3>
                 </div>
+
                 <div className='graph-component'>
                     <div
                         className='graph'
@@ -393,6 +419,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                         ref={tooltipRef}
                     />
                 </div>
+
                 <div>
                     <aside>Scroll to zoom. Drag to pan. Drag nodes horizontally.</aside>
                 </div>
