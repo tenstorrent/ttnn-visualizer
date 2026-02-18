@@ -17,7 +17,7 @@ export default function OperationDetails() {
 
     return (
         <>
-            <Helmet title={getTitle(status, intOperationId, operationDetails)} />
+            {status === 'success' ? <Helmet title={getTitle(status, intOperationId, operationDetails)} /> : null}
             <OperationDetailsComponent operationId={intOperationId} />
         </>
     );
