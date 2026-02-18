@@ -160,6 +160,8 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
 
 
 def get_cluster_desc(instance: Instance):
+    if not instance.profiler_path:
+        return None
     report_path = Path(instance.profiler_path).parent
     cluster_path = report_path / "cluster_descriptor.yaml"
 
