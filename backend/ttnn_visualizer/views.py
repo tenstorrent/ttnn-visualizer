@@ -1133,24 +1133,21 @@ def get_remote_folders_performance():
 @with_instance
 def get_cluster_descriptor(instance: Instance):
     try:
-        cluster_desc_file = get_cluster_desc(instance)
+        cluster_desc = get_cluster_desc(instance)
 
-        if not cluster_desc_file:
+        if not cluster_desc:
             return (
                 jsonify({"error": "cluster_descriptor.yaml not found"}),
                 HTTPStatus.NOT_FOUND,
             )
 
-        return jsonify(cluster_desc_file), HTTPStatus.OK
+        return jsonify(cluster_desc), HTTPStatus.OK
 
     except yaml.YAMLError as e:
         return (
             jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
             HTTPStatus.BAD_REQUEST,
         )
-
-    except RemoteConnectionException as e:
-        return jsonify({"error": e.message}), e.http_status
 
     except Exception as e:
         return (
