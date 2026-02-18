@@ -1132,36 +1132,28 @@ def get_remote_folders_performance():
 @api.route("/cluster-descriptor", methods=["GET"])
 @with_instance
 def get_cluster_descriptor(instance: Instance):
-    if instance.remote_connection:
-        try:
-            cluster_desc_file = get_cluster_desc(instance.remote_connection)
-            if not cluster_desc_file:
-                return jsonify({"error": "cluster_descriptor.yaml not found"}), 404
-            yaml_data = yaml.safe_load(cluster_desc_file.decode("utf-8"))
-            return jsonify(yaml_data), 200
+    try:
+        cluster_desc = get_cluster_desc(instance)
 
-        except yaml.YAMLError as e:
-            return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
+        if not cluster_desc:
+            return (
+                jsonify({"error": "cluster_descriptor.yaml not found"}),
+                HTTPStatus.NOT_FOUND,
+            )
 
-        except RemoteConnectionException as e:
-            return jsonify({"error": e.message}), e.http_status
+        return jsonify(cluster_desc), HTTPStatus.OK
 
-        except Exception as e:
-            return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
-    else:
-        local_path = get_cluster_descriptor_path(instance)
+    except yaml.YAMLError as e:
+        return (
+            jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
+            HTTPStatus.BAD_REQUEST,
+        )
 
-        if not local_path:
-            return jsonify({"error": "cluster_descriptor.yaml not found"}), 404
-
-        try:
-            with open(local_path) as cluster_desc_file:
-                yaml_data = yaml.safe_load(cluster_desc_file)
-                return jsonify(yaml_data)  # yaml_data is not compatible with orjson
-        except yaml.YAMLError as e:
-            return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
-
-    return jsonify({"error": "Cluster descriptor not found"}), 404
+    except Exception as e:
+        return (
+            jsonify({"error": f"An unexpected error occurred: {str(e)}"}),
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
 
 @api.route("/mesh-descriptor", methods=["GET"])
@@ -1178,7 +1170,7 @@ def get_mesh_descriptor(instance: Instance):
         )
 
     try:
-        with open(paths[0]) as mesh_descriptor_path:
+        with open(paths[0], "r", encoding="utf-8") as mesh_descriptor_path:
             yaml_data = yaml.safe_load(mesh_descriptor_path)
             return jsonify(yaml_data)  # yaml_data is not compatible with orjson
     except yaml.YAMLError as e:

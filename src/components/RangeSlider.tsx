@@ -9,6 +9,7 @@ import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
 import {
     activePerformanceReportAtom,
+    activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
     hasClusterDescriptionAtom,
     operationRangeAtom,
@@ -35,6 +36,7 @@ import createToastNotification, { ToastType } from '../functions/createToastNoti
 const RANGE_STEP = 25;
 
 function Range() {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const setOperationRange = useSetAtom(operationRangeAtom);
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
@@ -47,7 +49,7 @@ function Range() {
 
     const { data: operations } = useOperationsList();
     const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport?.reportName || null);
-    const { data: clusterData } = useGetClusterDescription();
+    const { data: clusterData, error: clusterError } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
@@ -166,6 +168,16 @@ function Range() {
             );
         }
     }, [perfDataError, activePerformanceReport]);
+
+    useEffect(() => {
+        if (clusterError && activeProfilerReport) {
+            createToastNotification(
+                'Cluster description not found, Topology unavailable',
+                activeProfilerReport?.reportName,
+                ToastType.WARNING,
+            );
+        }
+    }, [clusterError, activeProfilerReport]);
 
     return selectedOperationRange || selectedPerformanceRange ? (
         <div className='range-slider'>
