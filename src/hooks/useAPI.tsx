@@ -61,6 +61,9 @@ import createToastNotification, { ToastType } from '../functions/createToastNoti
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
+    if (!stackTrace) {
+        return '';
+    }
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
     const match = stackTrace.match(regex);
 
@@ -135,6 +138,9 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     const operationList = response.data;
 
     const getDeviceOperationNameList = (operation: OperationDescription) => {
+        if (!Array.isArray(operation.device_operations)) {
+            return [];
+        }
         return operation.device_operations
             .filter((op) => {
                 return op.node_type === NodeType.function_start && isDeviceOperation(op.params.name);
