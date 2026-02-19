@@ -63,7 +63,7 @@ function BufferSummaryPlotRenderer({
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
-    const deviceId = useAtomValue(selectedDeviceAtom) || 0;
+    const deviceId = useAtomValue(selectedDeviceAtom);
     const [activeRow, setActiveRow] = useState<number | null>(null);
 
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
