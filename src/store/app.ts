@@ -7,7 +7,6 @@ import { atom } from 'jotai';
 import { NumberRange, TabId } from '@blueprintjs/core';
 import { Id } from 'react-toastify';
 import { FileProgress, FileStatus } from '../model/APIData';
-import { DEFAULT_DEVICE_ID } from '../definitions/Devices';
 import { TAB_IDS } from '../definitions/BufferSummary';
 import { ScrollPosition } from '../definitions/ScrollPositions';
 import { Signpost } from '../functions/perfFunctions';
@@ -22,7 +21,6 @@ export const activeToastAtom = atom<Id | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
 export const scrollPositionsAtom = atom<ScrollPosition | null>(null);
-export const showDeallocationReportAtom = atom<boolean>(false);
 export const fileTransferProgressAtom = atom<FileProgress>({
     currentFileName: '',
     numberOfFiles: 0,
@@ -30,10 +28,10 @@ export const fileTransferProgressAtom = atom<FileProgress>({
     finishedFiles: 0,
     status: FileStatus.INACTIVE,
 }); // This atom stores the file transfer progress data in localStorage (or sessionStorage)
+export const showDeallocationReportAtom = atom<boolean>(false);
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);
 export const showMemoryRegionsAtom = atomWithStorage<boolean>('showMemoryRegions', true);
-export const selectedDeviceAtom = atom<number>(DEFAULT_DEVICE_ID); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
-export const renderMemoryLayoutAtom = atom<boolean>(false);
+export const renderMemoryLayoutAtom = atomWithStorage<boolean>('renderMemoryLayout', false);
 
 // Reports
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
@@ -59,7 +57,7 @@ export const shouldCollapseAllTensorsAtom = atom(false);
 export const tensorBufferTypeFiltersAtom = atom<(BufferType | null)[]>([]);
 
 // Buffers route
-export const selectedBufferSummaryTabAtom = atomWithStorage<TAB_IDS>('selectedBufferSummaryTab', TAB_IDS.L1);
+export const selectedBufferSummaryTabAtom = atom<TAB_IDS>(TAB_IDS.L1);
 export const showBufferSummaryZoomedAtom = atomWithStorage<boolean>('showBufferSummary', false);
 
 // Performance route
