@@ -34,6 +34,7 @@ import {
     filterBySignpostAtom,
     hideHostOpsAtom,
     isStackedViewAtom,
+    layoutFilterListAtom,
     mathFilterListAtom,
     mergeDevicesAtom,
     rawOpCodeFilterListAtom,
@@ -93,6 +94,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
+    const [activeLayoutFilterList, setActiveLayoutFilterList] = useAtom(layoutFilterListAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -142,6 +144,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
                 activeBufferTypeFilterList,
+                activeLayoutFilterList,
                 filterBySignpost,
             ),
         [
@@ -150,6 +153,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             activeMathFilterList,
             activeRawOpCodeFilterList,
             activeBufferTypeFilterList,
+            activeLayoutFilterList,
             filterBySignpost,
         ],
     );
@@ -163,6 +167,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
                 activeBufferTypeFilterList,
+                activeLayoutFilterList,
                 filterBySignpost,
             ),
         [
@@ -172,6 +177,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             activeRawOpCodeFilterList,
             activeMathFilterList,
             activeBufferTypeFilterList,
+            activeLayoutFilterList,
             filterBySignpost,
         ],
     );
@@ -486,6 +492,15 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 placeholder='Select Buffer Type...'
                                 values={activeBufferTypeFilterList}
                                 updateHandler={setActiveBufferTypeFilterList}
+                            />
+
+                            <MultiSelectField<TypedPerfTableRow, 'layout'>
+                                keyName='layout'
+                                options={processedRows || []}
+                                labelFormatter={(value: string | null) => (value !== null ? value : 'No value')}
+                                placeholder='Select Layout...'
+                                values={activeLayoutFilterList}
+                                updateHandler={setActiveLayoutFilterList}
                             />
 
                             <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
