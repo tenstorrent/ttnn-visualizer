@@ -28,10 +28,10 @@ export const fileTransferProgressAtom = atom<FileProgress>({
     finishedFiles: 0,
     status: FileStatus.INACTIVE,
 }); // This atom stores the file transfer progress data in localStorage (or sessionStorage)
-export const showDeallocationReportAtom = atom<boolean>(false);
-export const showHexAtom = atomWithStorage<boolean>('showHex', false);
-export const showMemoryRegionsAtom = atomWithStorage<boolean>('showMemoryRegions', true);
-export const renderMemoryLayoutAtom = atomWithStorage<boolean>('renderMemoryLayout', false);
+export const showDeallocationReportAtom = atom(false);
+export const showHexAtom = atomWithStorage('showHex', false); // Used in Buffers and Operation Details
+export const showMemoryRegionsAtom = atomWithStorage('showMemoryRegions', true); // Used in Buffers and Operation Details
+export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', false); // Used in Buffers and Operation Details
 
 // Reports
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
@@ -43,7 +43,7 @@ export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
-export const hasClusterDescriptionAtom = atom<boolean>(false);
+export const hasClusterDescriptionAtom = atom(false);
 
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);
@@ -58,20 +58,20 @@ export const tensorBufferTypeFiltersAtom = atom<(BufferType | null)[]>([]);
 
 // Buffers route
 export const selectedBufferSummaryTabAtom = atom<TAB_IDS>(TAB_IDS.L1);
-export const showBufferSummaryZoomedAtom = atomWithStorage<boolean>('showBufferSummary', false);
+export const showBufferSummaryZoomedAtom = atomWithStorage('showBufferSummary', false);
 
 // Performance route
 export const comparisonPerformanceReportListAtom = atom<string[] | null>(null);
 export const perfSelectedTabAtom = atom<TabId>(PerfTabIds.TABLE);
 export const isStackedViewAtom = atom(false);
 export const filterBySignpostAtom = atom<(Signpost | null)[]>([null, null]);
-export const hideHostOpsAtom = atom<boolean>(true);
+export const hideHostOpsAtom = atom(true);
 export const mathFilterListAtom = atom<TypedPerfTableRow['math_fidelity'][]>([]);
 export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>([]);
 export const bufferTypeFilterListAtom = atom<TypedPerfTableRow['buffer_type'][]>([]);
-export const mergeDevicesAtom = atom<boolean>(true);
-export const tracingModeAtom = atom<boolean>(false);
+export const mergeDevicesAtom = atom(true);
+export const tracingModeAtom = atom(false);
 export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
 
 // NPE
-export const altCongestionColorsAtom = atomWithStorage<boolean>('altCongestionColorsAtom', false);
+export const altCongestionColorsAtom = atomWithStorage('altCongestionColorsAtom', false);
