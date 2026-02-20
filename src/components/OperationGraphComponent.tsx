@@ -95,7 +95,9 @@ const OperationGraph: React.FC<{
                     .filter((op) => !filterOutDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
                     .map((op) => ({
                         id: op.id,
-                        label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
+                        label: `${op.id} ${op.name}${
+                            op.operationFileIdentifier ? `\n${op.operationFileIdentifier}` : ''
+                        }`,
                         shape: 'box',
                         filterString: `${op.name}`,
                         deviceOpFilter: op.deviceOperationNameList.join(' '),
