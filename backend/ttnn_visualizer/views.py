@@ -87,6 +87,18 @@ logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__)
 
 
+@api.before_request
+def _trim_session_report_lists():
+    """Keep session cookie under size limits by capping report lists (FIFO)."""
+    if not current_app.config.get("SERVER_MODE"):
+        return
+    max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+    for key in ("profiler_paths", "performance_paths", "npe_paths", "instances"):
+        lst = session.get(key, [])
+        if len(lst) > max_reports:
+            session[key] = lst[-max_reports:]
+
+
 @api.route("/operations", methods=["GET"])
 @with_instance
 @timer
@@ -943,8 +955,11 @@ def create_profiler_files():
         except Exception as e:
             logger.warning(f"Failed to read config.json in {config_file}: {e}")
 
-    # Set session data
-    session["profiler_paths"] = session.get("profiler_paths", []) + [str(profiler_path)]
+    # Set session data (FIFO cap to avoid cookie size limits)
+    max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+    session["profiler_paths"] = (
+        session.get("profiler_paths", []) + [str(profiler_path)]
+    )[-max_reports:]
     session.permanent = True
 
     return {
@@ -1002,9 +1017,10 @@ def create_performance_files():
         performance_path=performance_path,
     )
 
-    session["performance_paths"] = session.get("performance_paths", []) + [
-        str(performance_path)
-    ]
+    max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+    session["performance_paths"] = (
+        session.get("performance_paths", []) + [str(performance_path)]
+    )[-max_reports:]
     session.permanent = True
 
     return StatusMessage(
@@ -1047,7 +1063,10 @@ def create_npe_files():
         npe_path=npe_path,
     )
 
-    session["npe_paths"] = session.get("npe_paths", []) + [str(npe_path)]
+    max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+    session["npe_paths"] = (session.get("npe_paths", []) + [str(npe_path)])[
+        -max_reports:
+    ]
     session.permanent = True
 
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()

@@ -97,6 +97,8 @@ class DefaultConfig(object):
     # Session Settings
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = False  # For development on HTTP
+    # Max uploaded report paths / instance IDs stored in session cookie (FIFO); avoids cookie size limits (e.g. 4KB)
+    SESSION_MAX_UPLOADED_REPORTS = int(os.getenv("SESSION_MAX_UPLOADED_REPORTS", "20"))
 
     def override_with_env_variables(self):
         """Override config values with environment variables."""
