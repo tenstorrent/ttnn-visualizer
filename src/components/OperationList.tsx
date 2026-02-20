@@ -24,6 +24,8 @@ import {
     selectedDeviceOperationsAtom,
     selectedOperationRangeAtom,
     shouldCollapseAllOperationsAtom,
+    shouldSortByIDAtom,
+    shouldSortDurationAtom,
 } from '../store/app';
 import Collapsible from './Collapsible';
 import ListItem from './ListItem';
@@ -43,8 +45,8 @@ const OperationList = () => {
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
 
     const [filterQuery, setFilterQuery] = useAtom(operationListFilterAtom);
-    const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
-    const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
+    const [shouldSortByID, setShouldSortByID] = useAtom(shouldSortByIDAtom);
+    const [shouldSortDuration, setShouldSortDuration] = useAtom(shouldSortDurationAtom);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
     const [selectedDeviceOperations, setSelectedDeviceOperations] = useAtom(selectedDeviceOperationsAtom);
@@ -166,14 +168,14 @@ const OperationList = () => {
         setShouldSortByID(
             shouldSortByID === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
         );
-    }, [shouldSortByID]);
+    }, [shouldSortByID, setShouldSortByID, setShouldSortDuration]);
 
     const handleSortByDuration = useCallback(() => {
         setShouldSortByID(SortingOptions.OFF);
         setShouldSortDuration(
             shouldSortDuration === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
         );
-    }, [shouldSortDuration]);
+    }, [shouldSortDuration, setShouldSortDuration, setShouldSortByID]);
 
     const handleExpandAllToggle = useCallback(() => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);

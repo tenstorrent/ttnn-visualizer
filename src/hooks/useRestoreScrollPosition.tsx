@@ -4,13 +4,22 @@
 
 import { useAtom, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
-import { operationListFilterAtom, scrollPositionsAtom, selectedDeviceOperationsAtom } from '../store/app';
+import {
+    operationListFilterAtom,
+    scrollPositionsAtom,
+    selectedDeviceOperationsAtom,
+    shouldSortByIDAtom,
+    shouldSortDurationAtom,
+} from '../store/app';
 import { ScrollLocations, ScrollPosition, VirtualListState } from '../definitions/ScrollPositions';
+import { SortingOptions } from '../definitions/SortingOptions';
 
 const useRestoreScrollPosition = (key?: ScrollLocations) => {
     const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsAtom);
     const setOperationListFilter = useSetAtom(operationListFilterAtom);
     const setSelectedDeviceOperations = useSetAtom(selectedDeviceOperationsAtom);
+    const setShouldSortByID = useSetAtom(shouldSortByIDAtom);
+    const setShouldSortDuration = useSetAtom(shouldSortDurationAtom);
 
     const updateListState = useCallback(
         (state: Partial<VirtualListState>) => {
@@ -47,9 +56,19 @@ const useRestoreScrollPosition = (key?: ScrollLocations) => {
 
     const resetListStates = useCallback(() => {
         setScrollPositions(null);
+
+        // Operation List specific resets
         setOperationListFilter('');
         setSelectedDeviceOperations(new Set());
-    }, [setScrollPositions, setOperationListFilter, setSelectedDeviceOperations]);
+        setShouldSortByID(SortingOptions.ASCENDING);
+        setShouldSortDuration(SortingOptions.OFF);
+    }, [
+        setScrollPositions,
+        setOperationListFilter,
+        setSelectedDeviceOperations,
+        setShouldSortByID,
+        setShouldSortDuration,
+    ]);
 
     return {
         getListState,
