@@ -100,7 +100,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
 
         for (const timestep of timestepList) {
             const links = nocType
-                ? timestep.link_demand.filter((linkData) => String(linkData[NPE_LINK.NOC_ID]).startsWith(nocType))
+                ? timestep.link_demand.filter((linkData) => linkData[NPE_LINK.NOC_ID].startsWith(nocType))
                 : timestep.link_demand;
 
             const worst = Math.max(-1, ...links.map((linkData) => linkData[NPE_LINK.DEMAND]));
