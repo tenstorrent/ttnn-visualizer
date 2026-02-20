@@ -14,7 +14,7 @@ import { Node } from '../../model/APIData';
 import 'styles/components/DeviceOperationsGraphComponent.scss';
 import { isExtendedDeviceOperation } from '../../functions/filterOperations';
 import { toReadableShape } from '../../functions/formatting';
-import { GRAPH_COLORS } from '../../definitions/GRAPH_COLORS';
+import { GRAPH_COLORS } from '../../definitions/GraphColors';
 
 export interface GraphComponentProps {
     data: Node[];

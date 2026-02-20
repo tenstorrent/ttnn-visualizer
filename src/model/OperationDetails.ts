@@ -553,6 +553,9 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br /> ${formatMe
 
     // eslint-disable-next-line class-methods-use-this
     private preprocessConnections(ops: Node[]) {
+        if (!Array.isArray(ops)) {
+            return [];
+        }
         const captureStart = ops.find((op) => op.node_type === NodeType.capture_start);
         const operations: Node[] = ops.map((op) => ({ ...op, inputs: [], outputs: [] }));
         const getConnectedNodes = (node: Node): Node[] => {

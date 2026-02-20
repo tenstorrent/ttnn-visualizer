@@ -7,20 +7,18 @@ import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
-    selectedDeviceAtom,
 } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getServerConfig from '../../functions/getServerConfig';
-import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import {
     PERFORMANCE_FOLDER_QUERY_KEY,
     PROFILER_FOLDER_QUERY_KEY,
@@ -83,7 +81,6 @@ const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
     const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
-    const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
 
@@ -165,7 +162,6 @@ const LocalFolderOptions: FC = () => {
                 reportName: response.data.reportName,
             };
 
-            setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveProfilerReport(updatedReport);
             createToastNotification('Active memory report', updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);

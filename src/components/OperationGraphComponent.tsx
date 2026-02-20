@@ -18,7 +18,7 @@ import { BufferType } from '../model/BufferType';
 import { toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
 import MemoryTag from './MemoryTag';
-import { GRAPH_COLORS } from '../definitions/GRAPH_COLORS';
+import { GRAPH_COLORS } from '../definitions/GraphColors';
 
 type OperationList = OperationDescription[];
 const DEALLOCATE_OP_NAME = 'ttnn.deallocate';
