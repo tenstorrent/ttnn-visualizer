@@ -4,12 +4,13 @@
 
 import { useAtom, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
-import { operationListFilterAtom, scrollPositionsAtom } from '../store/app';
+import { operationListFilterAtom, scrollPositionsAtom, selectedDeviceOperationsAtom } from '../store/app';
 import { ScrollLocations, ScrollPosition, VirtualListState } from '../definitions/ScrollPositions';
 
 const useRestoreScrollPosition = (key?: ScrollLocations) => {
     const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsAtom);
     const setOperationListFilter = useSetAtom(operationListFilterAtom);
+    const setSelectedDeviceOperations = useSetAtom(selectedDeviceOperationsAtom);
 
     const updateListState = useCallback(
         (state: Partial<VirtualListState>) => {
@@ -47,7 +48,8 @@ const useRestoreScrollPosition = (key?: ScrollLocations) => {
     const resetListStates = useCallback(() => {
         setScrollPositions(null);
         setOperationListFilter('');
-    }, [setScrollPositions, setOperationListFilter]);
+        setSelectedDeviceOperations(new Set());
+    }, [setScrollPositions, setOperationListFilter, setSelectedDeviceOperations]);
 
     return {
         getListState,

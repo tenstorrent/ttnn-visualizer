@@ -361,6 +361,7 @@ const OperationList = () => {
                     label='Device Operations'
                     optionList={uniqueDeviceOperationNames || []}
                     onUpdateHandler={filterDeviceOperations}
+                    initialValue={selectedDeviceOperations ? Array.from(selectedDeviceOperations) : []}
                 />
 
                 {!isLoading && (
