@@ -57,7 +57,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
 
     return (
         <>
-            {maxYValue > 1 && mergeDevices && <PerfMultiDeviceNotice />}
+            {maxYValue > 0 && mergeDevices && <PerfMultiDeviceNotice />}
             <PerfChart
                 title='Utilization vs Device Kernel Duration'
                 chartData={chartData}

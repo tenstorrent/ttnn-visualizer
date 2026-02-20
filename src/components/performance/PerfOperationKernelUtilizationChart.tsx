@@ -87,7 +87,7 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
 
     return (
         <>
-            {maxY2Value > 1 && mergeDevices && <PerfMultiDeviceNotice />}
+            {maxY2Value > 0 && mergeDevices && <PerfMultiDeviceNotice />}
             <PerfChart
                 title='Device Kernel Duration + Utilization'
                 chartData={[...chartDataDuration, ...chartDataUtilization]}

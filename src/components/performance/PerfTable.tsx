@@ -24,9 +24,10 @@ import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
 import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
-import { hideHostOpsAtom } from '../../store/app';
+import { hideHostOpsAtom, mergeDevicesAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
 import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -51,6 +52,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     reportName,
 }) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
@@ -145,6 +147,8 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 data={data}
                 reportName={reportName}
             />
+
+            {mergeDevices && <PerfMultiDeviceNotice />}
 
             {data?.length > 0 ? (
                 <table className='perf-table monospace'>
