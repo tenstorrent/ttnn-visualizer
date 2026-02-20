@@ -59,6 +59,7 @@ import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { OpType } from '../../definitions/Performance';
 import { capitalizeString } from '../../functions/formatting';
+import { DeviceOperationLayoutTypes } from '../../model/APIData';
 
 enum SignpostSelectType {
     START,
@@ -497,7 +498,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             <MultiSelectField<TypedPerfTableRow, 'layout'>
                                 keyName='layout'
                                 options={processedRows || []}
-                                labelFormatter={(value: string | null) => (value !== null ? value : 'No value')}
+                                labelFormatter={(value: DeviceOperationLayoutTypes | null) =>
+                                    value !== null ? value : 'No value'
+                                }
                                 placeholder='Select Layout...'
                                 values={activeLayoutFilterList}
                                 updateHandler={setActiveLayoutFilterList}
