@@ -69,8 +69,9 @@ export const hideHostOpsAtom = atom(true);
 export const mathFilterListAtom = atom<TypedPerfTableRow['math_fidelity'][]>([]);
 export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>([]);
 export const bufferTypeFilterListAtom = atom<TypedPerfTableRow['buffer_type'][]>([]);
-export const mergeDevicesAtom = atom(true);
-export const tracingModeAtom = atom(false);
+export const layoutFilterListAtom = atom<TypedPerfTableRow['layout'][]>([]);
+export const mergeDevicesAtom = atom<boolean>(true);
+export const tracingModeAtom = atom<boolean>(false);
 export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
 
 // NPE
