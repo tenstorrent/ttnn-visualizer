@@ -17,7 +17,9 @@ import {
 } from '../../model/NPEModel';
 import { altCongestionColorsAtom } from '../../store/app';
 
+type MetricPoint = { value: number; color: string };
 type Rect = { x: number; y: number; width: number; height: number };
+
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
     canvasWidth: number;
@@ -86,57 +88,50 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
 
     const canvasZoneHeight = zoneRanges.maxZoneDepth * ZONE_HEIGHT;
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
+
     const congestionMapPerTimestamp = useMemo(() => {
-        return {
-            worst: timestepList.map((timestep) => {
-                if (nocType) {
-                    const value = Math.max(
-                        -1,
-                        ...timestep.link_demand
-                            .filter((linkData) => linkData[NPE_LINK.NOC_ID].indexOf(nocType) === 0)
-                            .map((linkData) => linkData[NPE_LINK.DEMAND]),
-                    );
-                    const color = calculateLinkCongestionColor(value, 0, altCongestionColors);
-                    return { value, color };
-                }
-                const value = Math.max(-1, ...timestep.link_demand.map((linkData) => linkData[NPE_LINK.DEMAND]));
-                const color = calculateLinkCongestionColor(value, 0, altCongestionColors);
-                return { value, color };
-            }),
-
-            utilization: timestepList.map((timestep) => {
-                if (nocType) {
-                    const nocData = timestep.noc[nocType];
-                    if (nocData) {
-                        return {
-                            value: nocData.avg_link_util,
-                            color: calculateLinkCongestionColor(nocData.avg_link_util, 0, altCongestionColors),
-                        };
-                    }
-                }
-                return {
-                    value: timestep.avg_link_util,
-                    color: calculateLinkCongestionColor(timestep.avg_link_util, 0, altCongestionColors),
-                };
-            }),
-
-            demand: timestepList.map((timestep) => {
-                if (nocType) {
-                    const nocData = timestep.noc[nocType];
-                    if (nocData) {
-                        return {
-                            value: nocData.avg_link_demand,
-                            color: calculateLinkCongestionColor(nocData.avg_link_demand, 0, altCongestionColors),
-                        };
-                    }
-                }
-                const color = calculateLinkCongestionColor(timestep.avg_link_demand, 0, altCongestionColors);
-                return {
-                    value: timestep.avg_link_demand,
-                    color,
-                };
-            }),
+        const result = {
+            worst: [] as Array<MetricPoint>,
+            utilization: [] as Array<MetricPoint>,
+            demand: [] as Array<MetricPoint>,
+            mcast: [] as Array<MetricPoint>,
         };
+        const color = (v: number) => calculateLinkCongestionColor(v, 0, altCongestionColors);
+
+        for (const timestep of timestepList) {
+            const links = nocType
+                ? timestep.link_demand.filter((linkData) => linkData[NPE_LINK.NOC_ID].startsWith(nocType))
+                : timestep.link_demand;
+
+            const worst = Math.max(-1, ...links.map((linkData) => linkData[NPE_LINK.DEMAND]));
+
+            result.worst.push({
+                value: worst,
+                color: color(worst),
+            });
+
+            const nocData = nocType ? timestep.noc?.[nocType] : undefined;
+
+            const utilization = nocData?.avg_link_util ?? timestep.avg_link_util;
+            result.utilization.push({
+                value: utilization,
+                color: color(utilization),
+            });
+
+            const demand = nocData?.avg_link_demand ?? timestep.avg_link_demand;
+            result.demand.push({
+                value: demand,
+                color: color(demand),
+            });
+
+            const mcast = timestep.mcast_write_link_util;
+            result.mcast.push({
+                value: mcast,
+                color: color(mcast || -1),
+            });
+        }
+
+        return result;
     }, [nocType, timestepList, altCongestionColors]);
 
     useEffect(() => {
@@ -147,19 +142,28 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
         }
 
         ctx.clearRect(0, 0, canvas.width, HEATMAP_HEIGHT + canvasZoneHeight);
-        const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length;
-        congestionMapPerTimestamp.worst.forEach(({ color }, index) => {
-            ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, 0, chunkWidth, HEATMAP_HEIGHT / 3);
-        });
-        congestionMapPerTimestamp.utilization.forEach(({ color }, index) => {
-            ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, HEATMAP_HEIGHT / 3, chunkWidth, (HEATMAP_HEIGHT / 3) * 2);
-        });
-        congestionMapPerTimestamp.demand.forEach(({ color }, index) => {
-            ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, (HEATMAP_HEIGHT / 3) * 2, chunkWidth, HEATMAP_HEIGHT / 3);
-        });
+        const dataSize = congestionMapPerTimestamp.worst.length;
+
+        const metricDataArray = [
+            congestionMapPerTimestamp.worst,
+            congestionMapPerTimestamp.utilization,
+            congestionMapPerTimestamp.demand,
+            congestionMapPerTimestamp.mcast,
+        ];
+        const numLines = metricDataArray.length;
+
+        const chunkWidth = canvas.width / dataSize;
+        const rowHeight = HEATMAP_HEIGHT / numLines;
+
+        for (let row = 0; row < numLines; row++) {
+            const y = row * rowHeight;
+            const pointList = metricDataArray[row];
+
+            pointList.forEach((point, index) => {
+                ctx.fillStyle = point.color;
+                ctx.fillRect(index * chunkWidth, y, chunkWidth, rowHeight);
+            });
+        }
 
         const groupBaseY = new Map<number, number>();
         {
@@ -295,6 +299,19 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                                             }}
                                         />
                                         {` Avg Demand: ${congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(3)} %`}
+                                    </div>
+
+                                    <div>
+                                        <span
+                                            className='color-square'
+                                            style={{
+                                                backgroundColor: congestionMapPerTimestamp.mcast[hoveredIndex].color,
+                                            }}
+                                        />
+                                        {` Multicast Utilisation:`}{' '}
+                                        {congestionMapPerTimestamp.mcast[hoveredIndex].value !== undefined
+                                            ? `${congestionMapPerTimestamp.mcast[hoveredIndex].value.toFixed(3)} %`
+                                            : 'N/A'}
                                     </div>
                                 </>
                             )}

@@ -9,6 +9,7 @@ export interface CommonInfo {
     arch: string;
     congestion_model_name: string;
     cycles_per_timestep: number;
+    mcast_write_link_util: number;
     device_name: string;
     dram_bw_util: number;
     link_demand: number;
@@ -68,6 +69,11 @@ export const NPE_KPI_METADATA = {
         units: '%',
         label: 'Max NoC Link Demand',
         description: 'Maximum observed link demand over all timesteps. See link_demand for more details.',
+    },
+    mcast_write_link_util: {
+        units: '%',
+        label: 'Multicast Write Link Utilization',
+        description: '',
     },
     num_cols: {
         decimals: 0,
@@ -174,6 +180,7 @@ export interface TimestepData {
     link_demand: LinkUtilization[];
     avg_link_demand: number; // percentage
     avg_link_util: number; // percentage
+    mcast_write_link_util: number;
     noc: {
         [K in NoCType]: {
             avg_link_demand: number; //  percentage

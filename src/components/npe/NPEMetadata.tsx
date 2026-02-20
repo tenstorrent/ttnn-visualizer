@@ -47,7 +47,7 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
                             if (hasKey(key) && info[key] !== undefined) {
                                 return (
                                     <div key={key}>
-                                        <span>{formatMetadataLabel(key)}: </span>
+                                        <span>{formatMetadataLabel(key)} </span>
                                         <span>{formatMetadataValue(key, info[key])}</span>
                                     </div>
                                 );
