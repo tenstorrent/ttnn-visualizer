@@ -15,6 +15,7 @@ import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
+import { SortingOptions } from '../definitions/SortingOptions';
 
 // App state
 export const activeToastAtom = atom<Id | null>(null);
@@ -48,6 +49,9 @@ export const hasClusterDescriptionAtom = atom(false);
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);
 export const operationListFilterAtom = atom('');
+export const selectedDeviceOperationsAtom = atom<Set<string>>(new Set<string>());
+export const shouldSortByIDAtom = atom<SortingOptions>(SortingOptions.ASCENDING);
+export const shouldSortDurationAtom = atom<SortingOptions>(SortingOptions.OFF);
 
 // Operation details route
 export const isFullStackTraceAtom = atom(false);

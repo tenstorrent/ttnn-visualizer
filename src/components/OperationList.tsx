@@ -19,7 +19,14 @@ import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/us
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
 import { OperationDescription } from '../model/APIData';
-import { operationListFilterAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
+import {
+    operationListFilterAtom,
+    selectedDeviceOperationsAtom,
+    selectedOperationRangeAtom,
+    shouldCollapseAllOperationsAtom,
+    shouldSortByIDAtom,
+    shouldSortDurationAtom,
+} from '../store/app';
 import Collapsible from './Collapsible';
 import ListItem from './ListItem';
 import LoadingSpinner from './LoadingSpinner';
@@ -38,10 +45,11 @@ const OperationList = () => {
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
 
     const [filterQuery, setFilterQuery] = useAtom(operationListFilterAtom);
-    const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
-    const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
+    const [shouldSortByID, setShouldSortByID] = useAtom(shouldSortByIDAtom);
+    const [shouldSortDuration, setShouldSortDuration] = useAtom(shouldSortDurationAtom);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
+    const [selectedDeviceOperations, setSelectedDeviceOperations] = useAtom(selectedDeviceOperationsAtom);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -61,7 +69,6 @@ const OperationList = () => {
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
     const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
-    const [selectedDeviceOperations, setSelectedDeviceOperations] = useState<Set<string>>(new Set());
 
     const filterDeviceOperations = (list: string[]) => {
         setSelectedDeviceOperations(new Set(list));
@@ -161,14 +168,14 @@ const OperationList = () => {
         setShouldSortByID(
             shouldSortByID === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
         );
-    }, [shouldSortByID]);
+    }, [shouldSortByID, setShouldSortByID, setShouldSortDuration]);
 
     const handleSortByDuration = useCallback(() => {
         setShouldSortByID(SortingOptions.OFF);
         setShouldSortDuration(
             shouldSortDuration === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
         );
-    }, [shouldSortDuration]);
+    }, [shouldSortDuration, setShouldSortDuration, setShouldSortByID]);
 
     const handleExpandAllToggle = useCallback(() => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
@@ -356,6 +363,7 @@ const OperationList = () => {
                     label='Device Operations'
                     optionList={uniqueDeviceOperationNames || []}
                     onUpdateHandler={filterDeviceOperations}
+                    initialValue={selectedDeviceOperations ? Array.from(selectedDeviceOperations) : []}
                 />
 
                 {!isLoading && (
