@@ -19,7 +19,12 @@ import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/us
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
 import { OperationDescription } from '../model/APIData';
-import { operationListFilterAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
+import {
+    operationListFilterAtom,
+    selectedDeviceOperationsAtom,
+    selectedOperationRangeAtom,
+    shouldCollapseAllOperationsAtom,
+} from '../store/app';
 import Collapsible from './Collapsible';
 import ListItem from './ListItem';
 import LoadingSpinner from './LoadingSpinner';
@@ -42,6 +47,7 @@ const OperationList = () => {
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
+    const [selectedDeviceOperations, setSelectedDeviceOperations] = useAtom(selectedDeviceOperationsAtom);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -61,7 +67,6 @@ const OperationList = () => {
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
     const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
-    const [selectedDeviceOperations, setSelectedDeviceOperations] = useState<Set<string>>(new Set());
 
     const filterDeviceOperations = (list: string[]) => {
         setSelectedDeviceOperations(new Set(list));
