@@ -7,7 +7,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
 import { useNavigate } from 'react-router-dom';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import {
     BufferSummaryAxisConfiguration,
     L1_SMALL_MARKER_COLOR,
@@ -29,7 +29,6 @@ import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import {
     renderMemoryLayoutAtom,
-    selectedDeviceAtom,
     showBufferSummaryZoomedAtom,
     showDeallocationReportAtom,
     showHexAtom,
@@ -43,6 +42,7 @@ import useScrollShade from '../../hooks/useScrollShade';
 
 import { BuffersByOperation } from '../../model/APIData';
 import useBufferNavigation from '../../hooks/useBufferNavigation';
+import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -63,7 +63,6 @@ function BufferSummaryPlotRenderer({
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
-    const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [activeRow, setActiveRow] = useState<number | null>(null);
 
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
@@ -95,7 +94,7 @@ function BufferSummaryPlotRenderer({
     const measurementsCacheRef = useRef(virtualizer.measurementsCache);
 
     const getMemorySize = () =>
-        !isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
+        !isLoadingDevices && devices ? devices[DEFAULT_DEVICE_ID]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
 
     const numberOfOperations = useMemo(
         () =>
@@ -109,7 +108,7 @@ function BufferSummaryPlotRenderer({
         useGetTensorDeallocationReportByOperation();
 
     // TODO: Multi device support
-    const memorySize = useMemo(getMemorySize, [deviceId, devices, isLoadingDevices]);
+    const memorySize = useMemo(getMemorySize, [devices, isLoadingDevices]);
 
     const zoomedMemorySize = useMemo(() => {
         let minValue: undefined | number;
