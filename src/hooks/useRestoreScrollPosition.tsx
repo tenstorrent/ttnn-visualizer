@@ -54,21 +54,23 @@ const useRestoreScrollPosition = (key?: ScrollLocations) => {
         return scrollPositions?.[key] || null;
     }, [key, scrollPositions]);
 
-    const resetListStates = useCallback(() => {
-        setScrollPositions(null);
-
-        // Operation List specific resets
+    const resetOperationList = useCallback(() => {
         setOperationListFilter('');
         setSelectedDeviceOperations(new Set());
         setShouldSortByID(SortingOptions.ASCENDING);
         setShouldSortDuration(SortingOptions.OFF);
-    }, [
-        setScrollPositions,
-        setOperationListFilter,
-        setSelectedDeviceOperations,
-        setShouldSortByID,
-        setShouldSortDuration,
-    ]);
+    }, [setOperationListFilter, setSelectedDeviceOperations, setShouldSortByID, setShouldSortDuration]);
+
+    const resetTensorList = useCallback(() => {
+        // Reset tensor list specific states here when implemented
+    }, []);
+
+    const resetListStates = useCallback(() => {
+        setScrollPositions(null);
+
+        resetOperationList();
+        resetTensorList();
+    }, [setScrollPositions, resetOperationList, resetTensorList]);
 
     return {
         getListState,
