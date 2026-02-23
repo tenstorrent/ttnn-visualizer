@@ -308,7 +308,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                                                 backgroundColor: congestionMapPerTimestamp.mcast[hoveredIndex].color,
                                             }}
                                         />
-                                        {` Multicast Utilisation:`}{' '}
+                                        {` Multicast Utilization:`}{' '}
                                         {congestionMapPerTimestamp.mcast[hoveredIndex].value !== undefined
                                             ? `${congestionMapPerTimestamp.mcast[hoveredIndex].value.toFixed(3)} %`
                                             : 'N/A'}
