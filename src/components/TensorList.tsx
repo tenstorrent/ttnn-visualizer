@@ -263,6 +263,41 @@ const TensorList = () => {
 
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
+                        content='Show high consumer tensors'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => setShowHighConsumerTensors(!showHighConsumerTensors)}
+                            endIcon={IconNames.ISSUE}
+                            disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
+                            intent={HIGH_CONSUMER_INTENT}
+                            variant={showHighConsumerTensors ? ButtonVariant.OUTLINED : undefined}
+                            aria-label='Show high consumer tensors'
+                        >
+                            {
+                                filteredTensorsList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)
+                                    .length
+                            }
+                        </Button>
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Show late deallocated tensors'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => setShowLateDeallocatedTensors(!showLateDeallocatedTensors)}
+                            endIcon={IconNames.OUTDATED}
+                            intent={Intent.WARNING}
+                            disabled={nonDeallocatedTensorList.size === 0}
+                            variant={showLateDeallocatedTensors ? ButtonVariant.OUTLINED : undefined}
+                            aria-label='Show late deallocated tensors'
+                        >
+                            {filteredTensorsList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
+                        </Button>
+                    </Tooltip>
+
+                    <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         placement={PopoverPosition.TOP}
                     >
@@ -333,41 +368,6 @@ const TensorList = () => {
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
                             aria-label='Scroll to bottom'
                         />
-                    </Tooltip>
-
-                    <Tooltip
-                        content='Toggle high consumer tensors'
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() => setShowHighConsumerTensors(!showHighConsumerTensors)}
-                            endIcon={IconNames.ISSUE}
-                            disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
-                            intent={HIGH_CONSUMER_INTENT}
-                            variant={showHighConsumerTensors ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Toggle high consumer tensors'
-                        >
-                            {
-                                filteredTensorsList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)
-                                    .length
-                            }
-                        </Button>
-                    </Tooltip>
-
-                    <Tooltip
-                        content='Show late deallocated tensors'
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() => setShowLateDeallocatedTensors(!showLateDeallocatedTensors)}
-                            endIcon={IconNames.OUTDATED}
-                            intent={Intent.WARNING}
-                            disabled={nonDeallocatedTensorList.size === 0}
-                            variant={showLateDeallocatedTensors ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Toggle high consumer tensors'
-                        >
-                            {filteredTensorsList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
-                        </Button>
                     </Tooltip>
                 </ButtonGroup>
 
