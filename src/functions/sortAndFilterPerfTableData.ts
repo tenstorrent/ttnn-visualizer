@@ -9,6 +9,7 @@ import {
     filterableColumnKeys,
     signpostRowDefaults,
 } from '../definitions/PerfTable';
+import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import { Signpost } from './perfFunctions';
 
@@ -29,6 +30,7 @@ const sortAndFilterPerfTableData = (
     rawOpCodeFilter: string[],
     mathFilter: string[],
     bufferTypeFilter: (BufferType | null)[],
+    activeLayoutFilterList: (DeviceOperationLayoutTypes | null)[],
     filterBySignpost: (Signpost | null)[],
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
@@ -94,6 +96,12 @@ const sortAndFilterPerfTableData = (
     if (bufferTypeFilter?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) => row?.buffer_type !== null && bufferTypeFilter.includes(row.buffer_type),
+        );
+    }
+
+    if (activeLayoutFilterList?.length > 0) {
+        filteredRows = filteredRows.filter(
+            (row) => row?.layout !== null && activeLayoutFilterList.includes(row.layout),
         );
     }
 
