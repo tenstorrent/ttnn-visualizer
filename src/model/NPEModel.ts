@@ -73,7 +73,8 @@ export const NPE_KPI_METADATA = {
     mcast_write_link_util: {
         units: '%',
         label: 'Multicast Write Link Utilization',
-        description: '',
+        description:
+            'Average utilization of NoC links for multicast write operations over entire runtime. Represents the portion of link bandwidth used specifically for multicast writes.',
     },
     num_cols: {
         decimals: 0,

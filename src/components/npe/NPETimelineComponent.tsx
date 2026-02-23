@@ -127,7 +127,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
             const mcast = timestep.mcast_write_link_util;
             result.mcast.push({
                 value: mcast,
-                color: color(mcast || -1),
+                color: color(mcast ?? -1),
             });
         }
 
