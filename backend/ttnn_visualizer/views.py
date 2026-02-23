@@ -955,12 +955,13 @@ def create_profiler_files():
         except Exception as e:
             logger.warning(f"Failed to read config.json in {config_file}: {e}")
 
-    # Set session data (FIFO cap to avoid cookie size limits)
-    max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
-    session["profiler_paths"] = (
-        session.get("profiler_paths", []) + [str(profiler_path)]
-    )[-max_reports:]
-    session.permanent = True
+    if current_app.config["SERVER_MODE"]:
+        # Set session data (FIFO cap to avoid cookie size limits)
+        max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+        session["profiler_paths"] = (
+            session.get("profiler_paths", []) + [str(profiler_path)]
+        )[-max_reports:]
+        session.permanent = True
 
     return {
         "path": parent_folder_name,
@@ -1017,11 +1018,12 @@ def create_performance_files():
         performance_path=performance_path,
     )
 
-    max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
-    session["performance_paths"] = (
-        session.get("performance_paths", []) + [str(performance_path)]
-    )[-max_reports:]
-    session.permanent = True
+    if current_app.config["SERVER_MODE"]:
+        max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+        session["performance_paths"] = (
+            session.get("performance_paths", []) + [str(performance_path)]
+        )[-max_reports:]
+        session.permanent = True
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -1063,11 +1065,12 @@ def create_npe_files():
         npe_path=npe_path,
     )
 
-    max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
-    session["npe_paths"] = (session.get("npe_paths", []) + [str(npe_path)])[
-        -max_reports:
-    ]
-    session.permanent = True
+    if current_app.config["SERVER_MODE"]:
+        max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+        session["npe_paths"] = (session.get("npe_paths", []) + [str(npe_path)])[
+            -max_reports:
+        ]
+        session.permanent = True
 
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
