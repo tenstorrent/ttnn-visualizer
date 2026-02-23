@@ -10,12 +10,14 @@ const SimpleMultiselect = ({
     label,
     optionList,
     onUpdateHandler,
+    initialValue,
 }: {
     label: string;
     optionList: string[];
     onUpdateHandler: (values: string[]) => void;
+    initialValue?: string[];
 }) => {
-    const [selected, setSelected] = useState<string[]>([]);
+    const [selected, setSelected] = useState<string[]>(initialValue ?? []);
     const handleItemSelect = (item: string) => {
         let list: string[] = [];
         if (!selected.includes(item)) {
