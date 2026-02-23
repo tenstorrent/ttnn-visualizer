@@ -165,17 +165,33 @@ const OperationList = () => {
 
     const handleSortByID = useCallback(() => {
         setShouldSortDuration(SortingOptions.OFF);
-        setShouldSortByID(
-            shouldSortByID === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
-        );
-    }, [shouldSortByID, setShouldSortByID, setShouldSortDuration]);
+        setShouldSortByID((current) => {
+            if (current === SortingOptions.OFF) {
+                return SortingOptions.ASCENDING;
+            }
+
+            if (current === SortingOptions.DESCENDING) {
+                return SortingOptions.OFF;
+            }
+
+            return SortingOptions.DESCENDING;
+        });
+    }, [setShouldSortByID, setShouldSortDuration]);
 
     const handleSortByDuration = useCallback(() => {
         setShouldSortByID(SortingOptions.OFF);
-        setShouldSortDuration(
-            shouldSortDuration === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
-        );
-    }, [shouldSortDuration, setShouldSortDuration, setShouldSortByID]);
+        setShouldSortDuration((current) => {
+            if (current === SortingOptions.OFF) {
+                return SortingOptions.ASCENDING;
+            }
+
+            if (current === SortingOptions.DESCENDING) {
+                return SortingOptions.OFF;
+            }
+
+            return SortingOptions.DESCENDING;
+        });
+    }, [setShouldSortDuration, setShouldSortByID]);
 
     const handleExpandAllToggle = useCallback(() => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
@@ -276,6 +292,13 @@ const OperationList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
+                <SimpleMultiselect
+                    label='Device Operations'
+                    optionList={uniqueDeviceOperationNames || []}
+                    onUpdateHandler={filterDeviceOperations}
+                    initialValue={selectedDeviceOperations ? Array.from(selectedDeviceOperations) : []}
+                />
+
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
@@ -290,49 +313,48 @@ const OperationList = () => {
 
                     <Tooltip
                         content={
-                            shouldSortByID === SortingOptions.DESCENDING
-                                ? 'Sort by id descending'
-                                : 'Sort by id ascending'
+                            // eslint-disable-next-line no-nested-ternary
+                            shouldSortByID === SortingOptions.OFF
+                                ? 'Sort by ID (ascending)'
+                                : shouldSortByID === SortingOptions.ASCENDING
+                                  ? 'Sort by ID (descending)'
+                                  : 'Clear ID sorting'
                         }
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleSortByID()}
                             icon={
-                                shouldSortByID === SortingOptions.DESCENDING
-                                    ? IconNames.SortAlphabeticalDesc
-                                    : IconNames.SortAlphabetical
+                                shouldSortByID === SortingOptions.ASCENDING || shouldSortByID === SortingOptions.OFF
+                                    ? IconNames.SORT_ALPHABETICAL
+                                    : IconNames.SORT_ALPHABETICAL_DESC
                             }
                             variant={isSortingModeActive(shouldSortByID) ? ButtonVariant.OUTLINED : undefined}
-                            aria-label={
-                                shouldSortByID === SortingOptions.DESCENDING
-                                    ? 'Sort by id descending'
-                                    : 'Sort by id ascending'
-                            }
+                            aria-label='Sort by ID'
                         />
                     </Tooltip>
 
                     <Tooltip
                         content={
-                            shouldSortDuration === SortingOptions.DESCENDING
-                                ? 'Sort by duration descending'
-                                : 'Sort by duration ascending'
+                            // eslint-disable-next-line no-nested-ternary
+                            shouldSortDuration === SortingOptions.OFF
+                                ? 'Sort by Duration (ascending)'
+                                : shouldSortDuration === SortingOptions.ASCENDING
+                                  ? 'Sort by Duration (descending)'
+                                  : 'Clear Duration sorting'
                         }
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleSortByDuration()}
                             icon={
-                                shouldSortDuration === SortingOptions.DESCENDING
-                                    ? IconNames.SortNumericalDesc
-                                    : IconNames.SortNumerical
+                                shouldSortDuration === SortingOptions.ASCENDING ||
+                                shouldSortDuration === SortingOptions.OFF
+                                    ? IconNames.SORT_NUMERICAL
+                                    : IconNames.SORT_NUMERICAL_DESC
                             }
                             variant={isSortingModeActive(shouldSortDuration) ? ButtonVariant.OUTLINED : undefined}
-                            aria-label={
-                                shouldSortDuration === SortingOptions.DESCENDING
-                                    ? 'Sort by duration descending'
-                                    : 'Sort by duration ascending'
-                            }
+                            aria-label='Sort tensors by Duration'
                         />
                     </Tooltip>
 
@@ -358,13 +380,6 @@ const OperationList = () => {
                         />
                     </Tooltip>
                 </ButtonGroup>
-
-                <SimpleMultiselect
-                    label='Device Operations'
-                    optionList={uniqueDeviceOperationNames || []}
-                    onUpdateHandler={filterDeviceOperations}
-                    initialValue={selectedDeviceOperations ? Array.from(selectedDeviceOperations) : []}
-                />
 
                 {!isLoading && (
                     <p className='result-count'>

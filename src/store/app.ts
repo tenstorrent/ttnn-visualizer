@@ -59,6 +59,10 @@ export const isFullStackTraceAtom = atom(false);
 // Tensors route
 export const shouldCollapseAllTensorsAtom = atom(false);
 export const tensorBufferTypeFiltersAtom = atom<(BufferType | null)[]>([]);
+export const tensorListFilterAtom = atom('');
+export const showHighConsumerTensorsAtom = atom(false);
+export const showLateDeallocatedTensorsAtom = atom(false);
+export const shouldSortBySizeAtom = atom<SortingOptions>(SortingOptions.OFF);
 
 // Buffers route
 export const selectedBufferSummaryTabAtom = atom<TAB_IDS>(TAB_IDS.L1);

@@ -23,7 +23,15 @@ import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
 import { Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
-import { selectedOperationRangeAtom, shouldCollapseAllTensorsAtom, tensorBufferTypeFiltersAtom } from '../store/app';
+import {
+    selectedOperationRangeAtom,
+    shouldCollapseAllTensorsAtom,
+    shouldSortBySizeAtom,
+    showHighConsumerTensorsAtom,
+    showLateDeallocatedTensorsAtom,
+    tensorBufferTypeFiltersAtom,
+    tensorListFilterAtom,
+} from '../store/app';
 import BufferDetails from './BufferDetails';
 import Collapsible from './Collapsible';
 import ListItem from './ListItem';
@@ -39,12 +47,11 @@ const HIGH_CONSUMER_INTENT = Intent.DANGER;
 const TensorList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllTensorsAtom);
     const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
+    const [showHighConsumerTensors, setShowHighConsumerTensors] = useAtom(showHighConsumerTensorsAtom);
+    const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useAtom(showLateDeallocatedTensorsAtom);
+    const [shouldSortBySize, setShouldSortBySize] = useAtom(shouldSortBySizeAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const [shouldSortBySize, setShouldSortBySize] = useState<SortingOptions>(SortingOptions.OFF);
-
-    const [filterQuery, setFilterQuery] = useState('');
-    const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
-    const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useState(false);
+    const [filterQuery, setFilterQuery] = useAtom(tensorListFilterAtom);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
 
     const location = useLocation();
@@ -245,7 +252,89 @@ const TensorList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
+                <MultiSelectField<Tensor, 'buffer_type'>
+                    keyName='buffer_type'
+                    options={tensorsWithRange || []}
+                    placeholder='Buffer type filter...'
+                    values={bufferTypeFilters}
+                    updateHandler={setBufferTypeFilters}
+                    labelFormatter={(value) => (value === null ? 'Unknown' : BufferTypeLabel[value])}
+                />
+
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>
+                    <Tooltip
+                        content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => handleExpandAllToggle()}
+                            endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content={
+                            // eslint-disable-next-line no-nested-ternary
+                            shouldSortBySize === SortingOptions.OFF
+                                ? 'Sort by Size (ascending)'
+                                : shouldSortBySize === SortingOptions.ASCENDING
+                                  ? 'Sort by Size (descending)'
+                                  : 'Clear Size sorting'
+                        }
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() =>
+                                setShouldSortBySize((current) => {
+                                    if (current === SortingOptions.OFF) {
+                                        return SortingOptions.ASCENDING;
+                                    }
+
+                                    if (current === SortingOptions.DESCENDING) {
+                                        return SortingOptions.OFF;
+                                    }
+
+                                    return SortingOptions.DESCENDING;
+                                })
+                            }
+                            icon={
+                                shouldSortBySize === SortingOptions.ASCENDING || shouldSortBySize === SortingOptions.OFF
+                                    ? IconNames.SORT_NUMERICAL
+                                    : IconNames.SORT_NUMERICAL_DESC
+                            }
+                            active={shouldSortBySize !== SortingOptions.OFF}
+                            variant={shouldSortBySize !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
+                            aria-label='Sort tensors by size'
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Scroll to top'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(0);
+                            }}
+                            icon={IconNames.DOUBLE_CHEVRON_UP}
+                            aria-label='Scroll to top'
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Scroll to bottom'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(numberOfTensors - 1);
+                            }}
+                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                            aria-label='Scroll to bottom'
+                        />
+                    </Tooltip>
+
                     <Tooltip
                         content='Toggle high consumer tensors'
                         placement={PopoverPosition.TOP}
@@ -280,85 +369,6 @@ const TensorList = () => {
                             {filteredTensorsList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
                         </Button>
                     </Tooltip>
-                    <Tooltip
-                        content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() => handleExpandAllToggle()}
-                            endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
-                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
-                        />
-                    </Tooltip>
-                    <Tooltip
-                        content='Scroll to top'
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() => {
-                                virtualizer.scrollToIndex(0);
-                            }}
-                            icon={IconNames.DOUBLE_CHEVRON_UP}
-                            aria-label='Scroll to top'
-                        />
-                    </Tooltip>
-                    <Tooltip
-                        content='Scroll to bottom'
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() => {
-                                virtualizer.scrollToIndex(numberOfTensors - 1);
-                            }}
-                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                            aria-label='Scroll to bottom'
-                        />
-                    </Tooltip>
-
-                    <Tooltip
-                        content={
-                            // eslint-disable-next-line no-nested-ternary
-                            shouldSortBySize === SortingOptions.OFF
-                                ? 'Sort by size (ascending)'
-                                : shouldSortBySize === SortingOptions.ASCENDING
-                                  ? 'Sort by size (descending)'
-                                  : 'Clear size sorting'
-                        }
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() =>
-                                setShouldSortBySize((current) => {
-                                    if (current === SortingOptions.OFF) {
-                                        return SortingOptions.ASCENDING;
-                                    }
-
-                                    if (current === SortingOptions.DESCENDING) {
-                                        return SortingOptions.OFF;
-                                    }
-
-                                    return SortingOptions.DESCENDING;
-                                })
-                            }
-                            icon={
-                                shouldSortBySize === SortingOptions.ASCENDING || shouldSortBySize === SortingOptions.OFF
-                                    ? IconNames.SORT_NUMERICAL
-                                    : IconNames.SORT_NUMERICAL_DESC
-                            }
-                            active={shouldSortBySize !== SortingOptions.OFF}
-                            variant={shouldSortBySize !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Sort tensors by size'
-                        />
-                    </Tooltip>
-
-                    <MultiSelectField<Tensor, 'buffer_type'>
-                        keyName='buffer_type'
-                        options={tensorsWithRange || []}
-                        placeholder='Buffer type filter...'
-                        values={bufferTypeFilters}
-                        updateHandler={setBufferTypeFilters}
-                        labelFormatter={(value) => (value === null ? 'Unknown' : BufferTypeLabel[value])}
-                    />
                 </ButtonGroup>
 
                 {!isTensorsLoading && !isOperationsLoading ? (
