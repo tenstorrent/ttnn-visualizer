@@ -39,7 +39,7 @@ export const NPE_KPI_METADATA = {
         description: 'Congestion model used in simulation to infer congestion (default: fast)',
     },
     cycles_per_timestep: {
-        units: 'cycles',
+        units: ' cycles',
         label: 'Device Cycles Per Timestep',
         description: 'How many cycles each simulation timestep/frame spans',
     },

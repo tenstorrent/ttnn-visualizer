@@ -16,9 +16,19 @@ import {
     getKernelColor,
 } from '../../model/NPEModel';
 import { altCongestionColorsAtom } from '../../store/app';
+import { formatPercentage } from '../../functions/math';
 
-type MetricPoint = { value: number; color: string };
-type Rect = { x: number; y: number; width: number; height: number };
+interface MetricPoint {
+    value: number;
+    color: string;
+}
+
+interface Rect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
 
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
@@ -91,10 +101,10 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
 
     const congestionMapPerTimestamp = useMemo(() => {
         const result = {
-            worst: [] as Array<MetricPoint>,
-            utilization: [] as Array<MetricPoint>,
-            demand: [] as Array<MetricPoint>,
-            mcast: [] as Array<MetricPoint>,
+            worst: [] as MetricPoint[],
+            utilization: [] as MetricPoint[],
+            demand: [] as MetricPoint[],
+            mcast: [] as MetricPoint[],
         };
         const color = (v: number) => calculateLinkCongestionColor(v, 0, altCongestionColors);
 
@@ -278,7 +288,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                                         />{' '}
                                         Max Demand:{' '}
                                         {congestionMapPerTimestamp.worst[hoveredIndex].value > -1
-                                            ? `${congestionMapPerTimestamp.worst[hoveredIndex].value.toFixed(3)} %`
+                                            ? `${formatPercentage(congestionMapPerTimestamp.worst[hoveredIndex].value, 3)}`
                                             : 'N/A'}
                                     </div>
                                     <div>
@@ -289,7 +299,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                                                     congestionMapPerTimestamp.utilization[hoveredIndex].color,
                                             }}
                                         />
-                                        {` Avg Utilization: ${congestionMapPerTimestamp.utilization[hoveredIndex].value.toFixed(3)} %`}
+                                        {` Avg Utilization: ${formatPercentage(congestionMapPerTimestamp.utilization[hoveredIndex].value, 3)}`}
                                     </div>
                                     <div>
                                         <span
@@ -298,7 +308,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                                                 backgroundColor: congestionMapPerTimestamp.demand[hoveredIndex].color,
                                             }}
                                         />
-                                        {` Avg Demand: ${congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(3)} %`}
+                                        {` Avg Demand: ${formatPercentage(congestionMapPerTimestamp.demand[hoveredIndex].value, 3)}`}
                                     </div>
 
                                     <div>
@@ -310,7 +320,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                                         />
                                         {` Multicast Utilization:`}{' '}
                                         {congestionMapPerTimestamp.mcast[hoveredIndex].value !== undefined
-                                            ? `${congestionMapPerTimestamp.mcast[hoveredIndex].value.toFixed(3)} %`
+                                            ? `${formatPercentage(congestionMapPerTimestamp.mcast[hoveredIndex].value, 3)}`
                                             : 'N/A'}
                                     </div>
                                 </>
