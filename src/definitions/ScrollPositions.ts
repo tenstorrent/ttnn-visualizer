@@ -20,7 +20,3 @@ export enum ScrollLocations {
 export interface ScrollPosition {
     [key: string]: VirtualListState;
 }
-
-// TODO: This is not quite the right place for this but we need to examine this file anyway after looking at tracking scroll positions
-// Add tolerance for Chrome's sub-pixel rendering issues
-export const SCROLL_TOLERANCE_PX = 1;

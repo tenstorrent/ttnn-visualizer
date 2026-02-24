@@ -61,7 +61,6 @@ const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
-// TODO: Check if we still need this formatting step because we're using typed data
 export const formatCell = (
     row: TypedPerfTableRow,
     column: TableColumn,

@@ -265,7 +265,7 @@ const OperationList = () => {
     }, [updateListState, filteredOperationsList]);
 
     return (
-        // TODO: Turn this into a generation ListView component used by OperationList and TensorList
+        // TODO: Turn this into a generic ListView component used by OperationList and TensorList
         <fieldset className='list-wrap operations-list-component'>
             <legend>Operations</legend>
 

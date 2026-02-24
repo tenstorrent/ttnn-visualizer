@@ -309,7 +309,6 @@ const getCellContent = (key: ColumnKeys, rowIndex: number, rows: SummaryTableBuf
     const textValue = getCellText(buffer, key);
 
     // TODO: Format address but also allow easy filtering
-
     if (key === 'size') {
         return formatMemorySize(buffer.size, 2);
     }

@@ -105,7 +105,7 @@ function BufferSummary() {
                     title='L1'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
-                        // TODO: excessive prop passing
+                        // Excessive prop passing - https://github.com/tenstorrent/ttnn-visualizer/issues/1266
                         // eslint-disable-next-line no-nested-ternary
                         buffersByOperation && operationsList && tensorListByOperation ? (
                             <BufferSummaryTab
@@ -137,7 +137,7 @@ function BufferSummary() {
                     title='DRAM'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
-                        // TODO: excessive prop passing
+                        // Excessive prop passing - https://github.com/tenstorrent/ttnn-visualizer/issues/1266
                         // eslint-disable-next-line no-nested-ternary
                         buffersByOperation && operationsList && tensorListByOperation ? (
                             <BufferSummaryTab
