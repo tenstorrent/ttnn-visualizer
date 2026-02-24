@@ -354,7 +354,7 @@ const OperationList = () => {
                                     : IconNames.SORT_NUMERICAL_DESC
                             }
                             variant={isSortingModeActive(shouldSortDuration) ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Sort tensors by Duration'
+                            aria-label='Sort by Duration'
                         />
                     </Tooltip>
 
