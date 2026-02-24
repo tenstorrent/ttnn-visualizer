@@ -439,7 +439,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             subLabel='Stacked data grouping'
                             className='form-group'
                         >
-                            <ButtonGroup className='toggle-group'>
+                            <ButtonGroup className='select-group'>
                                 <Select<StackedGroupBy>
                                     activeItem={stackedGroupBy}
                                     items={STACKED_GROUP_BY}
