@@ -61,6 +61,7 @@ const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
+// https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
     row: TypedPerfTableRow,
     column: TableColumn,

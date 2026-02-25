@@ -30,7 +30,6 @@ const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
-// TODO: Multi device support
 const MEMORY_SIZE = DRAM_MEMORY_SIZE;
 
 const CHART_DATA: Partial<PlotData>[][] = [
