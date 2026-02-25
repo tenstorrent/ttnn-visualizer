@@ -189,6 +189,31 @@ const TensorList = () => {
         );
     }, [filteredTensorsList, shouldCollapseAll, setShouldCollapseAll]);
 
+    const sortBySizeControl = useMemo(() => {
+        let label = 'Clear Size sorting';
+
+        if (shouldSortBySize === SortingOptions.OFF) {
+            label = 'Sort by Size (ascending)';
+        }
+
+        if (shouldSortBySize === SortingOptions.ASCENDING) {
+            label = 'Sort by Size (descending)';
+        }
+
+        const icon =
+            shouldSortBySize === SortingOptions.ASCENDING || shouldSortBySize === SortingOptions.OFF
+                ? IconNames.SORT_NUMERICAL
+                : IconNames.SORT_NUMERICAL_DESC;
+
+        return { label, icon };
+    }, [shouldSortBySize]);
+
+    const shouldCollapseAllLabel = shouldCollapseAll ? 'Collapse all' : 'Expand all';
+    const scrollToTopLabel = 'Scroll to top';
+    const scrollToBottomLabel = 'Scroll to bottom';
+    const showLateDeallocatedTensorsLabel = 'Show late deallocated tensors';
+    const showHighConsumerTensorsLabel = 'Show high consumer tensors';
+
     // Keep stored refs updated
     useEffect(() => {
         scrollOffsetRef.current = virtualizer.scrollOffset;
@@ -263,7 +288,7 @@ const TensorList = () => {
 
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
-                        content='Show high consumer tensors'
+                        content={showHighConsumerTensorsLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -272,7 +297,7 @@ const TensorList = () => {
                             disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
                             intent={HIGH_CONSUMER_INTENT}
                             variant={showHighConsumerTensors ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Show high consumer tensors'
+                            aria-label={showHighConsumerTensorsLabel}
                         >
                             {
                                 filteredTensorsList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)
@@ -282,7 +307,7 @@ const TensorList = () => {
                     </Tooltip>
 
                     <Tooltip
-                        content='Show late deallocated tensors'
+                        content={showLateDeallocatedTensorsLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -291,32 +316,25 @@ const TensorList = () => {
                             intent={Intent.WARNING}
                             disabled={nonDeallocatedTensorList.size === 0}
                             variant={showLateDeallocatedTensors ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Show late deallocated tensors'
+                            aria-label={showLateDeallocatedTensorsLabel}
                         >
                             {filteredTensorsList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
                         </Button>
                     </Tooltip>
 
                     <Tooltip
-                        content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                        content={shouldCollapseAllLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleExpandAllToggle()}
                             endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
-                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                            aria-label={shouldCollapseAllLabel}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content={
-                            // eslint-disable-next-line no-nested-ternary
-                            shouldSortBySize === SortingOptions.OFF
-                                ? 'Sort by Size (ascending)'
-                                : shouldSortBySize === SortingOptions.ASCENDING
-                                  ? 'Sort by Size (descending)'
-                                  : 'Clear Size sorting'
-                        }
+                        content={sortBySizeControl.label}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -333,19 +351,15 @@ const TensorList = () => {
                                     return SortingOptions.DESCENDING;
                                 })
                             }
-                            icon={
-                                shouldSortBySize === SortingOptions.ASCENDING || shouldSortBySize === SortingOptions.OFF
-                                    ? IconNames.SORT_NUMERICAL
-                                    : IconNames.SORT_NUMERICAL_DESC
-                            }
+                            icon={sortBySizeControl.icon}
                             active={shouldSortBySize !== SortingOptions.OFF}
                             variant={shouldSortBySize !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Sort tensors by size'
+                            aria-label={sortBySizeControl.label}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content='Scroll to top'
+                        content={scrollToTopLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -353,12 +367,12 @@ const TensorList = () => {
                                 virtualizer.scrollToIndex(0);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
-                            aria-label='Scroll to top'
+                            aria-label={scrollToTopLabel}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content='Scroll to bottom'
+                        content={scrollToBottomLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -366,7 +380,7 @@ const TensorList = () => {
                                 virtualizer.scrollToIndex(numberOfTensors - 1);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                            aria-label='Scroll to bottom'
+                            aria-label={scrollToBottomLabel}
                         />
                     </Tooltip>
                 </ButtonGroup>

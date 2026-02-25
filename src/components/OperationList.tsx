@@ -227,6 +227,46 @@ const OperationList = () => {
         scrollToIndex(numberOfOperations);
     };
 
+    const sortByIdControl = useMemo(() => {
+        let label = 'Clear ID sorting';
+
+        if (shouldSortByID === SortingOptions.OFF) {
+            label = 'Sort by ID (ascending)';
+        }
+        if (shouldSortByID === SortingOptions.ASCENDING) {
+            label = 'Sort by ID (descending)';
+        }
+
+        const icon =
+            shouldSortByID === SortingOptions.ASCENDING || shouldSortByID === SortingOptions.OFF
+                ? IconNames.SORT_ALPHABETICAL
+                : IconNames.SORT_ALPHABETICAL_DESC;
+
+        return { icon, label };
+    }, [shouldSortByID]);
+
+    const sortByDurationControl = useMemo(() => {
+        let label = 'Clear Duration sorting';
+
+        if (shouldSortDuration === SortingOptions.OFF) {
+            label = 'Sort by Duration (ascending)';
+        }
+        if (shouldSortDuration === SortingOptions.ASCENDING) {
+            label = 'Sort by Duration (descending)';
+        }
+
+        const icon =
+            shouldSortDuration === SortingOptions.ASCENDING || shouldSortDuration === SortingOptions.OFF
+                ? IconNames.SORT_NUMERICAL
+                : IconNames.SORT_NUMERICAL_DESC;
+
+        return { icon, label };
+    }, [shouldSortDuration]);
+
+    const shouldCollapseAllLabel = shouldCollapseAll ? 'Collapse all' : 'Expand all';
+    const scrollToTopLabel = 'Scroll to top';
+    const scrollToBottomLabel = 'Scroll to bottom';
+
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
 
@@ -301,82 +341,59 @@ const OperationList = () => {
 
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
-                        content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                        content={shouldCollapseAllLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleExpandAllToggle()}
                             endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
-                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                            aria-label={shouldCollapseAllLabel}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content={
-                            // eslint-disable-next-line no-nested-ternary
-                            shouldSortByID === SortingOptions.OFF
-                                ? 'Sort by ID (ascending)'
-                                : shouldSortByID === SortingOptions.ASCENDING
-                                  ? 'Sort by ID (descending)'
-                                  : 'Clear ID sorting'
-                        }
+                        content={sortByIdControl.label}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleSortByID()}
-                            icon={
-                                shouldSortByID === SortingOptions.ASCENDING || shouldSortByID === SortingOptions.OFF
-                                    ? IconNames.SORT_ALPHABETICAL
-                                    : IconNames.SORT_ALPHABETICAL_DESC
-                            }
+                            icon={sortByIdControl.icon}
                             variant={isSortingModeActive(shouldSortByID) ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Sort by ID'
+                            aria-label={sortByIdControl.label}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content={
-                            // eslint-disable-next-line no-nested-ternary
-                            shouldSortDuration === SortingOptions.OFF
-                                ? 'Sort by Duration (ascending)'
-                                : shouldSortDuration === SortingOptions.ASCENDING
-                                  ? 'Sort by Duration (descending)'
-                                  : 'Clear Duration sorting'
-                        }
+                        content={sortByDurationControl.label}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleSortByDuration()}
-                            icon={
-                                shouldSortDuration === SortingOptions.ASCENDING ||
-                                shouldSortDuration === SortingOptions.OFF
-                                    ? IconNames.SORT_NUMERICAL
-                                    : IconNames.SORT_NUMERICAL_DESC
-                            }
+                            icon={sortByDurationControl.icon}
                             variant={isSortingModeActive(shouldSortDuration) ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Sort by Duration'
+                            aria-label={sortByDurationControl.label}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content='Scroll to top'
+                        content={scrollToTopLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={scrollToTop}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
-                            aria-label='Scroll to top'
+                            aria-label={scrollToTopLabel}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content='Scroll to bottom'
+                        content={scrollToBottomLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={scrollToEnd}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                            aria-label='Scroll to bottom'
+                            aria-label={scrollToBottomLabel}
                         />
                     </Tooltip>
                 </ButtonGroup>
