@@ -51,7 +51,10 @@ def with_instance(func):
             session["instances"] = []
 
         if instance.instance_id not in session["instances"]:
-            session["instances"] = session.get("instances", []) + [instance.instance_id]
+            max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+            session["instances"] = (
+                session.get("instances", []) + [instance.instance_id]
+            )[-max_reports:]
 
         return func(*args, **kwargs)
 
