@@ -9,17 +9,31 @@ import {
     scrollPositionsAtom,
     selectedDeviceOperationsAtom,
     shouldSortByIDAtom,
+    shouldSortBySizeAtom,
     shouldSortDurationAtom,
+    showHighConsumerTensorsAtom,
+    showLateDeallocatedTensorsAtom,
+    tensorBufferTypeFiltersAtom,
+    tensorListFilterAtom,
 } from '../store/app';
 import { ScrollLocations, ScrollPosition, VirtualListState } from '../definitions/ScrollPositions';
 import { SortingOptions } from '../definitions/SortingOptions';
 
 const useRestoreScrollPosition = (key?: ScrollLocations) => {
     const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsAtom);
+
+    // Operation List
     const setOperationListFilter = useSetAtom(operationListFilterAtom);
     const setSelectedDeviceOperations = useSetAtom(selectedDeviceOperationsAtom);
     const setShouldSortByID = useSetAtom(shouldSortByIDAtom);
     const setShouldSortDuration = useSetAtom(shouldSortDurationAtom);
+
+    // Tensor List
+    const setTensorBufferTypeFilters = useSetAtom(tensorBufferTypeFiltersAtom);
+    const setTensorListFilter = useSetAtom(tensorListFilterAtom);
+    const setShowHighConsumerTensors = useSetAtom(showHighConsumerTensorsAtom);
+    const setShowLateDeallocatedTensors = useSetAtom(showLateDeallocatedTensorsAtom);
+    const setShouldSortBySize = useSetAtom(shouldSortBySizeAtom);
 
     const updateListState = useCallback(
         (state: Partial<VirtualListState>) => {
@@ -62,8 +76,18 @@ const useRestoreScrollPosition = (key?: ScrollLocations) => {
     }, [setOperationListFilter, setSelectedDeviceOperations, setShouldSortByID, setShouldSortDuration]);
 
     const resetTensorList = useCallback(() => {
-        // Reset tensor list specific states here when implemented
-    }, []);
+        setTensorListFilter('');
+        setTensorBufferTypeFilters([]);
+        setShowHighConsumerTensors(false);
+        setShowLateDeallocatedTensors(false);
+        setShouldSortBySize(SortingOptions.OFF);
+    }, [
+        setTensorListFilter,
+        setTensorBufferTypeFilters,
+        setShowHighConsumerTensors,
+        setShowLateDeallocatedTensors,
+        setShouldSortBySize,
+    ]);
 
     const resetListStates = useCallback(() => {
         setScrollPositions(null);
