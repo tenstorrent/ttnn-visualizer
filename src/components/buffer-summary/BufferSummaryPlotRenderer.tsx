@@ -107,7 +107,6 @@ function BufferSummaryPlotRenderer({
     const { lateDeallocationsByOperation: nondeallocatedTensorsByOperationId } =
         useGetTensorDeallocationReportByOperation();
 
-    // TODO: Multi device support
     const memorySize = useMemo(getMemorySize, [devices, isLoadingDevices]);
 
     const zoomedMemorySize = useMemo(() => {

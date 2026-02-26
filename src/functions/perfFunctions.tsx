@@ -61,7 +61,7 @@ const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
-// TODO: Check if we still need this formatting step because we're using typed data
+// https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
     row: TypedPerfTableRow,
     column: TableColumn,

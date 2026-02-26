@@ -308,8 +308,7 @@ const getCellContent = (key: ColumnKeys, rowIndex: number, rows: SummaryTableBuf
     const buffer = rows[rowIndex] as SummaryTableBuffer;
     const textValue = getCellText(buffer, key);
 
-    // TODO: Format address but also allow easy filtering
-
+    // Redo columns - https://github.com/tenstorrent/ttnn-visualizer/issues/1270
     if (key === 'size') {
         return formatMemorySize(buffer.size, 2);
     }

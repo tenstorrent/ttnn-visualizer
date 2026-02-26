@@ -266,7 +266,7 @@ const TensorList = () => {
     }, [virtualHeight, updateScrollShade, resetScrollShade]);
 
     return (
-        // TODO: Turn this into a generation ListView component used by OperationList and TensorList
+        // TODO: Turn this into a generic ListView component used by OperationList and TensorList
         <fieldset className='list-wrap'>
             <legend>Tensors</legend>
 

@@ -48,7 +48,7 @@ function StackTrace({
     className,
     intent = Intent.NONE,
 }: StackTraceProps) {
-    // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
+    // See if you can read the remote file and use setCanReadRemoteFile appropriately - https://github.com/tenstorrent/ttnn-visualizer/issues/1271
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
 
