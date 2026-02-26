@@ -21,58 +21,75 @@ export interface ColumnDefinition {
 }
 
 export enum ColumnHeaders {
-    operation_id = 'Operation',
-    tensor_id = 'Tensor',
     address = 'Address',
-    hexAddress = 'Address (hex)',
-    size = 'Size',
+    buffer_layout = 'Buffer Layout',
     buffer_type = 'Buffer Type',
     device_id = 'Device Id',
+    dtype = 'Data Type',
+    operation_id = 'Operation',
+    shape = 'Shape',
+    size = 'Size',
+    tensor_id = 'Tensor',
 }
 
 export type ColumnKeys = keyof typeof ColumnHeaders;
 
-const DEFAULT_COLUMN_WIDTH = 120;
+const DEFAULT_COLUMN_WIDTH = 140;
 
 export const Columns: ColumnDefinition[] = [
     {
         name: ColumnHeaders.operation_id,
         key: 'operation_id',
-        sortable: true,
         filterable: true,
+        sortable: true,
         width: 200,
     },
     {
         name: ColumnHeaders.tensor_id,
         key: 'tensor_id',
-        sortable: true,
         filterable: true,
+        sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
         name: ColumnHeaders.address,
         key: 'address',
-        sortable: true,
         filterable: true,
-        width: DEFAULT_COLUMN_WIDTH,
-    },
-    {
-        name: ColumnHeaders.hexAddress,
-        key: 'hexAddress',
         sortable: true,
-        filterable: true,
-        width: 140,
+        width: 100,
     },
     {
         name: ColumnHeaders.size,
         key: 'size',
+        filterable: true,
+        sortable: true,
+        width: 100,
+    },
+    {
+        name: ColumnHeaders.shape,
+        key: 'shape',
+        filterable: true,
+        sortable: true,
+        width: DEFAULT_COLUMN_WIDTH,
+    },
+    {
+        name: ColumnHeaders.dtype,
+        key: 'dtype',
+        filterable: true,
+        sortable: true,
+        width: 150,
+    },
+    {
+        name: ColumnHeaders.buffer_layout,
+        key: 'buffer_layout',
+        filterable: true,
         sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
         name: ColumnHeaders.buffer_type,
         key: 'buffer_type',
-        width: DEFAULT_COLUMN_WIDTH,
+        width: 105,
     },
     {
         name: ColumnHeaders.device_id,
