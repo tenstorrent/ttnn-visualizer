@@ -108,7 +108,6 @@ function BufferSummary() {
                                 plotRef={plotRef}
                                 tableRef={tableRef}
                                 buffersByOperation={buffersByOperation}
-                                bufferType={BufferType.L1}
                             />
                         ) : buffersError ? (
                             <Callout
@@ -140,7 +139,6 @@ function BufferSummary() {
                                 plotRef={plotRef}
                                 tableRef={tableRef}
                                 buffersByOperation={buffersByOperation}
-                                bufferType={BufferType.DRAM}
                             />
                         ) : buffersError ? (
                             <Callout

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
 import { Checkbox, HotkeysProvider, Icon, InputGroup, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtomValue } from 'jotai';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
@@ -16,13 +17,13 @@ import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { formatMemorySize, toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
-import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
+import { BufferTableFilters, ColumnKeys, Columns, TAB_IDS } from '../../definitions/BufferSummary';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { useCreateTensorsByOperationByIdList } from '../../hooks/useAPI';
+import { selectedBufferSummaryTabAtom } from '../../store/app';
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperation[];
-    bufferType: BufferType;
 }
 
 interface SummaryTableBuffer extends BufferData {
@@ -32,15 +33,18 @@ interface SummaryTableBuffer extends BufferData {
     hexAddress: string;
 }
 
-function BufferSummaryTable({ buffersByOperation, bufferType }: BufferSummaryTableProps) {
-    const { selectedTensorId } = useBufferFocus();
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
-    const tableRef = useRef<Table2 | null>(null);
-    const tensorListByOperation = useCreateTensorsByOperationByIdList(bufferType);
-
+function BufferSummaryTable({ buffersByOperation }: BufferSummaryTableProps) {
+    const selectedTabId = useAtomValue(selectedBufferSummaryTabAtom);
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
     const [mergedByDevice, setMergedByDevice] = useState(true);
+
+    const { selectedTensorId } = useBufferFocus();
+    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
+    const tableRef = useRef<Table2 | null>(null);
+    const tensorListByOperation = useCreateTensorsByOperationByIdList(
+        selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM,
+    );
 
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),

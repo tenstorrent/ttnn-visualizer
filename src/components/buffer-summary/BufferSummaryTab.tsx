@@ -3,21 +3,23 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { RefObject, useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import BufferSummaryPlotRenderer from './BufferSummaryPlotRenderer';
 import BufferSummaryTable from './BufferSummaryTable';
-import { SECTION_IDS } from '../../definitions/BufferSummary';
+import { SECTION_IDS, TAB_IDS } from '../../definitions/BufferSummary';
 import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
 import { Buffer, BuffersByOperation } from '../../model/APIData';
-import { BufferType } from '../../model/BufferType';
+import { selectedBufferSummaryTabAtom } from '../../store/app';
 
 interface BufferSummaryTabProps {
     plotRef: RefObject<HTMLHeadingElement>;
     tableRef: RefObject<HTMLHeadingElement>;
     buffersByOperation: BuffersByOperation[];
-    bufferType: BufferType;
 }
 
-function BufferSummaryTab({ plotRef, tableRef, buffersByOperation, bufferType }: BufferSummaryTabProps) {
+function BufferSummaryTab({ plotRef, tableRef, buffersByOperation }: BufferSummaryTabProps) {
+    const selectedTabId = useAtomValue(selectedBufferSummaryTabAtom);
+
     const uniqueBuffersByOperationList = useMemo(
         () =>
             buffersByOperation.map((operation) => {
@@ -47,7 +49,7 @@ function BufferSummaryTab({ plotRef, tableRef, buffersByOperation, bufferType }:
                 ref={plotRef}
                 id={SECTION_IDS.PLOT}
             >
-                {bufferType === BufferType.DRAM ? (
+                {selectedTabId === TAB_IDS.DRAM ? (
                     <BufferSummaryPlotRendererDRAM uniqueBuffersByOperationList={uniqueBuffersByOperationList} />
                 ) : (
                     <BufferSummaryPlotRenderer uniqueBuffersByOperationList={uniqueBuffersByOperationList} />
@@ -59,10 +61,7 @@ function BufferSummaryTab({ plotRef, tableRef, buffersByOperation, bufferType }:
                 ref={tableRef}
                 id={SECTION_IDS.TABLE}
             >
-                <BufferSummaryTable
-                    buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)}
-                    bufferType={bufferType}
-                />
+                <BufferSummaryTable buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)} />
             </div>
         </>
     );
