@@ -22,8 +22,8 @@ import {
     OperationDetailsData,
     ReportMetaData,
     Tensor,
-    blankOperation,
     defaultBuffer,
+    defaultOperation,
     defaultTensorData,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
@@ -104,7 +104,7 @@ export const fetchBufferPages = async (
 
 const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
     if (id === null) {
-        return blankOperation;
+        return defaultOperation;
     }
 
     try {
@@ -131,7 +131,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         }
     }
 
-    return blankOperation;
+    return defaultOperation;
 };
 
 const fetchOperations = async (): Promise<OperationDescription[]> => {
