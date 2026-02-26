@@ -126,7 +126,7 @@ export interface FileProgress {
     timestamp?: string; // Optional, with default handled elsewhere if necessary
 }
 
-export const blankOperation: OperationDetailsData = {
+export const defaultOperation: OperationDetailsData = {
     id: 0,
     name: '',
     inputs: [],
