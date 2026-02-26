@@ -1060,6 +1060,7 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
     const uniqueBuffersByOperationList = useMemo(() => {
         return buffersByOperation?.map((operation) => {
             const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+
             operation.buffers.forEach((buffer) => {
                 const { address, size } = buffer;
                 if (address) {
@@ -1069,6 +1070,7 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
                     }
                 }
             });
+
             return {
                 ...operation,
                 buffers: Array.from(uniqueBuffers.values()),

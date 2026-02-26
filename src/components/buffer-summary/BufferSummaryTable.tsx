@@ -7,22 +7,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
 import { Checkbox, HotkeysProvider, Icon, InputGroup, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { BufferTypeLabel } from '../../model/BufferType';
+import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
 import HighlightedText from '../HighlightedText';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { formatMemorySize, toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
 import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import { useCreateTensorsByOperationByIdList } from '../../hooks/useAPI';
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperation[];
-    tensorListByOperation: TensorsByOperationByAddress;
+    bufferType: BufferType;
 }
 
 interface SummaryTableBuffer extends BufferData {
@@ -32,14 +32,15 @@ interface SummaryTableBuffer extends BufferData {
     hexAddress: string;
 }
 
-function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
-    const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
-    const [showOnlySelected, setShowOnlySelected] = useState(false);
-    const [mergedByDevice, setMergedByDevice] = useState(true);
-
+function BufferSummaryTable({ buffersByOperation, bufferType }: BufferSummaryTableProps) {
     const { selectedTensorId } = useBufferFocus();
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
     const tableRef = useRef<Table2 | null>(null);
+    const tensorListByOperation = useCreateTensorsByOperationByIdList(bufferType);
+
+    const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
+    const [showOnlySelected, setShowOnlySelected] = useState(false);
+    const [mergedByDevice, setMergedByDevice] = useState(true);
 
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
@@ -67,7 +68,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     const existingBuffer = uniqueBuffers.get(address);
                     if (!existingBuffer || size > existingBuffer.size) {
                         uniqueBuffers.set(address, buffer);
-                        // TODO: add device list to buffer fro rendering maybe
+                        // TODO: add device list to buffer for rendering maybe
                     }
                 }
             });

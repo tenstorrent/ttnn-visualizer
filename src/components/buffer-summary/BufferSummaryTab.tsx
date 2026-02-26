@@ -5,44 +5,40 @@
 import { RefObject, useMemo } from 'react';
 import BufferSummaryPlotRenderer from './BufferSummaryPlotRenderer';
 import BufferSummaryTable from './BufferSummaryTable';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { SECTION_IDS } from '../../definitions/BufferSummary';
 import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
 import { Buffer, BuffersByOperation } from '../../model/APIData';
+import { BufferType } from '../../model/BufferType';
 
 interface BufferSummaryTabProps {
     plotRef: RefObject<HTMLHeadingElement>;
     tableRef: RefObject<HTMLHeadingElement>;
     buffersByOperation: BuffersByOperation[];
-    tensorListByOperation: TensorsByOperationByAddress;
-    isDram?: boolean;
+    bufferType: BufferType;
 }
 
-function BufferSummaryTab({
-    plotRef,
-    tableRef,
-    buffersByOperation,
-    tensorListByOperation,
-    isDram = false,
-}: BufferSummaryTabProps) {
-    const uniqueBuffersByOperationList = useMemo(() => {
-        return buffersByOperation.map((operation) => {
-            const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
-            operation.buffers.forEach((buffer) => {
-                const { address, size } = buffer;
-                if (address) {
-                    const existingBuffer = uniqueBuffers.get(address);
-                    if (!existingBuffer || size > existingBuffer.size) {
-                        uniqueBuffers.set(address, buffer);
+function BufferSummaryTab({ plotRef, tableRef, buffersByOperation, bufferType }: BufferSummaryTabProps) {
+    const uniqueBuffersByOperationList = useMemo(
+        () =>
+            buffersByOperation.map((operation) => {
+                const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+                operation.buffers.forEach((buffer) => {
+                    const { address, size } = buffer;
+                    if (address) {
+                        const existingBuffer = uniqueBuffers.get(address);
+                        if (!existingBuffer || size > existingBuffer.size) {
+                            uniqueBuffers.set(address, buffer);
+                        }
                     }
-                }
-            });
-            return {
-                ...operation,
-                buffers: Array.from(uniqueBuffers.values()),
-            };
-        });
-    }, [buffersByOperation]);
+                });
+
+                return {
+                    ...operation,
+                    buffers: Array.from(uniqueBuffers.values()),
+                };
+            }),
+        [buffersByOperation],
+    );
 
     return (
         <>
@@ -51,16 +47,10 @@ function BufferSummaryTab({
                 ref={plotRef}
                 id={SECTION_IDS.PLOT}
             >
-                {isDram ? (
-                    <BufferSummaryPlotRendererDRAM
-                        uniqueBuffersByOperationList={uniqueBuffersByOperationList}
-                        tensorListByOperation={tensorListByOperation}
-                    />
+                {bufferType === BufferType.DRAM ? (
+                    <BufferSummaryPlotRendererDRAM uniqueBuffersByOperationList={uniqueBuffersByOperationList} />
                 ) : (
-                    <BufferSummaryPlotRenderer
-                        uniqueBuffersByOperationList={uniqueBuffersByOperationList}
-                        tensorListByOperation={tensorListByOperation}
-                    />
+                    <BufferSummaryPlotRenderer uniqueBuffersByOperationList={uniqueBuffersByOperationList} />
                 )}
             </div>
 
@@ -71,7 +61,7 @@ function BufferSummaryTab({
             >
                 <BufferSummaryTable
                     buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)}
-                    tensorListByOperation={tensorListByOperation}
+                    bufferType={bufferType}
                 />
             </div>
         </>

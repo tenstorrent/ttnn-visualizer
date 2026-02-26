@@ -15,7 +15,6 @@ import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
@@ -25,6 +24,8 @@ import useScrollShade from '../../hooks/useScrollShade';
 
 import { BuffersByOperation } from '../../model/APIData';
 import useBufferNavigation from '../../hooks/useBufferNavigation';
+import { useCreateTensorsByOperationByIdList } from '../../hooks/useAPI';
+import { BufferType } from '../../model/BufferType';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -48,21 +49,18 @@ const CHART_DATA: Partial<PlotData>[][] = [
 
 interface BufferSummaryPlotRendererDRAMProps {
     uniqueBuffersByOperationList: BuffersByOperation[];
-    tensorListByOperation: TensorsByOperationByAddress;
 }
 
-function BufferSummaryPlotRendererDRAM({
-    uniqueBuffersByOperationList,
-    tensorListByOperation,
-}: BufferSummaryPlotRendererDRAMProps) {
+function BufferSummaryPlotRendererDRAM({ uniqueBuffersByOperationList }: BufferSummaryPlotRendererDRAMProps) {
+    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
+    const tensorListByOperation = useCreateTensorsByOperationByIdList(BufferType.DRAM);
+
     const [activeRow, setActiveRow] = useState<number | null>(null);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
     const scrollElementRef = useRef(null);
-
-    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
-    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
 
     const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
         if (isZoomedIn) {

@@ -14,6 +14,7 @@ import {
     L1_START_MARKER_COLOR,
 } from '../../definitions/PlotConfigurations';
 import {
+    useCreateTensorsByOperationByIdList,
     useDevices,
     useGetL1SmallMarker,
     useGetL1StartMarker,
@@ -26,7 +27,6 @@ import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import {
     renderMemoryLayoutAtom,
     showBufferSummaryZoomedAtom,
@@ -43,6 +43,7 @@ import useScrollShade from '../../hooks/useScrollShade';
 import { BuffersByOperation } from '../../model/APIData';
 import useBufferNavigation from '../../hooks/useBufferNavigation';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
+import { BufferType } from '../../model/BufferType';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -51,20 +52,9 @@ const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {
     uniqueBuffersByOperationList: BuffersByOperation[];
-    tensorListByOperation: TensorsByOperationByAddress;
 }
 
-function BufferSummaryPlotRenderer({
-    uniqueBuffersByOperationList,
-    tensorListByOperation,
-}: BufferSummaryPlotRendererProps) {
-    const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
-    const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
-    const [showHex, setShowHex] = useAtom(showHexAtom);
-    const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
-    const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
-    const [activeRow, setActiveRow] = useState<number | null>(null);
-
+function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSummaryPlotRendererProps) {
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const { data: operations } = useOperationsList();
     const navigate = useNavigate();
@@ -73,6 +63,14 @@ function BufferSummaryPlotRenderer({
     const l1SmallMarker = useGetL1SmallMarker();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY);
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
+    const tensorListByOperation = useCreateTensorsByOperationByIdList(BufferType.L1);
+
+    const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
+    const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
+    const [showHex, setShowHex] = useAtom(showHexAtom);
+    const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
+    const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+    const [activeRow, setActiveRow] = useState<number | null>(null);
 
     const { scrollOffset: restoredOffset, measurementsCache: restoredMeasurementsCache } =
         useMemo(() => getListState(), [getListState]) ?? {};
@@ -265,7 +263,7 @@ function BufferSummaryPlotRenderer({
                         {virtualItems.map((virtualRow) => {
                             const operation = uniqueBuffersByOperationList[virtualRow.index];
 
-                            return (
+                            return operation ? (
                                 <div
                                     className='buffer-summary-plot-container'
                                     key={virtualRow.key}
@@ -303,7 +301,7 @@ function BufferSummaryPlotRenderer({
                                         </a>
                                     </Tooltip>
                                 </div>
-                            );
+                            ) : null;
                         })}
                     </div>
                 </div>
