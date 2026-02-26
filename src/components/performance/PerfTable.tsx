@@ -319,7 +319,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
 const getTotalsForFooter = (column: TableColumn, data: TypedPerfTableRow[], hideHostOps: boolean): string => {
     if (column.key === ColumnHeaders.total_percent) {
-        return `100 %`;
+        return `100%`;
     }
 
     if (column.key === ColumnHeaders.device_time) {

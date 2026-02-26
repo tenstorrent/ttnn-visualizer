@@ -209,7 +209,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
 const getTotalsForFooter = (column: StackedTableColumn, data: TypedStackedPerfRow[]): string => {
     if (column.key === StackedColumnHeaders.Percent) {
-        return `100 %`;
+        return `100%`;
     }
 
     if (column.key === StackedColumnHeaders.DeviceTimeSumUs) {

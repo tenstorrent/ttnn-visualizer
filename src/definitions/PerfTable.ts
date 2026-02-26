@@ -177,8 +177,8 @@ export const tableColumns: TableColumn[] = [
     { label: 'Cores', key: ColumnHeaders.cores, colour: 'green', sortable: true },
     { label: 'DRAM', key: ColumnHeaders.dram, colour: 'yellow', unit: 'GB/s', decimals: 1, sortable: true },
     { label: 'DRAM %', key: ColumnHeaders.dram_percent, colour: 'yellow', unit: '%', decimals: 1, sortable: true },
-    { label: 'FLOPs', key: ColumnHeaders.flops, unit: 'TFLOPs', decimals: 1, sortable: true },
-    { label: 'FLOPs %', key: ColumnHeaders.flops_percent, unit: '%', decimals: 1, sortable: true },
+    { label: 'FLOPS', key: ColumnHeaders.flops, unit: 'TFLOPS', decimals: 1, sortable: true },
+    { label: 'FLOPS %', key: ColumnHeaders.flops_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
 ];
 

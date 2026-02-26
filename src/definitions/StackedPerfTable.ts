@@ -86,7 +86,7 @@ export interface TypedStackedPerfRow
 }
 
 export const stackedTableColumns: StackedTableColumn[] = [
-    { label: 'Percent', key: StackedColumnHeaders.Percent, unit: '%', decimals: 2, sortable: true },
+    { label: 'Total %', key: StackedColumnHeaders.Percent, unit: '%', decimals: 2, sortable: true },
     { label: 'Op Code', key: StackedColumnHeaders.OpCode, sortable: true, filterable: true },
     { label: 'Device', key: StackedColumnHeaders.Device, decimals: 0, sortable: true },
     { label: 'Device Time', key: StackedColumnHeaders.DeviceTimeSumUs, unit: 'µs', decimals: 2, sortable: true },
