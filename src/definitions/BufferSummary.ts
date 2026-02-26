@@ -12,6 +12,18 @@ export enum TAB_IDS {
     DRAM = 'DRAM',
 }
 
+export enum ColumnKeys {
+    operation_id = 'operation_id',
+    tensor_id = 'tensor_id',
+    address = 'address',
+    size = 'size',
+    buffer_type = 'buffer_type',
+    buffer_layout = 'buffer_layout',
+    dtype = 'dtype',
+    shape = 'shape',
+    device_id = 'device_id',
+}
+
 export interface ColumnDefinition {
     name: string;
     key: ColumnKeys;
@@ -32,68 +44,66 @@ export enum ColumnHeaders {
     tensor_id = 'Tensor',
 }
 
-export type ColumnKeys = keyof typeof ColumnHeaders;
-
 const DEFAULT_COLUMN_WIDTH = 140;
 
 export const Columns: ColumnDefinition[] = [
     {
         name: ColumnHeaders.operation_id,
-        key: 'operation_id',
+        key: ColumnKeys.operation_id,
         filterable: true,
         sortable: true,
         width: 200,
     },
     {
         name: ColumnHeaders.tensor_id,
-        key: 'tensor_id',
+        key: ColumnKeys.tensor_id,
         filterable: true,
         sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
         name: ColumnHeaders.address,
-        key: 'address',
+        key: ColumnKeys.address,
         filterable: true,
         sortable: true,
         width: 100,
     },
     {
         name: ColumnHeaders.size,
-        key: 'size',
+        key: ColumnKeys.size,
         filterable: true,
         sortable: true,
         width: 100,
     },
     {
         name: ColumnHeaders.shape,
-        key: 'shape',
+        key: ColumnKeys.shape,
         filterable: true,
         sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
         name: ColumnHeaders.dtype,
-        key: 'dtype',
+        key: ColumnKeys.dtype,
         filterable: true,
         sortable: true,
         width: 150,
     },
     {
         name: ColumnHeaders.buffer_layout,
-        key: 'buffer_layout',
+        key: ColumnKeys.buffer_layout,
         filterable: true,
         sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
         name: ColumnHeaders.buffer_type,
-        key: 'buffer_type',
+        key: ColumnKeys.buffer_type,
         width: 105,
     },
     {
         name: ColumnHeaders.device_id,
-        key: 'device_id',
+        key: ColumnKeys.device_id,
         width: 100,
     },
 ];

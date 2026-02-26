@@ -34,7 +34,6 @@ interface SummaryTableBuffer extends BufferData {
     size: number;
     operation_name: string;
     tensor_id: number;
-    hexAddress: string;
     buffer_layout: number | null;
     dtype?: string;
     shape?: string;
@@ -296,20 +295,20 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 const getCellText = (buffer: SummaryTableBuffer, key: ColumnKeys) => {
     let textValue = buffer[key]?.toString() || '';
 
-    if (key === 'tensor_id') {
+    if (key === ColumnKeys.tensor_id) {
         // Using a space character to ensure the table cell height remains consistent
         textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '\u00A0';
     }
 
-    if (key === 'operation_id') {
+    if (key === ColumnKeys.operation_id) {
         textValue = `${buffer.operation_id} ${buffer.operation_name}`;
     }
 
-    if (key === 'buffer_type') {
+    if (key === ColumnKeys.buffer_type) {
         textValue = BufferTypeLabel[buffer.buffer_type];
     }
 
-    if (key === 'buffer_layout') {
+    if (key === ColumnKeys.buffer_layout) {
         textValue = isValidNumber(buffer.buffer_layout) ? BufferMemoryLayout[buffer.buffer_layout] : '';
     }
 
@@ -329,11 +328,11 @@ const getCellContent = (key: ColumnKeys, rowIndex: number, rows: SummaryTableBuf
     const textValue = getCellText(buffer, key);
 
     // Redo columns - https://github.com/tenstorrent/ttnn-visualizer/issues/1270
-    if (key === 'size') {
+    if (key === ColumnKeys.size) {
         return formatMemorySize(buffer.size, 2);
     }
 
-    if (key === 'tensor_id') {
+    if (key === ColumnKeys.tensor_id) {
         return (
             <div className='operation-cell'>
                 <div
