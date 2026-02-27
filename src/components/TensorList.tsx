@@ -449,7 +449,7 @@ const TensorList = () => {
                                                 >
                                                     {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
                                                         <Tooltip
-                                                            content={`Unusually high number of consumers - ${tensor.consumers.length}`}
+                                                            content={`Unusually high number of consumers (${tensor.consumers.length})`}
                                                             position={PopoverPosition.TOP}
                                                             className='high-number-consumers'
                                                         >
