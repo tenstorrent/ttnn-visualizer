@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
-import { prettyPrintAddress, toHex } from '../../functions/math';
+import { formatSize, toHex } from '../../functions/math';
 import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
@@ -25,7 +25,6 @@ import { showHexAtom } from '../../store/app';
 
 export interface TensorDetailsComponentProps {
     tensor: Tensor;
-    memorySize: number;
     onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
     zoomRange: [number, number];
@@ -33,7 +32,6 @@ export interface TensorDetailsComponentProps {
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     tensor,
-    memorySize,
     onTensorClick,
     operationId,
     zoomRange,
@@ -115,12 +113,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
             <div className='tensor-meta'>
                 <p>
-                    Address:{' '}
-                    <strong>
-                        {useHex && tensor.address !== null
-                            ? toHex(tensor.address)
-                            : prettyPrintAddress(tensor.address, memorySize)}
-                    </strong>
+                    Address: <strong>{getAddress(tensor.address, useHex)}</strong>
                 </p>
                 {tensor.buffer_type !== null && (
                     <p>
@@ -185,6 +178,14 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
             </div>
         </div>
     );
+};
+
+const getAddress = (address: number | null, useHex: boolean): string => {
+    if (address === null) {
+        return 'NULL';
+    }
+
+    return useHex ? toHex(address) : formatSize(address);
 };
 
 export default TensorDetailsComponent;

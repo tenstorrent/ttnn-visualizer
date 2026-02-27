@@ -9,6 +9,7 @@ import { useAtomValue } from 'jotai';
 import { PlotConfiguration, PlotMarker, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getDimmedColour, getLightlyDimmedColour } from '../../functions/colour';
+import { formatSize, toHex } from '../../functions/math';
 
 export interface MemoryPlotRendererProps {
     chartDataList: Partial<PlotData>[][];
@@ -35,7 +36,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     style,
     markers,
 }) => {
-    const showHex = useAtomValue(showHexAtom);
+    const useHex = useAtomValue(showHexAtom);
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
@@ -45,7 +46,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
 
     const range = isZoomedIn ? plotZoomRange : [0, memorySize];
     // If we need more flexibility on the tickformat front, we can expand this to accept a prop instead of defaulting to the below
-    const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: ',.0r' };
+    const tickFormat = useHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: ',.0r' };
 
     const markerLines: Partial<Shape>[] =
         markers?.map((marker: PlotMarker) => ({
@@ -142,8 +143,10 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 const dimmedColour = getDimmedColour(originalColour);
 
                 if (selectedAddress) {
+                    const formattedAddress = useHex ? toHex(selectedAddress) : formatSize(selectedAddress);
+
                     data.marker.color =
-                        hoveredPoint === data.x[0] || data.hovertemplate?.includes(selectedAddress.toString())
+                        hoveredPoint === data.x[0] || data.hovertemplate?.includes(formattedAddress)
                             ? originalColour
                             : dimmedColour;
 
@@ -162,7 +165,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 return data;
             }),
         );
-    }, [hoveredPoint, chartData, selectedAddress]);
+    }, [hoveredPoint, chartData, selectedAddress, useHex]);
 
     return (
         <div
