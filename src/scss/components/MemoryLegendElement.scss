@@ -29,12 +29,12 @@
 
 .legend-item {
     display: inline-grid;
-    grid-template-columns: 15px 0.2fr 0.2fr 0.2fr 7fr 3fr;
+    grid-template-columns: 15px 0.2fr 0.2fr 7fr 3fr;
     column-gap: 15px;
     text-align: left;
 
     &.extra-info {
-        grid-template-columns: 15px 0.2fr 0.2fr 0.2fr 6fr 3fr 3fr;
+        grid-template-columns: 15px 0.2fr 0.2fr 6fr 3fr 3fr;
     }
 
     &.button {
@@ -61,10 +61,6 @@
 
     .format-numbers {
         text-align: right;
-
-        &.keep-left {
-            text-align: left;
-        }
     }
 
     .nowrap {

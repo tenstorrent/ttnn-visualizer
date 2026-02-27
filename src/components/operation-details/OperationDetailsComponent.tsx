@@ -278,7 +278,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             />
 
                             <GlobalSwitch
-                                label='Hex axis labels'
+                                label='Use Hex'
                                 checked={showHex}
                                 onChange={() => {
                                     setShowHex(!showHex);

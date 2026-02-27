@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-
+import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
@@ -21,6 +21,7 @@ import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
 import MemoryTag from '../MemoryTag';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import { showHexAtom } from '../../store/app';
 
 export interface TensorDetailsComponentProps {
     tensor: Tensor;
@@ -38,6 +39,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     zoomRange,
 }) => {
     const [overlayOpen, setOverlayOpen] = useState(false);
+    const useHex = useAtomValue(showHexAtom);
 
     const { address } = tensor;
     const { data: operations } = useOperationsList();
@@ -113,7 +115,12 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
             <div className='tensor-meta'>
                 <p>
-                    Address: <strong> {prettyPrintAddress(tensor.address, memorySize)}</strong>
+                    Address:{' '}
+                    <strong>
+                        {useHex && tensor.address !== null
+                            ? toHex(tensor.address)
+                            : prettyPrintAddress(tensor.address, memorySize)}
+                    </strong>
                 </p>
                 {tensor.buffer_type !== null && (
                     <p>
