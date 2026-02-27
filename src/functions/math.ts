@@ -43,6 +43,7 @@ export const toSecondsPretty = (us: number, min: number = 1000): string => {
     return `( ${(us / 1_000_000).toFixed(3)}s )`;
 };
 
+// Pretty print an address, with option to display in hex or decimal, and pad with leading zeros based on memory size
 export const prettyPrintAddress = (address: number | null, memorySize: number, isHex: boolean = false): string => {
     if (address === null) {
         return 'NULL';
@@ -159,4 +160,12 @@ export const formatMemorySize = (bytes: number, decimals = 0): string => {
     const value = formatSize(bytes / 1024 ** denominationIndex, fractionDigits);
 
     return `${value} ${sizes[denominationIndex]}`;
+};
+
+export const getMemoryAddress = (address: number | null, useHex: boolean): string => {
+    if (address === null) {
+        return 'NULL';
+    }
+
+    return useHex ? toHex(address) : address.toString();
 };

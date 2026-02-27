@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
-import { formatSize, toHex } from '../../functions/math';
+import { getMemoryAddress } from '../../functions/math';
 import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
@@ -87,12 +87,12 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
                 {isValidNumber(nextAllocationOperationId) && isValidNumber(address) && operations ? (
                     <Tooltip
-                        content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
+                        content={`Next allocation of ${getMemoryAddress(address, useHex)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         placement={PopoverPosition.TOP}
                     >
                         <Icon
                             icon={IconNames.INFO_SIGN}
-                            title={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
+                            title={`Next allocation of ${getMemoryAddress(address, useHex)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         />
                     </Tooltip>
                 ) : null}
@@ -113,7 +113,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
             <div className='tensor-meta'>
                 <p>
-                    Address: <strong>{getAddress(tensor.address, useHex)}</strong>
+                    Address: <strong>{getMemoryAddress(tensor.address, useHex)}</strong>
                 </p>
                 {tensor.buffer_type !== null && (
                     <p>
@@ -178,14 +178,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
             </div>
         </div>
     );
-};
-
-const getAddress = (address: number | null, useHex: boolean): string => {
-    if (address === null) {
-        return 'NULL';
-    }
-
-    return useHex ? toHex(address) : formatSize(address);
 };
 
 export default TensorDetailsComponent;
