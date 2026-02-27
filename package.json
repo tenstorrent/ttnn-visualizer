@@ -57,6 +57,7 @@
     "@tanstack/react-virtual": "^3.13.18",
     "ajv": "^8.17.1",
     "axios": "^1.13.3",
+    "elkjs": "^0.11.0",
     "jotai": "^2.16.2",
     "normalize.css": "^8.0.1",
     "react": "^18.3.1",
@@ -66,10 +67,12 @@
     "react-router": "^6.30.3",
     "react-router-dom": "^6.30.3",
     "react-toastify": "^11.0.5",
+    "reactflow": "^11.11.4",
     "socket.io-client": "^4.8.3",
     "tinycolor2": "^1.6.0",
     "vis-data": "^8.0.3",
-    "vis-network": "^10.0.2"
+    "vis-network": "^10.0.2",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@blueprintjs/node-build-scripts": "^9.2.10",
