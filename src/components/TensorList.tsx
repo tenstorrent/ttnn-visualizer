@@ -449,7 +449,7 @@ const TensorList = () => {
                                                 >
                                                     {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
                                                         <Tooltip
-                                                            content='Unusually high number of consumers'
+                                                            content={`Unusually high number of consumers (${tensor.consumers.length})`}
                                                             position={PopoverPosition.TOP}
                                                             className='high-number-consumers'
                                                         >
@@ -517,6 +517,12 @@ const TensorList = () => {
                                                     operations={operations}
                                                 />
                                             </div>
+                                            {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
+                                                <p className='arguments-wrapper high-consumer-warning'>
+                                                    This tensor has {tensor.consumers.length} consumers, which is
+                                                    unusually high and may indicate an issue in the model.
+                                                </p>
+                                            ) : null}
                                         </Collapsible>
                                     </li>
                                 );
