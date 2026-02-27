@@ -197,9 +197,7 @@ function MainNavigation() {
                     variant={ButtonVariant.MINIMAL}
                     size={Size.LARGE}
                     className='npe-button'
-                >
-                    <small>beta</small>
-                </Button>
+                />
 
                 <Tooltip
                     content={CLUSTER_DISABLED}
@@ -218,6 +216,22 @@ function MainNavigation() {
                         className='cluster-button modal'
                     />
                 </Tooltip>
+                {/* <Icon */}
+                {/*    icon={IconNames.DragHandleVertical} */}
+                {/*    className='separator' */}
+                {/* /> */}
+                <Button
+                    text='MLIR'
+                    aria-label='MLIR'
+                    onClick={() => handleNavigate(ROUTES.MLIR)}
+                    active={hasMatchingPath(ROUTES.MLIR)}
+                    icon={IconNames.Layout}
+                    variant={ButtonVariant.MINIMAL}
+                    size={Size.LARGE}
+                    className='mlir-button'
+                >
+                    <small>beta</small>
+                </Button>
             </Navbar.Group>
         </Navbar>
     );

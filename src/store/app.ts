@@ -44,6 +44,7 @@ export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
+export const activeMlirJsonAtom = atom<string | null>(null);
 export const hasClusterDescriptionAtom = atom(false);
 
 // Operations route

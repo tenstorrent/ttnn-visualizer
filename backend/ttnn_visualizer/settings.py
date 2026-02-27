@@ -52,6 +52,7 @@ class DefaultConfig(object):
     PROFILER_DIRECTORY_NAME = "profiler-reports"
     PERFORMANCE_DIRECTORY_NAME = "performance-reports"
     NPE_DIRECTORY_NAME = "npe-reports"
+    MLIR_DIRECTORY_NAME = "mlir-reports"
 
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0

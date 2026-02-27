@@ -1053,6 +1053,43 @@ def create_npe_files():
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
 
+@api.route("/local/upload/mlir-json", methods=["POST"])
+def create_mlir_json_file():
+    files = request.files.getlist("files")
+    data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+
+    for file in files:
+        if not file.filename.endswith(".json"):
+            return StatusMessage(
+                status=ConnectionTestStates.FAILED,
+                message="Must me a .json file",
+            ).model_dump()
+
+    npe_name = extract_npe_name(files)
+    target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
+    target_directory.mkdir(parents=True, exist_ok=True)
+
+    try:
+        paths = save_uploaded_files(files, target_directory)
+    except DataFormatError:
+        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+
+    instance_id = request.args.get("instanceId")
+    npe_path = str(paths[0])
+    update_instance(
+        instance_id=instance_id,
+        npe_name=npe_name,
+        npe_location=ReportLocation.LOCAL.value,
+        clear_remote=True,
+        npe_path=npe_path,
+    )
+
+    session["mlir_paths"] = session.get("mlir_paths", []) + [str(npe_path)]
+    session.permanent = True
+
+    return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
+
+
 @api.route("/remote/profiler", methods=["POST"])
 def get_remote_folders_profiler():
     connection_data = request.get_json()

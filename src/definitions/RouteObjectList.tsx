@@ -12,6 +12,7 @@ import GraphView from '../routes/GraphView';
 import Performance from '../routes/Performance';
 import NPE from '../routes/NPE';
 import ROUTES from './Routes';
+import MLIR from '../routes/MLIR';
 
 // Allows us to keep absolute paths in ROUTES while using relative paths in route objects
 const stripFirstSlash = (path: string) => {
@@ -54,6 +55,10 @@ export const routeObjectList = [
     {
         path: stripFirstSlash(`${ROUTES.NPE}/:filepath?`),
         element: <NPE />,
+    },
+    {
+        path: stripFirstSlash(`${ROUTES.MLIR}/:filepath?`),
+        element: <MLIR />,
     },
     {
         path: stripFirstSlash(ROUTES.CLUSTER),
