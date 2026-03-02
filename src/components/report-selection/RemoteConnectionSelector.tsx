@@ -21,6 +21,9 @@ interface RemoteConnectionSelectorProps {
     onSyncRemoteFolderList: (connection: RemoteConnection) => void;
 }
 
+const EDIT_CONNECTION_LABEL = 'Edit selected connection';
+const REMOVE_CONNECTION_LABEL = 'Remove selected connection';
+
 const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     connectionList,
     connection,
@@ -61,22 +64,22 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                     />
                 </Select>
                 <Tooltip
-                    content='Edit selected connection'
+                    content={EDIT_CONNECTION_LABEL}
                     position={PopoverPosition.TOP}
                 >
                     <Button
-                        aria-label='Edit selected connection'
+                        aria-label={EDIT_CONNECTION_LABEL}
                         icon={IconNames.EDIT}
                         disabled={disabled || !selectedConnection}
                         onClick={() => setIsEditDialogOpen(true)}
                     />
                 </Tooltip>
                 <Tooltip
-                    content='Remove selected connection'
+                    content={REMOVE_CONNECTION_LABEL}
                     position={PopoverPosition.TOP}
                 >
                     <Button
-                        aria-label='Remove selected connection'
+                        aria-label={REMOVE_CONNECTION_LABEL}
                         icon={IconNames.TRASH}
                         disabled={disabled || !selectedConnection}
                         onClick={() => onRemoveConnection(selectedConnection)}
@@ -100,13 +103,19 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 />
             </div>
 
-            <Button
-                icon={IconNames.REFRESH}
-                disabled={disabled || !selectedConnection}
-                loading={loading}
-                text='Fetch remote folders list'
-                onClick={() => onSyncRemoteFolderList(selectedConnection)}
-            />
+            <Tooltip
+                content='Fetching remote folders list...'
+                position={PopoverPosition.TOP}
+                disabled={!loading}
+            >
+                <Button
+                    icon={IconNames.REFRESH}
+                    disabled={disabled || !selectedConnection}
+                    loading={loading}
+                    text='Fetch remote folders list'
+                    onClick={() => onSyncRemoteFolderList(selectedConnection)}
+                />
+            </Tooltip>
         </>
     );
 };
