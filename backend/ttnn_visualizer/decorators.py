@@ -137,7 +137,7 @@ def remote_exception_handler(func):
             )
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
-                message=f"An unexpected error occurred: {str(err)}",
+                message=str(err),
             )
 
     return remote_handler
