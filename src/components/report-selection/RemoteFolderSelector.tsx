@@ -144,12 +144,12 @@ const formatRemoteFolderName = (
         return 'n/a';
     }
 
-    const paths = {
+    const paths: Record<FolderTypes, string | undefined> = {
         profiler: selectedConnection.profilerPath,
         performance: selectedConnection.performancePath,
     };
 
-    const pathToReplace = paths[type]!;
+    const pathToReplace = paths?.[type] ?? '';
 
     return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
 };

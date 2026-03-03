@@ -174,6 +174,7 @@ const useRemoteConnection = () => {
     };
 };
 
+// Could make these more generic but they're only used in useRemote right now
 const safeJsonParse = <T,>(value: string | null, fallback: T): T => {
     try {
         return value ? JSON.parse(value) : fallback;

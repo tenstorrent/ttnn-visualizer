@@ -4,7 +4,7 @@
 
 import { screen } from '@testing-library/dom';
 
-const getAllButtonsWithText = (text: string) => {
+const getAllButtonsWithText = (text: string): HTMLButtonElement[] => {
     return screen.getAllByRole('button', { name: new RegExp(text, 'i') });
 };
 
