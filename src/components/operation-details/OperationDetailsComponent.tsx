@@ -406,9 +406,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         labelStepSize={
                                             (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
                                         }
-                                        labelRenderer={(value) => {
-                                            return getMemoryAddress(value, showHex);
-                                        }}
+                                        labelRenderer={(value) => getMemoryAddress(value, showHex)}
                                         value={[zoomRangeStart, zoomRangeEnd]}
                                         onChange={(value: number[]) => {
                                             setZoomRangeStart(value[0]);

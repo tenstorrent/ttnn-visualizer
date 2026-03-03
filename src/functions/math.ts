@@ -162,6 +162,7 @@ export const formatMemorySize = (bytes: number, decimals = 0): string => {
     return `${value} ${sizes[denominationIndex]}`;
 };
 
+// Formats a memory address to a string with optional hex formatting
 export const getMemoryAddress = (address: number | null, useHex: boolean): string => {
     if (address === null) {
         return 'NULL';
