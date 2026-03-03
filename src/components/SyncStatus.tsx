@@ -13,15 +13,17 @@ const SyncStatus = () => {
     return (
         <span>
             {isInSync ? (
-                <strong>
-                    <Icon
-                        icon={IconNames.TickCircle}
-                        intent={Intent.SUCCESS}
-                    />{' '}
-                    Profiler and perf reports synchronised
-                </strong>
+                <Tooltip content='Reports synchronized - enhanced data available'>
+                    <strong>
+                        <Icon
+                            icon={IconNames.TickCircle}
+                            intent={Intent.SUCCESS}
+                        />{' '}
+                        Profiler and perf reports synchronised
+                    </strong>
+                </Tooltip>
             ) : (
-                <Tooltip content='Unable to match operations in the profiler report with those in the performance report. Please check both reports are from the same run.'>
+                <Tooltip content='Unable to match operations in the profiler report with those in the performance report, please check both reports are from the same run'>
                     <strong>
                         <Icon
                             icon={IconNames.ISSUE}
