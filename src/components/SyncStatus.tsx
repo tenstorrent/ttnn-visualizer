@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Icon, Intent } from '@blueprintjs/core';
+import { Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 
@@ -21,13 +21,15 @@ const SyncStatus = () => {
                     Profiler and perf reports synchronised
                 </strong>
             ) : (
-                <strong>
-                    <Icon
-                        icon={IconNames.ISSUE}
-                        intent={Intent.DANGER}
-                    />{' '}
-                    Profiler and perf reports can&apos;t be synchronized
-                </strong>
+                <Tooltip content='Unable to match operations in the profiler report with those in the performance report. Please check both reports are from the same run.'>
+                    <strong>
+                        <Icon
+                            icon={IconNames.ISSUE}
+                            intent={Intent.WARNING}
+                        />{' '}
+                        {`Profiler and perf reports can't be synchronized`}
+                    </strong>
+                </Tooltip>
             )}
         </span>
     );
