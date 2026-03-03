@@ -178,8 +178,7 @@ it('displays correct connection information format', () => {
     expect(getButtonWithText('Test Connection - ssh://test.example.com:2222/')).not.toBeNull();
 });
 
-// TODO: Error will throw currently due to inadequate handling of a JSON parse failure
-it.skip('handles localStorage parsing errors gracefully', () => {
+it('handles localStorage parsing errors gracefully', () => {
     // Set invalid JSON in localStorage
     window.localStorage.setItem('remoteConnections', 'invalid-json');
 
@@ -227,7 +226,7 @@ it('handles API errors gracefully', () => {
 });
 
 // TODO: Fix this test
-it.skip('enables sync buttons when folders are selected', async () => {
+it.only('enables sync buttons when folders are selected', async () => {
     window.localStorage.setItem('remoteConnections', JSON.stringify(remoteConnection));
     window.localStorage.setItem('selectedConnection', JSON.stringify(remoteConnection[0]));
     window.localStorage.setItem(

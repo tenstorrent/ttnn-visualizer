@@ -98,31 +98,32 @@ const useRemoteConnection = () => {
 
     const persistentState = {
         get savedConnectionList() {
-            return JSON.parse(getAppConfig('remoteConnections') ?? '[]') as RemoteConnection[];
+            return safeJsonParse(getAppConfig('remoteConnections'), []) as RemoteConnection[];
         },
         set savedConnectionList(connectionList: RemoteConnection[]) {
-            setAppConfig('remoteConnections', JSON.stringify(connectionList));
+            setAppConfig('remoteConnections', safeJsonStringify(connectionList, '[]'));
         },
         get selectedConnection() {
-            const savedSelectedConnection = JSON.parse(getAppConfig('selectedConnection') ?? 'null');
+            const savedSelectedConnection = safeJsonParse(getAppConfig('selectedConnection'), null);
             return (savedSelectedConnection ?? this.savedConnectionList[0]) as RemoteConnection | undefined;
         },
         set selectedConnection(connection: RemoteConnection | undefined) {
-            setAppConfig('selectedConnection', JSON.stringify(connection ?? null));
+            setAppConfig('selectedConnection', safeJsonStringify(connection ?? null));
         },
         getSavedReportFolders: (connection?: RemoteConnection) =>
-            JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]') as RemoteFolder[],
+            safeJsonParse(getAppConfig(`${connection?.name} - reportFolders`), []) as RemoteFolder[],
 
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name} - reportFolders`, JSON.stringify(folders));
+            setAppConfig(`${connection?.name} - reportFolders`, safeJsonStringify(folders, '[]'));
         },
         deleteSavedReportFolders: (connection?: RemoteConnection) => {
             deleteAppConfig(`${connection?.name} - reportFolders`);
         },
         getSavedPerformanceFolders: (connection?: RemoteConnection) =>
-            JSON.parse(getAppConfig(`${connection?.name} - performanceFolders`) ?? '[]') as RemoteFolder[],
+            safeJsonParse(getAppConfig(`${connection?.name} - performanceFolders`), []) as RemoteFolder[],
+
         setSavedPerformanceFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name} - performanceFolders`, JSON.stringify(folders));
+            setAppConfig(`${connection?.name} - performanceFolders`, safeJsonStringify(folders, '[]'));
         },
         deleteSavedPerformanceFolders: (connection?: RemoteConnection) => {
             deleteAppConfig(`${connection?.name} - performanceFolders`);
@@ -171,6 +172,22 @@ const useRemoteConnection = () => {
         persistentState,
         readRemoteFile,
     };
+};
+
+const safeJsonParse = <T,>(value: string | null, fallback: T): T => {
+    try {
+        return value ? JSON.parse(value) : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
+const safeJsonStringify = <T,>(value: T, fallback: string = 'null'): string => {
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return fallback;
+    }
 };
 
 export default useRemoteConnection;
