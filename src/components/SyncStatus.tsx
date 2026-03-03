@@ -13,7 +13,7 @@ const SyncStatus = () => {
     return (
         <span>
             {isInSync ? (
-                <Tooltip content='Reports synchronized - enhanced data available'>
+                <Tooltip content='Reports synchronized - data is enriched'>
                     <strong>
                         <Icon
                             icon={IconNames.TickCircle}
