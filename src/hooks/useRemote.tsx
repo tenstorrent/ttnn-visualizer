@@ -100,7 +100,11 @@ const useRemoteConnection = () => {
 
     const persistentState = {
         get savedConnectionList() {
-            return safeJsonParse(getAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS), []) as RemoteConnection[];
+            const connectionList = safeJsonParse(getAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS), []).filter(
+                isValidConnection,
+            );
+
+            return connectionList as RemoteConnection[];
         },
         set savedConnectionList(connectionList: RemoteConnection[]) {
             setAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS, safeJsonStringify(connectionList, '[]'));
@@ -191,6 +195,20 @@ const safeJsonStringify = <T,>(value: T, fallback: string = 'null'): string => {
     } catch {
         return fallback;
     }
+};
+
+const isValidConnection = (connection?: Partial<RemoteConnection>) => {
+    if (
+        !connection?.name ||
+        !connection?.username ||
+        !connection?.host ||
+        !connection?.port ||
+        (!connection?.profilerPath && !connection?.performancePath)
+    ) {
+        return false;
+    }
+
+    return true;
 };
 
 export default useRemoteConnection;

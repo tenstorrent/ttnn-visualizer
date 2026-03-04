@@ -337,7 +337,7 @@ it('handles connection with default port (22)', () => {
     ).not.toBeNull();
 });
 
-it.skip('validates connection data structure', () => {
+it('validates connection data structure', () => {
     const incompleteConnection: Partial<RemoteConnection>[] = [
         {
             name: 'Incomplete Connection',
@@ -354,13 +354,8 @@ it.skip('validates connection data structure', () => {
         </TestProviders>,
     );
 
-    // Should handle incomplete connection data gracefully
-    // The exact behavior depends on component validation logic
     expect(getButtonWithText(ADD_NEW_CONNECTION)).not.toBeNull();
-
-    // "Incomplete Connection - ssh://undefined:undefined/undefined"
-    // expect(screen.getByText(/invalid|incomplete/i)).not.toBeNull();
-    // expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
+    expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
 });
 
 it('maintains state consistency after localStorage changes', () => {
