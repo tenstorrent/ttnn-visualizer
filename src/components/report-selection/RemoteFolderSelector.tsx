@@ -2,13 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, Icon, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
 import { TEST_IDS } from '../../definitions/TestIds';
 import {
     NEVER_SYNCED_LABEL,
+    REPORT_OUTDATED_LABEL,
+    REPORT_UP_TO_DATE_LABEL,
     RemoteConnection,
     RemoteFolder,
     SYNC_DATE_FORMATTER,
@@ -29,24 +31,24 @@ const remoteFolderRenderer =
         }
 
         const { lastSynced, lastModified, reportName, remotePath } = folder;
-        const lastSyncedDate = lastSynced
-            ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(lastSynced))
-            : NEVER_SYNCED_LABEL;
-
         const isReportOutdated = isRemoteFolderOutdated(folder);
 
         const statusIcon = (
             <Tooltip
                 content={
-                    isReportOutdated
-                        ? `Report is stale - last synced: ${lastSyncedDate}`
-                        : `Report is up to date - last synced: ${lastSyncedDate}`
+                    <>
+                        {isReportOutdated ? REPORT_OUTDATED_LABEL : REPORT_UP_TO_DATE_LABEL}
+                        <br />
+                        <strong>
+                            {lastSynced ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(lastSynced)) : NEVER_SYNCED_LABEL}
+                        </strong>
+                    </>
                 }
                 placement={PopoverPosition.TOP}
             >
                 <Icon
                     icon={isReportOutdated ? IconNames.UPDATED : IconNames.HISTORY}
-                    color={isReportOutdated ? 'goldenrod' : 'green'}
+                    intent={isReportOutdated ? Intent.WARNING : Intent.SUCCESS}
                 />
             </Tooltip>
         );
