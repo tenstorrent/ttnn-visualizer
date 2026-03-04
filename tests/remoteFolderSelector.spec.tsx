@@ -17,9 +17,13 @@ import mockRemotePerformanceFolderList from './data/mockRemotePerformanceFolderL
 import mockInstance from './data/mockInstance.json';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import testForPortal from './helpers/testForPortal';
+import { RemoteConnection } from '../src/definitions/RemoteConnection';
 
 // Scrub the markup after each test
-afterEach(cleanup);
+afterEach(() => {
+    window.localStorage.clear();
+    cleanup();
+});
 
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
 const ADD_NEW_CONNECTION = 'Add new connection';
@@ -88,7 +92,7 @@ it('renders the initial form state when there is no data', () => {
 });
 
 it('enables fetch remote folder list button when a connection is selected', () => {
-    setupConnection(remoteConnection, remoteConnection[0]);
+    setupConnection(remoteConnection);
 
     render(
         <TestProviders>
@@ -143,7 +147,7 @@ it('clears localStorage and resets state when removing a connection', () => {
 });
 
 it('handles multiple remote connections in localStorage', () => {
-    const multipleConnections = [
+    const multipleConnections: RemoteConnection[] = [
         remoteConnection[0],
         {
             name: 'Production Server',
@@ -182,8 +186,8 @@ it('shows proper button states when remote folders are available', () => {
     expect(reportSelects).toHaveLength(2);
 });
 
-it.skip('displays correct connection information format', () => {
-    const customConnection = [
+it('displays correct connection information format', () => {
+    const customConnection: RemoteConnection[] = [
         {
             name: 'Test Connection',
             username: 'testuser',
@@ -280,7 +284,7 @@ it('set active performance report and syncs it on selection', async () => {
     });
 
     // Start with only a connection configured, no folders yet
-    setupConnection(remoteConnection, remoteConnection[0]);
+    setupConnection(remoteConnection);
 
     render(
         <TestProviders>
@@ -324,7 +328,7 @@ it('set active performance report and syncs it on selection', async () => {
     expect(syncButton.classList.contains(INTENT_SUCCESS_CLASS)).toBe(true);
 });
 
-it.skip('handles connection with default port (22)', () => {
+it('handles connection with default port (22)', () => {
     const connectionWithDefaultPort = [
         {
             ...remoteConnection[0],
@@ -349,7 +353,7 @@ it.skip('handles connection with default port (22)', () => {
 });
 
 it('validates connection data structure', () => {
-    const incompleteConnection = [
+    const incompleteConnection: Partial<RemoteConnection>[] = [
         {
             name: 'Incomplete Connection',
             username: 'user',
@@ -398,7 +402,7 @@ it('maintains state consistency after localStorage changes', () => {
 });
 
 it('displays appropriate connection count information', () => {
-    const multipleConnections = [
+    const multipleConnections: RemoteConnection[] = [
         remoteConnection[0],
         {
             name: 'Second Connection',
@@ -427,8 +431,9 @@ it('displays appropriate connection count information', () => {
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, false);
 });
 
-const setupConnection = (connection = remoteConnection, selected = remoteConnection[0]) => {
+const setupConnection = (connection: RemoteConnection[], selected?: RemoteConnection) => {
     window.localStorage.setItem(LOCAL_STORAGE_KEY_CONNECTIONS, JSON.stringify(connection));
+
     if (selected) {
         window.localStorage.setItem(LOCAL_STORAGE_KEY_SELECTED, JSON.stringify(selected));
     }
