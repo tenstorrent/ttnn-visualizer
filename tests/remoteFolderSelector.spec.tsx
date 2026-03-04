@@ -60,7 +60,6 @@ vi.mock('../src/libs/axiosInstance', () => ({
 
 beforeEach(() => {
     vi.resetAllMocks();
-    vi.clearAllMocks();
     mockUseReportFolderList.mockReturnValue({ data: mockProfilerFolderList });
     mockUsePerfFolderList.mockReturnValue({ data: mockPerformanceReportFolders });
     mockUseInstance.mockReturnValue({ data: mockInstance });
