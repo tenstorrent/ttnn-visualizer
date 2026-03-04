@@ -4,7 +4,7 @@
 
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
-import { formatSize } from '../functions/math';
+import { formatPercentage, formatSize } from '../functions/math';
 import { getCoreColour, getOpToOpGapColour } from '../functions/perfFunctions';
 import { DeviceOperationMapping, useGetDeviceOperationListPerf } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
@@ -35,7 +35,7 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                                         {formatSize(parseFloat(perf.perfData?.device_time))} µs
                                     </span>{' '}
                                     <span className='monospace'>
-                                        ({formatSize(parseFloat(perf.perfData?.total_percent))} %)
+                                        ({formatPercentage(parseFloat(perf.perfData?.total_percent), 2)})
                                     </span>
                                     {perf.perfData?.op_to_op_gap && (
                                         <>

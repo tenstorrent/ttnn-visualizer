@@ -22,7 +22,7 @@ const getServerConfig = (): ServerConfig => {
             BASE_PATH: '/',
             SERVER_MODE: !!import.meta.env.VITE_SERVER_MODE || false,
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
-            REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/data',
+            REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/path/to/data/directory', // Default value for development
         };
     }
 

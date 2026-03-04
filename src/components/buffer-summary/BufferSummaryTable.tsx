@@ -4,6 +4,7 @@
 
 import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAtomValue } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
 import { Checkbox, HotkeysProvider, Icon, InputGroup, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -19,6 +20,10 @@ import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
 import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import { showHexAtom } from '../../store/app';
+import { BufferMemoryLayout } from '../../functions/parseMemoryConfig';
+import isValidNumber from '../../functions/isValidNumber';
+import { toReadableShape, toReadableType } from '../../functions/formatting';
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperation[];
@@ -29,13 +34,16 @@ interface SummaryTableBuffer extends BufferData {
     size: number;
     operation_name: string;
     tensor_id: number;
-    hexAddress: string;
+    buffer_layout: number | null;
+    dtype?: string;
+    shape?: string;
 }
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
     const [mergedByDevice, setMergedByDevice] = useState(true);
+    const showHex = useAtomValue(showHexAtom);
 
     const { selectedTensorId } = useBufferFocus();
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
@@ -80,20 +88,27 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 
     const listOfBuffers = useMemo(() => {
         const targetList = mergedByDevice ? uniqueBuffersByOperationList : buffersByOperation;
+
         return targetList
             ?.map((operation) =>
                 operation.buffers
-                    .map((buffer) => ({
-                        ...buffer,
-                        hexAddress: toHex(buffer.address),
-                        operation_id: operation.id,
-                        operation_name: operation.name,
-                        tensor_id: tensorListByOperation.get(operation.id)?.get(buffer.address)?.id,
-                    }))
+                    .map((buffer) => {
+                        const bufferData = tensorListByOperation.get(operation.id)?.get(buffer.address);
+
+                        return {
+                            ...buffer,
+                            address: showHex ? toHex(buffer.address) : buffer.address,
+                            operation_id: operation.id,
+                            operation_name: operation.name,
+                            tensor_id: tensorListByOperation.get(operation.id)?.get(buffer.address)?.id,
+                            dtype: bufferData ? toReadableType(bufferData?.dtype) : undefined,
+                            shape: bufferData ? toReadableShape(bufferData?.shape) : undefined,
+                        };
+                    })
                     .flat(),
             )
             .flat() as SummaryTableBuffer[];
-    }, [buffersByOperation, tensorListByOperation, uniqueBuffersByOperationList, mergedByDevice]);
+    }, [buffersByOperation, tensorListByOperation, uniqueBuffersByOperationList, mergedByDevice, showHex]);
 
     const tableColumns = useMemo(
         () => (isMultiDevice ? Columns : Columns.filter((column) => column.key !== 'device_id')),
@@ -280,17 +295,21 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 const getCellText = (buffer: SummaryTableBuffer, key: ColumnKeys) => {
     let textValue = buffer[key]?.toString() || '';
 
-    if (key === 'tensor_id') {
+    if (key === ColumnKeys.tensor_id) {
         // Using a space character to ensure the table cell height remains consistent
         textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '\u00A0';
     }
 
-    if (key === 'operation_id') {
+    if (key === ColumnKeys.operation_id) {
         textValue = `${buffer.operation_id} ${buffer.operation_name}`;
     }
 
-    if (key === 'buffer_type') {
+    if (key === ColumnKeys.buffer_type) {
         textValue = BufferTypeLabel[buffer.buffer_type];
+    }
+
+    if (key === ColumnKeys.buffer_layout) {
+        textValue = isValidNumber(buffer.buffer_layout) ? BufferMemoryLayout[buffer.buffer_layout] : '';
     }
 
     return textValue;
@@ -309,11 +328,11 @@ const getCellContent = (key: ColumnKeys, rowIndex: number, rows: SummaryTableBuf
     const textValue = getCellText(buffer, key);
 
     // Redo columns - https://github.com/tenstorrent/ttnn-visualizer/issues/1270
-    if (key === 'size') {
+    if (key === ColumnKeys.size) {
         return formatMemorySize(buffer.size, 2);
     }
 
-    if (key === 'tensor_id') {
+    if (key === ColumnKeys.tensor_id) {
         return (
             <div className='operation-cell'>
                 <div

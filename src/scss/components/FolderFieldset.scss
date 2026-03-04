@@ -72,4 +72,14 @@
             white-space: pre;
         }
     }
+
+    .folder-upload-status {
+        display: inline-flex;
+        gap: 2px;
+        flex-basis: 100%;
+
+        .message {
+            line-height: 1.4;
+        }
+    }
 }

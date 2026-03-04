@@ -14,6 +14,7 @@ export const TEST_IDS = Object.freeze({
     // Remote folder selector
     REMOTE_FOLDER_SELECTOR_BUTTON: 'remote-folder-selector-button',
     REMOTE_SYNC_DISABLED: 'remote-sync-disabled',
+    REMOTE_SYNC_BUTTON: 'remote-sync-button',
 
     // Comparison components
     COMPARISON_REPORT_SELECTOR: 'comparison-report-selector',
