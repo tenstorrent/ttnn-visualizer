@@ -18,6 +18,8 @@ const FAILED_NO_PATH = {
     status: ConnectionTestStates.FAILED,
     message: 'Please provide at least one folder path.',
 };
+export const LOCAL_STORAGE_KEY_CONNECTIONS = 'remoteConnections';
+export const LOCAL_STORAGE_KEY_SELECTED = 'selectedConnection';
 
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
@@ -98,17 +100,17 @@ const useRemoteConnection = () => {
 
     const persistentState = {
         get savedConnectionList() {
-            return safeJsonParse(getAppConfig('remoteConnections'), []) as RemoteConnection[];
+            return safeJsonParse(getAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS), []) as RemoteConnection[];
         },
         set savedConnectionList(connectionList: RemoteConnection[]) {
-            setAppConfig('remoteConnections', safeJsonStringify(connectionList, '[]'));
+            setAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS, safeJsonStringify(connectionList, '[]'));
         },
         get selectedConnection() {
-            const savedSelectedConnection = safeJsonParse(getAppConfig('selectedConnection'), null);
+            const savedSelectedConnection = safeJsonParse(getAppConfig(LOCAL_STORAGE_KEY_SELECTED), null);
             return (savedSelectedConnection ?? this.savedConnectionList[0]) as RemoteConnection | undefined;
         },
         set selectedConnection(connection: RemoteConnection | undefined) {
-            setAppConfig('selectedConnection', safeJsonStringify(connection ?? null));
+            setAppConfig(LOCAL_STORAGE_KEY_SELECTED, safeJsonStringify(connection ?? null));
         },
         getSavedReportFolders: (connection?: RemoteConnection) =>
             safeJsonParse(getAppConfig(`${connection?.name} - reportFolders`), []) as RemoteFolder[],

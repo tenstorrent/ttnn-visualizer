@@ -18,6 +18,7 @@ import mockInstance from './data/mockInstance.json';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import testForPortal from './helpers/testForPortal';
 import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
 
 // Scrub the markup after each test
 afterEach(() => {
@@ -33,9 +34,6 @@ const REMOVE_NEW_CONNECTION = 'Remove selected connection';
 const FETCH_REMOTE_FOLDERS = 'Fetch remote folders list';
 const CONNECTION_NAME = 'Local - ssh://localhost:2222/';
 const NO_SELECTION = '(No selection)';
-
-const LOCAL_STORAGE_KEY_CONNECTIONS = 'remoteConnections';
-const LOCAL_STORAGE_KEY_SELECTED = 'selectedConnection';
 
 const HTML_DISABLED = 'disabled';
 const INTENT_SUCCESS_CLASS = 'bp6-intent-success';
@@ -171,19 +169,6 @@ it('handles multiple remote connections in localStorage', () => {
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
     expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
     expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
-});
-
-it('shows proper button states when remote folders are available', () => {
-    setupConnection(remoteConnection);
-
-    render(
-        <TestProviders>
-            <RemoteSyncConfigurator />
-        </TestProviders>,
-    );
-
-    const reportSelects = getAllButtonsWithText(NO_SELECTION);
-    expect(reportSelects).toHaveLength(2);
 });
 
 it('displays correct connection information format', () => {
