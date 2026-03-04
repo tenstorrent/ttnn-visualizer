@@ -40,7 +40,7 @@ function FooterInfobar() {
     const activeProfilerReportPath = activeProfilerReport?.path;
     const hasLoadedRemoteReport =
         instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
-    const activePerformanceReportName = activePerformanceReport?.reportName;
+    const activePerformanceReportPath = activePerformanceReport?.path;
     const serverConfig = getServerConfig();
     const isServerMode = serverConfig.SERVER_MODE;
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
@@ -92,7 +92,10 @@ function FooterInfobar() {
                             }
                             position={PopoverPosition.TOP}
                         >
-                            <Icon icon={IconNames.FOLDER_OPEN} />
+                            <Icon
+                                icon={IconNames.FOLDER_OPEN}
+                                aria-label='Base folder paths'
+                            />
                         </Tooltip>
                     )}
 
@@ -109,15 +112,15 @@ function FooterInfobar() {
                         </Tooltip>
                     )}
 
-                    {activePerformanceReportName && (
+                    {activePerformanceReportPath && (
                         <Tooltip
-                            disabled={!activePerformanceReportName}
-                            content={formatPath(activePerformanceReportName)}
+                            disabled={!activePerformanceReportPath}
+                            content={formatPath(activePerformanceReportPath)}
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
                                 <strong>Performance:</strong>
-                                <span className='report-name'>{activePerformanceReportName}</span>
+                                <span className='report-name'>{activePerformanceReportPath}</span>
                             </div>
                         </Tooltip>
                     )}
@@ -180,7 +183,7 @@ const formatPath = (str?: string): string => {
 
     const folderName = str.length <= MAX_TITLE_LENGTH ? str : str.slice(-MAX_TITLE_LENGTH);
 
-    return `/${folderName}`;
+    return folderName.startsWith('/') ? folderName : `/${folderName}`;
 };
 
 export default FooterInfobar;
