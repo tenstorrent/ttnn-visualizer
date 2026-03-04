@@ -3,10 +3,12 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
-import { FC } from 'react';
+import React, { FC } from 'react';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import {
     NEVER_SYNCED_LABEL,
+    REPORT_OUTDATED_LABEL,
+    REPORT_UP_TO_DATE_LABEL,
     RemoteFolder,
     SYNC_DATE_FORMATTER,
     getUTCFromEpoch,
@@ -34,11 +36,7 @@ const RemoteSyncButton: FC<RemoteSyncButtonProps> = ({
             position={PopoverPosition.TOP}
         >
             <Button
-                aria-label={getTooltipContent(
-                    selectedReportFolder,
-                    isSyncingReportFolder,
-                    isSelectedReportFolderOutdated,
-                )}
+                aria-label='Sync report folder'
                 icon={
                     selectedReportFolder
                         ? getSyncIcon(selectedReportFolder, isSyncingReportFolder, isSelectedReportFolderOutdated)
@@ -55,16 +53,30 @@ const RemoteSyncButton: FC<RemoteSyncButtonProps> = ({
     );
 };
 
-const getTooltipContent = (folder: RemoteFolder | undefined, isSyncing: boolean, isOutdated: boolean): string => {
-    if (!folder || isSyncing) {
+const getTooltipContent = (
+    folder: RemoteFolder | undefined,
+    isSyncing: boolean,
+    isOutdated: boolean,
+): string | React.JSX.Element => {
+    if (!folder) {
         return '';
     }
 
-    if (isOutdated) {
-        return `Click to sync, report may be out of date - ${folder.lastSynced ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(folder.lastSynced)) : `last sync: ${NEVER_SYNCED_LABEL}`}`;
+    if (isSyncing) {
+        return `Syncing report folder...`;
     }
 
-    return `Report last synced ${folder.lastSynced ? `${SYNC_DATE_FORMATTER.format(getUTCFromEpoch(folder.lastSynced))}` : ''}`;
+    return (
+        <>
+            {isOutdated ? REPORT_OUTDATED_LABEL : REPORT_UP_TO_DATE_LABEL}
+            <br />
+            <strong>
+                {folder.lastSynced
+                    ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(folder.lastSynced))
+                    : NEVER_SYNCED_LABEL}
+            </strong>
+        </>
+    );
 };
 
 const getSyncIcon = (folder: RemoteFolder | undefined, isSyncing: boolean, isOutdated: boolean): IconName => {

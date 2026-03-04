@@ -43,9 +43,18 @@ export const toSecondsPretty = (us: number, min: number = 1000): string => {
     return `( ${(us / 1_000_000).toFixed(3)}s )`;
 };
 
-export const prettyPrintAddress = (address: number | null, memorySize: number): string => {
+// Pretty print an address, with option to display in hex or decimal, and pad with leading zeros based on memory size
+export const prettyPrintAddress = (address: number | null, memorySize: number, isHex: boolean = false): string => {
     if (address === null) {
         return 'NULL';
+    }
+
+    if (isHex) {
+        // eslint-disable-next-line no-bitwise
+        const hexStr = (address >>> 0).toString(16).toUpperCase();
+        // eslint-disable-next-line no-bitwise
+        const maxHexLength = (memorySize >>> 0).toString(16).length;
+        return `0x${hexStr.padStart(maxHexLength, '0')}`;
     }
 
     return address.toString().padStart(memorySize?.toString().length, '0');
@@ -151,4 +160,13 @@ export const formatMemorySize = (bytes: number, decimals = 0): string => {
     const value = formatSize(bytes / 1024 ** denominationIndex, fractionDigits);
 
     return `${value} ${sizes[denominationIndex]}`;
+};
+
+// Formats a memory address to a string with optional hex formatting
+export const getMemoryAddress = (address: number | null, showHex: boolean): string => {
+    if (address === null) {
+        return 'NULL';
+    }
+
+    return showHex ? toHex(address) : address.toString();
 };

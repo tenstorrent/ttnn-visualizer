@@ -4,8 +4,9 @@
 
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
+import { useAtomValue } from 'jotai';
 import { Operation, OperationDescription, Tensor } from '../model/APIData';
-import { toHex } from '../functions/math';
+import { getMemoryAddress } from '../functions/math';
 import { toReadableShape, toReadableType } from '../functions/formatting';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/BufferDetails.scss';
@@ -15,6 +16,7 @@ import isValidNumber from '../functions/isValidNumber';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
+import { showHexAtom } from '../store/app';
 
 interface BufferDetailsProps {
     tensor: Tensor;
@@ -28,6 +30,8 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const lastOperationId = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperationId = getDeallocationOperation(tensor, operations)?.id;
     const nextAllocationOperationId = getNextAllocationOperation(tensor, operations)?.id;
+
+    const showHex = useAtomValue(showHexAtom);
 
     return (
         <>
@@ -64,7 +68,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                             <th>Next allocation</th>
                             <td>
                                 <span>
-                                    {toHex(address)} next allocated in{' '}
+                                    {getMemoryAddress(address, showHex)} next allocated in{' '}
                                     <Link to={`${ROUTES.OPERATIONS}/${nextAllocationOperationId}`}>
                                         {nextAllocationOperationId}{' '}
                                         {
