@@ -423,6 +423,7 @@ const setupConnection = (connection: RemoteConnection[], selected: RemoteConnect
     }
 };
 
+// TODO: Add more tests to cover remaining functionality and edge cases
 // ❌ No test for clicking Edit button
 // ❌ No test for clicking Remove button
 // ❌ No test for Profiler report selection (only performance)
