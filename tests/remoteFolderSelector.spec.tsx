@@ -236,7 +236,7 @@ it('handles API errors gracefully', () => {
     });
 });
 
-it('set active performance report and syncs it on selection', async () => {
+it('sets active performance report and syncs it on selection', async () => {
     const axiosInstance = await import('../src/libs/axiosInstance');
     const mockPost = vi.mocked(axiosInstance.default.post);
 
@@ -304,8 +304,8 @@ it('set active performance report and syncs it on selection', async () => {
 
     // Wait for the button text to update after selection
     await waitFor(() => {
-        const toastFilename = screen.queryByTestId(TEST_IDS.TOAST_FILENAME);
-        expect(toastFilename?.textContent.includes(reportName)).toBe(true);
+        const toastFilename = screen.getByTestId(TEST_IDS.TOAST_FILENAME);
+        expect(toastFilename?.textContent?.includes(reportName)).toBe(true);
     }, WAIT_FOR_OPTIONS);
 
     // Verify the sync button appears
@@ -415,11 +415,13 @@ it('displays appropriate connection count information', () => {
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, false);
 });
 
-const setupConnection = (connection: RemoteConnection[], selected: RemoteConnection = connection?.[0]) => {
+const setupConnection = (connection: RemoteConnection[], selected?: RemoteConnection) => {
     window.localStorage.setItem(LOCAL_STORAGE_KEY_CONNECTIONS, JSON.stringify(connection));
 
-    if (selected) {
-        window.localStorage.setItem(LOCAL_STORAGE_KEY_SELECTED, JSON.stringify(selected));
+    const initialConnection = selected ?? connection?.[0];
+
+    if (initialConnection) {
+        window.localStorage.setItem(LOCAL_STORAGE_KEY_SELECTED, JSON.stringify(initialConnection));
     }
 };
 

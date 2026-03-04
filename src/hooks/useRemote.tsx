@@ -99,35 +99,52 @@ const useRemoteConnection = () => {
     };
 
     const persistentState = {
-        get savedConnectionList() {
-            const connectionList = safeJsonParse(getAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS), []).filter(
-                isValidConnection,
-            );
+        get savedConnectionList(): RemoteConnection[] {
+            const connectionList = safeJsonParse(getAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS), []);
+            const parsedList = Array.isArray(connectionList) ? connectionList.filter(isValidConnection) : [];
 
-            return connectionList as RemoteConnection[];
+            return parsedList;
         },
         set savedConnectionList(connectionList: RemoteConnection[]) {
             setAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS, safeJsonStringify(connectionList, '[]'));
         },
-        get selectedConnection() {
-            const savedSelectedConnection = safeJsonParse(getAppConfig(LOCAL_STORAGE_KEY_SELECTED), null);
-            return (savedSelectedConnection ?? this.savedConnectionList[0]) as RemoteConnection | undefined;
+        get selectedConnection(): RemoteConnection | undefined {
+            const savedSelectedConnection = safeJsonParse(
+                getAppConfig(LOCAL_STORAGE_KEY_SELECTED),
+                null,
+            ) as RemoteConnection | null;
+
+            const connectionList = this.savedConnectionList;
+
+            if (!savedSelectedConnection || !isValidConnection(savedSelectedConnection)) {
+                return connectionList[0];
+            }
+
+            const existingConnection = connectionList.find(
+                (connection) => connection.name === savedSelectedConnection.name,
+            );
+
+            return existingConnection ?? connectionList[0];
         },
         set selectedConnection(connection: RemoteConnection | undefined) {
             setAppConfig(LOCAL_STORAGE_KEY_SELECTED, safeJsonStringify(connection ?? null));
         },
-        getSavedReportFolders: (connection?: RemoteConnection) =>
-            safeJsonParse(getAppConfig(`${connection?.name} - reportFolders`), []) as RemoteFolder[],
+        getSavedReportFolders: (connection?: RemoteConnection): RemoteFolder[] => {
+            const parsedList = safeJsonParse(getAppConfig(`${connection?.name} - reportFolders`), []);
 
+            return Array.isArray(parsedList) ? parsedList : [];
+        },
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - reportFolders`, safeJsonStringify(folders, '[]'));
         },
         deleteSavedReportFolders: (connection?: RemoteConnection) => {
             deleteAppConfig(`${connection?.name} - reportFolders`);
         },
-        getSavedPerformanceFolders: (connection?: RemoteConnection) =>
-            safeJsonParse(getAppConfig(`${connection?.name} - performanceFolders`), []) as RemoteFolder[],
+        getSavedPerformanceFolders: (connection?: RemoteConnection): RemoteFolder[] => {
+            const parsedList = safeJsonParse(getAppConfig(`${connection?.name} - performanceFolders`), []);
 
+            return Array.isArray(parsedList) ? parsedList : [];
+        },
         setSavedPerformanceFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - performanceFolders`, safeJsonStringify(folders, '[]'));
         },
