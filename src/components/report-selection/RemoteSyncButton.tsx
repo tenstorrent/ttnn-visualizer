@@ -13,6 +13,7 @@ import {
     SYNC_DATE_FORMATTER,
     getUTCFromEpoch,
 } from '../../definitions/RemoteConnection';
+import { TEST_IDS } from '../../definitions/TestIds';
 
 interface RemoteSyncButtonProps {
     selectedReportFolder: RemoteFolder | undefined;
@@ -46,6 +47,7 @@ const RemoteSyncButton: FC<RemoteSyncButtonProps> = ({
                 loading={isSyncingReportFolder}
                 disabled={isDisabled}
                 onClick={async () => handleClick(selectedReportFolder)}
+                data-testid={TEST_IDS.REMOTE_SYNC_BUTTON}
             />
         </Tooltip>
     );
