@@ -58,7 +58,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
 }) => {
     const { data } = useBufferPages(operationId, address, bufferType);
     const { data: devices } = useDevices();
-    const useHex = useAtomValue(showHexAtom);
+    const showHex = useAtomValue(showHexAtom);
 
     const [selectedTensix, setSelectedTensix] = useState<number | null>(null);
     const [chartData, setChartData] = useState<Partial<PlotData>[]>([]);
@@ -175,7 +175,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                                 pageDataToChunkArray(buffersByBankId[matchIndex]),
                                                 (id) => tensorByAddress?.get(id) || null,
                                                 undefined,
-                                                { showHex: useHex },
+                                                { showHex },
                                             ),
                                         );
                                     }}

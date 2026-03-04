@@ -36,7 +36,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     style,
     markers,
 }) => {
-    const useHex = useAtomValue(showHexAtom);
+    const showHex = useAtomValue(showHexAtom);
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
@@ -46,7 +46,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
 
     const range = isZoomedIn ? plotZoomRange : [0, memorySize];
     // If we need more flexibility on the tickformat front, we can expand this to accept a prop instead of defaulting to the below (hex or decimal)
-    const tickFormat = useHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
+    const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
 
     const markerLines: Partial<Shape>[] =
         markers?.map((marker: PlotMarker) => ({
@@ -143,7 +143,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 const dimmedColour = getDimmedColour(originalColour);
 
                 if (selectedAddress) {
-                    const formattedAddress = getMemoryAddress(selectedAddress, useHex);
+                    const formattedAddress = getMemoryAddress(selectedAddress, showHex);
 
                     data.marker.color =
                         hoveredPoint === data.x[0] || data.hovertemplate?.includes(formattedAddress)
@@ -165,7 +165,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 return data;
             }),
         );
-    }, [hoveredPoint, chartData, selectedAddress, useHex]);
+    }, [hoveredPoint, chartData, selectedAddress, showHex]);
 
     return (
         <div

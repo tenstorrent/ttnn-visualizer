@@ -14,8 +14,8 @@ interface ToastTensorMessageProps {
 }
 
 const ToastTensorMessage = ({ tensorId, address, colour }: ToastTensorMessageProps) => {
-    const useHex = useAtomValue(showHexAtom);
-    const formattedAddress = prettyPrintAddress(address ?? null, 0, useHex);
+    const showHex = useAtomValue(showHexAtom);
+    const formattedAddress = prettyPrintAddress(address ?? null, 0, showHex);
 
     return (
         <div className='toast-tensor-message'>

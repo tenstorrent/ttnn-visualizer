@@ -31,7 +31,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const deallocationOperationId = getDeallocationOperation(tensor, operations)?.id;
     const nextAllocationOperationId = getNextAllocationOperation(tensor, operations)?.id;
 
-    const useHex = useAtomValue(showHexAtom);
+    const showHex = useAtomValue(showHexAtom);
 
     return (
         <>
@@ -68,7 +68,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                             <th>Next allocation</th>
                             <td>
                                 <span>
-                                    {getMemoryAddress(address, useHex)} next allocated in{' '}
+                                    {getMemoryAddress(address, showHex)} next allocated in{' '}
                                     <Link to={`${ROUTES.OPERATIONS}/${nextAllocationOperationId}`}>
                                         {nextAllocationOperationId}{' '}
                                         {

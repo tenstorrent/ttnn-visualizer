@@ -43,7 +43,7 @@ export const MemoryLegendElement: React.FC<{
     className,
     numCores,
 }) => {
-    const useHex = useAtomValue(showHexAtom);
+    const showHex = useAtomValue(showHexAtom);
     const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
         <>
@@ -103,7 +103,7 @@ export const MemoryLegendElement: React.FC<{
                     }),
                 }}
             />
-            <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize, useHex)}</div>
+            <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize, showHex)}</div>
             <div className='format-numbers monospace nowrap'>
                 {/* eslint-disable-next-line no-nested-ternary */}
                 {chunk.bufferType === 'L1_SMALL' ? (

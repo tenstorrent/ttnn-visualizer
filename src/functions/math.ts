@@ -163,10 +163,10 @@ export const formatMemorySize = (bytes: number, decimals = 0): string => {
 };
 
 // Formats a memory address to a string with optional hex formatting
-export const getMemoryAddress = (address: number | null, useHex: boolean): string => {
+export const getMemoryAddress = (address: number | null, showHex: boolean): string => {
     if (address === null) {
         return 'NULL';
     }
 
-    return useHex ? toHex(address) : address.toString();
+    return showHex ? toHex(address) : address.toString();
 };
