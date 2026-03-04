@@ -12,6 +12,7 @@ export enum TAB_IDS {
     DRAM = 'DRAM',
 }
 
+// Examine current data model https://github.com/tenstorrent/ttnn-visualizer/issues/1286
 export enum ColumnKeys {
     operation_id = 'operation_id',
     tensor_id = 'tensor_id',
