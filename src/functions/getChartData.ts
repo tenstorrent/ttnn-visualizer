@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { getBufferColor, getTensorColor } from './colorGenerator';
-import { formatMemorySize, toHex } from './math';
+import { formatMemorySize, getMemoryAddress } from './math';
 import { toReadableShape, toReadableType } from './formatting';
 import { BufferPage, Chunk, ColoredChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
@@ -145,7 +145,7 @@ const createHoverTemplate = (
     options?: { lateDeallocation?: boolean; showHex?: boolean },
 ): string => {
     const square = `<span style="color:${color};font-size:22px">&#9632;</span>`;
-    const formattedAddress = options?.showHex ? toHex(address) : address;
+    const formattedAddress = getMemoryAddress(address, options?.showHex || false);
     const formattedSize = formatMemorySize(size);
     const canDeallocateText =
         options?.lateDeallocation && chunk.lateDeallocation ? ' - <u>Opportunity to deallocate earlier</u>' : '';

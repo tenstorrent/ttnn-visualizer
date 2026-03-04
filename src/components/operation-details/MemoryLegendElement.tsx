@@ -6,13 +6,15 @@ import React from 'react';
 import classNames from 'classnames';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtomValue } from 'jotai';
 import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { formatMemorySize, prettyPrintAddress, toHex } from '../../functions/math';
+import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import { toReadableShape, toReadableType } from '../../functions/formatting';
 import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
+import { showHexAtom } from '../../store/app';
 
 export const MemoryLegendElement: React.FC<{
     chunk: FragmentationEntry;
@@ -41,6 +43,7 @@ export const MemoryLegendElement: React.FC<{
     className,
     numCores,
 }) => {
+    const showHex = useAtomValue(showHexAtom);
     const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
         <>
@@ -100,8 +103,7 @@ export const MemoryLegendElement: React.FC<{
                     }),
                 }}
             />
-            <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
-            <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
+            <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize, showHex)}</div>
             <div className='format-numbers monospace nowrap'>
                 {/* eslint-disable-next-line no-nested-ternary */}
                 {chunk.bufferType === 'L1_SMALL' ? (
