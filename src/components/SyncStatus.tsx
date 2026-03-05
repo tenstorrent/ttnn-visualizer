@@ -5,35 +5,30 @@
 import { Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
+import 'styles/components/SyncStatus.scss';
 
 const SyncStatus = () => {
     const useGetDeviceOperationListPerfResult = useGetDeviceOperationListPerf();
-    const isInSync = useGetDeviceOperationListPerfResult.length > 0;
+    const canMatchOperations = useGetDeviceOperationListPerfResult.length > 0;
+
+    // Compute icon and messaging
+    const tooltipContent = canMatchOperations
+        ? 'Device operation data matched between reports'
+        : 'Selected memory and performance reports are likely not from the same run';
+    const icon = canMatchOperations ? IconNames.TickCircle : IconNames.ISSUE;
+    const intent = canMatchOperations ? Intent.SUCCESS : Intent.WARNING;
+    const message = canMatchOperations ? 'Active reports linked' : 'Unable to link active reports';
 
     return (
-        <span>
-            {isInSync ? (
-                <Tooltip content='Reports synchronized - data is enriched'>
-                    <strong>
-                        <Icon
-                            icon={IconNames.TickCircle}
-                            intent={Intent.SUCCESS}
-                        />{' '}
-                        Profiler and perf reports synchronised
-                    </strong>
-                </Tooltip>
-            ) : (
-                <Tooltip content='Unable to match operations in the profiler report with those in the performance report, please check both reports are from the same run'>
-                    <strong>
-                        <Icon
-                            icon={IconNames.ISSUE}
-                            intent={Intent.WARNING}
-                        />{' '}
-                        {`Profiler and perf reports can't be synchronized`}
-                    </strong>
-                </Tooltip>
-            )}
-        </span>
+        <Tooltip content={tooltipContent}>
+            <div className='sync-status'>
+                <Icon
+                    icon={icon}
+                    intent={intent}
+                />
+                <strong>{message}</strong>
+            </div>
+        </Tooltip>
     );
 };
 
