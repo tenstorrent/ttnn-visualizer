@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, Collapse, Icon, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
+import { Button, Classes, Collapse, Icon, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
@@ -107,10 +107,14 @@ function FooterInfobar() {
                         >
                             <div className='title'>
                                 <strong>Memory:</strong>
-                                <span className='report-name'>{activeProfilerReportName}</span>
+                                <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
+                                    {activeProfilerReportName}
+                                </span>
                             </div>
                         </Tooltip>
                     )}
+
+                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
 
                     {activePerformanceReportPath && (
                         <Tooltip
@@ -120,11 +124,12 @@ function FooterInfobar() {
                         >
                             <div className='title'>
                                 <strong>Performance:</strong>
-                                <span className='report-name'>{activePerformanceReportPath}</span>
+                                <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
+                                    {activePerformanceReportPath}
+                                </span>
                             </div>
                         </Tooltip>
                     )}
-                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
                 </div>
 
                 {(operationRange || performanceRange) && (
@@ -174,16 +179,12 @@ const getRemotePaths = (instance: Instance): string => {
     return `[ ${paths.toString().replace(/,/g, ', ')} ]`;
 };
 
-const MAX_TITLE_LENGTH = 20;
-
 const formatPath = (str?: string): string => {
     if (!str) {
         return '';
     }
 
-    const folderName = str.length <= MAX_TITLE_LENGTH ? str : str.slice(-MAX_TITLE_LENGTH);
-
-    return folderName.startsWith('/') ? folderName : `/${folderName}`;
+    return str.startsWith('/') ? str : `/${str}`;
 };
 
 export default FooterInfobar;

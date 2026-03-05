@@ -45,7 +45,6 @@
 
     .title {
         display: flex;
-        align-items: center;
         gap: 5px;
 
         .report-name {
@@ -55,5 +54,10 @@
             text-overflow: ellipsis;
             text-wrap: nowrap;
         }
+    }
+
+    .no-sync-status-icon {
+        color: $tt-grey-5;
+        opacity: 0.4;
     }
 }
