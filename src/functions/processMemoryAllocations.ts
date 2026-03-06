@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { DeviceOperationTypes, Node, NodeType } from '../model/APIData';
+import { Node, NodeType, StringBufferType } from '../model/APIData';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
 
 export type AllocationDetails = {
@@ -61,8 +61,8 @@ export function processMemoryAllocations(
             totalCb = 0;
         }
 
-        if (node.node_type === NodeType.buffer_allocate && node.params.type === DeviceOperationTypes.L1) {
-            const defaultNumberCores = node.params.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
+        if (node.node_type === NodeType.buffer_allocate && node.params.type === StringBufferType.L1) {
+            const defaultNumberCores = node.params.type === StringBufferType.L1 ? L1_NUM_CORES : 1;
             const numCores = parseInt(node.params.num_cores, 10) || defaultNumberCores;
             const totalSize = parseInt(node.params.size, 10);
             totalBuffer += totalSize / numCores;

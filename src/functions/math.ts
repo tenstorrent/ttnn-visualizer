@@ -135,7 +135,7 @@ export const getCoresInRange = (rangeString: string): number => {
 };
 
 /**
- * Convert bytes to human readable format using binary units (1024-based)
+ * Convert bytes to human-readable format using binary units (1024-based)
  * Appropriate for memory sizes (L1, DRAM, etc.) as memory is organized in powers of 2
  * @param bytes - The number of bytes to convert
  * @param decimals - Number of decimal places (default: 0 for B/KiB, 2 for MiB+)
@@ -143,8 +143,12 @@ export const getCoresInRange = (rangeString: string): number => {
  * @example convertBytes(163840) // "160 KiB"
  * @example convertBytes(22370304) // "21.33 MiB"
  */
-export const formatMemorySize = (bytes: number, decimals = 0): string => {
+export const formatMemorySize = (bytes: number | undefined, decimals = 0): string => {
     const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+
+    if (bytes === undefined) {
+        return 'N/A';
+    }
 
     if (bytes === 0) {
         return `0 ${sizes[0]}`;

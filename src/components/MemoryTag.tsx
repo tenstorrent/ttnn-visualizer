@@ -3,13 +3,16 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Tag } from '@blueprintjs/core';
+import { stripEnum } from '../functions/formatting';
 
 interface MemoryTagProps {
     memory: string | undefined;
 }
 
 const MemoryTag = ({ memory }: MemoryTagProps) => {
-    const memoryType = memory?.toLowerCase() || '';
-    return <Tag className={`tag-${memoryType}`}>{memory}</Tag>;
+    const memoryLabel = stripEnum(memory || '');
+    const memoryType = memoryLabel?.toLowerCase() || '';
+
+    return <Tag className={`tag-${memoryType}`}>{memoryLabel}</Tag>;
 };
 export default MemoryTag;

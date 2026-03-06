@@ -16,10 +16,12 @@ export const toReadableType = (input: string) => {
     return input.replace(/^DataType\./, '');
 };
 
-export const toReadableLayout = (input: TensorMemoryLayout) => {
-    return input.replace(/^TensorMemoryLayout::/, '');
+export const toReadableLayout = (input: TensorMemoryLayout | string) => {
+    return stripEnum(input);
 };
 
 export const capitalizeString = (input: string) => {
     return input.charAt(0).toUpperCase() + input.slice(1).toLowerCase();
 };
+
+export const stripEnum = (v: string) => v.split('::').pop();
