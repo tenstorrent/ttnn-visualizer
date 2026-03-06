@@ -24,4 +24,4 @@ export const capitalizeString = (input: string) => {
     return input.charAt(0).toUpperCase() + input.slice(1).toLowerCase();
 };
 
-export const stripEnum = (v: string) => v.split('::').pop();
+export const stripEnum = (v: string) => v.split('::').pop() || v;

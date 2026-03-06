@@ -46,7 +46,7 @@ const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, det
         const { params } = bufferOrTensorNode;
         address = parseInt(params.address, 10);
         size = parseInt(params.size, 10) || undefined;
-        layout = toReadableLayout(params.layout);
+        layout = toReadableLayout(params.layout) || '';
         type = BufferTypeLabel[params.buffer_type] as StringBufferType;
     }
 
@@ -83,7 +83,7 @@ const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, det
             <span>
                 <MemoryTag memory={type} />
             </span>
-            {layout ?? (<span className='layout'>{layout}</span> || null)}
+            {layout && <span className='layout'>{layout}</span>}
 
             {optionalOutput && optionalOutput}
         </div>
@@ -173,8 +173,7 @@ function createBuffersRender(node: TensorNode, details: OperationDetails) {
 
 function formatTensorRendering(node: Node, details: OperationDetails) {
     if (node.node_type === NodeType.tensor) {
-        const buffers = node.buffer ? createBuffersRender(node, details) : createBuffersRender(node, details);
-
+        const buffers = createBuffersRender(node, details);
         return <>{renderTensorLabel(node, details, buffers)}</>;
     }
 

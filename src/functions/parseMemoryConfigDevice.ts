@@ -2,30 +2,30 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-export interface Coord {
+interface Coord {
     x: number;
     y: number;
 }
 
-export interface GridRange {
+interface GridRange {
     start: Coord;
     end: Coord;
 }
 
-export interface NdShardSpec {
+interface NdShardSpec {
     shard_shape: number[];
     grid: GridRange[];
     orientation: string;
     shard_distribution_strategy: string;
 }
 
-export interface ShardSpec {
+interface ShardSpec {
     grid: GridRange[];
     shape: number[];
     orientation: string;
 }
 
-export interface MemoryConfig {
+interface MemoryConfig {
     memory_layout: string;
     buffer_type: string;
     shard_spec?: ShardSpec;

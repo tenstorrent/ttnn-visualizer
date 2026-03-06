@@ -72,7 +72,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         showHex: false,
     };
 
-    private static mergeDevices(operations: Node[]) {
+    protected static mergeDevices(operations: Node[]) {
         const multiDeviceOps: Node[] = [];
         const operationsByDevice: Map<string | number | undefined, Node[]> = new Map();
         let currentDeviceId: string | number | undefined;
@@ -141,7 +141,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.operations = operations;
         this.raw_device_operations = data.device_operations;
         this.deallocationReport = deallocationReport;
-        // DEBUG
+        // TODO: this merge function in breaking buffers rendering.
         // this.device_operations = OperationDetails.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.preprocessConnections(data.device_operations);
         this.options = options || { renderPattern: false, lateDeallocation: false, showHex: false };
@@ -631,7 +631,7 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
                 getConnectedNodes(op).forEach((n) => {
                     if (n.node_type === NodeType.function_end) {
                         n.operation = op;
-                        // n.params.device_id = op.params.device_id;
+                        n.params.device_id = op.params.device_id;
                     }
                 });
             } else if (op.node_type === NodeType.buffer) {
