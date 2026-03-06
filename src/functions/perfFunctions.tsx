@@ -97,13 +97,15 @@ export const formatCell = (
     }
 
     if (key === ColumnHeaders.high_dispatch) {
+        const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency`;
+
         return row?.[ColumnHeaders.device_time] !== null &&
             row?.[ColumnHeaders.device_time] > HIGH_DISPATCH_THRESHOLD_MS ? (
-            <Tooltip content={`Op with > ${HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency`}>
+            <Tooltip content={tooltipMessage}>
                 <Icon
                     className={WARNING_COLOUR}
                     icon={IconNames.WARNING_SIGN}
-                    title={`Op with > ${HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency`}
+                    title={tooltipMessage}
                 />
             </Tooltip>
         ) : (

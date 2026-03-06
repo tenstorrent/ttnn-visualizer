@@ -446,8 +446,9 @@ const OperationList = () => {
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
-                                                    content={operation?.error ? `Error recorded in operation` : ''}
+                                                    content='Error recorded in operation'
                                                     placement={PopoverPosition.TOP}
+                                                    disabled={!operation?.error}
                                                 >
                                                     <ListItem
                                                         filterName={getOperationFilterName(operation)}
