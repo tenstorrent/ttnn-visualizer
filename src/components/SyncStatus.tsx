@@ -12,9 +12,15 @@ const SyncStatus = () => {
     const canMatchOperations = useGetDeviceOperationListPerfResult.length > 0;
 
     // Compute icon and messaging
-    const tooltipContent = canMatchOperations
-        ? 'Device operation data matched between reports'
-        : 'Selected memory and performance reports are likely not from the same run';
+    const tooltipContent = canMatchOperations ? (
+        'Data linked between memory and performance reports'
+    ) : (
+        <>
+            Unable to link active memory and performance reports
+            <br />
+            Please select reports generated from the same run to see additional data across the visualizer
+        </>
+    );
     const icon = canMatchOperations ? IconNames.LINK : IconNames.UNLINK;
     const intent = canMatchOperations ? Intent.SUCCESS : Intent.NONE;
 
