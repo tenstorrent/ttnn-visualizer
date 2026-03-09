@@ -62,8 +62,7 @@ export function processMemoryAllocations(
         }
 
         if (node.node_type === NodeType.buffer_allocate && node.params.type === StringBufferType.L1) {
-            const defaultNumberCores = node.params.type === StringBufferType.L1 ? L1_NUM_CORES : 1;
-            const numCores = parseInt(node.params.num_cores, 10) || defaultNumberCores;
+            const numCores = parseInt(node.params.num_cores, 10) || L1_NUM_CORES;
             const totalSize = parseInt(node.params.size, 10);
             totalBuffer += totalSize / numCores;
         }

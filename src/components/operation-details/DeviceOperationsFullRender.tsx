@@ -301,7 +301,7 @@ function useDeviceOperationsFullRenderModel(args: {
                     const bufferSize = parseInt(buffer.size, 10) / cores;
 
                     operationContent = (
-                        <DeviceOperationNode
+                        <DeviceOperationNodeComponent
                             _node={node}
                             memoryInfo={(buffer.type === StringBufferType.L1 && memoryInfo) || undefined}
                             key={index}
@@ -321,7 +321,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                 bufferType={buffer.type}
                                 layout={buffer.layout}
                             />
-                        </DeviceOperationNode>
+                        </DeviceOperationNodeComponent>
                     );
                 } else if (nodeType === NodeType.buffer_deallocate) {
                     const buffer = node.params;
@@ -331,7 +331,7 @@ function useDeviceOperationsFullRenderModel(args: {
                     const bufferSize = size / cores;
 
                     operationContent = (
-                        <DeviceOperationNode
+                        <DeviceOperationNodeComponent
                             _node={node}
                             memoryInfo={(buffer.type === StringBufferType.L1 && memoryInfo) || undefined}
                             key={index}
@@ -340,7 +340,7 @@ function useDeviceOperationsFullRenderModel(args: {
                     );
                 } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
                     operationContent = (
-                        <DeviceOperationNode
+                        <DeviceOperationNodeComponent
                             _node={node}
                             memoryInfo={memoryInfo}
                             key={index}
@@ -437,7 +437,7 @@ const DeviceOperationsFullRender: React.FC<{
     );
 };
 
-const DeviceOperationNode: React.FC<
+const DeviceOperationNodeComponent: React.FC<
     React.PropsWithChildren<{
         title: string;
         memoryInfo?: JSX.Element;

@@ -10,7 +10,7 @@ interface MemoryTagProps {
 }
 
 const MemoryTag = ({ memory }: MemoryTagProps) => {
-    const memoryLabel = stripEnum(memory || '');
+    const memoryLabel = stripEnum(memory || '').replace(' ', '-');
     const memoryType = memoryLabel?.toLowerCase() || '';
 
     return <Tag className={`tag-${memoryType}`}>{memoryLabel}</Tag>;
