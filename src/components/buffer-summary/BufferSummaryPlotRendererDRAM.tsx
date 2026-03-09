@@ -19,7 +19,7 @@ import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
-import { ScrollLocations } from '../../definitions/ScrollPositions';
+import { ScrollLocations } from '../../definitions/VirtualLists';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
 

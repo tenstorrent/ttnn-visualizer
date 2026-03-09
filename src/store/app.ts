@@ -8,7 +8,7 @@ import { NumberRange, TabId } from '@blueprintjs/core';
 import { Id } from 'react-toastify';
 import { FileProgress, FileStatus } from '../model/APIData';
 import { TAB_IDS } from '../definitions/BufferSummary';
-import { ScrollPosition } from '../definitions/ScrollPositions';
+import { ListStates } from '../definitions/VirtualLists';
 import { Signpost } from '../functions/perfFunctions';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
@@ -21,7 +21,7 @@ import { SortingOptions } from '../definitions/SortingOptions';
 export const activeToastAtom = atom<Id | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
-export const scrollPositionsAtom = atom<ScrollPosition | null>(null);
+export const listStatesAtom = atom<ListStates | null>(null);
 export const fileTransferProgressAtom = atom<FileProgress>({
     currentFileName: '',
     numberOfFiles: 0,

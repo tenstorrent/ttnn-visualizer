@@ -36,7 +36,7 @@ import {
 } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
-import { ScrollLocations } from '../../definitions/ScrollPositions';
+import { ScrollLocations } from '../../definitions/VirtualLists';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
 
