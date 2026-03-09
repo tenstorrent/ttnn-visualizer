@@ -7,7 +7,7 @@ import { Classes, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/co
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import classNames from 'classnames';
-import { DeviceOperationTypes, Node, NodeType, Tensor } from '../../model/APIData';
+import { BufferNode, Node, NodeType, StringBufferType, Tensor, TensorNode } from '../../model/APIData';
 import 'styles/components/DeviceOperationFullRender.scss';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
@@ -18,25 +18,36 @@ import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1MemorySize';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
-import { toReadableShape } from '../../functions/formatting';
+import { toReadableLayout, toReadableShape } from '../../functions/formatting';
+import { BufferTypeLabel } from '../../model/BufferType';
 
 type BufferDetails = {
-    buffer?: Node;
+    bufferOrTensorNode?: BufferNode | TensorNode;
     tensorId?: number;
     optionalOutput?: JSX.Element;
     details: OperationDetails;
 };
 
-const renderBufferDetails = ({ buffer, tensorId, optionalOutput, details }: BufferDetails) => {
+const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, details }: BufferDetails) => {
     // TODO: this will need grouping of same sized buffers. its impractical to render 32 lines that are the same
-    if (buffer === undefined) {
+    if (bufferOrTensorNode === undefined) {
         return null;
     }
 
-    const { allocation } = buffer;
+    const { allocation } = bufferOrTensorNode;
 
     let tensorSquare = null;
-    const address = allocation?.params.address === undefined ? undefined : parseInt(allocation.params.address, 10);
+    let address = allocation?.params.address === undefined ? undefined : parseInt(allocation.params.address, 10);
+    const size: number | undefined = parseInt(bufferOrTensorNode.params.size, 10);
+    let layout = '';
+    let { type } = bufferOrTensorNode.params;
+
+    if (bufferOrTensorNode.node_type === NodeType.tensor) {
+        const { params } = bufferOrTensorNode;
+        address = parseInt(params.address, 10);
+        layout = toReadableLayout(params.layout) || '';
+        type = BufferTypeLabel[params.buffer_type] as StringBufferType;
+    }
 
     if (address !== undefined || tensorId !== undefined) {
         const tensor: Tensor | undefined =
@@ -62,21 +73,27 @@ const renderBufferDetails = ({ buffer, tensorId, optionalOutput, details }: Buff
     return (
         <div
             className='buffer-details'
-            key={buffer.id}
+            key={bufferOrTensorNode.id}
         >
             <span className='address'>
                 {tensorSquare} {address !== undefined && `${prettyPrintAddress(address, 0)}`}
             </span>
-            <span> {formatMemorySize(parseInt(buffer.params.size, 10), 2)}</span>
+            <span> {formatMemorySize(size, 2)}</span>
             <span>
-                <MemoryTag memory={buffer.params.type} />
+                <MemoryTag memory={type} />
             </span>
+            {layout && <span className='layout'>{layout}</span>}
+
             {optionalOutput && optionalOutput}
         </div>
     );
 };
 
-const renderTensorLabel = (node: Node, details: OperationDetails, buffers: JSX.Element | JSX.Element[] | null) => {
+const renderTensorLabel = (
+    node: TensorNode,
+    details: OperationDetails,
+    buffers: JSX.Element | JSX.Element[] | null,
+) => {
     const layout = node.buffer?.[0]?.params.layout;
     const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
 
@@ -120,7 +137,7 @@ const renderTensorLabel = (node: Node, details: OperationDetails, buffers: JSX.E
     );
 };
 
-function createBuffersRender(node: Node, details: OperationDetails) {
+function createBuffersRender(node: TensorNode, details: OperationDetails) {
     const deviceIds = node.buffer?.filter((b) => b).map((b) => b.params.device_id) || [];
 
     if (deviceIds?.length > 1 && node.buffer !== undefined && node.buffer.length > 0) {
@@ -128,7 +145,7 @@ function createBuffersRender(node: Node, details: OperationDetails) {
         return (
             <>
                 {renderBufferDetails({
-                    buffer,
+                    bufferOrTensorNode: buffer,
                     tensorId: node.params.tensor_id,
                     optionalOutput: <strong>x{deviceIds.length}</strong>,
                     details,
@@ -137,19 +154,22 @@ function createBuffersRender(node: Node, details: OperationDetails) {
         );
     }
 
+    if (node.params.address !== undefined) {
+        return <>{renderBufferDetails({ bufferOrTensorNode: node, tensorId: node.params.tensor_id, details })}</>;
+    }
     return (
         node.buffer?.map((buffer, index) => (
             <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
-                {renderBufferDetails({ buffer, tensorId: node.params.tensor_id, details })}
+                {renderBufferDetails({ bufferOrTensorNode: buffer, tensorId: node.params.tensor_id, details })}
             </Fragment>
         )) || null
     );
 }
 
-function formatDeviceOpParametersImpl(node: Node, details: OperationDetails) {
+function formatTensorRendering(node: Node, details: OperationDetails) {
     if (node.node_type === NodeType.tensor) {
-        const buffers = node.buffer ? createBuffersRender(node, details) : null;
-        return renderTensorLabel(node, details, buffers);
+        const buffers = createBuffersRender(node, details);
+        return <>{renderTensorLabel(node, details, buffers)}</>;
     }
 
     if (node.node_type === NodeType.circular_buffer_deallocate_all) {
@@ -190,10 +210,7 @@ function useDeviceOperationsFullRenderModel(args: {
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
 
-    const formatDeviceOpParameters = useCallback(
-        (node: Node) => formatDeviceOpParametersImpl(node, details),
-        [details],
-    );
+    const formatTensor = useCallback((node: Node) => formatTensorRendering(node, details), [details]);
 
     const renderNodes = useCallback(
         (nodes: Node[]) => {
@@ -204,7 +221,6 @@ function useDeviceOperationsFullRenderModel(args: {
 
             nodes.forEach((node, index) => {
                 const nodeType = node.node_type;
-
                 const memoryDetails = memoryAllocationList.find((data) => data.id === node.id);
                 const memoryInfo = renderMemoryInfo(memoryDetails, peakMemoryLoad);
 
@@ -226,13 +242,13 @@ function useDeviceOperationsFullRenderModel(args: {
                                 intent={Intent.SUCCESS}
                                 icon={IconNames.CUBE_ADD}
                             />
-                            {opName} <DeviceID _deviceId={node.operation?.params.device_id} /> (
+                            {opName} <DeviceID _node={node} /> (
                             {node.operation?.inputs.map((inputNode, i) => (
                                 <span
                                     className='params'
                                     key={`input ${inputNode.id} ${node.id} ${i}`}
                                 >
-                                    {formatDeviceOpParameters(inputNode)}
+                                    {formatTensor(inputNode)}
                                 </span>
                             ))}
                             ) &nbsp;{' => '}
@@ -241,7 +257,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     className='params'
                                     key={`output ${outputNode.id} ${node.id} ${i}`}
                                 >
-                                    {formatDeviceOpParameters(outputNode)}
+                                    {formatTensor(outputNode)}
                                 </span>
                             ))}
                         </h4>
@@ -275,14 +291,14 @@ function useDeviceOperationsFullRenderModel(args: {
 
                 if (nodeType === NodeType.buffer_allocate) {
                     const buffer = node.params;
-                    const defaultNumberCores = buffer.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
+                    const defaultNumberCores = buffer.type === StringBufferType.L1 ? L1_NUM_CORES : 1;
                     const cores = parseInt(buffer.num_cores, 10) || defaultNumberCores;
                     const bufferSize = parseInt(buffer.size, 10) / cores;
 
                     operationContent = (
-                        <DeviceOperationNode
+                        <DeviceOperationNodeComponent
                             _node={node}
-                            memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
+                            memoryInfo={(buffer.type === StringBufferType.L1 && memoryInfo) || undefined}
                             key={index}
                             title='Buffer allocate'
                         >
@@ -300,26 +316,26 @@ function useDeviceOperationsFullRenderModel(args: {
                                 bufferType={buffer.type}
                                 layout={buffer.layout}
                             />
-                        </DeviceOperationNode>
+                        </DeviceOperationNodeComponent>
                     );
                 } else if (nodeType === NodeType.buffer_deallocate) {
                     const buffer = node.params;
                     const size = parseInt(buffer.size, 10);
-                    const defaultNumberCores = buffer.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
+                    const defaultNumberCores = buffer.type === StringBufferType.L1 ? L1_NUM_CORES : 1;
                     const cores = parseInt(buffer.num_cores, 10) || defaultNumberCores;
                     const bufferSize = size / cores;
 
                     operationContent = (
-                        <DeviceOperationNode
+                        <DeviceOperationNodeComponent
                             _node={node}
-                            memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
+                            memoryInfo={(buffer.type === StringBufferType.L1 && memoryInfo) || undefined}
                             key={index}
                             title={`Buffer deallocate ${formatMemorySize(bufferSize)} ${buffer.type} x ${cores} cores`}
                         />
                     );
                 } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
                     operationContent = (
-                        <DeviceOperationNode
+                        <DeviceOperationNodeComponent
                             _node={node}
                             memoryInfo={memoryInfo}
                             key={index}
@@ -370,7 +386,7 @@ function useDeviceOperationsFullRenderModel(args: {
 
             return output;
         },
-        [details, formatDeviceOpParameters, memoryAllocationList, onLegendClick, peakMemoryLoad, selectedAddress],
+        [details, formatTensor, memoryAllocationList, onLegendClick, peakMemoryLoad, selectedAddress],
     );
 
     return {
@@ -416,7 +432,7 @@ const DeviceOperationsFullRender: React.FC<{
     );
 };
 
-const DeviceOperationNode: React.FC<
+const DeviceOperationNodeComponent: React.FC<
     React.PropsWithChildren<{
         title: string;
         memoryInfo?: JSX.Element;
@@ -439,9 +455,22 @@ const DeviceOperationNode: React.FC<
     );
 };
 
-const DeviceID: React.FC<{ _deviceId?: number | string }> = ({ _deviceId }) => {
+const DeviceID: React.FC<{ _deviceId?: number | string; _node?: Node }> = ({ _deviceId, _node }) => {
+    // if (_node === undefined) {
     return null;
+    // }
     // PLO, debugging code
+    // return (
+    //     <span>
+    //         <span style={{ color: 'yellow' }}>
+    //             (id: {_node.operation?.id}) {_node.operation?.connections.join(',')}
+    //         </span>
+    //         | |
+    //         <span style={{ color: 'yellow' }}>
+    //             (id: {_node.id}) {_node.connections.join(',')}
+    //         </span>
+    //     </span>
+    // );
     // return _deviceId !== undefined && <span className='device-id'>{_deviceId}</span>;
 };
 

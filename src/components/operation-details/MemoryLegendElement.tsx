@@ -7,12 +7,7 @@ import classNames from 'classnames';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
-import {
-    ChunkBufferType,
-    DeviceOperationLayoutTypes,
-    DeviceOperationTypes,
-    FragmentationEntry,
-} from '../../model/APIData';
+import { ChunkBufferType, DeviceOperationLayoutTypes, FragmentationEntry, StringBufferType } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
@@ -28,8 +23,8 @@ export const MemoryLegendElement: React.FC<{
     selectedTensorAddress: number | null;
     operationDetails: OperationDetails;
     onLegendClick: (selectedTensorAddress: number, tensorId?: number, colorVariance?: number) => void;
-    colorVariance?: number; // color uniqueness for the CB color
-    bufferType?: DeviceOperationTypes;
+    colorVariance?: number | undefined; // color uniqueness for the CB color
+    bufferType?: StringBufferType;
     layout?: DeviceOperationLayoutTypes;
     isMultiDeviceBuffer?: boolean;
     isGroupHeader?: boolean;
@@ -151,7 +146,7 @@ export const MemoryLegendElement: React.FC<{
             </div>
             {(bufferType || layout) && (
                 <div className='extra-info-slot'>
-                    {bufferType && <span className='monospace'>{DeviceOperationTypes[bufferType]} </span>}
+                    {bufferType && <span className='monospace'>{StringBufferType[bufferType]} </span>}
                     {layout && <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>}
                 </div>
             )}

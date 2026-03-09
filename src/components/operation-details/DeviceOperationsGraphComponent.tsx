@@ -10,7 +10,7 @@ import { DataSet } from 'vis-data';
 import { Edge, IdType } from 'vis-network';
 import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Node } from '../../model/APIData';
+import { DeviceOperationNode, Node, TensorNode } from '../../model/APIData';
 import 'styles/components/DeviceOperationsGraphComponent.scss';
 import { isExtendedDeviceOperation } from '../../functions/filterOperations';
 import { toReadableShape } from '../../functions/formatting';
@@ -22,14 +22,14 @@ export interface GraphComponentProps {
     onClose: () => void;
 }
 
-type ConnectedDeviceOperation = Node & {
+type ConnectedDeviceOperation = DeviceOperationNode & {
     inputs: Node[];
     outputs: Node[];
-    graphInputs: Node[];
-    graphOutputs: Node[];
+    graphInputs: TensorNode[];
+    graphOutputs: TensorNode[];
 };
 
-const formatOperationName = (item: Node) => {
+const formatOperationName = (item: DeviceOperationNode) => {
     return item.params.name ? `${item.params.name}()` : '';
 };
 
