@@ -178,10 +178,16 @@ export interface ColoredChunk extends Chunk {
     color: string | undefined;
 }
 
+export enum ChunkBufferType {
+    CB = 'CB',
+    L1_START = 'L1_START',
+    L1_SMALL = 'L1_SMALL',
+}
+
 export interface FragmentationEntry extends Chunk {
     empty?: boolean;
     largestEmpty?: boolean;
-    bufferType?: 'CB' | 'L1_START' | 'L1_SMALL' | undefined;
+    bufferType?: ChunkBufferType | undefined;
     colorVariance?: number | undefined;
 }
 

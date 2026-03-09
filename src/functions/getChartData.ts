@@ -19,14 +19,16 @@ export default function getChartData(
         const { address, size } = chunk;
         const tensor = getTensorForAddress(address);
         const tensorColor = getTensorColor(tensor?.id);
+        const colorVariance = overrides?.colorVariance || 0;
         let color;
+
         if (overrides?.color) {
             color = overrides?.color;
         } else if ('color' in chunk && typeof chunk.color === 'string' && chunk.color) {
             // check for ColoredChunk
             color = chunk.color;
         } else {
-            color = tensorColor !== undefined ? tensorColor : getBufferColor(address + (overrides?.colorVariance || 0));
+            color = tensorColor !== undefined ? tensorColor : getBufferColor(address + colorVariance);
         }
 
         const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
@@ -97,6 +99,7 @@ export default function getChartData(
                 address,
                 size,
                 tensor,
+                colorVariance,
             },
             hovertemplate:
                 overrides?.hovertemplate !== undefined
