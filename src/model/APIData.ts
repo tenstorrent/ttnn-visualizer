@@ -234,8 +234,11 @@ export enum DeviceOperationLayoutTypes {
 }
 
 export enum StringBufferType {
-    L1 = 'L1',
     DRAM = 'DRAM',
+    L1 = 'L1',
+    SYSTEM_MEMORY = 'SYSTEM MEMORY',
+    L1_SMALL = 'L1 SMALL',
+    TRACE = 'TRACE',
 }
 
 export interface DeviceOperationParams {
