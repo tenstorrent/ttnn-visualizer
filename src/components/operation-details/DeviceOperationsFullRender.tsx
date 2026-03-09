@@ -38,14 +38,13 @@ const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, det
 
     let tensorSquare = null;
     let address = allocation?.params.address === undefined ? undefined : parseInt(allocation.params.address, 10);
-    let size: number | undefined = parseInt(bufferOrTensorNode.params.size, 10);
+    const size: number | undefined = parseInt(bufferOrTensorNode.params.size, 10);
     let layout = '';
     let { type } = bufferOrTensorNode.params;
 
     if (bufferOrTensorNode.node_type === NodeType.tensor) {
         const { params } = bufferOrTensorNode;
         address = parseInt(params.address, 10);
-        size = parseInt(params.size, 10) || undefined;
         layout = toReadableLayout(params.layout) || '';
         type = BufferTypeLabel[params.buffer_type] as StringBufferType;
     }
@@ -156,11 +155,7 @@ function createBuffersRender(node: TensorNode, details: OperationDetails) {
     }
 
     if (node.params.address !== undefined) {
-        return (
-            <Fragment key={`buffer-details-${node.params.tensor_id}`}>
-                {renderBufferDetails({ bufferOrTensorNode: node, tensorId: node.params.tensor_id, details })}
-            </Fragment>
-        );
+        return <>{renderBufferDetails({ bufferOrTensorNode: node, tensorId: node.params.tensor_id, details })}</>;
     }
     return (
         node.buffer?.map((buffer, index) => (
