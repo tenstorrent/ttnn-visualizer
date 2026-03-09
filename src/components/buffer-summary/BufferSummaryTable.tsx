@@ -247,9 +247,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         <HotkeysProvider>
             <div className='buffer-summary-table'>
                 <div className='aside-container'>
-                    <Tooltip
-                        content={isMultiDevice ? '' : 'Merging is only available when multiple devices are present'}
-                    >
+                    <Tooltip content='Merging is only available when multiple devices are present'>
                         <Checkbox
                             checked={isMultiDevice && mergedByDevice}
                             onChange={() => setMergedByDevice(!mergedByDevice)}

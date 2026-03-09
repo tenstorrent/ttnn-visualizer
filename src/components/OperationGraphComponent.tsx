@@ -426,12 +426,8 @@ const OperationGraph: React.FC<{
                 <div className='operation-graph-nav'>
                     <Tooltip
                         placement={PopoverPosition.TOP}
-                        content={
-                            previousOperation
-                                ? `Go to previous operation ${previousOperation}`
-                                : 'No previous operation'
-                        }
-                        disabled={isLoading}
+                        content={`Go to previous operation ${previousOperation}`}
+                        disabled={isLoading || !previousOperation}
                     >
                         <Button
                             icon={IconNames.ArrowLeft}
@@ -461,8 +457,8 @@ const OperationGraph: React.FC<{
                     </Tooltip>
                     <Tooltip
                         placement={PopoverPosition.TOP}
-                        content={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
-                        disabled={isLoading}
+                        content={`Go to next operation ${nextOperation}`}
+                        disabled={isLoading || !nextOperation}
                     >
                         <Button
                             icon={IconNames.ArrowRight}
