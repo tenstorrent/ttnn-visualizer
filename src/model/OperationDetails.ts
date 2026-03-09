@@ -141,7 +141,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.operations = operations;
         this.raw_device_operations = data.device_operations;
         this.deallocationReport = deallocationReport;
-        // TODO: this merge function in breaking buffers rendering.
+        // TODO: something in merge device ids is breaking the render. since we are not using device id atm its removed from the stack temporarily
         // this.device_operations = OperationDetails.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.preprocessConnections(data.device_operations);
         this.options = options || { renderPattern: false, lateDeallocation: false, showHex: false };
