@@ -406,6 +406,16 @@ class OpsPerformanceReportQueries:
 
     @classmethod
     def generate_report(cls, instance, **kwargs):
+        def cleanup_stacked_temp_files(
+            summary_csv_path, summary_png_path, csv_summary_file
+        ):
+            if os.path.exists(summary_csv_path):
+                os.unlink(summary_csv_path)
+            if os.path.exists(summary_png_path):
+                os.unlink(summary_png_path)
+            if os.path.exists(csv_summary_file.name):
+                os.unlink(csv_summary_file.name)
+
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
 
@@ -476,7 +486,9 @@ class OpsPerformanceReportQueries:
         except Exception as e:
             logger.error(f"Error generating performance report: {e}")
             logger.error(f"Full traceback:\n{traceback.format_exc()}")
-
+            cleanup_stacked_temp_files(
+                summary_csv_path, summary_png_path, csv_summary_file
+            )
             raise DataFormatError(f"Error generating performance report: {e}") from e
 
         try:
@@ -586,65 +598,64 @@ class OpsPerformanceReportQueries:
 
         stacked_report = []
 
-        try:
-            logger.info(f"Processing stacked report file: {summary_csv_path}")
-            if os.path.exists(summary_csv_path):
-                try:
-                    with open(summary_csv_path, newline="") as csvfile:
-                        reader = csv.reader(csvfile, delimiter=",")
-                        next(reader, None)
+        if not no_stacked_report:
+            try:
+                logger.info(f"Processing stacked report file: {summary_csv_path}")
+                if os.path.exists(summary_csv_path):
+                    try:
+                        with open(summary_csv_path, newline="") as csvfile:
+                            reader = csv.reader(csvfile, delimiter=",")
+                            next(reader, None)
 
-                        # Use the appropriate column list based on merge_devices flag
-                        stacked_columns = (
-                            cls.STACKED_REPORT_COLUMNS_WITH_DEVICE
-                            if not merge_devices
-                            else cls.STACKED_REPORT_COLUMNS
-                        )
+                            # Use the appropriate column list based on merge_devices flag
+                            stacked_columns = (
+                                cls.STACKED_REPORT_COLUMNS_WITH_DEVICE
+                                if not merge_devices
+                                else cls.STACKED_REPORT_COLUMNS
+                            )
 
-                        for row in reader:
-                            processed_row = {
-                                column: row[index]
-                                for index, column in enumerate(stacked_columns)
-                                if index < len(row)
-                            }
+                            for row in reader:
+                                processed_row = {
+                                    column: row[index]
+                                    for index, column in enumerate(stacked_columns)
+                                    if index < len(row)
+                                }
 
-                            # Map "OP Code Joined" to "op_code" for consistency with non-stacked report
-                            if "OP Code Joined" in processed_row:
-                                processed_row["op_code"] = processed_row[
-                                    "OP Code Joined"
-                                ]
-                                del processed_row["OP Code Joined"]
+                                # Map "OP Code Joined" to "op_code" for consistency with non-stacked report
+                                if "OP Code Joined" in processed_row:
+                                    processed_row["op_code"] = processed_row[
+                                        "OP Code Joined"
+                                    ]
+                                    del processed_row["OP Code Joined"]
 
-                            if "op_code" in processed_row and any(
-                                processed_row["op_code"] in signpost["op_code"]
-                                for signpost in signposts
-                            ):
-                                processed_row["op_type"] = "signpost"
-                            else:
-                                processed_row["op_type"] = "unknown"
+                                if "op_code" in processed_row and any(
+                                    processed_row["op_code"] in signpost["op_code"]
+                                    for signpost in signposts
+                                ):
+                                    processed_row["op_type"] = "signpost"
+                                else:
+                                    processed_row["op_type"] = "unknown"
 
-                            stacked_report.append(processed_row)
-                except csv.Error as e:
-                    logger.error(f"CSV parsing error in stacked report: {e}")
-                    raise DataFormatError() from e
-                finally:
-                    # Clean up the files created by perf_report library
-                    if os.path.exists(summary_csv_path):
-                        os.unlink(summary_csv_path)
-                    if os.path.exists(summary_png_path):
-                        os.unlink(summary_png_path)
-                    # Clean up the original temp file that was just used for its name
-                    if os.path.exists(csv_summary_file.name):
-                        os.unlink(csv_summary_file.name)
-            else:
-                logger.warning(f"Stacked report file not created: {summary_csv_path}")
-        except Exception as e:
-            logger.error(f"Error processing stacked report: {e}")
-            # Don't raise, just log - stacked report is optional
-
-        finally:
-            # Ensure cleanup happens even if error occurs
-            pass
+                                stacked_report.append(processed_row)
+                    except csv.Error as e:
+                        logger.error(f"CSV parsing error in stacked report: {e}")
+                        raise DataFormatError() from e
+                else:
+                    logger.warning(
+                        f"Stacked report file not created: {summary_csv_path}"
+                    )
+            except Exception as e:
+                logger.error(f"Error processing stacked report: {e}")
+                # Don't raise, just log - stacked report is optional
+            finally:
+                cleanup_stacked_temp_files(
+                    summary_csv_path, summary_png_path, csv_summary_file
+                )
+        else:
+            logger.info("Skipping stacked report processing as per configuration")
+            cleanup_stacked_temp_files(
+                summary_csv_path, summary_png_path, csv_summary_file
+            )
 
         return {
             "report": report,
