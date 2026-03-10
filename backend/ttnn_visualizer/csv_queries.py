@@ -418,6 +418,16 @@ class OpsPerformanceReportQueries:
                 f"CSV must have at least header + 1 data row, got {len(csv_lines)} lines"
             )
 
+        # Determine if we should skip stacked report
+        data_row_count = len(csv_lines) - 1
+        no_stacked_report = kwargs.get(
+            "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
+        )
+
+        if data_row_count <= 1:
+            logger.info("Skipping stacked report generation: insufficient data rows")
+            no_stacked_report = True
+
         csv_summary_file = tempfile.NamedTemporaryFile(delete=False)
         csv_output_file = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         # The perf_report library creates files with format: {csv_summary_name}.csv and {csv_summary_name}.png
@@ -428,27 +438,16 @@ class OpsPerformanceReportQueries:
 
         start_signpost = kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST)
         end_signpost = kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST)
-        ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
         print_signposts = kwargs.get("print_signposts", cls.DEFAULT_PRINT_SIGNPOSTS)
         no_host_ops = kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS)
         merge_devices = kwargs.get("merge_devices", cls.DEFAULT_MERGE_DEVICES)
         tracing_mode = kwargs.get("tracing_mode", cls.DEFAULT_TRACING_MODE)
         group_by = kwargs.get("group_by", cls.DEFAULT_GROUP_BY)
 
-        # Determine if we should skip stacked report
-        csv_lines = raw_csv.strip().split("\n")
-        data_row_count = len(csv_lines) - 1
-        no_stacked_report = kwargs.get(
-            "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
-        )
-
-        # Skip stacked report for single row
-        if data_row_count <= 1:
-            logger.info("Skipping stacked report generation: insufficient data rows")
-            no_stacked_report = True
-
         if start_signpost or end_signpost:
             ignore_signposts = False
+        else:
+            ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
 
         try:
             perf_report.generate_perf_report(
@@ -482,8 +481,9 @@ class OpsPerformanceReportQueries:
 
         try:
             logger.info("Reading raw CSV for signpost extraction...")
+            csv_file.seek(0)
             ops_perf_results = []
-            ops_perf_results_reader = csv.DictReader(StringIO(raw_csv))
+            ops_perf_results_reader = csv.DictReader(csv_file)
 
             for row in ops_perf_results_reader:
                 ops_perf_results.append(row)
@@ -511,6 +511,8 @@ class OpsPerformanceReportQueries:
             ops_perf_results = []
             signposts = []
 
+        logger.info(f"Found {len(signposts)} signposts...")
+
         report = []
 
         try:
@@ -527,7 +529,6 @@ class OpsPerformanceReportQueries:
                             )
                             report = []
                         else:
-                            logger.info(f"CSV output header: {header}")
                             for row in reader:
                                 try:
                                     op_id = int(row[0])
