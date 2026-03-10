@@ -7,7 +7,7 @@ import classNames from 'classnames';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
-import { ChunkBufferType, DeviceOperationLayoutTypes, FragmentationEntry, StringBufferType } from '../../model/APIData';
+import { DeviceOperationLayoutTypes, FragmentationEntry, MarkerType, StringBufferType } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
@@ -46,7 +46,7 @@ export const MemoryLegendElement: React.FC<{
     const showHex = useAtomValue(showHexAtom);
     const selectedBufferColour = useAtomValue(selectedBufferColourAtom);
     const Component =
-        chunk.empty || chunk.bufferType === ChunkBufferType.L1_SMALL || chunk.bufferType === ChunkBufferType.L1_START
+        chunk.empty || chunk.bufferType === MarkerType.L1_SMALL || chunk.bufferType === MarkerType.L1_START
             ? 'div'
             : 'button';
     const emptyChunkLabel = (
@@ -75,10 +75,10 @@ export const MemoryLegendElement: React.FC<{
                           ? getTensorColor(chunk.tensorId) || getTensorColor(derivedTensor?.id)
                           : getBufferColor(chunk.address + (colorVariance || 0)),
               }),
-        ...(chunk.bufferType === ChunkBufferType.L1_SMALL && {
+        ...(chunk.bufferType === MarkerType.L1_SMALL && {
             backgroundColor: L1_SMALL_MARKER_COLOR,
         }),
-        ...(chunk.bufferType === ChunkBufferType.L1_START && {
+        ...(chunk.bufferType === MarkerType.L1_START && {
             backgroundColor: L1_START_MARKER_COLOR,
         }),
     };
@@ -93,8 +93,8 @@ export const MemoryLegendElement: React.FC<{
                 {
                     button:
                         !chunk.empty &&
-                        chunk.bufferType !== ChunkBufferType.L1_SMALL &&
-                        chunk.bufferType !== ChunkBufferType.L1_START,
+                        chunk.bufferType !== MarkerType.L1_SMALL &&
+                        chunk.bufferType !== MarkerType.L1_START,
                     active: selectedTensorAddress === chunk.address && isMatchingBufferColour,
                     dimmed:
                         selectedBufferColour !== null &&
@@ -105,9 +105,7 @@ export const MemoryLegendElement: React.FC<{
                 className,
             )}
             // eslint-disable-next-line react/jsx-props-no-spreading
-            {...(!chunk.empty &&
-            chunk.bufferType !== ChunkBufferType.L1_SMALL &&
-            chunk.bufferType !== ChunkBufferType.L1_START
+            {...(!chunk.empty && chunk.bufferType !== MarkerType.L1_SMALL && chunk.bufferType !== MarkerType.L1_START
                 ? {
                       type: 'button',
                       onClick: () => onLegendClick(chunk.address, chunk.tensorId, colorVariance),
@@ -123,9 +121,9 @@ export const MemoryLegendElement: React.FC<{
             <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize, showHex)}</div>
             <div className='format-numbers monospace nowrap'>
                 {/* eslint-disable-next-line no-nested-ternary */}
-                {chunk.bufferType === ChunkBufferType.L1_SMALL ? (
+                {chunk.bufferType === MarkerType.L1_SMALL ? (
                     'L1 SMALL region'
-                ) : chunk.bufferType === ChunkBufferType.L1_START ? (
+                ) : chunk.bufferType === MarkerType.L1_START ? (
                     'L1 START'
                 ) : (
                     <>

@@ -23,7 +23,7 @@ import {
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { BufferType } from '../../model/BufferType';
-import { ChunkBufferType, FragmentationEntry } from '../../model/APIData';
+import { FragmentationEntry, MarkerType } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
 import { useGetL1SmallMarker, useGetL1StartMarker } from '../../hooks/useAPI';
 import useScrollShade from '../../hooks/useScrollShade';
@@ -111,7 +111,7 @@ function L1Plots({
                     (cb) =>
                         ({
                             ...cb,
-                            bufferType: 'CB',
+                            bufferType: MarkerType.CB,
                             colorVariance: op.id,
                         }) as FragmentationEntry,
                 ),
@@ -291,7 +291,7 @@ function L1Plots({
                         chunk={{
                             size: 0,
                             address: l1StartMarker,
-                            bufferType: ChunkBufferType.L1_START,
+                            bufferType: MarkerType.L1_START,
                         }}
                         key='l1start-marker'
                         memSize={memorySizeL1}
@@ -342,7 +342,7 @@ function L1Plots({
                         chunk={{
                             size: 0,
                             address: l1SmallMarker,
-                            bufferType: ChunkBufferType.L1_SMALL,
+                            bufferType: MarkerType.L1_SMALL,
                         }}
                         key='l1small-marker'
                         memSize={memorySizeL1}
