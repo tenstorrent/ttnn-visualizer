@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import tempfile
+import traceback
 from io import StringIO
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -230,71 +231,6 @@ class DeviceLogProfilerQueries:
 
 class OpsPerformanceQueries:
     PERF_RESULTS_PREFIX = "ops_perf_results"
-    PERF_RESULTS_COLUMNS = [
-        "OP CODE",
-        "OP TYPE",
-        "GLOBAL CALL COUNT",
-        "DEVICE ID",
-        "ATTRIBUTES",
-        "MATH FIDELITY",
-        "CORE COUNT",
-        "PARALLELIZATION STRATEGY",
-        "HOST START TS",
-        "HOST END TS",
-        "HOST DURATION [ns]",
-        "DEVICE FW START CYCLE",
-        "DEVICE FW END CYCLE",
-        "OP TO OP LATENCY [ns]",
-        "DEVICE FW DURATION [ns]",
-        "DEVICE KERNEL DURATION [ns]",
-        "DEVICE BRISC KERNEL DURATION [ns]",
-        "DEVICE NCRISC KERNEL DURATION [ns]",
-        "DEVICE TRISC0 KERNEL DURATION [ns]",
-        "DEVICE TRISC1 KERNEL DURATION [ns]",
-        "DEVICE TRISC2 KERNEL DURATION [ns]",
-        "DEVICE ERISC KERNEL DURATION [ns]",
-        "DEVICE COMPUTE CB WAIT FRONT [ns]",
-        "DEVICE COMPUTE CB RESERVE BACK [ns]",
-        "INPUT_0_W",
-        "INPUT_0_Z",
-        "INPUT_0_Y",
-        "INPUT_0_X",
-        "INPUT_0_LAYOUT",
-        "INPUT_0_DATATYPE",
-        "INPUT_0_MEMORY",
-        "INPUT_1_W",
-        "INPUT_1_Z",
-        "INPUT_1_Y",
-        "INPUT_1_X",
-        "INPUT_1_LAYOUT",
-        "INPUT_1_DATATYPE",
-        "INPUT_1_MEMORY",
-        "INPUT_2_W",
-        "INPUT_2_Z",
-        "INPUT_2_Y",
-        "INPUT_2_X",
-        "INPUT_2_LAYOUT",
-        "INPUT_2_DATATYPE",
-        "INPUT_2_MEMORY",
-        "OUTPUT_0_W",
-        "OUTPUT_0_Z",
-        "OUTPUT_0_Y",
-        "OUTPUT_0_X",
-        "OUTPUT_0_LAYOUT",
-        "OUTPUT_0_DATATYPE",
-        "OUTPUT_0_MEMORY",
-        "COMPUTE KERNEL SOURCE",
-        "COMPUTE KERNEL HASH",
-        "DATA MOVEMENT KERNEL SOURCE",
-        "DATA MOVEMENT KERNEL HASH",
-        "PM IDEAL [ns]",
-        "PM COMPUTE [ns]",
-        "PM BANDWIDTH [ns]",
-        "PM REQ I BW",
-        "PM REQ O BW",
-        "CompileProgram_TT_HOST_FUNC [ns]",
-        "HWCommandQueue_write_buffer_TT_HOST_FUNC [ns]",
-    ]
 
     def __init__(self, instance: Instance):
         """
@@ -309,11 +245,8 @@ class OpsPerformanceQueries:
         :return:
         """
         file_path = OpsPerformanceQueries.get_local_ops_perf_file_path(self.instance)
-        self.runner = LocalCSVQueryRunner(file_path=file_path, offset=1)
+        self.runner = LocalCSVQueryRunner(file_path=file_path, offset=0)
         self.runner.__enter__()
-
-        # Set up columns
-        self.runner.df.columns = self.PERF_RESULTS_COLUMNS
         self.runner.df.columns = self.runner.df.columns.str.strip()
 
         return self
@@ -375,9 +308,7 @@ class OpsPerformanceQueries:
         """
         Fetch all entries from the performance log.
         """
-        return self.runner.execute_query(
-            columns=self.PERF_RESULTS_COLUMNS, as_dict=as_dict, limit=limit
-        )
+        return self.runner.execute_query(columns=[], as_dict=as_dict, limit=limit)
 
     def get_all_folders(directory: str) -> List[str]:
         """
@@ -477,6 +408,16 @@ class OpsPerformanceReportQueries:
     def generate_report(cls, instance, **kwargs):
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
+
+        # Validate that we have CSV data with rows
+        csv_lines = raw_csv.strip().split("\n")
+        logger.info(f"CSV has {len(csv_lines)} lines (header + data rows)")
+
+        if len(csv_lines) < 2:
+            raise DataFormatError(
+                f"CSV must have at least header + 1 data row, got {len(csv_lines)} lines"
+            )
+
         csv_summary_file = tempfile.NamedTemporaryFile(delete=False)
         csv_output_file = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         # The perf_report library creates files with format: {csv_summary_name}.csv and {csv_summary_name}.png
@@ -493,6 +434,18 @@ class OpsPerformanceReportQueries:
         merge_devices = kwargs.get("merge_devices", cls.DEFAULT_MERGE_DEVICES)
         tracing_mode = kwargs.get("tracing_mode", cls.DEFAULT_TRACING_MODE)
         group_by = kwargs.get("group_by", cls.DEFAULT_GROUP_BY)
+
+        # Determine if we should skip stacked report
+        csv_lines = raw_csv.strip().split("\n")
+        data_row_count = len(csv_lines) - 1
+        no_stacked_report = kwargs.get(
+            "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
+        )
+
+        # Skip stacked report for single row
+        if data_row_count <= 1:
+            logger.info("Skipping stacked report generation: insufficient data rows")
+            no_stacked_report = True
 
         if start_signpost or end_signpost:
             ignore_signposts = False
@@ -516,131 +469,181 @@ class OpsPerformanceReportQueries:
                 group_by,
                 cls.DEFAULT_CLASSIC_COLORS,
                 csv_summary_file.name,
-                cls.DEFAULT_NO_STACKED_REPORT,
+                no_stacked_report,
                 cls.DEFAULT_NO_STACK_BY_IN0,
                 cls.DEFAULT_STACKED_CSV_FILE,
                 not merge_devices,
             )
         except Exception as e:
             logger.error(f"Error generating performance report: {e}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+
             raise DataFormatError(f"Error generating performance report: {e}") from e
 
-        ops_perf_results = []
-        ops_perf_results_reader = csv.DictReader(StringIO(raw_csv))
+        try:
+            logger.info("Reading raw CSV for signpost extraction...")
+            ops_perf_results = []
+            ops_perf_results_reader = csv.DictReader(StringIO(raw_csv))
 
-        for row in ops_perf_results_reader:
-            ops_perf_results.append(row)
+            for row in ops_perf_results_reader:
+                ops_perf_results.append(row)
 
-        # Returns a list of unique signposts in the order they appear
-        # TODO: Signpost names are not unique but tt-perf-report treats them as such
-        captured_signposts = set()
-        signposts = []
-        for index, row in enumerate(ops_perf_results):
-            if row.get("OP TYPE") == "signpost":
-                op_code = row["OP CODE"]
-                op_id = index + 2  # Match IDs with row numbers in ops perf results csv
-                if not any(s["op_code"] == op_code for s in signposts):
-                    captured_signposts.add(op_code)
-                    signposts.append(
-                        {
-                            "id": op_id,
-                            "op_code": op_code,
-                        }
-                    )
+            # Returns a list of unique signposts in the order they appear
+            # TODO: Signpost names are not unique but tt-perf-report treats them as such
+            captured_signposts = set()
+            signposts = []
+            for index, row in enumerate(ops_perf_results):
+                if row.get("OP TYPE") == "signpost":
+                    op_code = row["OP CODE"]
+                    op_id = (
+                        index + 2
+                    )  # Match IDs with row numbers in ops perf results csv
+                    if not any(s["op_code"] == op_code for s in signposts):
+                        captured_signposts.add(op_code)
+                        signposts.append(
+                            {
+                                "id": op_id,
+                                "op_code": op_code,
+                            }
+                        )
+        except Exception as e:
+            logger.error(f"Error extracting signposts: {e}")
+            ops_perf_results = []
+            signposts = []
 
         report = []
 
-        if os.path.exists(csv_output_file.name):
-            try:
-                with open(csv_output_file.name, newline="") as csvfile:
-                    reader = csv.reader(csvfile, delimiter=",")
-                    next(reader, None)
-                    for row in reader:
-                        op_id = int(row[0])
-                        # IDs in result column one correspond to row numbers in ops perf results csv
-                        idx = op_id - 2
+        try:
+            logger.info(f"Processing CSV output file: {csv_output_file.name}")
+            if os.path.exists(csv_output_file.name):
+                try:
+                    with open(csv_output_file.name, newline="") as csvfile:
+                        reader = csv.reader(csvfile, delimiter=",")
+                        header = next(reader, None)
 
-                        processed_row = {
-                            column: row[index]
-                            for index, column in enumerate(cls.REPORT_COLUMNS)
-                            if index < len(row)
-                        }
-
-                        if "advice" in processed_row and processed_row["advice"]:
-                            processed_row["advice"] = processed_row["advice"].split(
-                                " • "
+                        if not header:
+                            logger.warning(
+                                "CSV output file is empty, no report data generated"
                             )
+                            report = []
                         else:
-                            processed_row["advice"] = []
+                            logger.info(f"CSV output header: {header}")
+                            for row in reader:
+                                try:
+                                    op_id = int(row[0])
+                                    # IDs in result column one correspond to row numbers in ops perf results csv
+                                    idx = op_id - 2
 
-                        for key, value in cls.PASSTHROUGH_COLUMNS.items():
-                            if 0 <= idx < len(ops_perf_results):
+                                    processed_row = {
+                                        column: row[index]
+                                        for index, column in enumerate(
+                                            cls.REPORT_COLUMNS
+                                        )
+                                        if index < len(row)
+                                    }
 
-                                processed_row[key] = ops_perf_results[idx][value]
-                            else:
-                                processed_row[key] = None
+                                    if (
+                                        "advice" in processed_row
+                                        and processed_row["advice"]
+                                    ):
+                                        processed_row["advice"] = processed_row[
+                                            "advice"
+                                        ].split(" • ")
+                                    else:
+                                        processed_row["advice"] = []
 
-                        # Get the op type from the raw file for this row as it is not returned from tt-perf-report
-                        if 0 <= idx < len(ops_perf_results):
-                            processed_row["op_type"] = ops_perf_results[idx].get(
-                                "OP TYPE"
-                            )
-                        else:
-                            processed_row["op_type"] = None
+                                    for key, value in cls.PASSTHROUGH_COLUMNS.items():
+                                        if 0 <= idx < len(ops_perf_results):
+                                            processed_row[key] = ops_perf_results[
+                                                idx
+                                            ].get(value)
+                                        else:
+                                            processed_row[key] = None
 
-                        report.append(processed_row)
-            except csv.Error as e:
-                raise DataFormatError() from e
-            finally:
-                os.unlink(csv_output_file.name)
+                                    # Get the op type from the raw file for this row as it is not returned from tt-perf-report
+                                    if 0 <= idx < len(ops_perf_results):
+                                        processed_row["op_type"] = ops_perf_results[
+                                            idx
+                                        ].get("OP TYPE")
+                                    else:
+                                        processed_row["op_type"] = None
+
+                                    report.append(processed_row)
+                                except (ValueError, IndexError) as e:
+                                    logger.error(f"Error processing row {row}: {e}")
+                                    continue
+                except csv.Error as e:
+                    logger.error(f"CSV parsing error: {e}")
+                    raise DataFormatError() from e
+                finally:
+                    os.unlink(csv_output_file.name)
+            else:
+                logger.warning(f"CSV output file not created: {csv_output_file.name}")
+        except Exception as e:
+            logger.error(f"Error processing CSV output file: {e}")
+            report = []
 
         stacked_report = []
 
-        if os.path.exists(summary_csv_path):
-            try:
-                with open(summary_csv_path, newline="") as csvfile:
-                    reader = csv.reader(csvfile, delimiter=",")
-                    next(reader, None)
+        try:
+            logger.info(f"Processing stacked report file: {summary_csv_path}")
+            if os.path.exists(summary_csv_path):
+                try:
+                    with open(summary_csv_path, newline="") as csvfile:
+                        reader = csv.reader(csvfile, delimiter=",")
+                        next(reader, None)
 
-                    # Use the appropriate column list based on merge_devices flag
-                    stacked_columns = (
-                        cls.STACKED_REPORT_COLUMNS_WITH_DEVICE
-                        if not merge_devices
-                        else cls.STACKED_REPORT_COLUMNS
-                    )
+                        # Use the appropriate column list based on merge_devices flag
+                        stacked_columns = (
+                            cls.STACKED_REPORT_COLUMNS_WITH_DEVICE
+                            if not merge_devices
+                            else cls.STACKED_REPORT_COLUMNS
+                        )
 
-                    for row in reader:
-                        processed_row = {
-                            column: row[index]
-                            for index, column in enumerate(stacked_columns)
-                            if index < len(row)
-                        }
+                        for row in reader:
+                            processed_row = {
+                                column: row[index]
+                                for index, column in enumerate(stacked_columns)
+                                if index < len(row)
+                            }
 
-                        # Map "OP Code Joined" to "op_code" for consistency with non-stacked report
-                        if "OP Code Joined" in processed_row:
-                            processed_row["op_code"] = processed_row["OP Code Joined"]
-                            del processed_row["OP Code Joined"]
+                            # Map "OP Code Joined" to "op_code" for consistency with non-stacked report
+                            if "OP Code Joined" in processed_row:
+                                processed_row["op_code"] = processed_row[
+                                    "OP Code Joined"
+                                ]
+                                del processed_row["OP Code Joined"]
 
-                        if "op_code" in processed_row and any(
-                            processed_row["op_code"] in signpost["op_code"]
-                            for signpost in signposts
-                        ):
-                            processed_row["op_type"] = "signpost"
-                        else:
-                            processed_row["op_type"] = "unknown"
+                            if "op_code" in processed_row and any(
+                                processed_row["op_code"] in signpost["op_code"]
+                                for signpost in signposts
+                            ):
+                                processed_row["op_type"] = "signpost"
+                            else:
+                                processed_row["op_type"] = "unknown"
 
-                        stacked_report.append(processed_row)
-            except csv.Error as e:
-                raise DataFormatError() from e
-            finally:
-                # Clean up the files created by perf_report library
-                if os.path.exists(summary_csv_path):
-                    os.unlink(summary_csv_path)
-                if os.path.exists(summary_png_path):
-                    os.unlink(summary_png_path)
-                # Clean up the original temp file that was just used for its name
-                if os.path.exists(csv_summary_file.name):
-                    os.unlink(csv_summary_file.name)
+                            stacked_report.append(processed_row)
+                except csv.Error as e:
+                    logger.error(f"CSV parsing error in stacked report: {e}")
+                    raise DataFormatError() from e
+                finally:
+                    # Clean up the files created by perf_report library
+                    if os.path.exists(summary_csv_path):
+                        os.unlink(summary_csv_path)
+                    if os.path.exists(summary_png_path):
+                        os.unlink(summary_png_path)
+                    # Clean up the original temp file that was just used for its name
+                    if os.path.exists(csv_summary_file.name):
+                        os.unlink(csv_summary_file.name)
+            else:
+                logger.warning(f"Stacked report file not created: {summary_csv_path}")
+        except Exception as e:
+            logger.error(f"Error processing stacked report: {e}")
+            # Don't raise, just log - stacked report is optional
+
+        finally:
+            # Ensure cleanup happens even if error occurs
+            pass
 
         return {
             "report": report,
