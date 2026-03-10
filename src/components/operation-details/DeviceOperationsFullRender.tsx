@@ -15,6 +15,7 @@ import {
     Size,
     Tooltip,
 } from '@blueprintjs/core';
+import cpp from 'highlight.js/lib/languages/cpp';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import classNames from 'classnames';
@@ -451,6 +452,7 @@ const DeviceOperationsFullRender: React.FC<{
     details: OperationDetails;
     onLegendClick: (address: number, tensorId?: number) => void;
 }> = ({ deviceOperations, details, onLegendClick }) => {
+    hljs.registerLanguage('cpp', cpp);
     const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);
     const [deviceOperationsArgsNode, setDeviceOperationsArgsNode] = useState<DeviceOperationNode | null>(null);
     const { peakMemoryLoad, renderOperations } = useDeviceOperationsFullRenderModel({
