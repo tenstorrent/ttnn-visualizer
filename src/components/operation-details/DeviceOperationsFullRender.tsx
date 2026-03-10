@@ -268,7 +268,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                 icon={IconNames.CUBE_ADD}
                             />
                             {opName}{' '}
-                            {opArgs && opArgs.length && (
+                            {opArgs && opArgs.length > 0 && (
                                 <Button
                                     icon={IconNames.COMPARISON}
                                     size={Size.SMALL}
