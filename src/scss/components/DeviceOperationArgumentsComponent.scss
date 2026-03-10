@@ -33,7 +33,7 @@
     }
 
     .contents {
-        width: 100%;
+        width: calc(100vw - 100px);
         background-color: $tt-grey-4;
 
         .title {

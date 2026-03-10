@@ -20,6 +20,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import classNames from 'classnames';
 import hljs from 'highlight.js/lib/core';
+import 'highlight.js/styles/a11y-dark.css';
 import {
     BufferNode,
     DeviceOperationNode,
@@ -561,33 +562,34 @@ const DeviceOperationArgumentsComponent: React.FC<{
                         />
                     </h3>
                 </div>
-
-                <div className='operation-arguments'>
-                    {node?.arguments.map((arg, index) => {
-                        const parsed = hljs.highlight(
-                            arg //
-                                .replaceAll('=', ' = ')
-                                .replaceAll(',', ', '),
-                            {
-                                language: 'cpp',
-                            },
-                        ).value;
-                        return (
-                            <div
-                                className='argument'
-                                key={`arg-${index}`}
-                            >
-                                <code
-                                    className='arg'
-                                    // eslint-disable-next-line react/no-danger
-                                    dangerouslySetInnerHTML={{
-                                        __html: parsed,
-                                    }}
-                                />
-                            </div>
-                        );
-                    })}
-                </div>
+                {node?.arguments && (
+                    <div className='operation-arguments'>
+                        {node?.arguments.map((arg, index) => {
+                            const parsed = hljs.highlight(
+                                arg //
+                                    .replaceAll('=', ' = ')
+                                    .replaceAll(',', ', '),
+                                {
+                                    language: 'cpp',
+                                },
+                            ).value;
+                            return (
+                                <div
+                                    className='argument'
+                                    key={`arg-${index}`}
+                                >
+                                    <code
+                                        className='arg'
+                                        // eslint-disable-next-line react/no-danger
+                                        dangerouslySetInnerHTML={{
+                                            __html: parsed,
+                                        }}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </Card>
         </Overlay2>
     );
