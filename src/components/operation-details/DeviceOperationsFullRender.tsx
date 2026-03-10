@@ -203,7 +203,7 @@ const renderMemoryInfo = (
 function useDeviceOperationsFullRenderModel(args: {
     deviceOperations: Node[];
     details: OperationDetails;
-    onLegendClick: (address: number, tensorId?: number) => void;
+    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }) {
     const { deviceOperations, details, onLegendClick } = args;
 
@@ -400,7 +400,7 @@ function useDeviceOperationsFullRenderModel(args: {
 const DeviceOperationsFullRender: React.FC<{
     deviceOperations: Node[];
     details: OperationDetails;
-    onLegendClick: (address: number, tensorId?: number) => void;
+    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }> = ({ deviceOperations, details, onLegendClick }) => {
     const { peakMemoryLoad, renderOperations } = useDeviceOperationsFullRenderModel({
         deviceOperations,

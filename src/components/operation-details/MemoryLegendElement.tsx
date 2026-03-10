@@ -83,7 +83,7 @@ export const MemoryLegendElement: React.FC<{
         }),
     };
 
-    const isMatchingBufferColor = memorySquare.backgroundColor === selectedBufferColour;
+    const isMatchingBufferColour = memorySquare.backgroundColor === selectedBufferColour;
 
     return (
         <Component
@@ -95,11 +95,11 @@ export const MemoryLegendElement: React.FC<{
                         !chunk.empty &&
                         chunk.bufferType !== ChunkBufferType.L1_SMALL &&
                         chunk.bufferType !== ChunkBufferType.L1_START,
-                    active: selectedTensorAddress === chunk.address && isMatchingBufferColor,
+                    active: selectedTensorAddress === chunk.address && isMatchingBufferColour,
                     dimmed:
                         selectedBufferColour !== null &&
                         selectedTensorAddress !== null &&
-                        (selectedTensorAddress !== chunk.address || !isMatchingBufferColor),
+                        (selectedTensorAddress !== chunk.address || !isMatchingBufferColour),
                     'extra-info': bufferType || layout,
                 },
                 className,

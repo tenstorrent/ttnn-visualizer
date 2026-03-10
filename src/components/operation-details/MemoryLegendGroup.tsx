@@ -15,7 +15,7 @@ export const MemoryLegendGroup: React.FC<{
     memSize: number;
     selectedTensorAddress: number | null;
     operationDetails: OperationDetails;
-    onLegendClick: (selectedTensorAddress: number, tensorId?: number) => void;
+    onLegendClick: (selectedTensorAddress: number, tensorId?: number, colorVariance?: number) => void;
 }> = ({
     // no wrap eslint
     group,

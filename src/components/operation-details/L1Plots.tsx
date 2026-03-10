@@ -37,7 +37,7 @@ interface L1PlotsProps {
     showCircularBuffer: boolean;
     showL1Small: boolean;
     onBufferClick: (event: Readonly<PlotMouseEventCustom>) => void;
-    onLegendClick: (address: number, tensorId?: number) => void;
+    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }
 
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
