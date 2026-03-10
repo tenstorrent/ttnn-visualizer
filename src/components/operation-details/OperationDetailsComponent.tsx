@@ -174,7 +174,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
         // TODO: Find a more robust way to determine if the click should not produce a toast
-        const isCBSummary = event.points[0].data.hovertemplate.includes('CBs Summary');
+        const { hovertemplate } = event.points[0].data;
+        const isCBSummary = typeof hovertemplate === 'string' && hovertemplate.includes('CBs Summary');
         const { address, tensor, colorVariance } = event.points[0].data.memoryData;
 
         if (!isCBSummary) {

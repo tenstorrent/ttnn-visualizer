@@ -14,8 +14,7 @@ import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import { toReadableShape, toReadableType } from '../../functions/formatting';
 import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
-import { showHexAtom } from '../../store/app';
-import useBufferFocus from '../../hooks/useBufferFocus';
+import { selectedBufferColourAtom, showHexAtom } from '../../store/app';
 
 export const MemoryLegendElement: React.FC<{
     chunk: FragmentationEntry;
@@ -45,7 +44,7 @@ export const MemoryLegendElement: React.FC<{
     numCores,
 }) => {
     const showHex = useAtomValue(showHexAtom);
-    const { selectedBufferColour } = useBufferFocus();
+    const selectedBufferColour = useAtomValue(selectedBufferColourAtom);
     const Component =
         chunk.empty || chunk.bufferType === ChunkBufferType.L1_SMALL || chunk.bufferType === ChunkBufferType.L1_START
             ? 'div'
@@ -98,7 +97,7 @@ export const MemoryLegendElement: React.FC<{
                         chunk.bufferType !== ChunkBufferType.L1_START,
                     active: selectedTensorAddress === chunk.address && isMatchingBufferColor,
                     dimmed:
-                        selectedBufferColour !== undefined &&
+                        selectedBufferColour !== null &&
                         selectedTensorAddress !== null &&
                         (selectedTensorAddress !== chunk.address || !isMatchingBufferColor),
                     'extra-info': bufferType || layout,
