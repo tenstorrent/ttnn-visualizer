@@ -14,6 +14,7 @@ import {
     showMemoryRegionsAtom,
 } from '../../store/app';
 import { TAB_IDS } from '../../definitions/BufferSummary';
+import 'styles/components/BufferSummaryControls.scss';
 
 const BufferSummaryPlotControls = () => {
     const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
@@ -24,7 +25,7 @@ const BufferSummaryPlotControls = () => {
     const selectedTabId = useAtomValue(selectedBufferSummaryTabAtom);
 
     return (
-        <div className='controls'>
+        <div className='buffer-summary-controls'>
             <Switch
                 label='Buffer zoom'
                 checked={isZoomedIn}
