@@ -185,13 +185,12 @@ it('handles valid memory report upload', async () => {
     );
 
     const mockDb = createMockFile('db.sqlite', 'text/x-sqlite3');
-    const mockConfig = createMockFile('config.json', 'application/json');
 
     const input = screen.getByTestId(TEST_IDS.LOCAL_PROFILER_UPLOAD);
 
     expect(input.nextElementSibling?.textContent).to.equal('Choose directory...');
 
-    fireEvent.change(input, { target: { files: [mockDb, mockConfig] } });
+    fireEvent.change(input, { target: { files: [mockDb] } });
 
     await waitFor(
         () =>
@@ -201,7 +200,7 @@ it('handles valid memory report upload', async () => {
         WAIT_FOR_OPTIONS,
     );
 
-    await waitFor(() => expect(input.nextElementSibling?.textContent).to.equal('2 files uploaded'), WAIT_FOR_OPTIONS);
+    await waitFor(() => expect(input.nextElementSibling?.textContent).to.equal('1 files uploaded'), WAIT_FOR_OPTIONS);
 
     const { reportName } = mockProfilerFolderList[0];
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
