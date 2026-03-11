@@ -299,14 +299,19 @@ export interface BaseNode<T extends NodeType, P> {
     params: P;
     inputs: Node[]; // tree specific
     outputs: Node[]; // tree specific
-    operation?: Node;
+    operation?: DeviceOperationNode;
     buffer?: BufferNode[];
     allocation?: BufferAllocateNode;
     stacking_level: number;
 }
+
+export interface DeviceOperationNode extends BaseNode<NodeType.function_start, DeviceOperationParams> {
+    arguments: string[];
+    stack_trace: string[];
+}
+
 export type CaptureStartNode = BaseNode<NodeType.capture_start, DeviceOperationParams>;
 export type CaptureEndNode = BaseNode<NodeType.capture_end, DeviceOperationParams>;
-export type DeviceOperationNode = BaseNode<NodeType.function_start, DeviceOperationParams>;
 export type DeviceOperationNodeEnd = BaseNode<NodeType.function_end, DeviceOperationParams>;
 
 export type BufferNode = BaseNode<NodeType.buffer, BufferAllocateParams>;

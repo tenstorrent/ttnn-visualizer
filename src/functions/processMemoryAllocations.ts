@@ -49,7 +49,7 @@ export function processMemoryAllocations(
             curOp.push({ name, id: node.id, deviceId: node.params.device_id });
         }
 
-        if (node.params.device_id !== undefined && curOp.length > 1) {
+        if (node.params?.device_id !== undefined && curOp.length > 1) {
             curOp[curOp.length - 1].deviceId = node.params.device_id;
         }
 
