@@ -111,7 +111,7 @@ function L1Plots({
                     (cb) =>
                         ({
                             ...cb,
-                            bufferType: MarkerType.CB,
+                            markerType: MarkerType.CB,
                             colorVariance: op.id,
                         }) as FragmentationEntry,
                 ),
@@ -291,7 +291,7 @@ function L1Plots({
                         chunk={{
                             size: 0,
                             address: l1StartMarker,
-                            bufferType: MarkerType.L1_START,
+                            markerType: MarkerType.L1_START,
                         }}
                         key='l1start-marker'
                         memSize={memorySizeL1}
@@ -342,7 +342,7 @@ function L1Plots({
                         chunk={{
                             size: 0,
                             address: l1SmallMarker,
-                            bufferType: MarkerType.L1_SMALL,
+                            markerType: MarkerType.L1_SMALL,
                         }}
                         key='l1small-marker'
                         memSize={memorySizeL1}

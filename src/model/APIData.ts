@@ -185,7 +185,7 @@ export enum MarkerType {
 }
 
 export interface FragmentationEntry extends Chunk {
-    bufferType?: MarkerType | undefined;
+    markerType?: MarkerType | undefined;
     colorVariance?: number | undefined;
     empty?: boolean;
     largestEmpty?: boolean;
