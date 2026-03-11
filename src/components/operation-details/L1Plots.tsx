@@ -77,7 +77,7 @@ function L1Plots({
         .sort((a, b) => a - b)[0];
 
     const cbZoomEnd = operationDetails.deviceOperations
-        .map((op) => op.cbList.map((cd) => cd.address + cd.size))
+        .map((op) => op.cbList.map((cb) => cb.address + cb.size))
         .flat()
         .sort((a, b) => a - b)
         .reverse()[0];
