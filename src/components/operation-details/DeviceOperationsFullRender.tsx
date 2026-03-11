@@ -196,7 +196,7 @@ function formatTensorRendering(node: Node, details: OperationDetails) {
     }
 
     if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-        return '';
+        return null;
     }
 
     return node.node_type;
@@ -262,7 +262,7 @@ function useDeviceOperationsFullRenderModel(args: {
                     const opArgs = node.operation?.arguments;
 
                     const label = (
-                        <h4>
+                        <h4 className='device-operation-label'>
                             <Icon
                                 className='operation-icon'
                                 size={13}
@@ -278,7 +278,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     {formatTensor(inputNode)}
                                 </span>
                             ))}
-                            ) &nbsp;{' => '}
+                            )<span className='operation-arrow'> =&gt; </span>
                             {node.operation?.outputs.map((outputNode, i) => (
                                 <span
                                     className='params'

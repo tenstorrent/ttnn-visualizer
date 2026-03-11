@@ -13,6 +13,13 @@
     }
 }
 
+.device-operation-label {
+    .operation-arrow {
+        font-size: 12px;
+        padding-top: 1px;
+    }
+}
+
 .tensor-details-layout {
     display: flex;
     justify-content: space-between;
@@ -30,8 +37,8 @@
     .has-tooltip {
         border-bottom-color: $tt-teal;
         border-bottom-width: 2px;
-        margin-top: 3px;
-        padding-bottom: 2px;
+        padding-bottom: 1px;
+        margin-top: 2px;
     }
 }
 
@@ -88,6 +95,10 @@
 
         .params {
             font-weight: lighter;
+
+            &:empty {
+                display: none;
+            }
         }
     }
 
