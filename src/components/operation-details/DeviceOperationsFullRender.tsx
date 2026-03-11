@@ -229,6 +229,7 @@ function useDeviceOperationsFullRenderModel(args: {
     onLegendClick: (address: number, tensorId?: number) => void;
     setDeviceOperationsArgsNode: React.Dispatch<React.SetStateAction<DeviceOperationNode | null>>;
     setDeviceOperationsArgsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    colorVariance?: number;
 }) {
     const { deviceOperations, details, onLegendClick, setDeviceOperationsArgsOpen, setDeviceOperationsArgsNode } = args;
 
@@ -458,7 +459,7 @@ function useDeviceOperationsFullRenderModel(args: {
 const DeviceOperationsFullRender: React.FC<{
     deviceOperations: Node[];
     details: OperationDetails;
-    onLegendClick: (address: number, tensorId?: number) => void;
+    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }> = ({ deviceOperations, details, onLegendClick }) => {
     hljs.registerLanguage('cpp', cpp);
     const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);

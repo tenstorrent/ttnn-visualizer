@@ -178,11 +178,17 @@ export interface ColoredChunk extends Chunk {
     color: string | undefined;
 }
 
+export enum MarkerType {
+    CB = 'CB',
+    L1_SMALL = 'L1_SMALL',
+    L1_START = 'L1_START',
+}
+
 export interface FragmentationEntry extends Chunk {
+    markerType?: MarkerType | undefined;
+    colorVariance?: number | undefined;
     empty?: boolean;
     largestEmpty?: boolean;
-    bufferType?: 'CB' | 'L1_START' | 'L1_SMALL' | undefined;
-    colorVariance?: number | undefined;
 }
 
 export interface ReportMetaData {
