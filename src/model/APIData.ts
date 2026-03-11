@@ -178,11 +178,17 @@ export interface ColoredChunk extends Chunk {
     color: string | undefined;
 }
 
+export enum MarkerType {
+    CB = 'CB',
+    L1_SMALL = 'L1_SMALL',
+    L1_START = 'L1_START',
+}
+
 export interface FragmentationEntry extends Chunk {
+    markerType?: MarkerType | undefined;
+    colorVariance?: number | undefined;
     empty?: boolean;
     largestEmpty?: boolean;
-    bufferType?: 'CB' | 'L1_START' | 'L1_SMALL' | undefined;
-    colorVariance?: number | undefined;
 }
 
 export interface ReportMetaData {
@@ -233,39 +239,99 @@ export enum DeviceOperationLayoutTypes {
     TILE = 'TILE',
 }
 
-export enum DeviceOperationTypes {
-    L1 = 'L1',
+export enum StringBufferType {
     DRAM = 'DRAM',
+    L1 = 'L1',
+    SYSTEM_MEMORY = 'SYSTEM MEMORY',
+    L1_SMALL = 'L1 SMALL',
+    TRACE = 'TRACE',
 }
 
-interface DeviceOperationParams {
-    inputs: number;
+export interface DeviceOperationParams {
     name: string;
-    tensor_id: number;
-    shape: string;
-    address: string;
-    layout: DeviceOperationLayoutTypes;
-    size: string;
-    type: DeviceOperationTypes;
-    /** only for CBs */
-    core_range_set: string;
-    /** only for buffers */
-    num_cores: string;
     device_id?: number | string;
+    inputs?: number;
+}
+
+export interface CircularBufferDeallocateParams {
+    device_id: number;
+}
+
+interface BufferAllocateParams {
+    address: string; // '1259520';
+    device_id: number;
+    exact_buffer_type: BufferType;
+    layout: DeviceOperationLayoutTypes;
+    max_size_per_bank?: string; // '114688';
+    num_cores: string; // '64';
+    page_size: string; // '448';
+    size: string; // '7340032';
+    type: StringBufferType; // 'L1';
     derived_device_id?: number[];
 }
+interface CircularBufferAllocateParams {
+    address: string; // '1259520';
+    core_range_set: string;
+    device_id: number;
+    globally_allocated: string; // 'false';
+    size: string; // '7340032';
+    num_cores: string;
+}
 
-export interface Node {
+export interface DeviceTensorParams {
+    address: string;
+    buffer_type: BufferType;
+    device_id: number;
+    device_tensors: string; // '[{"address": 1374208, "device_id": 0, "mesh_device_id": 0}]';
+    dtype: string;
+    layout: string;
+    memory_config: string; // 'MemoryConfig(memory_layout=TensorMemoryLayout::HEIGHT_SHARDED,buffer_type=BufferType::L1,shard_spec=ShardSpec{grid=[{"start":{"x":0,"y":0},"end":{"x":5,"y":7}], shape=[224, 224], orientation=ShardOrientation::ROW_MAJOR},nd_shard_spec={"shard_shape":[224, 224],"grid":[{"start":{"x":0,"y":0},"end":{"x":5,"y":7}}],"orientation":"ShardOrientation::ROW_MAJOR","shard_distribution_strategy":"ShardDistributionStrategy::ROUND_ROBIN_1D"},created_with_nd_shard_spec=0)';
+    shape: string; // 'Shape([16, 3, 224, 224])';
+    tensor_id: number; // '0';
+    size: string; // '602112';
+    type: StringBufferType;
+}
+
+export interface BaseNode<T extends NodeType, P> {
     connections: number[];
     id: number;
-    node_type: NodeType;
-    params: DeviceOperationParams;
-    inputs: Node[];
-    outputs: Node[];
+    node_type: T;
+    params: P;
+    inputs: Node[]; // tree specific
+    outputs: Node[]; // tree specific
     operation?: Node;
-    buffer?: Node[];
-    allocation?: Node;
+    buffer?: BufferNode[];
+    allocation?: BufferAllocateNode;
+    stacking_level: number;
 }
+export type CaptureStartNode = BaseNode<NodeType.capture_start, DeviceOperationParams>;
+export type CaptureEndNode = BaseNode<NodeType.capture_end, DeviceOperationParams>;
+export type DeviceOperationNode = BaseNode<NodeType.function_start, DeviceOperationParams>;
+export type DeviceOperationNodeEnd = BaseNode<NodeType.function_end, DeviceOperationParams>;
+
+export type BufferNode = BaseNode<NodeType.buffer, BufferAllocateParams>;
+export type BufferAllocateNode = BaseNode<NodeType.buffer_allocate, BufferAllocateParams>;
+export type BufferDeallocateNode = BaseNode<NodeType.buffer_deallocate, BufferAllocateParams>;
+
+export type CircularBufferAllocateNode = BaseNode<NodeType.circular_buffer_allocate, CircularBufferAllocateParams>;
+export type CircularBufferDeallocateAllNode = BaseNode<
+    NodeType.circular_buffer_deallocate_all,
+    CircularBufferDeallocateParams
+>;
+
+export type TensorNode = BaseNode<NodeType.tensor, DeviceTensorParams>;
+
+export type Node =
+    | CaptureStartNode
+    | CaptureEndNode
+    | DeviceOperationNode
+    | DeviceOperationNodeEnd
+    | BufferNode
+    | BufferAllocateNode
+    | BufferDeallocateNode
+    | CircularBufferAllocateNode
+    | CircularBufferDeallocateAllNode
+    | TensorNode;
 
 export interface DeviceOperation {
     id: number;
@@ -286,7 +352,7 @@ export interface CircularBuffer extends Chunk {
 
 export interface TensorBuffer extends Chunk {
     layout: DeviceOperationLayoutTypes;
-    type: DeviceOperationTypes;
+    type: StringBufferType;
 }
 
 export interface BufferPage {

@@ -314,17 +314,16 @@ const LocalFolderOptions: FC = () => {
 
                         {profilerFolder && !isUploadingReport && (
                             <div
-                                className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}
+                                className='folder-upload-status'
                                 data-testid={TEST_IDS.LOCAL_PROFILER_STATUS}
                             >
                                 <Icon
-                                    className='connection-status-icon'
                                     icon={ICON_MAP[profilerFolder.status]}
                                     size={20}
                                     intent={INTENT_MAP[profilerFolder.status]}
                                 />
 
-                                <span className='connection-status-text'>{profilerFolder.message}</span>
+                                <span className='message'>{profilerFolder.message}</span>
                             </div>
                         )}
                     </div>
@@ -362,17 +361,16 @@ const LocalFolderOptions: FC = () => {
 
                         {performanceFolder && !isUploadingPerformance && (
                             <div
-                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
+                                className='folder-upload-status'
                                 data-testid={TEST_IDS.LOCAL_PERFORMANCE_STATUS}
                             >
                                 <Icon
-                                    className='connection-status-icon'
                                     icon={ICON_MAP[performanceFolder.status]}
                                     size={20}
                                     intent={INTENT_MAP[performanceFolder.status]}
                                 />
 
-                                <span className='connection-status-text'>{performanceFolder.message}</span>
+                                <span className='message'>{performanceFolder.message}</span>
                             </div>
                         )}
                     </div>

@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
-import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
+import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
@@ -59,28 +59,29 @@ const NPEFileLoader: React.FC = () => {
     };
 
     return (
-        <div className='npe-file-loader'>
-            <FileInput
-                text={npeFileName ?? 'Upload an NPE report file for analysis...'}
-                onInputChange={handleFileChange}
-            />
+        <FormGroup className='npe-file-loader'>
+            <div className='form-container'>
+                <FileInput
+                    text={npeFileName ?? 'Upload an NPE report file for analysis...'}
+                    onInputChange={handleFileChange}
+                />
 
-            {/* Move these classes to a more generic definition as they are shared with the local/remote upload interface */}
-            <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>
-                {uploadStatus ? (
-                    <>
-                        <Icon
-                            className='connection-status-icon'
-                            icon={ICON_MAP[uploadStatus]}
-                            size={20}
-                            intent={INTENT_MAP[uploadStatus]}
-                        />
+                {/* Move these classes to a more generic definition as they are shared with the local/remote upload interface */}
+                <div className='folder-upload-status'>
+                    {uploadStatus ? (
+                        <>
+                            <Icon
+                                icon={ICON_MAP[uploadStatus]}
+                                size={20}
+                                intent={INTENT_MAP[uploadStatus]}
+                            />
 
-                        <span className='connection-status-text'>{errorMessage}</span>
-                    </>
-                ) : null}
+                            <span className='message'>{errorMessage}</span>
+                        </>
+                    ) : null}
+                </div>
             </div>
-        </div>
+        </FormGroup>
     );
 };
 

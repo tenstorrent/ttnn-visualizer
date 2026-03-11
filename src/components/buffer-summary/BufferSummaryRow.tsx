@@ -10,7 +10,7 @@ import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { formatMemorySize, toHex } from '../../functions/math';
+import { formatMemorySize, getMemoryAddress } from '../../functions/math';
 import { toReadableShape, toReadableType } from '../../functions/formatting';
 import { showHexAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
@@ -154,7 +154,7 @@ const BufferSummaryRow = ({
                     <div>
                         <strong>
                             <span style={{ fontSize: '20px', color, marginRight: '2px' }}>&#9632;</span>
-                            {showHex ? toHex(interactiveBuffer.buffer.address) : interactiveBuffer.buffer.address} (
+                            {getMemoryAddress(interactiveBuffer.buffer.address, showHex)} (
                             {formatMemorySize(interactiveBuffer.buffer.size, 2)})<br />
                             {interactiveBuffer.tensor?.shape
                                 ? toReadableShape(interactiveBuffer.tensor.shape)

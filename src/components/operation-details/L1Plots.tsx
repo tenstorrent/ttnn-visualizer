@@ -23,7 +23,7 @@ import {
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { BufferType } from '../../model/BufferType';
-import { FragmentationEntry } from '../../model/APIData';
+import { FragmentationEntry, MarkerType } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
 import { useGetL1SmallMarker, useGetL1StartMarker } from '../../hooks/useAPI';
 import useScrollShade from '../../hooks/useScrollShade';
@@ -37,7 +37,7 @@ interface L1PlotsProps {
     showCircularBuffer: boolean;
     showL1Small: boolean;
     onBufferClick: (event: Readonly<PlotMouseEventCustom>) => void;
-    onLegendClick: (address: number, tensorId?: number) => void;
+    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }
 
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
@@ -77,7 +77,7 @@ function L1Plots({
         .sort((a, b) => a - b)[0];
 
     const cbZoomEnd = operationDetails.deviceOperations
-        .map((op) => op.cbList.map((cd) => cd.address + cd.size))
+        .map((op) => op.cbList.map((cb) => cb.address + cb.size))
         .flat()
         .sort((a, b) => a - b)
         .reverse()[0];
@@ -111,7 +111,7 @@ function L1Plots({
                     (cb) =>
                         ({
                             ...cb,
-                            bufferType: 'CB',
+                            markerType: MarkerType.CB,
                             colorVariance: op.id,
                         }) as FragmentationEntry,
                 ),
@@ -291,7 +291,7 @@ function L1Plots({
                         chunk={{
                             size: 0,
                             address: l1StartMarker,
-                            bufferType: 'L1_START',
+                            markerType: MarkerType.L1_START,
                         }}
                         key='l1start-marker'
                         memSize={memorySizeL1}
@@ -342,7 +342,7 @@ function L1Plots({
                         chunk={{
                             size: 0,
                             address: l1SmallMarker,
-                            bufferType: 'L1_SMALL',
+                            markerType: MarkerType.L1_SMALL,
                         }}
                         key='l1small-marker'
                         memSize={memorySizeL1}

@@ -156,7 +156,7 @@ function BufferSummaryPlotRendererDRAM({ uniqueBuffersByOperationList }: BufferS
                 />
 
                 <GlobalSwitch
-                    label='Hex axis labels'
+                    label='Use Hex'
                     checked={showHex}
                     onChange={() => {
                         setShowHex(!showHex);

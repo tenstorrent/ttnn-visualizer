@@ -15,6 +15,7 @@ import {
     BufferPage,
     BuffersByOperation,
     DeviceInfo,
+    DeviceOperationParams,
     Instance,
     NodeType,
     Operation,
@@ -147,7 +148,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             .filter((op) => {
                 return op.node_type === NodeType.function_start && isDeviceOperation(op.params.name);
             })
-            .map((op) => op.params.name);
+            .map((op) => (op.params as DeviceOperationParams).name);
     };
 
     return operationList.map((operation: OperationDescription) => {
