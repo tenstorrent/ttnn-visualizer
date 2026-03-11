@@ -403,23 +403,24 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         memorySize={memorySizeL1}
                                         configuration={L1RenderZoomoutConfiguration}
                                     />
-
-                                    <RangeSlider
-                                        min={plotZoomRangeStart}
-                                        max={plotZoomRangeEnd}
-                                        disabled={!zoomedInViewMainMemory}
-                                        intent={Intent.WARNING}
-                                        labelStepSize={
-                                            (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
-                                        }
-                                        labelRenderer={(value) => getMemoryAddress(value, showHex)}
-                                        value={[zoomRangeStart, zoomRangeEnd]}
-                                        onChange={(value: number[]) => {
-                                            setZoomRangeStart(value[0]);
-                                            setZoomRangeEnd(value[1]);
-                                        }}
-                                        className='memory-zoom-range'
-                                    />
+                                    <div className='zoom-range-wrap'>
+                                        <RangeSlider
+                                            min={plotZoomRangeStart}
+                                            max={plotZoomRangeEnd}
+                                            disabled={!zoomedInViewMainMemory}
+                                            intent={Intent.WARNING}
+                                            labelStepSize={
+                                                (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
+                                            }
+                                            labelRenderer={(value) => getMemoryAddress(value, showHex)}
+                                            value={[zoomRangeStart, zoomRangeEnd]}
+                                            onChange={(value: number[]) => {
+                                                setZoomRangeStart(value[0]);
+                                                setZoomRangeEnd(value[1]);
+                                            }}
+                                            className='memory-zoom-range'
+                                        />
+                                    </div>
 
                                     <L1Plots
                                         operationDetails={details}
