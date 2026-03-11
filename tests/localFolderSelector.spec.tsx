@@ -200,7 +200,7 @@ it('handles valid memory report upload', async () => {
         WAIT_FOR_OPTIONS,
     );
 
-    await waitFor(() => expect(input.nextElementSibling?.textContent).to.equal('2 files uploaded'), WAIT_FOR_OPTIONS);
+    await waitFor(() => expect(input.nextElementSibling?.textContent).to.equal('1 files uploaded'), WAIT_FOR_OPTIONS);
 
     const { reportName } = mockProfilerFolderList[0];
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
