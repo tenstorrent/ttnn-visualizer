@@ -21,6 +21,7 @@ import { SortingOptions } from '../definitions/SortingOptions';
 export const activeToastAtom = atom<Id | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
+export const selectedBufferColourAtom = atom<string | null>(null);
 export const scrollPositionsAtom = atom<ScrollPosition | null>(null);
 export const fileTransferProgressAtom = atom<FileProgress>({
     currentFileName: '',

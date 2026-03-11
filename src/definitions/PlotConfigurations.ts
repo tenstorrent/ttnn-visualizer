@@ -141,6 +141,7 @@ export interface PlotDataCustom extends PlotData {
         address: number;
         size: number;
         tensor: Tensor | null;
+        colorVariance?: number;
     };
 }
 

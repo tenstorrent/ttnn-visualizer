@@ -2,8 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import 'styles/components/ToastTensorMessage.scss';
 import { useAtomValue } from 'jotai';
+import 'styles/components/ToastTensorMessage.scss';
 import { prettyPrintAddress } from '../../functions/math';
 import { showHexAtom } from '../../store/app';
 
