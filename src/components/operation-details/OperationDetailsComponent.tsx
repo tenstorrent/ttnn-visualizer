@@ -173,16 +173,22 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id);
+        // TODO: Find a more robust way to determine if the click should not produce a toast
+        const { hovertemplate } = event.points[0].data;
+        const isCBSummary = typeof hovertemplate === 'string' && hovertemplate.includes('CBs Summary');
+        const { address, tensor, colorVariance } = event.points[0].data.memoryData;
+
+        if (!isCBSummary) {
+            updateBufferFocus(address, tensor?.id, colorVariance);
+        }
     };
 
     const onTensorClick = (address?: number, tensorId?: number): void => {
         updateBufferFocus(address, tensorId);
     };
 
-    const onLegendClick = (address: number, tensorId?: number) => {
-        updateBufferFocus(address, tensorId);
+    const onLegendClick = (address: number, tensorId?: number, colorVariance?: number) => {
+        updateBufferFocus(address, tensorId, colorVariance);
     };
 
     const inputOutputList = details.inputs.concat(details.outputs);

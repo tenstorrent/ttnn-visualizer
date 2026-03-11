@@ -30,6 +30,7 @@ const colorList = [
 
 function* colorGenerator(): IterableIterator<string> {
     let i = 0;
+
     while (true) {
         yield colorList[i];
         i = (i + 1) % colorList.length;
@@ -43,11 +44,14 @@ export const getBufferColor = (address: number | null): string | undefined => {
     if (address === null) {
         return 'rgb(255,255,255)';
     }
+
     if (!bufferColorCache.has(address)) {
         bufferColorCache.set(address, getNextGroupColor.next().value);
     }
+
     return bufferColorCache.get(address);
 };
+
 const tensorNextColor = colorGenerator();
 const tensorColorCache = new Map<number, string>();
 
@@ -55,8 +59,10 @@ export const getTensorColor = (tensorId: number | undefined): string | undefined
     if (tensorId === undefined) {
         return undefined;
     }
+
     if (!tensorColorCache.has(tensorId)) {
         tensorColorCache.set(tensorId, tensorNextColor.next().value);
     }
+
     return tensorColorCache.get(tensorId);
 };

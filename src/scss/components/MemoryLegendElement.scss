@@ -38,11 +38,8 @@
     }
 
     &.button {
+        &:hover,
         &:focus {
-            background-color: $tt-bg-highlight;
-        }
-
-        &:hover {
             background-color: rgba($tt-bg-highlight, 0.5);
         }
     }

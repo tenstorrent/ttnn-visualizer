@@ -21,6 +21,7 @@ import HighlightedText from '../components/HighlightedText';
 import { HIGH_DISPATCH_THRESHOLD_MS, OpType } from '../definitions/Performance';
 import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 import { NormalisedPerfData } from './normalisePerformanceData';
+import MemoryTag from '../components/MemoryTag';
 import { BufferTypeLabel } from '../model/BufferType';
 
 export enum CellColour {
@@ -93,7 +94,7 @@ export const formatCell = (
     }
 
     if (key === ColumnHeaders.buffer_type) {
-        return BufferTypeLabel[value as number];
+        return <MemoryTag memory={BufferTypeLabel[value as number]} />;
     }
 
     if (key === ColumnHeaders.high_dispatch) {

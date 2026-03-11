@@ -22,6 +22,7 @@ export const activeToastAtom = atom<Id | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
 export const listStatesAtom = atom<ListStates | null>(null);
+export const selectedBufferColourAtom = atom<string | null>(null);
 export const fileTransferProgressAtom = atom<FileProgress>({
     currentFileName: '',
     numberOfFiles: 0,
