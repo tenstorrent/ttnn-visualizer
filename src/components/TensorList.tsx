@@ -13,7 +13,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import 'styles/components/ListView.scss';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import ROUTES from '../definitions/Routes';
-import { ScrollLocations } from '../definitions/ScrollPositions';
+import { ScrollLocations } from '../definitions/VirtualLists';
 import { SortingOptions } from '../definitions/SortingOptions';
 import isValidNumber from '../functions/isValidNumber';
 import { formatMemorySize } from '../functions/math';
