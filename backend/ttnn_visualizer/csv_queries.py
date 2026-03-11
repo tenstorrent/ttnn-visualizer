@@ -407,7 +407,7 @@ class OpsPerformanceReportQueries:
     @classmethod
     def generate_report(cls, instance, **kwargs):
         def cleanup_temp_files(summary_csv_path, summary_png_path, csv_summary_file):
-            if os.path.exists(csv_output_file):
+            if os.path.exists(csv_output_file.name):
                 os.unlink(csv_output_file.name)
             if os.path.exists(summary_csv_path):
                 os.unlink(summary_csv_path)
