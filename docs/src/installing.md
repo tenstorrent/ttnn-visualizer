@@ -38,7 +38,7 @@ To run a test with custom input data, you can use the following command with sui
 pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py::test_function[param]
 ```
 
-The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/reports/` which should include at least a `db.sqlite` file.
+The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/reports/` which should include at least a `db.sqlite` file (config.json is optional for the visualizer).
 
 <img width="909" alt="Screenshot 2024-12-13 at 12 29 24 PM" src="https://github.com/user-attachments/assets/ab31892a-2779-4fe1-9ad5-0f35f8329f9a" />
 
