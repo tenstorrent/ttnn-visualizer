@@ -149,13 +149,13 @@ const renderTensorLabel = (
             <span className='tensor-details-layout'>
                 {square}{' '}
                 <span className={classNames(Classes.TOOLTIP_INDICATOR, 'has-tooltip')}>
-                    Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
+                    <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}
                 </span>
             </span>
         </Tooltip>
     ) : (
         <span className='tensor-details-layout'>
-            {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
+            {square} <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}
         </span>
     );
 };
@@ -269,22 +269,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                 intent={Intent.SUCCESS}
                                 icon={IconNames.CUBE_ADD}
                             />
-                            {opName}{' '}
-                            {opArgs && opArgs.length > 0 && (
-                                <Button
-                                    icon={IconNames.COMPARISON}
-                                    size={Size.SMALL}
-                                    variant={ButtonVariant.MINIMAL}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeviceOperationsArgsNode(node.operation!);
-                                        setDeviceOperationsArgsOpen(true);
-                                    }}
-                                    title='View operation arguments'
-                                    className={`${Classes.TOOLTIP_INDICATOR} view-args-button`}
-                                />
-                            )}
-                            <DeviceID _node={node} /> (
+                            {opName} <DeviceID _node={node} /> (
                             {node.operation?.inputs.map((inputNode, i) => (
                                 <span
                                     className='params'
@@ -312,6 +297,28 @@ function useDeviceOperationsFullRenderModel(args: {
                             key={`end-${index}`}
                             label={label}
                             isOpen
+                            additionalElements={
+                                opArgs && opArgs.length > 0 ? (
+                                    <Button
+                                        icon={
+                                            <Icon
+                                                icon={IconNames.COMPARISON}
+                                                size={12}
+                                            />
+                                        }
+                                        size={Size.SMALL}
+                                        variant={ButtonVariant.OUTLINED}
+                                        intent={Intent.PRIMARY}
+                                        onClick={() => {
+                                            setDeviceOperationsArgsNode(node.operation!);
+                                            setDeviceOperationsArgsOpen(true);
+                                        }}
+                                        title='View operation arguments'
+                                    >
+                                        Arguments
+                                    </Button>
+                                ) : undefined
+                            }
                             collapseClassName={classNames('device-operation function-container', {
                                 [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
                             })}

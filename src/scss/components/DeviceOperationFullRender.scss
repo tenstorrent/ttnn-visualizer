@@ -20,6 +20,12 @@
     gap: 5px;
     position: relative;
     top: 1px;
+    font-size: 14px;
+
+    .memory-color-block {
+        width: 11px;
+        height: 11px;
+    }
 
     .has-tooltip {
         border-bottom-color: $tt-teal;
