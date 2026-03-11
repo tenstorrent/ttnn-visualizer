@@ -100,7 +100,7 @@ function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSumma
         [uniqueBuffersByOperationList],
     );
 
-    const { lateDeallocationsByOperation: nondeallocatedTensorsByOperationId } =
+    const { lateDeallocationsByOperation: nonDeallocatedTensorsByOperationId } =
         useGetTensorDeallocationReportByOperation();
 
     const memorySize = useMemo(getMemorySize, [devices, isLoadingDevices]);
@@ -243,7 +243,7 @@ function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSumma
                                         tensorList={tensorListByOperation.get(operation.id)!}
                                         tensorDeallocationReport={
                                             showDeallocationReport
-                                                ? nondeallocatedTensorsByOperationId.get(operation.id) || []
+                                                ? nonDeallocatedTensorsByOperationId.get(operation.id) || []
                                                 : []
                                         }
                                         showMemoryLayout={renderMemoryLayout}
