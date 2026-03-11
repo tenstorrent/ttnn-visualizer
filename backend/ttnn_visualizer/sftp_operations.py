@@ -30,6 +30,7 @@ from ttnn_visualizer.utils import update_last_synced
 logger = logging.getLogger(__name__)
 
 TEST_CONFIG_FILE = "config.json"
+TEST_DB_FILE = "db.sqlite"
 TEST_PROFILER_FILE = "profile_log_device.csv"
 
 
@@ -407,6 +408,9 @@ def get_remote_profiler_folder_from_config_path(
     remote_connection: RemoteConnection, config_path: str
 ) -> RemoteReportFolder:
     """Read a remote config file and return RemoteFolder object."""
+    folder_path = Path(config_path).parent
+    parent_folder_name = folder_path.name
+
     try:
         # Build SSH command to get file modification time (never prompts for password)
         stat_cmd = _ssh_cmd_prefix(remote_connection) + [
@@ -427,10 +431,9 @@ def get_remote_profiler_folder_from_config_path(
         # Parse JSON data
         data = json.loads(cat_result.stdout)
         report_name = data.get("report_name")
-        logger.info(f"********* report_name: {report_name}")
 
         return RemoteReportFolder(
-            remotePath=str(Path(config_path).parent),
+            remotePath=str(folder_path),
             reportName=report_name,
             lastModified=last_modified,
         )
@@ -444,23 +447,23 @@ def get_remote_profiler_folder_from_config_path(
             handle_ssh_subprocess_error(e, remote_connection)
             # This line never executes as handle_ssh_subprocess_error raises an exception
             return RemoteReportFolder(
-                remotePath=str(Path(config_path).parent),
-                reportName="",
+                remotePath=str(folder_path),
+                reportName=parent_folder_name,
                 lastModified=int(time.time()),
             )
         else:
             # Fall back to current time if we can't get modification time
             return RemoteReportFolder(
-                remotePath=str(Path(config_path).parent),
-                reportName="",
+                remotePath=str(folder_path),
+                reportName=parent_folder_name,
                 lastModified=int(time.time()),
             )
     except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"Error parsing config file {config_path}: {e}")
         # Fall back to current time and no report name
         return RemoteReportFolder(
-            remotePath=str(Path(config_path).parent),
-            reportName="",
+            remotePath=str(folder_path),
+            reportName=parent_folder_name,
             lastModified=int(time.time()),
         )
 
@@ -528,7 +531,7 @@ def check_remote_path_for_reports(remote_connection):
     remote_profiler_paths = []
     if remote_connection.profilerPath:
         remote_profiler_paths = find_folders_by_files(
-            remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
+            remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
         )
     else:
         logger.info("No profiler path configured; skipping check")
@@ -703,12 +706,12 @@ def get_remote_performance_folders(
 def get_remote_profiler_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
-    """Return a list of remote folders containing a config.json file."""
+    """Return a list of remote folders containing a db.sqlite file."""
     profiler_paths = []
 
     if remote_connection.profilerPath:
         profiler_paths = find_folders_by_files(
-            remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
+            remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
         )
     else:
         error = f"No profiler reports found at {remote_connection.profilerPath}"

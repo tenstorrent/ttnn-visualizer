@@ -185,13 +185,12 @@ it('handles valid memory report upload', async () => {
     );
 
     const mockDb = createMockFile('db.sqlite', 'text/x-sqlite3');
-    const mockConfig = createMockFile('config.json', 'application/json');
 
     const input = screen.getByTestId(TEST_IDS.LOCAL_PROFILER_UPLOAD);
 
     expect(input.nextElementSibling?.textContent).to.equal('Choose directory...');
 
-    fireEvent.change(input, { target: { files: [mockDb, mockConfig] } });
+    fireEvent.change(input, { target: { files: [mockDb] } });
 
     await waitFor(
         () =>

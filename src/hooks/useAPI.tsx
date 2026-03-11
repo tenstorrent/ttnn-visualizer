@@ -21,7 +21,6 @@ import {
     Operation,
     OperationDescription,
     OperationDetailsData,
-    ReportMetaData,
     Tensor,
     defaultBuffer,
     defaultOperation,
@@ -300,11 +299,11 @@ export const useOperationBuffers = (operationId: number) => {
     });
 };
 
-const fetchReportMeta = async (): Promise<ReportMetaData> => {
-    const { data: meta } = await axiosInstance.get<ReportMetaData>(Endpoints.CONFIG);
+// const fetchReportMeta = async (): Promise<ReportMetaData> => {
+//     const { data: meta } = await axiosInstance.get<ReportMetaData>(Endpoints.CONFIG);
 
-    return meta;
-};
+//     return meta;
+// };
 
 const fetchDevices = async (report: ReportFolder | RemoteFolder) => {
     const { data: meta } = await axiosInstance.get<DeviceInfo[]>(Endpoints.DEVICES);
@@ -696,14 +695,14 @@ export const usePerformanceRange = (): NumberRange | null => {
 };
 
 // Not currently used
-export const useReportMeta = () => {
-    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+// export const useReportMeta = () => {
+//     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<ReportMetaData, AxiosError>({
-        queryKey: ['get-report-config', activeProfilerReport?.path],
-        queryFn: () => fetchReportMeta(),
-    });
-};
+//     return useQuery<ReportMetaData, AxiosError>({
+//         queryKey: ['get-report-config', activeProfilerReport?.path],
+//         queryFn: () => fetchReportMeta(),
+//     });
+// };
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
     return useQuery<BufferPage[], AxiosError>({
