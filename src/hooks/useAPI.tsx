@@ -299,6 +299,7 @@ export const useOperationBuffers = (operationId: number) => {
     });
 };
 
+// Not currently used
 // const fetchReportMeta = async (): Promise<ReportMetaData> => {
 //     const { data: meta } = await axiosInstance.get<ReportMetaData>(Endpoints.CONFIG);
 
