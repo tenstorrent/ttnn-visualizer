@@ -2,8 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Node, NodeType, StringBufferType } from '../model/APIData';
+import { Node, NodeType } from '../model/APIData';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
+import { StringBufferType } from '../model/BufferType';
 
 export type AllocationDetails = {
     id: number;
