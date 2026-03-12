@@ -163,7 +163,7 @@ function Range() {
     useEffect(() => {
         if (perfDataError && activePerformanceReport) {
             const message = axios.isAxiosError(perfDataError)
-                ? (perfDataError.response?.data as string)
+                ? `Error loading report: ${perfDataError.response?.data as string}`
                 : 'Failed to load performance data';
 
             createToastNotification(message, activePerformanceReport?.reportName, ToastType.ERROR);

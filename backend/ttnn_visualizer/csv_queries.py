@@ -456,8 +456,16 @@ class OpsPerformanceReportQueries:
     @staticmethod
     def cleanup_temp_files(files):
         for file in files:
-            if os.path.exists(file.name):
-                os.unlink(file.name)
+            if isinstance(file, tempfile._TemporaryFileWrapper):
+                file_path = file.name
+            else:
+                file_path = file
+            if os.path.exists(file_path):
+                try:
+                    os.unlink(file_path)
+                    logger.info(f"Deleted temporary file: {file_path}")
+                except Exception as e:
+                    logger.warning(f"Could not delete temporary file {file_path}: {e}")
 
     @classmethod
     def generate_report(cls, instance, **kwargs):
