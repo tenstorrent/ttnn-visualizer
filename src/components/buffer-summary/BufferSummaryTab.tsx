@@ -4,25 +4,35 @@
 
 import { RefObject, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
+import { Callout, Intent } from '@blueprintjs/core';
 import BufferSummaryPlotRenderer from './BufferSummaryPlotRenderer';
 import BufferSummaryTable from './BufferSummaryTable';
 import { SECTION_IDS, TAB_IDS } from '../../definitions/BufferSummary';
 import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
-import { Buffer, BuffersByOperation } from '../../model/APIData';
-import { selectedBufferSummaryTabAtom } from '../../store/app';
+import { Buffer } from '../../model/APIData';
+import { activeProfilerReportAtom, selectedBufferSummaryTabAtom } from '../../store/app';
+import { BufferType } from '../../model/BufferType';
+import { useBuffers } from '../../hooks/useAPI';
+import LoadingSpinner from '../LoadingSpinner';
 
 interface BufferSummaryTabProps {
     plotRef: RefObject<HTMLHeadingElement>;
     tableRef: RefObject<HTMLHeadingElement>;
-    buffersByOperation: BuffersByOperation[];
 }
 
-function BufferSummaryTab({ plotRef, tableRef, buffersByOperation }: BufferSummaryTabProps) {
+function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
     const selectedTabId = useAtomValue(selectedBufferSummaryTabAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activeProfilerReportAtom);
+
+    const { data: buffersByOperation, error: buffersError } = useBuffers(
+        selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM,
+        true,
+    );
 
     const uniqueBuffersByOperationList = useMemo(
         () =>
-            buffersByOperation.map((operation) => {
+            buffersByOperation?.map((operation) => {
                 const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
                 operation.buffers.forEach((buffer) => {
                     const { address, size } = buffer;
@@ -42,7 +52,25 @@ function BufferSummaryTab({ plotRef, tableRef, buffersByOperation }: BufferSumma
         [buffersByOperation],
     );
 
-    return (
+    if (buffersError) {
+        const activeReport = selectedTabId === TAB_IDS.L1 ? activeProfilerReport : activePerformanceReport;
+
+        return (
+            <Callout
+                intent={Intent.WARNING}
+                title='Error loading buffer data'
+                compact
+            >
+                <p>
+                    {`We've been unable to load the ${selectedTabId === TAB_IDS.L1 ? 'L1' : 'DRAM'} buffer data for /${activeReport?.path}.`}
+                    <br />
+                    {buffersError.message}
+                </p>
+            </Callout>
+        );
+    }
+
+    return buffersByOperation && uniqueBuffersByOperationList ? (
         <>
             <h2>Plot view</h2>
             <div
@@ -64,6 +92,8 @@ function BufferSummaryTab({ plotRef, tableRef, buffersByOperation }: BufferSumma
                 <BufferSummaryTable buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)} />
             </div>
         </>
+    ) : (
+        <LoadingSpinner />
     );
 }
 

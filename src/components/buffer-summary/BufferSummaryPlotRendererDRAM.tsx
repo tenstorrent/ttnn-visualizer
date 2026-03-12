@@ -117,6 +117,12 @@ function BufferSummaryPlotRendererDRAM({ uniqueBuffersByOperationList }: BufferS
         }
     }, [updateScrollShade]);
 
+    useBufferNavigation({
+        buffersByOperation: segmentedChartData[0],
+        tensorListByOperation,
+        virtualizer,
+    });
+
     // Keep stored refs updated
     useEffect(() => {
         scrollOffsetRef.current = virtualizer.scrollOffset;
@@ -135,12 +141,6 @@ function BufferSummaryPlotRendererDRAM({ uniqueBuffersByOperationList }: BufferS
             });
         };
     }, [updateListState, uniqueBuffersByOperationList]);
-
-    useBufferNavigation({
-        buffersByOperation: segmentedChartData[0],
-        tensorListByOperation,
-        virtualizer,
-    });
 
     return uniqueBuffersByOperationList && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
@@ -208,7 +208,7 @@ function BufferSummaryPlotRendererDRAM({ uniqueBuffersByOperationList }: BufferS
                                                 memoryStart={isZoomedIn ? zoomedMemoryOptions[index].start : 0}
                                                 memoryEnd={isZoomedIn ? zoomedMemoryOptions[index].end : MEMORY_SIZE}
                                                 memoryPadding={zoomedMemoryOptions[index].padding}
-                                                tensorList={tensorListByOperation.get(operation.id)!}
+                                                tensorList={tensorListByOperation?.get(operation.id)}
                                             />
 
                                             <Tooltip

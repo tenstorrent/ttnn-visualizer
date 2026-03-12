@@ -54,6 +54,12 @@ interface BufferSummaryPlotRendererProps {
 }
 
 function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSummaryPlotRendererProps) {
+    const showDeallocationReport = useAtomValue(showDeallocationReportAtom);
+    const renderMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
+    const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
+    const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
+    const [activeRow, setActiveRow] = useState<number | null>(null);
+
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const { data: operations } = useOperationsList();
     const navigate = useNavigate();
@@ -63,12 +69,6 @@ function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSumma
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY);
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
     const tensorListByOperation = useCreateTensorsByOperationByIdList(BufferType.L1);
-
-    const showDeallocationReport = useAtomValue(showDeallocationReportAtom);
-    const renderMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
-    const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
-    const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
-    const [activeRow, setActiveRow] = useState<number | null>(null);
 
     const { scrollOffset: restoredOffset, measurementsCache: restoredMeasurementsCache } =
         useMemo(() => getListState(), [getListState]) ?? {};
@@ -240,7 +240,7 @@ function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSumma
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
-                                        tensorList={tensorListByOperation.get(operation.id)!}
+                                        tensorList={tensorListByOperation?.get(operation.id)}
                                         tensorDeallocationReport={
                                             showDeallocationReport
                                                 ? nonDeallocatedTensorsByOperationId.get(operation.id) || []

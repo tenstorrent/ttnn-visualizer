@@ -23,7 +23,7 @@ interface BufferSummaryRowProps {
     memoryStart: number;
     memoryEnd: number;
     memoryPadding: number;
-    tensorList: Map<number, Tensor>;
+    tensorList?: Map<number, Tensor>;
     showMemoryLayout?: boolean;
     className?: string;
     tensorDeallocationReport?: TensorDeallocationReport[];
@@ -57,7 +57,7 @@ const BufferSummaryRow = ({
         return buffers.map((buffer) => {
             const size = (buffer.size / computedMemorySize) * TARGET_SCALE;
             const position = ((buffer.address - memoryStart) / computedMemorySize) * TARGET_SCALE;
-            const tensor = tensorList.get(buffer.address);
+            const tensor = tensorList?.get(buffer.address);
             const color = (tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address)) || 'black';
             const dimmedColor = getDimmedColour(color);
             let notDeallocated = false;
