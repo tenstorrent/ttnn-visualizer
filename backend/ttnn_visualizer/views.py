@@ -11,6 +11,7 @@ import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
+from unittest import result
 
 import orjson
 import yaml
@@ -767,8 +768,11 @@ def get_performance_results_report(instance: Instance):
             tracing_mode=tracing_mode,
             group_by=group_by,
         )
-    except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+    except DataFormatError as error:
+        return (
+            jsonify(f"{str(error)}"),
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
 
     return Response(orjson.dumps(report), mimetype="application/json")
 
