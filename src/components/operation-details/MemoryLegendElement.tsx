@@ -7,7 +7,7 @@ import classNames from 'classnames';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
-import { DeviceOperationLayoutTypes, FragmentationEntry, MarkerType, StringBufferType } from '../../model/APIData';
+import { DeviceOperationLayoutTypes, FragmentationEntry, MarkerType } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
@@ -15,6 +15,7 @@ import { toReadableShape, toReadableType } from '../../functions/formatting';
 import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 import { selectedBufferColourAtom, showHexAtom } from '../../store/app';
+import { StringBufferType, StringBufferTypeLabel } from '../../model/BufferType';
 
 export const MemoryLegendElement: React.FC<{
     chunk: FragmentationEntry;
@@ -23,7 +24,7 @@ export const MemoryLegendElement: React.FC<{
     operationDetails: OperationDetails;
     onLegendClick: (selectedTensorAddress: number, tensorId?: number, colorVariance?: number) => void;
     colorVariance?: number | undefined; // color uniqueness for the CB color
-    bufferType?: keyof typeof StringBufferType;
+    bufferType?: StringBufferType;
     layout?: DeviceOperationLayoutTypes;
     isMultiDeviceBuffer?: boolean;
     isGroupHeader?: boolean;
@@ -143,7 +144,7 @@ export const MemoryLegendElement: React.FC<{
             </div>
             {(bufferType || layout) && (
                 <div className='extra-info-slot'>
-                    {bufferType && <span className='monospace'>{StringBufferType[bufferType]} </span>}
+                    {bufferType && <span className='monospace'>{StringBufferTypeLabel[bufferType]} </span>}
                     {layout && <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>}
                 </div>
             )}

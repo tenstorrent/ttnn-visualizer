@@ -20,3 +20,18 @@ export const BufferTypeLabel: Record<number, string> = {
     [BufferType.L1_SMALL]: 'L1 Small',
     [BufferType.TRACE]: 'Trace',
 };
+export enum StringBufferType {
+    DRAM = 'DRAM',
+    L1 = 'L1',
+    SYSTEM_MEMORY = 'SYSTEM_MEMORY',
+    L1_SMALL = 'L1_SMALL',
+    TRACE = 'TRACE',
+}
+
+export const StringBufferTypeLabel: Record<StringBufferType, string> = {
+    [StringBufferType.DRAM]: 'DRAM',
+    [StringBufferType.L1]: 'L1',
+    [StringBufferType.SYSTEM_MEMORY]: 'System Memory',
+    [StringBufferType.L1_SMALL]: 'L1 Small',
+    [StringBufferType.TRACE]: 'Trace',
+};

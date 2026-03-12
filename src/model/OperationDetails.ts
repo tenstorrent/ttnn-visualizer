@@ -14,10 +14,9 @@ import {
     NodeType,
     OperationDescription,
     OperationDetailsData,
-    StringBufferType,
     Tensor,
 } from './APIData';
-import { BufferType } from './BufferType';
+import { BufferType, StringBufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
