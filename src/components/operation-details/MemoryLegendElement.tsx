@@ -23,7 +23,7 @@ export const MemoryLegendElement: React.FC<{
     operationDetails: OperationDetails;
     onLegendClick: (selectedTensorAddress: number, tensorId?: number, colorVariance?: number) => void;
     colorVariance?: number | undefined; // color uniqueness for the CB color
-    bufferType?: StringBufferType;
+    bufferType?: keyof typeof StringBufferType;
     layout?: DeviceOperationLayoutTypes;
     isMultiDeviceBuffer?: boolean;
     isGroupHeader?: boolean;
