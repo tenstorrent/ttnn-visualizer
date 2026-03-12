@@ -266,7 +266,7 @@ interface BufferAllocateParams {
     num_cores: string; // '64';
     page_size: string; // '448';
     size: string; // '7340032';
-    type: StringBufferType; // 'L1';
+    type: keyof typeof StringBufferType; // 'L1';
     derived_device_id?: number[];
 }
 interface CircularBufferAllocateParams {
@@ -289,7 +289,7 @@ export interface DeviceTensorParams {
     shape: string; // 'Shape([16, 3, 224, 224])';
     tensor_id: number; // '0';
     size: string; // '602112';
-    type: StringBufferType;
+    type: keyof typeof StringBufferType;
 }
 
 export interface BaseNode<T extends NodeType, P> {
@@ -357,7 +357,7 @@ export interface CircularBuffer extends Chunk {
 
 export interface TensorBuffer extends Chunk {
     layout: DeviceOperationLayoutTypes;
-    type: StringBufferType;
+    type: keyof typeof StringBufferType;
 }
 
 export interface BufferPage {
