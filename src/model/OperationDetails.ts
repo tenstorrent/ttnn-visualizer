@@ -558,13 +558,13 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
 
             for (let i = this.operations.indexOf(currentOperation!); i >= 0; i--) {
                 const op = this.operations[i];
-                tensor = op.inputs.find((input) => input.address === bufferAddress);
+                tensor = op.outputs.find((output) => output.address === bufferAddress);
 
                 if (tensor !== undefined) {
                     break;
                 }
 
-                tensor = op.outputs.find((output) => output.address === bufferAddress);
+                tensor = op.inputs.find((input) => input.address === bufferAddress);
 
                 if (tensor !== undefined) {
                     break;
