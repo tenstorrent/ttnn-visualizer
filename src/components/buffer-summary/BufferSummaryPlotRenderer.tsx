@@ -82,6 +82,12 @@ function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSumma
         initialOffset: restoredOffset || 0,
     });
 
+    useBufferNavigation({
+        buffersByOperation: uniqueBuffersByOperationList,
+        tensorListByOperation,
+        virtualizer,
+    });
+
     const virtualItems = virtualizer.getVirtualItems();
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
@@ -121,6 +127,16 @@ function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSumma
         return minValue && maxValue ? [minValue, maxValue] : [0, memorySize];
     }, [uniqueBuffersByOperationList, memorySize]);
 
+    const memoryRegionsMarkers = showMemoryRegions
+        ? [
+              { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: 'L1 SMALL' },
+              { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: '' },
+          ]
+        : [];
+    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
+    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
+    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
+
     const handleUserScrolling = useCallback(() => {
         if (scrollElementRef.current) {
             updateScrollShade(scrollElementRef.current);
@@ -150,22 +166,6 @@ function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSumma
             });
         };
     }, [updateListState, uniqueBuffersByOperationList]);
-
-    useBufferNavigation({
-        buffersByOperation: uniqueBuffersByOperationList,
-        tensorListByOperation,
-        virtualizer,
-    });
-
-    const memoryRegionsMarkers = showMemoryRegions
-        ? [
-              { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: 'L1 SMALL' },
-              { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: '' },
-          ]
-        : [];
-    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
-    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
-    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     return uniqueBuffersByOperationList && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>

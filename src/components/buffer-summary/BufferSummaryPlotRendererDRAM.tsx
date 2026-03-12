@@ -52,12 +52,12 @@ interface BufferSummaryPlotRendererDRAMProps {
 }
 
 function BufferSummaryPlotRendererDRAM({ uniqueBuffersByOperationList }: BufferSummaryPlotRendererDRAMProps) {
+    const [activeRow, setActiveRow] = useState<number | null>(null);
+    const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
+
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
     const tensorListByOperation = useCreateTensorsByOperationByIdList(BufferType.DRAM);
-
-    const [activeRow, setActiveRow] = useState<number | null>(null);
-    const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
     const scrollElementRef = useRef(null);
 
     const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
