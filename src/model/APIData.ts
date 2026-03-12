@@ -67,13 +67,13 @@ export interface BufferData {
     device_id: number;
     address: number;
     max_size_per_bank: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     next_usage?: number;
 }
 
 export interface Buffer {
     address: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     device_id: number;
     size: number;
     buffer_layout?: BufferMemoryLayout | null;
@@ -141,7 +141,7 @@ export const defaultOperation: OperationDetailsData = {
 };
 
 export const defaultTensorData: Tensor = {
-    buffer_type: 0,
+    buffer_type: BufferType.L1,
     id: 0,
     shape: '',
     dtype: '',
@@ -163,7 +163,7 @@ export const defaultBuffer: BufferData = {
     device_id: 0,
     address: 0,
     max_size_per_bank: 0,
-    buffer_type: 0,
+    buffer_type: BufferType.L1,
 };
 
 export interface Chunk {
@@ -355,7 +355,7 @@ export interface TensorBuffer extends Chunk {
 export interface BufferPage {
     address: number;
     bank_id: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     core_x: number;
     core_y: number;
     device_id: number;
