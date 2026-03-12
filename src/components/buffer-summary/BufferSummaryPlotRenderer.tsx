@@ -14,7 +14,6 @@ import {
     L1_START_MARKER_COLOR,
 } from '../../definitions/PlotConfigurations';
 import {
-    useCreateTensorsByOperationByIdList,
     useDevices,
     useGetL1SmallMarker,
     useGetL1StartMarker,
@@ -41,8 +40,8 @@ import useScrollShade from '../../hooks/useScrollShade';
 import { BuffersByOperation } from '../../model/APIData';
 import useBufferNavigation from '../../hooks/useBufferNavigation';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
-import { BufferType } from '../../model/BufferType';
 import BufferSummaryPlotControls from './BufferSummaryPlotControls';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -51,9 +50,13 @@ const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {
     uniqueBuffersByOperationList: BuffersByOperation[];
+    tensorListByOperation: TensorsByOperationByAddress;
 }
 
-function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSummaryPlotRendererProps) {
+function BufferSummaryPlotRenderer({
+    uniqueBuffersByOperationList,
+    tensorListByOperation,
+}: BufferSummaryPlotRendererProps) {
     const showDeallocationReport = useAtomValue(showDeallocationReportAtom);
     const renderMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
     const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
@@ -68,7 +71,6 @@ function BufferSummaryPlotRenderer({ uniqueBuffersByOperationList }: BufferSumma
     const l1SmallMarker = useGetL1SmallMarker();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY);
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
-    const tensorListByOperation = useCreateTensorsByOperationByIdList(BufferType.L1);
 
     const { scrollOffset: restoredOffset, measurementsCache: restoredMeasurementsCache } =
         useMemo(() => getListState(), [getListState]) ?? {};

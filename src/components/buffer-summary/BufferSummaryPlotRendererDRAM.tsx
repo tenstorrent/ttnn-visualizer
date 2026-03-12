@@ -15,7 +15,7 @@ import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
-import { showBufferSummaryZoomedAtom } from '../../store/app';
+import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom } from '../../store/app';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
@@ -23,9 +23,8 @@ import useScrollShade from '../../hooks/useScrollShade';
 
 import { BuffersByOperation } from '../../model/APIData';
 import useBufferNavigation from '../../hooks/useBufferNavigation';
-import { useCreateTensorsByOperationByIdList } from '../../hooks/useAPI';
-import { BufferType } from '../../model/BufferType';
 import BufferSummaryPlotControls from './BufferSummaryPlotControls';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -49,15 +48,19 @@ const CHART_DATA: Partial<PlotData>[][] = [
 
 interface BufferSummaryPlotRendererDRAMProps {
     uniqueBuffersByOperationList: BuffersByOperation[];
+    tensorListByOperation: TensorsByOperationByAddress;
 }
 
-function BufferSummaryPlotRendererDRAM({ uniqueBuffersByOperationList }: BufferSummaryPlotRendererDRAMProps) {
+function BufferSummaryPlotRendererDRAM({
+    uniqueBuffersByOperationList,
+    tensorListByOperation,
+}: BufferSummaryPlotRendererDRAMProps) {
     const [activeRow, setActiveRow] = useState<number | null>(null);
     const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
+    const showMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
 
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
-    const tensorListByOperation = useCreateTensorsByOperationByIdList(BufferType.DRAM);
     const scrollElementRef = useRef(null);
 
     const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
@@ -209,6 +212,7 @@ function BufferSummaryPlotRendererDRAM({ uniqueBuffersByOperationList }: BufferS
                                                 memoryEnd={isZoomedIn ? zoomedMemoryOptions[index].end : MEMORY_SIZE}
                                                 memoryPadding={zoomedMemoryOptions[index].padding}
                                                 tensorList={tensorListByOperation?.get(operation.id)}
+                                                showMemoryLayout={showMemoryLayout}
                                             />
 
                                             <Tooltip

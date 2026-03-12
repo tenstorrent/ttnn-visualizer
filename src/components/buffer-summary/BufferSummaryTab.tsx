@@ -12,7 +12,7 @@ import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
 import { Buffer } from '../../model/APIData';
 import { activeProfilerReportAtom, selectedBufferSummaryTabAtom } from '../../store/app';
 import { BufferType } from '../../model/BufferType';
-import { useBuffers } from '../../hooks/useAPI';
+import { useBuffers, useCreateTensorsByOperationByIdList } from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
 
 interface BufferSummaryTabProps {
@@ -22,13 +22,11 @@ interface BufferSummaryTabProps {
 
 function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
     const selectedTabId = useAtomValue(selectedBufferSummaryTabAtom);
-    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activeProfilerReportAtom);
+    const selectedBufferType = selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM;
 
-    const { data: buffersByOperation, error: buffersError } = useBuffers(
-        selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM,
-        true,
-    );
+    const tensorListByOperation = useCreateTensorsByOperationByIdList(selectedBufferType);
+    const { data: buffersByOperation, error: buffersError } = useBuffers(selectedBufferType, true);
 
     const uniqueBuffersByOperationList = useMemo(
         () =>
@@ -53,8 +51,6 @@ function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
     );
 
     if (buffersError) {
-        const activeReport = selectedTabId === TAB_IDS.L1 ? activeProfilerReport : activePerformanceReport;
-
         return (
             <Callout
                 intent={Intent.WARNING}
@@ -62,7 +58,7 @@ function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
                 compact
             >
                 <p>
-                    {`We've been unable to load the ${selectedTabId === TAB_IDS.L1 ? 'L1' : 'DRAM'} buffer data for /${activeReport?.path}.`}
+                    {`We've been unable to load the ${selectedTabId === TAB_IDS.L1 ? 'L1' : 'DRAM'} buffer data for /${activePerformanceReport?.path}.`}
                     <br />
                     {buffersError.message}
                 </p>
@@ -78,9 +74,15 @@ function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
                 id={SECTION_IDS.PLOT}
             >
                 {selectedTabId === TAB_IDS.DRAM ? (
-                    <BufferSummaryPlotRendererDRAM uniqueBuffersByOperationList={uniqueBuffersByOperationList} />
+                    <BufferSummaryPlotRendererDRAM
+                        uniqueBuffersByOperationList={uniqueBuffersByOperationList}
+                        tensorListByOperation={tensorListByOperation}
+                    />
                 ) : (
-                    <BufferSummaryPlotRenderer uniqueBuffersByOperationList={uniqueBuffersByOperationList} />
+                    <BufferSummaryPlotRenderer
+                        uniqueBuffersByOperationList={uniqueBuffersByOperationList}
+                        tensorListByOperation={tensorListByOperation}
+                    />
                 )}
             </div>
 
@@ -89,7 +91,10 @@ function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
                 ref={tableRef}
                 id={SECTION_IDS.TABLE}
             >
-                <BufferSummaryTable buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)} />
+                <BufferSummaryTable
+                    buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)}
+                    tensorListByOperation={tensorListByOperation}
+                />
             </div>
         </>
     ) : (
