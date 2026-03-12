@@ -34,7 +34,7 @@ import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1Memory
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
 import { toReadableLayout, toReadableShape } from '../../functions/formatting';
-import { BufferTypeLabel, StringBufferType } from '../../model/BufferType';
+import { BufferTypeToStringBufferType, StringBufferType } from '../../model/BufferType';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
@@ -61,7 +61,7 @@ const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, det
         const { params } = bufferOrTensorNode;
         address = parseInt(params.address, 10);
         layout = toReadableLayout(params.layout) || '';
-        type = BufferTypeLabel[params.buffer_type] as StringBufferType; // converting int enum to string representation
+        type = BufferTypeToStringBufferType[params.buffer_type];
     }
 
     if (address !== undefined || tensorId !== undefined) {
