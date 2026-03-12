@@ -454,17 +454,10 @@ class OpsPerformanceReportQueries:
         return processed_row
 
     @staticmethod
-    def cleanup_temp_files(
-        output_csv_path, summary_csv_path, summary_png_path, csv_summary_file
-    ):
-        if os.path.exists(output_csv_path.name):
-            os.unlink(output_csv_path.name)
-        if os.path.exists(summary_csv_path):
-            os.unlink(summary_csv_path)
-        if os.path.exists(summary_png_path):
-            os.unlink(summary_png_path)
-        if os.path.exists(csv_summary_file.name):
-            os.unlink(csv_summary_file.name)
+    def cleanup_temp_files(files):
+        for file in files:
+            if os.path.exists(file.name):
+                os.unlink(file.name)
 
     @classmethod
     def generate_report(cls, instance, **kwargs):
@@ -537,11 +530,9 @@ class OpsPerformanceReportQueries:
                     not merge_devices,
                 )
             except Exception as e:
-                logger.error(f"Error generating performance report: {e}")
+                logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
-                raise DataFormatError(
-                    f"Error generating performance report: {e}"
-                ) from e
+                raise DataFormatError(e)
 
             try:
                 ops_perf_results, signposts = cls.extract_signposts(csv_file)
@@ -682,5 +673,5 @@ class OpsPerformanceReportQueries:
         finally:
             # Ensure cleanup always happens, even if exceptions are raised
             cls.cleanup_temp_files(
-                csv_output_file, summary_csv_path, summary_png_path, csv_summary_file
+                [csv_output_file, summary_csv_path, summary_png_path, csv_summary_file]
             )

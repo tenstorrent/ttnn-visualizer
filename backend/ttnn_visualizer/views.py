@@ -770,7 +770,7 @@ def get_performance_results_report(instance: Instance):
         )
     except DataFormatError as error:
         return (
-            jsonify(f"{str(error)}"),
+            jsonify(str(error)),
             HTTPStatus.UNPROCESSABLE_ENTITY,
         )
 
