@@ -19,9 +19,9 @@ import { toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
 import MemoryTag from './MemoryTag';
 import { GRAPH_COLORS } from '../definitions/GraphColors';
+import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 
 type OperationList = OperationDescription[];
-const DEALLOCATE_OP_NAME = 'ttnn.deallocate';
 
 const OperationGraph: React.FC<{
     operationList: OperationList;
@@ -92,7 +92,7 @@ const OperationGraph: React.FC<{
             new DataSet(
                 operationList
                     .filter((op) => connectedNodeIds.has(op.id))
-                    .filter((op) => !filterOutDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
+                    .filter((op) => !filterOutDeallocate || !DEALLOCATE_OP_NAME_LIST.includes(op.name.toLowerCase()))
                     .map((op) => ({
                         id: op.id,
                         label: `${op.id} ${op.name}${
