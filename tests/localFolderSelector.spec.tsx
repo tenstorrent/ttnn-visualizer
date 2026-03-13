@@ -224,7 +224,7 @@ it('handles invalid performance report upload', async () => {
     await waitFor(
         () =>
             expect(screen.getByTestId(TEST_IDS.LOCAL_PERFORMANCE_STATUS).textContent).to.equal(
-                'Selected directory is not a valid profiler run',
+                'Selected directory is not a valid performance report',
             ),
         WAIT_FOR_OPTIONS,
     );

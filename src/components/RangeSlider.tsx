@@ -38,7 +38,7 @@ const RANGE_STEP = 25;
 
 function Range() {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
     const setOperationRange = useSetAtom(operationRangeAtom);
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
@@ -167,8 +167,9 @@ function Range() {
                 : 'Failed to load performance data';
 
             createToastNotification(message, activePerformanceReport?.reportName, ToastType.ERROR);
+            setActivePerformanceReport(null);
         }
-    }, [perfDataError, activePerformanceReport]);
+    }, [perfDataError, activePerformanceReport, setActivePerformanceReport]);
 
     useEffect(() => {
         if (clusterError && activeProfilerReport) {

@@ -135,7 +135,7 @@ export default function Performance() {
     if (perfDataError?.status === HttpStatusCode.UnprocessableEntity) {
         return (
             <>
-                <h2>Unable to process performance data</h2>
+                <h2>Unable to load performance data</h2>
                 <p>
                     Data format is not supported, try using{' '}
                     <a href='https://github.com/tenstorrent/ttnn-visualizer/releases/tag/v0.49.0'>
@@ -144,6 +144,8 @@ export default function Performance() {
                     or earlier, or regenerate performance report using a newer version of{' '}
                     <a href='https://github.com/tenstorrent/tt-metal/'>TT-Metal</a>.
                 </p>
+
+                <code className='formatted-code'>{perfDataError?.response?.data as string}</code>
             </>
         );
     }
