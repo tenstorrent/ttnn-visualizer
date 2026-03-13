@@ -5,7 +5,7 @@
 import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import { ReportLocation } from '../definitions/Reports';
 import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
-import { BufferType } from './BufferType';
+import { BufferType, StringBufferType } from './BufferType';
 
 interface OperationError {
     operation_id: number;
@@ -67,13 +67,13 @@ export interface BufferData {
     device_id: number;
     address: number;
     max_size_per_bank: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     next_usage?: number;
 }
 
 export interface Buffer {
     address: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     device_id: number;
     size: number;
     buffer_layout?: BufferMemoryLayout | null;
@@ -141,7 +141,7 @@ export const defaultOperation: OperationDetailsData = {
 };
 
 export const defaultTensorData: Tensor = {
-    buffer_type: 0,
+    buffer_type: BufferType.L1,
     id: 0,
     shape: '',
     dtype: '',
@@ -163,7 +163,7 @@ export const defaultBuffer: BufferData = {
     device_id: 0,
     address: 0,
     max_size_per_bank: 0,
-    buffer_type: 0,
+    buffer_type: BufferType.L1,
 };
 
 export interface Chunk {
@@ -191,22 +191,22 @@ export interface FragmentationEntry extends Chunk {
     largestEmpty?: boolean;
 }
 
-export interface ReportMetaData {
-    cache_path: string;
-    model_cache_path: string;
-    tmp_dir: string;
-    enable_model_cache: boolean;
-    enable_fast_runtime_mode: boolean;
-    throw_exception_on_fallback: boolean;
-    enable_logging: boolean;
-    enable_graph_report: boolean;
-    enable_detailed_buffer_report: boolean;
-    enable_detailed_tensor_report: boolean;
-    enable_comparison_mode: boolean;
-    comparison_mode_pcc: number;
-    root_profiler_path: string;
-    profiler_name: string;
-}
+// export interface ReportMetaData {
+//     cache_path: string;
+//     model_cache_path: string;
+//     tmp_dir: string;
+//     enable_model_cache: boolean;
+//     enable_fast_runtime_mode: boolean;
+//     throw_exception_on_fallback: boolean;
+//     enable_logging: boolean;
+//     enable_graph_report: boolean;
+//     enable_detailed_buffer_report: boolean;
+//     enable_detailed_tensor_report: boolean;
+//     enable_comparison_mode: boolean;
+//     comparison_mode_pcc: number;
+//     root_profiler_path: string;
+//     profiler_name: string;
+// }
 
 export interface OperationDescription extends Operation {
     duration: number;
@@ -237,14 +237,6 @@ export enum DeviceOperationLayoutTypes {
     HEIGHT_SHARDED = 'HEIGHT_SHARDED',
     ROW_MAJOR = 'ROW_MAJOR',
     TILE = 'TILE',
-}
-
-export enum StringBufferType {
-    DRAM = 'DRAM',
-    L1 = 'L1',
-    SYSTEM_MEMORY = 'SYSTEM MEMORY',
-    L1_SMALL = 'L1 SMALL',
-    TRACE = 'TRACE',
 }
 
 export interface DeviceOperationParams {
@@ -299,14 +291,19 @@ export interface BaseNode<T extends NodeType, P> {
     params: P;
     inputs: Node[]; // tree specific
     outputs: Node[]; // tree specific
-    operation?: Node;
+    operation?: DeviceOperationNode;
     buffer?: BufferNode[];
     allocation?: BufferAllocateNode;
     stacking_level: number;
 }
+
+export interface DeviceOperationNode extends BaseNode<NodeType.function_start, DeviceOperationParams> {
+    arguments: string[];
+    stack_trace: string[];
+}
+
 export type CaptureStartNode = BaseNode<NodeType.capture_start, DeviceOperationParams>;
 export type CaptureEndNode = BaseNode<NodeType.capture_end, DeviceOperationParams>;
-export type DeviceOperationNode = BaseNode<NodeType.function_start, DeviceOperationParams>;
 export type DeviceOperationNodeEnd = BaseNode<NodeType.function_end, DeviceOperationParams>;
 
 export type BufferNode = BaseNode<NodeType.buffer, BufferAllocateParams>;
@@ -358,7 +355,7 @@ export interface TensorBuffer extends Chunk {
 export interface BufferPage {
     address: number;
     bank_id: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     core_x: number;
     core_y: number;
     device_id: number;

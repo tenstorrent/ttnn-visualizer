@@ -7,6 +7,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
+import axios from 'axios';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -37,7 +38,7 @@ const RANGE_STEP = 25;
 
 function Range() {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
     const setOperationRange = useSetAtom(operationRangeAtom);
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
@@ -161,13 +162,14 @@ function Range() {
 
     useEffect(() => {
         if (perfDataError && activePerformanceReport) {
-            createToastNotification(
-                'Performance data format is not supported, use TT-NN Visualizer v0.49.0',
-                activePerformanceReport?.reportName,
-                ToastType.WARNING,
-            );
+            const message = axios.isAxiosError(perfDataError)
+                ? `Error loading report: ${perfDataError.response?.data as string}`
+                : 'Failed to load performance data';
+
+            createToastNotification(message, activePerformanceReport?.reportName, ToastType.ERROR);
+            setActivePerformanceReport(null);
         }
-    }, [perfDataError, activePerformanceReport]);
+    }, [perfDataError, activePerformanceReport, setActivePerformanceReport]);
 
     useEffect(() => {
         if (clusterError && activeProfilerReport) {

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import 'styles/components/ListView.scss';
 import ROUTES from '../definitions/Routes';
-import { ScrollLocations } from '../definitions/ScrollPositions';
+import { ScrollLocations } from '../definitions/VirtualLists';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 import { formatSize } from '../functions/math';

@@ -2,13 +2,28 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { Fragment, JSX, useCallback } from 'react';
-import { Classes, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import React, { Fragment, JSX, useCallback, useState } from 'react';
+import {
+    Button,
+    ButtonVariant,
+    Card,
+    Classes,
+    Icon,
+    Intent,
+    Overlay2,
+    PopoverPosition,
+    Size,
+    Tooltip,
+} from '@blueprintjs/core';
+import cpp from 'highlight.js/lib/languages/cpp';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import classNames from 'classnames';
-import { BufferNode, Node, NodeType, StringBufferType, Tensor, TensorNode } from '../../model/APIData';
+import hljs from 'highlight.js/lib/core';
+import 'highlight.js/styles/a11y-dark.css';
+import { BufferNode, DeviceOperationNode, Node, NodeType, Tensor, TensorNode } from '../../model/APIData';
 import 'styles/components/DeviceOperationFullRender.scss';
+import 'styles/components/DeviceOperationArgumentsComponent.scss';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
@@ -19,7 +34,7 @@ import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1Memory
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
 import { toReadableLayout, toReadableShape } from '../../functions/formatting';
-import { BufferTypeLabel } from '../../model/BufferType';
+import { BufferTypeToStringBufferType, StringBufferType } from '../../model/BufferType';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
@@ -46,7 +61,7 @@ const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, det
         const { params } = bufferOrTensorNode;
         address = parseInt(params.address, 10);
         layout = toReadableLayout(params.layout) || '';
-        type = BufferTypeLabel[params.buffer_type] as StringBufferType;
+        type = BufferTypeToStringBufferType[params.buffer_type];
     }
 
     if (address !== undefined || tensorId !== undefined) {
@@ -126,13 +141,13 @@ const renderTensorLabel = (
             <span className='tensor-details-layout'>
                 {square}{' '}
                 <span className={classNames(Classes.TOOLTIP_INDICATOR, 'has-tooltip')}>
-                    Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
+                    <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}
                 </span>
             </span>
         </Tooltip>
     ) : (
         <span className='tensor-details-layout'>
-            {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
+            {square} <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}
         </span>
     );
 };
@@ -173,7 +188,7 @@ function formatTensorRendering(node: Node, details: OperationDetails) {
     }
 
     if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-        return '';
+        return null;
     }
 
     return node.node_type;
@@ -203,9 +218,12 @@ const renderMemoryInfo = (
 function useDeviceOperationsFullRenderModel(args: {
     deviceOperations: Node[];
     details: OperationDetails;
-    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
+    onLegendClick: (address: number, tensorId?: number) => void;
+    setDeviceOperationsArgsNode: React.Dispatch<React.SetStateAction<DeviceOperationNode | null>>;
+    setDeviceOperationsArgsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    colorVariance?: number;
 }) {
-    const { deviceOperations, details, onLegendClick } = args;
+    const { deviceOperations, details, onLegendClick, setDeviceOperationsArgsOpen, setDeviceOperationsArgsNode } = args;
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
@@ -234,8 +252,10 @@ function useDeviceOperationsFullRenderModel(args: {
                     const innerContent = stack.pop();
                     const opName = node.params.name;
 
+                    const opArgs = node.operation?.arguments;
+
                     const label = (
-                        <h4>
+                        <h4 className='device-operation-label'>
                             <Icon
                                 className='operation-icon'
                                 size={13}
@@ -251,7 +271,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     {formatTensor(inputNode)}
                                 </span>
                             ))}
-                            ) &nbsp;{' => '}
+                            )<span className='operation-arrow'> =&gt; </span>
                             {node.operation?.outputs.map((outputNode, i) => (
                                 <span
                                     className='params'
@@ -270,6 +290,28 @@ function useDeviceOperationsFullRenderModel(args: {
                             key={`end-${index}`}
                             label={label}
                             isOpen
+                            additionalElements={
+                                opArgs && opArgs.length > 0 ? (
+                                    <Button
+                                        icon={
+                                            <Icon
+                                                icon={IconNames.COMPARISON}
+                                                size={12}
+                                            />
+                                        }
+                                        size={Size.SMALL}
+                                        variant={ButtonVariant.OUTLINED}
+                                        intent={Intent.PRIMARY}
+                                        onClick={() => {
+                                            setDeviceOperationsArgsNode(node.operation!);
+                                            setDeviceOperationsArgsOpen(true);
+                                        }}
+                                        title='View operation arguments'
+                                    >
+                                        Arguments
+                                    </Button>
+                                ) : undefined
+                            }
                             collapseClassName={classNames('device-operation function-container', {
                                 [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
                             })}
@@ -386,7 +428,16 @@ function useDeviceOperationsFullRenderModel(args: {
 
             return output;
         },
-        [details, formatTensor, memoryAllocationList, onLegendClick, peakMemoryLoad, selectedAddress],
+        [
+            details,
+            formatTensor,
+            memoryAllocationList,
+            onLegendClick,
+            peakMemoryLoad,
+            selectedAddress,
+            setDeviceOperationsArgsNode,
+            setDeviceOperationsArgsOpen,
+        ],
     );
 
     return {
@@ -402,14 +453,23 @@ const DeviceOperationsFullRender: React.FC<{
     details: OperationDetails;
     onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }> = ({ deviceOperations, details, onLegendClick }) => {
+    hljs.registerLanguage('cpp', cpp);
+    const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);
+    const [deviceOperationsArgsNode, setDeviceOperationsArgsNode] = useState<DeviceOperationNode | null>(null);
     const { peakMemoryLoad, renderOperations } = useDeviceOperationsFullRenderModel({
         deviceOperations,
         details,
         onLegendClick,
+        setDeviceOperationsArgsNode,
+        setDeviceOperationsArgsOpen,
     });
-
     return (
         <div className='device-operations-full-render-wrap'>
+            <DeviceOperationArgumentsComponent
+                node={deviceOperationsArgsNode}
+                open={deviceOperationsArgsOpen}
+                onClose={() => setDeviceOperationsArgsOpen(false)}
+            />
             <h3 className='peak-load monospace'>
                 Peak L1 memory load per core:{' '}
                 <span className='format-numbers'>{formatMemorySize(peakMemoryLoad, 2)}</span>
@@ -473,5 +533,65 @@ const DeviceID: React.FC<{ _deviceId?: number | string; _node?: Node }> = ({ _de
     // );
     // return _deviceId !== undefined && <span className='device-id'>{_deviceId}</span>;
 };
-
+const DeviceOperationArgumentsComponent: React.FC<{
+    node: DeviceOperationNode | null;
+    open: boolean;
+    onClose: () => void;
+}> = ({ node, open, onClose }) => {
+    return (
+        <Overlay2
+            isOpen={open}
+            enforceFocus
+            hasBackdrop
+            usePortal
+            canEscapeKeyClose
+            transitionDuration={0}
+            onClose={onClose}
+            canOutsideClickClose
+            portalClassName='device-operation-arguments-visualisation-overlay'
+        >
+            <Card className='contents'>
+                <div className='header'>
+                    <h3 className='title'>
+                        {node?.params.name}
+                        <Button
+                            icon={IconNames.CROSS}
+                            variant={ButtonVariant.MINIMAL}
+                            size={Size.SMALL}
+                            onClick={onClose}
+                        />
+                    </h3>
+                </div>
+                {node?.arguments && (
+                    <div className='operation-arguments'>
+                        {node?.arguments.map((arg, index) => {
+                            const parsed = hljs.highlight(
+                                arg //
+                                    .replaceAll('=', ' = ')
+                                    .replaceAll(',', ', '),
+                                {
+                                    language: 'cpp',
+                                },
+                            ).value;
+                            return (
+                                <div
+                                    className='argument'
+                                    key={`arg-${index}`}
+                                >
+                                    <code
+                                        className='arg'
+                                        // eslint-disable-next-line react/no-danger
+                                        dangerouslySetInnerHTML={{
+                                            __html: parsed,
+                                        }}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </Card>
+        </Overlay2>
+    );
+};
 export default DeviceOperationsFullRender;

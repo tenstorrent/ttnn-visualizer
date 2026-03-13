@@ -517,12 +517,13 @@ def get_profiler_data_list(instance: Instance):
                     report_name = config_data.get("report_name")
             except Exception as e:
                 logger.warning(f"Failed to read config.json in {dir_path}: {e}")
+        else:
+            report_name = dir_path.name
 
         # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
         if not any(file.name == "db.sqlite" for file in files):
             continue
-        if not any(file.name == "config.json" for file in files):
-            continue
+
         valid_dirs.append({"path": dir_path.name, "reportName": report_name})
 
     return Response(orjson.dumps(valid_dirs), mimetype="application/json")
@@ -766,8 +767,11 @@ def get_performance_results_report(instance: Instance):
             tracing_mode=tracing_mode,
             group_by=group_by,
         )
-    except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+    except DataFormatError as error:
+        return (
+            jsonify(str(error)),
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
 
     return Response(orjson.dumps(report), mimetype="application/json")
 
@@ -911,7 +915,7 @@ def create_profiler_files():
         / current_app.config["PROFILER_DIRECTORY_NAME"]
     )
 
-    if not validate_files(files, {"db.sqlite", "config.json"}, folder_name=folder_name):
+    if not validate_files(files, {"db.sqlite"}, folder_name=folder_name):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
@@ -954,6 +958,8 @@ def create_profiler_files():
                 report_name = config_data.get("report_name")
         except Exception as e:
             logger.warning(f"Failed to read config.json in {config_file}: {e}")
+    else:
+        report_name = parent_folder_name
 
     if current_app.config["SERVER_MODE"]:
         # Set session data (FIFO cap to avoid cookie size limits)

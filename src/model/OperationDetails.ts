@@ -14,10 +14,9 @@ import {
     NodeType,
     OperationDescription,
     OperationDetailsData,
-    StringBufferType,
     Tensor,
 } from './APIData';
-import { BufferType } from './BufferType';
+import { BufferType, StringBufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
@@ -558,13 +557,13 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
 
             for (let i = this.operations.indexOf(currentOperation!); i >= 0; i--) {
                 const op = this.operations[i];
-                tensor = op.inputs.find((input) => input.address === bufferAddress);
+                tensor = op.outputs.find((output) => output.address === bufferAddress);
 
                 if (tensor !== undefined) {
                     break;
                 }
 
-                tensor = op.outputs.find((output) => output.address === bufferAddress);
+                tensor = op.inputs.find((input) => input.address === bufferAddress);
 
                 if (tensor !== undefined) {
                     break;

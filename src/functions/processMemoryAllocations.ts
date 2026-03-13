@@ -2,8 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Node, NodeType, StringBufferType } from '../model/APIData';
+import { Node, NodeType } from '../model/APIData';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
+import { StringBufferType } from '../model/BufferType';
 
 export type AllocationDetails = {
     id: number;
@@ -49,7 +50,7 @@ export function processMemoryAllocations(
             curOp.push({ name, id: node.id, deviceId: node.params.device_id });
         }
 
-        if (node.params.device_id !== undefined && curOp.length > 1) {
+        if (node.params?.device_id !== undefined && curOp.length > 1) {
             curOp[curOp.length - 1].deviceId = node.params.device_id;
         }
 

@@ -17,7 +17,7 @@ import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom } from '../../store/app';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
-import { ScrollLocations } from '../../definitions/ScrollPositions';
+import { ScrollLocations } from '../../definitions/VirtualLists';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
 
