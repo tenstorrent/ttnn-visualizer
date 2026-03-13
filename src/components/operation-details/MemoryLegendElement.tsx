@@ -7,7 +7,7 @@ import classNames from 'classnames';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
-import { DeviceOperationLayoutTypes, FragmentationEntry, MarkerType } from '../../model/APIData';
+import { DeviceOperationLayoutTypes, FragmentationEntry, MarkerType, MarkerTypeLabel } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
@@ -123,9 +123,9 @@ export const MemoryLegendElement: React.FC<{
             <div className='format-numbers monospace nowrap'>
                 {/* eslint-disable-next-line no-nested-ternary */}
                 {chunk.markerType === MarkerType.L1_SMALL ? (
-                    'L1 SMALL region'
+                    MarkerTypeLabel.L1_SMALL
                 ) : chunk.markerType === MarkerType.L1_START ? (
-                    'L1 START'
+                    MarkerTypeLabel.L1_START
                 ) : (
                     <>
                         {formatMemorySize(chunk.size, 2)}

@@ -14,7 +14,6 @@ import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
 import HighlightedText from '../HighlightedText';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { formatMemorySize, toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
@@ -24,6 +23,7 @@ import { showHexAtom } from '../../store/app';
 import { BufferMemoryLayout } from '../../functions/parseMemoryConfig';
 import isValidNumber from '../../functions/isValidNumber';
 import { toReadableShape, toReadableType } from '../../functions/formatting';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperation[];
@@ -75,7 +75,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     const existingBuffer = uniqueBuffers.get(address);
                     if (!existingBuffer || size > existingBuffer.size) {
                         uniqueBuffers.set(address, buffer);
-                        // TODO: add device list to buffer fro rendering maybe
+                        // TODO: add device list to buffer for rendering maybe
                     }
                 }
             });

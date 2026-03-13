@@ -184,6 +184,12 @@ export enum MarkerType {
     L1_START = 'L1_START',
 }
 
+export const MarkerTypeLabel: Record<MarkerType, string> = {
+    [MarkerType.CB]: 'Circular Buffer',
+    [MarkerType.L1_SMALL]: 'L1 SMALL',
+    [MarkerType.L1_START]: 'L1 START',
+};
+
 export interface FragmentationEntry extends Chunk {
     markerType?: MarkerType | undefined;
     colorVariance?: number | undefined;

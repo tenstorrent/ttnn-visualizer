@@ -23,7 +23,7 @@ interface BufferSummaryRowProps {
     memoryStart: number;
     memoryEnd: number;
     memoryPadding: number;
-    tensorList: Map<number, Tensor>;
+    tensorList?: Map<number, Tensor>;
     showMemoryLayout?: boolean;
     className?: string;
     tensorDeallocationReport?: TensorDeallocationReport[];
@@ -39,7 +39,7 @@ const BufferSummaryRow = ({
     memoryStart,
     memoryEnd,
     memoryPadding,
-    tensorList,
+    tensorList = new Map(),
     className = '',
     tensorDeallocationReport = [],
     showMemoryLayout,

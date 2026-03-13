@@ -1057,10 +1057,10 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
     const { data: buffersByOperation } = useBuffers(bufferType);
     const { data: operations } = useOperationsList();
 
-    const tensorsByOperationByAddress: TensorsByOperationByAddress = new Map();
     const uniqueBuffersByOperationList = useMemo(() => {
         return buffersByOperation?.map((operation) => {
             const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+
             operation.buffers.forEach((buffer) => {
                 const { address, size } = buffer;
                 if (address) {
@@ -1070,6 +1070,7 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
                     }
                 }
             });
+
             return {
                 ...operation,
                 buffers: Array.from(uniqueBuffers.values()),
@@ -1077,60 +1078,66 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         });
     }, [buffersByOperation]);
 
-    if (!operations || !buffersByOperation) {
-        return tensorsByOperationByAddress;
-    }
+    const tensorsByOperationByAddress = useMemo(() => {
+        const result: TensorsByOperationByAddress = new Map();
 
-    const buffersByOpId = new Map<number, Buffer[]>();
-    uniqueBuffersByOperationList?.forEach((op) => {
-        buffersByOpId.set(op.id, op.buffers);
-    });
+        if (!operations || !buffersByOperation) {
+            return result;
+        }
 
-    const latestTensorByAddress = new Map<number, Tensor>();
+        const buffersByOpId = new Map<number, Buffer[]>();
+        uniqueBuffersByOperationList?.forEach((op) => {
+            buffersByOpId.set(op.id, op.buffers);
+        });
 
-    for (const op of operations) {
-        if (op.inputs) {
-            for (const t of op.inputs) {
-                if (t && t.address !== null && t.address !== undefined) {
-                    latestTensorByAddress.set(t.address, t);
+        const latestTensorByAddress = new Map<number, Tensor>();
+
+        for (const op of operations) {
+            if (op.inputs) {
+                for (const t of op.inputs) {
+                    if (t && t.address !== null && t.address !== undefined) {
+                        latestTensorByAddress.set(t.address, t);
+                    }
                 }
             }
-        }
-        if (op.outputs) {
-            for (const t of op.outputs) {
-                if (t && t.address !== null && t.address !== undefined) {
-                    latestTensorByAddress.set(t.address, t);
+            if (op.outputs) {
+                for (const t of op.outputs) {
+                    if (t && t.address !== null && t.address !== undefined) {
+                        latestTensorByAddress.set(t.address, t);
+                    }
                 }
             }
-        }
 
-        const buffers = buffersByOpId.get(op.id);
-        if (!buffers?.length) {
-            tensorsByOperationByAddress.set(op.id, new Map());
-            // eslint-disable-next-line no-continue
-            continue;
-        }
-
-        const tensorsByBufferAddress = new Map<number, Tensor>();
-
-        for (const buffer of buffers) {
-            const addr = buffer.address;
-            if (addr === null || addr === undefined) {
+            const buffers = buffersByOpId.get(op.id);
+            if (!buffers?.length) {
+                result.set(op.id, new Map());
                 // eslint-disable-next-line no-continue
                 continue;
             }
 
-            const tensor = latestTensorByAddress.get(addr);
-            if (tensor) {
-                tensorsByBufferAddress.set(addr, {
-                    ...tensor,
-                    buffer_type: buffer.buffer_type,
-                });
+            const tensorsByBufferAddress = new Map<number, Tensor>();
+
+            for (const buffer of buffers) {
+                const addr = buffer.address;
+                if (addr === null || addr === undefined) {
+                    // eslint-disable-next-line no-continue
+                    continue;
+                }
+
+                const tensor = latestTensorByAddress.get(addr);
+                if (tensor) {
+                    tensorsByBufferAddress.set(addr, {
+                        ...tensor,
+                        buffer_type: buffer.buffer_type,
+                    });
+                }
             }
+
+            result.set(op.id, tensorsByBufferAddress);
         }
 
-        tensorsByOperationByAddress.set(op.id, tensorsByBufferAddress);
-    }
+        return result;
+    }, [buffersByOperation, operations, uniqueBuffersByOperationList]);
 
     return tensorsByOperationByAddress;
 };

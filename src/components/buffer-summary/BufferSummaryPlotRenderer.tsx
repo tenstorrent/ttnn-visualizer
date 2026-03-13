@@ -5,9 +5,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
-import { Switch, Tooltip } from '@blueprintjs/core';
+import { Tooltip } from '@blueprintjs/core';
 import { useNavigate } from 'react-router-dom';
-import { useAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import {
     BufferSummaryAxisConfiguration,
     L1_SMALL_MARKER_COLOR,
@@ -26,23 +26,22 @@ import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import {
     renderMemoryLayoutAtom,
     showBufferSummaryZoomedAtom,
     showDeallocationReportAtom,
-    showHexAtom,
     showMemoryRegionsAtom,
 } from '../../store/app';
-import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { ScrollLocations } from '../../definitions/VirtualLists';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
 
-import { BuffersByOperation } from '../../model/APIData';
+import { BuffersByOperation, MarkerTypeLabel } from '../../model/APIData';
 import useBufferNavigation from '../../hooks/useBufferNavigation';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
+import BufferSummaryPlotControls from './BufferSummaryPlotControls';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -58,11 +57,10 @@ function BufferSummaryPlotRenderer({
     uniqueBuffersByOperationList,
     tensorListByOperation,
 }: BufferSummaryPlotRendererProps) {
-    const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
-    const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
-    const [showHex, setShowHex] = useAtom(showHexAtom);
-    const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
-    const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+    const showDeallocationReport = useAtomValue(showDeallocationReportAtom);
+    const renderMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
+    const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
+    const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
     const [activeRow, setActiveRow] = useState<number | null>(null);
 
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
@@ -86,6 +84,12 @@ function BufferSummaryPlotRenderer({
         initialOffset: restoredOffset || 0,
     });
 
+    useBufferNavigation({
+        buffersByOperation: uniqueBuffersByOperationList,
+        tensorListByOperation,
+        virtualizer,
+    });
+
     const virtualItems = virtualizer.getVirtualItems();
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
@@ -104,7 +108,7 @@ function BufferSummaryPlotRenderer({
         [uniqueBuffersByOperationList],
     );
 
-    const { lateDeallocationsByOperation: nondeallocatedTensorsByOperationId } =
+    const { lateDeallocationsByOperation: nonDeallocatedTensorsByOperationId } =
         useGetTensorDeallocationReportByOperation();
 
     const memorySize = useMemo(getMemorySize, [devices, isLoadingDevices]);
@@ -124,6 +128,16 @@ function BufferSummaryPlotRenderer({
 
         return minValue && maxValue ? [minValue, maxValue] : [0, memorySize];
     }, [uniqueBuffersByOperationList, memorySize]);
+
+    const memoryRegionsMarkers = showMemoryRegions
+        ? [
+              { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: MarkerTypeLabel.L1_SMALL },
+              { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: MarkerTypeLabel.L1_START },
+          ]
+        : [];
+    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
+    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
+    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     const handleUserScrolling = useCallback(() => {
         if (scrollElementRef.current) {
@@ -155,61 +169,9 @@ function BufferSummaryPlotRenderer({
         };
     }, [updateListState, uniqueBuffersByOperationList]);
 
-    useBufferNavigation({
-        buffersByOperation: uniqueBuffersByOperationList,
-        tensorListByOperation,
-        virtualizer,
-    });
-
-    const memoryRegionsMarkers = showMemoryRegions
-        ? [
-              { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: 'L1 SMALL' },
-              { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: '' },
-          ]
-        : [];
-    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
-    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
-    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
-
     return uniqueBuffersByOperationList && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
-            <div className='controls'>
-                <Switch
-                    label='Buffer zoom'
-                    checked={isZoomedIn}
-                    onChange={() => {
-                        setIsZoomedIn(!isZoomedIn);
-                    }}
-                />
-                <GlobalSwitch
-                    label='Mark late tensor deallocations'
-                    checked={showDeallocationReport}
-                    onChange={() => {
-                        setShowDeallocationReport(!showDeallocationReport);
-                    }}
-                />
-                <GlobalSwitch
-                    label='Use Hex'
-                    checked={showHex}
-                    onChange={() => {
-                        setShowHex(!showHex);
-                    }}
-                />
-                <GlobalSwitch
-                    label='Tensor memory layout overlay'
-                    checked={renderMemoryLayout}
-                    onChange={() => {
-                        setRenderMemoryLayout(!renderMemoryLayout);
-                    }}
-                />
-                <GlobalSwitch
-                    label='Memory regions'
-                    checked={showMemoryRegions}
-                    onChange={() => {
-                        setShowMemoryRegions(!showMemoryRegions);
-                    }}
-                />
-            </div>
+            <BufferSummaryPlotControls />
 
             <p className='x-axis-label'>Memory Address</p>
 
@@ -265,7 +227,7 @@ function BufferSummaryPlotRenderer({
                         {virtualItems.map((virtualRow) => {
                             const operation = uniqueBuffersByOperationList[virtualRow.index];
 
-                            return (
+                            return operation ? (
                                 <div
                                     className='buffer-summary-plot-container'
                                     key={virtualRow.key}
@@ -280,10 +242,10 @@ function BufferSummaryPlotRenderer({
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
-                                        tensorList={tensorListByOperation.get(operation.id)!}
+                                        tensorList={tensorListByOperation.get(operation.id)}
                                         tensorDeallocationReport={
                                             showDeallocationReport
-                                                ? nondeallocatedTensorsByOperationId.get(operation.id) || []
+                                                ? nonDeallocatedTensorsByOperationId.get(operation.id) || []
                                                 : []
                                         }
                                         showMemoryLayout={renderMemoryLayout}
@@ -303,7 +265,7 @@ function BufferSummaryPlotRenderer({
                                         </a>
                                     </Tooltip>
                                 </div>
-                            );
+                            ) : null;
                         })}
                     </div>
                 </div>
