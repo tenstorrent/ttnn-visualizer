@@ -11,7 +11,6 @@ import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
-from unittest import result
 
 import orjson
 import yaml
