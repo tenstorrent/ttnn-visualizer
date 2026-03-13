@@ -211,7 +211,7 @@ function BufferSummaryPlotRendererDRAM({
                                                 memoryStart={isZoomedIn ? zoomedMemoryOptions[index].start : 0}
                                                 memoryEnd={isZoomedIn ? zoomedMemoryOptions[index].end : MEMORY_SIZE}
                                                 memoryPadding={zoomedMemoryOptions[index].padding}
-                                                tensorList={tensorListByOperation?.get(operation.id)}
+                                                tensorList={tensorListByOperation.get(operation.id)}
                                                 showMemoryLayout={showMemoryLayout}
                                             />
 

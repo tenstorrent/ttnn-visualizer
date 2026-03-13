@@ -66,7 +66,7 @@ function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
         );
     }
 
-    return buffersByOperation && uniqueBuffersByOperationList ? (
+    return buffersByOperation && uniqueBuffersByOperationList && tensorListByOperation ? (
         <>
             <h2>Plot view</h2>
             <div

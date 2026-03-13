@@ -37,7 +37,7 @@ import { ScrollLocations } from '../../definitions/VirtualLists';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
 
-import { BuffersByOperation } from '../../model/APIData';
+import { BuffersByOperation, MarkerTypeLabel } from '../../model/APIData';
 import useBufferNavigation from '../../hooks/useBufferNavigation';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import BufferSummaryPlotControls from './BufferSummaryPlotControls';
@@ -131,8 +131,8 @@ function BufferSummaryPlotRenderer({
 
     const memoryRegionsMarkers = showMemoryRegions
         ? [
-              { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: 'L1 SMALL' },
-              { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: '' },
+              { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: MarkerTypeLabel.L1_SMALL },
+              { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: MarkerTypeLabel.L1_START },
           ]
         : [];
     const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
@@ -242,7 +242,7 @@ function BufferSummaryPlotRenderer({
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
-                                        tensorList={tensorListByOperation?.get(operation.id)}
+                                        tensorList={tensorListByOperation.get(operation.id)}
                                         tensorDeallocationReport={
                                             showDeallocationReport
                                                 ? nonDeallocatedTensorsByOperationId.get(operation.id) || []
