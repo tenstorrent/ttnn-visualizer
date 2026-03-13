@@ -64,17 +64,17 @@ const invalidReportStatus: ConnectionStatus = {
 
 const invalidProfilerStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
-    message: 'Selected directory is not a valid profiler run',
+    message: 'Selected directory does not contain a valid report',
 };
 
 const directoryErrorStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
-    message: 'Selected directory does not contain a valid report.',
+    message: 'Selected directory does not contain a valid report',
 };
 
 const connectionFailedStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
-    message: 'Unable to upload selected directory.',
+    message: 'Unable to upload selected directory',
 };
 
 const LocalFolderOptions: FC = () => {

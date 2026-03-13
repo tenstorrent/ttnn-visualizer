@@ -404,18 +404,71 @@ class OpsPerformanceReportQueries:
     DEFAULT_CLASSIC_COLORS = False  # Colour scheme for plotted stacked report
     DEFAULT_GROUP_BY = None  # Group by method for stacked report
 
+    @staticmethod
+    def extract_signposts(csv_file):
+        logger.info("Reading raw CSV for signpost extraction...")
+        csv_file.seek(0)
+        ops_perf_results = []
+        ops_perf_results_reader = csv.DictReader(csv_file)
+
+        for row in ops_perf_results_reader:
+            ops_perf_results.append(row)
+
+        # Returns a list of unique signposts in the order they appear
+        # TODO: Signpost names are not unique but tt-perf-report treats them as such
+        captured_signposts = set()
+        signposts = []
+        for index, row in enumerate(ops_perf_results):
+            if row.get("OP TYPE") == "signpost":
+                op_code = row["OP CODE"]
+                op_id = index + 2  # Match IDs with row numbers in ops perf results csv
+                if not any(s["op_code"] == op_code for s in signposts):
+                    captured_signposts.add(op_code)
+                    signposts.append(
+                        {
+                            "id": op_id,
+                            "op_code": op_code,
+                        }
+                    )
+
+        return ops_perf_results, signposts
+
+    @staticmethod
+    def set_op_type_from_results(processed_row, idx, ops_perf_results):
+        if 0 <= idx < len(ops_perf_results):
+            processed_row["op_type"] = ops_perf_results[idx].get("OP TYPE")
+        else:
+            processed_row["op_type"] = None
+
+        return processed_row
+
+    @staticmethod
+    def set_op_type_from_signposts(processed_row, signposts):
+        if "op_code" in processed_row and any(
+            processed_row["op_code"] in signpost["op_code"] for signpost in signposts
+        ):
+            processed_row["op_type"] = "signpost"
+        else:
+            processed_row["op_type"] = "unknown"
+
+        return processed_row
+
+    @staticmethod
+    def cleanup_temp_files(files):
+        for file in files:
+            if isinstance(file, tempfile._TemporaryFileWrapper):
+                file_path = file.name
+            else:
+                file_path = file
+            if os.path.exists(file_path):
+                try:
+                    os.unlink(file_path)
+                    logger.info(f"Deleted temporary file: {file_path}")
+                except Exception as e:
+                    logger.warning(f"Could not delete temporary file {file_path}: {e}")
+
     @classmethod
     def generate_report(cls, instance, **kwargs):
-        def cleanup_temp_files(summary_csv_path, summary_png_path, csv_summary_file):
-            if os.path.exists(csv_output_file.name):
-                os.unlink(csv_output_file.name)
-            if os.path.exists(summary_csv_path):
-                os.unlink(summary_csv_path)
-            if os.path.exists(summary_png_path):
-                os.unlink(summary_png_path)
-            if os.path.exists(csv_summary_file.name):
-                os.unlink(csv_summary_file.name)
-
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
 
@@ -485,39 +538,12 @@ class OpsPerformanceReportQueries:
                     not merge_devices,
                 )
             except Exception as e:
-                logger.error(f"Error generating performance report: {e}")
+                logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
-                raise DataFormatError(
-                    f"Error generating performance report: {e}"
-                ) from e
+                raise DataFormatError(e)
 
             try:
-                logger.info("Reading raw CSV for signpost extraction...")
-                csv_file.seek(0)
-                ops_perf_results = []
-                ops_perf_results_reader = csv.DictReader(csv_file)
-
-                for row in ops_perf_results_reader:
-                    ops_perf_results.append(row)
-
-                # Returns a list of unique signposts in the order they appear
-                # TODO: Signpost names are not unique but tt-perf-report treats them as such
-                captured_signposts = set()
-                signposts = []
-                for index, row in enumerate(ops_perf_results):
-                    if row.get("OP TYPE") == "signpost":
-                        op_code = row["OP CODE"]
-                        op_id = (
-                            index + 2
-                        )  # Match IDs with row numbers in ops perf results csv
-                        if not any(s["op_code"] == op_code for s in signposts):
-                            captured_signposts.add(op_code)
-                            signposts.append(
-                                {
-                                    "id": op_id,
-                                    "op_code": op_code,
-                                }
-                            )
+                ops_perf_results, signposts = cls.extract_signposts(csv_file)
             except Exception as e:
                 logger.error(f"Error extracting signposts: {e}")
                 ops_perf_results = []
@@ -577,12 +603,9 @@ class OpsPerformanceReportQueries:
                                                 processed_row[key] = None
 
                                         # Get the op type from the raw file for this row as it is not returned from tt-perf-report
-                                        if 0 <= idx < len(ops_perf_results):
-                                            processed_row["op_type"] = ops_perf_results[
-                                                idx
-                                            ].get("OP TYPE")
-                                        else:
-                                            processed_row["op_type"] = None
+                                        cls.set_op_type_from_results(
+                                            processed_row, idx, ops_perf_results
+                                        )
 
                                         report.append(processed_row)
                                     except (ValueError, IndexError) as e:
@@ -631,13 +654,9 @@ class OpsPerformanceReportQueries:
                                         ]
                                         del processed_row["OP Code Joined"]
 
-                                    if "op_code" in processed_row and any(
-                                        processed_row["op_code"] in signpost["op_code"]
-                                        for signpost in signposts
-                                    ):
-                                        processed_row["op_type"] = "signpost"
-                                    else:
-                                        processed_row["op_type"] = "unknown"
+                                    cls.set_op_type_from_signposts(
+                                        processed_row, signposts
+                                    )
 
                                     stacked_report.append(processed_row)
                         except csv.Error as e:
@@ -661,4 +680,6 @@ class OpsPerformanceReportQueries:
 
         finally:
             # Ensure cleanup always happens, even if exceptions are raised
-            cleanup_temp_files(summary_csv_path, summary_png_path, csv_summary_file)
+            cls.cleanup_temp_files(
+                [csv_output_file, summary_csv_path, summary_png_path, csv_summary_file]
+            )
