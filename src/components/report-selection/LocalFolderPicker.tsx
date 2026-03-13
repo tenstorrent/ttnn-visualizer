@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useState } from 'react';
-import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
+import classNames from 'classnames';
+import { Alert, Button, ButtonVariant, Classes, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
@@ -67,7 +68,7 @@ const LocalFolderPicker = ({
             >
                 <MenuItem
                     textClassName='folder-picker-label'
-                    text={`/${getPrettyPath(folder.path)}`}
+                    text={`/${folder.path}`}
                     labelElement={
                         <Tooltip
                             content={folder.reportName}
@@ -80,7 +81,7 @@ const LocalFolderPicker = ({
                             />
                         </Tooltip>
                     }
-                    labelClassName='folder-picker-name-label'
+                    labelClassName={classNames('folder-picker-name-label', Classes.TEXT_OVERFLOW_ELLIPSIS)}
                     roleStructure='listoption'
                     active={folder.path === activePath}
                     disabled={modifiers.disabled}
@@ -162,8 +163,5 @@ const LocalFolderPicker = ({
         </Select>
     );
 };
-
-const PATH_REGEX = /^\d+_/gm;
-const getPrettyPath = (path: string) => (PATH_REGEX.test(path) ? path.replace(PATH_REGEX, '') : path);
 
 export default LocalFolderPicker;
