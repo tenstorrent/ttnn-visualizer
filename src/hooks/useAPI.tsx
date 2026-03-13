@@ -57,6 +57,7 @@ import Endpoints from '../definitions/Endpoints';
 import { ReportFolder } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification, { ToastType } from '../functions/createToastNotification';
+import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -1161,7 +1162,7 @@ export const useGetTensorDeallocationReportByOperation = () => {
                 const lastConsumerOperationId = list.sort().pop() || -1;
                 const lastConsumerName = operationsById.get(lastConsumerOperationId)?.name || '';
 
-                if (lastConsumerOperationId > -1 && !lastConsumerName.includes('ttnn.deallocate')) {
+                if (lastConsumerOperationId > -1 && !DEALLOCATE_OP_NAME_LIST.includes(lastConsumerName.toLowerCase())) {
                     return { lastConsumerOperationId, lastConsumerName };
                 }
             }
