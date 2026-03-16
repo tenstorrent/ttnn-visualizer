@@ -87,6 +87,16 @@ def create_app(settings_override=None):
 
     if flask_env == "production":
 
+        @app.route(f"{app.config['BASE_PATH']}robots.txt")
+        def robots_txt():
+            """Serve a permissive robots.txt so analyzers don't get SPA HTML."""
+            body = "User-agent: *\nAllow: /\n"
+            return flask.Response(
+                body,
+                mimetype="text/plain",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+
         @app.route(f"{app.config['BASE_PATH']}", defaults={"path": ""})
         @app.route(f"{app.config['BASE_PATH']}<path:path>")
         def catch_all(path):
