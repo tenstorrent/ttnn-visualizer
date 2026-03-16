@@ -212,6 +212,13 @@ class ActiveReports(SerializeableModel):
     npe_location: Optional[ReportLocation] = None
 
 
+class ReportMetadataEntry(SerializeableModel):
+    """Key-value row from the report_metadata table (schema_version, etc.)."""
+
+    key: str
+    value: Optional[str] = None
+
+
 class RemoteReportFolder(SerializeableModel):
     reportName: str
     remotePath: str

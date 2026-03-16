@@ -42,6 +42,7 @@ from ttnn_visualizer.models import (
     RemoteConnection,
     RemoteReportFolder,
     ReportLocation,
+    ReportMetadataEntry,
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
@@ -261,6 +262,28 @@ def errors_list(instance: Instance):
 
         return Response(
             orjson.dumps(serialized_errors),
+            mimetype="application/json",
+        )
+
+
+@api.route("/report_metadata", methods=["GET"])
+@with_instance
+@timer
+def report_metadata(instance: Instance):
+    with DatabaseQueries(instance) as db:
+        if not db._check_table_exists("report_metadata"):
+            return (
+                jsonify(
+                    {
+                        "error": "Report metadata table does not exist in this report database."
+                    }
+                ),
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
+        rows = db.query_report_metadata()
+        entries = [ReportMetadataEntry(key=row[0], value=row[1]) for row in rows]
+        return Response(
+            orjson.dumps([e.model_dump() for e in entries]),
             mimetype="application/json",
         )
 
