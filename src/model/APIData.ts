@@ -274,6 +274,8 @@ interface CircularBufferAllocateParams {
     globally_allocated: string; // 'false';
     size: string; // '7340032';
     num_cores: string;
+    allocateOperationId: number;
+    allocateOperationName: string;
 }
 
 export interface DeviceTensorParams {
