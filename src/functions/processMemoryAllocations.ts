@@ -57,8 +57,10 @@ export function processMemoryAllocations(
 
         if (node.node_type === NodeType.circular_buffer_allocate) {
             // this is the only sane way to track allocation op for color variance. not a fan
-            node.params.allocateOperationId = currentOp.id;
-            node.params.allocateOperationName = currentOp.name;
+            if (currentOp) {
+                node.params.allocateOperationId = currentOp.id;
+                node.params.allocateOperationName = currentOp.name;
+            }
             totalCb += parseInt(node.params.size, 10);
         }
 
