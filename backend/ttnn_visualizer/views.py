@@ -42,7 +42,6 @@ from ttnn_visualizer.models import (
     RemoteConnection,
     RemoteReportFolder,
     ReportLocation,
-    ReportMetadataEntry,
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
@@ -281,9 +280,9 @@ def report_metadata(instance: Instance):
                 HTTPStatus.UNPROCESSABLE_ENTITY,
             )
         rows = db.query_report_metadata()
-        entries = [ReportMetadataEntry(key=row[0], value=row[1]) for row in rows]
+        payload = {row[0]: row[1] for row in rows}
         return Response(
-            orjson.dumps([e.model_dump() for e in entries]),
+            orjson.dumps(payload),
             mimetype="application/json",
         )
 

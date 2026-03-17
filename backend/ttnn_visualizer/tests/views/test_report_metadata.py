@@ -48,7 +48,7 @@ def test_report_metadata_returns_422_when_table_missing(app, client):
 
 
 def test_report_metadata_returns_metadata_on_success(app, client):
-    """When the report DB has report_metadata table, return 200 and key-value list."""
+    """When the report DB has report_metadata table, return 200 and single object."""
     with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
         path = f.name
     try:
@@ -80,13 +80,14 @@ def test_report_metadata_returns_metadata_on_success(app, client):
 
         assert response.status_code == 200
         data = response.get_json()
-        assert isinstance(data, list)
-        assert len(data) == 3
-        keys = {row["key"] for row in data}
-        assert keys == {"schema_version", "capture_timestamp_ns", "total_duration_ns"}
-        by_key = {row["key"]: row["value"] for row in data}
-        assert by_key["schema_version"] == "2"
-        assert by_key["capture_timestamp_ns"] == "1773424287168605099"
-        assert by_key["total_duration_ns"] == "22119664963"
+        assert isinstance(data, dict)
+        assert set(data.keys()) == {
+            "schema_version",
+            "capture_timestamp_ns",
+            "total_duration_ns",
+        }
+        assert data["schema_version"] == "2"
+        assert data["capture_timestamp_ns"] == "1773424287168605099"
+        assert data["total_duration_ns"] == "22119664963"
     finally:
         Path(path).unlink(missing_ok=True)
