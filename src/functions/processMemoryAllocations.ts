@@ -25,7 +25,7 @@ export function processMemoryAllocations(
 } {
     let peakMemoryLoad = 0;
     const memoryAllocationList: AllocationDetails[] = [];
-    const curOp: { name: string; id: number; deviceId?: string | number }[] = [];
+    const curOpList: { name: string; id: number; deviceId?: string | number }[] = [];
     let totalCb = 0;
     let totalBuffer = 0;
 
@@ -34,7 +34,7 @@ export function processMemoryAllocations(
         const node = graph[i];
         i += 1;
         if (node.node_type === NodeType.function_start) {
-            // logic below calculates inputs sizes. its is deemed unnessisary for now
+            // logic below calculates inputs sizes. its is deemed unnecessary for now
             // keeping for a while
             // if (node.inputs?.length > 0) {
             //     // eslint-disable-next-line no-loop-func
@@ -47,14 +47,20 @@ export function processMemoryAllocations(
             // }
 
             const { name } = node.params;
-            curOp.push({ name, id: node.id, deviceId: node.params.device_id });
+            curOpList.push({ name, id: node.id, deviceId: node.params.device_id });
         }
+        const currentOp = curOpList[curOpList.length - 1];
 
-        if (node.params?.device_id !== undefined && curOp.length > 1) {
-            curOp[curOp.length - 1].deviceId = node.params.device_id;
+        if (node.params?.device_id !== undefined && curOpList.length > 1) {
+            curOpList[curOpList.length - 1].deviceId = node.params.device_id;
         }
 
         if (node.node_type === NodeType.circular_buffer_allocate) {
+            // this is the only sane way to track allocation op for color variance. not a fan
+            if (currentOp) {
+                node.params.allocateOperationId = currentOp.id;
+                node.params.allocateOperationName = currentOp.name;
+            }
             totalCb += parseInt(node.params.size, 10);
         }
 
@@ -69,7 +75,7 @@ export function processMemoryAllocations(
         }
 
         if (node.node_type === NodeType.function_end) {
-            curOp.pop();
+            curOpList.pop();
         }
 
         if (node.node_type === NodeType.buffer_deallocate) {
@@ -80,10 +86,10 @@ export function processMemoryAllocations(
             }
         }
 
-        if (curOp.length > 0) {
+        if (curOpList.length > 0) {
             const obj: AllocationDetails = {
-                name: curOp[curOp.length - 1].name,
-                deviceId: curOp[curOp.length - 1].deviceId as number,
+                name: curOpList[curOpList.length - 1].name,
+                deviceId: curOpList[curOpList.length - 1].deviceId as number,
                 id: node.id,
                 type: node.node_type,
                 total_cb: totalCb,

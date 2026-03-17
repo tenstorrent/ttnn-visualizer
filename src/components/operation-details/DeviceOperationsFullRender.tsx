@@ -388,6 +388,7 @@ function useDeviceOperationsFullRenderModel(args: {
                     const cb = node.params;
                     const numCores = parseInt(cb.num_cores, 10) || 1;
 
+                    const variance = cb.allocateOperationId;
                     operationContent = (
                         <Fragment key={`${cb.address}-${index}`}>
                             {!consecutiveCBsOutput && (
@@ -403,7 +404,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={details}
                                 onLegendClick={onLegendClick}
-                                colorVariance={deviceOpList.at(-1)?.id}
+                                colorVariance={variance}
                             />
                             {memoryInfo}
                             <br />
