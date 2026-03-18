@@ -290,6 +290,28 @@ def errors_list(instance: Instance):
         )
 
 
+@api.route("/report_metadata", methods=["GET"])
+@with_instance
+@timer
+def report_metadata(instance: Instance):
+    with DatabaseQueries(instance) as db:
+        if not db._check_table_exists("report_metadata"):
+            return (
+                jsonify(
+                    {
+                        "error": "Report metadata table does not exist in this report database."
+                    }
+                ),
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
+        rows = db.query_report_metadata()
+        payload = {row[0]: row[1] for row in rows}
+        return Response(
+            orjson.dumps(payload),
+            mimetype="application/json",
+        )
+
+
 @api.route("/config")
 @with_instance
 @timer
