@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+$folder-text-size: 14px;
+
 // The select component
 .folder-picker {
     > .bp6-popover-target {
@@ -35,11 +37,13 @@
 
     .folder-picker-label {
         max-width: 180px;
+        font-size: $folder-text-size;
     }
 
     .folder-picker-name-label {
         max-width: 120px;
         text-align: right;
+        font-size: $folder-text-size;
 
         > span {
             display: inline;
