@@ -4,9 +4,6 @@
 
 """
 Pytest fixtures for API tests.
-
-Use the `client` fixture to send GET/POST etc. to the API; responses support
-.status_code, .get_json(), .data, like Django REST Framework's APIClient.
 """
 
 import tempfile
