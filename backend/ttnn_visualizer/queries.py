@@ -370,6 +370,16 @@ class DatabaseQueries:
             )
             yield ProducersConsumers(tensor_id, producers, consumers)
 
+    def query_report_metadata(
+        self,
+    ) -> list[tuple[str, str | None]]:
+        """
+        Returns all rows from report_metadata (key, value).
+        Caller must ensure the table exists (e.g. via _check_table_exists).
+        """
+        rows = self._query_table("report_metadata", columns=["key", "value"])
+        return rows
+
     def query_next_buffer(self, operation_id: int, address: str) -> Optional[Buffer]:
         query = """
             SELECT
