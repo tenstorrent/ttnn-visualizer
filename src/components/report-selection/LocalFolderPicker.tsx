@@ -68,7 +68,7 @@ const LocalFolderPicker = ({
             >
                 <MenuItem
                     textClassName='folder-picker-label'
-                    text={`/${folder.path}`}
+                    text={`/${truncateStringMiddle(folder.path, REPORT_NAME_MAX_LENGTH)}`}
                     labelElement={
                         <Tooltip
                             content={folder.reportName}
@@ -162,6 +162,15 @@ const LocalFolderPicker = ({
             </Tooltip>
         </Select>
     );
+};
+
+const truncateStringMiddle = (str: string, maxLength: number) => {
+    if (str.length <= maxLength) {
+        return str;
+    }
+
+    const half = Math.floor(maxLength / 2);
+    return `${str.slice(0, half)}[...]${str.slice(str.length - half)}`;
 };
 
 export default LocalFolderPicker;
