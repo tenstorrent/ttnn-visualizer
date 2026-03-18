@@ -100,11 +100,10 @@ def _trim_session_report_lists():
             session[key] = lst[-max_reports:]
 
 
-def _get_system_capabilities():
-    """
-    Build a small dict of host/backend capabilities for the frontend.
-    """
-    return {
+@api.route("/system_capabilities", methods=["GET"])
+def get_system_capabilities():
+    """Return host/backend capabilities so the frontend can adapt (e.g. disable remote sync in hosted mode)."""
+    capabilities = {
         "os": platform.system(),
         "processor": platform.machine(),
         "remote_sync_methods": {
@@ -113,13 +112,8 @@ def _get_system_capabilities():
         },
     }
 
-
-@api.route("/system_capabilities", methods=["GET"])
-def get_system_capabilities():
-    """Return host/backend capabilities so the frontend can adapt (e.g. disable remote sync in hosted mode)."""
-    caps = _get_system_capabilities()
     return Response(
-        orjson.dumps(caps),
+        orjson.dumps(capabilities),
         mimetype="application/json",
     )
 
