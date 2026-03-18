@@ -33,7 +33,7 @@ import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1MemorySize';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
-import { toReadableLayout, toReadableShape } from '../../functions/formatting';
+import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { BufferTypeToStringBufferType, StringBufferType } from '../../model/BufferType';
 
 type BufferDetails = {
@@ -56,14 +56,14 @@ const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, det
     const size: number | undefined = parseInt(bufferOrTensorNode.params.size, 10);
     let layout = '';
     let { type } = bufferOrTensorNode.params;
-
+    let dtype = null;
     if (bufferOrTensorNode.node_type === NodeType.tensor) {
         const { params } = bufferOrTensorNode;
-        address = parseInt(params.address, 10);
+        address = params.address === undefined ? undefined : parseInt(params.address, 10);
         layout = toReadableLayout(params.layout) || '';
         type = BufferTypeToStringBufferType[params.buffer_type];
+        dtype = params.dtype || null;
     }
-
     if (address !== undefined || tensorId !== undefined) {
         const tensor: Tensor | undefined =
             address !== undefined
@@ -94,6 +94,7 @@ const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, det
                 {tensorSquare} {address !== undefined && `${prettyPrintAddress(address, 0)}`}
             </span>
             <span> {formatMemorySize(size, 2)}</span>
+            <span>{dtype && `${toReadableType(dtype)}`}</span>
             <span>
                 <MemoryTag memory={type} />
             </span>
@@ -171,6 +172,9 @@ function createBuffersRender(node: TensorNode, details: OperationDetails) {
 
     if (node.params.address !== undefined) {
         return <>{renderBufferDetails({ bufferOrTensorNode: node, tensorId: node.params.tensor_id, details })}</>;
+    }
+    if (node.buffer === undefined || node.buffer.length === 0) {
+        return renderBufferDetails({ bufferOrTensorNode: node, tensorId: node.params.tensor_id, details });
     }
     return (
         node.buffer?.map((buffer, index) => (

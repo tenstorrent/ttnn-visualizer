@@ -13,7 +13,7 @@ export const toReadableShape = (input: string) => {
 };
 
 export const toReadableType = (input: string) => {
-    return input.replace(/^DataType\./, '');
+    return stripEnum(input);
 };
 
 export const toReadableLayout = (input: TensorMemoryLayout | string) => {
