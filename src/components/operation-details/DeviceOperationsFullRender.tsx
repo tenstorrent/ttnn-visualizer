@@ -52,14 +52,14 @@ const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, det
     const { allocation } = bufferOrTensorNode;
 
     let tensorSquare = null;
-    let address = allocation?.params.address === undefined ? undefined : parseInt(allocation.params.address, 10);
+    let address = allocation?.params.address !== undefined ? parseInt(allocation.params.address, 10) : undefined;
     const size: number | undefined = parseInt(bufferOrTensorNode.params.size, 10);
     let layout = '';
     let { type } = bufferOrTensorNode.params;
     let dtype = null;
     if (bufferOrTensorNode.node_type === NodeType.tensor) {
         const { params } = bufferOrTensorNode;
-        address = params.address === undefined ? undefined : parseInt(params.address, 10);
+        address = params.address !== undefined ? parseInt(params.address, 10) : undefined;
         layout = toReadableLayout(params.layout) || '';
         type = BufferTypeToStringBufferType[params.buffer_type];
         dtype = params.dtype || null;
