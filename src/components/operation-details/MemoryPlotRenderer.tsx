@@ -3,9 +3,9 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { CSSProperties, useMemo, useState } from 'react';
-import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData, Shape } from 'plotly.js';
 import { useAtomValue } from 'jotai';
+import Plot from '../../libs/PlotComponent';
 import { PlotConfiguration, PlotMarker, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getDimmedColour, getLightlyDimmedColour } from '../../functions/colour';
@@ -179,8 +179,8 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 data={augmentedChart}
                 layout={layout}
                 config={config}
-                // @ts-expect-error PlotMouseEventCustom extends PlotMouseEvent and will be fine
                 onClick={onBufferClick}
+                // @ts-expect-error PlotMouseEventCustom extends PlotMouseEvent and will be fine
                 onHover={(data) => setHoveredPoint(data.points[0].x as number)}
                 onUnhover={() => setHoveredPoint(null)}
                 useResizeHandler
