@@ -124,15 +124,15 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     Shape:<strong> {toReadableShape(tensor.shape)}</strong>
                 </p>
                 <p>
-                    Dtype:<strong> {toReadableType(tensor.dtype)}</strong>
+                    Type:<strong> {toReadableType(tensor.dtype)}</strong>
                 </p>
                 <p>
-                    Layout:<strong> {tensor.layout}</strong>
+                    Layout:<strong> {toReadableLayout(tensor.layout)}</strong>
                 </p>
                 <p>
                     {tensor.memory_config?.memory_layout && (
                         <>
-                            Memory layout:<strong> {toReadableLayout(tensor.memory_config.memory_layout)}</strong>
+                            Memory:<strong> {toReadableLayout(tensor.memory_config.memory_layout)}</strong>
                         </>
                     )}
                 </p>

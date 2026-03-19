@@ -142,13 +142,15 @@ const renderTensorLabel = (
             <span className='tensor-details-layout'>
                 {square}{' '}
                 <span className={classNames(Classes.TOOLTIP_INDICATOR, 'has-tooltip')}>
-                    <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}
+                    <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}{' '}
+                    <strong>{toReadableType(node.params.dtype)}</strong>
                 </span>
             </span>
         </Tooltip>
     ) : (
         <span className='tensor-details-layout'>
-            {square} <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}
+            {square} <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}{' '}
+            <strong>{toReadableType(node.params.dtype)}</strong>
         </span>
     );
 };

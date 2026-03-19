@@ -13,11 +13,12 @@ export const toReadableShape = (input: string) => {
 };
 
 export const toReadableType = (input: string) => {
-    return stripEnum(input);
+    return toShortTypeLabel(stripEnum(input));
 };
 
 export const toReadableLayout = (input: TensorMemoryLayout | string) => {
-    return stripEnum(input);
+    // TODO: we may want to consider getting rid of uppercase and underscores in the future
+    return stripEnum(input); // .toLowerCase().replaceAll('_', '-');
 };
 
 export const capitalizeString = (input: string) => {
@@ -25,5 +26,27 @@ export const capitalizeString = (input: string) => {
 };
 
 export const stripEnum = (v: string) => {
-    return v.toString().split('::').pop() || v;
+    if (!v) {
+        return v;
+    }
+    const str = v.toString();
+    const parsed = str.split(/::|\./);
+
+    return parsed[parsed.length - 1] || str;
+};
+
+const TYPE_LABELS: Record<string, string> = {
+    UINT8: 'u8',
+    UINT16: 'u16',
+    INT32: 'i32',
+    UINT32: 'u32',
+    FLOAT32: 'f32',
+    BFLOAT16: 'bf16',
+    BFLOAT8_B: 'bf8',
+    BFLOAT4_B: 'bf4',
+};
+
+const toShortTypeLabel = (input: string) => {
+    const key = stripEnum(input);
+    return TYPE_LABELS[key] ?? key.toLowerCase();
 };
