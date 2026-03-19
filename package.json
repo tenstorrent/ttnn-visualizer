@@ -48,12 +48,12 @@
     "test": "vitest run --environment jsdom"
   },
   "dependencies": {
-    "@blueprintjs/colors": "^5.1.15",
-    "@blueprintjs/core": "^6.10.0",
-    "@blueprintjs/icons": "^6.7.0",
-    "@blueprintjs/select": "^6.1.4",
-    "@blueprintjs/table": "^6.0.19",
-    "@tanstack/react-query": "^5.90.21",
+    "@blueprintjs/colors": "^5.1.12",
+    "@blueprintjs/core": "^6.6.1",
+    "@blueprintjs/icons": "^6.5.0",
+    "@blueprintjs/select": "^6.0.13",
+    "@blueprintjs/table": "^6.0.13",
+    "@tanstack/react-query": "^5.91.0",
     "@tanstack/react-virtual": "^3.13.23",
     "ajv": "^8.18.0",
     "axios": "^1.13.6",
@@ -72,7 +72,7 @@
     "vis-network": "^10.0.2"
   },
   "devDependencies": {
-    "@blueprintjs/node-build-scripts": "^9.3.2",
+    "@blueprintjs/node-build-scripts": "^9.2.10",
     "@eslint/compat": "^1.4.1",
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^9.39.4",
