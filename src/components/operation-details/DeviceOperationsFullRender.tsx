@@ -38,12 +38,25 @@ import { BufferTypeToStringBufferType, StringBufferType } from '../../model/Buff
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
-    tensorId?: number;
     optionalOutput?: JSX.Element;
     details: OperationDetails;
 };
 
-const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, details }: BufferDetails) => {
+const getColorSquare = (address: number | null | undefined, tensorId?: number) => {
+    const color = tensorId !== undefined ? getTensorColor(tensorId) : getBufferColor(address || null);
+    return (
+        <div
+            className={classNames('memory-color-block', {
+                'empty-tensor': address === null,
+            })}
+            style={{
+                backgroundColor: color,
+            }}
+        />
+    );
+};
+
+const renderBufferDetails = ({ bufferOrTensorNode, optionalOutput, details }: BufferDetails) => {
     // TODO: this will need grouping of same sized buffers. its impractical to render 32 lines that are the same
     if (bufferOrTensorNode === undefined) {
         return null;
@@ -64,25 +77,12 @@ const renderBufferDetails = ({ bufferOrTensorNode, tensorId, optionalOutput, det
         type = BufferTypeToStringBufferType[params.buffer_type];
         dtype = params.dtype || null;
     }
-    if (address !== undefined || tensorId !== undefined) {
-        const tensor: Tensor | undefined =
-            address !== undefined
-                ? details.tensorListByAddress.get(address)
-                : Object.values(details.tensorListByAddress).find((t) => t.id === tensorId);
+    const tensor: Tensor | undefined = address !== undefined ? details.tensorListByAddress.get(address) : undefined;
 
-        tensorSquare = (
-            <div
-                className={classNames('memory-color-block', {
-                    'empty-tensor': address === null,
-                })}
-                style={{
-                    backgroundColor:
-                        tensor?.id !== undefined || tensorId !== undefined
-                            ? getTensorColor(tensor?.id) || getTensorColor(tensorId)
-                            : getBufferColor(address || null),
-                }}
-            />
-        );
+    if (address === undefined && tensor?.id === undefined) {
+        tensorSquare = null;
+    } else {
+        tensorSquare = getColorSquare(address, tensor?.id);
     }
 
     return (
@@ -111,20 +111,11 @@ const renderTensorLabel = (
     buffers: JSX.Element | JSX.Element[] | null,
 ) => {
     const layout = node.buffer?.[0]?.params.layout;
-    const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
+    // const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
+    const address = node.params.address !== undefined ? parseInt(node.params.address, 10) : undefined;
+    const tensor: Tensor | undefined = address !== undefined ? details.tensorListByAddress.get(address) : undefined;
 
-    const square =
-        (tensor && (
-            <div
-                className={classNames('memory-color-block', {
-                    'empty-tensor': tensor.address === null,
-                })}
-                style={{
-                    backgroundColor: getTensorColor(parseInt(node.params.tensor_id.toString(), 10)),
-                }}
-            />
-        )) ||
-        null;
+    const square = tensor?.id === undefined && address === undefined ? null : getColorSquare(address, tensor?.id);
 
     const producer = tensor?.operationIdentifier || '';
 
@@ -164,7 +155,6 @@ function createBuffersRender(node: TensorNode, details: OperationDetails) {
             <>
                 {renderBufferDetails({
                     bufferOrTensorNode: buffer,
-                    tensorId: node.params.tensor_id,
                     optionalOutput: <strong>x{deviceIds.length}</strong>,
                     details,
                 })}
@@ -173,15 +163,15 @@ function createBuffersRender(node: TensorNode, details: OperationDetails) {
     }
 
     if (node.params.address !== undefined) {
-        return <>{renderBufferDetails({ bufferOrTensorNode: node, tensorId: node.params.tensor_id, details })}</>;
+        return <>{renderBufferDetails({ bufferOrTensorNode: node, details })}</>;
     }
     if (node.buffer === undefined || node.buffer.length === 0) {
-        return renderBufferDetails({ bufferOrTensorNode: node, tensorId: node.params.tensor_id, details });
+        return renderBufferDetails({ bufferOrTensorNode: node, details });
     }
     return (
         node.buffer?.map((buffer, index) => (
             <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
-                {renderBufferDetails({ bufferOrTensorNode: buffer, tensorId: node.params.tensor_id, details })}
+                {renderBufferDetails({ bufferOrTensorNode: buffer, details })}
             </Fragment>
         )) || null
     );
