@@ -48,5 +48,8 @@ const TYPE_LABELS: Record<string, string> = {
 
 const toShortTypeLabel = (input: string) => {
     const key = stripEnum(input);
+    if (!key) {
+        return input;
+    }
     return TYPE_LABELS[key] ?? key.toLowerCase();
 };
