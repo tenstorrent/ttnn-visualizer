@@ -72,6 +72,8 @@
     }
 
     .device-operation {
+        margin-bottom: 10px;
+
         hr {
             opacity: 0.2;
             padding-top: 5px;
@@ -93,6 +95,12 @@
             }
         }
 
+        .collapsible-label-wrap {
+            display: inline-flex;
+            padding-left: 8px;
+            padding-right: 8px;
+        }
+
         .params {
             font-weight: lighter;
 
@@ -104,6 +112,10 @@
 
     .end-function {
         padding-top: 10px;
+
+        &:empty {
+            display: none;
+        }
     }
 
     .function-content {

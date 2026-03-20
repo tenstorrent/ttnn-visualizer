@@ -316,8 +316,12 @@ function useDeviceOperationsFullRenderModel(args: {
                                 [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
                             })}
                         >
-                            <div className='function-content'>{innerContent}</div>
-                            <div className='end-function'>{/* staying for now */}</div>
+                            {hasContent ? (
+                                <>
+                                    <div className='function-content'>{innerContent}</div>
+                                    <div className='end-function'>{/* staying for now */}</div>
+                                </>
+                            ) : null}
                         </Collapsible>
                     );
 
