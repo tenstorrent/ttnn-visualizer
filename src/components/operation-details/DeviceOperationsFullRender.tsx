@@ -111,7 +111,6 @@ const renderTensorLabel = (
     buffers: JSX.Element | JSX.Element[] | null,
 ) => {
     const layout = node.buffer?.[0]?.params.layout;
-    // const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
     const address = node.params.address !== undefined ? parseInt(node.params.address, 10) : undefined;
     const tensor: Tensor | undefined = address !== undefined ? details.tensorListByAddress.get(address) : undefined;
 
