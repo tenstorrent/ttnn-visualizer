@@ -2,7 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-$folder-text-size: 14px;
+@use '../definitions/colours' as *;
+
+$folder-text-size: 15px;
 
 // The select component
 .folder-picker {
@@ -57,7 +59,8 @@ $folder-text-size: 14px;
 
     .folder-picker-sub-label {
         display: block;
-        font-size: 12px;
-        line-height: 1;
+        font-size: 11px;
+        line-height: 1.1;
+        color: $tt-grey-5;
     }
 }
