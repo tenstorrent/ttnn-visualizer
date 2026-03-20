@@ -139,16 +139,16 @@ it('updates the instance when a performance report is selected and creates toast
 
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    const { reportName } = mockPerformanceReportFolders[0];
+    const { path } = mockPerformanceReportFolders[0];
 
-    screen.getByText(reportName).click();
+    screen.getByText(new RegExp(path, 'i')).click();
 
     await waitFor(
-        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(reportName),
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(path),
         WAIT_FOR_OPTIONS,
     );
 
-    expect(getAllButtonsWithText(reportName)).toHaveLength(1);
+    expect(getAllButtonsWithText(path)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
 });
 
