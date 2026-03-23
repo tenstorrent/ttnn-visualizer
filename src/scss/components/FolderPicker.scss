@@ -2,6 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use '../definitions/colours' as *;
+
+$folder-text-size: 15px;
+
 // The select component
 .folder-picker {
     > .bp6-popover-target {
@@ -24,25 +28,39 @@
     display: flex;
     flex-wrap: nowrap;
     justify-content: space-between;
+    align-items: flex-start;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 
     .bp6-menu-item {
-        padding-left: 7px;
+        padding-left: 5px; // Aligns with search icon padding in the filter field
     }
 
     > li {
-        flex-grow: 1;
+        flex-grow: 1; // Lets the item take up the full width of the menu
+        overflow: hidden; // Ensures text-overflow ellipsis works when the text is too long
     }
 
     .folder-picker-label {
-        max-width: 180px;
+        font-size: $folder-text-size;
     }
 
+    // TODO: Used for NPE - move style rule out of here or refactor NPE picker UI
     .folder-picker-name-label {
-        max-width: 120px;
         text-align: right;
+        font-size: $folder-text-size;
 
         > span {
             display: inline;
         }
+    }
+
+    .folder-picker-sub-label {
+        display: block;
+        font-size: 11px;
+        line-height: 1.1;
+        color: $tt-grey-5;
     }
 }

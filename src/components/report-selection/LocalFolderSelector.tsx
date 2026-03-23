@@ -291,6 +291,7 @@ const LocalFolderOptions: FC = () => {
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
+                    showReportName
                 />
             </FormGroup>
 
