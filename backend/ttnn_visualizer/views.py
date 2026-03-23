@@ -5,6 +5,7 @@
 import dataclasses
 import json
 import logging
+import platform
 import re
 import shutil
 import time
@@ -97,6 +98,24 @@ def _trim_session_report_lists():
         lst = session.get(key, [])
         if len(lst) > max_reports:
             session[key] = lst[-max_reports:]
+
+
+@api.route("/system_capabilities", methods=["GET"])
+def get_system_capabilities():
+    """Return host/backend capabilities so the frontend can adapt (e.g. disable remote sync in hosted mode)."""
+    capabilities = {
+        "os": platform.system(),
+        "processor": platform.machine(),
+        "remote_sync_methods": {
+            "sftp": shutil.which("sftp") is not None,
+            "rsync": shutil.which("rsync") is not None,
+        },
+    }
+
+    return Response(
+        orjson.dumps(capabilities),
+        mimetype="application/json",
+    )
 
 
 @api.route("/operations", methods=["GET"])
