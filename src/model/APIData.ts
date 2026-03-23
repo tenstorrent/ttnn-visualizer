@@ -306,6 +306,7 @@ export interface BaseNode<T extends NodeType, P> {
 }
 
 export interface DeviceOperationNode extends BaseNode<NodeType.function_start, DeviceOperationParams> {
+    input_tensors: number[];
     arguments: string[];
     stack_trace: string[];
 }

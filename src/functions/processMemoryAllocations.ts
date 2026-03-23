@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Node, NodeType } from '../model/APIData';
+import { DeviceOperationNode, Node, NodeType } from '../model/APIData';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
 import { StringBufferType } from '../model/BufferType';
 
@@ -104,3 +104,31 @@ export function processMemoryAllocations(
 
     return { peakMemoryLoad, memoryAllocationList };
 }
+
+export const processInputsOutputs = (graph: Node[]): DeviceOperationNode[] => {
+    if (!Array.isArray(graph)) {
+        return [];
+    }
+    const operations: DeviceOperationNode[] = [];
+    const nodeByNodeId = new Map<number, Node>(graph.map((op) => [op.id, op]));
+
+    const connected = (node: Node): Node[] =>
+        (node.connections ?? []).map((id) => nodeByNodeId.get(id)).filter((n): n is Node => Boolean(n));
+
+    for (const op of graph) {
+        if (op.node_type !== NodeType.function_start) {
+            // eslint-disable-next-line no-continue
+            continue;
+        }
+        operations.push(op);
+        op.inputs = (op.input_tensors ?? [])
+            .map((id) => nodeByNodeId.get(id))
+            .filter((n): n is Node => Boolean(n && n.node_type === NodeType.tensor));
+
+        op.outputs = connected(op)
+            .filter((n) => n.node_type === NodeType.function_end)
+            .flatMap((end) => connected(end))
+            .filter((n): n is Node => n.node_type === NodeType.tensor);
+    }
+    return operations;
+};
