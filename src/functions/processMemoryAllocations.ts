@@ -130,5 +130,6 @@ export const processInputsOutputs = (graph: Node[]): DeviceOperationNode[] => {
             .flatMap((end) => connected(end))
             .filter((n): n is Node => n.node_type === NodeType.tensor);
     }
+
     return operations;
 };
