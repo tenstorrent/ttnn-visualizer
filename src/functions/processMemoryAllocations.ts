@@ -110,7 +110,7 @@ export const processInputsOutputs = (graph: Node[]): DeviceOperationNode[] => {
         return [];
     }
     const operations: DeviceOperationNode[] = [];
-    const nodeByNodeId = new Map<number, Node>(graph.map((op) => [op.id, op]));
+    const nodeByNodeId = new Map<number, Node>(graph.map((op) => [op.id, { ...op }]));
 
     const connected = (node: Node): Node[] =>
         (node.connections ?? []).map((id) => nodeByNodeId.get(id)).filter((n): n is Node => Boolean(n));
