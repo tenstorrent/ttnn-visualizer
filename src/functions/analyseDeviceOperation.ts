@@ -15,7 +15,7 @@ export enum DEVICE_OPERATION_ANALYSIS_RESULT {
 
 export const DEVICE_OPERATION_ANALYSIS_RESULT_LABEL = {
     [DEVICE_OPERATION_ANALYSIS_RESULT.OK]: '',
-    [DEVICE_OPERATION_ANALYSIS_RESULT.NOOP]: 'Operations appears to be a no-op and may be removable',
+    [DEVICE_OPERATION_ANALYSIS_RESULT.NOOP]: 'Operation appears to be a no-op and may be removable',
 };
 
 export const analyseDeviceOperation = (operation?: DeviceOperationNode) => {
