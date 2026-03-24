@@ -115,12 +115,14 @@ export const processInputsOutputs = (graph: Node[]): DeviceOperationNode[] => {
     const connected = (node: Node): Node[] =>
         (node.connections ?? []).map((id) => nodeByNodeId.get(id)).filter((n): n is Node => Boolean(n));
 
-    for (const op of graph) {
+    for (const op of nodeByNodeId.values()) {
         if (op.node_type !== NodeType.function_start) {
             // eslint-disable-next-line no-continue
             continue;
         }
+
         operations.push(op);
+
         op.inputs = (op.input_tensors ?? [])
             .map((id) => nodeByNodeId.get(id))
             .filter((n): n is Node => Boolean(n && n.node_type === NodeType.tensor));
