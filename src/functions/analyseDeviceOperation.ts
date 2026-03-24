@@ -28,10 +28,8 @@ export const analyseDeviceOperation = (operation?: DeviceOperationNode) => {
     if (name.toLowerCase() === DEVICE_OPERATION_NAME.RESHAPE) {
         const inputTensor: TensorNode = inputs?.[0] as TensorNode;
         const outputTensor = outputs?.[0] as TensorNode;
-        if (inputTensor && outputTensor) {
-            const inputShape = inputTensor.params.shape;
-            const outputShape = outputTensor.params.shape;
-            if (inputShape === outputShape) {
+        if (inputTensor && outputTensor && inputTensor.params.shape && outputTensor.params.shape) {
+            if (inputTensor.params.shape === outputTensor.params.shape) {
                 return DEVICE_OPERATION_ANALYSIS_RESULT.NOOP;
             }
         }
