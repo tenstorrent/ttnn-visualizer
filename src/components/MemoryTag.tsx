@@ -16,6 +16,6 @@ const MemoryTag = ({ memory }: MemoryTagProps) => {
     const memoryLabel = stripEnum(memory).replace(' ', '-');
     const memoryType = memoryLabel?.toLowerCase();
 
-    return <Tag className={`tag-${memoryType}`}>{memoryLabel}</Tag>;
+    return <Tag className={`memory-tag tag-${memoryType}`}>{memoryLabel}</Tag>;
 };
 export default MemoryTag;
