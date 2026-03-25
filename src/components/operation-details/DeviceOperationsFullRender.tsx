@@ -35,6 +35,11 @@ import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
 import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { BufferTypeToStringBufferType, StringBufferType } from '../../model/BufferType';
+import {
+    DEVICE_OPERATION_ANALYSIS_RESULT,
+    DEVICE_OPERATION_ANALYSIS_RESULT_LABEL,
+    analyseDeviceOperation,
+} from '../../functions/analyseDeviceOperation';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
@@ -249,14 +254,25 @@ function useDeviceOperationsFullRenderModel(args: {
 
                     const opArgs = node.operation?.arguments;
 
+                    const opAnalysisResult = analyseDeviceOperation(node.operation);
+                    const opAnalysisLabel = DEVICE_OPERATION_ANALYSIS_RESULT_LABEL[opAnalysisResult];
+                    const labelClass = classNames('device-operation-label', {
+                        'failed-op-analysis': opAnalysisResult !== DEVICE_OPERATION_ANALYSIS_RESULT.OK,
+                    });
                     const label = (
-                        <h4 className='device-operation-label'>
-                            <Icon
-                                className='operation-icon'
-                                size={13}
-                                intent={Intent.SUCCESS}
-                                icon={IconNames.CUBE_ADD}
-                            />
+                        <h4 className={labelClass}>
+                            <Tooltip content={opAnalysisLabel}>
+                                <Icon
+                                    className='operation-icon'
+                                    size={13}
+                                    intent={
+                                        opAnalysisResult === DEVICE_OPERATION_ANALYSIS_RESULT.NOOP
+                                            ? Intent.WARNING
+                                            : Intent.SUCCESS
+                                    }
+                                    icon={IconNames.CUBE_ADD}
+                                />
+                            </Tooltip>
                             {opName} <DeviceID _node={node} /> (
                             {node.operation?.inputs.map((inputNode, i) => (
                                 <span

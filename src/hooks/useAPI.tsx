@@ -58,6 +58,7 @@ import { ReportFolder } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification, { ToastType } from '../functions/createToastNotification';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
+import { processInputsOutputs } from '../functions/processMemoryAllocations';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -192,6 +193,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             inputs,
             arguments: argumentsWithParsedValues,
             deviceOperationNameList: getDeviceOperationNameList(operation),
+            processedConnections: processInputsOutputs(operation.device_operations),
         } as OperationDescription;
     });
 };

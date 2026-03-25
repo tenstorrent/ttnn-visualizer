@@ -221,6 +221,7 @@ export interface OperationDescription extends Operation {
         value: string;
         parsedValue: MemoryConfig | null;
     }[];
+    processedConnections: DeviceOperationNode[];
     deviceOperationNameList: string[]; // List of device operation names. actual device ops only
 }
 
@@ -306,6 +307,7 @@ export interface BaseNode<T extends NodeType, P> {
 }
 
 export interface DeviceOperationNode extends BaseNode<NodeType.function_start, DeviceOperationParams> {
+    input_tensors: number[];
     arguments: string[];
     stack_trace: string[];
 }

@@ -18,6 +18,10 @@
         font-size: 12px;
         padding-top: 1px;
     }
+
+    &.failed-op-analysis {
+        background-color: rgba($tt-yellow-accent, 0.2);
+    }
 }
 
 .tensor-details-layout {
@@ -97,8 +101,9 @@
 
         .collapsible-label-wrap {
             display: inline-flex;
-            padding-left: 8px;
             padding-right: 8px;
+
+            // padding-left: 8px;
         }
 
         .params {
