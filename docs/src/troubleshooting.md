@@ -60,4 +60,8 @@ Failed: Timeout (>300.0s) from pytest-timeout.
 ```
 
 This can be resolved by passing a `--timeout <timeout>` value to the `pytest` command,
-with a larger timeout value than the default.
+with a larger timeout value than the default. For example:
+
+```shell
+python -m tracy -r -v -m pytest --timeout 900 /path/to/demo.py
+```
