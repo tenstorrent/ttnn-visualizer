@@ -421,6 +421,7 @@ const RemoteSyncConfigurator: FC = () => {
                         }
                     }}
                     type='profiler'
+                    showReportName
                 >
                     {(isProfilerRemote || isSyncingReportFolder) && selectedReportFolder && (
                         <RemoteSyncButton

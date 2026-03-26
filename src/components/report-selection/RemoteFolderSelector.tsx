@@ -18,13 +18,17 @@ import {
 } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
-import 'styles/components/RemoteFolderSelector.scss';
 import HighlightedText from '../HighlightedText';
 
 type FolderTypes = 'performance' | 'profiler';
 
 const remoteFolderRenderer =
-    (type: FolderTypes, selectedFolder?: RemoteFolder, connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>
+    (
+        type: FolderTypes,
+        selectedFolder?: RemoteFolder,
+        connection?: RemoteConnection,
+        showReportName?: boolean,
+    ): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
@@ -53,28 +57,28 @@ const remoteFolderRenderer =
             </Tooltip>
         );
 
-        const getLabelElement = (filterText: string) => (
-            <>
-                <HighlightedText
-                    text={reportName}
-                    filter={filterText}
-                />
-                <span className='status-icon'>{statusIcon}</span>
-            </>
-        );
-
         return (
-            <MenuItem
-                className='remote-folder-item'
-                active={selectedFolder?.remotePath === remotePath}
-                disabled={modifiers.disabled}
-                key={`${formatRemoteFolderName(folder, type, connection)}${lastSynced ?? lastModified}`}
-                onClick={handleClick}
-                text={formatRemoteFolderName(folder, type, connection)}
-                icon={selectedFolder?.remotePath === remotePath ? IconNames.SAVED : IconNames.DOCUMENT}
-                labelElement={getLabelElement(query)}
-                labelClassName='remote-folder-status-icon'
-            />
+            <div
+                className='folder-picker-menu-item'
+                key={`${formatRemoteFolderPath(folder, type, connection)}${lastSynced ?? lastModified}`}
+            >
+                <MenuItem
+                    active={selectedFolder?.remotePath === remotePath}
+                    disabled={modifiers.disabled}
+                    onClick={handleClick}
+                    text={
+                        <>
+                            <HighlightedText
+                                text={formatRemoteFolderPath(folder, type, connection)}
+                                filter={query}
+                            />
+                            {showReportName && <span className='folder-picker-sub-label'>{reportName}</span>}
+                        </>
+                    }
+                    icon={selectedFolder?.remotePath === remotePath ? IconNames.SAVED : IconNames.DOCUMENT}
+                    labelElement={<span className='status-icon'>{statusIcon}</span>}
+                />
+            </div>
         );
     };
 
@@ -87,6 +91,7 @@ interface RemoteFolderSelectorProps {
     icon?: IconName;
     onSelectFolder: (folder: RemoteFolder) => void;
     type: FolderTypes;
+    showReportName?: boolean;
 }
 
 const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = ({
@@ -99,6 +104,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     fallbackLabel = '(No selection)',
     icon = IconNames.DOCUMENT_OPEN,
     type,
+    showReportName,
 }) => {
     const { persistentState } = useRemoteConnection();
     const remoteConnection = persistentState.selectedConnection;
@@ -110,7 +116,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
             <Select
                 className='remote-select'
                 items={remoteFolderList ?? []}
-                itemRenderer={remoteFolderRenderer(type, remoteFolder, remoteConnection)}
+                itemRenderer={remoteFolderRenderer(type, remoteFolder, remoteConnection, showReportName)}
                 filterable
                 itemPredicate={filterFolders(type, remoteConnection)}
                 noResults={
@@ -137,7 +143,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     );
 };
 
-const formatRemoteFolderName = (
+const formatRemoteFolderPath = (
     folder: RemoteFolder,
     type: FolderTypes,
     selectedConnection?: RemoteConnection,
@@ -153,13 +159,14 @@ const formatRemoteFolderName = (
 
     const pathToReplace = paths?.[type] ?? '';
 
-    return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
+    const formattedPath = folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
+
+    return formattedPath.startsWith('/') ? formattedPath : `/${formattedPath}`;
 };
 
 const filterFolders =
     (type: FolderTypes, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
-    (query, folder) => {
-        return formatRemoteFolderName(folder, type, connection).toLowerCase().includes(query.toLowerCase());
-    };
+    (query, folder) =>
+        formatRemoteFolderPath(folder, type, connection).toLowerCase().includes(query.toLowerCase());
 
 export default RemoteFolderSelector;
