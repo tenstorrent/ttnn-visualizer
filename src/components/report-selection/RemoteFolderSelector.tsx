@@ -6,7 +6,7 @@ import { Button, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@bluep
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
-import { TEST_IDS } from '../../definitions/TestIds';
+import 'styles/components/FolderPicker.scss';
 import {
     NEVER_SYNCED_LABEL,
     REPORT_OUTDATED_LABEL,
@@ -16,10 +16,10 @@ import {
     SYNC_DATE_FORMATTER,
     getUTCFromEpoch,
 } from '../../definitions/RemoteConnection';
+import { TEST_IDS } from '../../definitions/TestIds';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
-import '../../styles/components/FolderPicker.scss';
 
 type FolderTypes = 'performance' | 'profiler';
 
