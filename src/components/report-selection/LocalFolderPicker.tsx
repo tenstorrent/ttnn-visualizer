@@ -51,7 +51,6 @@ const LocalFolderPicker = ({
                 key={`${folder.path} - ${folder.reportName}`}
             >
                 <MenuItem
-                    textClassName='folder-picker-label'
                     text={
                         <>
                             <HighlightedText
