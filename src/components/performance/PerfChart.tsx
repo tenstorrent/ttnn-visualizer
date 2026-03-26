@@ -4,7 +4,7 @@
 
 import { Config, Layout, PlotData } from 'plotly.js';
 import classNames from 'classnames';
-import Plot from 'react-plotly.js';
+import Plot from '../../libs/PlotComponent';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import 'styles/components/PerfChart.scss';
 
