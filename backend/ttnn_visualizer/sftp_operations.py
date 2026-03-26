@@ -730,7 +730,7 @@ def get_remote_profiler_folders(
         )
         remote_folder_data.append(remote_folder)
 
-    return remote_folder_data
+    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
 
 
 @remote_exception_handler
