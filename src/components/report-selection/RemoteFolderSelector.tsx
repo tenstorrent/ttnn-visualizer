@@ -19,6 +19,7 @@ import {
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
+import '../../styles/components/FolderPicker.scss';
 
 type FolderTypes = 'performance' | 'profiler';
 
