@@ -699,7 +699,7 @@ def get_remote_performance_folders(
             get_remote_performance_folder(remote_connection, path)
         )
 
-    return remote_folder_data
+    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
 
 
 @remote_exception_handler
