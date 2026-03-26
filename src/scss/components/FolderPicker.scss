@@ -33,6 +33,7 @@ $folder-text-size: 15px;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    font-size: $folder-text-size;
 
     .bp6-menu-item {
         padding-left: 5px; // Aligns with search icon padding in the filter field
@@ -41,20 +42,6 @@ $folder-text-size: 15px;
     > li {
         flex-grow: 1; // Lets the item take up the full width of the menu
         overflow: hidden; // Ensures text-overflow ellipsis works when the text is too long
-    }
-
-    .folder-picker-label {
-        font-size: $folder-text-size;
-    }
-
-    // TODO: Used for NPE - move style rule out of here or refactor NPE picker UI
-    .folder-picker-name-label {
-        text-align: right;
-        font-size: $folder-text-size;
-
-        > span {
-            display: inline;
-        }
     }
 
     .folder-picker-sub-label {
