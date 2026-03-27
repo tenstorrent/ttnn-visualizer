@@ -387,7 +387,6 @@ function useDeviceOperationsFullRenderModel(args: {
                             _node={node}
                             memoryInfo={(buffer.type === StringBufferType.L1 && memoryInfo) || undefined}
                             key={index}
-                            // title={`Buffer deallocate ${formatMemorySize(bufferSize)} ${buffer.type} x ${cores} cores`}
                             title='Buffer deallocate'
                         >
                             <MemoryLegendElement

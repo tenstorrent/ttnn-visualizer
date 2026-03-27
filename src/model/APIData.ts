@@ -269,7 +269,7 @@ interface BaseMemoryParams {
 }
 
 export interface BufferDeallocateParams extends Omit<BaseMemoryParams, 'address'> {
-    address?: string | undefined;
+    address?: string;
 }
 
 export interface DeviceTensorParams extends BaseMemoryParams {
