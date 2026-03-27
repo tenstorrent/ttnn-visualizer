@@ -104,6 +104,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState(true);
+    const [showHashColumn, setShowHashColumn] = useState(false);
     const [filters, setFilters] = useState<TableFilter>(
         Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
@@ -559,6 +560,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 />
                             </Tooltip>
                         )}
+
+                        <Switch
+                            label='Show Hash Column'
+                            onChange={() => setShowHashColumn(!showHashColumn)}
+                            checked={showHashColumn}
+                            className='option-switch'
+                        />
                     </FormGroup>
                 </div>
 
@@ -592,6 +600,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
                                     reportName={activePerformanceReport?.reportName || null}
+                                    showHashColumn={showHashColumn}
                                 />
                             )
                         }
@@ -655,6 +664,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}
                                         reportName={report}
+                                        showHashColumn={showHashColumn}
                                     />
                                 )
                             }

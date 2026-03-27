@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Union
 
 import pandas as pd
 import zstd
+from isort.core import process
 from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
@@ -467,6 +468,25 @@ class OpsPerformanceReportQueries:
                 except Exception as e:
                     logger.warning(f"Could not delete temporary file {file_path}: {e}")
 
+    @staticmethod
+    def set_hash_from_results(processed_row, idx, ops_perf_results):
+        if 0 <= idx < len(ops_perf_results):
+            hash_value = ops_perf_results[idx].get("PROGRAM HASH")
+            processed_row["hash"] = hash_value if hash_value else None
+
+            cache_hit_value = ops_perf_results[idx].get("PROGRAM CACHE HIT")
+            if cache_hit_value == "True":
+                processed_row["cache_hit"] = True
+            elif cache_hit_value == "False":
+                processed_row["cache_hit"] = False
+            else:
+                processed_row["cache_hit"] = None
+        else:
+            processed_row["hash"] = None
+            processed_row["cache_hit"] = None
+
+        return processed_row
+
     @classmethod
     def generate_report(cls, instance, **kwargs):
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
@@ -604,6 +624,10 @@ class OpsPerformanceReportQueries:
 
                                         # Get the op type from the raw file for this row as it is not returned from tt-perf-report
                                         cls.set_op_type_from_results(
+                                            processed_row, idx, ops_perf_results
+                                        )
+
+                                        cls.set_hash_from_results(
                                             processed_row, idx, ops_perf_results
                                         )
 

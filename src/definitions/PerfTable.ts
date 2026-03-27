@@ -60,6 +60,8 @@ export interface PerfTableRow {
     op_type: OpType;
     op?: number;
     missing?: boolean;
+    hash: string | null;
+    cache_hit: boolean | null;
 }
 
 export interface TypedPerfTableRow
@@ -162,6 +164,8 @@ export enum ColumnHeaders {
     OP = 'op',
     high_dispatch = 'high_dispatch',
     global_call_count = 'global_call_count',
+    hash = 'hash',
+    cache_hit = 'cache_hit',
 }
 
 export const tableColumns: TableColumn[] = [
@@ -180,6 +184,7 @@ export const tableColumns: TableColumn[] = [
     { label: 'FLOPS', key: ColumnHeaders.flops, unit: 'TFLOPS', decimals: 1, sortable: true },
     { label: 'FLOPS %', key: ColumnHeaders.flops_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
+    { label: 'Cache Hit', key: ColumnHeaders.cache_hit, colour: 'magenta', filterable: true },
 ];
 
 export const filterableColumnKeys = tableColumns.filter((column) => column.filterable).map((column) => column.key);
@@ -228,4 +233,6 @@ export const signpostRowDefaults = Object.freeze({
     device: null,
     layout: null,
     buffer_type: null,
+    hash: null,
+    cache_hit: null,
 });

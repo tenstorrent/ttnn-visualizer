@@ -18,11 +18,11 @@ import {
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
-import { formatCell, isHostOp } from '../../functions/perfFunctions';
+import { formatCell, isFirstHashOccurrence, isHostOp } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
-import { formatSize } from '../../functions/math';
+import { formatPercentage, formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import { hideHostOpsAtom, mergeDevicesAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
@@ -37,10 +37,12 @@ interface PerformanceTableProps {
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
     reportName: string | null;
+    showHashColumn: boolean;
 }
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
+const CACHE_HIT_INSERTION_POINT = 15;
 
 const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
@@ -50,6 +52,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     hiliteHighDispatch,
     shouldHighlightRows,
     reportName,
+    showHashColumn,
 }) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
@@ -85,7 +88,9 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         ...(opIdsMap.length > 0 ? [{ label: 'OP', key: ColumnHeaders.OP, sortable: true }] : []),
         ...tableColumns.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
         ...(hiliteHighDispatch ? [{ label: 'Slow', key: ColumnHeaders.high_dispatch }] : []),
-        ...tableColumns.slice(HIGH_DISPATCH_INSERTION_POINT),
+        ...tableColumns.slice(HIGH_DISPATCH_INSERTION_POINT, CACHE_HIT_INSERTION_POINT),
+        ...(showHashColumn ? [{ label: 'Hash', key: ColumnHeaders.hash }] : []),
+        ...tableColumns.slice(CACHE_HIT_INSERTION_POINT),
         ...(npeManifest && npeManifest.length > 0 ? [{ label: 'NPE', key: ColumnHeaders.global_call_count }] : []),
     ] as TableColumn[];
 
@@ -123,7 +128,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             return null;
         }
 
-        return formatCell(row, column, operations, highlight);
+        return formatCell(row, column, operations, highlight, tableFields);
     };
 
     if (!data) {
@@ -265,7 +270,13 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 >
                                                     {comparisonKeys.includes(h.key) &&
                                                         dataset[i] &&
-                                                        formatCell(dataset[i], h, operationsList, filters?.[h.key])}
+                                                        formatCell(
+                                                            dataset[i],
+                                                            h,
+                                                            operationsList,
+                                                            filters?.[h.key],
+                                                            dataset,
+                                                        )}
                                                 </td>
                                             ))}
                                         </tr>
@@ -343,6 +354,14 @@ const getTotalsForFooter = (column: TableColumn, data: TypedPerfTableRow[], hide
             data?.reduce((acc, curr) => acc + (curr.op_to_op_gap || 0), 0),
             2,
         )} µs`;
+    }
+
+    if (column.key === ColumnHeaders.cache_hit) {
+        const nonUniqueOps = data.filter((row) => !isFirstHashOccurrence(row, data));
+        const cacheHits = nonUniqueOps.filter((row) => row.cache_hit).length;
+        const cacheHitPercent = nonUniqueOps.length > 0 ? (cacheHits / nonUniqueOps.length) * 100 : 0;
+
+        return `${formatPercentage(cacheHitPercent).toString()} expected cache hit`;
     }
 
     return '';

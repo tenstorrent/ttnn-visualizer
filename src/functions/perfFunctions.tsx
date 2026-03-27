@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React from 'react';
-import { Icon, Tooltip } from '@blueprintjs/core';
+import { Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
 import {
@@ -62,12 +62,32 @@ const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
+/**
+ * Check if a hash's first occurrence is in the given row.
+ * Returns true only if this row contains the first instance of its hash in the table.
+ */
+export const isFirstHashOccurrence = (row: TypedPerfTableRow, allRows: TypedPerfTableRow[] | undefined): boolean => {
+    if (!allRows || !row.hash) {
+        return true; // Default to true if no rows provided or no hash
+    }
+
+    // Find the first occurrence of this hash in all rows
+    for (const r of allRows) {
+        if (r.hash === row.hash) {
+            return r.id === row.id; // True if this row is the first occurrence
+        }
+    }
+
+    return true; // Hash not found in rows
+};
+
 // https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
     row: TypedPerfTableRow,
     column: TableColumn,
     operations?: OperationDescription[],
     highlight?: string | null,
+    allRows?: TypedPerfTableRow[],
 ): React.JSX.Element | string => {
     const { key, unit, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
@@ -125,6 +145,54 @@ export const formatCell = (
                 usePortal={false}
             >
                 <Link to={`${ROUTES.OPERATIONS}/${value}`}>{value}</Link>
+            </Tooltip>
+        );
+    }
+
+    if (key === ColumnHeaders.hash) {
+        const hashText = value?.toString() || '';
+
+        return hashText || '';
+    }
+
+    if (key === ColumnHeaders.cache_hit) {
+        if (typeof value !== 'boolean') {
+            return '';
+        }
+
+        // Only show icon if this is not the first occurrence of the hash
+        if (isFirstHashOccurrence(row, allRows)) {
+            return '';
+        }
+
+        const tooltipMessage =
+            value === true ? (
+                <>
+                    Operation result reused from cache
+                    <br />
+                    <strong>Hash:</strong> {row[ColumnHeaders.hash]}
+                </>
+            ) : (
+                <>
+                    Operation result was recomputed
+                    <br />
+                    <strong>Hash:</strong> {row[ColumnHeaders.hash]}
+                </>
+            );
+
+        return value === true ? (
+            <Tooltip content={tooltipMessage}>
+                <Icon
+                    intent={Intent.SUCCESS}
+                    icon={IconNames.TICK}
+                />
+            </Tooltip>
+        ) : (
+            <Tooltip content={tooltipMessage}>
+                <Icon
+                    intent={Intent.WARNING}
+                    icon={IconNames.WARNING_SIGN}
+                />
             </Tooltip>
         );
     }
@@ -250,6 +318,13 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : DEFAULT_COLOUR;
+    }
+
+    if (key === ColumnHeaders.hash) {
+        // Highlight hash in red if there's a cache miss
+        if (row.cache_hit === false) {
+            return CellColour.Red;
+        }
     }
 
     if (key === ColumnHeaders.math_fidelity && typeof keyValue === 'string') {
