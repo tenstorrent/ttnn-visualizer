@@ -297,15 +297,15 @@ it('sets active performance report and syncs it on selection', async () => {
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
     // Select the folder - use the same simple approach as localFolderSelector
-    const { reportName } = selectedReport;
+    const { remotePath } = selectedReport;
+    const formattedPath = remotePath.split('/').slice(-1);
 
-    screen.getByText(reportName).click();
+    screen.getByText(remotePath).click();
 
-    // Wait for the button text to update after selection
-    await waitFor(() => {
-        const toastFilename = screen.getByTestId(TEST_IDS.TOAST_FILENAME);
-        expect(toastFilename?.textContent?.includes(reportName)).toBe(true);
-    }, WAIT_FOR_OPTIONS);
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(formattedPath),
+        WAIT_FOR_OPTIONS,
+    );
 
     // Verify the sync button appears
     const syncButton = await screen.findByTestId(TEST_IDS.REMOTE_SYNC_BUTTON, undefined, WAIT_FOR_OPTIONS);
