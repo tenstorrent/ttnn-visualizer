@@ -15,7 +15,7 @@ import {
     performanceRangeAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
-import SyncStatus from './SyncStatus';
+import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
@@ -114,7 +114,7 @@ function FooterInfobar() {
                         </Tooltip>
                     )}
 
-                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
+                    {activeProfilerReport && activePerformanceReport && <ReportLinkStatus />}
 
                     {activePerformanceReportPath && (
                         <Tooltip
