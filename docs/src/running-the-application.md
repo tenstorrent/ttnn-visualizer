@@ -4,7 +4,7 @@ After installation run `ttnn-visualizer` to start the application. If the app do
 
 Data can be loaded from your local file system or remotely via ssh.
 
-## Local data 
+## Loading local data 
 
 <img width="595" alt="Local folder upload" src="https://github.com/user-attachments/assets/8fce6283-689b-4389-b8c5-4f77a76ae8e9" />
 
@@ -12,7 +12,7 @@ For both profiler and performance data, TT-NN Visualizer expects the relevant fi
 
 Please note that currently NPE data can only be loaded locally on the NPE screen.
 
-## Remote data
+## Loading remote data
 
 <img width="595" alt="Remote folder sync" src="https://github.com/user-attachments/assets/366ae8cd-ee5a-4dfe-a7f0-3229df003c6f" />
 
@@ -26,7 +26,7 @@ The application will sync the files from the remote server to your local machine
 
 **Need help setting up SSH?** See our [Remote Sync guide](./remote-sync.md) for detailed SSH setup instructions.
 
-## Preload data on app launch
+## Preload data on launch
 
 The `ttnn-visualizer` command supports two CLI arguments for passing custom data paths:
 
@@ -42,9 +42,9 @@ with the data preloaded, or for restarting the visualizer with the same data, wi
 ttnn-visualizer --report-path ~/Downloads/report/generated/ttnn/reports/17274205533343344897 --profiler-path ~/Downloads/report/generated/profiler/reports/2025_02_24_23_17_27
 ```
 
-## TT-Metal Home
+### TT-Metal Home
 
-If reports are being generated on a machine which is accessible to your local workstation,
+If reports are being generated on a machine which is accessible from your local workstation,
 the `ttnn-visualizer` command can be run directly on the remote machine and load reports
 directly from the directory specified by the `--tt-metal-home` CLI arg or the `TT_METAL_HOME`
 env var.
