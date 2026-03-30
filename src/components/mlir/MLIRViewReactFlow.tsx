@@ -8,8 +8,10 @@ import ReactFlow, {
     MarkerType,
     MiniMap,
     Node,
+    ReactFlowProvider,
     useEdgesState,
     useNodesState,
+    useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -25,6 +27,7 @@ type MLNodeData = {
 interface ViewProps {
     data: GraphBundle;
 }
+
 const elk = new ELK();
 
 const elkOptions: Record<string, string> = {
@@ -118,6 +121,8 @@ const getOwningCollapsedNamespace = (
 };
 
 const MlGraph: React.FC<ViewProps> = ({ data }) => {
+    const { fitView } = useReactFlow();
+
     const graph = data.graphs[0];
 
     const getTensorInfoFromAttrs = (attrs: { key: string; value: string }[]) => {
@@ -171,9 +176,9 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
 
     const [collapsedNamespaces, setCollapsedNamespaces] = useState<Set<string>>(initialCollapsedNamespaces);
 
-    useEffect(() => {
-        setCollapsedNamespaces(initialCollapsedNamespaces);
-    }, [initialCollapsedNamespaces]);
+    // useEffect(() => {
+    //     setCollapsedNamespaces(initialCollapsedNamespaces);
+    // }, [initialCollapsedNamespaces]);
 
     const { computedNodes, computedEdges } = useMemo(() => {
         const collapsibleNamespaces = Array.from(
@@ -307,9 +312,15 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
 
         const runLayout = async () => {
             const { nodes: laidOutNodes, edges: laidOutEdges } = await layoutWithElk(computedNodes, computedEdges);
+
             if (!cancelled) {
                 setNodes(laidOutNodes);
                 setEdges(laidOutEdges);
+
+                requestAnimationFrame(() => {
+                    // eslint-disable-next-line no-void
+                    void fitView({ padding: 0.2, duration: 200 });
+                });
             }
         };
 
@@ -319,7 +330,7 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
         return () => {
             cancelled = true;
         };
-    }, [computedNodes, computedEdges, setNodes, setEdges]);
+    }, [computedNodes, computedEdges, setNodes, setEdges, fitView]);
 
     const handleNodeClick = useCallback((_: React.MouseEvent, node: Node<MLNodeData>) => {
         if (node.data.kind !== 'group' || !node.data.namespace) {
@@ -376,4 +387,11 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
     );
 };
 
-export default MlGraph;
+const MlGraphWithProvider: React.FC<ViewProps> = (props) => (
+    <ReactFlowProvider>
+        {/* eslint-disable-next-line react/jsx-props-no-spreading */}
+        <MlGraph {...props} />
+    </ReactFlowProvider>
+);
+
+export default MlGraphWithProvider;
