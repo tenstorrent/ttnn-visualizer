@@ -401,7 +401,6 @@ function useDeviceOperationsFullRenderModel(args: {
                                 operationDetails={details}
                                 onLegendClick={onLegendClick}
                                 bufferType={buffer.type}
-                                // layout={buffer.layout}
                             />
                             <hr />
                         </DeviceOperationNodeComponent>
@@ -534,7 +533,7 @@ const DeviceOperationNodeComponent: React.FC<
     return (
         <div className='device-operation'>
             <hr />
-            <h4 className={`node-type-${_node.node_type}`}>
+            <h4 className={`title node-type-${_node.node_type}`}>
                 {title}
                 {/* DEBUGGING */}
                 {/* <span style={{ color: 'yellow' }}> */}

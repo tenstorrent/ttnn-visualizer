@@ -89,9 +89,11 @@
         }
 
         /* stylelint-disable selector-class-pattern */
-        h4.node-type-buffer_allocate,
-        h4.node-type-buffer_deallocate {
-            margin-bottom: 10px;
+        .title {
+            &.node-type-buffer_allocate,
+            &.node-type-buffer_deallocate {
+                margin-bottom: 10px;
+            }
         }
 
         /* stylelint-enable selector-class-pattern */
