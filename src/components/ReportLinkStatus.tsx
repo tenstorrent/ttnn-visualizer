@@ -7,7 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 
-const SyncStatus = () => {
+const ReportLinkStatus = () => {
     const useGetDeviceOperationListPerfResult = useGetDeviceOperationListPerf();
     const canMatchOperations = useGetDeviceOperationListPerfResult.length > 0;
 
@@ -38,4 +38,4 @@ const SyncStatus = () => {
     );
 };
 
-export default SyncStatus;
+export default ReportLinkStatus;
