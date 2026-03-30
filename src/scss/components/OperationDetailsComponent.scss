@@ -128,6 +128,11 @@
         padding-left: 18px;
     }
 
+    .zoom-range-wrap {
+        position: relative;
+        overflow-x: hidden;
+    }
+
     .memory-zoom-range {
         $zoom-range-margin: 15px;
 
@@ -184,7 +189,7 @@
         }
 
         .bp6-slider-handle {
-            background-color: #f6bc42;
+            background-color: $tt-yellow;
         }
     }
 

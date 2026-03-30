@@ -196,39 +196,68 @@ class DatabaseQueries:
     def query_tensors(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Tensor, None, None]:
-        # Check if device_tensors table exists
+        # Check if tensors table has a size column (new schema) or we need to infer from joins
+        tensor_columns = self._get_table_columns("tensors")
+        size_on_tensors = "size" in tensor_columns
+
         device_tensors_exists = self._check_table_exists("device_tensors")
 
-        # Build the base query with joins to get size and optionally device_tensors
-        if device_tensors_exists:
-            query = """
-                SELECT 
-                    t.*, 
-                    b.max_size_per_bank as size,
-                    GROUP_CONCAT(dt.device_id || ':' || dt.address, ',') as device_tensors_data
-                FROM tensors t
-                LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
-                LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
-                LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
-                    AND t.address = b.address
-                    AND t.device_id = b.device_id
-                LEFT JOIN device_tensors dt ON dt.tensor_id = t.tensor_id
-                WHERE 1=1
-            """
+        if size_on_tensors:
+            # New schema: size is on tensors table — simple select without buffer/op joins
+            if device_tensors_exists:
+                query = """
+                    SELECT
+                        t.tensor_id, t.shape, t.dtype, t.layout, t.memory_config,
+                        t.device_id, t.address, t.buffer_type,
+                        t.size,
+                        GROUP_CONCAT(dt.device_id || ':' || dt.address, ',') as device_tensors_data
+                    FROM tensors t
+                    LEFT JOIN device_tensors dt ON dt.tensor_id = t.tensor_id
+                    WHERE 1=1
+                """
+            else:
+                query = """
+                    SELECT
+                        t.tensor_id, t.shape, t.dtype, t.layout, t.memory_config,
+                        t.device_id, t.address, t.buffer_type,
+                        t.size,
+                        NULL as device_tensors_data
+                    FROM tensors t
+                    WHERE 1=1
+                """
         else:
-            query = """
-                SELECT 
-                    t.*, 
-                    b.max_size_per_bank as size,
-                    NULL as device_tensors_data
-                FROM tensors t
-                LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
-                LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
-                LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
-                    AND t.address = b.address
-                    AND t.device_id = b.device_id
-                WHERE 1=1
-            """
+            # Old schema: infer size from buffers via input_tensors/output_tensors joins
+            if device_tensors_exists:
+                query = """
+                    SELECT
+                        t.tensor_id, t.shape, t.dtype, t.layout, t.memory_config,
+                        t.device_id, t.address, t.buffer_type,
+                        b.max_size_per_bank as size,
+                        GROUP_CONCAT(dt.device_id || ':' || dt.address, ',') as device_tensors_data
+                    FROM tensors t
+                    LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
+                    LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
+                    LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
+                        AND t.address = b.address
+                        AND t.device_id = b.device_id
+                    LEFT JOIN device_tensors dt ON dt.tensor_id = t.tensor_id
+                    WHERE 1=1
+                """
+            else:
+                query = """
+                    SELECT
+                        t.tensor_id, t.shape, t.dtype, t.layout, t.memory_config,
+                        t.device_id, t.address, t.buffer_type,
+                        b.max_size_per_bank as size,
+                        NULL as device_tensors_data
+                    FROM tensors t
+                    LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
+                    LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
+                    LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
+                        AND t.address = b.address
+                        AND t.device_id = b.device_id
+                    WHERE 1=1
+                """
         params = []
 
         # Apply filters to tensors table
@@ -251,10 +280,9 @@ class DatabaseQueries:
 
         rows = self.query_runner.execute_query(query, params)
         for row in rows:
-            # Extract size and device_tensors_data (last two columns) and tensor data
-            tensor_row = row[:-2]  # All tensor columns
-            size = row[-2]  # size column
-            device_tensors_data = row[-1]  # device_tensors_data column
+            tensor_row = row[:8]
+            size = row[8]
+            device_tensors_data = row[9]
 
             device_addresses = []
 
@@ -341,6 +369,16 @@ class DatabaseQueries:
                 else []
             )
             yield ProducersConsumers(tensor_id, producers, consumers)
+
+    def query_report_metadata(
+        self,
+    ) -> list[tuple[str, str | None]]:
+        """
+        Returns all rows from report_metadata (key, value).
+        Caller must ensure the table exists (e.g. via _check_table_exists).
+        """
+        rows = self._query_table("report_metadata", columns=["key", "value"])
+        return rows
 
     def query_next_buffer(self, operation_id: int, address: str) -> Optional[Buffer]:
         query = """

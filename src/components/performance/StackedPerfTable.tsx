@@ -23,6 +23,7 @@ import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import LoadingSpinner from '../LoadingSpinner';
 import { PATTERN_COUNT } from '../../definitions/Performance';
 import { mergeDevicesAtom } from '../../store/app';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -76,6 +77,8 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                 data={data}
                 reportName={reportName}
             />
+
+            {mergeDevices && <PerfMultiDeviceNotice />}
 
             {stackedData && stackedData?.length > 0 ? (
                 <table className='perf-table monospace'>
@@ -206,7 +209,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
 const getTotalsForFooter = (column: StackedTableColumn, data: TypedStackedPerfRow[]): string => {
     if (column.key === StackedColumnHeaders.Percent) {
-        return `100 %`;
+        return `100%`;
     }
 
     if (column.key === StackedColumnHeaders.DeviceTimeSumUs) {

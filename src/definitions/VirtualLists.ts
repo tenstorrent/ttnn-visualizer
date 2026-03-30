@@ -10,17 +10,13 @@ export interface VirtualListState {
     expandedItems: number[];
 }
 
+export interface ListStates {
+    [key: string]: VirtualListState;
+}
+
 export enum ScrollLocations {
     OPERATION_LIST = 'operation_list',
     TENSOR_LIST = 'tensor_list',
     BUFFER_SUMMARY = 'buffer_summary',
     BUFFER_SUMMARY_DRAM = 'buffer_summary_dram',
 }
-
-export interface ScrollPosition {
-    [key: string]: VirtualListState;
-}
-
-// TODO: This is not quite the right place for this but we need to examine this file anyway after looking at tracking scroll positions
-// Add tolerance for Chrome's sub-pixel rendering issues
-export const SCROLL_TOLERANCE_PX = 1;

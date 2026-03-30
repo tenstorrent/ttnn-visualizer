@@ -86,7 +86,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 />
 
                 <Tooltip
-                    content={previousOperation ? `${previousOperation?.id} ${previousOperation?.name}` : ''}
+                    content={`${previousOperation?.id} ${previousOperation?.name}`}
                     placement={PopoverPosition.TOP}
                     disabled={!previousOperation}
                 >
@@ -122,7 +122,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 </Tooltip>
 
                 <Tooltip
-                    content={nextOperation ? `${nextOperation?.id} ${nextOperation?.name}` : ''}
+                    content={`${nextOperation?.id} ${nextOperation?.name}`}
                     placement={PopoverPosition.TOP}
                     disabled={!nextOperation}
                 >

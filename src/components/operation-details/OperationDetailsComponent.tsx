@@ -42,7 +42,7 @@ import useBufferFocus from '../../hooks/useBufferFocus';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
-import { formatSize } from '../../functions/math';
+import { getMemoryAddress } from '../../functions/math';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -173,16 +173,22 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id);
+        // TODO: Find a more robust way to determine if the click should not produce a toast
+        const { hovertemplate } = event.points[0].data;
+        const isCBSummary = typeof hovertemplate === 'string' && hovertemplate.includes('CBs Summary');
+        const { address, tensor, colorVariance } = event.points[0].data.memoryData;
+
+        if (!isCBSummary) {
+            updateBufferFocus(address, tensor?.id, colorVariance);
+        }
     };
 
     const onTensorClick = (address?: number, tensorId?: number): void => {
         updateBufferFocus(address, tensorId);
     };
 
-    const onLegendClick = (address: number, tensorId?: number) => {
-        updateBufferFocus(address, tensorId);
+    const onLegendClick = (address: number, tensorId?: number, colorVariance?: number) => {
+        updateBufferFocus(address, tensorId, colorVariance);
     };
 
     const inputOutputList = details.inputs.concat(details.outputs);
@@ -278,7 +284,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             />
 
                             <GlobalSwitch
-                                label='Hex axis labels'
+                                label='Use Hex'
                                 checked={showHex}
                                 onChange={() => {
                                     setShowHex(!showHex);
@@ -397,27 +403,24 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         memorySize={memorySizeL1}
                                         configuration={L1RenderZoomoutConfiguration}
                                     />
-
-                                    <RangeSlider
-                                        min={plotZoomRangeStart}
-                                        max={plotZoomRangeEnd}
-                                        disabled={!zoomedInViewMainMemory}
-                                        intent={Intent.WARNING}
-                                        labelStepSize={
-                                            (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
-                                        }
-                                        labelRenderer={(value) => {
-                                            return showHex
-                                                ? `0x${value.toString(16).toUpperCase()}`
-                                                : formatSize(value);
-                                        }}
-                                        value={[zoomRangeStart, zoomRangeEnd]}
-                                        onChange={(value: number[]) => {
-                                            setZoomRangeStart(value[0]);
-                                            setZoomRangeEnd(value[1]);
-                                        }}
-                                        className='memory-zoom-range'
-                                    />
+                                    <div className='zoom-range-wrap'>
+                                        <RangeSlider
+                                            min={plotZoomRangeStart}
+                                            max={plotZoomRangeEnd}
+                                            disabled={!zoomedInViewMainMemory}
+                                            intent={Intent.WARNING}
+                                            labelStepSize={
+                                                (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
+                                            }
+                                            labelRenderer={(value) => getMemoryAddress(value, showHex)}
+                                            value={[zoomRangeStart, zoomRangeEnd]}
+                                            onChange={(value: number[]) => {
+                                                setZoomRangeStart(value[0]);
+                                                setZoomRangeEnd(value[1]);
+                                            }}
+                                            className='memory-zoom-range'
+                                        />
+                                    </div>
 
                                     <L1Plots
                                         operationDetails={details}

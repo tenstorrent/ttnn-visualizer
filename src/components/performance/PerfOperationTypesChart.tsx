@@ -2,10 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import Plot from 'react-plotly.js';
 import classNames from 'classnames';
 import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
+import Plot from '../../libs/PlotComponent';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import 'styles/components/PerformanceOperationTypesChart.scss';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';

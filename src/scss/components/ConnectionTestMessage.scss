@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+.connection-test-message {
+    display: inline-flex;
+    gap: 2px;
+    flex-basis: 100%;
+
+    &:last-of-type {
+        margin-bottom: 10px;
+    }
+
+    .connection-status-icon {
+        animation: 0.7s steps(2) infinite alternate both;
+    }
+
+    .connection-status-content {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .connection-status-text {
+        line-height: 1.4;
+    }
+
+    .connection-status-detail {
+        font-size: 12px;
+        color: $tt-grey-6;
+        background-color: $tt-grey-2;
+        border-radius: 4px;
+        padding: 8px;
+    }
+
+    &.status-idle .connection-status-icon {
+        color: $tt-grey-5;
+    }
+
+    &.status-progress .connection-status-icon {
+        animation-name: connection-test-progress;
+        color: $tt-yellow;
+    }
+}

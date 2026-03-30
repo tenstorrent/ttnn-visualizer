@@ -24,7 +24,7 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
         const kpi = NPE_KPI_METADATA[key] as NPE_KPI;
         const unit = kpi.units;
         const decimals = kpi.decimals !== undefined ? kpi.decimals : 2;
-        return `${typeof value === 'number' ? Number(value).toFixed(decimals) : value} ${unit}`;
+        return `${typeof value === 'number' ? Number(value).toFixed(decimals) : value}${unit}`;
     };
     const formatMetadataLabel = (key: keyof CommonInfo) => {
         const KPI: NPE_KPI | null = NPE_KPI_METADATA[key];
@@ -47,7 +47,7 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
                             if (hasKey(key) && info[key] !== undefined) {
                                 return (
                                     <div key={key}>
-                                        <span>{formatMetadataLabel(key)}: </span>
+                                        <span>{formatMetadataLabel(key)} </span>
                                         <span>{formatMetadataValue(key, info[key])}</span>
                                     </div>
                                 );
@@ -57,7 +57,7 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
                 </div>
                 <hr />
                 <div>
-                    <span>Active transfers:</span>
+                    <span>Active transfers: </span>
                     <span>{numTransfers}</span>
                 </div>
             </Collapsible>

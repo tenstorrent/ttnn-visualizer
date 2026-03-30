@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import 'styles/components/ListView.scss';
 import ROUTES from '../definitions/Routes';
-import { ScrollLocations } from '../definitions/ScrollPositions';
+import { ScrollLocations } from '../definitions/VirtualLists';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 import { formatSize } from '../functions/math';
@@ -165,17 +165,33 @@ const OperationList = () => {
 
     const handleSortByID = useCallback(() => {
         setShouldSortDuration(SortingOptions.OFF);
-        setShouldSortByID(
-            shouldSortByID === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
-        );
-    }, [shouldSortByID, setShouldSortByID, setShouldSortDuration]);
+        setShouldSortByID((current) => {
+            if (current === SortingOptions.OFF) {
+                return SortingOptions.ASCENDING;
+            }
+
+            if (current === SortingOptions.DESCENDING) {
+                return SortingOptions.OFF;
+            }
+
+            return SortingOptions.DESCENDING;
+        });
+    }, [setShouldSortByID, setShouldSortDuration]);
 
     const handleSortByDuration = useCallback(() => {
         setShouldSortByID(SortingOptions.OFF);
-        setShouldSortDuration(
-            shouldSortDuration === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
-        );
-    }, [shouldSortDuration, setShouldSortDuration, setShouldSortByID]);
+        setShouldSortDuration((current) => {
+            if (current === SortingOptions.OFF) {
+                return SortingOptions.ASCENDING;
+            }
+
+            if (current === SortingOptions.DESCENDING) {
+                return SortingOptions.OFF;
+            }
+
+            return SortingOptions.DESCENDING;
+        });
+    }, [setShouldSortDuration, setShouldSortByID]);
 
     const handleExpandAllToggle = useCallback(() => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
@@ -210,6 +226,46 @@ const OperationList = () => {
         setFocusedRow(null);
         scrollToIndex(numberOfOperations);
     };
+
+    const sortByIdControl = useMemo(() => {
+        let label = 'Clear ID sorting';
+
+        if (shouldSortByID === SortingOptions.OFF) {
+            label = 'Sort by ID (ascending)';
+        }
+        if (shouldSortByID === SortingOptions.ASCENDING) {
+            label = 'Sort by ID (descending)';
+        }
+
+        const icon =
+            shouldSortByID === SortingOptions.ASCENDING || shouldSortByID === SortingOptions.OFF
+                ? IconNames.SORT_ALPHABETICAL
+                : IconNames.SORT_ALPHABETICAL_DESC;
+
+        return { icon, label };
+    }, [shouldSortByID]);
+
+    const sortByDurationControl = useMemo(() => {
+        let label = 'Clear Duration sorting';
+
+        if (shouldSortDuration === SortingOptions.OFF) {
+            label = 'Sort by Duration (ascending)';
+        }
+        if (shouldSortDuration === SortingOptions.ASCENDING) {
+            label = 'Sort by Duration (descending)';
+        }
+
+        const icon =
+            shouldSortDuration === SortingOptions.ASCENDING || shouldSortDuration === SortingOptions.OFF
+                ? IconNames.SORT_NUMERICAL
+                : IconNames.SORT_NUMERICAL_DESC;
+
+        return { icon, label };
+    }, [shouldSortDuration]);
+
+    const shouldCollapseAllLabel = shouldCollapseAll ? 'Collapse all' : 'Expand all';
+    const scrollToTopLabel = 'Scroll to top';
+    const scrollToBottomLabel = 'Scroll to bottom';
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
@@ -265,7 +321,7 @@ const OperationList = () => {
     }, [updateListState, filteredOperationsList]);
 
     return (
-        // TODO: Turn this into a generation ListView component used by OperationList and TensorList
+        // TODO: Turn this into a generic ListView component used by OperationList and TensorList
         <fieldset className='list-wrap operations-list-component'>
             <legend>Operations</legend>
 
@@ -276,95 +332,71 @@ const OperationList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
-                <ButtonGroup variant={ButtonVariant.MINIMAL}>
-                    <Tooltip
-                        content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() => handleExpandAllToggle()}
-                            endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
-                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
-                        />
-                    </Tooltip>
-
-                    <Tooltip
-                        content={
-                            shouldSortByID === SortingOptions.DESCENDING
-                                ? 'Sort by id descending'
-                                : 'Sort by id ascending'
-                        }
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() => handleSortByID()}
-                            icon={
-                                shouldSortByID === SortingOptions.DESCENDING
-                                    ? IconNames.SortAlphabeticalDesc
-                                    : IconNames.SortAlphabetical
-                            }
-                            variant={isSortingModeActive(shouldSortByID) ? ButtonVariant.OUTLINED : undefined}
-                            aria-label={
-                                shouldSortByID === SortingOptions.DESCENDING
-                                    ? 'Sort by id descending'
-                                    : 'Sort by id ascending'
-                            }
-                        />
-                    </Tooltip>
-
-                    <Tooltip
-                        content={
-                            shouldSortDuration === SortingOptions.DESCENDING
-                                ? 'Sort by duration descending'
-                                : 'Sort by duration ascending'
-                        }
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() => handleSortByDuration()}
-                            icon={
-                                shouldSortDuration === SortingOptions.DESCENDING
-                                    ? IconNames.SortNumericalDesc
-                                    : IconNames.SortNumerical
-                            }
-                            variant={isSortingModeActive(shouldSortDuration) ? ButtonVariant.OUTLINED : undefined}
-                            aria-label={
-                                shouldSortDuration === SortingOptions.DESCENDING
-                                    ? 'Sort by duration descending'
-                                    : 'Sort by duration ascending'
-                            }
-                        />
-                    </Tooltip>
-
-                    <Tooltip
-                        content='Scroll to top'
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={scrollToTop}
-                            icon={IconNames.DOUBLE_CHEVRON_UP}
-                            aria-label='Scroll to top'
-                        />
-                    </Tooltip>
-
-                    <Tooltip
-                        content='Scroll to bottom'
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={scrollToEnd}
-                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                            aria-label='Scroll to bottom'
-                        />
-                    </Tooltip>
-                </ButtonGroup>
-
                 <SimpleMultiselect
                     label='Device Operations'
                     optionList={uniqueDeviceOperationNames || []}
                     onUpdateHandler={filterDeviceOperations}
                     initialValue={selectedDeviceOperations ? Array.from(selectedDeviceOperations) : []}
                 />
+
+                <ButtonGroup variant={ButtonVariant.MINIMAL}>
+                    <Tooltip
+                        content={shouldCollapseAllLabel}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => handleExpandAllToggle()}
+                            endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                            aria-label={shouldCollapseAllLabel}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content={sortByIdControl.label}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => handleSortByID()}
+                            icon={sortByIdControl.icon}
+                            variant={isSortingModeActive(shouldSortByID) ? ButtonVariant.OUTLINED : undefined}
+                            aria-label={sortByIdControl.label}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content={sortByDurationControl.label}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => handleSortByDuration()}
+                            icon={sortByDurationControl.icon}
+                            variant={isSortingModeActive(shouldSortDuration) ? ButtonVariant.OUTLINED : undefined}
+                            aria-label={sortByDurationControl.label}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content={scrollToTopLabel}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={scrollToTop}
+                            icon={IconNames.DOUBLE_CHEVRON_UP}
+                            aria-label={scrollToTopLabel}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content={scrollToBottomLabel}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={scrollToEnd}
+                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                            aria-label={scrollToBottomLabel}
+                        />
+                    </Tooltip>
+                </ButtonGroup>
 
                 {!isLoading && (
                     <p className='result-count'>
@@ -414,8 +446,9 @@ const OperationList = () => {
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
-                                                    content={operation?.error ? `Error recorded in operation` : ''}
+                                                    content='Error recorded in operation'
                                                     placement={PopoverPosition.TOP}
+                                                    disabled={!operation?.error}
                                                 >
                                                     <ListItem
                                                         filterName={getOperationFilterName(operation)}

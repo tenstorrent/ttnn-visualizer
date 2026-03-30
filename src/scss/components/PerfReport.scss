@@ -15,10 +15,11 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     color: #fff;
     min-width: 1240px;
     overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 
     .report-tabs {
-        margin-top: 10px;
-
         > .bp6-tab-list {
             flex-wrap: wrap;
         }
@@ -32,6 +33,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         display: flex;
         width: 100%;
         justify-content: space-between;
+
+        .title {
+            margin-bottom: 0;
+        }
     }
 
     .op-tooltip {
@@ -54,35 +59,31 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         margin-bottom: 0;
     }
 
-    .filters {
+    .option-row {
         display: flex;
         flex-wrap: nowrap;
-        gap: 5px;
+        column-gap: 10px;
         align-items: stretch;
-        margin-bottom: 15px;
+        margin-bottom: 0;
 
-        .signpost-filters {
+        .form-group {
+            display: inline-flex;
             margin-bottom: 0;
         }
 
-        .toggle-filters {
-            margin-bottom: 0;
-        }
-
-        .toggle-group {
+        .select-group {
             column-gap: 5px;
+            margin-right: 10px;
+        }
+
+        .switch-group {
+            column-gap: 5px;
+            margin-right: 5px;
+            margin-bottom: 0;
 
             .option-switch {
                 margin-top: 7px;
-            }
-        }
-
-        .signpost-group {
-            column-gap: 5px;
-            margin-right: 5px;
-
-            &:last-child {
-                margin-right: 10px;
+                margin-bottom: 0;
             }
         }
     }
@@ -92,24 +93,12 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         flex-wrap: nowrap;
         gap: 10px;
         align-items: center;
-        margin-bottom: 1rem;
-    }
-
-    .data-options {
-        display: flex;
-        flex-wrap: nowrap;
-        gap: 10px;
-        align-items: center;
-        margin-bottom: 1rem;
-
-        .option-switch {
-            margin-bottom: 0;
-        }
     }
 
     .multi-device-note {
         width: auto;
         display: inline-block;
+        margin-bottom: 10px;
     }
 
     .cell-header {

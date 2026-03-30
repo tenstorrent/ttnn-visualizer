@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, ButtonVariant, Collapse, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
+import { Button, Classes, Collapse, Icon, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
@@ -23,8 +23,6 @@ import { useInstance } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
 import { Instance } from '../model/APIData';
 
-const MAX_TITLE_LENGTH = 20;
-
 const RANGE_DISALLOWED_ROUTES: string[] = [ROUTES.NPE];
 
 function FooterInfobar() {
@@ -34,9 +32,18 @@ function FooterInfobar() {
     const performanceRange = useAtomValue(performanceRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: instance } = useInstance();
 
+    const { data: instance } = useInstance();
     const location = useLocation();
+
+    const activeProfilerReportName = activeProfilerReport?.reportName;
+    const activeProfilerReportPath = activeProfilerReport?.path;
+    const hasLoadedRemoteReport =
+        instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
+    const activePerformanceReportPath = activePerformanceReport?.path;
+    const serverConfig = getServerConfig();
+    const isServerMode = serverConfig.SERVER_MODE;
+    const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
 
     const isAllowedRoute = useCallback(() => {
         if (RANGE_DISALLOWED_ROUTES.includes(location.pathname)) {
@@ -51,13 +58,6 @@ function FooterInfobar() {
 
         return true;
     }, [location.pathname]);
-    const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
-
-    useEffect(() => {
-        if (!isAllowedRoute()) {
-            setSliderIsOpen(false);
-        }
-    }, [isAllowedRoute]);
 
     const getSelectedRangeLabel = (): string | null => {
         if (isPerformanceRoute) {
@@ -67,14 +67,11 @@ function FooterInfobar() {
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
-    const activeProfilerReportName = activeProfilerReport?.reportName;
-    const activeProfilerReportPath = activeProfilerReport?.path;
-    const hasLoadedRemoteReport =
-        instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
-    const activePerformanceReportName = activePerformanceReport?.reportName;
-
-    const serverConfig = getServerConfig();
-    const isServerMode = serverConfig.SERVER_MODE;
+    useEffect(() => {
+        if (!isAllowedRoute()) {
+            setSliderIsOpen(false);
+        }
+    }, [isAllowedRoute]);
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
@@ -95,43 +92,44 @@ function FooterInfobar() {
                             }
                             position={PopoverPosition.TOP}
                         >
-                            <Button
-                                className='path-button'
+                            <Icon
                                 icon={IconNames.FOLDER_OPEN}
-                                variant={ButtonVariant.MINIMAL}
-                                aria-label='Report paths'
+                                aria-label='Base folder paths'
                             />
                         </Tooltip>
                     )}
 
                     {activeProfilerReportName && (
                         <Tooltip
-                            content={`/${activeProfilerReportPath}`}
+                            disabled={!activeProfilerReportPath}
+                            content={formatPath(activeProfilerReportPath)}
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
                                 <strong>Memory:</strong>
-                                <span className='report-name'>{activeProfilerReportName}</span>
+                                <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
+                                    {activeProfilerReportName}
+                                </span>
                             </div>
                         </Tooltip>
                     )}
 
-                    {activePerformanceReportName && (
+                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
+
+                    {activePerformanceReportPath && (
                         <Tooltip
-                            content={
-                                activePerformanceReportName?.length > MAX_TITLE_LENGTH
-                                    ? `/${activePerformanceReportName}`
-                                    : ''
-                            }
+                            disabled={!activePerformanceReportPath}
+                            content={formatPath(activePerformanceReportPath)}
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
                                 <strong>Performance:</strong>
-                                <span className='report-name'>{activePerformanceReportName}</span>
+                                <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
+                                    {activePerformanceReportPath}
+                                </span>
                             </div>
                         </Tooltip>
                     )}
-                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
                 </div>
 
                 {(operationRange || performanceRange) && (
@@ -179,6 +177,14 @@ const getRemotePaths = (instance: Instance): string => {
 
     // Return a more easily readable stringified array
     return `[ ${paths.toString().replace(/,/g, ', ')} ]`;
+};
+
+const formatPath = (str?: string): string => {
+    if (!str) {
+        return '';
+    }
+
+    return str.startsWith('/') ? str : `/${str}`;
 };
 
 export default FooterInfobar;

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { getBufferColor, getTensorColor } from './colorGenerator';
-import { formatMemorySize, toHex } from './math';
+import { formatMemorySize, getMemoryAddress } from './math';
 import { toReadableShape, toReadableType } from './formatting';
 import { BufferPage, Chunk, ColoredChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
@@ -19,14 +19,16 @@ export default function getChartData(
         const { address, size } = chunk;
         const tensor = getTensorForAddress(address);
         const tensorColor = getTensorColor(tensor?.id);
+        const colorVariance = overrides?.colorVariance || 0;
         let color;
+
         if (overrides?.color) {
             color = overrides?.color;
         } else if ('color' in chunk && typeof chunk.color === 'string' && chunk.color) {
             // check for ColoredChunk
             color = chunk.color;
         } else {
-            color = tensorColor !== undefined ? tensorColor : getBufferColor(address + (overrides?.colorVariance || 0));
+            color = tensorColor !== undefined ? tensorColor : getBufferColor(address + colorVariance);
         }
 
         const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
@@ -97,6 +99,7 @@ export default function getChartData(
                 address,
                 size,
                 tensor,
+                colorVariance,
             },
             hovertemplate:
                 overrides?.hovertemplate !== undefined
@@ -145,7 +148,7 @@ const createHoverTemplate = (
     options?: { lateDeallocation?: boolean; showHex?: boolean },
 ): string => {
     const square = `<span style="color:${color};font-size:22px">&#9632;</span>`;
-    const formattedAddress = options?.showHex ? toHex(address) : address;
+    const formattedAddress = getMemoryAddress(address, options?.showHex || false);
     const formattedSize = formatMemorySize(size);
     const canDeallocateText =
         options?.lateDeallocation && chunk.lateDeallocation ? ' - <u>Opportunity to deallocate earlier</u>' : '';

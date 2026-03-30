@@ -30,7 +30,7 @@ import NonFilterablePerfCharts from '../components/performance/NonFilterablePerf
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
-import { OpType, PerfTabIds } from '../definitions/Performance';
+import { HIGH_DISPATCH_THRESHOLD_MS, OpType, PerfTabIds } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { StackedColumnHeaders, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
@@ -135,7 +135,7 @@ export default function Performance() {
     if (perfDataError?.status === HttpStatusCode.UnprocessableEntity) {
         return (
             <>
-                <h2>Unable to process performance data</h2>
+                <h2>Unable to load performance data</h2>
                 <p>
                     Data format is not supported, try using{' '}
                     <a href='https://github.com/tenstorrent/ttnn-visualizer/releases/tag/v0.49.0'>
@@ -144,6 +144,8 @@ export default function Performance() {
                     or earlier, or regenerate performance report using a newer version of{' '}
                     <a href='https://github.com/tenstorrent/tt-metal/'>TT-Metal</a>.
                 </p>
+
+                <code className='formatted-code'>{perfDataError?.response?.data as string}</code>
             </>
         );
     }
@@ -240,8 +242,6 @@ export default function Performance() {
     );
 }
 
-const HIGH_DISPATCH_THRESHOLD = 6.5;
-
 interface RowAttributes {
     buffer_type: BufferType | null;
     layout: DeviceOperationLayoutTypes | null;
@@ -282,7 +282,7 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
         return {
             ...row,
             op,
-            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
+            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD_MS,
             id: parseInt(row.id, 10),
             total_percent: parseFloat(row.total_percent),
             device: parseInt(row.device, 10) ?? null,

@@ -2,13 +2,28 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { Fragment, JSX, useCallback } from 'react';
-import { Classes, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import React, { Fragment, JSX, useCallback, useState } from 'react';
+import {
+    Button,
+    ButtonVariant,
+    Card,
+    Classes,
+    Icon,
+    Intent,
+    Overlay2,
+    PopoverPosition,
+    Size,
+    Tooltip,
+} from '@blueprintjs/core';
+import cpp from 'highlight.js/lib/languages/cpp';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import classNames from 'classnames';
-import { DeviceOperationTypes, Node, NodeType, Tensor } from '../../model/APIData';
+import hljs from 'highlight.js/lib/core';
+import 'highlight.js/styles/a11y-dark.css';
+import { BufferNode, DeviceOperationNode, Node, NodeType, Tensor, TensorNode } from '../../model/APIData';
 import 'styles/components/DeviceOperationFullRender.scss';
+import 'styles/components/DeviceOperationArgumentsComponent.scss';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
@@ -18,80 +33,93 @@ import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1MemorySize';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
-import { toReadableShape } from '../../functions/formatting';
+import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
+import { BufferTypeToStringBufferType, StringBufferType } from '../../model/BufferType';
+import {
+    DEVICE_OPERATION_ANALYSIS_RESULT,
+    DEVICE_OPERATION_ANALYSIS_RESULT_LABEL,
+    analyseDeviceOperation,
+} from '../../functions/analyseDeviceOperation';
 
 type BufferDetails = {
-    buffer?: Node;
-    tensorId?: number;
+    bufferOrTensorNode?: BufferNode | TensorNode;
     optionalOutput?: JSX.Element;
     details: OperationDetails;
 };
 
-const renderBufferDetails = ({ buffer, tensorId, optionalOutput, details }: BufferDetails) => {
+const getColorSquare = (address: number | null | undefined, tensorId?: number) => {
+    const color = tensorId !== undefined ? getTensorColor(tensorId) : getBufferColor(address || null);
+    return (
+        <div
+            className={classNames('memory-color-block', {
+                'empty-tensor': address === null,
+            })}
+            style={{
+                backgroundColor: color,
+            }}
+        />
+    );
+};
+
+const renderBufferDetails = ({ bufferOrTensorNode, optionalOutput, details }: BufferDetails) => {
     // TODO: this will need grouping of same sized buffers. its impractical to render 32 lines that are the same
-    if (buffer === undefined) {
+    if (bufferOrTensorNode === undefined) {
         return null;
     }
 
-    const { allocation } = buffer;
+    const { allocation } = bufferOrTensorNode;
 
     let tensorSquare = null;
-    const address = allocation?.params.address === undefined ? undefined : parseInt(allocation.params.address, 10);
+    let address = allocation?.params.address !== undefined ? parseInt(allocation.params.address, 10) : undefined;
+    const size: number | undefined = parseInt(bufferOrTensorNode.params.size, 10);
+    let layout = '';
+    let { type } = bufferOrTensorNode.params;
+    let dtype = null;
+    if (bufferOrTensorNode.node_type === NodeType.tensor) {
+        const { params } = bufferOrTensorNode;
+        address = params.address !== undefined ? parseInt(params.address, 10) : undefined;
+        layout = toReadableLayout(params.layout) || '';
+        type = BufferTypeToStringBufferType[params.buffer_type];
+        dtype = params.dtype || null;
+    }
+    const tensor: Tensor | undefined = address !== undefined ? details.tensorListByAddress.get(address) : undefined;
 
-    if (address !== undefined || tensorId !== undefined) {
-        const tensor: Tensor | undefined =
-            address !== undefined
-                ? details.tensorListByAddress.get(address)
-                : Object.values(details.tensorListByAddress).find((t) => t.id === tensorId);
-
-        tensorSquare = (
-            <div
-                className={classNames('memory-color-block', {
-                    'empty-tensor': address === null,
-                })}
-                style={{
-                    backgroundColor:
-                        tensor?.id !== undefined || tensorId !== undefined
-                            ? getTensorColor(tensor?.id) || getTensorColor(tensorId)
-                            : getBufferColor(address || null),
-                }}
-            />
-        );
+    if (address === undefined && tensor?.id === undefined) {
+        tensorSquare = null;
+    } else {
+        tensorSquare = getColorSquare(address, tensor?.id);
     }
 
     return (
         <div
             className='buffer-details'
-            key={buffer.id}
+            key={bufferOrTensorNode.id}
         >
             <span className='address'>
                 {tensorSquare} {address !== undefined && `${prettyPrintAddress(address, 0)}`}
             </span>
-            <span> {formatMemorySize(parseInt(buffer.params.size, 10), 2)}</span>
+            <span> {formatMemorySize(size, 2)}</span>
+            <span>{dtype && `${toReadableType(dtype)}`}</span>
             <span>
-                <MemoryTag memory={buffer.params.type} />
+                <MemoryTag memory={type} />
             </span>
+            {layout && <span className='layout'>{layout}</span>}
+
             {optionalOutput && optionalOutput}
         </div>
     );
 };
 
-const renderTensorLabel = (node: Node, details: OperationDetails, buffers: JSX.Element | JSX.Element[] | null) => {
+const renderTensorLabel = (
+    node: TensorNode,
+    details: OperationDetails,
+    buffers: JSX.Element | JSX.Element[] | null,
+) => {
     const layout = node.buffer?.[0]?.params.layout;
-    const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
+    const address = node.params.address !== undefined ? parseInt(node.params.address, 10) : undefined;
+    const tensor: Tensor | undefined = address !== undefined ? details.tensorListByAddress.get(address) : undefined;
 
-    const square =
-        (tensor && (
-            <div
-                className={classNames('memory-color-block', {
-                    'empty-tensor': tensor.address === null,
-                })}
-                style={{
-                    backgroundColor: getTensorColor(parseInt(node.params.tensor_id.toString(), 10)),
-                }}
-            />
-        )) ||
-        null;
+    const square = tensor?.id === undefined && address === undefined ? null : getColorSquare(address, tensor?.id);
 
     const producer = tensor?.operationIdentifier || '';
 
@@ -109,18 +137,20 @@ const renderTensorLabel = (node: Node, details: OperationDetails, buffers: JSX.E
             <span className='tensor-details-layout'>
                 {square}{' '}
                 <span className={classNames(Classes.TOOLTIP_INDICATOR, 'has-tooltip')}>
-                    Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
+                    <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}{' '}
+                    <strong>{toReadableType(node.params.dtype)}</strong>
                 </span>
             </span>
         </Tooltip>
     ) : (
         <span className='tensor-details-layout'>
-            {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
+            {square} <strong>{node.params.tensor_id}</strong> {toReadableShape(node.params.shape)}{' '}
+            <strong>{toReadableType(node.params.dtype)}</strong>
         </span>
     );
 };
 
-function createBuffersRender(node: Node, details: OperationDetails) {
+function createBuffersRender(node: TensorNode, details: OperationDetails) {
     const deviceIds = node.buffer?.filter((b) => b).map((b) => b.params.device_id) || [];
 
     if (deviceIds?.length > 1 && node.buffer !== undefined && node.buffer.length > 0) {
@@ -128,8 +158,7 @@ function createBuffersRender(node: Node, details: OperationDetails) {
         return (
             <>
                 {renderBufferDetails({
-                    buffer,
-                    tensorId: node.params.tensor_id,
+                    bufferOrTensorNode: buffer,
                     optionalOutput: <strong>x{deviceIds.length}</strong>,
                     details,
                 })}
@@ -137,23 +166,29 @@ function createBuffersRender(node: Node, details: OperationDetails) {
         );
     }
 
+    if (node.params.address !== undefined) {
+        return <>{renderBufferDetails({ bufferOrTensorNode: node, details })}</>;
+    }
+    if (node.buffer === undefined || node.buffer.length === 0) {
+        return renderBufferDetails({ bufferOrTensorNode: node, details });
+    }
     return (
         node.buffer?.map((buffer, index) => (
             <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
-                {renderBufferDetails({ buffer, tensorId: node.params.tensor_id, details })}
+                {renderBufferDetails({ bufferOrTensorNode: buffer, details })}
             </Fragment>
         )) || null
     );
 }
 
-function formatDeviceOpParametersImpl(node: Node, details: OperationDetails) {
+function formatTensorRendering(node: Node, details: OperationDetails) {
     if (node.node_type === NodeType.tensor) {
-        const buffers = node.buffer ? createBuffersRender(node, details) : null;
-        return renderTensorLabel(node, details, buffers);
+        const buffers = createBuffersRender(node, details);
+        return <>{renderTensorLabel(node, details, buffers)}</>;
     }
 
     if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-        return '';
+        return null;
     }
 
     return node.node_type;
@@ -184,16 +219,16 @@ function useDeviceOperationsFullRenderModel(args: {
     deviceOperations: Node[];
     details: OperationDetails;
     onLegendClick: (address: number, tensorId?: number) => void;
+    setDeviceOperationsArgsNode: React.Dispatch<React.SetStateAction<DeviceOperationNode | null>>;
+    setDeviceOperationsArgsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    colorVariance?: number;
 }) {
-    const { deviceOperations, details, onLegendClick } = args;
+    const { deviceOperations, details, onLegendClick, setDeviceOperationsArgsOpen, setDeviceOperationsArgsNode } = args;
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
 
-    const formatDeviceOpParameters = useCallback(
-        (node: Node) => formatDeviceOpParametersImpl(node, details),
-        [details],
-    );
+    const formatTensor = useCallback((node: Node) => formatTensorRendering(node, details), [details]);
 
     const renderNodes = useCallback(
         (nodes: Node[]) => {
@@ -204,7 +239,6 @@ function useDeviceOperationsFullRenderModel(args: {
 
             nodes.forEach((node, index) => {
                 const nodeType = node.node_type;
-
                 const memoryDetails = memoryAllocationList.find((data) => data.id === node.id);
                 const memoryInfo = renderMemoryInfo(memoryDetails, peakMemoryLoad);
 
@@ -218,30 +252,43 @@ function useDeviceOperationsFullRenderModel(args: {
                     const innerContent = stack.pop();
                     const opName = node.params.name;
 
+                    const opArgs = node.operation?.arguments;
+
+                    const opAnalysisResult = analyseDeviceOperation(node.operation);
+                    const opAnalysisLabel = DEVICE_OPERATION_ANALYSIS_RESULT_LABEL[opAnalysisResult];
+                    const labelClass = classNames('device-operation-label', {
+                        'failed-op-analysis': opAnalysisResult !== DEVICE_OPERATION_ANALYSIS_RESULT.OK,
+                    });
                     const label = (
-                        <h4>
-                            <Icon
-                                className='operation-icon'
-                                size={13}
-                                intent={Intent.SUCCESS}
-                                icon={IconNames.CUBE_ADD}
-                            />
-                            {opName} <DeviceID _deviceId={node.operation?.params.device_id} /> (
+                        <h4 className={labelClass}>
+                            <Tooltip content={opAnalysisLabel}>
+                                <Icon
+                                    className='operation-icon'
+                                    size={13}
+                                    intent={
+                                        opAnalysisResult === DEVICE_OPERATION_ANALYSIS_RESULT.NOOP
+                                            ? Intent.WARNING
+                                            : Intent.SUCCESS
+                                    }
+                                    icon={IconNames.CUBE_ADD}
+                                />
+                            </Tooltip>
+                            {opName} <DeviceID _node={node} /> (
                             {node.operation?.inputs.map((inputNode, i) => (
                                 <span
                                     className='params'
                                     key={`input ${inputNode.id} ${node.id} ${i}`}
                                 >
-                                    {formatDeviceOpParameters(inputNode)}
+                                    {formatTensor(inputNode)}
                                 </span>
                             ))}
-                            ) &nbsp;{' => '}
+                            )<span className='operation-arrow'> =&gt; </span>
                             {node.operation?.outputs.map((outputNode, i) => (
                                 <span
                                     className='params'
                                     key={`output ${outputNode.id} ${node.id} ${i}`}
                                 >
-                                    {formatDeviceOpParameters(outputNode)}
+                                    {formatTensor(outputNode)}
                                 </span>
                             ))}
                         </h4>
@@ -254,12 +301,38 @@ function useDeviceOperationsFullRenderModel(args: {
                             key={`end-${index}`}
                             label={label}
                             isOpen
+                            additionalElements={
+                                opArgs && opArgs.length > 0 ? (
+                                    <Button
+                                        icon={
+                                            <Icon
+                                                icon={IconNames.COMPARISON}
+                                                size={12}
+                                            />
+                                        }
+                                        size={Size.SMALL}
+                                        variant={ButtonVariant.OUTLINED}
+                                        intent={Intent.PRIMARY}
+                                        onClick={() => {
+                                            setDeviceOperationsArgsNode(node.operation!);
+                                            setDeviceOperationsArgsOpen(true);
+                                        }}
+                                        title='View operation arguments'
+                                    >
+                                        Arguments
+                                    </Button>
+                                ) : undefined
+                            }
                             collapseClassName={classNames('device-operation function-container', {
                                 [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
                             })}
                         >
-                            <div className='function-content'>{innerContent}</div>
-                            <div className='end-function'>{/* staying for now */}</div>
+                            {hasContent ? (
+                                <>
+                                    <div className='function-content'>{innerContent}</div>
+                                    <div className='end-function'>{/* staying for now */}</div>
+                                </>
+                            ) : null}
                         </Collapsible>
                     );
 
@@ -275,14 +348,14 @@ function useDeviceOperationsFullRenderModel(args: {
 
                 if (nodeType === NodeType.buffer_allocate) {
                     const buffer = node.params;
-                    const defaultNumberCores = buffer.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
+                    const defaultNumberCores = buffer.type === StringBufferType.L1 ? L1_NUM_CORES : 1;
                     const cores = parseInt(buffer.num_cores, 10) || defaultNumberCores;
                     const bufferSize = parseInt(buffer.size, 10) / cores;
 
                     operationContent = (
-                        <DeviceOperationNode
+                        <DeviceOperationNodeComponent
                             _node={node}
-                            memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
+                            memoryInfo={(buffer.type === StringBufferType.L1 && memoryInfo) || undefined}
                             key={index}
                             title='Buffer allocate'
                         >
@@ -300,26 +373,41 @@ function useDeviceOperationsFullRenderModel(args: {
                                 bufferType={buffer.type}
                                 layout={buffer.layout}
                             />
-                        </DeviceOperationNode>
+                        </DeviceOperationNodeComponent>
                     );
                 } else if (nodeType === NodeType.buffer_deallocate) {
                     const buffer = node.params;
                     const size = parseInt(buffer.size, 10);
-                    const defaultNumberCores = buffer.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
+                    const defaultNumberCores = buffer.type === StringBufferType.L1 ? L1_NUM_CORES : 1;
                     const cores = parseInt(buffer.num_cores, 10) || defaultNumberCores;
                     const bufferSize = size / cores;
 
                     operationContent = (
-                        <DeviceOperationNode
+                        <DeviceOperationNodeComponent
                             _node={node}
-                            memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
+                            memoryInfo={(buffer.type === StringBufferType.L1 && memoryInfo) || undefined}
                             key={index}
-                            title={`Buffer deallocate ${formatMemorySize(bufferSize)} ${buffer.type} x ${cores} cores`}
-                        />
+                            title='Buffer deallocate'
+                        >
+                            <MemoryLegendElement
+                                chunk={{
+                                    address: buffer.address !== undefined ? parseInt(buffer.address, 10) : NaN,
+                                    size: bufferSize,
+                                }}
+                                numCores={cores}
+                                key={buffer.address}
+                                memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
+                                selectedTensorAddress={selectedAddress}
+                                operationDetails={details}
+                                onLegendClick={onLegendClick}
+                                bufferType={buffer.type}
+                            />
+                            <hr />
+                        </DeviceOperationNodeComponent>
                     );
                 } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
                     operationContent = (
-                        <DeviceOperationNode
+                        <DeviceOperationNodeComponent
                             _node={node}
                             memoryInfo={memoryInfo}
                             key={index}
@@ -330,6 +418,7 @@ function useDeviceOperationsFullRenderModel(args: {
                     const cb = node.params;
                     const numCores = parseInt(cb.num_cores, 10) || 1;
 
+                    const variance = cb.allocateOperationId;
                     operationContent = (
                         <Fragment key={`${cb.address}-${index}`}>
                             {!consecutiveCBsOutput && (
@@ -345,7 +434,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={details}
                                 onLegendClick={onLegendClick}
-                                colorVariance={deviceOpList.at(-1)?.id}
+                                colorVariance={variance}
                             />
                             {memoryInfo}
                             <br />
@@ -370,7 +459,16 @@ function useDeviceOperationsFullRenderModel(args: {
 
             return output;
         },
-        [details, formatDeviceOpParameters, memoryAllocationList, onLegendClick, peakMemoryLoad, selectedAddress],
+        [
+            details,
+            formatTensor,
+            memoryAllocationList,
+            onLegendClick,
+            peakMemoryLoad,
+            selectedAddress,
+            setDeviceOperationsArgsNode,
+            setDeviceOperationsArgsOpen,
+        ],
     );
 
     return {
@@ -384,16 +482,25 @@ function useDeviceOperationsFullRenderModel(args: {
 const DeviceOperationsFullRender: React.FC<{
     deviceOperations: Node[];
     details: OperationDetails;
-    onLegendClick: (address: number, tensorId?: number) => void;
+    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }> = ({ deviceOperations, details, onLegendClick }) => {
+    hljs.registerLanguage('cpp', cpp);
+    const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);
+    const [deviceOperationsArgsNode, setDeviceOperationsArgsNode] = useState<DeviceOperationNode | null>(null);
     const { peakMemoryLoad, renderOperations } = useDeviceOperationsFullRenderModel({
         deviceOperations,
         details,
         onLegendClick,
+        setDeviceOperationsArgsNode,
+        setDeviceOperationsArgsOpen,
     });
-
     return (
         <div className='device-operations-full-render-wrap'>
+            <DeviceOperationArgumentsComponent
+                node={deviceOperationsArgsNode}
+                open={deviceOperationsArgsOpen}
+                onClose={() => setDeviceOperationsArgsOpen(false)}
+            />
             <h3 className='peak-load monospace'>
                 Peak L1 memory load per core:{' '}
                 <span className='format-numbers'>{formatMemorySize(peakMemoryLoad, 2)}</span>
@@ -416,7 +523,7 @@ const DeviceOperationsFullRender: React.FC<{
     );
 };
 
-const DeviceOperationNode: React.FC<
+const DeviceOperationNodeComponent: React.FC<
     React.PropsWithChildren<{
         title: string;
         memoryInfo?: JSX.Element;
@@ -426,7 +533,7 @@ const DeviceOperationNode: React.FC<
     return (
         <div className='device-operation'>
             <hr />
-            <h4>
+            <h4 className={`title node-type-${_node.node_type}`}>
                 {title}
                 {/* DEBUGGING */}
                 {/* <span style={{ color: 'yellow' }}> */}
@@ -439,10 +546,83 @@ const DeviceOperationNode: React.FC<
     );
 };
 
-const DeviceID: React.FC<{ _deviceId?: number | string }> = ({ _deviceId }) => {
+const DeviceID: React.FC<{ _deviceId?: number | string; _node?: Node }> = ({ _deviceId, _node }) => {
+    // if (_node === undefined) {
     return null;
+    // }
     // PLO, debugging code
+    // return (
+    //     <span>
+    //         <span style={{ color: 'yellow' }}>
+    //             (id: {_node.operation?.id}) {_node.operation?.connections.join(',')}
+    //         </span>
+    //         | |
+    //         <span style={{ color: 'yellow' }}>
+    //             (id: {_node.id}) {_node.connections.join(',')}
+    //         </span>
+    //     </span>
+    // );
     // return _deviceId !== undefined && <span className='device-id'>{_deviceId}</span>;
 };
-
+const DeviceOperationArgumentsComponent: React.FC<{
+    node: DeviceOperationNode | null;
+    open: boolean;
+    onClose: () => void;
+}> = ({ node, open, onClose }) => {
+    return (
+        <Overlay2
+            isOpen={open}
+            enforceFocus
+            hasBackdrop
+            usePortal
+            canEscapeKeyClose
+            transitionDuration={0}
+            onClose={onClose}
+            canOutsideClickClose
+            portalClassName='device-operation-arguments-visualisation-overlay'
+        >
+            <Card className='contents'>
+                <div className='header'>
+                    <h3 className='title'>
+                        {node?.params.name}
+                        <Button
+                            icon={IconNames.CROSS}
+                            variant={ButtonVariant.MINIMAL}
+                            size={Size.SMALL}
+                            onClick={onClose}
+                        />
+                    </h3>
+                </div>
+                {node?.arguments && (
+                    <div className='operation-arguments'>
+                        {node?.arguments.map((arg, index) => {
+                            const parsed = hljs.highlight(
+                                arg //
+                                    .replaceAll('=', ' = ')
+                                    .replaceAll(',', ', '),
+                                {
+                                    language: 'cpp',
+                                },
+                            ).value;
+                            return (
+                                <div
+                                    className='argument'
+                                    key={`arg-${index}`}
+                                >
+                                    <code
+                                        className='arg'
+                                        // eslint-disable-next-line react/no-danger
+                                        dangerouslySetInnerHTML={{
+                                            __html: parsed,
+                                        }}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </Card>
+        </Overlay2>
+    );
+};
 export default DeviceOperationsFullRender;

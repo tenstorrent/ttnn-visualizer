@@ -19,9 +19,8 @@ interface LocalFolderPickerProps {
     handleDelete?: (folder: ReportFolder) => void;
     defaultLabel?: string;
     valueLabel?: string | null;
+    showReportName?: boolean;
 }
-
-const REPORT_NAME_MAX_LENGTH = 18;
 
 const LocalFolderPicker = ({
     items,
@@ -30,6 +29,7 @@ const LocalFolderPicker = ({
     handleDelete,
     defaultLabel = 'Select a report...',
     valueLabel,
+    showReportName,
 }: LocalFolderPickerProps) => {
     const { data: instance } = useInstance();
 
@@ -39,21 +39,6 @@ const LocalFolderPicker = ({
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
-
-    // Map through items and if reportNames are duplicated append (count) to the name
-    const itemsWithUniqueReportNames = items?.map((item, idx, arr) => {
-        const name = item.reportName;
-        const prevCount = arr.slice(0, idx).filter((i) => i.reportName === name).length;
-
-        if (prevCount === 0) {
-            return item;
-        }
-
-        return {
-            ...item,
-            reportName: `${name} (${prevCount})`,
-        };
-    });
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
@@ -66,21 +51,15 @@ const LocalFolderPicker = ({
                 key={`${folder.path} - ${folder.reportName}`}
             >
                 <MenuItem
-                    textClassName='folder-picker-label'
-                    text={`/${getPrettyPath(folder.path)}`}
-                    labelElement={
-                        <Tooltip
-                            content={folder.reportName}
-                            disabled={folder.reportName.length < REPORT_NAME_MAX_LENGTH}
-                            position={Position.TOP}
-                        >
+                    text={
+                        <>
                             <HighlightedText
-                                text={folder.reportName}
+                                text={`/${folder.path}`}
                                 filter={query}
                             />
-                        </Tooltip>
+                            {showReportName && <span className='folder-picker-sub-label'>{folder.reportName}</span>}
+                        </>
                     }
-                    labelClassName='folder-picker-name-label'
                     roleStructure='listoption'
                     active={folder.path === activePath}
                     disabled={modifiers.disabled}
@@ -129,8 +108,8 @@ const LocalFolderPicker = ({
     return (
         <Select<ReportFolder>
             className='folder-picker'
-            items={itemsWithUniqueReportNames ?? []}
-            itemPredicate={(query, item) => !query || item.reportName.toLowerCase().includes(query.toLowerCase())}
+            items={items ?? []}
+            itemPredicate={(query, item) => !query || item.path.toLowerCase().includes(query.toLowerCase())}
             itemRenderer={renderItem}
             noResults={
                 <MenuItem
@@ -162,8 +141,5 @@ const LocalFolderPicker = ({
         </Select>
     );
 };
-
-const PATH_REGEX = /^\d+_/gm;
-const getPrettyPath = (path: string) => (PATH_REGEX.test(path) ? path.replace(PATH_REGEX, '') : path);
 
 export default LocalFolderPicker;

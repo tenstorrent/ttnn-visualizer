@@ -5,6 +5,7 @@
 import dataclasses
 import json
 import logging
+import platform
 import re
 import shutil
 import time
@@ -85,6 +86,36 @@ def test_ssh_connection(connection) -> bool:
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__)
+
+
+@api.before_request
+def _trim_session_report_lists():
+    """Keep session cookie under size limits by capping report lists (FIFO)."""
+    if not current_app.config.get("SERVER_MODE"):
+        return
+    max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+    for key in ("profiler_paths", "performance_paths", "npe_paths", "instances"):
+        lst = session.get(key, [])
+        if len(lst) > max_reports:
+            session[key] = lst[-max_reports:]
+
+
+@api.route("/system_capabilities", methods=["GET"])
+def get_system_capabilities():
+    """Return host/backend capabilities so the frontend can adapt (e.g. disable remote sync in hosted mode)."""
+    capabilities = {
+        "os": platform.system(),
+        "processor": platform.machine(),
+        "remote_sync_methods": {
+            "sftp": shutil.which("sftp") is not None,
+            "rsync": shutil.which("rsync") is not None,
+        },
+    }
+
+    return Response(
+        orjson.dumps(capabilities),
+        mimetype="application/json",
+    )
 
 
 @api.route("/operations", methods=["GET"])
@@ -249,6 +280,28 @@ def errors_list(instance: Instance):
 
         return Response(
             orjson.dumps(serialized_errors),
+            mimetype="application/json",
+        )
+
+
+@api.route("/report_metadata", methods=["GET"])
+@with_instance
+@timer
+def report_metadata(instance: Instance):
+    with DatabaseQueries(instance) as db:
+        if not db._check_table_exists("report_metadata"):
+            return (
+                jsonify(
+                    {
+                        "error": "Report metadata table does not exist in this report database."
+                    }
+                ),
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
+        rows = db.query_report_metadata()
+        payload = {row[0]: row[1] for row in rows}
+        return Response(
+            orjson.dumps(payload),
             mimetype="application/json",
         )
 
@@ -505,12 +558,13 @@ def get_profiler_data_list(instance: Instance):
                     report_name = config_data.get("report_name")
             except Exception as e:
                 logger.warning(f"Failed to read config.json in {dir_path}: {e}")
+        else:
+            report_name = dir_path.name
 
         # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
         if not any(file.name == "db.sqlite" for file in files):
             continue
-        if not any(file.name == "config.json" for file in files):
-            continue
+
         valid_dirs.append({"path": dir_path.name, "reportName": report_name})
 
     return Response(orjson.dumps(valid_dirs), mimetype="application/json")
@@ -754,8 +808,11 @@ def get_performance_results_report(instance: Instance):
             tracing_mode=tracing_mode,
             group_by=group_by,
         )
-    except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+    except DataFormatError as error:
+        return (
+            jsonify(str(error)),
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
 
     return Response(orjson.dumps(report), mimetype="application/json")
 
@@ -899,7 +956,7 @@ def create_profiler_files():
         / current_app.config["PROFILER_DIRECTORY_NAME"]
     )
 
-    if not validate_files(files, {"db.sqlite", "config.json"}, folder_name=folder_name):
+    if not validate_files(files, {"db.sqlite"}, folder_name=folder_name):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
@@ -942,10 +999,16 @@ def create_profiler_files():
                 report_name = config_data.get("report_name")
         except Exception as e:
             logger.warning(f"Failed to read config.json in {config_file}: {e}")
+    else:
+        report_name = parent_folder_name
 
-    # Set session data
-    session["profiler_paths"] = session.get("profiler_paths", []) + [str(profiler_path)]
-    session.permanent = True
+    if current_app.config["SERVER_MODE"]:
+        # Set session data (FIFO cap to avoid cookie size limits)
+        max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+        session["profiler_paths"] = (
+            session.get("profiler_paths", []) + [str(profiler_path)]
+        )[-max_reports:]
+        session.permanent = True
 
     return {
         "path": parent_folder_name,
@@ -1002,10 +1065,12 @@ def create_performance_files():
         performance_path=performance_path,
     )
 
-    session["performance_paths"] = session.get("performance_paths", []) + [
-        str(performance_path)
-    ]
-    session.permanent = True
+    if current_app.config["SERVER_MODE"]:
+        max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+        session["performance_paths"] = (
+            session.get("performance_paths", []) + [str(performance_path)]
+        )[-max_reports:]
+        session.permanent = True
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -1047,8 +1112,12 @@ def create_npe_files():
         npe_path=npe_path,
     )
 
-    session["npe_paths"] = session.get("npe_paths", []) + [str(npe_path)]
-    session.permanent = True
+    if current_app.config["SERVER_MODE"]:
+        max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+        session["npe_paths"] = (session.get("npe_paths", []) + [str(npe_path)])[
+            -max_reports:
+        ]
+        session.permanent = True
 
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 

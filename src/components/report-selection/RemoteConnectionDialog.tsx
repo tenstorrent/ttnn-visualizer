@@ -242,7 +242,10 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             <DialogFooter
                 minimal
                 actions={
-                    <Tooltip content={!isValidConnection ? 'Ensure connection passes all tests' : ''}>
+                    <Tooltip
+                        content='Ensure connection passes all tests'
+                        disabled={isValidConnection}
+                    >
                         <Button
                             text={buttonLabel}
                             disabled={!isValidConnection}

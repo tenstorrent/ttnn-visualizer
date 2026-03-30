@@ -19,7 +19,7 @@ function TensorDetailsList({
     plotZoomRangeEnd,
     onTensorClick,
 }: TensorDetailsProps) {
-    const { id, inputs, outputs, memorySizeL1 } = operationDetails;
+    const { id, inputs, outputs } = operationDetails;
 
     return (
         <div className='tensor-list'>
@@ -31,7 +31,6 @@ function TensorDetailsList({
                         tensor={tensor}
                         key={`${tensor.id}-${index}`}
                         onTensorClick={onTensorClick}
-                        memorySize={memorySizeL1}
                         operationId={id}
                         zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                     />
@@ -46,7 +45,6 @@ function TensorDetailsList({
                         tensor={tensor}
                         key={`${tensor.id}-${index}`}
                         onTensorClick={onTensorClick}
-                        memorySize={memorySizeL1}
                         operationId={id}
                         zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                     />

@@ -18,10 +18,11 @@ import { OperationDescription } from '../model/APIData';
 import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
-import { OpType } from '../definitions/Performance';
+import { HIGH_DISPATCH_THRESHOLD_MS, OpType } from '../definitions/Performance';
 import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 import { NormalisedPerfData } from './normalisePerformanceData';
-import { BufferTypeLabel } from '../model/BufferType';
+import MemoryTag from '../components/MemoryTag';
+import { BufferType, BufferTypeLabel } from '../model/BufferType';
 
 export enum CellColour {
     White = 'white',
@@ -61,7 +62,7 @@ const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
-// TODO: Check if we still need this formatting step because we're using typed data
+// https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
     row: TypedPerfTableRow,
     column: TableColumn,
@@ -71,42 +72,45 @@ export const formatCell = (
     const { key, unit, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
     const isHost = isHostOp(row.bound);
+    const value = row[key];
     let formatted: string | boolean | string[];
-    let value = row[key];
 
     if (value === null || value === '' || Number.isNaN(value)) {
         return '';
     }
 
+    // Signposts only have a few meaningful columns
     if (isSignpost) {
-        // Signposts only have a few meaningful columns
         if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code) {
             return '';
         }
-
-        value = value !== null ? String(value) : '';
     }
 
+    // Host Ops only have a few meaningful columns
     if (isHost) {
-        // Host Ops only have a few meaningful columns
         if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code && key !== ColumnHeaders.bound) {
             return '';
         }
     }
 
     if (key === ColumnHeaders.buffer_type) {
-        return BufferTypeLabel[value as number];
+        return <MemoryTag memory={BufferTypeLabel[value as BufferType]} />;
     }
 
     if (key === ColumnHeaders.high_dispatch) {
-        return (
-            <Tooltip content='Op with > 6 µs dispatch latency'>
+        const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency`;
+
+        return row?.[ColumnHeaders.device_time] !== null &&
+            row?.[ColumnHeaders.device_time] > HIGH_DISPATCH_THRESHOLD_MS ? (
+            <Tooltip content={tooltipMessage}>
                 <Icon
                     className={WARNING_COLOUR}
                     icon={IconNames.WARNING_SIGN}
-                    title='Op with > 6 µs dispatch latency'
+                    title={tooltipMessage}
                 />
             </Tooltip>
+        ) : (
+            ''
         );
     }
 
@@ -132,7 +136,11 @@ export const formatCell = (
     }
 
     if (unit) {
-        formatted += ` ${unit}`;
+        if (unit === '%') {
+            formatted = formatPercentage(Number(value), decimals);
+        } else {
+            formatted += ` ${unit}`;
+        }
     }
 
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
@@ -292,7 +300,7 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
 };
 
 export const getOpToOpGapColour = (value: number): CellColour => {
-    return value > 6.5 ? CellColour.Red : FALLBACK_COLOUR;
+    return value > HIGH_DISPATCH_THRESHOLD_MS ? CellColour.Red : FALLBACK_COLOUR;
 };
 
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
@@ -300,7 +308,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
         .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
         .filter(([_, opData]) => {
             const val = opData.op_to_op_gap;
-            return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
+            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_MS;
         });
 
     if (highDispatchOps.length === 0) {
@@ -311,7 +319,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
         const val = opData.op_to_op_gap || 0;
 
-        return acc + (val - 6);
+        return acc + (val - HIGH_DISPATCH_THRESHOLD_MS);
     }, 0);
 
     // Compute total_duration as sum of device times + Op-to-Op Gaps
@@ -333,7 +341,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     return (
         <div className='high-dispatch-advice'>
             <p>
-                Marked ops have &gt; 6 µs dispatch latency. Running with tracing could save{' '}
+                Marked ops have &gt; {HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency. Running with tracing could save{' '}
                 {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
                 {formatPercentage(percentageSaved, 1)} of overall time).
             </p>

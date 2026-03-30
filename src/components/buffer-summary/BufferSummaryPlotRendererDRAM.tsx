@@ -5,9 +5,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
-import { Switch, Tooltip } from '@blueprintjs/core';
+import { Tooltip } from '@blueprintjs/core';
 import { Link } from 'react-router-dom';
-import { useAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { PlotData } from 'plotly.js';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
@@ -15,22 +15,21 @@ import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
-import GlobalSwitch from '../GlobalSwitch';
+import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom } from '../../store/app';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
-import { ScrollLocations } from '../../definitions/ScrollPositions';
+import { ScrollLocations } from '../../definitions/VirtualLists';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import useScrollShade from '../../hooks/useScrollShade';
 
 import { BuffersByOperation } from '../../model/APIData';
 import useBufferNavigation from '../../hooks/useBufferNavigation';
+import BufferSummaryPlotControls from './BufferSummaryPlotControls';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
-// TODO: Multi device support
 const MEMORY_SIZE = DRAM_MEMORY_SIZE;
 
 const CHART_DATA: Partial<PlotData>[][] = [
@@ -57,13 +56,12 @@ function BufferSummaryPlotRendererDRAM({
     tensorListByOperation,
 }: BufferSummaryPlotRendererDRAMProps) {
     const [activeRow, setActiveRow] = useState<number | null>(null);
-    const [showHex, setShowHex] = useAtom(showHexAtom);
-    const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
-    const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
-    const scrollElementRef = useRef(null);
+    const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
+    const showMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
 
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.BUFFER_SUMMARY_DRAM);
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, shadeClasses } = useScrollShade();
+    const scrollElementRef = useRef(null);
 
     const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
         if (isZoomedIn) {
@@ -122,6 +120,12 @@ function BufferSummaryPlotRendererDRAM({
         }
     }, [updateScrollShade]);
 
+    useBufferNavigation({
+        buffersByOperation: segmentedChartData[0],
+        tensorListByOperation,
+        virtualizer,
+    });
+
     // Keep stored refs updated
     useEffect(() => {
         scrollOffsetRef.current = virtualizer.scrollOffset;
@@ -141,39 +145,9 @@ function BufferSummaryPlotRendererDRAM({
         };
     }, [updateListState, uniqueBuffersByOperationList]);
 
-    useBufferNavigation({
-        buffersByOperation: segmentedChartData[0],
-        tensorListByOperation,
-        virtualizer,
-    });
-
     return uniqueBuffersByOperationList && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
-            <div className='controls'>
-                <Switch
-                    label='Buffer zoom'
-                    checked={isZoomedIn}
-                    onChange={() => {
-                        setIsZoomedIn(!isZoomedIn);
-                    }}
-                />
-
-                <GlobalSwitch
-                    label='Hex axis labels'
-                    checked={showHex}
-                    onChange={() => {
-                        setShowHex(!showHex);
-                    }}
-                />
-
-                <GlobalSwitch
-                    label='Tensor memory layout overlay'
-                    checked={renderMemoryLayout}
-                    onChange={() => {
-                        setRenderMemoryLayout(!renderMemoryLayout);
-                    }}
-                />
-            </div>
+            <BufferSummaryPlotControls />
 
             <p className='x-axis-label'>Memory Address</p>
 
@@ -237,7 +211,8 @@ function BufferSummaryPlotRendererDRAM({
                                                 memoryStart={isZoomedIn ? zoomedMemoryOptions[index].start : 0}
                                                 memoryEnd={isZoomedIn ? zoomedMemoryOptions[index].end : MEMORY_SIZE}
                                                 memoryPadding={zoomedMemoryOptions[index].padding}
-                                                tensorList={tensorListByOperation.get(operation.id)!}
+                                                tensorList={tensorListByOperation.get(operation.id)}
+                                                showMemoryLayout={showMemoryLayout}
                                             />
 
                                             <Tooltip

@@ -3,12 +3,12 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { formatMemorySize, getCoresInRange, toHex } from '../functions/math';
+import { formatMemorySize, getCoresInRange, getMemoryAddress } from '../functions/math';
 import {
     BufferData,
     Chunk,
     DeviceOperation,
-    DeviceOperationTypes,
+    DeviceOperationNode,
     FragmentationEntry,
     Node,
     NodeType,
@@ -16,7 +16,7 @@ import {
     OperationDetailsData,
     Tensor,
 } from './APIData';
-import { BufferType } from './BufferType';
+import { BufferType, StringBufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
@@ -71,6 +71,54 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         showHex: false,
     };
 
+    protected static mergeDevices(operations: Node[]) {
+        const multiDeviceOps: Node[] = [];
+        const operationsByDevice: Map<string | number | undefined, Node[]> = new Map();
+        let currentDeviceId: string | number | undefined;
+        operations.forEach((op) => {
+            if (op.node_type === NodeType.function_start) {
+                const deviceId = Number(op.params.device_id);
+                currentDeviceId = deviceId;
+                if (op.params.device_id !== undefined) {
+                    if (!operationsByDevice.has(deviceId)) {
+                        operationsByDevice.set(deviceId, []);
+                    }
+                    operationsByDevice.get(deviceId)?.push(op);
+                } else {
+                    multiDeviceOps.push(op);
+                }
+            } else if (currentDeviceId !== undefined) {
+                if (op.params.device_id === undefined) {
+                    multiDeviceOps.push(op);
+                } else {
+                    operationsByDevice.get(currentDeviceId)?.push(op);
+                }
+            } else if (op.params.device_id !== undefined) {
+                const deviceId = Number(op.params.device_id);
+
+                if (!operationsByDevice.has(deviceId)) {
+                    operationsByDevice.set(deviceId, []);
+                }
+                // PLO
+                // galaxy
+                // http://localhost:5173/operations/17
+                // operationsByDevice.get(deviceId)?.push(op);
+            } else {
+                multiDeviceOps.push(op);
+            }
+        });
+
+        const deviceIdList = [...operationsByDevice.keys()]
+            .filter((el) => el !== undefined && el !== null)
+            .map((el) => Number(el));
+
+        const firstDevice = Math.min(...deviceIdList);
+
+        const result: Node[] = [...multiDeviceOps, ...(operationsByDevice.get(firstDevice) || [])];
+        result.sort((a, b) => a.id - b.id);
+        return result;
+    }
+
     constructor(
         data: OperationDetailsData,
         operations: OperationDescription[],
@@ -92,9 +140,9 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.operations = operations;
         this.raw_device_operations = data.device_operations;
         this.deallocationReport = deallocationReport;
-        // DEBUG
-        // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
-        this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
+        // TODO: something in merge device ids is breaking the render. since we are not using device id atm its removed from the stack temporarily
+        // this.device_operations = OperationDetails.mergeDevices(this.preprocessConnections(data.device_operations));
+        this.device_operations = this.preprocessConnections(data.device_operations);
         this.options = options || { renderPattern: false, lateDeallocation: false, showHex: false };
         this.memoryConfig = memoryConfig;
 
@@ -151,7 +199,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             Array.from(this.tensorListByAddress.values()).map((tensor) => [tensor.id, tensor]),
         );
 
-        const deviceOpList: Node[] = [];
+        const deviceOpList: DeviceOperationNode[] = [];
         if (this.device_operations !== null) {
             this.device_operations = this.sortDeviceOperationsByBufferDeallocation(this.device_operations);
 
@@ -204,7 +252,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                             .find((op) => op.name === deviceOpNode.params.name);
 
                         if (deviceOp) {
-                            if (node.params.type === DeviceOperationTypes.L1) {
+                            if (node.params.type === StringBufferType.L1) {
                                 const cores = parseInt(node.params.num_cores, 10) || L1_NUM_CORES;
                                 deviceOp.bufferList.push({
                                     address: parseInt(node.params.address, 10),
@@ -417,7 +465,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         const cbColor = '#e2defc';
         const cbHoverTemplate = `
 <span style="color:${cbColor};font-size:20px;">&#9632;</span>
-${cbCondensed.address} (${toHex(cbCondensed.address)}) <br />${formatMemorySize(cbCondensed.size, 2)}
+${getMemoryAddress(cbCondensed.address, this.options.showHex)} <br />${formatMemorySize(cbCondensed.size, 2)}
 <br><br>CBs Summary
 <extra></extra>`;
 
@@ -438,7 +486,7 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br />${formatMemorySize(
         const bufferColor = '#fcdefa';
         const bufferHoverTemplate = `
 <span style="color:${bufferColor};font-size:20px;">&#9632;</span>
-${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br /> ${formatMemorySize(bufferCondensed.size, 2)}
+${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${formatMemorySize(bufferCondensed.size, 2)}
 <br><br>Buffers Summary
 <extra></extra>`;
         const bufferChartData = this.getChartData([bufferCondensed], {
@@ -509,13 +557,13 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br /> ${formatMe
 
             for (let i = this.operations.indexOf(currentOperation!); i >= 0; i--) {
                 const op = this.operations[i];
-                tensor = op.inputs.find((input) => input.address === bufferAddress);
+                tensor = op.outputs.find((output) => output.address === bufferAddress);
 
                 if (tensor !== undefined) {
                     break;
                 }
 
-                tensor = op.outputs.find((output) => output.address === bufferAddress);
+                tensor = op.inputs.find((input) => input.address === bufferAddress);
 
                 if (tensor !== undefined) {
                     break;
@@ -599,7 +647,7 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br /> ${formatMe
                 });
             } else if (op.node_type === NodeType.buffer_allocate) {
                 const connectedNodes = getConnectedNodes(op);
-                connectedNodes.forEach((n) => {
+                connectedNodes.forEach((n: Node) => {
                     if (n.node_type === NodeType.buffer) {
                         const deviceId = (op.params.device_id as number) || 0;
                         const bufferDeviceId = (n.params.device_id as number) || 0;
@@ -634,64 +682,15 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br /> ${formatMe
                     if (n.node_type === NodeType.tensor) {
                         if (n.params.device_id !== undefined) {
                             // KEEPING in case device id arrays confirmed
-                            // op.params.derived_device_id = [
-                            //     ...new Set(op.params.derived_device_id || [n.params.device_id]),
+                            // op.params.derivedDeviceId = [
+                            //     ...new Set(op.params.derivedDeviceId || [n.params.device_id]),
                             // ];
-                            op.params.device_id = n.params.device_id;
+                            // op.params.device_id = n.params.device_id;
                         }
                     }
                 });
             });
         return operations;
-    }
-
-    // eslint-disable-next-line class-methods-use-this
-    private mergeDevices(operations: Node[]) {
-        const multiDeviceOps: Node[] = [];
-        const operationsByDevice: Map<string | number | undefined, Node[]> = new Map();
-        let currentDeviceId: string | number | undefined;
-        operations.forEach((op) => {
-            if (op.node_type === NodeType.function_start) {
-                const deviceId = Number(op.params.device_id);
-                currentDeviceId = deviceId;
-                if (op.params.device_id !== undefined) {
-                    if (!operationsByDevice.has(deviceId)) {
-                        operationsByDevice.set(deviceId, []);
-                    }
-                    operationsByDevice.get(deviceId)?.push(op);
-                } else {
-                    multiDeviceOps.push(op);
-                }
-            } else if (currentDeviceId !== undefined) {
-                if (op.params.device_id === undefined) {
-                    multiDeviceOps.push(op);
-                } else {
-                    operationsByDevice.get(currentDeviceId)?.push(op);
-                }
-            } else if (currentDeviceId === undefined && op.params.device_id !== undefined) {
-                const deviceId = Number(op.params.device_id);
-
-                if (!operationsByDevice.has(deviceId)) {
-                    operationsByDevice.set(deviceId, []);
-                }
-                // PLO
-                // galaxy
-                // http://localhost:5173/operations/17
-                // operationsByDevice.get(deviceId)?.push(op);
-            } else {
-                multiDeviceOps.push(op);
-            }
-        });
-
-        const deviceIdList = [...operationsByDevice.keys()]
-            .filter((el) => el !== undefined && el !== null)
-            .map((el) => Number(el));
-
-        const firstDevice = Math.min(...deviceIdList);
-
-        const result: Node[] = [...multiDeviceOps, ...(operationsByDevice.get(firstDevice) || [])];
-        result.sort((a, b) => a.id - b.id);
-        return result;
     }
 
     // eslint-disable-next-line class-methods-use-this

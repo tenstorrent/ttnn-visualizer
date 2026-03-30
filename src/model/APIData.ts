@@ -5,7 +5,7 @@
 import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import { ReportLocation } from '../definitions/Reports';
 import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
-import { BufferType } from './BufferType';
+import { BufferType, StringBufferType } from './BufferType';
 
 interface OperationError {
     operation_id: number;
@@ -67,13 +67,13 @@ export interface BufferData {
     device_id: number;
     address: number;
     max_size_per_bank: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     next_usage?: number;
 }
 
 export interface Buffer {
     address: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     device_id: number;
     size: number;
     buffer_layout?: BufferMemoryLayout | null;
@@ -126,8 +126,7 @@ export interface FileProgress {
     timestamp?: string; // Optional, with default handled elsewhere if necessary
 }
 
-// TODO: we may want to revisit the 'default' portion for the variable name
-export const defaultOperationDetailsData: OperationDetailsData = {
+export const defaultOperation: OperationDetailsData = {
     id: 0,
     name: '',
     inputs: [],
@@ -142,7 +141,7 @@ export const defaultOperationDetailsData: OperationDetailsData = {
 };
 
 export const defaultTensorData: Tensor = {
-    buffer_type: 0,
+    buffer_type: BufferType.L1,
     id: 0,
     shape: '',
     dtype: '',
@@ -164,7 +163,7 @@ export const defaultBuffer: BufferData = {
     device_id: 0,
     address: 0,
     max_size_per_bank: 0,
-    buffer_type: 0,
+    buffer_type: BufferType.L1,
 };
 
 export interface Chunk {
@@ -179,29 +178,41 @@ export interface ColoredChunk extends Chunk {
     color: string | undefined;
 }
 
-export interface FragmentationEntry extends Chunk {
-    empty?: boolean;
-    largestEmpty?: boolean;
-    bufferType?: 'CB' | 'L1_START' | 'L1_SMALL' | undefined;
-    colorVariance?: number | undefined;
+export enum MarkerType {
+    CB = 'CB',
+    L1_SMALL = 'L1_SMALL',
+    L1_START = 'L1_START',
 }
 
-export interface ReportMetaData {
-    cache_path: string;
-    model_cache_path: string;
-    tmp_dir: string;
-    enable_model_cache: boolean;
-    enable_fast_runtime_mode: boolean;
-    throw_exception_on_fallback: boolean;
-    enable_logging: boolean;
-    enable_graph_report: boolean;
-    enable_detailed_buffer_report: boolean;
-    enable_detailed_tensor_report: boolean;
-    enable_comparison_mode: boolean;
-    comparison_mode_pcc: number;
-    root_profiler_path: string;
-    profiler_name: string;
+export const MarkerTypeLabel: Record<MarkerType, string> = {
+    [MarkerType.CB]: 'Circular Buffer',
+    [MarkerType.L1_SMALL]: 'L1 SMALL',
+    [MarkerType.L1_START]: 'L1 START',
+};
+
+export interface FragmentationEntry extends Chunk {
+    markerType?: MarkerType | undefined;
+    colorVariance?: number | undefined;
+    empty?: boolean;
+    largestEmpty?: boolean;
 }
+
+// export interface ReportMetaData {
+//     cache_path: string;
+//     model_cache_path: string;
+//     tmp_dir: string;
+//     enable_model_cache: boolean;
+//     enable_fast_runtime_mode: boolean;
+//     throw_exception_on_fallback: boolean;
+//     enable_logging: boolean;
+//     enable_graph_report: boolean;
+//     enable_detailed_buffer_report: boolean;
+//     enable_detailed_tensor_report: boolean;
+//     enable_comparison_mode: boolean;
+//     comparison_mode_pcc: number;
+//     root_profiler_path: string;
+//     profiler_name: string;
+// }
 
 export interface OperationDescription extends Operation {
     duration: number;
@@ -210,6 +221,7 @@ export interface OperationDescription extends Operation {
         value: string;
         parsedValue: MemoryConfig | null;
     }[];
+    processedConnections: DeviceOperationNode[];
     deviceOperationNameList: string[]; // List of device operation names. actual device ops only
 }
 
@@ -234,39 +246,98 @@ export enum DeviceOperationLayoutTypes {
     TILE = 'TILE',
 }
 
-export enum DeviceOperationTypes {
-    L1 = 'L1',
-    DRAM = 'DRAM',
-}
-
-interface DeviceOperationParams {
-    inputs: number;
+export interface DeviceOperationParams {
     name: string;
-    tensor_id: number;
-    shape: string;
-    address: string;
-    layout: DeviceOperationLayoutTypes;
-    size: string;
-    type: DeviceOperationTypes;
-    /** only for CBs */
-    core_range_set: string;
-    /** only for buffers */
-    num_cores: string;
     device_id?: number | string;
-    derived_device_id?: number[];
+    inputs?: number;
 }
 
-export interface Node {
+export interface CircularBufferDeallocateParams {
+    device_id: number;
+}
+
+interface BaseMemoryParams {
+    address: string; // '1259520';
+    device_id: number;
+    num_cores: string; // '64';
+    page_size: string; // '448';
+    size: string; // '7340032';
+    type: StringBufferType; // 'L1';
+    exact_buffer_type: BufferType;
+    layout: DeviceOperationLayoutTypes;
+    buffer_type: BufferType;
+}
+
+export interface BufferDeallocateParams extends Omit<BaseMemoryParams, 'address'> {
+    address?: string;
+}
+
+export interface DeviceTensorParams extends BaseMemoryParams {
+    device_tensors: string; // '[{"address": 1374208, "device_id": 0, "mesh_device_id": 0}]';
+    dtype: string;
+    memory_config: string; // 'MemoryConfig(memory_layout=TensorMemoryLayout::HEIGHT_SHARDED,buffer_type=BufferType::L1,shard_spec=ShardSpec{grid=[{"start":{"x":0,"y":0},"end":{"x":5,"y":7}], shape=[224, 224], orientation=ShardOrientation::ROW_MAJOR},nd_shard_spec={"shard_shape":[224, 224],"grid":[{"start":{"x":0,"y":0},"end":{"x":5,"y":7}}],"orientation":"ShardOrientation::ROW_MAJOR","shard_distribution_strategy":"ShardDistributionStrategy::ROUND_ROBIN_1D"},created_with_nd_shard_spec=0)';
+    shape: string; // 'Shape([16, 3, 224, 224])';
+    tensor_id: number; // '0';
+}
+
+interface BufferAllocateParams extends BaseMemoryParams {
+    max_size_per_bank?: string; // '114688';
+    derivedDeviceId?: number[];
+}
+
+interface CircularBufferAllocateParams extends BaseMemoryParams {
+    core_range_set: string;
+    globally_allocated: string; // 'false';
+    allocateOperationId: number;
+    allocateOperationName: string;
+}
+
+export interface BaseNode<T extends NodeType, P> {
     connections: number[];
     id: number;
-    node_type: NodeType;
-    params: DeviceOperationParams;
-    inputs: Node[];
-    outputs: Node[];
-    operation?: Node;
-    buffer?: Node[];
-    allocation?: Node;
+    node_type: T;
+    params: P;
+    inputs: Node[]; // tree specific
+    outputs: Node[]; // tree specific
+    operation?: DeviceOperationNode;
+    buffer?: BufferNode[];
+    allocation?: BufferAllocateNode;
+    stacking_level: number;
 }
+
+export interface DeviceOperationNode extends BaseNode<NodeType.function_start, DeviceOperationParams> {
+    input_tensors: number[];
+    arguments: string[];
+    stack_trace: string[];
+}
+
+export type CaptureStartNode = BaseNode<NodeType.capture_start, DeviceOperationParams>;
+export type CaptureEndNode = BaseNode<NodeType.capture_end, DeviceOperationParams>;
+export type DeviceOperationNodeEnd = BaseNode<NodeType.function_end, DeviceOperationParams>;
+
+export type BufferNode = BaseNode<NodeType.buffer, BufferAllocateParams>;
+export type BufferAllocateNode = BaseNode<NodeType.buffer_allocate, BufferAllocateParams>;
+export type BufferDeallocateNode = BaseNode<NodeType.buffer_deallocate, BufferDeallocateParams>;
+
+export type CircularBufferAllocateNode = BaseNode<NodeType.circular_buffer_allocate, CircularBufferAllocateParams>;
+export type CircularBufferDeallocateAllNode = BaseNode<
+    NodeType.circular_buffer_deallocate_all,
+    CircularBufferDeallocateParams
+>;
+
+export type TensorNode = BaseNode<NodeType.tensor, DeviceTensorParams>;
+
+export type Node =
+    | CaptureStartNode
+    | CaptureEndNode
+    | DeviceOperationNode
+    | DeviceOperationNodeEnd
+    | BufferNode
+    | BufferAllocateNode
+    | BufferDeallocateNode
+    | CircularBufferAllocateNode
+    | CircularBufferDeallocateAllNode
+    | TensorNode;
 
 export interface DeviceOperation {
     id: number;
@@ -287,13 +358,13 @@ export interface CircularBuffer extends Chunk {
 
 export interface TensorBuffer extends Chunk {
     layout: DeviceOperationLayoutTypes;
-    type: DeviceOperationTypes;
+    type: StringBufferType;
 }
 
 export interface BufferPage {
     address: number;
     bank_id: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     core_x: number;
     core_y: number;
     device_id: number;

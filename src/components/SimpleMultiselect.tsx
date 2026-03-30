@@ -11,11 +11,13 @@ const SimpleMultiselect = ({
     optionList,
     onUpdateHandler,
     initialValue,
+    className,
 }: {
     label: string;
     optionList: string[];
     onUpdateHandler: (values: string[]) => void;
     initialValue?: string[];
+    className?: string;
 }) => {
     const [selected, setSelected] = useState<string[]>(initialValue ?? []);
     const handleItemSelect = (item: string) => {
@@ -54,6 +56,7 @@ const SimpleMultiselect = ({
 
     return (
         <MultiSelect<string>
+            className={className ?? ''}
             items={optionList}
             itemRenderer={renderOption}
             onItemSelect={handleItemSelect}

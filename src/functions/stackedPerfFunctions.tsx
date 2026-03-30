@@ -4,7 +4,7 @@
 
 import React from 'react';
 import HighlightedText from '../components/HighlightedText';
-import { formatSize } from './math';
+import { formatPercentage, formatSize } from './math';
 import {
     StackedColumnHeaders,
     StackedTableColumn,
@@ -48,8 +48,8 @@ export const formatStackedCell = (
     highlight?: string | null,
 ): React.JSX.Element | string => {
     const { key, unit, decimals } = column;
-    let formatted: string | boolean | string[];
     const value = row[key];
+    let formatted: string | boolean | string[];
 
     if (value === null || value === '' || value === undefined) {
         return '';
@@ -62,7 +62,11 @@ export const formatStackedCell = (
     }
 
     if (unit) {
-        formatted += ` ${unit}`;
+        if (unit === '%') {
+            formatted = formatPercentage(Number(value), decimals);
+        } else {
+            formatted += ` ${unit}`;
+        }
     }
 
     return getCellMarkup(formatted, getCellColour(row, key), highlight);

@@ -48,3 +48,20 @@ demo both with and without trace capture.
 
 Models or demos that have trace capture enabled need to be modified to not use that
 feature in order for report generation to work.
+
+
+## Pytest Timeout
+
+Report generation when running models with `pytest` can sometimes take longer than the
+default timeout value:
+
+```
+Failed: Timeout (>300.0s) from pytest-timeout.
+```
+
+This can be resolved by passing a `--timeout <timeout>` value to the `pytest` command,
+with a larger timeout value than the default. For example:
+
+```shell
+python -m tracy -r -v -m pytest --timeout 900 /path/to/demo.py
+```

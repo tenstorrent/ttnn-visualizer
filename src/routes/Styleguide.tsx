@@ -443,7 +443,7 @@ export default function Styleguide() {
                             endIcon={IconNames.OUTDATED}
                             intent={Intent.WARNING}
                             variant={ButtonVariant.OUTLINED}
-                            aria-label='Toggle high consumer tensors'
+                            aria-label='Toggle late deallocated tensors'
                         >
                             123
                         </Button>

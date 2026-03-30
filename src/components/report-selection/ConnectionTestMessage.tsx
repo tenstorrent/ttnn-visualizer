@@ -5,6 +5,7 @@
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import 'styles/components/ConnectionTestMessage.scss';
 
 type ConnectionTestMessageProps = ConnectionStatus;
 
@@ -24,13 +25,14 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 
 function ConnectionTestMessage({ status, message, detail }: ConnectionTestMessageProps) {
     return (
-        <div className={`verify-connection-item status-${ConnectionTestStates[status].toLowerCase()}`}>
+        <div className={`connection-test-message status-${ConnectionTestStates[status].toLowerCase()}`}>
             <Icon
                 className='connection-status-icon'
                 icon={ICON_MAP[status]}
                 size={20}
                 intent={INTENT_MAP[status]}
             />
+
             <div className='connection-status-content'>
                 <span className='connection-status-text'>{message}</span>
                 {detail && <code className='connection-status-detail'>{detail}</code>}
