@@ -11,7 +11,7 @@ import { useNpe } from '../hooks/useAPI';
 import { NPEValidationError } from '../definitions/NPEData';
 import { activeMlirJsonAtom } from '../store/app';
 import MLIRJSONFileLoader from '../components/mlir/MlirJsonFileLoader';
-import MLIRView from '../components/mlir/MLIRView';
+import MlGraph from '../components/mlir/MLIRViewReactFlow';
 
 const MLIR: FC = () => {
     const { filepath } = useParams<{ filepath?: string }>();
@@ -49,7 +49,8 @@ const MLIR: FC = () => {
             <h1 className='page-title'>MLIR model viewer</h1>
             <div className='npe-inline-loaders'>{!filepath && <MLIRJSONFileLoader />}</div>
 
-            {errorCode !== NPEValidationError.OK ? { errorCode } : npeData && <MLIRView data={npeData} />}
+            {/* {errorCode !== NPEValidationError.OK ? { errorCode } : npeData && <MLIRView data={npeData} />} */}
+            {errorCode !== NPEValidationError.OK ? { errorCode } : npeData && <MlGraph data={npeData} />}
         </>
     );
 };
