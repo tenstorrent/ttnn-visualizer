@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
+import 'styles/components/MLIRViewReactFlow.scss';
 import ReactFlow, {
     Background,
     ConnectionLineType,
     Controls,
     Edge,
+    MarkerType,
     MiniMap,
     Node,
     useEdgesState,
@@ -25,13 +27,24 @@ const elk = new ELK();
 const elkOptions: Record<string, string> = {
     'elk.algorithm': 'layered',
     'elk.direction': 'DOWN',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '80',
-    'elk.spacing.nodeNode': '40',
 
-    'elk.layered.crossingMinimization.semiInteractive': 'true',
-    'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+    'elk.spacing.nodeNode': '24',
+    'elk.layered.spacing.nodeNodeBetweenLayers': '120',
+    'elk.spacing.edgeNode': '16',
+    'elk.spacing.edgeEdge': '12',
 
-    'elk.edgeRouting': 'ORTHOGONAL', // or "SPLINES"
+    'elk.edgeRouting': 'ORTHOGONAL',
+
+    'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+    'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+    'elk.layered.crossingMinimization.semiInteractive': 'false',
+
+    'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+    'elk.layered.thoroughness': '10',
+
+    'elk.layered.unnecessaryBendpoints': 'true',
+    'elk.layered.mergeEdges': 'false',
+    'elk.layered.cycleBreaking.strategy': 'GREEDY',
 };
 
 function toElkGraph(nodes: Node<MLNodeData>[], edges: Edge[]): ElkNode {
@@ -163,7 +176,7 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
 
                 // type: "smoothstep",
                 // animated: false,
-                // markerEnd: { type: MarkerType.ArrowClosed },
+                markerEnd: { type: MarkerType.ArrowClosed, height: 20, width: 20 },
                 // data: { ... },
             });
         }
@@ -195,6 +208,8 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
+                minZoom={0.1}
+                maxZoom={1.5}
                 fitView
                 connectionLineType={ConnectionLineType.SmoothStep}
             >
