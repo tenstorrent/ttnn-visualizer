@@ -5,8 +5,10 @@
 @use '../definitions/colours' as *;
 
 /* stylelint-disable selector-class-pattern */
-.react-flow__edge-textbg {
-    fill: transparent; // !important;
+.react-flow__edge-textwrapper {
+    .react-flow__edge-textbg {
+        fill: transparent;
+    }
 }
 
 .react-flow__edge-text {
@@ -14,5 +16,9 @@
     font-size: 10px;
     font-family: monospace;
     opacity: 0.8;
+}
+
+.react-flow__node-default {
+    color: #222;
 }
 /* stylelint-enable selector-class-pattern */
