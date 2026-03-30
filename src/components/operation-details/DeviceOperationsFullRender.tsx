@@ -387,8 +387,23 @@ function useDeviceOperationsFullRenderModel(args: {
                             _node={node}
                             memoryInfo={(buffer.type === StringBufferType.L1 && memoryInfo) || undefined}
                             key={index}
-                            title={`Buffer deallocate ${formatMemorySize(bufferSize)} ${buffer.type} x ${cores} cores`}
-                        />
+                            title='Buffer deallocate'
+                        >
+                            <MemoryLegendElement
+                                chunk={{
+                                    address: buffer.address !== undefined ? parseInt(buffer.address, 10) : NaN,
+                                    size: bufferSize,
+                                }}
+                                numCores={cores}
+                                key={buffer.address}
+                                memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
+                                selectedTensorAddress={selectedAddress}
+                                operationDetails={details}
+                                onLegendClick={onLegendClick}
+                                bufferType={buffer.type}
+                            />
+                            <hr />
+                        </DeviceOperationNodeComponent>
                     );
                 } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
                     operationContent = (
@@ -518,7 +533,7 @@ const DeviceOperationNodeComponent: React.FC<
     return (
         <div className='device-operation'>
             <hr />
-            <h4>
+            <h4 className={`title node-type-${_node.node_type}`}>
                 {title}
                 {/* DEBUGGING */}
                 {/* <span style={{ color: 'yellow' }}> */}

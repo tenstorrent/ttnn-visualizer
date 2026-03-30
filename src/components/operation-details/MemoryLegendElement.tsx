@@ -82,6 +82,7 @@ export const MemoryLegendElement: React.FC<{
         ...(chunk.markerType === MarkerType.L1_START && {
             backgroundColor: L1_START_MARKER_COLOR,
         }),
+        ...(Number.isNaN(chunk.address) && { backgroundColor: 'white' }),
     };
 
     const isMatchingBufferColour = memorySquare.backgroundColor === selectedBufferColour;
@@ -119,7 +120,9 @@ export const MemoryLegendElement: React.FC<{
                 })}
                 style={memorySquare}
             />
-            <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize, showHex)}</div>
+            <div className='format-numbers monospace'>
+                {!Number.isNaN(chunk.address) ? prettyPrintAddress(chunk.address, memSize, showHex) : 'N/A'}
+            </div>
             <div className='format-numbers monospace nowrap'>
                 {/* eslint-disable-next-line no-nested-ternary */}
                 {chunk.markerType === MarkerType.L1_SMALL ? (

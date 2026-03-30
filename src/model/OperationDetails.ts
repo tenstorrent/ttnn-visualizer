@@ -682,8 +682,8 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
                     if (n.node_type === NodeType.tensor) {
                         if (n.params.device_id !== undefined) {
                             // KEEPING in case device id arrays confirmed
-                            // op.params.derived_device_id = [
-                            //     ...new Set(op.params.derived_device_id || [n.params.device_id]),
+                            // op.params.derivedDeviceId = [
+                            //     ...new Set(op.params.derivedDeviceId || [n.params.device_id]),
                             // ];
                             // op.params.device_id = n.params.device_id;
                         }

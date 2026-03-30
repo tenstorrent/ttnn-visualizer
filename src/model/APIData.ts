@@ -256,41 +256,40 @@ export interface CircularBufferDeallocateParams {
     device_id: number;
 }
 
-interface BufferAllocateParams {
+interface BaseMemoryParams {
     address: string; // '1259520';
     device_id: number;
-    exact_buffer_type: BufferType;
-    layout: DeviceOperationLayoutTypes;
-    max_size_per_bank?: string; // '114688';
     num_cores: string; // '64';
     page_size: string; // '448';
     size: string; // '7340032';
     type: StringBufferType; // 'L1';
-    derived_device_id?: number[];
-}
-interface CircularBufferAllocateParams {
-    address: string; // '1259520';
-    core_range_set: string;
-    device_id: number;
-    globally_allocated: string; // 'false';
-    size: string; // '7340032';
-    num_cores: string;
-    allocateOperationId: number;
-    allocateOperationName: string;
+    exact_buffer_type: BufferType;
+    layout: DeviceOperationLayoutTypes;
+    buffer_type: BufferType;
 }
 
-export interface DeviceTensorParams {
-    address: string;
-    buffer_type: BufferType;
-    device_id: number;
+export interface BufferDeallocateParams extends Omit<BaseMemoryParams, 'address'> {
+    address?: string;
+}
+
+export interface DeviceTensorParams extends BaseMemoryParams {
     device_tensors: string; // '[{"address": 1374208, "device_id": 0, "mesh_device_id": 0}]';
     dtype: string;
-    layout: string;
     memory_config: string; // 'MemoryConfig(memory_layout=TensorMemoryLayout::HEIGHT_SHARDED,buffer_type=BufferType::L1,shard_spec=ShardSpec{grid=[{"start":{"x":0,"y":0},"end":{"x":5,"y":7}], shape=[224, 224], orientation=ShardOrientation::ROW_MAJOR},nd_shard_spec={"shard_shape":[224, 224],"grid":[{"start":{"x":0,"y":0},"end":{"x":5,"y":7}}],"orientation":"ShardOrientation::ROW_MAJOR","shard_distribution_strategy":"ShardDistributionStrategy::ROUND_ROBIN_1D"},created_with_nd_shard_spec=0)';
     shape: string; // 'Shape([16, 3, 224, 224])';
     tensor_id: number; // '0';
-    size: string; // '602112';
-    type: StringBufferType;
+}
+
+interface BufferAllocateParams extends BaseMemoryParams {
+    max_size_per_bank?: string; // '114688';
+    derivedDeviceId?: number[];
+}
+
+interface CircularBufferAllocateParams extends BaseMemoryParams {
+    core_range_set: string;
+    globally_allocated: string; // 'false';
+    allocateOperationId: number;
+    allocateOperationName: string;
 }
 
 export interface BaseNode<T extends NodeType, P> {
@@ -318,7 +317,7 @@ export type DeviceOperationNodeEnd = BaseNode<NodeType.function_end, DeviceOpera
 
 export type BufferNode = BaseNode<NodeType.buffer, BufferAllocateParams>;
 export type BufferAllocateNode = BaseNode<NodeType.buffer_allocate, BufferAllocateParams>;
-export type BufferDeallocateNode = BaseNode<NodeType.buffer_deallocate, BufferAllocateParams>;
+export type BufferDeallocateNode = BaseNode<NodeType.buffer_deallocate, BufferDeallocateParams>;
 
 export type CircularBufferAllocateNode = BaseNode<NodeType.circular_buffer_allocate, CircularBufferAllocateParams>;
 export type CircularBufferDeallocateAllNode = BaseNode<

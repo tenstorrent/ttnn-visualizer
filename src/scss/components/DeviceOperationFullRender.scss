@@ -88,6 +88,16 @@
             margin-top: 10px;
         }
 
+        /* stylelint-disable selector-class-pattern */
+        .title {
+            &.node-type-buffer_allocate,
+            &.node-type-buffer_deallocate {
+                margin-bottom: 10px;
+            }
+        }
+
+        /* stylelint-enable selector-class-pattern */
+
         .collapsible-controls {
             h4 {
                 margin-top: 0;
