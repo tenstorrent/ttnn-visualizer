@@ -22,17 +22,14 @@ interface ViewProps {
 }
 const elk = new ELK();
 
-
 const elkOptions: Record<string, string> = {
     'elk.algorithm': 'layered',
     'elk.direction': 'DOWN',
     'elk.layered.spacing.nodeNodeBetweenLayers': '80',
     'elk.spacing.nodeNode': '40',
 
-
     'elk.layered.crossingMinimization.semiInteractive': 'true',
     'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
-
 
     'elk.edgeRouting': 'ORTHOGONAL', // or "SPLINES"
 };
