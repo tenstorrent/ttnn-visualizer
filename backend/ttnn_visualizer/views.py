@@ -1627,7 +1627,7 @@ def notify_report_update():
 
 
 @api.route("/latest-version", methods=["GET"])
-def get_app_versions():
+def get_latest_version():
     try:
         headers = {"Content-Type": "application/xml"}
         releases_request = urllib.request.Request(
