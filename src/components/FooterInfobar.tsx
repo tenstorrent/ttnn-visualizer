@@ -36,7 +36,6 @@ function FooterInfobar() {
     const { data: instance } = useInstance();
     const location = useLocation();
 
-    const activeProfilerReportName = activeProfilerReport?.reportName;
     const activeProfilerReportPath = activeProfilerReport?.path;
     const hasLoadedRemoteReport =
         instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
@@ -99,7 +98,7 @@ function FooterInfobar() {
                         </Tooltip>
                     )}
 
-                    {activeProfilerReportName && (
+                    {activeProfilerReportPath && (
                         <Tooltip
                             disabled={!activeProfilerReportPath}
                             content={formatPath(activeProfilerReportPath)}
@@ -108,13 +107,13 @@ function FooterInfobar() {
                             <div className='title'>
                                 <strong>Memory:</strong>
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
-                                    {formatName(activeProfilerReportName)}
+                                    {formatName(activeProfilerReportPath)}
                                 </span>
                             </div>
                         </Tooltip>
                     )}
 
-                    {activeProfilerReport && activePerformanceReport && <ReportLinkStatus />}
+                    {activeProfilerReportPath && activePerformanceReportPath && <ReportLinkStatus />}
 
                     {activePerformanceReportPath && (
                         <Tooltip
@@ -150,7 +149,7 @@ function FooterInfobar() {
                 )}
             </div>
 
-            {(activeProfilerReport || activePerformanceReport) && (
+            {(activeProfilerReportPath || activePerformanceReportPath) && (
                 <Collapse
                     isOpen={sliderIsOpen}
                     keepChildrenMounted
