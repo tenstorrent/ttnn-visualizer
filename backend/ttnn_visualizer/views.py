@@ -10,6 +10,7 @@ import re
 import shutil
 import time
 import urllib
+import urllib.request
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
@@ -1629,14 +1630,14 @@ def notify_report_update():
 def get_app_versions():
     try:
         headers = {"Content-Type": "application/xml"}
-        request = urllib.request.Request(
+        releases_request = urllib.request.Request(
             "https://pypi.org/rss/project/ttnn-visualizer/releases.xml",
             headers=headers,
             method="GET",
         )
 
-        urllib.response = urllib.request.urlopen(request, timeout=2)
-        response = urllib.response.read().decode("utf-8")
+        with urllib.request.urlopen(releases_request, timeout=2) as url_response:
+            response = url_response.read().decode("utf-8")
 
         match = re.search(r"<title>(\d+\.\d+\.\d+)</title>", response)
         latest_version = match.group(1) if match else None
