@@ -1,3 +1,6 @@
+/* eslint-disable no-continue */
+/* eslint-disable no-void */
+
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import 'styles/components/MLIRViewReactFlow.scss';
 import ReactFlow, {
@@ -16,14 +19,16 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 import ELK, { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk.bundled';
+import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
 
 type MLNodeData = {
     label: string;
-    kind?: 'op' | 'group';
-    namespace?: string;
+    kind?: 'op' | 'group' | 'subgraphBox';
+    namespace: string;
     collapsed?: boolean;
 };
+
 interface ViewProps {
     data: GraphBundle;
 }
@@ -52,6 +57,10 @@ const elkOptions: Record<string, string> = {
     'elk.layered.mergeEdges': 'false',
     'elk.layered.cycleBreaking.strategy': 'GREEDY',
 };
+
+const SUBGRAPH_PADDING_X = 36;
+const SUBGRAPH_PADDING_TOP = 44;
+const SUBGRAPH_PADDING_BOTTOM = 28;
 
 function toElkGraph(nodes: Node<MLNodeData>[], edges: Edge[]): ElkNode {
     return {
@@ -87,8 +96,7 @@ async function layoutWithElk(
         return {
             ...n,
             position: p,
-
-            draggable: true,
+            draggable: n.data.kind !== 'subgraphBox',
         };
     });
 
@@ -102,9 +110,26 @@ const getShortName = (namespace: string): string => {
     return parts[parts.length - 1] ?? namespace;
 };
 
+const getParentNamespace = (namespace: string): string | undefined => {
+    const parts = getNamespaceSegments(namespace);
+    if (parts.length <= 1) {
+        return undefined;
+    }
+    return parts.slice(0, -1).join('/');
+};
+
+const getRegionBaseOpLabel = (namespace: string): string => getShortName(namespace).replace(/_\d+$/, '');
+
 const isCollapsibleNamespace = (namespace: string): boolean => {
     const leaf = getShortName(namespace);
     return /^stablehlo\.(reduce|scatter)_\d+$/.test(leaf);
+};
+
+const isNodeInsideNamespaceTree = (nodeNamespace: string | undefined, namespace: string): boolean => {
+    if (!nodeNamespace) {
+        return false;
+    }
+    return nodeNamespace === namespace || nodeNamespace.startsWith(`${namespace}/`);
 };
 
 const getOwningCollapsedNamespace = (
@@ -120,9 +145,75 @@ const getOwningCollapsedNamespace = (
         .find((collapsedNs) => namespace === collapsedNs || namespace.startsWith(`${collapsedNs}/`));
 };
 
-const MlGraph: React.FC<ViewProps> = ({ data }) => {
-    const { fitView } = useReactFlow();
+const getOuterOpForExpandedNamespace = (
+    namespace: string,
+    nodes: GraphBundle['graphs'][0]['nodes'],
+): GraphBundle['graphs'][0]['nodes'][number] | undefined => {
+    const parentNamespace = getParentNamespace(namespace);
+    const expectedLabel = getRegionBaseOpLabel(namespace);
 
+    return nodes.find((n) => n.namespace === parentNamespace && n.label === expectedLabel);
+};
+
+const getInputNodesForExpandedNamespace = (
+    namespace: string,
+    nodes: GraphBundle['graphs'][0]['nodes'],
+): GraphBundle['graphs'][0]['nodes'][number][] => nodes.filter((n) => n.namespace === `${namespace}/Inputs`);
+
+const getReturnNodeForExpandedNamespace = (
+    namespace: string,
+    nodes: GraphBundle['graphs'][0]['nodes'],
+): GraphBundle['graphs'][0]['nodes'][number] | undefined =>
+    nodes.find((n) => n.namespace === namespace && n.label === 'stablehlo.return');
+
+function buildSubgraphBoxNodes(laidOutNodes: Node<MLNodeData>[], expandedNamespaces: string[]): Node<MLNodeData>[] {
+    return expandedNamespaces.flatMap((namespace) => {
+        const childNodes = laidOutNodes.filter(
+            (node) => node.data.kind === 'op' && isNodeInsideNamespaceTree(node.data.namespace, namespace),
+        );
+
+        if (childNodes.length === 0) {
+            return [];
+        }
+
+        const minX = Math.min(...childNodes.map((n) => n.position.x));
+        const minY = Math.min(...childNodes.map((n) => n.position.y));
+        const maxX = Math.max(...childNodes.map((n) => n.position.x + (n.width ?? 180)));
+        const maxY = Math.max(...childNodes.map((n) => n.position.y + (n.height ?? 48)));
+
+        return [
+            {
+                id: `subgraph:${namespace}`,
+                data: {
+                    label: `▾ ${getShortName(namespace)} [subgraph]`,
+                    kind: 'subgraphBox',
+                    namespace,
+                    collapsed: false,
+                },
+                position: {
+                    x: minX - SUBGRAPH_PADDING_X,
+                    y: minY - SUBGRAPH_PADDING_TOP,
+                },
+                draggable: false,
+                selectable: true,
+                style: {
+                    width: maxX - minX + SUBGRAPH_PADDING_X * 2,
+                    height: maxY - minY + SUBGRAPH_PADDING_TOP + SUBGRAPH_PADDING_BOTTOM,
+                    border: '2px dashed #7d7d7d',
+                    borderRadius: 16,
+                    background: 'rgba(90, 90, 90, 0.14)',
+                    color: '#ddd',
+                    fontWeight: 600,
+                    padding: '10px 12px',
+                    zIndex: 0,
+                },
+            },
+        ];
+    });
+}
+
+const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
+    const { fitView } = useReactFlow();
     const graph = data.graphs[0];
 
     const getTensorInfoFromAttrs = (attrs: { key: string; value: string }[]) => {
@@ -164,51 +255,41 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
 
     const nodeMap = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes]);
 
-    const initialCollapsedNamespaces = useMemo(
+    const collapsibleNamespaces = useMemo(
         () =>
-            new Set(
-                Array.from(new Set(graph.nodes.map((n) => n.namespace).filter(Boolean) as string[])).filter(
-                    isCollapsibleNamespace,
-                ),
+            Array.from(new Set(graph.nodes.map((n) => n.namespace).filter(Boolean) as string[])).filter(
+                isCollapsibleNamespace,
             ),
         [graph.nodes],
     );
 
-    const [collapsedNamespaces, setCollapsedNamespaces] = useState<Set<string>>(initialCollapsedNamespaces);
+    const [collapsedNamespaces, setCollapsedNamespaces] = useState<Set<string>>(() => new Set(collapsibleNamespaces));
 
-    // useEffect(() => {
-    //     setCollapsedNamespaces(initialCollapsedNamespaces);
-    // }, [initialCollapsedNamespaces]);
+    const { computedNodes, computedEdges, expandedNamespaces } = useMemo(() => {
+        const expandedNamespaceList = collapsibleNamespaces.filter((namespace) => !collapsedNamespaces.has(namespace));
 
-    const { computedNodes, computedEdges } = useMemo(() => {
-        const collapsibleNamespaces = Array.from(
-            new Set(graph.nodes.map((n) => n.namespace).filter(Boolean) as string[]),
-        ).filter(isCollapsibleNamespace);
-
-        const groupNodes: Node<MLNodeData>[] = collapsibleNamespaces.map((namespace) => {
-            const isCollapsed = collapsedNamespaces.has(namespace);
-
-            return {
+        const groupNodes: Node<MLNodeData>[] = collapsibleNamespaces
+            .filter((namespace) => collapsedNamespaces.has(namespace))
+            .map((namespace) => ({
                 id: `group:${namespace}`,
                 data: {
-                    label: `${isCollapsed ? '▸' : '▾'} ${getShortName(namespace)}`,
+                    label: `▸ ${getShortName(namespace)}`,
                     kind: 'group',
                     namespace,
-                    collapsed: isCollapsed,
+                    collapsed: true,
                 },
                 position: { x: 0, y: 0 },
                 style: {
-                    border: `1px solid ${isCollapsed ? '#666' : '#888'}`,
+                    border: '1px solid #666',
                     borderRadius: 12,
                     padding: 10,
-                    background: isCollapsed ? '#2f2f2f' : '#3a3a3a',
+                    background: '#2f2f2f',
                     color: '#fff',
                     minWidth: 220,
                     cursor: 'pointer',
                     fontWeight: 600,
                 },
-            };
-        });
+            }));
 
         const visibleOpNodes: Node<MLNodeData>[] = graph.nodes
             .filter((n) => {
@@ -217,12 +298,20 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
                 }
 
                 const owningCollapsedNs = getOwningCollapsedNamespace(n.namespace, collapsedNamespaces);
-
-                if (!owningCollapsedNs) {
-                    return true;
+                if (owningCollapsedNs) {
+                    return false;
                 }
 
-                return false;
+                const isOuterOpOfExpandedRegion = expandedNamespaceList.some((expandedNs) => {
+                    const outerOp = getOuterOpForExpandedNamespace(expandedNs, graph.nodes);
+                    return outerOp?.id === n.id;
+                });
+
+                if (isOuterOpOfExpandedRegion) {
+                    return false;
+                }
+
+                return true;
             })
             .map((n) => ({
                 id: n.id,
@@ -242,8 +331,7 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
                 },
             }));
 
-        // eslint-disable-next-line @typescript-eslint/no-shadow
-        const computedNodes: Node<MLNodeData>[] = [...groupNodes, ...visibleOpNodes];
+        const nextNodes: Node<MLNodeData>[] = [...groupNodes, ...visibleOpNodes];
 
         const getVisibleEndpointId = (nodeId: string): string => {
             const rawNode = nodeMap.get(nodeId);
@@ -252,8 +340,7 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
         };
 
         const seen = new Set<string>();
-        // eslint-disable-next-line @typescript-eslint/no-shadow
-        const computedEdges: Edge[] = [];
+        const nextEdges: Edge[] = [];
 
         for (const target of graph.nodes) {
             for (const e of target.incomingEdges ?? []) {
@@ -261,13 +348,11 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
                 const visibleTarget = getVisibleEndpointId(target.id);
 
                 if (visibleSource === visibleTarget) {
-                    // eslint-disable-next-line no-continue
                     continue;
                 }
 
                 const key = `${visibleSource}:${e.sourceNodeOutputId}->${visibleTarget}:${e.targetNodeInputId}`;
                 if (seen.has(key)) {
-                    // eslint-disable-next-line no-continue
                     continue;
                 }
                 seen.add(key);
@@ -283,7 +368,7 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
                     }
                 }
 
-                computedEdges.push({
+                nextEdges.push({
                     id: key,
                     source: visibleSource,
                     target: visibleTarget,
@@ -295,54 +380,127 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
             }
         }
 
-        return { computedNodes, computedEdges };
-    }, [collapsedNamespaces, graph.nodes, nodeMap]);
+        for (const expandedNs of expandedNamespaceList) {
+            const outerOp = getOuterOpForExpandedNamespace(expandedNs, graph.nodes);
+            const inputNodes = getInputNodesForExpandedNamespace(expandedNs, graph.nodes);
+            const returnNode = getReturnNodeForExpandedNamespace(expandedNs, graph.nodes);
+
+            if (!outerOp) {
+                continue;
+            }
+
+            const sortedInputs = [...inputNodes].sort((a, b) => a.label.localeCompare(b.label));
+
+            for (const incoming of outerOp.incomingEdges ?? []) {
+                const inputIndex = Number(incoming.targetNodeInputId);
+                const targetInputNode = sortedInputs[inputIndex];
+
+                if (!targetInputNode) {
+                    continue;
+                }
+
+                const sourceId = getVisibleEndpointId(incoming.sourceNodeId);
+                const targetId = targetInputNode.id;
+                const bridgeId = `bridge-in:${sourceId}->${targetId}:${expandedNs}:${incoming.targetNodeInputId}`;
+
+                if (seen.has(bridgeId) || sourceId === targetId) {
+                    continue;
+                }
+                seen.add(bridgeId);
+
+                nextEdges.push({
+                    id: bridgeId,
+                    source: sourceId,
+                    target: targetId,
+                    markerEnd: { type: MarkerType.ArrowClosed, height: 20, width: 20 },
+                    style: {
+                        strokeDasharray: '4 2',
+                    },
+                });
+            }
+
+            if (returnNode) {
+                for (const consumer of graph.nodes) {
+                    for (const incoming of consumer.incomingEdges ?? []) {
+                        if (incoming.sourceNodeId !== outerOp.id) {
+                            continue;
+                        }
+
+                        const sourceId = returnNode.id;
+                        const targetId = getVisibleEndpointId(consumer.id);
+                        const bridgeId = `bridge-out:${sourceId}->${targetId}:${expandedNs}:${incoming.targetNodeInputId}`;
+
+                        if (seen.has(bridgeId) || sourceId === targetId) {
+                            continue;
+                        }
+                        seen.add(bridgeId);
+
+                        nextEdges.push({
+                            id: bridgeId,
+                            source: sourceId,
+                            target: targetId,
+                            markerEnd: { type: MarkerType.ArrowClosed, height: 20, width: 20 },
+                            style: {
+                                strokeDasharray: '4 2',
+                            },
+                        });
+                    }
+                }
+            }
+        }
+
+        return {
+            computedNodes: nextNodes,
+            computedEdges: nextEdges,
+            expandedNamespaces: expandedNamespaceList,
+        };
+    }, [collapsedNamespaces, collapsibleNamespaces, graph.nodes, nodeMap]);
 
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
     const doLayout = useCallback(async () => {
-        const { nodes: laidOutNodes, edges: laidOutEdges } = await layoutWithElk(nodes, edges);
-        setNodes(laidOutNodes);
+        const { nodes: laidOutNodes, edges: laidOutEdges } = await layoutWithElk(computedNodes, computedEdges);
+        const boxNodes = buildSubgraphBoxNodes(laidOutNodes, expandedNamespaces);
+        setNodes([...boxNodes, ...laidOutNodes]);
         setEdges(laidOutEdges);
-    }, [nodes, edges, setNodes, setEdges]);
+    }, [computedEdges, computedNodes, expandedNamespaces, setEdges, setNodes]);
 
     useEffect(() => {
         let cancelled = false;
 
         const runLayout = async () => {
             const { nodes: laidOutNodes, edges: laidOutEdges } = await layoutWithElk(computedNodes, computedEdges);
+            const boxNodes = buildSubgraphBoxNodes(laidOutNodes, expandedNamespaces);
 
             if (!cancelled) {
-                setNodes(laidOutNodes);
+                setNodes([...boxNodes, ...laidOutNodes]);
                 setEdges(laidOutEdges);
 
                 requestAnimationFrame(() => {
-                    // eslint-disable-next-line no-void
                     void fitView({ padding: 0.2, duration: 200 });
                 });
             }
         };
 
-        // eslint-disable-next-line no-void
         void runLayout();
 
         return () => {
             cancelled = true;
         };
-    }, [computedNodes, computedEdges, setNodes, setEdges, fitView]);
+    }, [computedNodes, computedEdges, expandedNamespaces, fitView, setEdges, setNodes]);
 
     const handleNodeClick = useCallback((_: React.MouseEvent, node: Node<MLNodeData>) => {
-        if (node.data.kind !== 'group' || !node.data.namespace) {
+        if ((node.data.kind !== 'group' && node.data.kind !== 'subgraphBox') || !node.data.namespace) {
             return;
         }
 
         setCollapsedNamespaces((prev) => {
             const next = new Set(prev);
-            if (next.has(node.data.namespace!)) {
-                next.delete(node.data.namespace!);
+            if (next.has(node.data.namespace)) {
+                next.delete(node.data.namespace);
             } else {
-                next.add(node.data.namespace!);
+                next.add(node.data.namespace);
             }
             return next;
         });
@@ -369,20 +527,18 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
                 <Background />
             </ReactFlow>
 
-            {/* eslint-disable-next-line react/button-has-type */}
-            <button
-                // eslint-disable-next-line no-void
+            <Button
                 onClick={() => void doLayout()}
                 style={{
                     position: 'absolute',
-                    top: 12,
+                    top: 80,
                     left: 12,
                     zIndex: 10,
                     padding: '8px 10px',
                 }}
             >
                 Re-layout (ELK)
-            </button>
+            </Button>
         </div>
     );
 };
@@ -390,7 +546,7 @@ const MlGraph: React.FC<ViewProps> = ({ data }) => {
 const MlGraphWithProvider: React.FC<ViewProps> = (props) => (
     <ReactFlowProvider>
         {/* eslint-disable-next-line react/jsx-props-no-spreading */}
-        <MlGraph {...props} />
+        <MlGraphInner {...props} />
     </ReactFlowProvider>
 );
 
