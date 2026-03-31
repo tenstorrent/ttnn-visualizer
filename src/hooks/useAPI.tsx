@@ -1199,3 +1199,26 @@ export const useGetTensorDeallocationReportByOperation = () => {
         return { lateDeallocationsByOperation, nonDeallocatedTensorList: nonDeallocatedTensorListById };
     }, [operationsById, tensorListByOperation]);
 };
+
+const fetchLatestAppVersion = async (): Promise<string | null> => {
+    try {
+        const response = await axiosInstance.get<string>(Endpoints.LATEST_VERSION);
+
+        return response.data;
+    } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch latest app version:', error);
+        throw error;
+    }
+};
+
+export const useGetLatestAppVersion = () => {
+    const response = useQuery<string | null, AxiosError>({
+        queryFn: () => fetchLatestAppVersion(),
+        queryKey: ['get-latest-app-version'],
+        retry: false,
+        staleTime: Infinity,
+    });
+
+    return response.data;
+};

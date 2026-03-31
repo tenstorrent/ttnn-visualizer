@@ -9,6 +9,8 @@ import platform
 import re
 import shutil
 import time
+import urllib
+import urllib.request
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
@@ -1619,6 +1621,36 @@ def notify_report_update():
         logger.error(f"Error processing report update notification: {str(e)}")
         return Response(
             orjson.dumps({"error": "Internal server error"}),
+            mimetype="application/json",
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
+
+
+@api.route("/latest-version", methods=["GET"])
+def get_latest_version():
+    try:
+        headers = {"Content-Type": "application/xml"}
+        releases_request = urllib.request.Request(
+            "https://pypi.org/rss/project/ttnn-visualizer/releases.xml",
+            headers=headers,
+            method="GET",
+        )
+
+        with urllib.request.urlopen(releases_request, timeout=2) as url_response:
+            response = url_response.read().decode("utf-8")
+
+        match = re.search(r"<title>(\d+\.\d+\.\d+)</title>", response)
+        latest_version = match.group(1) if match else None
+
+        return Response(
+            orjson.dumps(latest_version),
+            mimetype="application/json",
+        )
+    except Exception as e:
+        logger.error(f"Error fetching releases XML: {str(e)}")
+
+        return Response(
+            orjson.dumps({"error": "Failed to fetch releases"}),
             mimetype="application/json",
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
         )
