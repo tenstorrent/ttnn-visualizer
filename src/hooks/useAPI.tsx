@@ -1200,22 +1200,22 @@ export const useGetTensorDeallocationReportByOperation = () => {
     }, [operationsById, tensorListByOperation]);
 };
 
-const fetchLatestReleaseVersion = async (): Promise<string> => {
+const fetchLatestAppVersion = async (): Promise<string | null> => {
     try {
-        const response = await axiosInstance.get(Endpoints.VERSIONS);
+        const response = await axiosInstance.get<string>(Endpoints.VERSIONS);
 
         return response.data;
     } catch (error) {
         // eslint-disable-next-line no-console
-        console.error('Failed to fetch latest release version:', error);
+        console.error('Failed to fetch latest app version:', error);
         throw error;
     }
 };
 
-export const useGetLatestReleaseVersion = () => {
-    const response = useQuery<string, AxiosError>({
-        queryFn: () => fetchLatestReleaseVersion(),
-        queryKey: ['get-latest-release-version'],
+export const useGetLatestAppVersion = () => {
+    const response = useQuery<string | null, AxiosError>({
+        queryFn: () => fetchLatestAppVersion(),
+        queryKey: ['get-latest-app-version'],
         retry: false,
         staleTime: Infinity,
     });
