@@ -1202,7 +1202,7 @@ export const useGetTensorDeallocationReportByOperation = () => {
 
 const fetchLatestAppVersion = async (): Promise<string | null> => {
     try {
-        const response = await axiosInstance.get<string>(Endpoints.VERSIONS);
+        const response = await axiosInstance.get<string>(Endpoints.LATEST_VERSION);
 
         return response.data;
     } catch (error) {
