@@ -1622,3 +1622,30 @@ def notify_report_update():
             mimetype="application/json",
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
         )
+
+
+@api.route("/latest-version", methods=["GET"])
+def get_app_versions():
+    try:
+        import requests
+
+        response = requests.get(
+            "https://pypi.org/rss/project/ttnn-visualizer/releases.xml"
+        )
+        response.raise_for_status()
+
+        # Extract version number from RSS feed
+        match = re.search(r"<title>(\d+\.\d+\.\d+)</title>", response.text)
+        latest_version = match.group(1) if match else None
+
+        return Response(
+            orjson.dumps(latest_version),
+            mimetype="application/json",
+        )
+    except Exception as e:
+        logger.error(f"Error fetching releases XML: {str(e)}")
+        return Response(
+            orjson.dumps({"error": "Failed to fetch releases"}),
+            mimetype="application/json",
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
