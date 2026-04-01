@@ -554,7 +554,26 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             return nodeId;
         };
 
-        const mapToRenderedTargetEndpointId = (targetNodeId: string, targetInputId?: string): string => {
+        const mapToRenderedTargetEndpointId = (
+            sourceNodeId: string,
+            targetNodeId: string,
+            targetInputId?: string,
+        ): string => {
+            const sourceNamespace = getContainingNamespace(nodeMap.get(sourceNodeId)?.namespace);
+            const targetNamespace = getContainingNamespace(nodeMap.get(targetNodeId)?.namespace);
+
+            // Boundary entry: route external incoming edges to namespace input args (%arg*).
+            if (targetNamespace && sourceNamespace !== targetNamespace) {
+                const inputIdx = Number(targetInputId);
+                if (Number.isInteger(inputIdx) && inputIdx >= 0) {
+                    const inputNodeIds = namespaceInputNodeIdsByNamespace.get(targetNamespace) ?? [];
+                    const inputNodeId = inputNodeIds[inputIdx];
+                    if (inputNodeId) {
+                        return inputNodeId;
+                    }
+                }
+            }
+
             const outerNamespace = outerNamespaceByNodeId.get(targetNodeId);
             if (outerNamespace) {
                 const inputIdx = Number(targetInputId);
@@ -566,6 +585,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                     }
                 }
             }
+
             return mapToRenderedEndpointId(targetNodeId);
         };
 
@@ -653,7 +673,11 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         for (const target of graph.nodes) {
             for (const incoming of target.incomingEdges ?? []) {
                 const sourceId = mapToRenderedEndpointId(incoming.sourceNodeId);
-                const targetId = mapToRenderedTargetEndpointId(target.id, incoming.targetNodeInputId);
+                const targetId = mapToRenderedTargetEndpointId(
+                    incoming.sourceNodeId,
+                    target.id,
+                    incoming.targetNodeInputId,
+                );
 
                 if (sourceId === targetId) {
                     continue;
