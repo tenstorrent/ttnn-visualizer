@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React from 'react';
-import { Icon, Tooltip } from '@blueprintjs/core';
+import { Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
 import {
@@ -129,6 +129,54 @@ export const formatCell = (
         );
     }
 
+    if (key === ColumnHeaders.hash) {
+        const hashText = value?.toString() || '';
+
+        return hashText || '';
+    }
+
+    if (key === ColumnHeaders.cache_hit) {
+        if (typeof value !== 'boolean') {
+            return '';
+        }
+
+        // Only show icon if this is not the first occurrence of the hash
+        if (row.isFirstHashOccurrence) {
+            return '';
+        }
+
+        const tooltipMessage =
+            value === true ? (
+                <>
+                    Operation result reused from cache
+                    <br />
+                    <strong>Hash:</strong> {row[ColumnHeaders.hash]}
+                </>
+            ) : (
+                <>
+                    Operation result was recomputed
+                    <br />
+                    <strong>Hash:</strong> {row[ColumnHeaders.hash]}
+                </>
+            );
+
+        return value === true ? (
+            <Tooltip content={tooltipMessage}>
+                <Icon
+                    intent={Intent.SUCCESS}
+                    icon={IconNames.TICK}
+                />
+            </Tooltip>
+        ) : (
+            <Tooltip content={tooltipMessage}>
+                <Icon
+                    intent={Intent.WARNING}
+                    icon={IconNames.WARNING_SIGN}
+                />
+            </Tooltip>
+        );
+    }
+
     if (typeof value === 'number' && key !== ColumnHeaders.id) {
         formatted = formatSize(value, decimals);
     } else {
@@ -250,6 +298,13 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : DEFAULT_COLOUR;
+    }
+
+    if (key === ColumnHeaders.hash) {
+        // Highlight hash in red if there's a cache miss
+        if (row.cache_hit === false) {
+            return CellColour.Red;
+        }
     }
 
     if (key === ColumnHeaders.math_fidelity && typeof keyValue === 'string') {
