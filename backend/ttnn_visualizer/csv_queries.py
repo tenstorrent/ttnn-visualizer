@@ -14,7 +14,6 @@ from typing import Dict, List, Optional, Union
 
 import pandas as pd
 import zstd
-from isort.core import process
 from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
