@@ -18,7 +18,7 @@ import {
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
-import { formatCell, isFirstHashOccurrence, isHostOp } from '../../functions/perfFunctions';
+import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
@@ -128,7 +128,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             return null;
         }
 
-        return formatCell(row, column, operations, highlight, tableFields);
+        return formatCell(row, column, operations, highlight);
     };
 
     if (!data) {
@@ -270,13 +270,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 >
                                                     {comparisonKeys.includes(h.key) &&
                                                         dataset[i] &&
-                                                        formatCell(
-                                                            dataset[i],
-                                                            h,
-                                                            operationsList,
-                                                            filters?.[h.key],
-                                                            dataset,
-                                                        )}
+                                                        formatCell(dataset[i], h, operationsList, filters?.[h.key])}
                                                 </td>
                                             ))}
                                         </tr>
@@ -357,11 +351,11 @@ const getTotalsForFooter = (column: TableColumn, data: TypedPerfTableRow[], hide
     }
 
     if (column.key === ColumnHeaders.cache_hit) {
-        const nonUniqueOps = data.filter((row) => !isFirstHashOccurrence(row, data));
+        const nonUniqueOps = data.filter((row) => !row.isFirstHashOccurrence);
         const cacheHits = nonUniqueOps.filter((row) => row.cache_hit).length;
         const cacheHitPercent = nonUniqueOps.length > 0 ? (cacheHits / nonUniqueOps.length) * 100 : 0;
 
-        return `${formatPercentage(cacheHitPercent).toString()} expected cache hit`;
+        return `${formatPercentage(cacheHitPercent).toString()} expected cache hits`;
     }
 
     return '';

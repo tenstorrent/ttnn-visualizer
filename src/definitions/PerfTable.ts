@@ -97,6 +97,7 @@ export interface TypedPerfTableRow
     // Next two extracted from input_0_memory
     buffer_type: BufferType | null;
     layout: DeviceOperationLayoutTypes | null;
+    isFirstHashOccurrence: boolean;
 }
 
 // Not a general enum but used in evaluateFidelity to analyze tt-perf-report output

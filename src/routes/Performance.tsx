@@ -274,7 +274,7 @@ const getRowAttributes = (row: PerfTableRow): RowAttributes => {
 };
 
 const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
-    return rows.map((row) => {
+    const typedRows = rows.map((row) => {
         const val = parseInt(row.op_to_op_gap, 10);
         const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
         const op = opStr !== undefined ? Number(opStr) : undefined;
@@ -295,8 +295,22 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
             pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
             ...getRowAttributes(row),
+            isFirstHashOccurrence: true, // Default to true, will be updated if needed in next step
         };
     });
+
+    // Mark which rows are the first occurrence of each hash
+    const hashFirstOccurrence = new Map<string | null, boolean>();
+    for (const row of typedRows) {
+        if (row.hash && !hashFirstOccurrence.has(row.hash)) {
+            hashFirstOccurrence.set(row.hash, true);
+            row.isFirstHashOccurrence = true;
+        } else if (row.hash) {
+            row.isFirstHashOccurrence = false;
+        }
+    }
+
+    return typedRows;
 };
 
 const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
