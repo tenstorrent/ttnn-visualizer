@@ -1,7 +1,7 @@
 /* eslint-disable no-continue */
 /* eslint-disable no-void */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'styles/components/MLIRViewReactFlow.scss';
 import ReactFlow, {
     Background,
@@ -166,6 +166,65 @@ const getReturnNodeForExpandedNamespace = (
 ): GraphBundle['graphs'][0]['nodes'][number] | undefined =>
     nodes.find((n) => n.namespace === namespace && n.label === 'stablehlo.return');
 
+function getBounds(nodes: Node<MLNodeData>[]) {
+    const minX = Math.min(...nodes.map((n) => n.position.x));
+    const minY = Math.min(...nodes.map((n) => n.position.y));
+    const maxX = Math.max(...nodes.map((n) => n.position.x + (n.width ?? 180)));
+    const maxY = Math.max(...nodes.map((n) => n.position.y + (n.height ?? 48)));
+
+    return { minX, minY, maxX, maxY };
+}
+
+function translateExpandedNamespacesInPlace(
+    laidOutNodes: Node<MLNodeData>[],
+    expandedNamespaces: string[],
+    previousPositions: Map<string, { x: number; y: number }>,
+): Node<MLNodeData>[] {
+    let nextNodes = [...laidOutNodes];
+
+    for (const namespace of expandedNamespaces) {
+        const anchorId = `group:${namespace}`;
+        const anchorPosition = previousPositions.get(anchorId);
+
+        if (!anchorPosition) {
+            continue;
+        }
+
+        const regionNodes = nextNodes.filter(
+            (node) => node.data.kind === 'op' && isNodeInsideNamespaceTree(node.data.namespace, namespace),
+        );
+
+        if (regionNodes.length === 0) {
+            continue;
+        }
+
+        const bounds = getBounds(regionNodes);
+        const regionCenterX = (bounds.minX + bounds.maxX) / 2;
+        const regionTopY = bounds.minY;
+
+        const targetCenterX = anchorPosition.x + 110;
+        const targetTopY = anchorPosition.y + 20;
+
+        const dx = targetCenterX - regionCenterX;
+        const dy = targetTopY - regionTopY;
+
+        nextNodes = nextNodes.map((node) => {
+            if (node.data.kind === 'op' && isNodeInsideNamespaceTree(node.data.namespace, namespace)) {
+                return {
+                    ...node,
+                    position: {
+                        x: node.position.x + dx,
+                        y: node.position.y + dy,
+                    },
+                };
+            }
+            return node;
+        });
+    }
+
+    return nextNodes;
+}
+
 function buildSubgraphBoxNodes(laidOutNodes: Node<MLNodeData>[], expandedNamespaces: string[]): Node<MLNodeData>[] {
     return expandedNamespaces.flatMap((namespace) => {
         const childNodes = laidOutNodes.filter(
@@ -215,6 +274,8 @@ function buildSubgraphBoxNodes(laidOutNodes: Node<MLNodeData>[], expandedNamespa
 const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const { fitView } = useReactFlow();
     const graph = data.graphs[0];
+    const hasFitInitiallyRef = useRef(false);
+    const previousNodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
     const getTensorInfoFromAttrs = (attrs: { key: string; value: string }[]) => {
         const shapeAttr =
@@ -461,8 +522,15 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     const doLayout = useCallback(async () => {
         const { nodes: laidOutNodes, edges: laidOutEdges } = await layoutWithElk(computedNodes, computedEdges);
-        const boxNodes = buildSubgraphBoxNodes(laidOutNodes, expandedNamespaces);
-        setNodes([...boxNodes, ...laidOutNodes]);
+
+        const shiftedNodes = translateExpandedNamespacesInPlace(
+            laidOutNodes,
+            expandedNamespaces,
+            previousNodePositionsRef.current,
+        );
+        const boxNodes = buildSubgraphBoxNodes(shiftedNodes, expandedNamespaces);
+
+        setNodes([...boxNodes, ...shiftedNodes]);
         setEdges(laidOutEdges);
     }, [computedEdges, computedNodes, expandedNamespaces, setEdges, setNodes]);
 
@@ -471,15 +539,24 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
         const runLayout = async () => {
             const { nodes: laidOutNodes, edges: laidOutEdges } = await layoutWithElk(computedNodes, computedEdges);
-            const boxNodes = buildSubgraphBoxNodes(laidOutNodes, expandedNamespaces);
+
+            const shiftedNodes = translateExpandedNamespacesInPlace(
+                laidOutNodes,
+                expandedNamespaces,
+                previousNodePositionsRef.current,
+            );
+            const boxNodes = buildSubgraphBoxNodes(shiftedNodes, expandedNamespaces);
 
             if (!cancelled) {
-                setNodes([...boxNodes, ...laidOutNodes]);
+                setNodes([...boxNodes, ...shiftedNodes]);
                 setEdges(laidOutEdges);
 
-                requestAnimationFrame(() => {
-                    void fitView({ padding: 0.2, duration: 200 });
-                });
+                if (!hasFitInitiallyRef.current) {
+                    requestAnimationFrame(() => {
+                        void fitView({ padding: 0.2, duration: 200 });
+                    });
+                    hasFitInitiallyRef.current = true;
+                }
             }
         };
 
@@ -489,6 +566,14 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             cancelled = true;
         };
     }, [computedNodes, computedEdges, expandedNamespaces, fitView, setEdges, setNodes]);
+
+    useEffect(() => {
+        const map = new Map<string, { x: number; y: number }>();
+        for (const node of nodes) {
+            map.set(node.id, { x: node.position.x, y: node.position.y });
+        }
+        previousNodePositionsRef.current = map;
+    }, [nodes]);
 
     const handleNodeClick = useCallback((_: React.MouseEvent, node: Node<MLNodeData>) => {
         if ((node.data.kind !== 'group' && node.data.kind !== 'subgraphBox') || !node.data.namespace) {
@@ -527,6 +612,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 <Background />
             </ReactFlow>
 
+            {}
             <Button
                 onClick={() => void doLayout()}
                 style={{
