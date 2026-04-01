@@ -26,7 +26,6 @@ type MLNodeData = {
     label: string;
     kind?: 'op' | 'group';
     namespace: string;
-    collapsed?: boolean;
 };
 
 interface ViewProps {
@@ -38,33 +37,26 @@ const elk = new ELK();
 const elkOptions: Record<string, string> = {
     'elk.algorithm': 'layered',
     'elk.direction': 'DOWN',
-
     'elk.spacing.nodeNode': '24',
     'elk.layered.spacing.nodeNodeBetweenLayers': '120',
     'elk.spacing.edgeNode': '16',
     'elk.spacing.edgeEdge': '12',
-
     'elk.edgeRouting': 'ORTHOGONAL',
-
     'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
     'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
     'elk.layered.crossingMinimization.semiInteractive': 'false',
-
     'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
     'elk.layered.thoroughness': '10',
-
     'elk.layered.unnecessaryBendpoints': 'true',
     'elk.layered.mergeEdges': 'false',
     'elk.layered.cycleBreaking.strategy': 'GREEDY',
 };
 
-const COLLAPSED_GROUP_WIDTH = 220;
-const COLLAPSED_GROUP_HEIGHT = 52;
-const EXPANDED_GROUP_MIN_WIDTH = 260;
-const EXPANDED_GROUP_MIN_HEIGHT = 120;
-const CHILD_PADDING_X = 24;
-const CHILD_PADDING_TOP = 36;
-const CHILD_PADDING_BOTTOM = 20;
+const GROUP_MIN_WIDTH = 260;
+const GROUP_MIN_HEIGHT = 140;
+const GROUP_PADDING_X = 24;
+const GROUP_PADDING_TOP = 36;
+const GROUP_PADDING_BOTTOM = 20;
 
 function toElkGraph(nodes: Node<MLNodeData>[], edges: Edge[]): ElkNode {
     return {
@@ -99,15 +91,13 @@ async function layoutWithElk(
         positions.set(c.id, { x: c.x ?? 0, y: c.y ?? 0 });
     });
 
-    const nextNodes = nodes.map((n) => {
-        const p = positions.get(n.id) ?? { x: 0, y: 0 };
-        return {
+    return {
+        nodes: nodes.map((n) => ({
             ...n,
-            position: p,
-        };
-    });
-
-    return { nodes: nextNodes, edges };
+            position: positions.get(n.id) ?? { x: 0, y: 0 },
+        })),
+        edges,
+    };
 }
 
 const getNamespaceSegments = (namespace?: string): string[] => (namespace ? namespace.split('/').filter(Boolean) : []);
@@ -139,7 +129,7 @@ const isNodeInsideNamespaceTree = (nodeNamespace: string | undefined, namespace:
     return nodeNamespace === namespace || nodeNamespace.startsWith(`${namespace}/`);
 };
 
-const getOuterOpForExpandedNamespace = (
+const getOuterOpForNamespace = (
     namespace: string,
     nodes: GraphBundle['graphs'][0]['nodes'],
 ): GraphBundle['graphs'][0]['nodes'][number] | undefined => {
@@ -148,17 +138,6 @@ const getOuterOpForExpandedNamespace = (
 
     return nodes.find((n) => n.namespace === parentNamespace && n.label === expectedLabel);
 };
-
-const getInputNodesForExpandedNamespace = (
-    namespace: string,
-    nodes: GraphBundle['graphs'][0]['nodes'],
-): GraphBundle['graphs'][0]['nodes'][number][] => nodes.filter((n) => n.namespace === `${namespace}/Inputs`);
-
-const getReturnNodeForExpandedNamespace = (
-    namespace: string,
-    nodes: GraphBundle['graphs'][0]['nodes'],
-): GraphBundle['graphs'][0]['nodes'][number] | undefined =>
-    nodes.find((n) => n.namespace === namespace && n.label === 'stablehlo.return');
 
 function getTensorInfoFromAttrs(attrs: { key: string; value: string }[]) {
     const shapeAttr =
@@ -190,8 +169,6 @@ function getTensorInfoFromAttrs(attrs: { key: string; value: string }[]) {
     const prettyShape = cleanShape(shape);
 
     return {
-        shape: prettyShape,
-        dtype,
         label: prettyShape && dtype ? `${prettyShape} ${dtype}` : prettyShape || dtype,
     };
 }
@@ -226,230 +203,36 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         [graph.nodes],
     );
 
-    const outerOpByNamespace = useMemo(() => {
-        const map = new Map<string, GraphBundle['graphs'][0]['nodes'][number]>();
+    const outerNamespaceByNodeId = useMemo(() => {
+        const map = new Map<string, string>();
         for (const namespace of collapsibleNamespaces) {
-            const outer = getOuterOpForExpandedNamespace(namespace, graph.nodes);
+            const outer = getOuterOpForNamespace(namespace, graph.nodes);
             if (outer) {
-                map.set(namespace, outer);
+                map.set(outer.id, namespace);
             }
         }
         return map;
     }, [collapsibleNamespaces, graph.nodes]);
 
-    const outerOpNamespaceById = useMemo(() => {
-        const map = new Map<string, string>();
-        for (const [namespace, outer] of outerOpByNamespace.entries()) {
-            map.set(outer.id, namespace);
-        }
-        return map;
-    }, [outerOpByNamespace]);
-
-    const [collapsedNamespaces, setCollapsedNamespaces] = useState<Set<string>>(() => new Set(collapsibleNamespaces));
-
     useEffect(() => {
-        setCollapsedNamespaces(new Set(collapsibleNamespaces));
         setHasFitInitially(false);
-    }, [graph.id, collapsibleNamespaces]);
+    }, [graph.id]);
 
     const buildVisibleGraph = useCallback(async () => {
-        const expandedNamespaces = collapsibleNamespaces.filter((namespace) => !collapsedNamespaces.has(namespace));
-
-        const getContainingNamespace = (namespace?: string): string | undefined => {
-            if (!namespace) {
-                return undefined;
-            }
-
-            return [...collapsibleNamespaces]
-                .sort((a, b) => b.length - a.length)
-                .find((candidate) => isNodeInsideNamespaceTree(namespace, candidate));
-        };
-
-        const topLevelPlaceholderNodes: Node<MLNodeData>[] = collapsibleNamespaces.map((namespace) => {
-            const isCollapsed = collapsedNamespaces.has(namespace);
-            const isExpanded = !isCollapsed;
-
-            return {
-                id: `group:${namespace}`,
-                type: isExpanded ? 'group' : undefined,
-                data: {
-                    label: `${isCollapsed ? '▸' : '▾'} ${getShortName(namespace)}`,
-                    kind: 'group',
-                    namespace,
-                    collapsed: isCollapsed,
-                },
-                position: { x: 0, y: 0 },
-                selectable: true,
-                draggable: true,
-                style: isExpanded
-                    ? {
-                          width: EXPANDED_GROUP_MIN_WIDTH,
-                          height: EXPANDED_GROUP_MIN_HEIGHT,
-                          border: '2px dashed #7d7d7d',
-                          borderRadius: 16,
-                          background: 'rgba(90, 90, 90, 0.14)',
-                          color: '#ddd',
-                          padding: '10px 12px',
-                      }
-                    : {
-                          width: COLLAPSED_GROUP_WIDTH,
-                          height: COLLAPSED_GROUP_HEIGHT,
-                          border: '1px solid #666',
-                          borderRadius: 12,
-                          background: '#2f2f2f',
-                          color: '#fff',
-                          padding: '10px 12px',
-                          fontWeight: 600,
-                      },
-            };
-        });
-
-        const topLevelVisibleOpNodes: Node<MLNodeData>[] = graph.nodes
-            .filter((n) => {
-                if (!n.namespace) {
-                    return true;
-                }
-
-                if (outerOpNamespaceById.has(n.id)) {
-                    return false;
-                }
-
-                const containingNamespace = getContainingNamespace(n.namespace);
-                if (containingNamespace) {
-                    return false;
-                }
-
-                return true;
-            })
-            .map((n) => ({
-                id: n.id,
-                data: {
-                    label: n.label,
-                    kind: 'op',
-                    namespace: n.namespace,
-                    collapsed: false,
-                },
-                position: { x: 0, y: 0 },
-                style: {
-                    color: '#222',
-                    background: '#f5f5f5',
-                    border: '1px solid #999',
-                    borderRadius: 6,
-                    fontSize: 12,
-                },
-            }));
-
-        const topLevelNodesForLayout: Node<MLNodeData>[] = [...topLevelPlaceholderNodes, ...topLevelVisibleOpNodes];
-
-        const mapToTopLevelEndpointId = (nodeId: string): string => {
-            const outerNamespace = outerOpNamespaceById.get(nodeId);
-            if (outerNamespace) {
-                return `group:${outerNamespace}`;
-            }
-
-            const rawNode = nodeMap.get(nodeId);
-            const containingNamespace = getContainingNamespace(rawNode?.namespace);
-
-            if (containingNamespace) {
-                return `group:${containingNamespace}`;
-            }
-
-            return nodeId;
-        };
-
-        const topLevelLayoutEdgesSeen = new Set<string>();
-        const topLevelLayoutEdges: Edge[] = [];
-
-        for (const target of graph.nodes) {
-            for (const incoming of target.incomingEdges ?? []) {
-                const sourceId = mapToTopLevelEndpointId(incoming.sourceNodeId);
-                const targetId = mapToTopLevelEndpointId(target.id);
-
-                if (sourceId === targetId) {
-                    continue;
-                }
-
-                const edgeId = `layout:${sourceId}->${targetId}`;
-                if (topLevelLayoutEdgesSeen.has(edgeId)) {
-                    continue;
-                }
-                topLevelLayoutEdgesSeen.add(edgeId);
-
-                topLevelLayoutEdges.push({
-                    id: edgeId,
-                    source: sourceId,
-                    target: targetId,
-                });
-            }
-        }
-
-        const { nodes: laidOutTopLevelNodes } = await layoutWithElk(topLevelNodesForLayout, topLevelLayoutEdges);
-        const topLevelNodeById = new Map<string, Node<MLNodeData>>(laidOutTopLevelNodes.map((n) => [n.id, n]));
-
-        const finalNodes: Node<MLNodeData>[] = [];
-        const finalEdges: Edge[] = [];
-        const finalEdgesSeen = new Set<string>();
-        const visibleTopLevelIds = new Set<string>();
-
-        const addEdgeSafe = (edge: Edge) => {
-            if (edge.source === edge.target) {
-                return;
-            }
-            if (finalEdgesSeen.has(edge.id)) {
-                return;
-            }
-            finalEdgesSeen.add(edge.id);
-            finalEdges.push(edge);
-        };
-
-        for (const node of topLevelVisibleOpNodes) {
-            const laidOut = topLevelNodeById.get(node.id);
-            finalNodes.push({
-                ...node,
-                position: laidOut?.position ?? node.position,
-            });
-            visibleTopLevelIds.add(node.id);
-        }
+        // Always expanded. No collapse / expand behavior in this version.
+        const groupNodesForTopLayout: Node<MLNodeData>[] = [];
+        const childNodesByNamespace = new Map<string, Node<MLNodeData>[]>();
+        const internalEdgesByNamespace = new Map<string, Edge[]>();
 
         for (const namespace of collapsibleNamespaces) {
-            const groupId = `group:${namespace}`;
-            const laidOutGroup = topLevelNodeById.get(groupId);
-            const isCollapsed = collapsedNamespaces.has(namespace);
-
-            if (isCollapsed) {
-                finalNodes.push({
-                    id: groupId,
-                    data: {
-                        label: `▸ ${getShortName(namespace)}`,
-                        kind: 'group',
-                        namespace,
-                        collapsed: true,
-                    },
-                    position: laidOutGroup?.position ?? { x: 0, y: 0 },
-                    style: {
-                        width: COLLAPSED_GROUP_WIDTH,
-                        height: COLLAPSED_GROUP_HEIGHT,
-                        border: '1px solid #666',
-                        borderRadius: 12,
-                        background: '#2f2f2f',
-                        color: '#fff',
-                        padding: '10px 12px',
-                        fontWeight: 600,
-                    },
-                });
-                visibleTopLevelIds.add(groupId);
-                continue;
-            }
-
             const childRawNodes = graph.nodes.filter((n) => isNodeInsideNamespaceTree(n.namespace, namespace));
 
-            const childNodesForLayout: Node<MLNodeData>[] = childRawNodes.map((n) => ({
+            const childNodes: Node<MLNodeData>[] = childRawNodes.map((n) => ({
                 id: n.id,
                 data: {
                     label: n.label,
                     kind: 'op',
                     namespace: n.namespace,
-                    collapsed: false,
                 },
                 position: { x: 0, y: 0 },
                 style: {
@@ -477,12 +260,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                     }
                     internalEdgesSeen.add(edgeId);
 
-                    const sourceOutputMeta = sourceRawNode?.outputsMetadata?.find(
-                        (m) => m.id === incoming.sourceNodeOutputId,
-                    );
-                    const edgeLabel = sourceOutputMeta
-                        ? getTensorInfoFromAttrs(sourceOutputMeta.attrs).label
-                        : undefined;
+                    const sourceOutputMeta = sourceRawNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
+                    const edgeLabel = sourceOutputMeta ? getTensorInfoFromAttrs(sourceOutputMeta.attrs).label : undefined;
 
                     internalEdges.push({
                         id: edgeId,
@@ -496,32 +275,44 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 }
             }
 
-            const { nodes: laidOutChildNodes, edges: laidOutChildEdges } = await layoutWithElk(
-                childNodesForLayout,
-                internalEdges,
-            );
-            const bounds = laidOutChildNodes.length > 0 ? getBounds(laidOutChildNodes) : undefined;
+            const { nodes: laidOutChildren } = await layoutWithElk(childNodes, internalEdges);
+            const bounds = laidOutChildren.length > 0 ? getBounds(laidOutChildren) : undefined;
 
             const groupWidth = bounds
-                ? Math.max(EXPANDED_GROUP_MIN_WIDTH, bounds.maxX - bounds.minX + CHILD_PADDING_X * 2)
-                : EXPANDED_GROUP_MIN_WIDTH;
+                ? Math.max(GROUP_MIN_WIDTH, bounds.maxX - bounds.minX + GROUP_PADDING_X * 2)
+                : GROUP_MIN_WIDTH;
             const groupHeight = bounds
-                ? Math.max(
-                      EXPANDED_GROUP_MIN_HEIGHT,
-                      bounds.maxY - bounds.minY + CHILD_PADDING_TOP + CHILD_PADDING_BOTTOM,
-                  )
-                : EXPANDED_GROUP_MIN_HEIGHT;
+                ? Math.max(GROUP_MIN_HEIGHT, bounds.maxY - bounds.minY + GROUP_PADDING_TOP + GROUP_PADDING_BOTTOM)
+                : GROUP_MIN_HEIGHT;
 
-            finalNodes.push({
-                id: groupId,
+            const normalizedChildren = laidOutChildren.map((child) => ({
+                ...child,
+                parentId: `group:${namespace}`,
+                extent: 'parent' as const,
+                draggable: false,
+                position: bounds
+                    ? {
+                          x: child.position.x - bounds.minX + GROUP_PADDING_X,
+                          y: child.position.y - bounds.minY + GROUP_PADDING_TOP,
+                      }
+                    : {
+                          x: GROUP_PADDING_X,
+                          y: GROUP_PADDING_TOP,
+                      },
+            }));
+
+            childNodesByNamespace.set(namespace, normalizedChildren);
+            internalEdgesByNamespace.set(namespace, internalEdges);
+
+            groupNodesForTopLayout.push({
+                id: `group:${namespace}`,
                 type: 'group',
                 data: {
                     label: `▾ ${getShortName(namespace)}`,
                     kind: 'group',
                     namespace,
-                    collapsed: false,
                 },
-                position: laidOutGroup?.position ?? { x: 0, y: 0 },
+                position: { x: 0, y: 0 },
                 style: {
                     width: groupWidth,
                     height: groupHeight,
@@ -532,72 +323,71 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                     padding: '10px 12px',
                 },
             });
-            visibleTopLevelIds.add(groupId);
-
-            for (const childNode of laidOutChildNodes) {
-                finalNodes.push({
-                    ...childNode,
-                    parentId: groupId,
-                    extent: 'parent',
-                    draggable: false,
-                    position: bounds
-                        ? {
-                              x: childNode.position.x - bounds.minX + CHILD_PADDING_X,
-                              y: childNode.position.y - bounds.minY + CHILD_PADDING_TOP,
-                          }
-                        : { x: CHILD_PADDING_X, y: CHILD_PADDING_TOP },
-                });
-            }
-
-            for (const edge of laidOutChildEdges) {
-                addEdgeSafe(edge);
-            }
-
-            const outerOp = outerOpByNamespace.get(namespace);
-            const inputNodes = getInputNodesForExpandedNamespace(namespace, graph.nodes);
-            const returnNode = getReturnNodeForExpandedNamespace(namespace, graph.nodes);
-
-            if (outerOp) {
-                const sortedInputs = [...inputNodes].sort((a, b) => a.label.localeCompare(b.label));
-
-                for (const incoming of outerOp.incomingEdges ?? []) {
-                    const targetInputNode = sortedInputs[Number(incoming.targetNodeInputId)];
-                    if (!targetInputNode) {
-                        continue;
-                    }
-
-                    const sourceId = mapToTopLevelEndpointId(incoming.sourceNodeId);
-                    addEdgeSafe({
-                        id: `bridge-in:${sourceId}->${targetInputNode.id}:${namespace}:${incoming.targetNodeInputId}`,
-                        source: sourceId,
-                        target: targetInputNode.id,
-                        markerEnd: { type: MarkerType.ArrowClosed, height: 20, width: 20 },
-                        style: { strokeDasharray: '4 2' },
-                    });
-                }
-
-                if (returnNode) {
-                    for (const consumer of graph.nodes) {
-                        for (const incoming of consumer.incomingEdges ?? []) {
-                            if (incoming.sourceNodeId !== outerOp.id) {
-                                continue;
-                            }
-
-                            const targetId = mapToTopLevelEndpointId(consumer.id);
-                            addEdgeSafe({
-                                id: `bridge-out:${returnNode.id}->${targetId}:${namespace}:${incoming.targetNodeInputId}`,
-                                source: returnNode.id,
-                                target: targetId,
-                                markerEnd: { type: MarkerType.ArrowClosed, height: 20, width: 20 },
-                                style: { strokeDasharray: '4 2' },
-                            });
-                        }
-                    }
-                }
-            }
         }
 
-        const expandedGroupIds = new Set(expandedNamespaces.map((namespace) => `group:${namespace}`));
+        const getContainingNamespace = (namespace?: string): string | undefined => {
+            if (!namespace) {
+                return undefined;
+            }
+
+            return [...collapsibleNamespaces]
+                .sort((a, b) => b.length - a.length)
+                .find((candidate) => isNodeInsideNamespaceTree(namespace, candidate));
+        };
+
+        const topLevelOpNodes: Node<MLNodeData>[] = graph.nodes
+            .filter((n) => {
+                if (!n.namespace) {
+                    return true;
+                }
+
+                if (outerNamespaceByNodeId.has(n.id)) {
+                    return false;
+                }
+
+                const containingNamespace = getContainingNamespace(n.namespace);
+                if (containingNamespace) {
+                    return false;
+                }
+
+                return true;
+            })
+            .map((n) => ({
+                id: n.id,
+                data: {
+                    label: n.label,
+                    kind: 'op',
+                    namespace: n.namespace,
+                },
+                position: { x: 0, y: 0 },
+                style: {
+                    color: '#222',
+                    background: '#f5f5f5',
+                    border: '1px solid #999',
+                    borderRadius: 6,
+                    fontSize: 12,
+                },
+            }));
+
+        const topLevelNodes = [...groupNodesForTopLayout, ...topLevelOpNodes];
+
+        const mapToTopLevelEndpointId = (nodeId: string): string => {
+            const outerNamespace = outerNamespaceByNodeId.get(nodeId);
+            if (outerNamespace) {
+                return `group:${outerNamespace}`;
+            }
+
+            const rawNode = nodeMap.get(nodeId);
+            const containingNamespace = getContainingNamespace(rawNode?.namespace);
+            if (containingNamespace) {
+                return `group:${containingNamespace}`;
+            }
+
+            return nodeId;
+        };
+
+        const topLevelEdgeSeen = new Set<string>();
+        const topLevelEdgesForLayout: Edge[] = [];
 
         for (const target of graph.nodes) {
             for (const incoming of target.incomingEdges ?? []) {
@@ -608,11 +398,71 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                     continue;
                 }
 
-                if (expandedGroupIds.has(sourceId) || expandedGroupIds.has(targetId)) {
+                const edgeId = `layout:${sourceId}->${targetId}`;
+                if (topLevelEdgeSeen.has(edgeId)) {
                     continue;
                 }
+                topLevelEdgeSeen.add(edgeId);
 
-                if (!visibleTopLevelIds.has(sourceId) || !visibleTopLevelIds.has(targetId)) {
+                topLevelEdgesForLayout.push({
+                    id: edgeId,
+                    source: sourceId,
+                    target: targetId,
+                });
+            }
+        }
+
+        const { nodes: laidOutTopLevelNodes } = await layoutWithElk(topLevelNodes, topLevelEdgesForLayout);
+        const topLevelNodeById = new Map<string, Node<MLNodeData>>(laidOutTopLevelNodes.map((n) => [n.id, n]));
+
+        const finalNodes: Node<MLNodeData>[] = [];
+        const finalEdges: Edge[] = [];
+        const finalEdgeSeen = new Set<string>();
+
+        const addEdgeSafe = (edge: Edge) => {
+            if (edge.source === edge.target) {
+                return;
+            }
+            if (finalEdgeSeen.has(edge.id)) {
+                return;
+            }
+            finalEdgeSeen.add(edge.id);
+            finalEdges.push(edge);
+        };
+
+        for (const node of topLevelOpNodes) {
+            const laidOut = topLevelNodeById.get(node.id);
+            finalNodes.push({
+                ...node,
+                position: laidOut?.position ?? node.position,
+            });
+        }
+
+        for (const namespace of collapsibleNamespaces) {
+            const groupId = `group:${namespace}`;
+            const laidOutGroup = topLevelNodeById.get(groupId);
+            const topLayoutGroup = groupNodesForTopLayout.find((n) => n.id === groupId);
+
+            finalNodes.push({
+                ...(topLayoutGroup as Node<MLNodeData>),
+                position: laidOutGroup?.position ?? { x: 0, y: 0 },
+            });
+
+            for (const childNode of childNodesByNamespace.get(namespace) ?? []) {
+                finalNodes.push(childNode);
+            }
+
+            for (const edge of internalEdgesByNamespace.get(namespace) ?? []) {
+                addEdgeSafe(edge);
+            }
+        }
+
+        for (const target of graph.nodes) {
+            for (const incoming of target.incomingEdges ?? []) {
+                const sourceId = mapToTopLevelEndpointId(incoming.sourceNodeId);
+                const targetId = mapToTopLevelEndpointId(target.id);
+
+                if (sourceId === targetId) {
                     continue;
                 }
 
@@ -631,7 +481,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         }
 
         return { nodes: finalNodes, edges: finalEdges };
-    }, [collapsedNamespaces, collapsibleNamespaces, graph.nodes, nodeMap, outerOpByNamespace, outerOpNamespaceById]);
+    }, [collapsibleNamespaces, graph.nodes, nodeMap, outerNamespaceByNodeId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -665,22 +515,6 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         setEdges(visibleGraph.edges);
     }, [buildVisibleGraph, setEdges, setNodes]);
 
-    const handleNodeClick = useCallback((_: React.MouseEvent, node: Node<MLNodeData>) => {
-        if (node.data.kind !== 'group' || !node.data.namespace) {
-            return;
-        }
-
-        setCollapsedNamespaces((prev) => {
-            const next = new Set(prev);
-            if (next.has(node.data.namespace)) {
-                next.delete(node.data.namespace);
-            } else {
-                next.add(node.data.namespace);
-            }
-            return next;
-        });
-    }, []);
-
     const nodeTypes = useMemo(() => ({}), []);
 
     return (
@@ -695,7 +529,6 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 maxZoom={1.5}
                 fitView
                 connectionLineType={ConnectionLineType.SmoothStep}
-                onNodeClick={handleNodeClick}
             >
                 <MiniMap />
                 <Controls />
