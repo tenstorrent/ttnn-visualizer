@@ -144,21 +144,20 @@ const isCollapsibleNamespace = (namespace: string): boolean => {
     return /^stablehlo\.(reduce|scatter)_\d+$/.test(leaf);
 };
 
+const getNodeAttrValue = (node: GraphBundle['graphs'][0]['nodes'][number], key: string): string | undefined =>
+    node.attrs.find((attr) => attr.key === key)?.value;
+
+const getNamespaceOrdinal = (namespace: string): number => {
+    const leaf = getShortName(namespace);
+    const match = leaf.match(/_(\d+)$/);
+    return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+};
+
 const isNodeInsideNamespaceTree = (nodeNamespace: string | undefined, namespace: string): boolean => {
     if (!nodeNamespace) {
         return false;
     }
     return nodeNamespace === namespace || nodeNamespace.startsWith(`${namespace}/`);
-};
-
-const getOuterOpForNamespace = (
-    namespace: string,
-    nodes: GraphBundle['graphs'][0]['nodes'],
-): GraphBundle['graphs'][0]['nodes'][number] | undefined => {
-    const parentNamespace = getParentNamespace(namespace);
-    const expectedLabel = getRegionBaseOpLabel(namespace);
-
-    return nodes.find((n) => n.namespace === parentNamespace && n.label === expectedLabel);
 };
 
 function getTensorInfoFromAttrs(attrs: { key: string; value: string }[]) {
@@ -224,12 +223,43 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     const outerNamespaceByNodeId = useMemo(() => {
         const map = new Map<string, string>();
-        for (const namespace of collapsibleNamespaces) {
-            const outer = getOuterOpForNamespace(namespace, graph.nodes);
+        const usedOuterNodeIds = new Set<string>();
+        const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
+        const orderedNamespaces = [...collapsibleNamespaces].sort(
+            (a, b) => getNamespaceOrdinal(a) - getNamespaceOrdinal(b),
+        );
+
+        for (const namespace of orderedNamespaces) {
+            const parentNamespace = getParentNamespace(namespace);
+            if (!parentNamespace) {
+                continue;
+            }
+            const expectedLabel = getRegionBaseOpLabel(namespace);
+            const namespaceNodes = graph.nodes.filter((n) => n.namespace === namespace);
+            const preferredLocations = new Set(
+                namespaceNodes
+                    .filter((n) => n.label === expectedLabel)
+                    .map((n) => getNodeAttrValue(n, 'full_location'))
+                    .filter((v): v is string => Boolean(v)),
+            );
+
+            const outerCandidates = graph.nodes.filter(
+                (n) => n.namespace === parentNamespace && n.label === expectedLabel && !usedOuterNodeIds.has(n.id),
+            );
+            outerCandidates.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
+
+            const outer =
+                outerCandidates.find((candidate) => {
+                    const location = getNodeAttrValue(candidate, 'full_location');
+                    return location ? preferredLocations.has(location) : false;
+                }) ?? outerCandidates[0];
+
             if (outer) {
                 map.set(outer.id, namespace);
+                usedOuterNodeIds.add(outer.id);
             }
         }
+
         return map;
     }, [collapsibleNamespaces, graph.nodes]);
 
