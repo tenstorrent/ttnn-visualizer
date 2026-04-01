@@ -202,6 +202,26 @@ class DatabaseQueries:
 
         return self.query_runner.execute_query(query, params)
 
+    def merge_rank_filter(
+        self,
+        table_name: str,
+        filters: Optional[Dict[str, Any]],
+        rank: Optional[int],
+    ) -> Dict[str, Any]:
+        """
+        Return a copy of filters with rank = rank if the table has a rank column.
+        No-op when rank is None or the schema has no rank (old reports).
+        """
+        out = dict(filters or {})
+        if rank is None:
+            return out
+        if not self._check_table_exists(table_name):
+            return out
+        if "rank" not in self._get_table_columns(table_name):
+            return out
+        out["rank"] = rank
+        return out
+
     def query_device_operations(
         self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
     ) -> List[DeviceOperation]:
@@ -448,7 +468,9 @@ class DatabaseQueries:
         for row in rows:
             yield Device(*row)
 
-    def query_producers_consumers(self) -> Generator[ProducersConsumers, None, None]:
+    def query_producers_consumers(
+        self, rank: Optional[int] = None
+    ) -> Generator[ProducersConsumers, None, None]:
         rank_on_tensors = "rank" in self._get_table_columns("tensors")
         it_rank = "rank" in self._get_table_columns("input_tensors")
         ot_rank = "rank" in self._get_table_columns("output_tensors")
@@ -463,6 +485,12 @@ class DatabaseQueries:
         rank_select = ", t.rank" if rank_on_tensors else ""
         group_by = "t.tensor_id" + (", t.rank" if rank_on_tensors else "")
 
+        where_sql = "WHERE 1=1"
+        params: List[Any] = []
+        if rank_on_tensors and rank is not None:
+            where_sql += " AND t.rank = ?"
+            params.append(rank)
+
         query = f"""
             SELECT
                 t.tensor_id{rank_select},
@@ -474,10 +502,11 @@ class DatabaseQueries:
                 input_tensors it ON {it_join}
             LEFT JOIN
                 output_tensors ot ON {ot_join}
+            {where_sql}
             GROUP BY
                 {group_by}
         """
-        rows = self.query_runner.execute_query(query)
+        rows = self.query_runner.execute_query(query, params)
         for row in rows:
             # SQL aliases: ot AS "consumers", it AS "producers" (names are swapped vs semantics).
             if rank_on_tensors:
@@ -507,7 +536,9 @@ class DatabaseQueries:
         rows = self._query_table("report_metadata", columns=["key", "value"])
         return rows
 
-    def query_next_buffer(self, operation_id: int, address: str) -> Optional[Buffer]:
+    def query_next_buffer(
+        self, operation_id: int, address: str, rank: Optional[int] = None
+    ) -> Optional[Buffer]:
         buf_cols = self._get_table_columns("buffers")
         ordered = [
             c
@@ -523,6 +554,11 @@ class DatabaseQueries:
             if c in buf_cols
         ]
         col_sql = ", ".join(f"buffers.{c}" for c in ordered)
+        where_extra = ""
+        params: List[Any] = [address, operation_id]
+        if rank is not None and "rank" in buf_cols:
+            where_extra = " AND buffers.rank = ?"
+            params.append(rank)
         query = f"""
             SELECT
                 {col_sql}
@@ -530,10 +566,10 @@ class DatabaseQueries:
                 buffers
             WHERE
                 buffers.address = ?
-                AND buffers.operation_id > ?
+                AND buffers.operation_id > ?{where_extra}
             ORDER BY buffers.operation_id
         """
-        rows = self.query_runner.execute_query(query, [address, operation_id])
+        rows = self.query_runner.execute_query(query, params)
         return _buffer_from_row(rows[0]) if rows else None
 
     def __enter__(self):
