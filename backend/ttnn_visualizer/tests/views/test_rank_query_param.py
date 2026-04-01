@@ -11,6 +11,7 @@ import tempfile
 from http import HTTPStatus
 from pathlib import Path
 
+import pytest
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
 
@@ -508,25 +509,61 @@ def test_invalid_rank_query_returns_400(app, client):
         Path(path).unlink(missing_ok=True)
 
 
-def test_nonzero_rank_on_legacy_db_returns_422(app, client):
-    """Unranked DB cannot satisfy rank > 0; do not return all rows as rank 0."""
+@pytest.mark.parametrize(
+    "path,extra_query",
+    [
+        ("/api/operations", {}),
+        ("/api/tensors", {}),
+        ("/api/devices", {}),
+        ("/api/buffers", {}),
+        ("/api/operation-buffers", {}),
+        ("/api/errors", {}),
+        ("/api/operations/1", {}),
+        ("/api/operation-buffers/1", {}),
+        ("/api/tensors/1", {}),
+        (
+            "/api/buffer",
+            {"address": "100", "operation_id": "1"},
+        ),
+        (
+            "/api/buffer-pages",
+            {"operation_id": "1", "address": "100"},
+        ),
+    ],
+)
+def test_legacy_nonzero_rank_returns_422_not_rank_zero_payload(
+    app, client, path, extra_query
+):
+    """
+    Regression: unranked DBs only represent rank 0. ``?rank`` with a non-zero value
+    must not succeed with HTTP 200 and legacy rows (which would appear as rank 0 in JSON).
+    """
     with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
-        path = f.name
+        path_db = f.name
     try:
-        _write_legacy_report_db(path)
-        _register_profiler_instance(app, path, instance_id=LEGACY_INSTANCE_ID)
+        _write_legacy_report_db(path_db)
+        _register_profiler_instance(app, path_db, instance_id=LEGACY_INSTANCE_ID)
 
-        response = client.get(
-            "/api/operations",
-            query_string={"instanceId": LEGACY_INSTANCE_ID, "rank": "1"},
+        query_string = {
+            "instanceId": LEGACY_INSTANCE_ID,
+            "rank": "2",
+            **extra_query,
+        }
+        response = client.get(path, query_string=query_string)
+
+        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, (
+            f"expected 422 for {path} with rank=2 on unranked DB, got "
+            f"{response.status_code}"
         )
-        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
         err = response.get_json()
         assert err is not None
         assert "error" in err
         assert "per-rank" in err["error"].lower()
+        # A mistaken 200 would typically be a JSON list or object with legacy data — we
+        # never return that shape for this error path.
+        assert not isinstance(err, list)
     finally:
-        Path(path).unlink(missing_ok=True)
+        Path(path_db).unlink(missing_ok=True)
 
 
 def test_rank_zero_explicit_allowed_on_legacy_db(app, client):
