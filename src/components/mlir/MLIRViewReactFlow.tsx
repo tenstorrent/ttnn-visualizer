@@ -37,7 +37,7 @@ const elk = new ELK();
 const elkOptions: Record<string, string> = {
     'elk.algorithm': 'layered',
     'elk.direction': 'DOWN',
-    'elk.spacing.nodeNode': '24',
+    'elk.spacing.nodeNode': '40',
     'elk.layered.spacing.nodeNodeBetweenLayers': '120',
     'elk.spacing.edgeNode': '16',
     'elk.spacing.edgeEdge': '12',
@@ -58,15 +58,37 @@ const GROUP_PADDING_X = 24;
 const GROUP_PADDING_TOP = 36;
 const GROUP_PADDING_BOTTOM = 20;
 
+/** Match ELK spacing to rendered default-node size so layers do not overlap. */
+function estimateOpNodeDimensions(label: string): { width: number; height: number } {
+    const charW = 7.25;
+    const padX = 32;
+    const minW = 108;
+    const maxW = 560;
+    const width = Math.ceil(Math.min(maxW, Math.max(minW, label.length * charW + padX)));
+    return { width, height: 48 };
+}
+
+function getNodeLayoutSize(n: Node<MLNodeData>): { width: number; height: number } {
+    const style = n.style as { width?: number; height?: number } | undefined;
+    const w = n.width ?? style?.width;
+    const h = n.height ?? style?.height;
+    const width = typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : 180;
+    const height = typeof h === 'number' && Number.isFinite(h) && h > 0 ? h : 48;
+    return { width, height };
+}
+
 function toElkGraph(nodes: Node<MLNodeData>[], edges: Edge[]): ElkNode {
     return {
         id: 'root',
         layoutOptions: elkOptions,
-        children: nodes.map((n) => ({
-            id: n.id,
-            width: n.width ?? Number((n.style as { width?: number })?.width) ?? 180,
-            height: n.height ?? Number((n.style as { height?: number })?.height) ?? 48,
-        })),
+        children: nodes.map((n) => {
+            const { width, height } = getNodeLayoutSize(n);
+            return {
+                id: n.id,
+                width,
+                height,
+            };
+        }),
         edges: edges.map((e) => ({
             id: e.id,
             sources: [e.source],
@@ -156,6 +178,7 @@ function getTensorInfoFromAttrs(attrs: { key: string; value: string }[]) {
     if (!dtype && shape?.includes('tensor<')) {
         const match = shape.match(/x([a-z0-9]+)>$/i);
         if (match) {
+            // eslint-disable-next-line prefer-destructuring
             dtype = match[1];
         }
     }
@@ -176,12 +199,8 @@ function getTensorInfoFromAttrs(attrs: { key: string; value: string }[]) {
 function getBounds(nodes: Node<MLNodeData>[]) {
     const minX = Math.min(...nodes.map((n) => n.position.x));
     const minY = Math.min(...nodes.map((n) => n.position.y));
-    const maxX = Math.max(
-        ...nodes.map((n) => n.position.x + (n.width ?? Number((n.style as { width?: number })?.width) ?? 180)),
-    );
-    const maxY = Math.max(
-        ...nodes.map((n) => n.position.y + (n.height ?? Number((n.style as { height?: number })?.height) ?? 48)),
-    );
+    const maxX = Math.max(...nodes.map((n) => n.position.x + getNodeLayoutSize(n).width));
+    const maxY = Math.max(...nodes.map((n) => n.position.y + getNodeLayoutSize(n).height));
 
     return { minX, minY, maxX, maxY };
 }
@@ -227,22 +246,30 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         for (const namespace of collapsibleNamespaces) {
             const childRawNodes = graph.nodes.filter((n) => isNodeInsideNamespaceTree(n.namespace, namespace));
 
-            const childNodes: Node<MLNodeData>[] = childRawNodes.map((n) => ({
-                id: n.id,
-                data: {
-                    label: n.label,
-                    kind: 'op',
-                    namespace: n.namespace,
-                },
-                position: { x: 0, y: 0 },
-                style: {
-                    color: '#222',
-                    background: '#f5f5f5',
-                    border: '1px solid #999',
-                    borderRadius: 6,
-                    fontSize: 12,
-                },
-            }));
+            const childNodes: Node<MLNodeData>[] = childRawNodes.map((n) => {
+                const { width, height } = estimateOpNodeDimensions(n.label);
+                return {
+                    id: n.id,
+                    data: {
+                        label: n.label,
+                        kind: 'op',
+                        namespace: n.namespace,
+                    },
+                    position: { x: 0, y: 0 },
+                    width,
+                    height,
+                    style: {
+                        color: '#222',
+                        background: '#f5f5f5',
+                        border: '1px solid #999',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        width,
+                        height,
+                        boxSizing: 'border-box',
+                    },
+                };
+            });
 
             const internalEdgesSeen = new Set<string>();
             const internalEdges: Edge[] = [];
@@ -260,8 +287,12 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                     }
                     internalEdgesSeen.add(edgeId);
 
-                    const sourceOutputMeta = sourceRawNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
-                    const edgeLabel = sourceOutputMeta ? getTensorInfoFromAttrs(sourceOutputMeta.attrs).label : undefined;
+                    const sourceOutputMeta = sourceRawNode?.outputsMetadata?.find(
+                        (m) => m.id === incoming.sourceNodeOutputId,
+                    );
+                    const edgeLabel = sourceOutputMeta
+                        ? getTensorInfoFromAttrs(sourceOutputMeta.attrs).label
+                        : undefined;
 
                     internalEdges.push({
                         id: edgeId,
@@ -275,6 +306,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 }
             }
 
+            // eslint-disable-next-line no-await-in-loop
             const { nodes: laidOutChildren } = await layoutWithElk(childNodes, internalEdges);
             const bounds = laidOutChildren.length > 0 ? getBounds(laidOutChildren) : undefined;
 
@@ -352,22 +384,30 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
                 return true;
             })
-            .map((n) => ({
-                id: n.id,
-                data: {
-                    label: n.label,
-                    kind: 'op',
-                    namespace: n.namespace,
-                },
-                position: { x: 0, y: 0 },
-                style: {
-                    color: '#222',
-                    background: '#f5f5f5',
-                    border: '1px solid #999',
-                    borderRadius: 6,
-                    fontSize: 12,
-                },
-            }));
+            .map((n) => {
+                const { width, height } = estimateOpNodeDimensions(n.label);
+                return {
+                    id: n.id,
+                    data: {
+                        label: n.label,
+                        kind: 'op',
+                        namespace: n.namespace,
+                    },
+                    position: { x: 0, y: 0 },
+                    width,
+                    height,
+                    style: {
+                        color: '#222',
+                        background: '#f5f5f5',
+                        border: '1px solid #999',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        width,
+                        height,
+                        boxSizing: 'border-box',
+                    },
+                };
+            });
 
         const topLevelNodes = [...groupNodesForTopLayout, ...topLevelOpNodes];
 

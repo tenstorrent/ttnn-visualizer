@@ -20,5 +20,9 @@
 
 .react-flow__node-default {
     color: #222;
+
+    /* DefaultNode renders label as a raw text node; clip when width is capped for ELK. */
+    overflow: hidden;
+    white-space: nowrap;
 }
 /* stylelint-enable selector-class-pattern */
