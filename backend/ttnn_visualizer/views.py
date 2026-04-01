@@ -13,12 +13,12 @@ import urllib
 import urllib.request
 from http import HTTPStatus
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import orjson
 import yaml
 import zstd
-from flask import Blueprint, Response, current_app, jsonify, request, session
+from flask import Blueprint, Response, abort, current_app, jsonify, request, session
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     NPEQueries,
@@ -90,6 +90,47 @@ logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__)
 
 
+def _optional_rank_query_param() -> Optional[int]:
+    """
+    Parse optional ``?rank=`` for multi-host report DBs.
+    Returns None if the parameter is absent or empty.
+    """
+    if "rank" not in request.args:
+        return None
+    raw = request.args.get("rank")
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        abort(
+            400,
+            description="Invalid query parameter 'rank': expected an integer.",
+        )
+
+
+_NONZERO_RANK_UNSUPPORTED_MSG = (
+    "This report database does not store per-rank data. "
+    "Omit the rank query parameter or use rank=0 only."
+)
+
+
+def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
+    """
+    Legacy reports only represent rank 0. If the client asks for a different rank
+    but the schema has no ``rank`` column, return 422 instead of returning all rows
+    (which would misleadingly appear as rank 0 in the API).
+    """
+    if rank is None or rank == 0:
+        return None
+    if db.report_has_rank_column():
+        return None
+    return (
+        jsonify({"error": _NONZERO_RANK_UNSUPPORTED_MSG}),
+        HTTPStatus.UNPROCESSABLE_ENTITY,
+    )
+
+
 @api.before_request
 def _trim_session_report_lists():
     """Keep session cookie under size limits by capping report lists (FIFO)."""
@@ -124,21 +165,43 @@ def get_system_capabilities():
 @with_instance
 @timer
 def operation_list(instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        operations = list(db.query_operations())
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        operations = list(
+            db.query_operations(db.merge_rank_filter("operations", None, rank))
+        )
         operations.sort(key=lambda o: o.operation_id)
-        operation_arguments = list(db.query_operation_arguments())
-        device_operations = list(db.query_device_operations())
-        stack_traces = list(db.query_stack_traces())
-        outputs = list(db.query_output_tensors())
-        tensors = list(db.query_tensors())
-        inputs = list(db.query_input_tensors())
-        devices = list(db.query_devices())
-        producers_consumers = list(db.query_producers_consumers())
+        operation_arguments = list(
+            db.query_operation_arguments(
+                db.merge_rank_filter("operation_arguments", None, rank)
+            )
+        )
+        device_operations = list(
+            db.query_device_operations(
+                db.merge_rank_filter("captured_graph", None, rank)
+            )
+        )
+        stack_traces = list(
+            db.query_stack_traces(db.merge_rank_filter("stack_traces", None, rank))
+        )
+        outputs = list(
+            db.query_output_tensors(db.merge_rank_filter("output_tensors", None, rank))
+        )
+        tensors = list(db.query_tensors(db.merge_rank_filter("tensors", None, rank)))
+        inputs = list(
+            db.query_input_tensors(db.merge_rank_filter("input_tensors", None, rank))
+        )
+        devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
+        producers_consumers = list(db.query_producers_consumers(rank=rank))
 
         error_records = None
         if db._check_table_exists("errors"):
-            error_records = list(db.query_error_records())
+            error_records = list(
+                db.query_error_records(db.merge_rank_filter("errors", None, rank))
+            )
 
         serialized_operations = serialize_operations(
             inputs,
@@ -162,10 +225,22 @@ def operation_list(instance: Instance):
 @with_instance
 @timer
 def operation_detail(operation_id, instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
 
         device_id = request.args.get("device_id", None)
-        operations = list(db.query_operations(filters={"operation_id": operation_id}))
+        operations = list(
+            db.query_operations(
+                db.merge_rank_filter(
+                    "operations",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
+        )
 
         if not operations:
             return Response(status=HTTPStatus.NOT_FOUND)
@@ -174,53 +249,119 @@ def operation_detail(operation_id, instance: Instance):
 
         buffers = list(
             db.query_buffers(
-                filters={"operation_id": operation_id, "device_id": device_id}
+                db.merge_rank_filter(
+                    "buffers",
+                    {"operation_id": operation_id, "device_id": device_id},
+                    rank,
+                )
             )
         )
         operation_arguments = list(
-            db.query_operation_arguments(filters={"operation_id": operation_id})
+            db.query_operation_arguments(
+                db.merge_rank_filter(
+                    "operation_arguments",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
         )
-        stack_trace = list(
-            db.query_stack_traces(filters={"operation_id": operation_id})
+        stack_traces = list(
+            db.query_stack_traces(
+                db.merge_rank_filter(
+                    "stack_traces",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
         )
 
-        if stack_trace:
-            stack_trace = stack_trace[0]
-        else:
-            stack_trace = None
+        stack_trace = None
+        for st in stack_traces:
+            if st.rank == operation.rank:
+                stack_trace = st
+                break
+        if stack_trace is None and stack_traces:
+            stack_trace = stack_traces[0]
 
-        inputs = list(db.query_input_tensors(filters={"operation_id": operation_id}))
-        outputs = list(db.query_output_tensors({"operation_id": operation_id}))
+        inputs = list(
+            db.query_input_tensors(
+                db.merge_rank_filter(
+                    "input_tensors",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
+        )
+        outputs = list(
+            db.query_output_tensors(
+                db.merge_rank_filter(
+                    "output_tensors",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
+        )
 
         input_tensor_ids = [i.tensor_id for i in inputs]
         output_tensor_ids = [o.tensor_id for o in outputs]
         tensor_ids = input_tensor_ids + output_tensor_ids
-        tensors = list(db.query_tensors(filters={"tensor_id": tensor_ids}))
-        local_comparisons = list(
-            db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
-        )
-        global_comparisons = list(
-            db.query_tensor_comparisons(local=False, filters={"tensor_id": tensor_ids})
-        )
+        # Empty tensor_ids: query_tensors skips empty IN lists and would return all tensors.
+        if not tensor_ids:
+            tensors = []
+            local_comparisons = []
+            global_comparisons = []
+        else:
+            tensors = list(
+                db.query_tensors(
+                    db.merge_rank_filter(
+                        "tensors",
+                        {"tensor_id": tensor_ids},
+                        rank,
+                    )
+                )
+            )
+            local_comparisons = list(
+                db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
+            )
+            global_comparisons = list(
+                db.query_tensor_comparisons(
+                    local=False, filters={"tensor_id": tensor_ids}
+                )
+            )
 
         device_operations = db.query_device_operations(
-            filters={"operation_id": operation_id}
+            db.merge_rank_filter(
+                "captured_graph",
+                {"operation_id": operation_id},
+                rank,
+            )
         )
 
         producers_consumers = list(
             filter(
-                lambda pc: pc.tensor_id in tensor_ids, db.query_producers_consumers()
+                lambda pc: pc.tensor_id in tensor_ids,
+                db.query_producers_consumers(rank=rank),
             )
         )
 
-        devices = list(db.query_devices())
+        devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
 
         error_record = None
         if db._check_table_exists("errors"):
             error_records = list(
-                db.query_error_records(filters={"operation_id": operation_id})
+                db.query_error_records(
+                    db.merge_rank_filter(
+                        "errors",
+                        {"operation_id": operation_id},
+                        rank,
+                    )
+                )
             )
-            if error_records:
+            for e in error_records:
+                if e.rank == operation.rank:
+                    error_record = e
+                    break
+            if error_record is None and error_records:
                 error_record = error_records[0]
 
         serialized_operation = serialize_operation(
@@ -266,7 +407,11 @@ def operation_history(instance: Instance):
 @with_instance
 @timer
 def errors_list(instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         if not db._check_table_exists("errors"):
             return (
                 jsonify(
@@ -277,7 +422,9 @@ def errors_list(instance: Instance):
                 HTTPStatus.UNPROCESSABLE_ENTITY,
             )
 
-        error_records = list(db.query_error_records())
+        error_records = list(
+            db.query_error_records(db.merge_rank_filter("errors", None, rank))
+        )
         serialized_errors = [dataclasses.asdict(error) for error in error_records]
 
         return Response(
@@ -326,12 +473,36 @@ def get_config(instance: Instance):
 @with_instance
 @timer
 def tensors_list(instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         device_id = request.args.get("device_id", None)
-        tensors = list(db.query_tensors(filters={"device_id": device_id}))
-        local_comparisons = list(db.query_tensor_comparisons())
-        global_comparisons = list(db.query_tensor_comparisons(local=False))
-        producers_consumers = list(db.query_producers_consumers())
+        tensor_filters: dict = {}
+        if device_id is not None:
+            tensor_filters["device_id"] = device_id
+        tensors = list(
+            db.query_tensors(db.merge_rank_filter("tensors", tensor_filters, rank))
+        )
+        if rank is not None and "rank" in db._get_table_columns("tensors"):
+            tensor_ids = [t.tensor_id for t in tensors]
+            if tensor_ids:
+                local_comparisons = list(
+                    db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
+                )
+                global_comparisons = list(
+                    db.query_tensor_comparisons(
+                        local=False, filters={"tensor_id": tensor_ids}
+                    )
+                )
+            else:
+                local_comparisons = []
+                global_comparisons = []
+        else:
+            local_comparisons = list(db.query_tensor_comparisons())
+            global_comparisons = list(db.query_tensor_comparisons(local=False))
+        producers_consumers = list(db.query_producers_consumers(rank=rank))
         serialized_tensors = serialize_tensors(
             tensors, producers_consumers, local_comparisons, global_comparisons
         )
@@ -356,8 +527,12 @@ def buffer_detail(instance: Instance):
     else:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        buffer = db.query_next_buffer(operation_id, address)
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        buffer = db.query_next_buffer(operation_id, address, rank=rank)
         if not buffer:
             return Response(status=HTTPStatus.NOT_FOUND)
         return Response(
@@ -385,16 +560,21 @@ def buffer_pages(instance: Instance):
     else:
         buffer_type = None
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        page_filters = {
+            "operation_id": operation_id,
+            "device_id": device_id,
+            "address": addresses,
+            "buffer_type": buffer_type,
+        }
         buffers = list(
             list(
                 db.query_buffer_pages(
-                    filters={
-                        "operation_id": operation_id,
-                        "device_id": device_id,
-                        "address": addresses,
-                        "buffer_type": buffer_type,
-                    }
+                    db.merge_rank_filter("buffer_pages", page_filters, rank)
                 )
             )
         )
@@ -408,8 +588,16 @@ def buffer_pages(instance: Instance):
 @with_instance
 @timer
 def tensor_detail(tensor_id, instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        tensors = list(db.query_tensors(filters={"tensor_id": tensor_id}))
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        tensors = list(
+            db.query_tensors(
+                db.merge_rank_filter("tensors", {"tensor_id": tensor_id}, rank)
+            )
+        )
         if not tensors:
             return Response(status=HTTPStatus.NOT_FOUND)
 
@@ -429,10 +617,18 @@ def get_all_buffers(instance: Instance):
     else:
         buffer_type = None
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         buffers = list(
             db.query_buffers(
-                filters={"buffer_type": buffer_type, "device_id": device_id}
+                db.merge_rank_filter(
+                    "buffers",
+                    {"buffer_type": buffer_type, "device_id": device_id},
+                    rank,
+                )
             )
         )
         serialized = [serialize_buffer(b) for b in buffers]
@@ -450,13 +646,23 @@ def get_operations_buffers(instance: Instance):
     else:
         buffer_type = None
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         buffers = list(
             db.query_buffers(
-                filters={"buffer_type": buffer_type, "device_id": device_id}
+                db.merge_rank_filter(
+                    "buffers",
+                    {"buffer_type": buffer_type, "device_id": device_id},
+                    rank,
+                )
             )
         )
-        operations = list(db.query_operations())
+        operations = list(
+            db.query_operations(db.merge_rank_filter("operations", None, rank))
+        )
         return Response(
             orjson.dumps(serialize_operations_buffers(operations, buffers)),
             mimetype="application/json",
@@ -473,18 +679,34 @@ def get_operation_buffers(operation_id, instance: Instance):
     else:
         buffer_type = None
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        operations = list(db.query_operations(filters={"operation_id": operation_id}))
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        operations = list(
+            db.query_operations(
+                db.merge_rank_filter(
+                    "operations",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
+        )
         if not operations:
             return Response(status=HTTPStatus.NOT_FOUND)
         operation = operations[0]
         buffers = list(
             db.query_buffers(
-                filters={
-                    "operation_id": operation_id,
-                    "buffer_type": buffer_type,
-                    "device_id": device_id,
-                }
+                db.merge_rank_filter(
+                    "buffers",
+                    {
+                        "operation_id": operation_id,
+                        "buffer_type": buffer_type,
+                        "device_id": device_id,
+                    },
+                    rank,
+                )
             )
         )
         if not operation:
@@ -939,8 +1161,12 @@ def get_zone_statistics(zone, instance: Instance):
 @api.route("/devices", methods=["GET"])
 @with_instance
 def get_devices(instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        devices = list(db.query_devices())
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
         return Response(
             orjson.dumps(serialize_devices(devices)),
             mimetype="application/json",
