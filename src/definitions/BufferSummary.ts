@@ -12,20 +12,19 @@ export enum TAB_IDS {
     DRAM = 'DRAM',
 }
 
-// Examine current data model https://github.com/tenstorrent/ttnn-visualizer/issues/1286
 export enum ColumnKeys {
-    operation_id = 'operation_id',
-    tensor_id = 'tensor_id',
-    address = 'address',
-    size = 'size',
-    buffer_type = 'buffer_type',
-    buffer_layout = 'buffer_layout',
-    dtype = 'dtype',
-    shape = 'shape',
-    device_id = 'device_id',
+    OperationId = 'operation_id',
+    TensorId = 'tensor_id',
+    Address = 'address',
+    Size = 'size',
+    BufferType = 'buffer_type',
+    BufferLayout = 'buffer_layout',
+    Dtype = 'dtype',
+    Shape = 'shape',
+    DeviceId = 'device_id',
 }
 
-export interface ColumnDefinition {
+interface ColumnDefinition {
     name: string;
     key: ColumnKeys;
     width: number;
@@ -33,78 +32,66 @@ export interface ColumnDefinition {
     filterable?: boolean;
 }
 
-export enum ColumnHeaders {
-    address = 'Address',
-    buffer_layout = 'Buffer Layout',
-    buffer_type = 'Buffer Type',
-    device_id = 'Device Id',
-    dtype = 'Data Type',
-    operation_id = 'Operation',
-    shape = 'Shape',
-    size = 'Size',
-    tensor_id = 'Tensor',
-}
-
 const DEFAULT_COLUMN_WIDTH = 140;
 
 export const Columns: ColumnDefinition[] = [
     {
-        name: ColumnHeaders.operation_id,
-        key: ColumnKeys.operation_id,
+        name: 'Operation',
+        key: ColumnKeys.OperationId,
         filterable: true,
         sortable: true,
         width: 200,
     },
     {
-        name: ColumnHeaders.tensor_id,
-        key: ColumnKeys.tensor_id,
+        name: 'Tensor',
+        key: ColumnKeys.TensorId,
         filterable: true,
         sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
-        name: ColumnHeaders.address,
-        key: ColumnKeys.address,
+        name: 'Address',
+        key: ColumnKeys.Address,
         filterable: true,
         sortable: true,
         width: 100,
     },
     {
-        name: ColumnHeaders.size,
-        key: ColumnKeys.size,
+        name: 'Size',
+        key: ColumnKeys.Size,
         filterable: true,
         sortable: true,
         width: 100,
     },
     {
-        name: ColumnHeaders.shape,
-        key: ColumnKeys.shape,
+        name: 'Shape',
+        key: ColumnKeys.Shape,
         filterable: true,
         sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
-        name: ColumnHeaders.dtype,
-        key: ColumnKeys.dtype,
+        name: 'Data Type',
+        key: ColumnKeys.Dtype,
         filterable: true,
         sortable: true,
         width: 150,
     },
     {
-        name: ColumnHeaders.buffer_layout,
-        key: ColumnKeys.buffer_layout,
+        name: 'Buffer Layout',
+        key: ColumnKeys.BufferLayout,
         filterable: true,
         sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
-        name: ColumnHeaders.buffer_type,
-        key: ColumnKeys.buffer_type,
+        name: 'Buffer Type',
+        key: ColumnKeys.BufferType,
         width: 105,
     },
     {
-        name: ColumnHeaders.device_id,
-        key: ColumnKeys.device_id,
+        name: 'Device Id',
+        key: ColumnKeys.DeviceId,
         width: 100,
     },
 ];

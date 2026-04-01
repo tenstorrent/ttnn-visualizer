@@ -15,7 +15,7 @@ import {
     performanceRangeAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
-import SyncStatus from './SyncStatus';
+import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
@@ -108,13 +108,13 @@ function FooterInfobar() {
                             <div className='title'>
                                 <strong>Memory:</strong>
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
-                                    {activeProfilerReportName}
+                                    {formatName(activeProfilerReportName)}
                                 </span>
                             </div>
                         </Tooltip>
                     )}
 
-                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
+                    {activeProfilerReport && activePerformanceReport && <ReportLinkStatus />}
 
                     {activePerformanceReportPath && (
                         <Tooltip
@@ -125,7 +125,7 @@ function FooterInfobar() {
                             <div className='title'>
                                 <strong>Performance:</strong>
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
-                                    {activePerformanceReportPath}
+                                    {formatName(activePerformanceReportPath)}
                                 </span>
                             </div>
                         </Tooltip>
@@ -184,7 +184,20 @@ const formatPath = (str?: string): string => {
         return '';
     }
 
-    return str.startsWith('/') ? str : `/${str}`;
+    const endPath = str.includes('/') ? str.split('/').at(-1) : str;
+
+    return endPath?.startsWith('/') ? endPath : `/${endPath}`;
+};
+
+// If the name is a path, return the parent folder name otherwise return the name (name is optional)
+const formatName = (str: string): string => {
+    const isPath = str.includes('/');
+
+    if (isPath) {
+        return str.split('/').at(-1) || str;
+    }
+
+    return str;
 };
 
 export default FooterInfobar;
