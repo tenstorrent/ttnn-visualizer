@@ -139,9 +139,32 @@ const getParentNamespace = (namespace: string): string | undefined => {
 
 const getRegionBaseOpLabel = (namespace: string): string => getShortName(namespace).replace(/_\d+$/, '');
 
-const isCollapsibleNamespace = (namespace: string): boolean => {
-    const leaf = getShortName(namespace);
-    return /^stablehlo\.(reduce|scatter)_\d+$/.test(leaf);
+const isCollapsibleNamespace = (namespace: string, nodes: GraphBundle['graphs'][0]['nodes']): boolean => {
+    const parentNamespace = getParentNamespace(namespace);
+    if (!parentNamespace) {
+        return false;
+    }
+
+    const expectedLabel = getRegionBaseOpLabel(namespace);
+    const hasMatchingInnerOp = nodes.some((n) => n.namespace === namespace && n.label === expectedLabel);
+    if (!hasMatchingInnerOp) {
+        return false;
+    }
+
+    // Region namespaces usually have nested namespace segments (e.g. ".../Inputs").
+    const hasNestedNamespaceContent = nodes.some((n) => {
+        if (!n.namespace) {
+            return false;
+        }
+        return n.namespace !== namespace && n.namespace.startsWith(`${namespace}/`);
+    });
+    if (hasNestedNamespaceContent) {
+        return true;
+    }
+
+    // Fallback: if parent contains a matching op label, this namespace is likely a region body.
+    const hasMatchingParentOp = nodes.some((n) => n.namespace === parentNamespace && n.label === expectedLabel);
+    return hasMatchingParentOp;
 };
 
 const getNodeAttrValue = (node: GraphBundle['graphs'][0]['nodes'][number], key: string): string | undefined =>
@@ -215,8 +238,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     const collapsibleNamespaces = useMemo(
         () =>
-            Array.from(new Set(graph.nodes.map((n) => n.namespace).filter(Boolean) as string[])).filter(
-                isCollapsibleNamespace,
+            Array.from(new Set(graph.nodes.map((n) => n.namespace).filter(Boolean) as string[])).filter((namespace) =>
+                isCollapsibleNamespace(namespace, graph.nodes),
             ),
         [graph.nodes],
     );
@@ -282,6 +305,44 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 map.set(namespace, anchor.id);
             }
         }
+        return map;
+    }, [collapsibleNamespaces, graph.nodes]);
+
+    const namespaceInputNodeIdsByNamespace = useMemo(() => {
+        const map = new Map<string, string[]>();
+        const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
+
+        for (const namespace of collapsibleNamespaces) {
+            const inputNodes = graph.nodes.filter((n) => {
+                if (!isNodeInsideNamespaceTree(n.namespace, namespace)) {
+                    return false;
+                }
+                if ((n.incomingEdges ?? []).length > 0) {
+                    return false;
+                }
+                if (n.namespace?.startsWith(`${namespace}/Inputs`)) {
+                    return true;
+                }
+                return /^%arg\d+$/i.test(n.label);
+            });
+
+            inputNodes.sort((a, b) => {
+                const aMatch = a.label.match(/^%arg(\d+)$/i);
+                const bMatch = b.label.match(/^%arg(\d+)$/i);
+                const aIdx = aMatch ? Number(aMatch[1]) : Number.POSITIVE_INFINITY;
+                const bIdx = bMatch ? Number(bMatch[1]) : Number.POSITIVE_INFINITY;
+                if (aIdx !== bIdx) {
+                    return aIdx - bIdx;
+                }
+                return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
+            });
+
+            map.set(
+                namespace,
+                inputNodes.map((n) => n.id),
+            );
+        }
+
         return map;
     }, [collapsibleNamespaces, graph.nodes]);
 
@@ -493,6 +554,29 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             return nodeId;
         };
 
+        const mapToRenderedTargetEndpointId = (targetNodeId: string, targetInputId?: string): string => {
+            const outerNamespace = outerNamespaceByNodeId.get(targetNodeId);
+            if (outerNamespace) {
+                const inputIdx = Number(targetInputId);
+                if (Number.isInteger(inputIdx) && inputIdx >= 0) {
+                    const inputNodeIds = namespaceInputNodeIdsByNamespace.get(outerNamespace) ?? [];
+                    const inputNodeId = inputNodeIds[inputIdx];
+                    if (inputNodeId) {
+                        return inputNodeId;
+                    }
+                }
+            }
+            return mapToRenderedEndpointId(targetNodeId);
+        };
+
+        const mapTopLevelEndpointToRenderedEndpoint = (endpointId: string): string => {
+            if (endpointId.startsWith('group:')) {
+                const namespace = endpointId.slice('group:'.length);
+                return namespaceAnchorNodeByNamespace.get(namespace) ?? endpointId;
+            }
+            return endpointId;
+        };
+
         const topLevelEdgeSeen = new Set<string>();
         const topLevelEdgesForLayout: Edge[] = [];
 
@@ -525,6 +609,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         const finalNodes: Node<MLNodeData>[] = [];
         const finalEdges: Edge[] = [];
         const finalEdgeSeen = new Set<string>();
+        const finalEdgePairSeen = new Set<string>();
 
         const addEdgeSafe = (edge: Edge) => {
             if (edge.source === edge.target) {
@@ -534,6 +619,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 return;
             }
             finalEdgeSeen.add(edge.id);
+            finalEdgePairSeen.add(`${edge.source}->${edge.target}`);
             finalEdges.push(edge);
         };
 
@@ -567,7 +653,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         for (const target of graph.nodes) {
             for (const incoming of target.incomingEdges ?? []) {
                 const sourceId = mapToRenderedEndpointId(incoming.sourceNodeId);
-                const targetId = mapToRenderedEndpointId(target.id);
+                const targetId = mapToRenderedTargetEndpointId(target.id, incoming.targetNodeInputId);
 
                 if (sourceId === targetId) {
                     continue;
@@ -587,8 +673,36 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             }
         }
 
+        // Some namespace bodies are disconnected in raw data; preserve high-level links used for layout.
+        for (const edge of topLevelEdgesForLayout) {
+            const renderedSource = mapTopLevelEndpointToRenderedEndpoint(edge.source);
+            const renderedTarget = mapTopLevelEndpointToRenderedEndpoint(edge.target);
+            const pair = `${renderedSource}->${renderedTarget}`;
+            if (renderedSource === renderedTarget || finalEdgePairSeen.has(pair)) {
+                continue;
+            }
+
+            addEdgeSafe({
+                id: `bridge:${pair}`,
+                source: renderedSource,
+                target: renderedTarget,
+                markerEnd: { type: MarkerType.ArrowClosed, height: 20, width: 20 },
+                style: {
+                    strokeDasharray: '6 4',
+                    opacity: 0.7,
+                },
+            });
+        }
+
         return { nodes: finalNodes, edges: finalEdges };
-    }, [collapsibleNamespaces, graph.nodes, namespaceAnchorNodeByNamespace, nodeMap, outerNamespaceByNodeId]);
+    }, [
+        collapsibleNamespaces,
+        graph.nodes,
+        namespaceAnchorNodeByNamespace,
+        namespaceInputNodeIdsByNamespace,
+        nodeMap,
+        outerNamespaceByNodeId,
+    ]);
 
     useEffect(() => {
         let cancelled = false;
