@@ -180,14 +180,17 @@ def operation_detail(operation_id, instance: Instance):
         operation_arguments = list(
             db.query_operation_arguments(filters={"operation_id": operation_id})
         )
-        stack_trace = list(
+        stack_traces = list(
             db.query_stack_traces(filters={"operation_id": operation_id})
         )
 
-        if stack_trace:
-            stack_trace = stack_trace[0]
-        else:
-            stack_trace = None
+        stack_trace = None
+        for st in stack_traces:
+            if st.rank == operation.rank:
+                stack_trace = st
+                break
+        if stack_trace is None and stack_traces:
+            stack_trace = stack_traces[0]
 
         inputs = list(db.query_input_tensors(filters={"operation_id": operation_id}))
         outputs = list(db.query_output_tensors({"operation_id": operation_id}))
@@ -220,7 +223,11 @@ def operation_detail(operation_id, instance: Instance):
             error_records = list(
                 db.query_error_records(filters={"operation_id": operation_id})
             )
-            if error_records:
+            for e in error_records:
+                if e.rank == operation.rank:
+                    error_record = e
+                    break
+            if error_record is None and error_records:
                 error_record = error_records[0]
 
         serialized_operation = serialize_operation(

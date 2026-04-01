@@ -34,6 +34,7 @@ class Operation(SerializeableDataclass):
     operation_id: int
     name: str
     duration: float
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -55,12 +56,14 @@ class Device(SerializeableDataclass):
     total_l1_for_interleaved_buffers: int
     total_l1_for_sharded_buffers: int
     cb_limit: int
+    rank: int = 0
 
 
 @dataclasses.dataclass
 class DeviceOperation(SerializeableDataclass):
     operation_id: int
     captured_graph: str
+    rank: int = 0
 
     def __post_init__(self):
         try:
@@ -83,6 +86,7 @@ class Buffer(SerializeableDataclass):
     max_size_per_bank: int
     buffer_type: BufferType
     buffer_layout: Optional[int] = None
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -97,6 +101,7 @@ class BufferPage(SerializeableDataclass):
     page_address: int
     page_size: int
     buffer_type: BufferType
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -104,6 +109,7 @@ class ProducersConsumers(SerializeableDataclass):
     tensor_id: int
     producers: list[int]
     consumers: list[int]
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -118,6 +124,7 @@ class Tensor(SerializeableDataclass):
     buffer_type: BufferType
     device_addresses: list[int]
     size: Optional[int] = None
+    rank: int = 0
 
     def __post_init__(self):
         self.memory_config = parse_memory_config(self.memory_config)
@@ -128,6 +135,7 @@ class InputTensor(SerializeableDataclass):
     operation_id: int
     input_index: int
     tensor_id: int
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -135,6 +143,7 @@ class OutputTensor(SerializeableDataclass):
     operation_id: int
     output_index: int
     tensor_id: int
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -151,12 +160,14 @@ class OperationArgument(SerializeableDataclass):
     operation_id: int
     name: str
     value: str
+    rank: int = 0
 
 
 @dataclasses.dataclass
 class StackTrace(SerializeableDataclass):
     operation_id: int
     stack_trace: str
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -167,6 +178,7 @@ class ErrorRecord(SerializeableDataclass):
     error_message: str
     stack_trace: str
     timestamp: str
+    rank: int = 0
 
     def to_nested_dict(self) -> dict:
         """

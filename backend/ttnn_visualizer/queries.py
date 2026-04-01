@@ -26,6 +26,77 @@ from ttnn_visualizer.models import (
 )
 
 
+def _buffer_from_row(row: tuple) -> Buffer:
+    n = len(row)
+    if n == 5:
+        return Buffer(row[0], row[1], row[2], row[3], row[4], None, 0)
+    if n == 6:
+        return Buffer(row[0], row[1], row[2], row[3], row[4], row[5], 0)
+    if n == 7:
+        return Buffer(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+    raise ValueError(f"Unexpected buffers row width: {n}")
+
+
+def _stack_trace_from_row(row: tuple) -> StackTrace:
+    if len(row) == 2:
+        return StackTrace(row[0], stack_trace=row[1], rank=0)
+    return StackTrace(row[0], stack_trace=row[1], rank=row[2])
+
+
+def _error_record_from_row(row: tuple) -> ErrorRecord:
+    if len(row) == 6:
+        return ErrorRecord(row[0], row[1], row[2], row[3], row[4], row[5], rank=0)
+    return ErrorRecord(*row)
+
+
+def _buffer_page_from_row(row: tuple) -> BufferPage:
+    if len(row) == 10:
+        return BufferPage(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+            row[8],
+            row[9],
+            rank=0,
+        )
+    return BufferPage(*row)
+
+
+def _operation_argument_from_row(row: tuple) -> OperationArgument:
+    if len(row) == 3:
+        return OperationArgument(row[0], row[1], row[2], 0)
+    return OperationArgument(*row)
+
+
+def _operation_from_row(row: tuple) -> Operation:
+    if len(row) == 3:
+        return Operation(row[0], row[1], row[2], 0)
+    return Operation(*row)
+
+
+def _device_operation_from_row(row: tuple) -> DeviceOperation:
+    if len(row) == 2:
+        return DeviceOperation(row[0], row[1], 0)
+    return DeviceOperation(*row)
+
+
+def _input_tensor_from_row(row: tuple) -> InputTensor:
+    if len(row) == 3:
+        return InputTensor(row[0], row[1], row[2], 0)
+    return InputTensor(*row)
+
+
+def _output_tensor_from_row(row: tuple) -> OutputTensor:
+    if len(row) == 3:
+        return OutputTensor(row[0], row[1], row[2], 0)
+    return OutputTensor(*row)
+
+
 class LocalQueryRunner:
     def __init__(self, instance: Optional[Instance] = None, connection=None):
 
@@ -137,43 +208,42 @@ class DatabaseQueries:
         if not self._check_table_exists("captured_graph"):
             return []
         rows = self._query_table("captured_graph", filters)
-        return [DeviceOperation(*row) for row in rows]
+        return [_device_operation_from_row(row) for row in rows]
 
     def query_operation_arguments(
         self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
     ) -> Generator[OperationArgument, None, None]:
         rows = self._query_table("operation_arguments", filters)
         for row in rows:
-            yield OperationArgument(*row)
+            yield _operation_argument_from_row(row)
 
     def query_operations(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Operation, None, None]:
         rows = self._query_table("operations", filters)
         for row in rows:
-            yield Operation(*row)
+            yield _operation_from_row(row)
 
     def query_buffers(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Buffer, None, None]:
         rows = self._query_table("buffers", filters)
         for row in rows:
-            yield Buffer(*row[:6])
+            yield _buffer_from_row(row)
 
     def query_stack_traces(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[StackTrace, None, None]:
         rows = self._query_table("stack_traces", filters)
         for row in rows:
-            operation_id, stack_trace = row
-            yield StackTrace(operation_id, stack_trace=stack_trace)
+            yield _stack_trace_from_row(row)
 
     def query_error_records(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[ErrorRecord, None, None]:
         rows = self._query_table("errors", filters)
         for row in rows:
-            yield ErrorRecord(*row)
+            yield _error_record_from_row(row)
 
     def query_tensor_comparisons(
         self, local: bool = True, filters: Optional[Dict[str, Any]] = None
@@ -191,76 +261,100 @@ class DatabaseQueries:
     ) -> Generator[BufferPage, None, None]:
         rows = self._query_table("buffer_pages", filters)
         for row in rows:
-            yield BufferPage(*row)
+            yield _buffer_page_from_row(row)
 
     def query_tensors(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Tensor, None, None]:
-        # Check if tensors table has a size column (new schema) or we need to infer from joins
         tensor_columns = self._get_table_columns("tensors")
         size_on_tensors = "size" in tensor_columns
+        rank_on_tensors = "rank" in tensor_columns
 
         device_tensors_exists = self._check_table_exists("device_tensors")
+        dt_rank = device_tensors_exists and "rank" in self._get_table_columns(
+            "device_tensors"
+        )
+        it_rank = "rank" in self._get_table_columns("input_tensors")
+        ot_rank = "rank" in self._get_table_columns("output_tensors")
+        buf_rank = "rank" in self._get_table_columns("buffers")
+
+        it_join = "it.tensor_id = t.tensor_id"
+        if it_rank and rank_on_tensors:
+            it_join += " AND it.rank = t.rank"
+        ot_join = "ot.tensor_id = t.tensor_id"
+        if ot_rank and rank_on_tensors:
+            ot_join += " AND ot.rank = t.rank"
+
+        buf_join = (
+            "b.operation_id = COALESCE(it.operation_id, ot.operation_id) "
+            "AND t.address = b.address AND t.device_id = b.device_id"
+        )
+        if buf_rank and rank_on_tensors:
+            buf_join += " AND b.rank = t.rank"
+
+        dt_join = "dt.tensor_id = t.tensor_id"
+        if dt_rank and rank_on_tensors:
+            dt_join += " AND dt.rank = t.rank"
+
+        select_core = """
+                        t.tensor_id, t.shape, t.dtype, t.layout, t.memory_config,
+                        t.device_id, t.address, t.buffer_type"""
+        select_parts = [select_core.strip()]
+        if rank_on_tensors:
+            select_parts.append("t.rank")
+        if size_on_tensors:
+            select_parts.append("t.size")
+        else:
+            select_parts.append("b.max_size_per_bank AS size")
+
+        if device_tensors_exists:
+            select_parts.append(
+                "GROUP_CONCAT(dt.device_id || ':' || dt.address, ',') AS device_tensors_data"
+            )
+        else:
+            select_parts.append("NULL AS device_tensors_data")
+
+        select_sql = ",\n                        ".join(select_parts)
+
+        group_by = "t.tensor_id"
+        if rank_on_tensors:
+            group_by += ", t.rank"
 
         if size_on_tensors:
-            # New schema: size is on tensors table — simple select without buffer/op joins
+            join_lines = []
             if device_tensors_exists:
-                query = """
+                join_lines.append(f"LEFT JOIN device_tensors dt ON {dt_join}")
+            join_sql = (
+                "\n                    " + "\n                    ".join(join_lines)
+                if join_lines
+                else ""
+            )
+            query = f"""
                     SELECT
-                        t.tensor_id, t.shape, t.dtype, t.layout, t.memory_config,
-                        t.device_id, t.address, t.buffer_type,
-                        t.size,
-                        GROUP_CONCAT(dt.device_id || ':' || dt.address, ',') as device_tensors_data
-                    FROM tensors t
-                    LEFT JOIN device_tensors dt ON dt.tensor_id = t.tensor_id
-                    WHERE 1=1
-                """
-            else:
-                query = """
-                    SELECT
-                        t.tensor_id, t.shape, t.dtype, t.layout, t.memory_config,
-                        t.device_id, t.address, t.buffer_type,
-                        t.size,
-                        NULL as device_tensors_data
-                    FROM tensors t
+                        {select_sql}
+                    FROM tensors t{join_sql}
                     WHERE 1=1
                 """
         else:
-            # Old schema: infer size from buffers via input_tensors/output_tensors joins
+            join_lines = [
+                f"LEFT JOIN input_tensors it ON {it_join}",
+                f"LEFT JOIN output_tensors ot ON {ot_join}",
+                f"LEFT JOIN buffers b ON {buf_join}",
+            ]
             if device_tensors_exists:
-                query = """
+                join_lines.append(f"LEFT JOIN device_tensors dt ON {dt_join}")
+            join_sql = "\n                    " + "\n                    ".join(
+                join_lines
+            )
+            query = f"""
                     SELECT
-                        t.tensor_id, t.shape, t.dtype, t.layout, t.memory_config,
-                        t.device_id, t.address, t.buffer_type,
-                        b.max_size_per_bank as size,
-                        GROUP_CONCAT(dt.device_id || ':' || dt.address, ',') as device_tensors_data
+                        {select_sql}
                     FROM tensors t
-                    LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
-                    LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
-                    LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
-                        AND t.address = b.address
-                        AND t.device_id = b.device_id
-                    LEFT JOIN device_tensors dt ON dt.tensor_id = t.tensor_id
+                    {join_sql}
                     WHERE 1=1
                 """
-            else:
-                query = """
-                    SELECT
-                        t.tensor_id, t.shape, t.dtype, t.layout, t.memory_config,
-                        t.device_id, t.address, t.buffer_type,
-                        b.max_size_per_bank as size,
-                        NULL as device_tensors_data
-                    FROM tensors t
-                    LEFT JOIN input_tensors it ON it.tensor_id = t.tensor_id
-                    LEFT JOIN output_tensors ot ON ot.tensor_id = t.tensor_id
-                    LEFT JOIN buffers b ON b.operation_id = COALESCE(it.operation_id, ot.operation_id)
-                        AND t.address = b.address
-                        AND t.device_id = b.device_id
-                    WHERE 1=1
-                """
-        params = []
+        params: List[Any] = []
 
-        # Apply filters to tensors table
         if filters:
             for column, value in filters.items():
                 if value is None:
@@ -276,18 +370,21 @@ class DatabaseQueries:
                     query += f" AND t.{column} = ?"
                     params.append(value)
 
-        query += " GROUP BY t.tensor_id"
+        query += f" GROUP BY {group_by}"
 
         rows = self.query_runner.execute_query(query, params)
         for row in rows:
-            tensor_row = row[:8]
-            size = row[8]
-            device_tensors_data = row[9]
+            i = 8
+            rank_val = row[i] if rank_on_tensors else 0
+            if rank_on_tensors:
+                i += 1
+            size = row[i]
+            i += 1
+            device_tensors_data = row[i]
 
-            device_addresses = []
+            device_addresses: List[Any] = []
 
             if device_tensors_data:
-                # Parse the concatenated device_id:address pairs
                 pairs = device_tensors_data.split(",")
                 device_tensor_list = []
                 for pair in pairs:
@@ -297,7 +394,6 @@ class DatabaseQueries:
                         address = int(address_str)
                         device_tensor_list.append((device_id, address))
 
-                # Sort by device_id and build the list with proper indexing
                 for device_id, address in sorted(
                     device_tensor_list, key=lambda x: x[0]
                 ):
@@ -305,21 +401,33 @@ class DatabaseQueries:
                         device_addresses.append(None)
                     device_addresses.append(address)
 
-            yield Tensor(*tensor_row, device_addresses, size=size)
+            yield Tensor(
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[4],
+                row[5],
+                row[6],
+                row[7],
+                device_addresses,
+                size=size,
+                rank=rank_val,
+            )
 
     def query_input_tensors(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[InputTensor, None, None]:
         rows = self._query_table("input_tensors", filters)
         for row in rows:
-            yield InputTensor(*row)
+            yield _input_tensor_from_row(row)
 
     def query_output_tensors(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[OutputTensor, None, None]:
         rows = self._query_table("output_tensors", filters)
         for row in rows:
-            yield OutputTensor(*row)
+            yield _output_tensor_from_row(row)
 
     def query_devices(
         self, filters: Optional[Dict[str, Any]] = None
@@ -341,23 +449,42 @@ class DatabaseQueries:
             yield Device(*row)
 
     def query_producers_consumers(self) -> Generator[ProducersConsumers, None, None]:
-        query = """
+        rank_on_tensors = "rank" in self._get_table_columns("tensors")
+        it_rank = "rank" in self._get_table_columns("input_tensors")
+        ot_rank = "rank" in self._get_table_columns("output_tensors")
+
+        it_join = "it.tensor_id = t.tensor_id"
+        if it_rank and rank_on_tensors:
+            it_join += " AND it.rank = t.rank"
+        ot_join = "ot.tensor_id = t.tensor_id"
+        if ot_rank and rank_on_tensors:
+            ot_join += " AND ot.rank = t.rank"
+
+        rank_select = ", t.rank" if rank_on_tensors else ""
+        group_by = "t.tensor_id" + (", t.rank" if rank_on_tensors else "")
+
+        query = f"""
             SELECT
-                t.tensor_id,
+                t.tensor_id{rank_select},
                 GROUP_CONCAT(ot.operation_id, ', ') AS consumers,
                 GROUP_CONCAT(it.operation_id, ', ') AS producers
             FROM
                 tensors t
             LEFT JOIN
-                input_tensors it ON t.tensor_id = it.tensor_id
+                input_tensors it ON {it_join}
             LEFT JOIN
-                output_tensors ot on t.tensor_id = ot.tensor_id
+                output_tensors ot ON {ot_join}
             GROUP BY
-                t.tensor_id
+                {group_by}
         """
         rows = self.query_runner.execute_query(query)
         for row in rows:
-            tensor_id, producers_data, consumers_data = row
+            # SQL aliases: ot AS "consumers", it AS "producers" (names are swapped vs semantics).
+            if rank_on_tensors:
+                tensor_id, rank_val, producers_data, consumers_data = row
+            else:
+                tensor_id, producers_data, consumers_data = row
+                rank_val = 0
             producers = sorted(
                 set(map(int, producers_data.strip('"').split(",")))
                 if producers_data
@@ -368,7 +495,7 @@ class DatabaseQueries:
                 if consumers_data
                 else []
             )
-            yield ProducersConsumers(tensor_id, producers, consumers)
+            yield ProducersConsumers(tensor_id, producers, consumers, rank_val)
 
     def query_report_metadata(
         self,
@@ -381,13 +508,24 @@ class DatabaseQueries:
         return rows
 
     def query_next_buffer(self, operation_id: int, address: str) -> Optional[Buffer]:
-        query = """
+        buf_cols = self._get_table_columns("buffers")
+        ordered = [
+            c
+            for c in (
+                "operation_id",
+                "device_id",
+                "address",
+                "max_size_per_bank",
+                "buffer_type",
+                "buffer_layout",
+                "rank",
+            )
+            if c in buf_cols
+        ]
+        col_sql = ", ".join(f"buffers.{c}" for c in ordered)
+        query = f"""
             SELECT
-                buffers.operation_id,
-                buffers.device_id,
-                buffers.address,
-                buffers.max_size_per_bank,
-                buffers.buffer_type
+                {col_sql}
             FROM
                 buffers
             WHERE
@@ -396,7 +534,7 @@ class DatabaseQueries:
             ORDER BY buffers.operation_id
         """
         rows = self.query_runner.execute_query(query, [address, operation_id])
-        return Buffer(*rows[0]) if rows else None
+        return _buffer_from_row(rows[0]) if rows else None
 
     def __enter__(self):
         return self
