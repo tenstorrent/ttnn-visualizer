@@ -305,21 +305,29 @@ def operation_detail(operation_id, instance: Instance):
         input_tensor_ids = [i.tensor_id for i in inputs]
         output_tensor_ids = [o.tensor_id for o in outputs]
         tensor_ids = input_tensor_ids + output_tensor_ids
-        tensors = list(
-            db.query_tensors(
-                db.merge_rank_filter(
-                    "tensors",
-                    {"tensor_id": tensor_ids},
-                    rank,
+        # Empty tensor_ids: query_tensors skips empty IN lists and would return all tensors.
+        if not tensor_ids:
+            tensors = []
+            local_comparisons = []
+            global_comparisons = []
+        else:
+            tensors = list(
+                db.query_tensors(
+                    db.merge_rank_filter(
+                        "tensors",
+                        {"tensor_id": tensor_ids},
+                        rank,
+                    )
                 )
             )
-        )
-        local_comparisons = list(
-            db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
-        )
-        global_comparisons = list(
-            db.query_tensor_comparisons(local=False, filters={"tensor_id": tensor_ids})
-        )
+            local_comparisons = list(
+                db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
+            )
+            global_comparisons = list(
+                db.query_tensor_comparisons(
+                    local=False, filters={"tensor_id": tensor_ids}
+                )
+            )
 
         device_operations = db.query_device_operations(
             db.merge_rank_filter(
