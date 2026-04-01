@@ -263,6 +263,28 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         return map;
     }, [collapsibleNamespaces, graph.nodes]);
 
+    const namespaceAnchorNodeByNamespace = useMemo(() => {
+        const map = new Map<string, string>();
+        const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
+        for (const namespace of collapsibleNamespaces) {
+            const expectedLabel = getRegionBaseOpLabel(namespace);
+            const candidates = graph.nodes.filter((n) => n.namespace === namespace && n.label === expectedLabel);
+            candidates.sort((a, b) => {
+                const aPinned = a.config?.pinToGroupTop ? 1 : 0;
+                const bPinned = b.config?.pinToGroupTop ? 1 : 0;
+                if (aPinned !== bPinned) {
+                    return bPinned - aPinned;
+                }
+                return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
+            });
+            const anchor = candidates[0];
+            if (anchor) {
+                map.set(namespace, anchor.id);
+            }
+        }
+        return map;
+    }, [collapsibleNamespaces, graph.nodes]);
+
     useEffect(() => {
         setHasFitInitially(false);
     }, [graph.id]);
@@ -456,6 +478,21 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             return nodeId;
         };
 
+        const mapToRenderedEndpointId = (nodeId: string): string => {
+            const outerNamespace = outerNamespaceByNodeId.get(nodeId);
+            if (outerNamespace) {
+                return namespaceAnchorNodeByNamespace.get(outerNamespace) ?? `group:${outerNamespace}`;
+            }
+
+            const rawNode = nodeMap.get(nodeId);
+            const containingNamespace = getContainingNamespace(rawNode?.namespace);
+            if (containingNamespace) {
+                return namespaceAnchorNodeByNamespace.get(containingNamespace) ?? `group:${containingNamespace}`;
+            }
+
+            return nodeId;
+        };
+
         const topLevelEdgeSeen = new Set<string>();
         const topLevelEdgesForLayout: Edge[] = [];
 
@@ -529,8 +566,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
         for (const target of graph.nodes) {
             for (const incoming of target.incomingEdges ?? []) {
-                const sourceId = mapToTopLevelEndpointId(incoming.sourceNodeId);
-                const targetId = mapToTopLevelEndpointId(target.id);
+                const sourceId = mapToRenderedEndpointId(incoming.sourceNodeId);
+                const targetId = mapToRenderedEndpointId(target.id);
 
                 if (sourceId === targetId) {
                     continue;
@@ -551,7 +588,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         }
 
         return { nodes: finalNodes, edges: finalEdges };
-    }, [collapsibleNamespaces, graph.nodes, nodeMap, outerNamespaceByNodeId]);
+    }, [collapsibleNamespaces, graph.nodes, namespaceAnchorNodeByNamespace, nodeMap, outerNamespaceByNodeId]);
 
     useEffect(() => {
         let cancelled = false;
