@@ -109,6 +109,28 @@ def _optional_rank_query_param() -> Optional[int]:
         )
 
 
+_NONZERO_RANK_UNSUPPORTED_MSG = (
+    "This report database does not store per-rank data. "
+    "Omit the rank query parameter or use rank=0 only."
+)
+
+
+def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
+    """
+    Legacy reports only represent rank 0. If the client asks for a different rank
+    but the schema has no ``rank`` column, return 422 instead of returning all rows
+    (which would misleadingly appear as rank 0 in the API).
+    """
+    if rank is None or rank == 0:
+        return None
+    if db.report_has_rank_column():
+        return None
+    return (
+        jsonify({"error": _NONZERO_RANK_UNSUPPORTED_MSG}),
+        HTTPStatus.UNPROCESSABLE_ENTITY,
+    )
+
+
 @api.before_request
 def _trim_session_report_lists():
     """Keep session cookie under size limits by capping report lists (FIFO)."""
@@ -145,6 +167,9 @@ def get_system_capabilities():
 def operation_list(instance: Instance):
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         operations = list(
             db.query_operations(db.merge_rank_filter("operations", None, rank))
         )
@@ -202,6 +227,9 @@ def operation_list(instance: Instance):
 def operation_detail(operation_id, instance: Instance):
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
 
         device_id = request.args.get("device_id", None)
         operations = list(
@@ -373,6 +401,9 @@ def operation_history(instance: Instance):
 def errors_list(instance: Instance):
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         if not db._check_table_exists("errors"):
             return (
                 jsonify(
@@ -436,6 +467,9 @@ def get_config(instance: Instance):
 def tensors_list(instance: Instance):
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         device_id = request.args.get("device_id", None)
         tensor_filters: dict = {}
         if device_id is not None:
@@ -487,6 +521,9 @@ def buffer_detail(instance: Instance):
 
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         buffer = db.query_next_buffer(operation_id, address, rank=rank)
         if not buffer:
             return Response(status=HTTPStatus.NOT_FOUND)
@@ -517,6 +554,9 @@ def buffer_pages(instance: Instance):
 
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         page_filters = {
             "operation_id": operation_id,
             "device_id": device_id,
@@ -542,6 +582,9 @@ def buffer_pages(instance: Instance):
 def tensor_detail(tensor_id, instance: Instance):
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         tensors = list(
             db.query_tensors(
                 db.merge_rank_filter("tensors", {"tensor_id": tensor_id}, rank)
@@ -568,6 +611,9 @@ def get_all_buffers(instance: Instance):
 
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         buffers = list(
             db.query_buffers(
                 db.merge_rank_filter(
@@ -594,6 +640,9 @@ def get_operations_buffers(instance: Instance):
 
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         buffers = list(
             db.query_buffers(
                 db.merge_rank_filter(
@@ -624,6 +673,9 @@ def get_operation_buffers(operation_id, instance: Instance):
 
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         operations = list(
             db.query_operations(
                 db.merge_rank_filter(
@@ -1103,6 +1155,9 @@ def get_zone_statistics(zone, instance: Instance):
 def get_devices(instance: Instance):
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
         return Response(
             orjson.dumps(serialize_devices(devices)),

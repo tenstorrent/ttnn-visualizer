@@ -15,6 +15,97 @@ from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
 
 INSTANCE_ID = "pytest-rank-filter"
+LEGACY_INSTANCE_ID = "pytest-legacy-no-rank"
+
+# Pre-rank schema (no ``rank`` columns) — same shape as historical profiler DBs.
+_LEGACY_REPORT_SQL = """
+CREATE TABLE devices (
+    device_id int,
+    num_y_cores int,
+    num_x_cores int,
+    num_y_compute_cores int,
+    num_x_compute_cores int,
+    worker_l1_size int,
+    l1_num_banks int,
+    l1_bank_size int,
+    address_at_first_l1_bank int,
+    address_at_first_l1_cb_buffer int,
+    num_banks_per_storage_core int,
+    num_compute_cores int,
+    total_l1_memory int,
+    total_l1_for_tensors int,
+    total_l1_for_interleaved_buffers int,
+    total_l1_for_sharded_buffers int,
+    cb_limit int
+);
+CREATE TABLE captured_graph (operation_id int, captured_graph text);
+CREATE TABLE buffers (
+    operation_id int,
+    device_id int,
+    address int,
+    max_size_per_bank int,
+    buffer_type int
+);
+CREATE TABLE tensors (
+    tensor_id int UNIQUE,
+    shape text,
+    dtype text,
+    layout text,
+    memory_config text,
+    device_id int,
+    address int,
+    buffer_type int
+);
+CREATE TABLE operation_arguments (
+    operation_id int,
+    name text,
+    value text
+);
+CREATE TABLE stack_traces (operation_id int, stack_trace text);
+CREATE TABLE input_tensors (
+    operation_id int,
+    input_index int,
+    tensor_id int
+);
+CREATE TABLE output_tensors (
+    operation_id int,
+    output_index int,
+    tensor_id int
+);
+CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
+CREATE TABLE buffer_pages (
+    operation_id INT,
+    device_id INT,
+    address INT,
+    core_y INT,
+    core_x INT,
+    bank_id INT,
+    page_index INT,
+    page_address INT,
+    page_size INT,
+    buffer_type INT
+);
+CREATE TABLE local_tensor_comparison_records (
+    tensor_id int,
+    golden_tensor_id int,
+    matches int,
+    desired_pcc float,
+    actual_pcc float
+);
+CREATE TABLE global_tensor_comparison_records (
+    tensor_id int,
+    golden_tensor_id int,
+    matches int,
+    desired_pcc float,
+    actual_pcc float
+);
+INSERT INTO operations VALUES (1, 'legacy_op', 0.5);
+INSERT INTO tensors VALUES (1, '(1,)', 'float32', 'TILE', '{}', 0, 100, 0);
+INSERT INTO output_tensors VALUES (1, 0, 1);
+INSERT INTO buffers VALUES (1, 0, 100, 4096, 0);
+INSERT INTO devices VALUES
+(0, 4, 4, 2, 2, 1024, 4, 256, 0, 0, 1, 2, 4096, 2048, 2048, 2048, 256);
+"""
 
 # Minimal schema with rank on all tables the list/detail endpoints touch.
 _RANKED_REPORT_SQL = """
@@ -160,14 +251,23 @@ def _write_ranked_report_db(path: str) -> None:
     conn.close()
 
 
-def _register_profiler_instance(app, sqlite_path: str) -> None:
+def _write_legacy_report_db(path: str) -> None:
+    conn = sqlite3.connect(path)
+    conn.executescript(_LEGACY_REPORT_SQL)
+    conn.commit()
+    conn.close()
+
+
+def _register_profiler_instance(
+    app, sqlite_path: str, instance_id: str = INSTANCE_ID
+) -> None:
     with app.app_context():
-        existing = InstanceTable.query.filter_by(instance_id=INSTANCE_ID).first()
+        existing = InstanceTable.query.filter_by(instance_id=instance_id).first()
         if existing:
             db.session.delete(existing)
             db.session.commit()
         row = InstanceTable(
-            instance_id=INSTANCE_ID,
+            instance_id=instance_id,
             active_report={},
             profiler_path=sqlite_path,
         )
@@ -404,5 +504,54 @@ def test_invalid_rank_query_returns_400(app, client):
             query_string={"instanceId": INSTANCE_ID, "rank": "not-an-int"},
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_nonzero_rank_on_legacy_db_returns_422(app, client):
+    """Unranked DB cannot satisfy rank > 0; do not return all rows as rank 0."""
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        path = f.name
+    try:
+        _write_legacy_report_db(path)
+        _register_profiler_instance(app, path, instance_id=LEGACY_INSTANCE_ID)
+
+        response = client.get(
+            "/api/operations",
+            query_string={"instanceId": LEGACY_INSTANCE_ID, "rank": "1"},
+        )
+        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+        err = response.get_json()
+        assert err is not None
+        assert "error" in err
+        assert "per-rank" in err["error"].lower()
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_rank_zero_explicit_allowed_on_legacy_db(app, client):
+    """Explicit rank=0 (or omitting rank) still returns legacy data."""
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        path = f.name
+    try:
+        _write_legacy_report_db(path)
+        _register_profiler_instance(app, path, instance_id=LEGACY_INSTANCE_ID)
+
+        r0 = client.get(
+            "/api/operations",
+            query_string={"instanceId": LEGACY_INSTANCE_ID, "rank": "0"},
+        )
+        assert r0.status_code == HTTPStatus.OK
+        data0 = r0.get_json()
+        assert len(data0) == 1
+        assert data0[0]["name"] == "legacy_op"
+        assert data0[0]["rank"] == 0
+
+        r_none = client.get(
+            "/api/operations",
+            query_string={"instanceId": LEGACY_INSTANCE_ID},
+        )
+        assert r_none.status_code == HTTPStatus.OK
+        assert len(r_none.get_json()) == 1
     finally:
         Path(path).unlink(missing_ok=True)

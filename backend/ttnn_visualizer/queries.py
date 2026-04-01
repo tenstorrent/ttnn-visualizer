@@ -222,6 +222,15 @@ class DatabaseQueries:
         out["rank"] = rank
         return out
 
+    def report_has_rank_column(self) -> bool:
+        """
+        True if the report DB uses the multi-host schema (``rank`` on ``operations``).
+        Used to reject ``?rank=N`` (N != 0) on legacy databases that only represent rank 0.
+        """
+        if not self._check_table_exists("operations"):
+            return False
+        return "rank" in self._get_table_columns("operations")
+
     def query_device_operations(
         self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
     ) -> List[DeviceOperation]:
