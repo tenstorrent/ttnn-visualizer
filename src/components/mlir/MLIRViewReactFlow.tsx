@@ -8,9 +8,12 @@ import ReactFlow, {
     ConnectionLineType,
     Controls,
     Edge,
+    Handle,
     MarkerType,
     MiniMap,
     Node,
+    NodeProps,
+    Position,
     ReactFlowProvider,
     useEdgesState,
     useNodesState,
@@ -31,6 +34,23 @@ type MLNodeData = {
 interface ViewProps {
     data: GraphBundle;
 }
+
+const MlirOpNode: React.FC<NodeProps<MLNodeData>> = ({ id, data }) => (
+    <>
+        <Handle
+            type='target'
+            position={Position.Top}
+            isConnectable={false}
+        />
+        <div className='mlir-op-node-label'>{data.label}</div>
+        <div className='mlir-op-node-id nodrag nopan'>{id}</div>
+        <Handle
+            type='source'
+            position={Position.Bottom}
+            isConnectable={false}
+        />
+    </>
+);
 
 const elk = new ELK();
 
@@ -65,7 +85,7 @@ function estimateOpNodeDimensions(label: string): { width: number; height: numbe
     const minW = 108;
     const maxW = 560;
     const width = Math.ceil(Math.min(maxW, Math.max(minW, label.length * charW + padX)));
-    return { width, height: 48 };
+    return { width, height: 64 };
 }
 
 function getNodeLayoutSize(n: Node<MLNodeData>): { width: number; height: number } {
@@ -368,6 +388,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                         kind: 'op',
                         namespace: n.namespace,
                     },
+                    type: 'mlirOp',
                     position: { x: 0, y: 0 },
                     width,
                     height,
@@ -506,6 +527,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                         kind: 'op',
                         namespace: n.namespace,
                     },
+                    type: 'mlirOp',
                     position: { x: 0, y: 0 },
                     width,
                     height,
@@ -760,7 +782,12 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         setEdges(visibleGraph.edges);
     }, [buildVisibleGraph, setEdges, setNodes]);
 
-    const nodeTypes = useMemo(() => ({}), []);
+    const nodeTypes = useMemo(
+        () => ({
+            mlirOp: MlirOpNode,
+        }),
+        [],
+    );
 
     return (
         <div style={{ width: '100%', height: '80vh' }}>
