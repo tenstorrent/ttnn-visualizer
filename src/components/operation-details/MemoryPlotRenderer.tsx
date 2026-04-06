@@ -42,8 +42,6 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
 
-    const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
-
     const range = isZoomedIn ? plotZoomRange : [0, memorySize];
     // If we need more flexibility on the tickformat front, we can expand this to accept a prop instead of defaulting to the below (hex or decimal)
     const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
@@ -130,41 +128,39 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
         responsive: true,
     };
 
-    useMemo(() => {
-        setAugmentedChart(
-            // creating a deep clone of the chart data to avoid mutating the original data
-            (JSON.parse(JSON.stringify(chartData)) as Partial<PlotData>[]).map((data, index) => {
-                if (!data?.marker?.color || !data?.x || !chartData?.[index]?.marker) {
-                    return data;
-                }
+    const augmentedChart = useMemo(() => {
+        // creating a deep clone of the chart data to avoid mutating the original data
+        return (JSON.parse(JSON.stringify(chartData)) as Partial<PlotData>[]).map((data, index) => {
+            if (!data?.marker?.color || !data?.x || !chartData?.[index]?.marker) {
+                return data;
+            }
 
-                const originalColour = chartData[index].marker?.color as string;
-                const lightlyDimmedColour = getLightlyDimmedColour(originalColour);
-                const dimmedColour = getDimmedColour(originalColour);
+            const originalColour = chartData[index].marker?.color as string;
+            const lightlyDimmedColour = getLightlyDimmedColour(originalColour);
+            const dimmedColour = getDimmedColour(originalColour);
 
-                if (selectedAddress) {
-                    const formattedAddress = getMemoryAddress(selectedAddress, showHex);
+            if (selectedAddress) {
+                const formattedAddress = getMemoryAddress(selectedAddress, showHex);
 
-                    data.marker.color =
-                        hoveredPoint === data.x[0] || data.hovertemplate?.includes(formattedAddress)
-                            ? originalColour
-                            : dimmedColour;
-
-                    return data;
-                }
-
-                // No selected address (but could be hovered)
-                if (hoveredPoint) {
-                    data.marker.color = hoveredPoint === data.x[0] ? originalColour : lightlyDimmedColour;
-
-                    return data;
-                }
-
-                data.marker.color = lightlyDimmedColour;
+                data.marker.color =
+                    hoveredPoint === data.x[0] || data.hovertemplate?.includes(formattedAddress)
+                        ? originalColour
+                        : dimmedColour;
 
                 return data;
-            }),
-        );
+            }
+
+            // No selected address (but could be hovered)
+            if (hoveredPoint) {
+                data.marker.color = hoveredPoint === data.x[0] ? originalColour : lightlyDimmedColour;
+
+                return data;
+            }
+
+            data.marker.color = lightlyDimmedColour;
+
+            return data;
+        });
     }, [hoveredPoint, chartData, selectedAddress, showHex]);
 
     return (

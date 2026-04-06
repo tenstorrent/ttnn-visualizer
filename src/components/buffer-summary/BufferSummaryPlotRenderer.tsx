@@ -75,6 +75,8 @@ function BufferSummaryPlotRenderer({
     const { scrollOffset: restoredOffset, measurementsCache: restoredMeasurementsCache } =
         useMemo(() => getListState(), [getListState]) ?? {};
 
+    // Disabling warning because it's a known limitation of Tanstack Virtual
+    // eslint-disable-next-line react-hooks/incompatible-library
     const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
         estimateSize: () => OPERATION_EL_HEIGHT,
         getScrollElement: () => scrollElementRef.current,

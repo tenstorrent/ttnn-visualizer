@@ -4,6 +4,7 @@
 
 import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useAtomValue } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
 import { Checkbox, HotkeysProvider, Icon, InputGroup, Size, Tooltip } from '@blueprintjs/core';
@@ -186,6 +187,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         );
     };
 
+    // React Compiler optimization warning
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const tableRows = useMemo<SummaryTableBuffer[]>(() => {
         let filteredRows = listOfBuffers;
 
@@ -211,6 +214,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         return [...sortTableFields(filteredRows as [])];
     }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensorId, showOnlySelected]);
 
+    // React Compiler optimization warning
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const selectedRows = useMemo(() => {
         if (userSelectedRows.length) {
             return userSelectedRows;
@@ -228,20 +233,26 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             return arr;
         }, []);
 
-        if (tableRef?.current?.scrollToRegion && matchingBuffers.length) {
-            tableRef.current.scrollToRegion({ rows: [matchingBuffers[0], matchingBuffers[0]] });
-        }
-
         return matchingBuffers;
+        // React Compiler optimization warning
+        // eslint-disable-next-line react-hooks/preserve-manual-memoization
     }, [tableRows, selectedTensorId, userSelectedRows]);
 
     useEffect(() => {
-        if (selectedTensorId) {
-            setUserSelectedRows([]);
-        } else {
-            setShowOnlySelected(false);
-        }
+        flushSync(() => {
+            if (selectedTensorId) {
+                setUserSelectedRows([]);
+            } else {
+                setShowOnlySelected(false);
+            }
+        });
     }, [selectedTensorId]);
+
+    useEffect(() => {
+        if (tableRef?.current?.scrollToRegion && selectedRows.length) {
+            tableRef.current.scrollToRegion({ rows: [selectedRows[0], selectedRows[0]] });
+        }
+    }, [selectedRows]);
 
     return tableRows ? (
         <HotkeysProvider>
