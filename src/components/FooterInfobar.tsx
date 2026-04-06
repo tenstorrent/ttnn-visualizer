@@ -5,7 +5,7 @@
 import classNames from 'classnames';
 import { Button, Classes, Collapse, Icon, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
@@ -65,12 +65,6 @@ function FooterInfobar() {
 
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
-
-    useEffect(() => {
-        if (!isAllowedRoute()) {
-            setSliderIsOpen(false);
-        }
-    }, [isAllowedRoute]);
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>

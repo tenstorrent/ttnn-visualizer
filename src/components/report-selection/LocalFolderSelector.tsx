@@ -165,11 +165,11 @@ const LocalFolderOptions: FC = () => {
             setActiveProfilerReport(updatedReport);
             createToastNotification('Active memory report', updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);
-            setProfilerFolder(connectionStatus);
         }
 
         queryClient.clear();
         setIsUploadingReport(false);
+        setProfilerFolder(connectionStatus);
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
