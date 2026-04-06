@@ -102,6 +102,24 @@ export default function Performance() {
         () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [],
         [comparisonPerfData, opIdsMap],
     );
+
+    const filteredEnrichedData = useMemo(
+        () =>
+            selectedOpCodes.length > 0
+                ? enrichedData.filter((row) => selectedOpCodes.some((selected) => selected.opCode === row.raw_op_code))
+                : enrichedData,
+        [enrichedData, selectedOpCodes],
+    );
+
+    const filteredEnrichedComparisonData = useMemo(
+        () =>
+            selectedOpCodes.length > 0
+                ? enrichedComparisonData.map((dataset) =>
+                      dataset.filter((row) => selectedOpCodes.some((selected) => selected.opCode === row.raw_op_code)),
+                  )
+                : enrichedComparisonData,
+        [enrichedComparisonData, selectedOpCodes],
+    );
     const enrichedStackedData = useMemo(() => (stackedData ? enrichStackedRowData(stackedData) : []), [stackedData]);
     const enrichedComparisonStackedData = useMemo(
         () => comparisonStackedData?.map((dataset) => enrichStackedRowData(dataset)) || [],
@@ -215,8 +233,8 @@ export default function Performance() {
                                         />
 
                                         <PerfCharts
-                                            filteredPerfData={enrichedData}
-                                            comparisonData={enrichedComparisonData || []}
+                                            filteredPerfData={filteredEnrichedData}
+                                            comparisonData={filteredEnrichedComparisonData || []}
                                             selectedOpCodes={selectedOpCodes}
                                         />
                                     </div>
