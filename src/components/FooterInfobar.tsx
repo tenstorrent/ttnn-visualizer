@@ -41,7 +41,7 @@ function FooterInfobar() {
     const serverConfig = getServerConfig();
     const isServerMode = serverConfig.SERVER_MODE;
 
-    const latestAppVersion = useGetLatestAppVersion({ enabled: !isServerMode });
+    const latestAppVersion = useGetLatestAppVersion();
     const appVersion = import.meta.env.APP_VERSION;
 
     const activeProfilerReportPath = activeProfilerReport?.path;
