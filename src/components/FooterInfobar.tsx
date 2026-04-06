@@ -39,10 +39,10 @@ function FooterInfobar() {
     const { data: instance } = useInstance();
     const location = useLocation();
     const serverConfig = getServerConfig();
-
-    const latestAppVersion = useGetLatestAppVersion();
-    const appVersion = import.meta.env.APP_VERSION;
     const isServerMode = serverConfig.SERVER_MODE;
+
+    const latestAppVersion = useGetLatestAppVersion({ enabled: !isServerMode });
+    const appVersion = import.meta.env.APP_VERSION;
 
     const activeProfilerReportPath = activeProfilerReport?.path;
     const hasLoadedRemoteReport =
