@@ -25,10 +25,15 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
         [flattenedData],
     );
 
+    const filteredOpCodes = useMemo(
+        () => opCodes.filter((opCode) => selectedOpCodes.some((selected) => selected.opCode === opCode)),
+        [opCodes, selectedOpCodes],
+    );
+
     const opCountData = useMemo(
         () =>
             datasets.map((data, dataIndex) =>
-                opCodes.map(
+                filteredOpCodes.map(
                     (opCode) =>
                         ({
                             x: [`Op Count % ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
@@ -42,13 +47,13 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                         }) as Partial<PlotData>,
                 ),
             ),
-        [datasets, opCodes, selectedOpCodes, perfReport, comparisonReportList],
+        [datasets, filteredOpCodes, selectedOpCodes, perfReport, comparisonReportList],
     );
 
     const opDeviceTimeData = useMemo(
         () =>
             datasets.map((data, dataIndex) =>
-                opCodes.map(
+                filteredOpCodes.map(
                     (opCode) =>
                         ({
                             x: [`Device Time % ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
@@ -65,7 +70,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                         }) as Partial<PlotData>,
                 ),
             ),
-        [datasets, opCodes, selectedOpCodes, perfReport, comparisonReportList],
+        [datasets, filteredOpCodes, selectedOpCodes, perfReport, comparisonReportList],
     );
 
     const configuration: PlotConfiguration = {
