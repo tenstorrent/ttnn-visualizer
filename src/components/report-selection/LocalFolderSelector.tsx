@@ -4,7 +4,7 @@
 
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, type FC, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, type FC, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom } from 'jotai';
@@ -261,22 +261,6 @@ const LocalFolderOptions: FC = () => {
             setPerformanceFolder(undefined);
         }
     };
-
-    useEffect(() => {
-        if (isUploadingReport) {
-            setProfilerFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-
-        if (isUploadingPerformance) {
-            setPerformanceFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-    }, [isUploadingReport, isUploadingPerformance]);
 
     return (
         <>

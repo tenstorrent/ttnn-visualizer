@@ -97,9 +97,6 @@ function BufferSummaryPlotRenderer({
     const scrollOffsetRef = useRef(virtualizer.scrollOffset);
     const measurementsCacheRef = useRef(virtualizer.measurementsCache);
 
-    const getMemorySize = () =>
-        !isLoadingDevices && devices ? devices[DEFAULT_DEVICE_ID]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
-
     const numberOfOperations = useMemo(
         () =>
             uniqueBuffersByOperationList && uniqueBuffersByOperationList.length >= 0
@@ -111,7 +108,10 @@ function BufferSummaryPlotRenderer({
     const { lateDeallocationsByOperation: nonDeallocatedTensorsByOperationId } =
         useGetTensorDeallocationReportByOperation();
 
-    const memorySize = useMemo(getMemorySize, [devices, isLoadingDevices]);
+    const memorySize = useMemo(
+        () => (!isLoadingDevices && devices ? devices[DEFAULT_DEVICE_ID]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE),
+        [devices, isLoadingDevices],
+    );
 
     const zoomedMemorySize = useMemo(() => {
         let minValue: undefined | number;
