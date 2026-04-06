@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useSetAtom } from 'jotai';
 import {
     activeNpeOpTraceAtom,
@@ -13,7 +14,7 @@ import {
 } from '../store/app';
 import { useInstance, useReportFolderList } from './useAPI';
 import useRemoteConnection from './useRemote';
-import { ReportFolder, ReportLocation } from '../definitions/Reports';
+import { ReportLocation } from '../definitions/Reports';
 import type { RemoteFolder } from '../definitions/RemoteConnection';
 
 const useRestoreInstance = () => {
@@ -37,14 +38,14 @@ const useRestoreInstance = () => {
             const profilerReportPath = instance?.active_report?.profiler_name || null;
             const profilerReportName =
                 (isProfilerRemote && profilerReportPath) || instance?.remote_profiler_folder
-                    ? getRemoteReportName(remoteFolders, profilerReportPath) || ''
-                    : getLocalReportName(reports, profilerReportPath) || '';
+                    ? getRemoteReportName(remoteFolders, profilerReportPath) || profilerReportPath
+                    : profilerReportPath;
             const perfReportPath = instance?.active_report?.performance_name || null;
 
             const activeProfilerReport = profilerReportPath
                 ? {
                       path: profilerReportPath,
-                      reportName: profilerReportName,
+                      reportName: profilerReportName || profilerReportPath,
                   }
                 : null;
             const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
@@ -64,15 +65,17 @@ const useRestoreInstance = () => {
                 npe: instance?.active_report?.npe_name ?? null,
             };
 
-            setHasRestoredInstance(true);
+            flushSync(() => {
+                setHasRestoredInstance(true);
 
-            setActiveProfilerReport(activeReports.profiler);
-            setProfilerReportLocation(activeReports.profilerLocation);
+                setActiveProfilerReport(activeReports.profiler);
+                setProfilerReportLocation(activeReports.profilerLocation);
 
-            setActivePerformanceReport(activeReports.performance);
-            setPerformanceReportLocation(activeReports.performanceLocation);
+                setActivePerformanceReport(activeReports.performance);
+                setPerformanceReportLocation(activeReports.performanceLocation);
 
-            setActiveNpe(activeReports.npe);
+                setActiveNpe(activeReports.npe);
+            });
         }
     }, [
         setActiveProfilerReport,
@@ -92,9 +95,6 @@ const useRestoreInstance = () => {
         hasRestoredInstance,
     };
 };
-
-const getLocalReportName = (reports: ReportFolder[], path: string | null): string | undefined =>
-    reports?.find((report) => report.path === path)?.reportName;
 
 const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null): string | undefined =>
     folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : undefined;

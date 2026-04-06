@@ -36,6 +36,7 @@ function FooterInfobar() {
     const { data: instance } = useInstance();
     const location = useLocation();
 
+    const activeProfilerReportName = activeProfilerReport?.reportName;
     const activeProfilerReportPath = activeProfilerReport?.path;
     const hasLoadedRemoteReport =
         instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
@@ -101,7 +102,7 @@ function FooterInfobar() {
                             <div className='title'>
                                 <strong>Memory:</strong>
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
-                                    {formatName(activeProfilerReportPath)}
+                                    {activeProfilerReportName || formatName(activeProfilerReportPath)}
                                 </span>
                             </div>
                         </Tooltip>

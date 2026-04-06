@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtomValue } from 'jotai';
 import { calculateLinkCongestionColor } from './drawingApi';
@@ -55,10 +55,10 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
 }) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const [hoverMap, setHoverMap] = useState<Map<string, Rect>>(new Map());
+    const hoverMapRef = useRef<Map<string, Rect>>(new Map());
 
-    const getZoneDrawingModel = useCallback(
-        (zones: NPEZone[], depth: number): ZoneDrawingInfo[] => {
+    const zoneRanges = useMemo(() => {
+        const getZoneDrawingModel = (zones: NPEZone[], depth: number): ZoneDrawingInfo[] => {
             return zones.flatMap((zone) => {
                 return [
                     {
@@ -70,31 +70,32 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                     ...getZoneDrawingModel(zone.zones, depth + 1),
                 ];
             });
-        },
-        [cyclesPerTimestep],
-    );
+        };
 
-    const zoneRanges = useMemo(() => {
-        let maxZoneDepth = 0;
-        let groupIndex = -1;
-        return {
-            range: selectedZoneList.flatMap((rootZone) => {
-                groupIndex += 1;
-                const childZones = rootZone.expandedState ? getZoneDrawingModel(rootZone.zones, 1) : [];
-                const maxDepth = childZones.length ? Math.max(...childZones.map((z) => z.depth)) : 0;
-                maxZoneDepth += 1 + maxDepth;
-                return rootZone.zones.map((zone) => ({
+        const rangeData = selectedZoneList.map((rootZone, groupIndex) => {
+            const childZones = rootZone.expandedState ? getZoneDrawingModel(rootZone.zones, 1) : [];
+            const maxDepth = childZones.length ? Math.max(...childZones.map((z) => z.depth)) : 0;
+            return {
+                zones: rootZone.zones.map((zone) => ({
                     groupIndex,
                     maxDepth,
                     proc: rootZone.proc,
                     start: zone.start / cyclesPerTimestep,
                     end: zone.end / cyclesPerTimestep,
                     zones: childZones,
-                }));
-            }),
+                })),
+                heightNeeded: 1 + maxDepth,
+            };
+        });
+
+        const maxZoneDepth = rangeData.reduce((sum, item) => sum + item.heightNeeded, 0);
+        const range = rangeData.flatMap((item) => item.zones);
+
+        return {
+            range,
             maxZoneDepth,
         };
-    }, [selectedZoneList, cyclesPerTimestep, getZoneDrawingModel]);
+    }, [selectedZoneList, cyclesPerTimestep]);
 
     const canvasZoneHeight = zoneRanges.maxZoneDepth * ZONE_HEIGHT;
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
@@ -222,7 +223,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
         ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
         ctx.fillRect(x, 0, 2, HEATMAP_HEIGHT + canvasZoneHeight);
 
-        setHoverMap(hovermap);
+        hoverMapRef.current = hovermap;
     }, [
         //
         congestionMapPerTimestamp,
@@ -260,7 +261,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
 
             if (hoveredIndex > -1) {
                 const congestionHoverCondition = !zoneArea;
-                const hoveredZone = Array.from(hoverMap.entries()).find(([_, r]) => {
+                const hoveredZone = Array.from(hoverMapRef.current.entries()).find(([_, r]) => {
                     return y >= r.y && y <= r.y + r.height && x >= r.x && x <= r.x + r.width;
                 });
                 if (!congestionHoverCondition && hoveredZone === undefined) {
