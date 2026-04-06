@@ -85,9 +85,9 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
     let arrowHeadWidth = 9;
 
     let transform = '';
-    let angle;
+    let angle: number;
 
-    let arrowOffset;
+    let arrowOffset: number;
     let arrow = { p1: '', p2: '', p3: '' };
     // const arrowSecondary = { p1: '', p2: '', p3: '' };
 

@@ -139,7 +139,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             const lightlyDimmedColour = getLightlyDimmedColour(originalColour);
             const dimmedColour = getDimmedColour(originalColour);
 
-            if (selectedAddress) {
+            if (selectedAddress !== null) {
                 const formattedAddress = getMemoryAddress(selectedAddress, showHex);
 
                 data.marker.color =

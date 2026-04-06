@@ -29,7 +29,7 @@ const useRestoreInstance = () => {
     const [hasRestoredInstance, setHasRestoredInstance] = useState<boolean>(false);
 
     useEffect(() => {
-        if (instance && reports?.length && !hasRestoredInstance) {
+        if (instance && reports !== null && !hasRestoredInstance) {
             const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
             const remoteFolders = remote.persistentState.getSavedReportFolders(
                 remote.persistentState.selectedConnection,
