@@ -79,7 +79,7 @@ const getVersionOutdatedLevel = (appVersion: string, latestAppVersion: string): 
 
     if (majorDiff > 0) {
         // If major version is behind, count as at least 100 (high level)
-        return 100 + minorDiff * 10 + patchDiff;
+        return Math.max(100 + minorDiff * 10 + patchDiff, 100);
     }
 
     if (minorDiff > 0) {
