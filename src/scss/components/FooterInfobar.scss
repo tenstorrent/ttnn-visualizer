@@ -12,8 +12,9 @@
     flex-direction: column;
     z-index: 1;
     width: 100%;
-    background-color: rgba($tt-grey-4, 0.9);
+    background-color: rgba($tt-black, 0.9);
     padding: 5px 15px;
+    min-height: 34px; // Closed height
 
     &.is-open {
         gap: 5px;
@@ -21,8 +22,15 @@
 
     .active-reports {
         display: flex;
+        flex-grow: 1;
         gap: 10px;
         margin-right: 10px;
+    }
+
+    .version-container {
+        display: flex;
+        align-items: center;
+        border-right: 1px solid $tt-grey-5;
     }
 
     .slider-controls {
@@ -40,6 +48,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 12px;
     }
 
     .title {
