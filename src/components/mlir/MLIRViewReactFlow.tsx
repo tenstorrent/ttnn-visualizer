@@ -87,7 +87,7 @@ function estimateOpNodeDimensions(label: string): { width: number; height: numbe
     const minW = 108;
     const maxW = 560;
     const width = Math.ceil(Math.min(maxW, Math.max(minW, label.length * charW + padX)));
-    return { width, height: 64 };
+    return { width, height: 30 };
 }
 
 function getNodeLayoutSize(n: Node<MLNodeData>): { width: number; height: number } {
