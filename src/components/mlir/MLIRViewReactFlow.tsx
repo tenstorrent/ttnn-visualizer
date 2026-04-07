@@ -35,6 +35,7 @@ interface ViewProps {
     data: GraphBundle;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const MlirOpNode: React.FC<NodeProps<MLNodeData>> = ({ id, data }) => (
     <>
         <Handle
@@ -43,7 +44,8 @@ const MlirOpNode: React.FC<NodeProps<MLNodeData>> = ({ id, data }) => (
             isConnectable={false}
         />
         <div className='mlir-op-node-label'>{data.label}</div>
-        <div className='mlir-op-node-id nodrag nopan'>{id}</div>
+        {/* DEBUG LABEL */}
+        {/* <div className='mlir-op-node-id nodrag nopan'>{id}</div> */}
         <Handle
             type='source'
             position={Position.Bottom}
@@ -790,14 +792,14 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     );
 
     return (
-        <div style={{ width: '100%', height: '80vh' }}>
+        <div style={{ width: '100%', height: 'calc(100vh - 92px - 30px - 56px - 40px)' }}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
-                minZoom={0.1}
+                minZoom={0.05}
                 maxZoom={1.5}
                 fitView
                 connectionLineType={ConnectionLineType.SmoothStep}

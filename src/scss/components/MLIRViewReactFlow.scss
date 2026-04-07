@@ -35,6 +35,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-align: center;
 }
 
 .mlir-op-node-id {
@@ -44,9 +45,16 @@
     line-height: 1.2;
     color: rgb(34 34 34 / 80%);
     user-select: text;
-    user-select: text;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+// .react-flow__node-group
+.react-flow__node {
+    flex-direction: row;
+    place-content: center center;
+    align-items: center;
+}
+
 /* stylelint-enable selector-class-pattern */
