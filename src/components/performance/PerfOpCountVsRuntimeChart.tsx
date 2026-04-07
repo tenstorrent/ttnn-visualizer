@@ -25,9 +25,14 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
         [flattenedData],
     );
 
+    const selectedOpCodeSet = useMemo(
+        () => new Set(selectedOpCodes.map((selected) => selected.opCode)),
+        [selectedOpCodes],
+    );
+
     const filteredOpCodes = useMemo(
-        () => opCodes.filter((opCode) => selectedOpCodes.some((selected) => selected.opCode === opCode)),
-        [opCodes, selectedOpCodes],
+        () => opCodes.filter((opCode) => selectedOpCodeSet.has(opCode)),
+        [opCodes, selectedOpCodeSet],
     );
 
     const opCountData = useMemo(

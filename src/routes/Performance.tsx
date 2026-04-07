@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
@@ -43,6 +43,12 @@ export default function Performance() {
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
     const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>([]);
+    const [hasUserChangedOpCodeFilter, setHasUserChangedOpCodeFilter] = useState(false);
+
+    const setSelectedOpCodesFromUser = useCallback((update: Marker[] | ((previous: Marker[]) => Marker[])) => {
+        setHasUserChangedOpCodeFilter(true);
+        setSelectedOpCodes(update);
+    }, []);
 
     const {
         data,
@@ -103,23 +109,50 @@ export default function Performance() {
         [comparisonPerfData, opIdsMap],
     );
 
-    const filteredEnrichedData = useMemo(
-        () =>
-            selectedOpCodes.length > 0
-                ? enrichedData.filter((row) => selectedOpCodes.some((selected) => selected.opCode === row.raw_op_code))
-                : enrichedData,
-        [enrichedData, selectedOpCodes],
+    const selectedOpCodeSet = useMemo(
+        () => new Set(selectedOpCodes.map((selected) => selected.opCode)),
+        [selectedOpCodes],
     );
 
-    const filteredEnrichedComparisonData = useMemo(
-        () =>
-            selectedOpCodes.length > 0
-                ? enrichedComparisonData.map((dataset) =>
-                      dataset.filter((row) => selectedOpCodes.some((selected) => selected.opCode === row.raw_op_code)),
-                  )
-                : enrichedComparisonData,
-        [enrichedComparisonData, selectedOpCodes],
-    );
+    const filteredEnrichedData = useMemo(() => {
+        if (opCodeOptions.length === 0) {
+            return enrichedData;
+        }
+
+        if (selectedOpCodes.length === 0) {
+            if (!hasUserChangedOpCodeFilter) {
+                return enrichedData;
+            }
+
+            return [];
+        }
+
+        return enrichedData.filter((row) => row.raw_op_code !== undefined && selectedOpCodeSet.has(row.raw_op_code));
+    }, [enrichedData, hasUserChangedOpCodeFilter, opCodeOptions.length, selectedOpCodes.length, selectedOpCodeSet]);
+
+    const filteredEnrichedComparisonData = useMemo(() => {
+        if (opCodeOptions.length === 0) {
+            return enrichedComparisonData;
+        }
+
+        if (selectedOpCodes.length === 0) {
+            if (!hasUserChangedOpCodeFilter) {
+                return enrichedComparisonData;
+            }
+
+            return enrichedComparisonData.map(() => []);
+        }
+
+        return enrichedComparisonData.map((dataset) =>
+            dataset.filter((row) => row.raw_op_code !== undefined && selectedOpCodeSet.has(row.raw_op_code)),
+        );
+    }, [
+        enrichedComparisonData,
+        hasUserChangedOpCodeFilter,
+        opCodeOptions.length,
+        selectedOpCodes.length,
+        selectedOpCodeSet,
+    ]);
     const enrichedStackedData = useMemo(() => (stackedData ? enrichStackedRowData(stackedData) : []), [stackedData]);
     const enrichedComparisonStackedData = useMemo(
         () => comparisonStackedData?.map((dataset) => enrichStackedRowData(dataset)) || [],
@@ -143,6 +176,7 @@ export default function Performance() {
     }, [comparisonReportList, setSelectedRange, perfRange]);
 
     useEffect(() => {
+        setHasUserChangedOpCodeFilter(false);
         setSelectedOpCodes(opCodeOptions);
     }, [opCodeOptions]);
 
@@ -229,12 +263,12 @@ export default function Performance() {
                                         <PerfChartFilter
                                             opCodeOptions={opCodeOptions}
                                             selectedOpCodes={selectedOpCodes}
-                                            updateOpCodes={setSelectedOpCodes}
+                                            updateOpCodes={setSelectedOpCodesFromUser}
                                         />
 
                                         <PerfCharts
                                             filteredPerfData={filteredEnrichedData}
-                                            comparisonData={filteredEnrichedComparisonData || []}
+                                            comparisonData={filteredEnrichedComparisonData}
                                             selectedOpCodes={selectedOpCodes}
                                         />
                                     </div>
