@@ -1,7 +1,7 @@
 /* eslint-disable no-continue */
 /* eslint-disable no-void */
 
-import React, { type MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'styles/components/MLIRViewReactFlow.scss';
 import ReactFlow, {
     Background,
@@ -259,13 +259,17 @@ function getBounds(nodes: Node<MLNodeData>[]) {
 }
 
 const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
-    const { fitView } = useReactFlow();
+    const { fitView, getViewport, setViewport } = useReactFlow();
     const graph = data.graphs[0];
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [hasFitInitially, setHasFitInitially] = useState(false);
     /** Subgraph namespaces currently expanded; default none = all collapsed. */
     const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
+    const viewportAnchorRef = useRef<{
+        toNodeId: string;
+        fromPosition: { x: number; y: number };
+    } | null>(null);
 
     const nodeMap = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes]);
 
@@ -401,6 +405,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     useEffect(() => {
         setHasFitInitially(false);
         setExpandedNamespaces(new Set());
+        viewportAnchorRef.current = null;
     }, [graph.id]);
 
     const buildVisibleGraph = useCallback(async () => {
@@ -822,6 +827,25 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 setNodes(visibleGraph.nodes);
                 setEdges(visibleGraph.edges);
 
+                const viewportAnchor = viewportAnchorRef.current;
+                if (viewportAnchor) {
+                    const toNode = visibleGraph.nodes.find((n) => n.id === viewportAnchor.toNodeId);
+                    if (toNode) {
+                        const viewport = getViewport();
+                        const dx = toNode.position.x - viewportAnchor.fromPosition.x;
+                        const dy = toNode.position.y - viewportAnchor.fromPosition.y;
+                        void setViewport(
+                            {
+                                x: viewport.x - dx * viewport.zoom,
+                                y: viewport.y - dy * viewport.zoom,
+                                zoom: viewport.zoom,
+                            },
+                            { duration: 0 },
+                        );
+                    }
+                    viewportAnchorRef.current = null;
+                }
+
                 if (!hasFitInitially) {
                     requestAnimationFrame(() => {
                         void fitView({ padding: 0.2, duration: 200 });
@@ -836,7 +860,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         return () => {
             cancelled = true;
         };
-    }, [buildVisibleGraph, fitView, hasFitInitially, setEdges, setNodes]);
+    }, [buildVisibleGraph, fitView, getViewport, hasFitInitially, setEdges, setNodes, setViewport]);
 
     const doLayout = useCallback(async () => {
         const visibleGraph = await buildVisibleGraph();
@@ -849,6 +873,13 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             if (node.type === 'group' && node.data?.namespace) {
                 const ns = node.data.namespace;
                 if (subgraphNamespaces.includes(ns)) {
+                    const anchorNodeId = namespaceAnchorNodeByNamespace.get(ns);
+                    if (anchorNodeId) {
+                        viewportAnchorRef.current = {
+                            toNodeId: anchorNodeId,
+                            fromPosition: { x: node.position.x, y: node.position.y },
+                        };
+                    }
                     setExpandedNamespaces((prev) => {
                         const next = new Set(prev);
                         next.delete(ns);
@@ -859,6 +890,12 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             }
             const collapsedNs = node.data?.collapsedSubgraphNamespace;
             if (collapsedNs) {
+                // On expand, anchor to group node (top-level absolute coords), not a child node.
+                const expandedGroupNodeId = `group:${collapsedNs}`;
+                viewportAnchorRef.current = {
+                    toNodeId: expandedGroupNodeId,
+                    fromPosition: { x: node.position.x, y: node.position.y },
+                };
                 setExpandedNamespaces((prev) => {
                     const next = new Set(prev);
                     next.add(collapsedNs);
@@ -866,7 +903,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 });
             }
         },
-        [subgraphNamespaces],
+        [namespaceAnchorNodeByNamespace, subgraphNamespaces],
     );
 
     const nodeTypes = useMemo(
