@@ -71,7 +71,6 @@ def _update_active_report(
     name_key: str,
     location_key: str,
 ) -> None:
-    """Update or delete a report entry in active_report dict."""
     if report_name == "":
         active_report.pop(name_key, None)
         active_report.pop(location_key, None)
@@ -80,7 +79,7 @@ def _update_active_report(
         active_report[location_key] = report_location
 
 
-def _build_active_report(
+def _gather_active_reports(
     profiler_name: str | None,
     profiler_location,
     performance_name: str | None,
@@ -88,7 +87,6 @@ def _build_active_report(
     npe_name: str | None,
     npe_location,
 ) -> dict:
-    """Build active_report dict from report name/location tuples."""
     report = {}
     if profiler_name and profiler_location is not None:
         report[KEY_PROFILER_NAME] = profiler_name
@@ -120,7 +118,7 @@ def update_existing_instance(
 ):
     active_report = instance_data.active_report or {}
 
-    # Update active_report entries using helper
+    # Profiler
     _update_active_report(
         active_report,
         profiler_name,
@@ -128,6 +126,7 @@ def update_existing_instance(
         KEY_PROFILER_NAME,
         KEY_PROFILER_LOCATION,
     )
+    # Performance
     _update_active_report(
         active_report,
         performance_name,
@@ -135,6 +134,7 @@ def update_existing_instance(
         KEY_PERFORMANCE_NAME,
         KEY_PERFORMANCE_LOCATION,
     )
+    # NPE
     _update_active_report(
         active_report, npe_name, npe_location, KEY_NPE_NAME, KEY_NPE_LOCATION
     )
@@ -224,7 +224,7 @@ def create_new_instance(
     performance_path=_sentinel,
     npe_path=_sentinel,
 ):
-    active_report = _build_active_report(
+    active_report = _gather_active_reports(
         profiler_name,
         profiler_location,
         performance_name,
