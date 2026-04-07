@@ -27,8 +27,25 @@
 }
 
 .react-flow__node-mlirOp {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     color: #222;
     overflow: hidden;
+}
+
+.mlir-op-node-collapse-hint {
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    line-height: 1;
+    color: rgb(85 85 85 / 95%);
+    pointer-events: none;
+    user-select: none;
 }
 
 .mlir-op-node-label {
@@ -36,8 +53,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: center;
-    line-height: 1.15;
-    font-size: 11px;
 }
 
 .mlir-op-node-id {

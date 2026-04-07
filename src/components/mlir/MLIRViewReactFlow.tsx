@@ -1,7 +1,7 @@
 /* eslint-disable no-continue */
 /* eslint-disable no-void */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { type MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import 'styles/components/MLIRViewReactFlow.scss';
 import ReactFlow, {
     Background,
@@ -29,20 +29,29 @@ type MLNodeData = {
     label: string;
     kind?: 'op' | 'group';
     namespace: string;
+    /** Present on outer op nodes when the subgraph is collapsed — click to expand. */
+    collapsedSubgraphNamespace?: string;
 };
 
 interface ViewProps {
     data: GraphBundle;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const MlirOpNode: React.FC<NodeProps<MLNodeData>> = ({ id, data }) => (
+const MlirOpNode: React.FC<NodeProps<MLNodeData>> = ({ data }) => (
     <>
         <Handle
             type='target'
             position={Position.Top}
             isConnectable={false}
         />
+        {data.collapsedSubgraphNamespace ? (
+            <span
+                className='mlir-op-node-collapse-hint'
+                title='Subgraph collapsed — click to expand'
+            >
+                ▸
+            </span>
+        ) : null}
         <div className='mlir-op-node-label'>{data.label}</div>
         {/* DEBUG LABEL */}
         {/* <div className='mlir-op-node-id nodrag nopan'>{id}</div> */}
@@ -255,6 +264,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [hasFitInitially, setHasFitInitially] = useState(false);
+    /** Subgraph namespaces currently expanded; default none = all collapsed. */
+    const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
 
     const nodeMap = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes]);
 
@@ -308,10 +319,21 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         return map;
     }, [collapsibleNamespaces, graph.nodes]);
 
+    /** Subgraph regions inferred from data; each has an internal anchor op we can collapse to. */
+    const subgraphNamespaces = useMemo(() => {
+        return [...collapsibleNamespaces].sort((a, b) => {
+            const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
+            if (ord !== 0) {
+                return ord;
+            }
+            return a.localeCompare(b);
+        });
+    }, [collapsibleNamespaces]);
+
     const namespaceAnchorNodeByNamespace = useMemo(() => {
         const map = new Map<string, string>();
         const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
-        for (const namespace of collapsibleNamespaces) {
+        for (const namespace of subgraphNamespaces) {
             const expectedLabel = getRegionBaseOpLabel(namespace);
             const candidates = graph.nodes.filter((n) => n.namespace === namespace && n.label === expectedLabel);
             candidates.sort((a, b) => {
@@ -328,13 +350,21 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             }
         }
         return map;
-    }, [collapsibleNamespaces, graph.nodes]);
+    }, [graph.nodes, subgraphNamespaces]);
+
+    const anchorNamespaceByNodeId = useMemo(() => {
+        const map = new Map<string, string>();
+        namespaceAnchorNodeByNamespace.forEach((nodeId, namespace) => {
+            map.set(nodeId, namespace);
+        });
+        return map;
+    }, [namespaceAnchorNodeByNamespace]);
 
     const namespaceInputNodeIdsByNamespace = useMemo(() => {
         const map = new Map<string, string[]>();
         const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
 
-        for (const namespace of collapsibleNamespaces) {
+        for (const namespace of subgraphNamespaces) {
             const inputNodes = graph.nodes.filter((n) => {
                 if (!isNodeInsideNamespaceTree(n.namespace, namespace)) {
                     return false;
@@ -366,19 +396,22 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         }
 
         return map;
-    }, [collapsibleNamespaces, graph.nodes]);
+    }, [graph.nodes, subgraphNamespaces]);
 
     useEffect(() => {
         setHasFitInitially(false);
+        setExpandedNamespaces(new Set());
     }, [graph.id]);
 
     const buildVisibleGraph = useCallback(async () => {
-        // Always expanded. No collapse / expand behavior in this version.
         const groupNodesForTopLayout: Node<MLNodeData>[] = [];
         const childNodesByNamespace = new Map<string, Node<MLNodeData>[]>();
         const internalEdgesByNamespace = new Map<string, Edge[]>();
 
-        for (const namespace of collapsibleNamespaces) {
+        for (const namespace of subgraphNamespaces) {
+            if (!expandedNamespaces.has(namespace)) {
+                continue;
+            }
             const childRawNodes = graph.nodes.filter((n) => isNodeInsideNamespaceTree(n.namespace, namespace));
 
             const childNodes: Node<MLNodeData>[] = childRawNodes.map((n) => {
@@ -476,7 +509,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 id: `group:${namespace}`,
                 type: 'group',
                 data: {
-                    label: `▾ ${getShortName(namespace)}`,
+                    label: `▾ ${getShortName(namespace)} · click to collapse`,
                     kind: 'group',
                     namespace,
                 },
@@ -498,7 +531,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 return undefined;
             }
 
-            return [...collapsibleNamespaces]
+            return [...subgraphNamespaces]
                 .sort((a, b) => b.length - a.length)
                 .find((candidate) => isNodeInsideNamespaceTree(namespace, candidate));
         };
@@ -509,8 +542,10 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                     return true;
                 }
 
-                if (outerNamespaceByNodeId.has(n.id)) {
-                    return false;
+                const collapsedNamespace = anchorNamespaceByNodeId.get(n.id) ?? outerNamespaceByNodeId.get(n.id);
+                if (collapsedNamespace) {
+                    const ns = collapsedNamespace;
+                    return !expandedNamespaces.has(ns);
                 }
 
                 const containingNamespace = getContainingNamespace(n.namespace);
@@ -522,12 +557,14 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             })
             .map((n) => {
                 const { width, height } = estimateOpNodeDimensions(n.label);
+                const collapsedNs = anchorNamespaceByNodeId.get(n.id) ?? outerNamespaceByNodeId.get(n.id);
                 return {
                     id: n.id,
                     data: {
                         label: n.label,
                         kind: 'op',
                         namespace: n.namespace,
+                        ...(collapsedNs ? { collapsedSubgraphNamespace: collapsedNs } : {}),
                     },
                     type: 'mlirOp',
                     position: { x: 0, y: 0 },
@@ -549,30 +586,42 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         const topLevelNodes = [...groupNodesForTopLayout, ...topLevelOpNodes];
 
         const mapToTopLevelEndpointId = (nodeId: string): string => {
-            const outerNamespace = outerNamespaceByNodeId.get(nodeId);
-            if (outerNamespace) {
-                return `group:${outerNamespace}`;
+            const collapsedNamespace = anchorNamespaceByNodeId.get(nodeId) ?? outerNamespaceByNodeId.get(nodeId);
+            if (collapsedNamespace) {
+                if (expandedNamespaces.has(collapsedNamespace)) {
+                    return `group:${collapsedNamespace}`;
+                }
+                return nodeId;
             }
 
             const rawNode = nodeMap.get(nodeId);
             const containingNamespace = getContainingNamespace(rawNode?.namespace);
             if (containingNamespace) {
-                return `group:${containingNamespace}`;
+                if (expandedNamespaces.has(containingNamespace)) {
+                    return `group:${containingNamespace}`;
+                }
+                return namespaceAnchorNodeByNamespace.get(containingNamespace) ?? nodeId;
             }
 
             return nodeId;
         };
 
         const mapToRenderedEndpointId = (nodeId: string): string => {
-            const outerNamespace = outerNamespaceByNodeId.get(nodeId);
-            if (outerNamespace) {
-                return namespaceAnchorNodeByNamespace.get(outerNamespace) ?? `group:${outerNamespace}`;
+            const collapsedNamespace = anchorNamespaceByNodeId.get(nodeId) ?? outerNamespaceByNodeId.get(nodeId);
+            if (collapsedNamespace) {
+                if (expandedNamespaces.has(collapsedNamespace)) {
+                    return namespaceAnchorNodeByNamespace.get(collapsedNamespace) ?? `group:${collapsedNamespace}`;
+                }
+                return nodeId;
             }
 
             const rawNode = nodeMap.get(nodeId);
             const containingNamespace = getContainingNamespace(rawNode?.namespace);
             if (containingNamespace) {
-                return namespaceAnchorNodeByNamespace.get(containingNamespace) ?? `group:${containingNamespace}`;
+                if (expandedNamespaces.has(containingNamespace)) {
+                    return namespaceAnchorNodeByNamespace.get(containingNamespace) ?? `group:${containingNamespace}`;
+                }
+                return namespaceAnchorNodeByNamespace.get(containingNamespace) ?? nodeId;
             }
 
             return nodeId;
@@ -586,8 +635,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             const sourceNamespace = getContainingNamespace(nodeMap.get(sourceNodeId)?.namespace);
             const targetNamespace = getContainingNamespace(nodeMap.get(targetNodeId)?.namespace);
 
-            // Boundary entry: route external incoming edges to namespace input args (%arg*).
-            if (targetNamespace && sourceNamespace !== targetNamespace) {
+            // Boundary entry: route external incoming edges to namespace input args (%arg*) when expanded.
+            if (targetNamespace && expandedNamespaces.has(targetNamespace) && sourceNamespace !== targetNamespace) {
                 const inputIdx = Number(targetInputId);
                 if (Number.isInteger(inputIdx) && inputIdx >= 0) {
                     const inputNodeIds = namespaceInputNodeIdsByNamespace.get(targetNamespace) ?? [];
@@ -598,11 +647,12 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 }
             }
 
-            const outerNamespace = outerNamespaceByNodeId.get(targetNodeId);
-            if (outerNamespace) {
+            const collapsedNamespace =
+                anchorNamespaceByNodeId.get(targetNodeId) ?? outerNamespaceByNodeId.get(targetNodeId);
+            if (collapsedNamespace && expandedNamespaces.has(collapsedNamespace)) {
                 const inputIdx = Number(targetInputId);
                 if (Number.isInteger(inputIdx) && inputIdx >= 0) {
-                    const inputNodeIds = namespaceInputNodeIdsByNamespace.get(outerNamespace) ?? [];
+                    const inputNodeIds = namespaceInputNodeIdsByNamespace.get(collapsedNamespace) ?? [];
                     const inputNodeId = inputNodeIds[inputIdx];
                     if (inputNodeId) {
                         return inputNodeId;
@@ -647,7 +697,12 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             }
         }
 
-        const { nodes: laidOutTopLevelNodes } = await layoutWithElk(topLevelNodes, topLevelEdgesForLayout);
+        const topLevelNodeIdSet = new Set(topLevelNodes.map((n) => n.id));
+        const topLevelEdgesForElk = topLevelEdgesForLayout.filter(
+            (e) => topLevelNodeIdSet.has(e.source) && topLevelNodeIdSet.has(e.target),
+        );
+
+        const { nodes: laidOutTopLevelNodes } = await layoutWithElk(topLevelNodes, topLevelEdgesForElk);
         const topLevelNodeById = new Map<string, Node<MLNodeData>>(laidOutTopLevelNodes.map((n) => [n.id, n]));
 
         const finalNodes: Node<MLNodeData>[] = [];
@@ -675,7 +730,10 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             });
         }
 
-        for (const namespace of collapsibleNamespaces) {
+        for (const namespace of subgraphNamespaces) {
+            if (!expandedNamespaces.has(namespace)) {
+                continue;
+            }
             const groupId = `group:${namespace}`;
             const laidOutGroup = topLevelNodeById.get(groupId);
             const topLayoutGroup = groupNodesForTopLayout.find((n) => n.id === groupId);
@@ -744,12 +802,14 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
         return { nodes: finalNodes, edges: finalEdges };
     }, [
-        collapsibleNamespaces,
+        anchorNamespaceByNodeId,
+        expandedNamespaces,
         graph.nodes,
         namespaceAnchorNodeByNamespace,
         namespaceInputNodeIdsByNamespace,
         nodeMap,
         outerNamespaceByNodeId,
+        subgraphNamespaces,
     ]);
 
     useEffect(() => {
@@ -784,6 +844,31 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         setEdges(visibleGraph.edges);
     }, [buildVisibleGraph, setEdges, setNodes]);
 
+    const onSubgraphNodeClick = useCallback(
+        (_event: MouseEvent, node: Node<MLNodeData>) => {
+            if (node.type === 'group' && node.data?.namespace) {
+                const ns = node.data.namespace;
+                if (subgraphNamespaces.includes(ns)) {
+                    setExpandedNamespaces((prev) => {
+                        const next = new Set(prev);
+                        next.delete(ns);
+                        return next;
+                    });
+                }
+                return;
+            }
+            const collapsedNs = node.data?.collapsedSubgraphNamespace;
+            if (collapsedNs) {
+                setExpandedNamespaces((prev) => {
+                    const next = new Set(prev);
+                    next.add(collapsedNs);
+                    return next;
+                });
+            }
+        },
+        [subgraphNamespaces],
+    );
+
     const nodeTypes = useMemo(
         () => ({
             mlirOp: MlirOpNode,
@@ -796,6 +881,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
+                onNodeClick={onSubgraphNodeClick}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
