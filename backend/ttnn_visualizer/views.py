@@ -798,7 +798,10 @@ def get_profiler_data_list(instance: Instance):
 @with_instance
 @local_only
 def delete_profiler_report(profiler_name, instance: Instance):
-    is_remote = bool(instance.remote_connection)
+    is_remote = (
+        instance.active_report
+        and instance.active_report.profiler_location == ReportLocation.REMOTE.value
+    )
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
 
@@ -941,7 +944,10 @@ def get_profiler_performance_data(instance: Instance):
 @with_instance
 @local_only
 def delete_performance_report(performance_name, instance: Instance):
-    is_remote = bool(instance.remote_connection)
+    is_remote = (
+        instance.active_report
+        and instance.active_report.performance_location == ReportLocation.REMOTE.value
+    )
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
 
