@@ -798,7 +798,6 @@ def get_profiler_data_list(instance: Instance):
 @with_instance
 @local_only
 def delete_profiler_report(profiler_name, instance: Instance):
-    # Check if THIS specific report is remote by looking at its location in active_report
     is_remote = (
         instance.active_report
         and instance.active_report.profiler_location == ReportLocation.REMOTE.value
@@ -945,7 +944,6 @@ def get_profiler_performance_data(instance: Instance):
 @with_instance
 @local_only
 def delete_performance_report(performance_name, instance: Instance):
-    # Check if THIS specific report is remote by looking at its location in active_report
     is_remote = (
         instance.active_report
         and instance.active_report.performance_location == ReportLocation.REMOTE.value
