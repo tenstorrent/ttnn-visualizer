@@ -29,8 +29,9 @@ type MLNodeData = {
     label: string;
     kind?: 'op' | 'group';
     namespace: string;
-    /** Present on outer op nodes when the subgraph is collapsed — click to expand. */
+    /** Present on subgraph toggle nodes (collapsed outer op or expanded anchor op). */
     collapsedSubgraphNamespace?: string;
+    subgraphToggleState?: 'collapsed' | 'expanded';
 };
 
 interface ViewProps {
@@ -47,9 +48,13 @@ const MlirOpNode: React.FC<NodeProps<MLNodeData>> = ({ data }) => (
         {data.collapsedSubgraphNamespace ? (
             <span
                 className='mlir-op-node-collapse-hint'
-                title='Subgraph collapsed — click to expand'
+                title={
+                    data.subgraphToggleState === 'expanded'
+                        ? 'Subgraph expanded — click to collapse'
+                        : 'Subgraph collapsed — click to expand'
+                }
             >
-                ▸
+                {data.subgraphToggleState === 'expanded' ? '▾' : '▸'}
             </span>
         ) : null}
         <div className='mlir-op-node-label'>{data.label}</div>
@@ -421,12 +426,19 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
             const childNodes: Node<MLNodeData>[] = childRawNodes.map((n) => {
                 const { width, height } = estimateOpNodeDimensions(n.label);
+                const anchorId = namespaceAnchorNodeByNamespace.get(namespace);
                 return {
                     id: n.id,
                     data: {
                         label: n.label,
                         kind: 'op',
                         namespace: n.namespace,
+                        ...(anchorId === n.id
+                            ? {
+                                  collapsedSubgraphNamespace: namespace,
+                                  subgraphToggleState: 'expanded' as const,
+                              }
+                            : {}),
                     },
                     type: 'mlirOp',
                     position: { x: 0, y: 0 },
@@ -569,7 +581,12 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                         label: n.label,
                         kind: 'op',
                         namespace: n.namespace,
-                        ...(collapsedNs ? { collapsedSubgraphNamespace: collapsedNs } : {}),
+                        ...(collapsedNs
+                            ? {
+                                  collapsedSubgraphNamespace: collapsedNs,
+                                  subgraphToggleState: 'collapsed' as const,
+                              }
+                            : {}),
                     },
                     type: 'mlirOp',
                     position: { x: 0, y: 0 },
@@ -890,20 +907,44 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             }
             const collapsedNs = node.data?.collapsedSubgraphNamespace;
             if (collapsedNs) {
-                // On expand, anchor to group node (top-level absolute coords), not a child node.
-                const expandedGroupNodeId = `group:${collapsedNs}`;
-                viewportAnchorRef.current = {
-                    toNodeId: expandedGroupNodeId,
-                    fromPosition: { x: node.position.x, y: node.position.y },
-                };
-                setExpandedNamespaces((prev) => {
-                    const next = new Set(prev);
-                    next.add(collapsedNs);
-                    return next;
-                });
+                const isExpanded = expandedNamespaces.has(collapsedNs);
+                if (isExpanded) {
+                    const anchorNodeId = namespaceAnchorNodeByNamespace.get(collapsedNs);
+                    // If clicked node is a child, use parent group absolute coordinates as anchor origin.
+                    let fromPosition = { x: node.position.x, y: node.position.y };
+                    if (node.parentId) {
+                        const parentNode = nodes.find((n) => n.id === node.parentId);
+                        if (parentNode) {
+                            fromPosition = { x: parentNode.position.x, y: parentNode.position.y };
+                        }
+                    }
+                    if (anchorNodeId) {
+                        viewportAnchorRef.current = {
+                            toNodeId: anchorNodeId,
+                            fromPosition,
+                        };
+                    }
+                    setExpandedNamespaces((prev) => {
+                        const next = new Set(prev);
+                        next.delete(collapsedNs);
+                        return next;
+                    });
+                } else {
+                    // On expand, anchor to group node (top-level absolute coords), not a child node.
+                    const expandedGroupNodeId = `group:${collapsedNs}`;
+                    viewportAnchorRef.current = {
+                        toNodeId: expandedGroupNodeId,
+                        fromPosition: { x: node.position.x, y: node.position.y },
+                    };
+                    setExpandedNamespaces((prev) => {
+                        const next = new Set(prev);
+                        next.add(collapsedNs);
+                        return next;
+                    });
+                }
             }
         },
-        [namespaceAnchorNodeByNamespace, subgraphNamespaces],
+        [expandedNamespaces, namespaceAnchorNodeByNamespace, nodes, subgraphNamespaces],
     );
 
     const nodeTypes = useMemo(
