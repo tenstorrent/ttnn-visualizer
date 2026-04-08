@@ -159,6 +159,13 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const latestBuildRequestIdRef = useRef(0);
     const workerRef = useRef<Worker | null>(null);
     const [indexedGraphId, setIndexedGraphId] = useState<string | null>(null);
+    const desiredBuildKeyRef = useRef<string>('');
+    const lastBuildParamsRef = useRef<{
+        expandedNamespaces: string[];
+        cacheKey: string;
+    }>({ expandedNamespaces: [], cacheKey: '' });
+    const currentGraphIdRef = useRef(graph.id);
+    const currentGraphIndexRef = useRef<GraphIndex | null>(null);
 
     const collapsibleNamespaces = useMemo(
         () =>
@@ -357,6 +364,11 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     }, [graph.id]);
 
     useEffect(() => {
+        currentGraphIdRef.current = graph.id;
+        currentGraphIndexRef.current = graphIndex;
+    }, [graph.id, graphIndex]);
+
+    useEffect(() => {
         const worker = new Worker(new URL('./mlirLayoutWorker.ts', import.meta.url), { type: 'module' });
         workerRef.current = worker;
 
@@ -367,13 +379,34 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 return;
             }
             if (msg.type === 'error') {
-                if (msg.requestId === latestBuildRequestIdRef.current) {
+                if (msg.error.includes('Graph index not found')) {
+                    if (!currentGraphIndexRef.current) {
+                        return;
+                    }
+                    worker.postMessage({
+                        type: 'set-index',
+                        graphId: currentGraphIndexRef.current.graphId,
+                        index: currentGraphIndexRef.current,
+                    });
+                    latestBuildRequestIdRef.current += 1;
+                    const retryRequestId = latestBuildRequestIdRef.current;
+                    worker.postMessage({
+                        type: 'build',
+                        requestId: retryRequestId,
+                        graphId: currentGraphIdRef.current,
+                        expandedNamespaces: lastBuildParamsRef.current.expandedNamespaces,
+                        cacheKey: lastBuildParamsRef.current.cacheKey,
+                    });
+                    return;
+                }
+                if (msg.requestId >= latestBuildRequestIdRef.current - 1) {
                     // eslint-disable-next-line no-console
                     console.error('mlir layout worker:', msg.error);
                 }
                 return;
             }
-            if (msg.requestId !== latestBuildRequestIdRef.current) {
+            const builtKey = `${msg.graphId}::${msg.cacheKey}`;
+            if (builtKey !== desiredBuildKeyRef.current) {
                 return;
             }
             const rf = builtGraphToReactFlow(msg.graph);
@@ -431,11 +464,19 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     useEffect(() => {
         const w = workerRef.current;
-        if (!w || indexedGraphId !== graphIndex.graphId) {
+        if (!w) {
             return;
+        }
+        if (indexedGraphId !== graphIndex.graphId) {
+            w.postMessage({ type: 'set-index', graphId: graphIndex.graphId, index: graphIndex });
         }
         latestBuildRequestIdRef.current += 1;
         const requestId = latestBuildRequestIdRef.current;
+        desiredBuildKeyRef.current = `${graphIndex.graphId}::${expansionCacheKey}`;
+        lastBuildParamsRef.current = {
+            expandedNamespaces: expandedNamespacesSorted,
+            cacheKey: expansionCacheKey,
+        };
         w.postMessage({
             type: 'build',
             requestId,
@@ -452,10 +493,14 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         }
         if (indexedGraphId !== graphIndex.graphId) {
             w.postMessage({ type: 'set-index', graphId: graphIndex.graphId, index: graphIndex });
-            return;
         }
         latestBuildRequestIdRef.current += 1;
         const requestId = latestBuildRequestIdRef.current;
+        desiredBuildKeyRef.current = `${graphIndex.graphId}::${expansionCacheKey}`;
+        lastBuildParamsRef.current = {
+            expandedNamespaces: expandedNamespacesSorted,
+            cacheKey: expansionCacheKey,
+        };
         w.postMessage({
             type: 'build',
             requestId,

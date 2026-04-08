@@ -85,6 +85,7 @@ export type WorkerInboundMessage = SetIndexMessage | BuildMessage;
 export type WorkerBuiltMessage = {
     type: 'built';
     requestId: number;
+    graphId: string;
     cacheKey: string;
     graph: BuiltGraph;
 };

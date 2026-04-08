@@ -23,8 +23,12 @@ type ElkLike = {
 };
 
 let elkInstance: ElkLike | null = null;
+let elkUnavailable = false;
 
 function getElk(): ElkLike {
+    if (elkUnavailable) {
+        throw new Error('ELK disabled after previous initialization failure');
+    }
     if (elkInstance) {
         return elkInstance;
     }
@@ -37,6 +41,70 @@ function getElk(): ElkLike {
         throw new Error('ELK worker initialization failed: unexpected export shape');
     }
     return elkInstance;
+}
+
+function fallbackLayeredLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+    const idSet = new Set(nodes.map((n) => n.id));
+    const indegree = new Map(nodes.map((n) => [n.id, 0]));
+    const outgoing = new Map<string, string[]>();
+    const levelById = new Map(nodes.map((n) => [n.id, 0]));
+
+    for (const e of edges) {
+        if (!idSet.has(e.source) || !idSet.has(e.target) || e.source === e.target) {
+            continue;
+        }
+        indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
+        const arr = outgoing.get(e.source) ?? [];
+        arr.push(e.target);
+        outgoing.set(e.source, arr);
+    }
+
+    const queue: string[] = [];
+    indegree.forEach((deg, id) => {
+        if (deg === 0) {
+            queue.push(id);
+        }
+    });
+
+    for (let qi = 0; qi < queue.length; qi += 1) {
+        const id = queue[qi];
+        const level = levelById.get(id) ?? 0;
+        for (const outId of outgoing.get(id) ?? []) {
+            const prev = levelById.get(outId) ?? 0;
+            if (level + 1 > prev) {
+                levelById.set(outId, level + 1);
+            }
+            const nextDeg = (indegree.get(outId) ?? 0) - 1;
+            indegree.set(outId, nextDeg);
+            if (nextDeg === 0) {
+                queue.push(outId);
+            }
+        }
+    }
+
+    const byLevel = new Map<number, WorkerNode[]>();
+    for (const n of nodes) {
+        const level = levelById.get(n.id) ?? 0;
+        const arr = byLevel.get(level) ?? [];
+        arr.push(n);
+        byLevel.set(level, arr);
+    }
+
+    const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
+    const laidOut: WorkerNode[] = [];
+    const xGap = 220;
+    const yGap = 110;
+    for (const level of sortedLevels) {
+        const bucket = byLevel.get(level) ?? [];
+        bucket.sort((a, b) => a.id.localeCompare(b.id));
+        bucket.forEach((n, idx) => {
+            laidOut.push({
+                ...n,
+                position: { x: idx * xGap, y: level * yGap },
+            });
+        });
+    }
+    return laidOut;
 }
 
 const elkOptions: Record<string, string> = {
@@ -106,16 +174,24 @@ async function layoutWithElk(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<
     if (nodes.length === 0) {
         return nodes;
     }
-    const graph = toElkGraph(nodes, edges);
-    const laidOut = await getElk().layout(graph);
-    const positions = new Map<string, { x: number; y: number }>();
-    (laidOut.children ?? []).forEach((c) => {
-        positions.set(c.id, { x: c.x ?? 0, y: c.y ?? 0 });
-    });
-    return nodes.map((n) => ({
-        ...n,
-        position: positions.get(n.id) ?? { x: 0, y: 0 },
-    }));
+    try {
+        const graph = toElkGraph(nodes, edges);
+        const laidOut = await getElk().layout(graph);
+        const positions = new Map<string, { x: number; y: number }>();
+        (laidOut.children ?? []).forEach((c) => {
+            positions.set(c.id, { x: c.x ?? 0, y: c.y ?? 0 });
+        });
+        return nodes.map((n) => ({
+            ...n,
+            position: positions.get(n.id) ?? { x: 0, y: 0 },
+        }));
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('not a constructor')) {
+            elkUnavailable = true;
+        }
+        return fallbackLayeredLayout(nodes, edges);
+    }
 }
 
 function getBounds(nodes: WorkerNode[]) {
@@ -547,6 +623,7 @@ self.onmessage = async (event: MessageEvent<WorkerInboundMessage>) => {
             postMessage({
                 type: 'built',
                 requestId,
+                graphId,
                 cacheKey,
                 graph: cached,
             });
@@ -557,6 +634,7 @@ self.onmessage = async (event: MessageEvent<WorkerInboundMessage>) => {
         postMessage({
             type: 'built',
             requestId,
+            graphId,
             cacheKey,
             graph: built,
         });
