@@ -5,7 +5,7 @@
 import classNames from 'classnames';
 import { Button, Classes, Collapse, Icon, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
@@ -78,21 +78,20 @@ function FooterInfobar() {
         }
     }, [isAllowedRoute]);
 
+    const versionStatus: ReactNode = latestAppVersion ? (
+        <AppVersionStatus
+            appVersion={appVersion}
+            latestAppVersion={latestAppVersion}
+            isServerMode={isServerMode}
+        />
+    ) : (
+        <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
+    );
+
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
-                {!isServerMode ? (
-                    <div className='version-container'>
-                        {latestAppVersion ? (
-                            <AppVersionStatus
-                                appVersion={appVersion}
-                                latestAppVersion={latestAppVersion}
-                            />
-                        ) : (
-                            <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
-                        )}
-                    </div>
-                ) : null}
+                <div className='version-container'>{versionStatus}</div>
 
                 <div className='active-reports'>
                     {!isServerMode && (

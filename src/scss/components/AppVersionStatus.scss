@@ -80,3 +80,9 @@ $version-outdated-three-color: #ff7272;
         }
     }
 }
+
+.version-container > .app-version {
+    font-size: 12px;
+    font-weight: 500;
+    color: $version-up-to-date-color;
+}

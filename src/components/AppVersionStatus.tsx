@@ -12,6 +12,7 @@ import 'styles/components/AppVersionStatus.scss';
 interface AppVersionStatusProps {
     appVersion: string;
     latestAppVersion: string;
+    isServerMode?: boolean;
 }
 
 enum OutdatedLevel {
@@ -31,15 +32,26 @@ const OUTDATED_CLASS_MAP: Record<OutdatedLevel, string> = {
 const PYPI_SOURCE_URL = 'https://pypi.org/project/ttnn-visualizer/';
 const VERSION_ICON_SIZE = 14;
 
-function AppVersionStatus({ appVersion, latestAppVersion }: AppVersionStatusProps) {
+function AppVersionStatus({ appVersion, latestAppVersion, isServerMode }: AppVersionStatusProps) {
     const versionOutdatedLevel: OutdatedLevel = useMemo(
-        () => (latestAppVersion ? getVersionOutdatedLevel(appVersion, latestAppVersion) : OutdatedLevel.NONE),
-        [latestAppVersion, appVersion],
+        () =>
+            isServerMode || !latestAppVersion
+                ? OutdatedLevel.NONE
+                : getVersionOutdatedLevel(appVersion, latestAppVersion),
+        [isServerMode, latestAppVersion, appVersion],
     );
     const isAppOutdated = versionOutdatedLevel > OutdatedLevel.NONE;
     const versionClasses = classNames('version-info', OUTDATED_CLASS_MAP[versionOutdatedLevel], {
         'is-anchor': isAppOutdated,
     });
+
+    if (isServerMode) {
+        return (
+            <div className='version-info'>
+                <span className='app-version'>v{appVersion}</span>
+            </div>
+        );
+    }
 
     return (
         <Tooltip
