@@ -19,9 +19,12 @@ import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
-import { useInstance } from '../hooks/useAPI';
+import { useGetLatestAppVersion, useInstance } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
 import { Instance } from '../model/APIData';
+import LoadingSpinner from './LoadingSpinner';
+import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
+import AppVersionStatus from './AppVersionStatus';
 
 const RANGE_DISALLOWED_ROUTES: string[] = [ROUTES.NPE];
 
@@ -35,13 +38,16 @@ function FooterInfobar() {
 
     const { data: instance } = useInstance();
     const location = useLocation();
+    const serverConfig = getServerConfig();
+    const isServerMode = serverConfig.SERVER_MODE;
+
+    const latestAppVersion = useGetLatestAppVersion();
+    const appVersion = import.meta.env.APP_VERSION;
 
     const activeProfilerReportPath = activeProfilerReport?.path;
     const hasLoadedRemoteReport =
         instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
     const activePerformanceReportPath = activePerformanceReport?.path;
-    const serverConfig = getServerConfig();
-    const isServerMode = serverConfig.SERVER_MODE;
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
 
     const isAllowedRoute = useCallback(() => {
@@ -75,6 +81,19 @@ function FooterInfobar() {
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
+                {!isServerMode ? (
+                    <div className='version-container'>
+                        {latestAppVersion ? (
+                            <AppVersionStatus
+                                appVersion={appVersion}
+                                latestAppVersion={latestAppVersion}
+                            />
+                        ) : (
+                            <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
+                        )}
+                    </div>
+                ) : null}
+
                 <div className='active-reports'>
                     {!isServerMode && (
                         <Tooltip
@@ -94,6 +113,7 @@ function FooterInfobar() {
                             <Icon
                                 icon={IconNames.FOLDER_OPEN}
                                 aria-label='Base folder paths'
+                                size={16}
                             />
                         </Tooltip>
                     )}
