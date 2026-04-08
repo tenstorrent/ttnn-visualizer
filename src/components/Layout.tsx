@@ -25,7 +25,6 @@ const BounceIn = cssTransition({
 
 function Layout() {
     const location = useLocation();
-    const appVersion = import.meta.env.APP_VERSION;
     const state = location.state as { background?: Location };
 
     return (
@@ -55,7 +54,6 @@ function Layout() {
                             />
                             <span className='visualizer-title'>TT-NN Visualizer</span>
                         </h1>
-                        <sup className='version'>v{appVersion}</sup>
                     </Link>
 
                     <MainNavigation />

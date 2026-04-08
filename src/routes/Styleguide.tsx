@@ -24,6 +24,7 @@ import ConnectionTestMessage from '../components/report-selection/ConnectionTest
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
 import SearchField from '../components/SearchField';
+import AppVersionStatus from '../components/AppVersionStatus';
 import 'styles/routes/Styleguide.scss';
 import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
@@ -57,6 +58,8 @@ const FILE_DOWNLOAD_INACTIVE = {
 };
 
 const TIME_REMAINING_INTERVAL = 100;
+
+const LATEST_APP_VERSION = '0.80.0';
 
 export default function Styleguide() {
     const [updateFileTransferProgress, setUpdateFileTransferProgress] = useAtom(fileTransferProgressAtom);
@@ -692,6 +695,34 @@ export default function Styleguide() {
                     dataVersion={MIN_SUPPORTED_VERSION}
                     errorCode={NPEValidationError.DEFAULT}
                     isLoading={false}
+                />
+            </div>
+
+            <div className='container'>
+                <h3>App version status</h3>
+
+                <h4>Up to date</h4>
+                <AppVersionStatus
+                    appVersion='0.80.0'
+                    latestAppVersion={LATEST_APP_VERSION}
+                />
+
+                <h4>Level one outdated</h4>
+                <AppVersionStatus
+                    appVersion='0.79.0'
+                    latestAppVersion={LATEST_APP_VERSION}
+                />
+
+                <h4>Level two outdated</h4>
+                <AppVersionStatus
+                    appVersion='0.78.0'
+                    latestAppVersion={LATEST_APP_VERSION}
+                />
+
+                <h4>Level three outdated</h4>
+                <AppVersionStatus
+                    appVersion='0.77.0'
+                    latestAppVersion={LATEST_APP_VERSION}
                 />
             </div>
         </>
