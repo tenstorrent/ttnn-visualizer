@@ -8,7 +8,7 @@ Follow instructions for setting up [TT-Metalium](https://docs.tenstorrent.com/tt
 
 ### Memory reports
 
-Recommended PyTest config when generating your data:
+Recommended pytest config when generating your data:
 
 ``` bash
 export TTNN_CONFIG_OVERRIDES='{
@@ -17,7 +17,7 @@ export TTNN_CONFIG_OVERRIDES='{
     "report_name": "YOUR REPORT NAME",
     "enable_detailed_buffer_report": true,
     "enable_detailed_tensor_report": false,
-    "enable_graph_report": false,
+    "enable_graph_report": true,
     "enable_comparison_mode": false
 }'
 ```
@@ -29,7 +29,7 @@ export TTNN_CONFIG_OVERRIDES='{
 | **report_name** | Prefix of the folder name where the memory report is output. **Must have a value for data8 to be output to disk**. |
 | **enable_detailed_buffer_report** | Enable to visualize the detailed buffer report after every operation. **Needed for full buffer information**. |
 | **enable_detailed_tensor_report** | Enable to visualize the values of input and output tensors of every operation. **Data not used by the visualizer**. |
-| **enable_graph_report** | Generates an SVG visualization of the computation graph. **Data not used by the visualizer**. |
+| **enable_graph_report** | Generates an SVG visualization of the computation graph and enables automatic report generation with pytest. **Must be enabled**. |
 | **enable_comparison_mode** | Enable to test the output of operations against their golden implementation. **Optional, not always available on models**. |
 
 To run a test with custom input data, you can use the following command with suitable values for `input-path`:
@@ -38,11 +38,13 @@ To run a test with custom input data, you can use the following command with sui
 pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py::test_function[param]
 ```
 
-The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/reports/` which should include at least a `db.sqlite` file (config.json is optional for the visualizer).
+The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/reports/` which should include at least a `db.sqlite` file (config.json is optional for the visualizer). The report will be created automatically when running TT-Metal model demos and tests with `pytest`, when `enable_logging` and `enable_graph_report` are `true`.
 
 <img width="909" alt="Memory report files" src="https://github.com/user-attachments/assets/ab31892a-2779-4fe1-9ad5-0f35f8329f9a" />
 
 For more information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/get_started/get_started.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/get_started.html) documentation.
+
+To generate reports with other codebases using TT-NN, see the [TT-NN Graph Tracing](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/ttnn/graph-tracing.md) documentation.
 
 ### Performance reports
 
