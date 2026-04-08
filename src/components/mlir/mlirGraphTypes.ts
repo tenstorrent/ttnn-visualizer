@@ -95,4 +95,9 @@ export type WorkerErrorMessage = {
     error: string;
 };
 
-export type WorkerOutboundMessage = WorkerBuiltMessage | WorkerErrorMessage;
+export type WorkerIndexedMessage = {
+    type: 'indexed';
+    graphId: string;
+};
+
+export type WorkerOutboundMessage = WorkerBuiltMessage | WorkerErrorMessage | WorkerIndexedMessage;

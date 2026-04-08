@@ -158,6 +158,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     const latestBuildRequestIdRef = useRef(0);
     const workerRef = useRef<Worker | null>(null);
+    const [indexedGraphId, setIndexedGraphId] = useState<string | null>(null);
 
     const collapsibleNamespaces = useMemo(
         () =>
@@ -352,6 +353,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         hasFitInitiallyRef.current = false;
         setExpandedNamespaces(new Set());
         viewportAnchorRef.current = null;
+        setIndexedGraphId(null);
     }, [graph.id]);
 
     useEffect(() => {
@@ -360,6 +362,10 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
         worker.onmessage = (event: MessageEvent<WorkerOutboundMessage>) => {
             const msg = event.data;
+            if (msg.type === 'indexed') {
+                setIndexedGraphId(msg.graphId);
+                return;
+            }
             if (msg.type === 'error') {
                 if (msg.requestId === latestBuildRequestIdRef.current) {
                     // eslint-disable-next-line no-console
@@ -412,6 +418,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         if (!w) {
             return;
         }
+        setIndexedGraphId(null);
         w.postMessage({ type: 'set-index', graphId: graphIndex.graphId, index: graphIndex });
     }, [graphIndex]);
 
@@ -424,7 +431,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     useEffect(() => {
         const w = workerRef.current;
-        if (!w) {
+        if (!w || indexedGraphId !== graphIndex.graphId) {
             return;
         }
         latestBuildRequestIdRef.current += 1;
@@ -436,14 +443,17 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             expandedNamespaces: expandedNamespacesSorted,
             cacheKey: expansionCacheKey,
         });
-    }, [expansionCacheKey, expandedNamespacesSorted, graphIndex]);
+    }, [expansionCacheKey, expandedNamespacesSorted, graphIndex, indexedGraphId]);
 
     const doLayout = useCallback(() => {
         const w = workerRef.current;
         if (!w) {
             return;
         }
-        w.postMessage({ type: 'set-index', graphId: graphIndex.graphId, index: graphIndex });
+        if (indexedGraphId !== graphIndex.graphId) {
+            w.postMessage({ type: 'set-index', graphId: graphIndex.graphId, index: graphIndex });
+            return;
+        }
         latestBuildRequestIdRef.current += 1;
         const requestId = latestBuildRequestIdRef.current;
         w.postMessage({
@@ -453,7 +463,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             expandedNamespaces: expandedNamespacesSorted,
             cacheKey: expansionCacheKey,
         });
-    }, [expansionCacheKey, expandedNamespacesSorted, graphIndex]);
+    }, [expansionCacheKey, expandedNamespacesSorted, graphIndex, indexedGraphId]);
 
     const onSubgraphNodeClick = useCallback(
         (_event: MouseEvent, node: Node<MLNodeData>) => {

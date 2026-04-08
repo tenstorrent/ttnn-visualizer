@@ -522,6 +522,10 @@ self.onmessage = async (event: MessageEvent<WorkerInboundMessage>) => {
     if (message.type === 'set-index') {
         indexByGraphId.set(message.graphId, message.index);
         cacheByGraphId.set(message.graphId, new Map());
+        postMessage({
+            type: 'indexed',
+            graphId: message.graphId,
+        });
         return;
     }
 
