@@ -1,8 +1,9 @@
+engineStrict: true
+
+nodeLinker: hoisted
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - canvas
   - es5-ext
+  - esbuild
   - unrs-resolver
-
-nodeLinker: hoisted
-engineStrict: true
