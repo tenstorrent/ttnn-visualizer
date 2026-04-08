@@ -59,20 +59,19 @@ export interface StackedPerfRow {
     op_type: OpType;
 }
 
-export interface TypedStackedPerfRow
-    extends Omit<
-        StackedPerfRow,
-        | StackedColumnHeaders.Percent
-        | StackedColumnHeaders.Device
-        | StackedColumnHeaders.DeviceTimeSumUs
-        | StackedColumnHeaders.OpsCount
-        | StackedColumnHeaders.OpCategory
-        | StackedColumnHeaders.FlopsMin
-        | StackedColumnHeaders.FlopsMax
-        | StackedColumnHeaders.FlopsMean
-        | StackedColumnHeaders.FlopsStd
-        | StackedColumnHeaders.FlopsWeightedMean
-    > {
+export interface TypedStackedPerfRow extends Omit<
+    StackedPerfRow,
+    | StackedColumnHeaders.Percent
+    | StackedColumnHeaders.Device
+    | StackedColumnHeaders.DeviceTimeSumUs
+    | StackedColumnHeaders.OpsCount
+    | StackedColumnHeaders.OpCategory
+    | StackedColumnHeaders.FlopsMin
+    | StackedColumnHeaders.FlopsMax
+    | StackedColumnHeaders.FlopsMean
+    | StackedColumnHeaders.FlopsStd
+    | StackedColumnHeaders.FlopsWeightedMean
+> {
     [StackedColumnHeaders.Percent]: number | null;
     [StackedColumnHeaders.Device]: number | null;
     [StackedColumnHeaders.DeviceTimeSumUs]: number | null;
