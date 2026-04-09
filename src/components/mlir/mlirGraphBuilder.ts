@@ -237,6 +237,7 @@ function makeOpNode(node: IndexedNode, toggle?: { namespace: string; state: 'col
 export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: string[]): Promise<BuiltGraph> {
     const expandedNamespaces = new Set(expandedNamespacesList);
     const nodeById = new Map(index.nodes.map((n) => [n.id, n]));
+    const subgraphNamespaceSet = new Set(index.subgraphNamespaces);
 
     const resolveRenderedNodeId = (nodeId: string): string => {
         const chain = index.containingNamespacesByNodeId[nodeId] ?? [];
@@ -269,18 +270,58 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
         }
     }
 
-    const groupNodesForTopLayout: WorkerNode[] = [];
+    const getExpandedParentOfNamespace = (namespace: string): string | undefined => {
+        const segments = namespace.split('/');
+        let result: string | undefined;
+        for (let i = 1; i < segments.length; i++) {
+            const ancestor = segments.slice(0, i).join('/');
+            if (expandedNamespaces.has(ancestor) && subgraphNamespaceSet.has(ancestor)) {
+                result = ancestor;
+            }
+        }
+        return result;
+    };
+
+    const expandedParentOfNamespace = new Map<string, string>();
+    for (const ns of index.subgraphNamespaces) {
+        if (!expandedNamespaces.has(ns)) {
+            continue;
+        }
+        const parent = getExpandedParentOfNamespace(ns);
+        if (parent) {
+            expandedParentOfNamespace.set(ns, parent);
+        }
+    }
+
+    const expandedByDepthDesc = index.subgraphNamespaces
+        .filter((ns) => expandedNamespaces.has(ns))
+        .sort((a, b) => b.split('/').length - a.split('/').length);
+
+    const groupNodeByNamespace = new Map<string, WorkerNode>();
     const childNodesByNamespace = new Map<string, WorkerNode[]>();
     const internalEdgesByNamespace = new Map<string, WorkerEdge[]>();
 
-    for (const namespace of index.subgraphNamespaces) {
-        if (!expandedNamespaces.has(namespace)) {
-            continue;
+    const mapToChildEndpointId = (nodeId: string, ownerNamespace: string): string => {
+        const renderedId = resolveRenderedNodeId(nodeId);
+        const nodeParentNs = parentNamespaceByVisibleNodeId.get(renderedId);
+        if (nodeParentNs === ownerNamespace) {
+            return renderedId;
         }
-        const childRawNodes = visibleRawNodes.filter((n) => parentNamespaceByVisibleNodeId.get(n.id) === namespace);
-        const childRawNodeIdSet = new Set(childRawNodes.map((n) => n.id));
+        const chain = index.containingNamespacesByNodeId[nodeId] ?? [];
+        for (const ns of chain) {
+            if (expandedNamespaces.has(ns) && expandedParentOfNamespace.get(ns) === ownerNamespace) {
+                return `group:${ns}`;
+            }
+        }
+        return renderedId;
+    };
 
-        const childNodes: WorkerNode[] = childRawNodes.map((n) => {
+    for (const namespace of expandedByDepthDesc) {
+        const directChildRawNodes = visibleRawNodes.filter(
+            (n) => parentNamespaceByVisibleNodeId.get(n.id) === namespace,
+        );
+
+        const childOpNodes: WorkerNode[] = directChildRawNodes.map((n) => {
             const toggleNs = toggleNamespaceForNode(index, n.id);
             return makeOpNode(
                 n,
@@ -290,36 +331,50 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
             );
         });
 
+        const nestedGroupNodes: WorkerNode[] = [];
+        for (const [nestedNs, parentNs] of expandedParentOfNamespace) {
+            if (parentNs === namespace) {
+                const g = groupNodeByNamespace.get(nestedNs);
+                if (g) {
+                    nestedGroupNodes.push(g);
+                }
+            }
+        }
+
+        const allChildNodes = [...childOpNodes, ...nestedGroupNodes];
+        const allChildIds = new Set(allChildNodes.map((n) => n.id));
+
         const internalEdgesSeen = new Set<string>();
         const internalEdges: WorkerEdge[] = [];
-        for (const target of childRawNodes) {
+        for (const target of index.nodes) {
+            const targetChildId = mapToChildEndpointId(target.id, namespace);
+            if (!allChildIds.has(targetChildId)) {
+                continue;
+            }
             for (const incoming of target.incomingEdges ?? []) {
-                if (!childRawNodeIdSet.has(incoming.sourceNodeId)) {
+                const sourceChildId = mapToChildEndpointId(incoming.sourceNodeId, namespace);
+                if (!allChildIds.has(sourceChildId) || sourceChildId === targetChildId) {
                     continue;
                 }
-                const edgeId = `internal:${incoming.sourceNodeId}->${target.id}:${incoming.targetNodeInputId}`;
+                const edgeId = `internal:${sourceChildId}->${targetChildId}:${incoming.targetNodeInputId}`;
                 if (internalEdgesSeen.has(edgeId)) {
                     continue;
                 }
                 internalEdgesSeen.add(edgeId);
                 const sourceRawNode = nodeById.get(incoming.sourceNodeId);
-                const sourceOutputMeta = sourceRawNode?.outputsMetadata?.find(
-                    (m) => m.id === incoming.sourceNodeOutputId,
-                );
-                const edgeLabel = sourceOutputMeta ? getTensorInfoFromAttrs(sourceOutputMeta.attrs).label : undefined;
+                const outputMeta = sourceRawNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
+                const edgeLabel = outputMeta ? getTensorInfoFromAttrs(outputMeta.attrs).label : undefined;
                 internalEdges.push({
                     id: edgeId,
-                    source: incoming.sourceNodeId,
-                    target: target.id,
-                    sourceHandle: incoming.sourceNodeOutputId,
-                    targetHandle: incoming.targetNodeInputId,
+                    source: sourceChildId,
+                    target: targetChildId,
                     label: edgeLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`,
                     markerEnd: { type: 'arrowclosed', height: 20, width: 20 },
                 });
             }
         }
 
-        const laidOutChildren = await layoutWithElk(childNodes, internalEdges);
+        const laidOutChildren = await layoutWithElk(allChildNodes, internalEdges);
         const bounds = laidOutChildren.length > 0 ? getBounds(laidOutChildren) : undefined;
         const groupWidth = bounds
             ? Math.max(GROUP_MIN_WIDTH, bounds.maxX - bounds.minX + GROUP_PADDING_X * 2)
@@ -328,11 +383,11 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
             ? Math.max(GROUP_MIN_HEIGHT, bounds.maxY - bounds.minY + GROUP_PADDING_TOP + GROUP_PADDING_BOTTOM)
             : GROUP_MIN_HEIGHT;
 
+        const groupId = `group:${namespace}`;
         const normalizedChildren = laidOutChildren.map((child) => ({
             ...child,
-            parentId: `group:${namespace}`,
+            parentId: groupId,
             extent: 'parent' as const,
-            draggable: false,
             position: bounds
                 ? {
                       x: child.position.x - bounds.minX + GROUP_PADDING_X,
@@ -343,11 +398,15 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
 
         childNodesByNamespace.set(namespace, normalizedChildren);
         internalEdgesByNamespace.set(namespace, internalEdges);
-        groupNodesForTopLayout.push({
-            id: `group:${namespace}`,
+
+        groupNodeByNamespace.set(namespace, {
+            id: groupId,
             type: 'group',
+            draggable: false,
             data: { label: `▾ ${namespace.split('/').pop()} · click to collapse`, kind: 'group', namespace },
             position: { x: 0, y: 0 },
+            width: groupWidth,
+            height: groupHeight,
             style: {
                 width: groupWidth,
                 height: groupHeight,
@@ -372,13 +431,26 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
             );
         });
 
-    const topLevelNodes = [...groupNodesForTopLayout, ...topLevelOpNodes];
+    const topLevelGroupNodes = expandedByDepthDesc
+        .filter((ns) => !expandedParentOfNamespace.has(ns))
+        .map((ns) => groupNodeByNamespace.get(ns)!)
+        .filter(Boolean);
+
+    const topLevelNodes = [...topLevelGroupNodes, ...topLevelOpNodes];
 
     const mapToTopLevelEndpointId = (nodeId: string): string => {
         const renderedId = resolveRenderedNodeId(nodeId);
         const parentNamespace = parentNamespaceByVisibleNodeId.get(renderedId);
-        return parentNamespace ? `group:${parentNamespace}` : renderedId;
+        if (!parentNamespace) {
+            return renderedId;
+        }
+        let ns: string | undefined = parentNamespace;
+        while (ns && expandedParentOfNamespace.has(ns)) {
+            ns = expandedParentOfNamespace.get(ns);
+        }
+        return ns ? `group:${ns}` : renderedId;
     };
+
     const mapToRenderedEndpointId = (nodeId: string): string => resolveRenderedNodeId(nodeId);
     const mapToRenderedTargetEndpointId = (
         sourceNodeId: string,
@@ -468,12 +540,15 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
             continue;
         }
         const groupId = `group:${namespace}`;
-        const laidOutGroup = topLevelNodeById.get(groupId);
-        const topLayoutGroup = groupNodesForTopLayout.find((n) => n.id === groupId);
-        if (!topLayoutGroup) {
+        const groupNode = groupNodeByNamespace.get(namespace);
+        if (!groupNode) {
             continue;
         }
-        finalNodes.push({ ...topLayoutGroup, position: laidOutGroup?.position ?? { x: 0, y: 0 } });
+        const isNested = expandedParentOfNamespace.has(namespace);
+        if (!isNested) {
+            const position = topLevelNodeById.get(groupId)?.position ?? { x: 0, y: 0 };
+            finalNodes.push({ ...groupNode, position });
+        }
         for (const childNode of childNodesByNamespace.get(namespace) ?? []) {
             finalNodes.push(childNode);
         }
