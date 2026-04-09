@@ -256,6 +256,21 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         return map;
     }, [graph.nodes, subgraphNamespaces]);
 
+    const namespaceReturnNodeByNamespace = useMemo(() => {
+        const map = new Map<string, string>();
+        const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
+        for (const namespace of subgraphNamespaces) {
+            const returnCandidates = graph.nodes.filter(
+                (n) => n.namespace === namespace && /\.return$|^return$/i.test(n.label),
+            );
+            returnCandidates.sort((a, b) => (nodeIndexById.get(b.id) ?? 0) - (nodeIndexById.get(a.id) ?? 0));
+            if (returnCandidates[0]) {
+                map.set(namespace, returnCandidates[0].id);
+            }
+        }
+        return map;
+    }, [graph.nodes, subgraphNamespaces]);
+
     const graphIndex: GraphIndex = useMemo(() => {
         const getContainingNamespaces = (namespace?: string): string[] => {
             if (!namespace) {
@@ -281,6 +296,10 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         namespaceInputNodeIdsByNamespace.forEach((ids, ns) => {
             namespaceInputByNamespace[ns] = ids;
         });
+        const returnByNamespace: Record<string, string> = {};
+        namespaceReturnNodeByNamespace.forEach((nodeId, ns) => {
+            returnByNamespace[ns] = nodeId;
+        });
         const outerByNode: Record<string, string> = {};
         outerNamespaceByNodeId.forEach((ns, nodeId) => {
             outerByNode[nodeId] = ns;
@@ -300,6 +319,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             anchorByNamespace,
             anchorNamespaceByNodeId: anchorNsByNode,
             namespaceInputByNamespace,
+            namespaceReturnNodeByNamespace: returnByNamespace,
             containingNamespacesByNodeId,
             outerNamespaceByNodeId: outerByNode,
         };
@@ -310,6 +330,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         namespaceAnchorNodeByNamespace,
         anchorNamespaceByNodeId,
         namespaceInputNodeIdsByNamespace,
+        namespaceReturnNodeByNamespace,
         outerNamespaceByNodeId,
     ]);
 

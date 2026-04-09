@@ -452,6 +452,26 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
     };
 
     const mapToRenderedEndpointId = (nodeId: string): string => resolveRenderedNodeId(nodeId);
+
+    const mapToRenderedSourceEndpointId = (sourceNodeId: string): string => {
+        const renderedId = resolveRenderedNodeId(sourceNodeId);
+        const outerNs = index.outerNamespaceByNodeId[renderedId];
+        if (outerNs && expandedNamespaces.has(outerNs)) {
+            const returnNodeId = index.namespaceReturnNodeByNamespace[outerNs];
+            if (returnNodeId) {
+                return returnNodeId;
+            }
+        }
+        const anchorNs = index.anchorNamespaceByNodeId[renderedId];
+        if (anchorNs && expandedNamespaces.has(anchorNs)) {
+            const returnNodeId = index.namespaceReturnNodeByNamespace[anchorNs];
+            if (returnNodeId) {
+                return returnNodeId;
+            }
+        }
+        return renderedId;
+    };
+
     const mapToRenderedTargetEndpointId = (
         sourceNodeId: string,
         targetNodeId: string,
@@ -559,7 +579,7 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
 
     for (const target of index.nodes) {
         for (const incoming of target.incomingEdges ?? []) {
-            const sourceId = mapToRenderedEndpointId(incoming.sourceNodeId);
+            const sourceId = mapToRenderedSourceEndpointId(incoming.sourceNodeId);
             const targetId = mapToRenderedTargetEndpointId(
                 incoming.sourceNodeId,
                 target.id,

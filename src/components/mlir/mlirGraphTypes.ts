@@ -29,6 +29,8 @@ export type GraphIndex = {
     anchorByNamespace: Record<string, string>;
     anchorNamespaceByNodeId: Record<string, string>;
     namespaceInputByNamespace: Record<string, string[]>;
+    /** Return/output node id per namespace (e.g. stablehlo.return). */
+    namespaceReturnNodeByNamespace: Record<string, string>;
     containingNamespacesByNodeId: Record<string, string[]>;
     /** Outer region op node id → collapsible inner namespace (parent-level toggle). */
     outerNamespaceByNodeId: Record<string, string>;
