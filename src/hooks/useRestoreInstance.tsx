@@ -3,7 +3,6 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { useSetAtom } from 'jotai';
 import {
     activeNpeOpTraceAtom,
@@ -29,54 +28,55 @@ const useRestoreInstance = () => {
     const [hasRestoredInstance, setHasRestoredInstance] = useState<boolean>(false);
 
     useEffect(() => {
-        if (instance && reports !== null && !hasRestoredInstance) {
-            const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
-            const remoteFolders = remote.persistentState.getSavedReportFolders(
-                remote.persistentState.selectedConnection,
-            );
-
-            const profilerReportPath = instance?.active_report?.profiler_name || null;
-            const profilerReportName =
-                (isProfilerRemote && profilerReportPath) || instance?.remote_profiler_folder
-                    ? getRemoteReportName(remoteFolders, profilerReportPath) || profilerReportPath
-                    : profilerReportPath;
-            const perfReportPath = instance?.active_report?.performance_name || null;
-
-            const activeProfilerReport = profilerReportPath
-                ? {
-                      path: profilerReportPath,
-                      reportName: profilerReportName || profilerReportPath,
-                  }
-                : null;
-            const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
-            const activePerfReport = perfReportPath
-                ? {
-                      path: perfReportPath,
-                      reportName: perfReportPath,
-                  }
-                : null;
-            const activePerfLocation = instance?.active_report?.performance_location ?? null;
-
-            const activeReports = {
-                profiler: activeProfilerReport,
-                profilerLocation: activeProfilerLocation,
-                performance: activePerfReport,
-                performanceLocation: activePerfLocation,
-                npe: instance?.active_report?.npe_name ?? null,
-            };
-
-            flushSync(() => {
-                setHasRestoredInstance(true);
-
-                setActiveProfilerReport(activeReports.profiler);
-                setProfilerReportLocation(activeReports.profilerLocation);
-
-                setActivePerformanceReport(activeReports.performance);
-                setPerformanceReportLocation(activeReports.performanceLocation);
-
-                setActiveNpe(activeReports.npe);
-            });
+        if (!instance || reports === null || hasRestoredInstance) {
+            return;
         }
+
+        const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
+        const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
+
+        const profilerReportPath = instance?.active_report?.profiler_name || null;
+        const profilerReportName =
+            (isProfilerRemote && profilerReportPath) || instance?.remote_profiler_folder
+                ? getRemoteReportName(remoteFolders, profilerReportPath) || profilerReportPath
+                : profilerReportPath;
+        const perfReportPath = instance?.active_report?.performance_name || null;
+
+        const activeProfilerReport = profilerReportPath
+            ? {
+                  path: profilerReportPath,
+                  reportName: profilerReportName || profilerReportPath,
+              }
+            : null;
+        const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
+        const activePerfReport = perfReportPath
+            ? {
+                  path: perfReportPath,
+                  reportName: perfReportPath,
+              }
+            : null;
+        const activePerfLocation = instance?.active_report?.performance_location ?? null;
+
+        const activeReports = {
+            profiler: activeProfilerReport,
+            profilerLocation: activeProfilerLocation,
+            performance: activePerfReport,
+            performanceLocation: activePerfLocation,
+            npe: instance?.active_report?.npe_name ?? null,
+        };
+
+        // Executed at a safe time prior to control returning to the browser's event loop
+        queueMicrotask(() => {
+            setHasRestoredInstance(true);
+
+            setActiveProfilerReport(activeReports.profiler);
+            setProfilerReportLocation(activeReports.profilerLocation);
+
+            setActivePerformanceReport(activeReports.performance);
+            setPerformanceReportLocation(activeReports.performanceLocation);
+
+            setActiveNpe(activeReports.npe);
+        });
     }, [
         setActiveProfilerReport,
         setProfilerReportLocation,
