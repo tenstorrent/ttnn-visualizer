@@ -22,13 +22,13 @@ import 'reactflow/dist/style.css';
 
 import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
-import type { BuiltGraph, GraphIndex, WorkerOutboundMessage } from './mlirGraphTypes';
+import type { BuiltGraph, GraphIndex } from './mlirGraphTypes';
+import { buildVisibleGraph } from './mlirGraphBuilder';
 
 type MLNodeData = {
     label: string;
     kind?: 'op' | 'group';
     namespace: string;
-    /** Present on subgraph toggle nodes (collapsed outer op or expanded anchor op). */
     collapsedSubgraphNamespace?: string;
     subgraphToggleState?: 'collapsed' | 'expanded';
 };
@@ -89,7 +89,6 @@ const isCollapsibleNamespace = (namespace: string, nodes: GraphBundle['graphs'][
     if (!hasMatchingInnerOp) {
         return false;
     }
-
     const hasNestedNamespaceContent = nodes.some((n) => {
         if (!n.namespace) {
             return false;
@@ -99,14 +98,11 @@ const isCollapsibleNamespace = (namespace: string, nodes: GraphBundle['graphs'][
     if (hasNestedNamespaceContent) {
         return true;
     }
-
     const parentNamespace = getParentNamespace(namespace);
     if (!parentNamespace) {
         return false;
     }
-
-    const hasMatchingParentOp = nodes.some((n) => n.namespace === parentNamespace && n.label === expectedLabel);
-    return hasMatchingParentOp;
+    return nodes.some((n) => n.namespace === parentNamespace && n.label === expectedLabel);
 };
 
 const getNodeAttrValue = (node: GraphBundle['graphs'][0]['nodes'][number], key: string): string | undefined =>
@@ -133,12 +129,7 @@ function builtGraphToReactFlow(built: BuiltGraph): { nodes: Node<MLNodeData>[]; 
     }));
     const edges: Edge[] = built.edges.map((e) => ({
         ...e,
-        markerEnd: e.markerEnd
-            ? {
-                  ...e.markerEnd,
-                  type: MarkerType.ArrowClosed,
-              }
-            : undefined,
+        markerEnd: e.markerEnd ? { ...e.markerEnd, type: MarkerType.ArrowClosed } : undefined,
     }));
     return { nodes, edges };
 }
@@ -148,24 +139,13 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const graph = data.graphs[0];
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    /** Subgraph namespaces currently expanded; default none = all collapsed. */
     const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
     const viewportAnchorRef = useRef<{
         toNodeId: string;
         fromPosition: { x: number; y: number };
     } | null>(null);
     const hasFitInitiallyRef = useRef(false);
-
-    const latestBuildRequestIdRef = useRef(0);
-    const workerRef = useRef<Worker | null>(null);
-    const [indexedGraphId, setIndexedGraphId] = useState<string | null>(null);
-    const desiredBuildKeyRef = useRef<string>('');
-    const lastBuildParamsRef = useRef<{
-        expandedNamespaces: string[];
-        cacheKey: string;
-    }>({ expandedNamespaces: [], cacheKey: '' });
-    const currentGraphIdRef = useRef(graph.id);
-    const currentGraphIndexRef = useRef<GraphIndex | null>(null);
+    const buildSeqRef = useRef(0);
 
     const collapsibleNamespaces = useMemo(
         () =>
@@ -182,7 +162,6 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         const orderedNamespaces = [...collapsibleNamespaces].sort(
             (a, b) => getNamespaceOrdinal(a) - getNamespaceOrdinal(b),
         );
-
         for (const namespace of orderedNamespaces) {
             const parentNamespace = getParentNamespace(namespace);
             if (parentNamespace) {
@@ -194,35 +173,28 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                         .map((n) => getNodeAttrValue(n, 'full_location'))
                         .filter((v): v is string => Boolean(v)),
                 );
-
                 const outerCandidates = graph.nodes.filter(
                     (n) => n.namespace === parentNamespace && n.label === expectedLabel && !usedOuterNodeIds.has(n.id),
                 );
                 outerCandidates.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
-
                 const outer =
-                    outerCandidates.find((candidate) => {
-                        const location = getNodeAttrValue(candidate, 'full_location');
-                        return location ? preferredLocations.has(location) : false;
+                    outerCandidates.find((c) => {
+                        const loc = getNodeAttrValue(c, 'full_location');
+                        return loc ? preferredLocations.has(loc) : false;
                     }) ?? outerCandidates[0];
-
                 if (outer) {
                     map.set(outer.id, namespace);
                     usedOuterNodeIds.add(outer.id);
                 }
             }
         }
-
         return map;
     }, [collapsibleNamespaces, graph.nodes]);
 
     const subgraphNamespaces = useMemo(() => {
         return [...collapsibleNamespaces].sort((a, b) => {
             const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
-            if (ord !== 0) {
-                return ord;
-            }
-            return a.localeCompare(b);
+            return ord !== 0 ? ord : a.localeCompare(b);
         });
     }, [collapsibleNamespaces]);
 
@@ -240,9 +212,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 }
                 return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
             });
-            const anchor = candidates[0];
-            if (anchor) {
-                map.set(namespace, anchor.id);
+            if (candidates[0]) {
+                map.set(namespace, candidates[0].id);
             }
         }
         return map;
@@ -259,7 +230,6 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const namespaceInputNodeIdsByNamespace = useMemo(() => {
         const map = new Map<string, string[]>();
         const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
-
         for (const namespace of subgraphNamespaces) {
             const inputNodes = graph.nodes.filter((n) => {
                 if (!isNodeInsideNamespaceTree(n.namespace, namespace)) {
@@ -273,24 +243,16 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 }
                 return /^%arg\d+$/i.test(n.label);
             });
-
             inputNodes.sort((a, b) => {
-                const aMatch = a.label.match(/^%arg(\d+)$/i);
-                const bMatch = b.label.match(/^%arg(\d+)$/i);
-                const aIdx = aMatch ? Number(aMatch[1]) : Number.POSITIVE_INFINITY;
-                const bIdx = bMatch ? Number(bMatch[1]) : Number.POSITIVE_INFINITY;
-                if (aIdx !== bIdx) {
-                    return aIdx - bIdx;
-                }
-                return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
+                const aIdx = Number(a.label.match(/^%arg(\d+)$/i)?.[1] ?? Infinity);
+                const bIdx = Number(b.label.match(/^%arg(\d+)$/i)?.[1] ?? Infinity);
+                return aIdx !== bIdx ? aIdx - bIdx : (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
             });
-
             map.set(
                 namespace,
                 inputNodes.map((n) => n.id),
             );
         }
-
         return map;
     }, [graph.nodes, subgraphNamespaces]);
 
@@ -303,27 +265,22 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 .filter((candidate) => isNodeInsideNamespaceTree(namespace, candidate))
                 .sort((a, b) => a.length - b.length);
         };
-
         const containingNamespacesByNodeId: Record<string, string[]> = {};
         for (const n of graph.nodes) {
             containingNamespacesByNodeId[n.id] = getContainingNamespaces(n.namespace);
         }
-
         const anchorByNamespace: Record<string, string> = {};
         namespaceAnchorNodeByNamespace.forEach((nodeId, ns) => {
             anchorByNamespace[ns] = nodeId;
         });
-
         const anchorNsByNode: Record<string, string> = {};
         anchorNamespaceByNodeId.forEach((ns, nodeId) => {
             anchorNsByNode[nodeId] = ns;
         });
-
         const namespaceInputByNamespace: Record<string, string[]> = {};
         namespaceInputNodeIdsByNamespace.forEach((ids, ns) => {
             namespaceInputByNamespace[ns] = ids;
         });
-
         const outerByNode: Record<string, string> = {};
         outerNamespaceByNodeId.forEach((ns, nodeId) => {
             outerByNode[nodeId] = ns;
@@ -360,72 +317,30 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         hasFitInitiallyRef.current = false;
         setExpandedNamespaces(new Set());
         viewportAnchorRef.current = null;
-        setIndexedGraphId(null);
     }, [graph.id]);
 
-    useEffect(() => {
-        currentGraphIdRef.current = graph.id;
-        currentGraphIndexRef.current = graphIndex;
-    }, [graph.id, graphIndex]);
-
-    useEffect(() => {
-        const worker = new Worker(new URL('./mlirLayoutWorker.ts', import.meta.url), { type: 'module' });
-        workerRef.current = worker;
-
-        worker.onmessage = (event: MessageEvent<WorkerOutboundMessage>) => {
-            const msg = event.data;
-            if (msg.type === 'indexed') {
-                setIndexedGraphId(msg.graphId);
+    const runBuild = useCallback(
+        async (expanded: Set<string>) => {
+            buildSeqRef.current += 1;
+            const seq = buildSeqRef.current;
+            const expandedSorted = Array.from(expanded).sort((a, b) => a.localeCompare(b));
+            const built = await buildVisibleGraph(graphIndex, expandedSorted);
+            if (seq !== buildSeqRef.current) {
                 return;
             }
-            if (msg.type === 'error') {
-                if (msg.error.includes('Graph index not found')) {
-                    if (!currentGraphIndexRef.current) {
-                        return;
-                    }
-                    worker.postMessage({
-                        type: 'set-index',
-                        graphId: currentGraphIndexRef.current.graphId,
-                        index: currentGraphIndexRef.current,
-                    });
-                    latestBuildRequestIdRef.current += 1;
-                    const retryRequestId = latestBuildRequestIdRef.current;
-                    worker.postMessage({
-                        type: 'build',
-                        requestId: retryRequestId,
-                        graphId: currentGraphIdRef.current,
-                        expandedNamespaces: lastBuildParamsRef.current.expandedNamespaces,
-                        cacheKey: lastBuildParamsRef.current.cacheKey,
-                    });
-                    return;
-                }
-                if (msg.requestId >= latestBuildRequestIdRef.current - 1) {
-                    // eslint-disable-next-line no-console
-                    console.error('mlir layout worker:', msg.error);
-                }
-                return;
-            }
-            const builtKey = `${msg.graphId}::${msg.cacheKey}`;
-            if (builtKey !== desiredBuildKeyRef.current) {
-                return;
-            }
-            const rf = builtGraphToReactFlow(msg.graph);
+            const rf = builtGraphToReactFlow(built);
             setNodes(rf.nodes);
             setEdges(rf.edges);
 
-            const viewportAnchor = viewportAnchorRef.current;
-            if (viewportAnchor) {
-                const toNode = rf.nodes.find((n) => n.id === viewportAnchor.toNodeId);
+            const anchor = viewportAnchorRef.current;
+            if (anchor) {
+                const toNode = rf.nodes.find((n) => n.id === anchor.toNodeId);
                 if (toNode) {
-                    const viewport = getViewport();
-                    const dx = toNode.position.x - viewportAnchor.fromPosition.x;
-                    const dy = toNode.position.y - viewportAnchor.fromPosition.y;
+                    const vp = getViewport();
+                    const dx = toNode.position.x - anchor.fromPosition.x;
+                    const dy = toNode.position.y - anchor.fromPosition.y;
                     void setViewport(
-                        {
-                            x: viewport.x - dx * viewport.zoom,
-                            y: viewport.y - dy * viewport.zoom,
-                            zoom: viewport.zoom,
-                        },
+                        { x: vp.x - dx * vp.zoom, y: vp.y - dy * vp.zoom, zoom: vp.zoom },
                         { duration: 0 },
                     );
                 }
@@ -438,77 +353,13 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 });
                 hasFitInitiallyRef.current = true;
             }
-        };
-
-        return () => {
-            worker.terminate();
-            workerRef.current = null;
-        };
-    }, [fitView, getViewport, setEdges, setNodes, setViewport]);
-
-    useEffect(() => {
-        const w = workerRef.current;
-        if (!w) {
-            return;
-        }
-        setIndexedGraphId(null);
-        w.postMessage({ type: 'set-index', graphId: graphIndex.graphId, index: graphIndex });
-    }, [graphIndex]);
-
-    const expandedNamespacesSorted = useMemo(
-        () => Array.from(expandedNamespaces).sort((a, b) => a.localeCompare(b)),
-        [expandedNamespaces],
+        },
+        [fitView, getViewport, graphIndex, setEdges, setNodes, setViewport],
     );
 
-    const expansionCacheKey = useMemo(() => JSON.stringify(expandedNamespacesSorted), [expandedNamespacesSorted]);
-
     useEffect(() => {
-        const w = workerRef.current;
-        if (!w) {
-            return;
-        }
-        if (indexedGraphId !== graphIndex.graphId) {
-            w.postMessage({ type: 'set-index', graphId: graphIndex.graphId, index: graphIndex });
-        }
-        latestBuildRequestIdRef.current += 1;
-        const requestId = latestBuildRequestIdRef.current;
-        desiredBuildKeyRef.current = `${graphIndex.graphId}::${expansionCacheKey}`;
-        lastBuildParamsRef.current = {
-            expandedNamespaces: expandedNamespacesSorted,
-            cacheKey: expansionCacheKey,
-        };
-        w.postMessage({
-            type: 'build',
-            requestId,
-            graphId: graphIndex.graphId,
-            expandedNamespaces: expandedNamespacesSorted,
-            cacheKey: expansionCacheKey,
-        });
-    }, [expansionCacheKey, expandedNamespacesSorted, graphIndex, indexedGraphId]);
-
-    const doLayout = useCallback(() => {
-        const w = workerRef.current;
-        if (!w) {
-            return;
-        }
-        if (indexedGraphId !== graphIndex.graphId) {
-            w.postMessage({ type: 'set-index', graphId: graphIndex.graphId, index: graphIndex });
-        }
-        latestBuildRequestIdRef.current += 1;
-        const requestId = latestBuildRequestIdRef.current;
-        desiredBuildKeyRef.current = `${graphIndex.graphId}::${expansionCacheKey}`;
-        lastBuildParamsRef.current = {
-            expandedNamespaces: expandedNamespacesSorted,
-            cacheKey: expansionCacheKey,
-        };
-        w.postMessage({
-            type: 'build',
-            requestId,
-            graphId: graphIndex.graphId,
-            expandedNamespaces: expandedNamespacesSorted,
-            cacheKey: expansionCacheKey,
-        });
-    }, [expansionCacheKey, expandedNamespacesSorted, graphIndex, indexedGraphId]);
+        void runBuild(expandedNamespaces);
+    }, [expandedNamespaces, runBuild]);
 
     const onSubgraphNodeClick = useCallback(
         (_event: MouseEvent, node: Node<MLNodeData>) => {
@@ -530,11 +381,14 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 }
                 return;
             }
-            const collapsedNs = node.data?.collapsedSubgraphNamespace;
-            if (collapsedNs) {
-                const isExpanded = expandedNamespaces.has(collapsedNs);
+            const toggleNamespace =
+                node.data?.collapsedSubgraphNamespace ??
+                anchorNamespaceByNodeId.get(node.id) ??
+                outerNamespaceByNodeId.get(node.id);
+            if (toggleNamespace) {
+                const isExpanded = expandedNamespaces.has(toggleNamespace);
                 if (isExpanded) {
-                    const anchorNodeId = namespaceAnchorNodeByNamespace.get(collapsedNs);
+                    const anchorNodeId = namespaceAnchorNodeByNamespace.get(toggleNamespace);
                     let fromPosition = { x: node.position.x, y: node.position.y };
                     if (node.parentId) {
                         const parentNode = nodes.find((n) => n.id === node.parentId);
@@ -543,39 +397,37 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                         }
                     }
                     if (anchorNodeId) {
-                        viewportAnchorRef.current = {
-                            toNodeId: anchorNodeId,
-                            fromPosition,
-                        };
+                        viewportAnchorRef.current = { toNodeId: anchorNodeId, fromPosition };
                     }
                     setExpandedNamespaces((prev) => {
                         const next = new Set(prev);
-                        next.delete(collapsedNs);
+                        next.delete(toggleNamespace);
                         return next;
                     });
                 } else {
-                    const expandedGroupNodeId = `group:${collapsedNs}`;
                     viewportAnchorRef.current = {
-                        toNodeId: expandedGroupNodeId,
+                        toNodeId: `group:${toggleNamespace}`,
                         fromPosition: { x: node.position.x, y: node.position.y },
                     };
                     setExpandedNamespaces((prev) => {
                         const next = new Set(prev);
-                        next.add(collapsedNs);
+                        next.add(toggleNamespace);
                         return next;
                     });
                 }
             }
         },
-        [expandedNamespaces, namespaceAnchorNodeByNamespace, nodes, subgraphNamespaces],
+        [
+            anchorNamespaceByNodeId,
+            expandedNamespaces,
+            namespaceAnchorNodeByNamespace,
+            nodes,
+            outerNamespaceByNodeId,
+            subgraphNamespaces,
+        ],
     );
 
-    const nodeTypes = useMemo(
-        () => ({
-            mlirOp: MlirOpNode,
-        }),
-        [],
-    );
+    const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode }), []);
 
     return (
         <div style={{ width: '100%', height: 'calc(100vh - 92px - 30px - 56px - 40px)' }}>
@@ -597,14 +449,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             </ReactFlow>
 
             <Button
-                onClick={() => void doLayout()}
-                style={{
-                    position: 'absolute',
-                    top: 80,
-                    left: 12,
-                    zIndex: 10,
-                    padding: '8px 10px',
-                }}
+                onClick={() => void runBuild(expandedNamespaces)}
+                style={{ position: 'absolute', top: 80, left: 12, zIndex: 10, padding: '8px 10px' }}
             >
                 Re-layout (ELK)
             </Button>

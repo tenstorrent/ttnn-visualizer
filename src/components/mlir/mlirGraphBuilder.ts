@@ -1,16 +1,7 @@
 /* eslint-disable no-await-in-loop */
 /* eslint-disable no-continue */
-/* eslint-disable no-restricted-globals */
 import ELK, { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk.bundled';
-import type {
-    BuiltGraph,
-    GraphIndex,
-    IndexedAttr,
-    IndexedNode,
-    WorkerEdge,
-    WorkerInboundMessage,
-    WorkerNode,
-} from './mlirGraphTypes';
+import type { BuiltGraph, GraphIndex, IndexedAttr, IndexedNode, WorkerEdge, WorkerNode } from './mlirGraphTypes';
 
 const GROUP_MIN_WIDTH = 260;
 const GROUP_MIN_HEIGHT = 140;
@@ -38,7 +29,7 @@ function getElk(): ElkLike {
     } else if (maybeCtor && typeof (maybeCtor as ElkLike).layout === 'function') {
         elkInstance = maybeCtor as ElkLike;
     } else {
-        throw new Error('ELK worker initialization failed: unexpected export shape');
+        throw new Error('ELK initialization failed: unexpected export shape');
     }
     return elkInstance;
 }
@@ -98,10 +89,7 @@ function fallbackLayeredLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Worker
         const bucket = byLevel.get(level) ?? [];
         bucket.sort((a, b) => a.id.localeCompare(b.id));
         bucket.forEach((n, idx) => {
-            laidOut.push({
-                ...n,
-                position: { x: idx * xGap, y: level * yGap },
-            });
+            laidOut.push({ ...n, position: { x: idx * xGap, y: level * yGap } });
         });
     }
     return laidOut;
@@ -124,9 +112,6 @@ const elkOptions: Record<string, string> = {
     'elk.layered.mergeEdges': 'false',
     'elk.layered.cycleBreaking.strategy': 'GREEDY',
 };
-
-const indexByGraphId = new Map<string, GraphIndex>();
-const cacheByGraphId = new Map<string, Map<string, BuiltGraph>>();
 
 function toggleNamespaceForNode(index: GraphIndex, nodeId: string): string | undefined {
     return index.anchorNamespaceByNodeId[nodeId] ?? index.outerNamespaceByNodeId[nodeId];
@@ -156,11 +141,7 @@ function toElkGraph(nodes: WorkerNode[], edges: WorkerEdge[]): ElkNode {
         layoutOptions: elkOptions,
         children: nodes.map((n) => {
             const { width, height } = getNodeLayoutSize(n);
-            return {
-                id: n.id,
-                width,
-                height,
-            };
+            return { id: n.id, width, height };
         }),
         edges: edges.map((e) => ({
             id: e.id,
@@ -181,10 +162,7 @@ async function layoutWithElk(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<
         (laidOut.children ?? []).forEach((c) => {
             positions.set(c.id, { x: c.x ?? 0, y: c.y ?? 0 });
         });
-        return nodes.map((n) => ({
-            ...n,
-            position: positions.get(n.id) ?? { x: 0, y: 0 },
-        }));
+        return nodes.map((n) => ({ ...n, position: positions.get(n.id) ?? { x: 0, y: 0 } }));
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (message.includes('not a constructor')) {
@@ -226,9 +204,7 @@ function getTensorInfoFromAttrs(attrs: IndexedAttr[]) {
             ?.replace(/>$/, '')
             ?.replace(/x/g, '×');
     const prettyShape = cleanShape(shape);
-    return {
-        label: prettyShape && dtype ? `${prettyShape} ${dtype}` : prettyShape || dtype,
-    };
+    return { label: prettyShape && dtype ? `${prettyShape} ${dtype}` : prettyShape || dtype };
 }
 
 function makeOpNode(node: IndexedNode, toggle?: { namespace: string; state: 'collapsed' | 'expanded' }): WorkerNode {
@@ -239,12 +215,7 @@ function makeOpNode(node: IndexedNode, toggle?: { namespace: string; state: 'col
             label: node.label,
             kind: 'op',
             namespace: node.namespace,
-            ...(toggle
-                ? {
-                      collapsedSubgraphNamespace: toggle.namespace,
-                      subgraphToggleState: toggle.state,
-                  }
-                : {}),
+            ...(toggle ? { collapsedSubgraphNamespace: toggle.namespace, subgraphToggleState: toggle.state } : {}),
         },
         type: 'mlirOp',
         position: { x: 0, y: 0 },
@@ -263,9 +234,7 @@ function makeOpNode(node: IndexedNode, toggle?: { namespace: string; state: 'col
     };
 }
 
-async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: string[]): Promise<BuiltGraph> {
-    // eslint-disable-next-line no-console
-    console.log('[WORKER] buildVisibleGraph start', { expanded: expandedNamespacesList });
+export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: string[]): Promise<BuiltGraph> {
     const expandedNamespaces = new Set(expandedNamespacesList);
     const nodeById = new Map(index.nodes.map((n) => [n.id, n]));
 
@@ -316,17 +285,13 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
             return makeOpNode(
                 n,
                 toggleNs
-                    ? {
-                          namespace: toggleNs,
-                          state: expandedNamespaces.has(toggleNs) ? 'expanded' : 'collapsed',
-                      }
+                    ? { namespace: toggleNs, state: expandedNamespaces.has(toggleNs) ? 'expanded' : 'collapsed' }
                     : undefined,
             );
         });
 
         const internalEdgesSeen = new Set<string>();
         const internalEdges: WorkerEdge[] = [];
-
         for (const target of childRawNodes) {
             for (const incoming of target.incomingEdges ?? []) {
                 if (!childRawNodeIdSet.has(incoming.sourceNodeId)) {
@@ -337,7 +302,6 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
                     continue;
                 }
                 internalEdgesSeen.add(edgeId);
-
                 const sourceRawNode = nodeById.get(incoming.sourceNodeId);
                 const sourceOutputMeta = sourceRawNode?.outputsMetadata?.find(
                     (m) => m.id === incoming.sourceNodeOutputId,
@@ -355,14 +319,7 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
             }
         }
 
-        // eslint-disable-next-line no-console
-        console.log(`[WORKER] layoutWithElk internal for ${namespace}`, {
-            childCount: childNodes.length,
-            edgeCount: internalEdges.length,
-        });
         const laidOutChildren = await layoutWithElk(childNodes, internalEdges);
-        // eslint-disable-next-line no-console
-        console.log(`[WORKER] layoutWithElk internal done for ${namespace}`, { laidOutCount: laidOutChildren.length });
         const bounds = laidOutChildren.length > 0 ? getBounds(laidOutChildren) : undefined;
         const groupWidth = bounds
             ? Math.max(GROUP_MIN_WIDTH, bounds.maxX - bounds.minX + GROUP_PADDING_X * 2)
@@ -381,10 +338,7 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
                       x: child.position.x - bounds.minX + GROUP_PADDING_X,
                       y: child.position.y - bounds.minY + GROUP_PADDING_TOP,
                   }
-                : {
-                      x: GROUP_PADDING_X,
-                      y: GROUP_PADDING_TOP,
-                  },
+                : { x: GROUP_PADDING_X, y: GROUP_PADDING_TOP },
         }));
 
         childNodesByNamespace.set(namespace, normalizedChildren);
@@ -392,11 +346,7 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
         groupNodesForTopLayout.push({
             id: `group:${namespace}`,
             type: 'group',
-            data: {
-                label: `▾ ${namespace.split('/').pop()} · click to collapse`,
-                kind: 'group',
-                namespace,
-            },
+            data: { label: `▾ ${namespace.split('/').pop()} · click to collapse`, kind: 'group', namespace },
             position: { x: 0, y: 0 },
             style: {
                 width: groupWidth,
@@ -417,10 +367,7 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
             return makeOpNode(
                 n,
                 toggleNs
-                    ? {
-                          namespace: toggleNs,
-                          state: expandedNamespaces.has(toggleNs) ? 'expanded' : 'collapsed',
-                      }
+                    ? { namespace: toggleNs, state: expandedNamespaces.has(toggleNs) ? 'expanded' : 'collapsed' }
                     : undefined,
             );
         });
@@ -430,14 +377,9 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
     const mapToTopLevelEndpointId = (nodeId: string): string => {
         const renderedId = resolveRenderedNodeId(nodeId);
         const parentNamespace = parentNamespaceByVisibleNodeId.get(renderedId);
-        if (parentNamespace) {
-            return `group:${parentNamespace}`;
-        }
-        return renderedId;
+        return parentNamespace ? `group:${parentNamespace}` : renderedId;
     };
-
     const mapToRenderedEndpointId = (nodeId: string): string => resolveRenderedNodeId(nodeId);
-
     const mapToRenderedTargetEndpointId = (
         sourceNodeId: string,
         targetNodeId: string,
@@ -457,7 +399,6 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
                 }
             }
         }
-
         const collapsedNamespace = toggleNamespaceForNode(index, targetNodeId);
         if (collapsedNamespace && expandedNamespaces.has(collapsedNamespace)) {
             const inputIdx = Number(targetInputId);
@@ -468,10 +409,8 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
                 }
             }
         }
-
         return mapToRenderedEndpointId(targetNodeId);
     };
-
     const mapTopLevelEndpointToRenderedEndpoint = (endpointId: string): string => {
         if (endpointId.startsWith('group:')) {
             const namespace = endpointId.slice('group:'.length);
@@ -494,11 +433,7 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
                 continue;
             }
             topLevelEdgeSeen.add(edgeId);
-            topLevelEdgesForLayout.push({
-                id: edgeId,
-                source: sourceId,
-                target: targetId,
-            });
+            topLevelEdgesForLayout.push({ id: edgeId, source: sourceId, target: targetId });
         }
     }
 
@@ -506,14 +441,7 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
     const topLevelEdgesForElk = topLevelEdgesForLayout.filter(
         (e) => topLevelNodeIdSet.has(e.source) && topLevelNodeIdSet.has(e.target),
     );
-    // eslint-disable-next-line no-console
-    console.log('[WORKER] layoutWithElk top-level', {
-        nodeCount: topLevelNodes.length,
-        edgeCount: topLevelEdgesForElk.length,
-    });
     const laidOutTopLevelNodes = await layoutWithElk(topLevelNodes, topLevelEdgesForElk);
-    // eslint-disable-next-line no-console
-    console.log('[WORKER] layoutWithElk top-level done');
     const topLevelNodeById = new Map(laidOutTopLevelNodes.map((n) => [n.id, n]));
 
     const finalNodes: WorkerNode[] = [];
@@ -522,10 +450,7 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
     const finalEdgePairSeen = new Set<string>();
 
     const addEdgeSafe = (edge: WorkerEdge) => {
-        if (edge.source === edge.target) {
-            return;
-        }
-        if (finalEdgeSeen.has(edge.id)) {
+        if (edge.source === edge.target || finalEdgeSeen.has(edge.id)) {
             return;
         }
         finalEdgeSeen.add(edge.id);
@@ -535,10 +460,7 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
 
     for (const node of topLevelOpNodes) {
         const laidOut = topLevelNodeById.get(node.id);
-        finalNodes.push({
-            ...node,
-            position: laidOut?.position ?? node.position,
-        });
+        finalNodes.push({ ...node, position: laidOut?.position ?? node.position });
     }
 
     for (const namespace of index.subgraphNamespaces) {
@@ -551,10 +473,7 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
         if (!topLayoutGroup) {
             continue;
         }
-        finalNodes.push({
-            ...topLayoutGroup,
-            position: laidOutGroup?.position ?? { x: 0, y: 0 },
-        });
+        finalNodes.push({ ...topLayoutGroup, position: laidOutGroup?.position ?? { x: 0, y: 0 } });
         for (const childNode of childNodesByNamespace.get(namespace) ?? []) {
             finalNodes.push(childNode);
         }
@@ -599,82 +518,9 @@ async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: stri
             source: renderedSource,
             target: renderedTarget,
             markerEnd: { type: 'arrowclosed', height: 20, width: 20 },
-            style: {
-                strokeDasharray: '6 4',
-                opacity: 0.7,
-            },
+            style: { strokeDasharray: '6 4', opacity: 0.7 },
         });
     }
 
-    // eslint-disable-next-line no-console
-    console.log('[WORKER] buildVisibleGraph done', { finalNodes: finalNodes.length, finalEdges: finalEdges.length });
     return { nodes: finalNodes, edges: finalEdges };
 }
-
-const WORKER_ID = Math.random().toString(36).slice(2, 8);
-// eslint-disable-next-line no-console
-console.log(`[WORKER ${WORKER_ID}] module loaded`);
-
-self.onmessage = async (event: MessageEvent<WorkerInboundMessage>) => {
-    const message = event.data;
-    // eslint-disable-next-line no-console
-    console.log(
-        `[WORKER ${WORKER_ID} onmessage]`,
-        message.type,
-        message.type === 'build'
-            ? { requestId: message.requestId, cacheKey: message.cacheKey, expanded: message.expandedNamespaces }
-            : '',
-    );
-    if (message.type === 'set-index') {
-        indexByGraphId.set(message.graphId, message.index);
-        cacheByGraphId.set(message.graphId, new Map());
-        postMessage({
-            type: 'indexed',
-            graphId: message.graphId,
-        });
-        return;
-    }
-
-    const { graphId, requestId, expandedNamespaces, cacheKey } = message;
-    try {
-        const index = indexByGraphId.get(graphId);
-        if (!index) {
-            postMessage({
-                type: 'error',
-                requestId,
-                error: `Graph index not found for ${graphId}`,
-            });
-            return;
-        }
-        const cache = cacheByGraphId.get(graphId) ?? new Map<string, BuiltGraph>();
-        cacheByGraphId.set(graphId, cache);
-        const cached = cache.get(cacheKey);
-        if (cached) {
-            // eslint-disable-next-line no-console
-            console.log('[WORKER] cache hit', { requestId, cacheKey });
-            postMessage({
-                type: 'built',
-                requestId,
-                graphId,
-                cacheKey,
-                graph: cached,
-            });
-            return;
-        }
-        const built = await buildVisibleGraph(index, expandedNamespaces);
-        cache.set(cacheKey, built);
-        postMessage({
-            type: 'built',
-            requestId,
-            graphId,
-            cacheKey,
-            graph: built,
-        });
-    } catch (error) {
-        postMessage({
-            type: 'error',
-            requestId,
-            error: error instanceof Error ? error.message : String(error),
-        });
-    }
-};
