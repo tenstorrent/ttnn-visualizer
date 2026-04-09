@@ -186,7 +186,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         );
     };
 
-    // React Compiler optimization warning
+    // TODO: React Compiler optimization warning, look into this
     // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const tableRows = useMemo<SummaryTableBuffer[]>(() => {
         let filteredRows = listOfBuffers;
@@ -213,7 +213,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         return [...sortTableFields(filteredRows as [])];
     }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensorId, showOnlySelected]);
 
-    // React Compiler optimization warning
+    // TODO: React Compiler optimization warning, look into this
     // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const selectedRows = useMemo(() => {
         if (userSelectedRows.length) {
@@ -233,7 +233,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         }, []);
 
         return matchingBuffers;
-        // React Compiler optimization warning
+        // TODO: React Compiler optimization warning, look into this
         // eslint-disable-next-line react-hooks/preserve-manual-memoization
     }, [tableRows, selectedTensorId, userSelectedRows]);
 
