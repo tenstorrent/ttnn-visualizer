@@ -3,7 +3,18 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, Classes, Collapse, Icon, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    Classes,
+    Collapse,
+    Icon,
+    Intent,
+    NumberRange,
+    PopoverPosition,
+    Size,
+    Tag,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
@@ -13,8 +24,11 @@ import {
     activeProfilerReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
+    performanceReportLocationAtom,
+    profilerReportLocationAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
+import { ReportLocation } from '../definitions/Reports';
 import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
@@ -35,6 +49,8 @@ function FooterInfobar() {
     const performanceRange = useAtomValue(performanceRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const profilerReportLocation = useAtomValue(profilerReportLocationAtom);
+    const performanceReportLocation = useAtomValue(performanceReportLocationAtom);
 
     const { data: instance } = useInstance();
     const location = useLocation();
@@ -129,6 +145,9 @@ function FooterInfobar() {
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
                                     {formatName(activeProfilerReportPath)}
                                 </span>
+                                {profilerReportLocation !== null && (
+                                    <ReportLocationTag location={profilerReportLocation} />
+                                )}
                             </div>
                         </Tooltip>
                     )}
@@ -146,6 +165,9 @@ function FooterInfobar() {
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
                                     {formatName(activePerformanceReportPath)}
                                 </span>
+                                {performanceReportLocation !== null && (
+                                    <ReportLocationTag location={performanceReportLocation} />
+                                )}
                             </div>
                         </Tooltip>
                     )}
@@ -180,6 +202,22 @@ function FooterInfobar() {
         </footer>
     );
 }
+
+const ReportLocationTag = ({ location }: { location: ReportLocation }) => {
+    const isRemote = location === ReportLocation.REMOTE;
+    const label = isRemote ? 'Remote' : 'Local';
+
+    return (
+        <Tag
+            minimal
+            className='report-source-tag'
+            aria-label={`Report source: ${label}`}
+            intent={Intent.PRIMARY}
+        >
+            {label}
+        </Tag>
+    );
+};
 
 const hasRangeSelected = (selectedRange: NumberRange | null, operationRange: NumberRange | null): boolean =>
     !!(

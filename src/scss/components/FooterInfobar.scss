@@ -51,9 +51,17 @@
         gap: 12px;
     }
 
+    .report-source-tag {
+        flex-shrink: 0;
+        font-size: 10px;
+        line-height: 1.2;
+        padding: 1px 5px;
+    }
+
     .title {
         display: flex;
         gap: 5px;
+        align-items: center;
 
         .report-name {
             display: inline-block;
