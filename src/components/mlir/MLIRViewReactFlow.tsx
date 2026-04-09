@@ -363,22 +363,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     const onSubgraphNodeClick = useCallback(
         (_event: MouseEvent, node: Node<MLNodeData>) => {
-            if (node.type === 'group' && node.data?.namespace) {
-                const ns = node.data.namespace;
-                if (subgraphNamespaces.includes(ns)) {
-                    const anchorNodeId = namespaceAnchorNodeByNamespace.get(ns);
-                    if (anchorNodeId) {
-                        viewportAnchorRef.current = {
-                            toNodeId: anchorNodeId,
-                            fromPosition: { x: node.position.x, y: node.position.y },
-                        };
-                    }
-                    setExpandedNamespaces((prev) => {
-                        const next = new Set(prev);
-                        next.delete(ns);
-                        return next;
-                    });
-                }
+            if (node.type === 'group') {
                 return;
             }
             const toggleNamespace =
@@ -418,12 +403,12 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             }
         },
         [
+            //
             anchorNamespaceByNodeId,
             expandedNamespaces,
             namespaceAnchorNodeByNamespace,
             nodes,
             outerNamespaceByNodeId,
-            subgraphNamespaces,
         ],
     );
 
