@@ -483,21 +483,27 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
         const sourceNamespace = sourceNamespaces[sourceNamespaces.length - 1];
 
         if (targetNamespace && expandedNamespaces.has(targetNamespace) && sourceNamespace !== targetNamespace) {
-            const inputIdx = Number(targetInputId);
-            if (Number.isInteger(inputIdx) && inputIdx >= 0) {
-                const inputNodeId = index.namespaceInputByNamespace[targetNamespace]?.[inputIdx];
-                if (inputNodeId) {
-                    return inputNodeId;
+            const sourceIsInsideTarget = sourceNamespaces.includes(targetNamespace);
+            if (!sourceIsInsideTarget) {
+                const inputIdx = Number(targetInputId);
+                if (Number.isInteger(inputIdx) && inputIdx >= 0) {
+                    const inputNodeId = index.namespaceInputByNamespace[targetNamespace]?.[inputIdx];
+                    if (inputNodeId) {
+                        return inputNodeId;
+                    }
                 }
             }
         }
         const collapsedNamespace = toggleNamespaceForNode(index, targetNodeId);
         if (collapsedNamespace && expandedNamespaces.has(collapsedNamespace)) {
-            const inputIdx = Number(targetInputId);
-            if (Number.isInteger(inputIdx) && inputIdx >= 0) {
-                const inputNodeId = index.namespaceInputByNamespace[collapsedNamespace]?.[inputIdx];
-                if (inputNodeId) {
-                    return inputNodeId;
+            const sourceIsInsideCollapsed = sourceNamespaces.includes(collapsedNamespace);
+            if (!sourceIsInsideCollapsed) {
+                const inputIdx = Number(targetInputId);
+                if (Number.isInteger(inputIdx) && inputIdx >= 0) {
+                    const inputNodeId = index.namespaceInputByNamespace[collapsedNamespace]?.[inputIdx];
+                    if (inputNodeId) {
+                        return inputNodeId;
+                    }
                 }
             }
         }
