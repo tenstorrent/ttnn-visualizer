@@ -546,13 +546,23 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
     const finalEdges: WorkerEdge[] = [];
     const finalEdgeSeen = new Set<string>();
     const finalEdgePairSeen = new Set<string>();
+    const finalEdgeByPair = new Map<string, WorkerEdge>();
 
     const addEdgeSafe = (edge: WorkerEdge) => {
         if (edge.source === edge.target || finalEdgeSeen.has(edge.id)) {
             return;
         }
         finalEdgeSeen.add(edge.id);
-        finalEdgePairSeen.add(`${edge.source}->${edge.target}`);
+        const pair = `${edge.source}->${edge.target}`;
+        const existing = finalEdgeByPair.get(pair);
+        if (existing) {
+            if (edge.label && existing.label && edge.label !== existing.label && !existing.label.includes(edge.label)) {
+                existing.label = `${existing.label}\n${edge.label}`;
+            }
+            return;
+        }
+        finalEdgePairSeen.add(pair);
+        finalEdgeByPair.set(pair, edge);
         finalEdges.push(edge);
     };
 
