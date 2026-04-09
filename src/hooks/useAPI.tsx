@@ -839,6 +839,7 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
             const filteredData = response.data.filter(
                 (operation) => operation.id >= range[0] && operation.id <= range[1],
             );
+
             return {
                 ...response,
                 data: filteredData,

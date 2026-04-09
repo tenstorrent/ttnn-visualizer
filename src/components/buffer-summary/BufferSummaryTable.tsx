@@ -4,7 +4,6 @@
 
 import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { useAtomValue } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
 import { Checkbox, HotkeysProvider, Icon, InputGroup, Size, Tooltip } from '@blueprintjs/core';
@@ -239,13 +238,13 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     }, [tableRows, selectedTensorId, userSelectedRows]);
 
     useEffect(() => {
-        flushSync(() => {
-            if (selectedTensorId) {
-                setUserSelectedRows([]);
-            } else {
-                setShowOnlySelected(false);
-            }
-        });
+        if (selectedTensorId) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setUserSelectedRows([]);
+        } else {
+            setShowOnlySelected(false);
+        }
     }, [selectedTensorId]);
 
     useEffect(() => {

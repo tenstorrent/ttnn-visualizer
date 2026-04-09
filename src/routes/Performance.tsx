@@ -44,6 +44,7 @@ export default function Performance() {
     const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>([]);
     const [hasUserChangedOpCodeFilter, setHasUserChangedOpCodeFilter] = useState(false);
+    const [appliedOpCodeOptionsKey, setAppliedOpCodeOptionsKey] = useState<string | null>(null);
 
     const setSelectedOpCodesFromUser = useCallback((update: Marker[] | ((previous: Marker[]) => Marker[])) => {
         setHasUserChangedOpCodeFilter(true);
@@ -96,7 +97,7 @@ export default function Performance() {
         () => opCodeOptions.map((o) => `${o.opCode}:${o.colour}`).join('|'),
         [opCodeOptions],
     );
-    const [appliedOpCodeOptionsKey, setAppliedOpCodeOptionsKey] = useState<string | null>(null);
+
     if (appliedOpCodeOptionsKey === null || opCodeOptionsKey !== appliedOpCodeOptionsKey) {
         setAppliedOpCodeOptionsKey(opCodeOptionsKey);
         setHasUserChangedOpCodeFilter(false);
