@@ -546,23 +546,13 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
     const finalEdges: WorkerEdge[] = [];
     const finalEdgeSeen = new Set<string>();
     const finalEdgePairSeen = new Set<string>();
-    const finalEdgeByPair = new Map<string, WorkerEdge>();
 
     const addEdgeSafe = (edge: WorkerEdge) => {
         if (edge.source === edge.target || finalEdgeSeen.has(edge.id)) {
             return;
         }
         finalEdgeSeen.add(edge.id);
-        const pair = `${edge.source}->${edge.target}`;
-        const existing = finalEdgeByPair.get(pair);
-        if (existing) {
-            if (edge.label && existing.label && edge.label !== existing.label && !existing.label.includes(edge.label)) {
-                existing.label = `${existing.label}\n${edge.label}`;
-            }
-            return;
-        }
-        finalEdgePairSeen.add(pair);
-        finalEdgeByPair.set(pair, edge);
+        finalEdgePairSeen.add(`${edge.source}->${edge.target}`);
         finalEdges.push(edge);
     };
 
@@ -631,6 +621,29 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
             markerEnd: { type: 'arrowclosed', height: 20, width: 20 },
             style: { strokeDasharray: '6 4', opacity: 0.7 },
         });
+    }
+
+    const edgesByPair = new Map<string, WorkerEdge[]>();
+    for (const edge of finalEdges) {
+        const pair = `${edge.source}->${edge.target}`;
+        const arr = edgesByPair.get(pair) ?? [];
+        arr.push(edge);
+        edgesByPair.set(pair, arr);
+    }
+    const BASE_CURVATURE = 0.25;
+    const CURVATURE_STEP = 0.2;
+    const LABEL_Y_STEP = 16;
+    for (const [, edges] of edgesByPair) {
+        if (edges.length <= 1) {
+            continue;
+        }
+        const mid = (edges.length - 1) / 2;
+        for (let i = 0; i < edges.length; i++) {
+            const curvature = BASE_CURVATURE + (i - mid) * CURVATURE_STEP;
+            const labelYOffset = Math.round((i - mid) * LABEL_Y_STEP);
+            edges[i].pathOptions = { curvature };
+            edges[i].labelStyle = { transform: `translateY(${labelYOffset}px)` };
+        }
     }
 
     return { nodes: finalNodes, edges: finalEdges };

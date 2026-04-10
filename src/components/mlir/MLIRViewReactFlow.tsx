@@ -2,23 +2,22 @@
 
 import React, { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'styles/components/MLIRViewReactFlow.scss';
-import ReactFlow, {
+import {
     Background,
     ConnectionLineType,
     Controls,
-    Edge,
     Handle,
     MarkerType,
     MiniMap,
-    Node,
-    NodeProps,
     Position,
+    ReactFlow,
     ReactFlowProvider,
     useEdgesState,
     useNodesState,
     useReactFlow,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+} from '@xyflow/react';
+import type { Edge, Node, NodeProps } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 
 import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
@@ -37,8 +36,10 @@ interface ViewProps {
     data: GraphBundle;
 }
 
+type MLNode = Node<MLNodeData>;
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const MlirOpNode: React.FC<NodeProps<MLNodeData>> = ({ id, data }) => (
+const MlirOpNode: React.FC<NodeProps<MLNode>> = ({ id, data }) => (
     <>
         <Handle
             type='target'
@@ -121,8 +122,8 @@ const isNodeInsideNamespaceTree = (nodeNamespace: string | undefined, namespace:
     return nodeNamespace === namespace || nodeNamespace.startsWith(`${namespace}/`);
 };
 
-function builtGraphToReactFlow(built: BuiltGraph): { nodes: Node<MLNodeData>[]; edges: Edge[] } {
-    const nodes: Node<MLNodeData>[] = built.nodes.map((n) => ({
+function builtGraphToReactFlow(built: BuiltGraph): { nodes: MLNode[]; edges: Edge[] } {
+    const nodes: MLNode[] = built.nodes.map((n) => ({
         ...n,
         type: n.type === 'group' ? 'group' : 'mlirOp',
         data: n.data as MLNodeData,
@@ -137,8 +138,8 @@ function builtGraphToReactFlow(built: BuiltGraph): { nodes: Node<MLNodeData>[]; 
 const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const { fitView, getViewport, setViewport } = useReactFlow();
     const graph = data.graphs[0];
-    const [nodes, setNodes, onNodesChange] = useNodesState([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [nodes, setNodes, onNodesChange] = useNodesState<MLNode>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
     const viewportAnchorRef = useRef<{
         toNodeId: string;
@@ -383,7 +384,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     }, [expandedNamespaces, runBuild]);
 
     const onSubgraphNodeClick = useCallback(
-        (_event: MouseEvent, node: Node<MLNodeData>) => {
+        (_event: MouseEvent, node: MLNode) => {
             if (node.type === 'group') {
                 return;
             }
@@ -433,7 +434,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         ],
     );
 
-    const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode }), []);
+    const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode }) as const, []);
 
     return (
         <div style={{ width: '100%', height: 'calc(100vh - 92px - 30px - 56px - 40px)' }}>

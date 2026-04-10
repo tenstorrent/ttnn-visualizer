@@ -62,6 +62,13 @@ export type WorkerEdge = {
     sourceHandle?: string;
     targetHandle?: string;
     label?: string;
+    type?: string;
+    pathOptions?: { offset?: number; curvature?: number };
+    labelShowBg?: boolean;
+    labelBgStyle?: Record<string, unknown>;
+    labelBgPadding?: [number, number];
+    labelBgBorderRadius?: number;
+    labelStyle?: Record<string, unknown>;
     markerEnd?: { type: string; height: number; width: number };
     style?: Record<string, unknown>;
 };
