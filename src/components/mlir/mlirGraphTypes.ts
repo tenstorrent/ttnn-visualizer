@@ -22,6 +22,16 @@ export type IndexedNode = {
     config: { pinToGroupTop?: boolean } | null;
 };
 
+export type SourceNode = {
+    id: string;
+    label: string;
+    namespace: string;
+    attrs: IndexedAttr[];
+    incomingEdges: IndexedEdge[];
+    outputsMetadata: IndexedPortMetadata[];
+    config: { pinToGroupTop?: boolean } | null;
+};
+
 export type GraphIndex = {
     graphId: string;
     nodes: IndexedNode[];
@@ -75,10 +85,10 @@ export type WorkerEdge = {
 
 export type BuiltGraph = { nodes: WorkerNode[]; edges: WorkerEdge[] };
 
-export type SetIndexMessage = {
-    type: 'set-index';
+export type SetGraphMessage = {
+    type: 'set-graph';
     graphId: string;
-    index: GraphIndex;
+    nodes: SourceNode[];
 };
 
 export type BuildMessage = {
@@ -89,7 +99,7 @@ export type BuildMessage = {
     cacheKey: string;
 };
 
-export type WorkerInboundMessage = SetIndexMessage | BuildMessage;
+export type WorkerInboundMessage = SetGraphMessage | BuildMessage;
 
 export type WorkerBuiltMessage = {
     type: 'built';
@@ -105,9 +115,16 @@ export type WorkerErrorMessage = {
     error: string;
 };
 
+export type WorkerInteractionIndex = {
+    anchorByNamespace: Record<string, string>;
+    anchorNamespaceByNodeId: Record<string, string>;
+    outerNamespaceByNodeId: Record<string, string>;
+};
+
 export type WorkerIndexedMessage = {
     type: 'indexed';
     graphId: string;
+    interactionIndex: WorkerInteractionIndex;
 };
 
 export type WorkerOutboundMessage = WorkerBuiltMessage | WorkerErrorMessage | WorkerIndexedMessage;
