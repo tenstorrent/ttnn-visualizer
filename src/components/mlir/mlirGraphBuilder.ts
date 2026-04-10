@@ -594,6 +594,11 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
             if (sourceId === targetId) {
                 continue;
             }
+            const srcParentNs = parentNamespaceByVisibleNodeId.get(sourceId);
+            const tgtParentNs = parentNamespaceByVisibleNodeId.get(targetId);
+            if (srcParentNs && srcParentNs === tgtParentNs) {
+                continue;
+            }
             const sourceNode = nodeById.get(incoming.sourceNodeId);
             const outputMeta = sourceNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
             const edgeLabel = outputMeta ? getTensorInfoFromAttrs(outputMeta.attrs).label : undefined;
