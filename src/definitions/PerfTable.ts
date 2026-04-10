@@ -3,15 +3,12 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { DeviceOperationLayoutTypes } from '../model/APIData';
-import { BufferType } from '../model/BufferType';
+import { BufferType as BufferTypeEnum } from '../model/BufferType';
 import { OpType } from './Performance';
 
-export type TableKeys = keyof TypedPerfTableRow;
-export type TableFilter = Partial<Record<TableKeys, string>> | null;
-
-export interface TableColumn {
-    label: string;
-    key: TableKeys;
+export interface ColumnDefinition {
+    name: string;
+    key: ColumnKeys;
     colour?: string;
     unit?: string;
     decimals?: number;
@@ -94,16 +91,9 @@ export interface TypedPerfTableRow extends Omit<
     bound: BoundType | null;
     pm_ideal_ns: number | null;
     // Next two extracted from input_0_memory
-    buffer_type: BufferType | null;
+    buffer_type: BufferTypeEnum | null;
     layout: DeviceOperationLayoutTypes | null;
     isFirstHashOccurrence: boolean;
-}
-
-// Not a general enum but used in evaluateFidelity to analyze tt-perf-report output
-export enum MathFidelity {
-    HiFi4 = 'HiFi4',
-    HiFi2 = 'HiFi2',
-    LoFi = 'LoFi',
 }
 
 export const MarkerColours = [
@@ -145,64 +135,69 @@ export interface Marker {
     colour: (typeof MarkerColours)[number];
 }
 
-export enum ColumnHeaders {
-    id = 'id',
-    total_percent = 'total_percent',
-    bound = 'bound',
-    op_code = 'op_code',
-    device = 'device',
-    buffer_type = 'buffer_type',
-    device_time = 'device_time',
-    layout = 'layout',
-    op_to_op_gap = 'op_to_op_gap',
-    cores = 'cores',
-    dram = 'dram',
-    dram_percent = 'dram_percent',
-    flops = 'flops',
-    flops_percent = 'flops_percent',
-    math_fidelity = 'math_fidelity',
+export enum ColumnKeys {
+    Id = 'id',
+    TotalPercent = 'total_percent',
+    Bound = 'bound',
+    OpCode = 'op_code',
+    Device = 'device',
+    BufferType = 'buffer_type',
+    DeviceTime = 'device_time',
+    Layout = 'layout',
+    OpToOpGap = 'op_to_op_gap',
+    Cores = 'cores',
+    Dram = 'dram',
+    DramPercent = 'dram_percent',
+    Flops = 'flops',
+    FlopsPercent = 'flops_percent',
+    MathFidelity = 'math_fidelity',
     OP = 'op',
-    high_dispatch = 'high_dispatch',
-    global_call_count = 'global_call_count',
-    hash = 'hash',
-    cache_hit = 'cache_hit',
+    HighDispatch = 'high_dispatch',
+    GlobalCallCount = 'global_call_count',
+    Hash = 'hash',
+    CacheHit = 'cache_hit',
 }
 
-export const tableColumns: TableColumn[] = [
-    { label: 'ID', key: ColumnHeaders.id, sortable: true },
-    { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
-    { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
-    { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true, footerSpan: 3 },
-    { label: 'Device ID', key: ColumnHeaders.device, footerSpan: 0 },
-    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true, footerSpan: 0 },
-    { label: 'Layout', key: ColumnHeaders.layout, sortable: true, filterable: true },
-    { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Op-to-Op Gap', key: ColumnHeaders.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Cores', key: ColumnHeaders.cores, colour: 'green', sortable: true },
-    { label: 'DRAM', key: ColumnHeaders.dram, colour: 'yellow', unit: 'GB/s', decimals: 1, sortable: true },
-    { label: 'DRAM %', key: ColumnHeaders.dram_percent, colour: 'yellow', unit: '%', decimals: 1, sortable: true },
-    { label: 'FLOPS', key: ColumnHeaders.flops, unit: 'TFLOPS', decimals: 1, sortable: true },
-    { label: 'FLOPS %', key: ColumnHeaders.flops_percent, unit: '%', decimals: 1, sortable: true },
-    { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
-    { label: 'Cache Hit', key: ColumnHeaders.cache_hit, colour: 'magenta', filterable: true },
+export const Columns: ColumnDefinition[] = [
+    { name: 'ID', key: ColumnKeys.Id, sortable: true },
+    { name: 'Total %', key: ColumnKeys.TotalPercent, unit: '%', decimals: 1, sortable: true },
+    { name: 'Bound', key: ColumnKeys.Bound, colour: 'yellow' },
+    {
+        name: 'OP Code',
+        key: ColumnKeys.OpCode,
+        colour: 'blue',
+        sortable: true,
+        filterable: true,
+        footerSpan: 3,
+    },
+    { name: 'Device ID', key: ColumnKeys.Device, footerSpan: 0 },
+    { name: 'Buffer Type', key: ColumnKeys.BufferType, sortable: true, filterable: true, footerSpan: 0 },
+    { name: 'Layout', key: ColumnKeys.Layout, sortable: true, filterable: true },
+    { name: 'Device Time', key: ColumnKeys.DeviceTime, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'Op-to-Op Gap', key: ColumnKeys.OpToOpGap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
+    { name: 'Cores', key: ColumnKeys.Cores, colour: 'green', sortable: true },
+    { name: 'DRAM', key: ColumnKeys.Dram, colour: 'yellow', unit: 'GB/s', decimals: 1, sortable: true },
+    { name: 'DRAM %', key: ColumnKeys.DramPercent, colour: 'yellow', unit: '%', decimals: 1, sortable: true },
+    { name: 'FLOPS', key: ColumnKeys.Flops, unit: 'TFLOPS', decimals: 1, sortable: true },
+    { name: 'FLOPS %', key: ColumnKeys.FlopsPercent, unit: '%', decimals: 1, sortable: true },
+    { name: 'Math Fidelity', key: ColumnKeys.MathFidelity, colour: 'cyan' },
+    { name: 'Cache Hit', key: ColumnKeys.CacheHit, colour: 'magenta', filterable: true },
 ];
 
-export const filterableColumnKeys = tableColumns.filter((column) => column.filterable).map((column) => column.key);
-
-export const comparisonKeys: TableKeys[] = [
-    ColumnHeaders.op_code,
-    ColumnHeaders.bound,
-    ColumnHeaders.total_percent,
-    ColumnHeaders.device_time,
-    ColumnHeaders.op_to_op_gap,
-    ColumnHeaders.cores,
-    ColumnHeaders.dram,
-    ColumnHeaders.dram_percent,
-    ColumnHeaders.flops,
-    ColumnHeaders.flops_percent,
-    ColumnHeaders.math_fidelity,
-    ColumnHeaders.high_dispatch,
-    ColumnHeaders.global_call_count,
+export const comparisonKeys: ColumnKeys[] = [
+    ColumnKeys.OpCode,
+    ColumnKeys.Bound,
+    ColumnKeys.TotalPercent,
+    ColumnKeys.DeviceTime,
+    ColumnKeys.OpToOpGap,
+    ColumnKeys.Cores,
+    ColumnKeys.Dram,
+    ColumnKeys.DramPercent,
+    ColumnKeys.Flops,
+    ColumnKeys.FlopsPercent,
+    ColumnKeys.MathFidelity,
+    ColumnKeys.HighDispatch,
+    ColumnKeys.GlobalCallCount,
 ];
 
 export const signpostRowDefaults = Object.freeze({
@@ -235,4 +230,7 @@ export const signpostRowDefaults = Object.freeze({
     buffer_type: null,
     hash: null,
     cache_hit: null,
+    isFirstHashOccurrence: true,
 });
+
+export type PerfTableFilters = Partial<Record<ColumnKeys, string>> | null;

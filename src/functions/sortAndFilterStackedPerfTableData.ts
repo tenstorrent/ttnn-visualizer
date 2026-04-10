@@ -3,17 +3,16 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import {
-    StackedColumnHeaders,
+    StackedColumnKeys,
     StackedTableFilter,
-    StackedTableKeys,
     TypedStackedPerfRow,
     filterableStackedColumnKeys,
 } from '../definitions/StackedPerfTable';
 
-const isFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
+const isFiltersActive = (filters: Record<StackedColumnKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
-const getCellText = (buffer: TypedStackedPerfRow, key: StackedTableKeys) => {
+const getCellText = (buffer: TypedStackedPerfRow, key: StackedColumnKeys) => {
     const textValue = buffer[key]?.toString() || '';
 
     return textValue;
@@ -34,15 +33,15 @@ const sortAndFilterStackedPerfTableData = (
     // TODO: This should be moved to tt-perf-report as the printed report differs from the output csv
     filteredRows = filteredRows.sort((a, b) => {
         // First sort by device (numeric comparison)
-        const deviceA = a[StackedColumnHeaders.Device] ?? Number.MAX_SAFE_INTEGER;
-        const deviceB = b[StackedColumnHeaders.Device] ?? Number.MAX_SAFE_INTEGER;
+        const deviceA = a[StackedColumnKeys.Device] ?? Number.MAX_SAFE_INTEGER;
+        const deviceB = b[StackedColumnKeys.Device] ?? Number.MAX_SAFE_INTEGER;
         const deviceCompare = deviceA - deviceB;
         if (deviceCompare !== 0) {
             return deviceCompare;
         }
         // Then sort by percent
-        const percentA = typeof a[StackedColumnHeaders.Percent] === 'number' ? a[StackedColumnHeaders.Percent] : 0;
-        const percentB = typeof b[StackedColumnHeaders.Percent] === 'number' ? b[StackedColumnHeaders.Percent] : 0;
+        const percentA = typeof a[StackedColumnKeys.Percent] === 'number' ? a[StackedColumnKeys.Percent] : 0;
+        const percentB = typeof b[StackedColumnKeys.Percent] === 'number' ? b[StackedColumnKeys.Percent] : 0;
         return percentB - percentA;
     });
 
@@ -53,7 +52,7 @@ const sortAndFilterStackedPerfTableData = (
                 Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
-                        const cellText = getCellText(row, key as StackedTableKeys);
+                        const cellText = getCellText(row, key as StackedColumnKeys);
 
                         return !cellText.toLowerCase().includes(filterValue.toLowerCase());
                     });
@@ -65,12 +64,12 @@ const sortAndFilterStackedPerfTableData = (
     if (rawOpCodeFilter?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) =>
-                row?.[StackedColumnHeaders.OpCode] !== null &&
+                row?.[StackedColumnKeys.OpCode] !== null &&
                 rawOpCodeFilter.some((filterValue) =>
                     isGroupedByMemory
-                        ? filterValue.toLowerCase() === row[StackedColumnHeaders.OpCode].toLowerCase()
+                        ? filterValue.toLowerCase() === row[StackedColumnKeys.OpCode].toLowerCase()
                         : // TODO: This split is currently needed but we should store the data differently
-                          filterValue.toLowerCase() === row[StackedColumnHeaders.OpCode].split(' ')[0].toLowerCase(),
+                          filterValue.toLowerCase() === row[StackedColumnKeys.OpCode].split(' ')[0].toLowerCase(),
                 ),
         );
     }
