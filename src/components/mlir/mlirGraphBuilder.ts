@@ -83,14 +83,23 @@ function fallbackLayeredLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Worker
 
     const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
     const laidOut: WorkerNode[] = [];
-    const xGap = 220;
-    const yGap = 110;
+    const xPad = 40;
+    const yPad = 40;
+    let yOffset = 0;
     for (const level of sortedLevels) {
         const bucket = byLevel.get(level) ?? [];
         bucket.sort((a, b) => a.id.localeCompare(b.id));
-        bucket.forEach((n, idx) => {
-            laidOut.push({ ...n, position: { x: idx * xGap, y: level * yGap } });
-        });
+        let xOffset = 0;
+        let maxHeight = 0;
+        for (const n of bucket) {
+            const { width, height } = getNodeLayoutSize(n);
+            laidOut.push({ ...n, position: { x: xOffset, y: yOffset } });
+            xOffset += width + xPad;
+            if (height > maxHeight) {
+                maxHeight = height;
+            }
+        }
+        yOffset += maxHeight + yPad;
     }
     return laidOut;
 }
@@ -151,9 +160,14 @@ function toElkGraph(nodes: WorkerNode[], edges: WorkerEdge[]): ElkNode {
     };
 }
 
+const ELK_NODE_THRESHOLD = 500;
+
 async function layoutWithElk(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<WorkerNode[]> {
     if (nodes.length === 0) {
         return nodes;
+    }
+    if (nodes.length > ELK_NODE_THRESHOLD) {
+        return fallbackLayeredLayout(nodes, edges);
     }
     try {
         const graph = toElkGraph(nodes, edges);

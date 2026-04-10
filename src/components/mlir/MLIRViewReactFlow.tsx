@@ -469,6 +469,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 minZoom={0.003}
                 maxZoom={1.5}
                 fitView
+                onlyRenderVisibleElements
                 connectionLineType={ConnectionLineType.SmoothStep}
             >
                 <MiniMap />
