@@ -1,7 +1,10 @@
 /* eslint-disable no-void */
+/* eslint-disable no-continue */
+/* eslint-disable react/prop-types */
 
-import React, { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'styles/components/MLIRViewReactFlow.scss';
+import type { Edge, Node, NodeProps } from '@xyflow/react';
 import {
     Background,
     ConnectionLineType,
@@ -16,7 +19,6 @@ import {
     useNodesState,
     useReactFlow,
 } from '@xyflow/react';
-import type { Edge, Node, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { Button } from '@blueprintjs/core';
@@ -39,7 +41,7 @@ interface ViewProps {
 type MLNode = Node<MLNodeData>;
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const MlirOpNode: React.FC<NodeProps<MLNode>> = ({ id, data }) => (
+const MlirOpNode = memo<NodeProps<MLNode>>(({ id, data }) => (
     <>
         <Handle
             type='target'
@@ -65,7 +67,7 @@ const MlirOpNode: React.FC<NodeProps<MLNode>> = ({ id, data }) => (
             isConnectable={false}
         />
     </>
-);
+));
 
 const getNamespaceSegments = (namespace?: string): string[] => (namespace ? namespace.split('/').filter(Boolean) : []);
 
@@ -148,63 +150,40 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const hasFitInitiallyRef = useRef(false);
     const buildSeqRef = useRef(0);
 
-    const collapsibleNamespaces = useMemo(
-        () =>
-            Array.from(new Set(graph.nodes.map((n) => n.namespace).filter(Boolean) as string[])).filter((namespace) =>
-                isCollapsibleNamespace(namespace, graph.nodes),
-            ),
-        [graph.nodes],
-    );
-
-    const outerNamespaceByNodeId = useMemo(() => {
-        const map = new Map<string, string>();
-        const usedOuterNodeIds = new Set<string>();
+    const {
+        subgraphNamespaces,
+        namespaceAnchorNodeByNamespace,
+        anchorNamespaceByNodeId,
+        namespaceInputNodeIdsByNamespace,
+        namespaceReturnNodeByNamespace,
+        outerNamespaceByNodeId,
+    } = useMemo(() => {
         const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
-        const orderedNamespaces = [...collapsibleNamespaces].sort(
-            (a, b) => getNamespaceOrdinal(a) - getNamespaceOrdinal(b),
-        );
-        for (const namespace of orderedNamespaces) {
-            const parentNamespace = getParentNamespace(namespace);
-            if (parentNamespace) {
-                const expectedLabel = getRegionBaseOpLabel(namespace);
-                const namespaceNodes = graph.nodes.filter((n) => n.namespace === namespace);
-                const preferredLocations = new Set(
-                    namespaceNodes
-                        .filter((n) => n.label === expectedLabel)
-                        .map((n) => getNodeAttrValue(n, 'full_location'))
-                        .filter((v): v is string => Boolean(v)),
-                );
-                const outerCandidates = graph.nodes.filter(
-                    (n) => n.namespace === parentNamespace && n.label === expectedLabel && !usedOuterNodeIds.has(n.id),
-                );
-                outerCandidates.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
-                const outer =
-                    outerCandidates.find((c) => {
-                        const loc = getNodeAttrValue(c, 'full_location');
-                        return loc ? preferredLocations.has(loc) : false;
-                    }) ?? outerCandidates[0];
-                if (outer) {
-                    map.set(outer.id, namespace);
-                    usedOuterNodeIds.add(outer.id);
+        const nodesByNamespace = new Map<string, typeof graph.nodes>();
+        const allNamespaces = new Set<string>();
+        for (const n of graph.nodes) {
+            if (n.namespace) {
+                allNamespaces.add(n.namespace);
+                const arr = nodesByNamespace.get(n.namespace);
+                if (arr) {
+                    arr.push(n);
+                } else {
+                    nodesByNamespace.set(n.namespace, [n]);
                 }
             }
         }
-        return map;
-    }, [collapsibleNamespaces, graph.nodes]);
 
-    const subgraphNamespaces = useMemo(() => {
-        return [...collapsibleNamespaces].sort((a, b) => {
+        const collapsible = Array.from(allNamespaces).filter((ns) => isCollapsibleNamespace(ns, graph.nodes));
+        const sorted = [...collapsible].sort((a, b) => {
             const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
             return ord !== 0 ? ord : a.localeCompare(b);
         });
-    }, [collapsibleNamespaces]);
 
-    const namespaceAnchorNodeByNamespace = useMemo(() => {
-        const map = new Map<string, string>();
-        const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
-        for (const namespace of subgraphNamespaces) {
-            const expectedLabel = getRegionBaseOpLabel(namespace);
-            const candidates = graph.nodes.filter((n) => n.namespace === namespace && n.label === expectedLabel);
+        const anchorMap = new Map<string, string>();
+        const anchorReverseMap = new Map<string, string>();
+        for (const ns of sorted) {
+            const expectedLabel = getRegionBaseOpLabel(ns);
+            const candidates = (nodesByNamespace.get(ns) ?? []).filter((n) => n.label === expectedLabel);
             candidates.sort((a, b) => {
                 const aPinned = a.config?.pinToGroupTop ? 1 : 0;
                 const bPinned = b.config?.pinToGroupTop ? 1 : 0;
@@ -214,63 +193,86 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
             });
             if (candidates[0]) {
-                map.set(namespace, candidates[0].id);
+                anchorMap.set(ns, candidates[0].id);
+                anchorReverseMap.set(candidates[0].id, ns);
             }
         }
-        return map;
-    }, [graph.nodes, subgraphNamespaces]);
 
-    const anchorNamespaceByNodeId = useMemo(() => {
-        const map = new Map<string, string>();
-        namespaceAnchorNodeByNamespace.forEach((nodeId, namespace) => {
-            map.set(nodeId, namespace);
-        });
-        return map;
-    }, [namespaceAnchorNodeByNamespace]);
+        const outerMap = new Map<string, string>();
+        const usedOuterNodeIds = new Set<string>();
+        for (const ns of sorted) {
+            const parentNs = getParentNamespace(ns);
+            if (!parentNs) {
+                continue;
+            }
+            const expectedLabel = getRegionBaseOpLabel(ns);
+            const nsNodes = nodesByNamespace.get(ns) ?? [];
+            const preferredLocations = new Set(
+                nsNodes
+                    .filter((n) => n.label === expectedLabel)
+                    .map((n) => getNodeAttrValue(n, 'full_location'))
+                    .filter((v): v is string => Boolean(v)),
+            );
+            const outerCandidates = (nodesByNamespace.get(parentNs) ?? []).filter(
+                (n) => n.label === expectedLabel && !usedOuterNodeIds.has(n.id),
+            );
+            outerCandidates.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
+            const outer =
+                outerCandidates.find((c) => {
+                    const loc = getNodeAttrValue(c, 'full_location');
+                    return loc ? preferredLocations.has(loc) : false;
+                }) ?? outerCandidates[0];
+            if (outer) {
+                outerMap.set(outer.id, ns);
+                usedOuterNodeIds.add(outer.id);
+            }
+        }
 
-    const namespaceInputNodeIdsByNamespace = useMemo(() => {
-        const map = new Map<string, string[]>();
-        const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
-        for (const namespace of subgraphNamespaces) {
-            const inputNodes = graph.nodes.filter((n) => {
-                if (!isNodeInsideNamespaceTree(n.namespace, namespace)) {
-                    return false;
+        const inputMap = new Map<string, string[]>();
+        const returnMap = new Map<string, string>();
+        for (const ns of sorted) {
+            const inputNodes: typeof graph.nodes = [];
+            const returnCandidates: typeof graph.nodes = [];
+            for (const [childNs, childNodes] of nodesByNamespace) {
+                if (!isNodeInsideNamespaceTree(childNs, ns)) {
+                    continue;
                 }
-                if ((n.incomingEdges ?? []).length > 0) {
-                    return false;
+                for (const n of childNodes) {
+                    if (
+                        (n.incomingEdges ?? []).length === 0 &&
+                        (n.namespace?.startsWith(`${ns}/Inputs`) || /^%arg\d+$/i.test(n.label))
+                    ) {
+                        inputNodes.push(n);
+                    }
+                    if (n.namespace === ns && /\.return$|^return$/i.test(n.label)) {
+                        returnCandidates.push(n);
+                    }
                 }
-                if (n.namespace?.startsWith(`${namespace}/Inputs`)) {
-                    return true;
-                }
-                return /^%arg\d+$/i.test(n.label);
-            });
+            }
             inputNodes.sort((a, b) => {
                 const aIdx = Number(a.label.match(/^%arg(\d+)$/i)?.[1] ?? Infinity);
                 const bIdx = Number(b.label.match(/^%arg(\d+)$/i)?.[1] ?? Infinity);
                 return aIdx !== bIdx ? aIdx - bIdx : (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
             });
-            map.set(
-                namespace,
+            inputMap.set(
+                ns,
                 inputNodes.map((n) => n.id),
-            );
-        }
-        return map;
-    }, [graph.nodes, subgraphNamespaces]);
-
-    const namespaceReturnNodeByNamespace = useMemo(() => {
-        const map = new Map<string, string>();
-        const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
-        for (const namespace of subgraphNamespaces) {
-            const returnCandidates = graph.nodes.filter(
-                (n) => n.namespace === namespace && /\.return$|^return$/i.test(n.label),
             );
             returnCandidates.sort((a, b) => (nodeIndexById.get(b.id) ?? 0) - (nodeIndexById.get(a.id) ?? 0));
             if (returnCandidates[0]) {
-                map.set(namespace, returnCandidates[0].id);
+                returnMap.set(ns, returnCandidates[0].id);
             }
         }
-        return map;
-    }, [graph.nodes, subgraphNamespaces]);
+
+        return {
+            subgraphNamespaces: sorted,
+            namespaceAnchorNodeByNamespace: anchorMap,
+            anchorNamespaceByNodeId: anchorReverseMap,
+            namespaceInputNodeIdsByNamespace: inputMap,
+            namespaceReturnNodeByNamespace: returnMap,
+            outerNamespaceByNodeId: outerMap,
+        };
+    }, [graph]);
 
     const graphIndex: GraphIndex = useMemo(() => {
         const getContainingNamespaces = (namespace?: string): string[] => {

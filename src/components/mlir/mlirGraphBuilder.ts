@@ -173,10 +173,27 @@ async function layoutWithElk(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<
 }
 
 function getBounds(nodes: WorkerNode[]) {
-    const minX = Math.min(...nodes.map((n) => n.position.x));
-    const minY = Math.min(...nodes.map((n) => n.position.y));
-    const maxX = Math.max(...nodes.map((n) => n.position.x + getNodeLayoutSize(n).width));
-    const maxY = Math.max(...nodes.map((n) => n.position.y + getNodeLayoutSize(n).height));
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const n of nodes) {
+        const { width, height } = getNodeLayoutSize(n);
+        if (n.position.x < minX) {
+            minX = n.position.x;
+        }
+        if (n.position.y < minY) {
+            minY = n.position.y;
+        }
+        const right = n.position.x + width;
+        const bottom = n.position.y + height;
+        if (right > maxX) {
+            maxX = right;
+        }
+        if (bottom > maxY) {
+            maxY = bottom;
+        }
+    }
     return { minX, minY, maxX, maxY };
 }
 
@@ -261,12 +278,37 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
         return parentNamespace;
     };
 
-    const visibleRawNodes = index.nodes.filter((n) => resolveRenderedNodeId(n.id) === n.id);
+    const visibleRawNodes: IndexedNode[] = [];
+    const visibleNodesByParentNs = new Map<string, IndexedNode[]>();
     const parentNamespaceByVisibleNodeId = new Map<string, string>();
-    for (const n of visibleRawNodes) {
+
+    for (const n of index.nodes) {
+        if (resolveRenderedNodeId(n.id) !== n.id) {
+            continue;
+        }
+        visibleRawNodes.push(n);
         const parentNamespace = getExpandedParentNamespaceForVisibleNode(n.id);
         if (parentNamespace) {
             parentNamespaceByVisibleNodeId.set(n.id, parentNamespace);
+            const arr = visibleNodesByParentNs.get(parentNamespace);
+            if (arr) {
+                arr.push(n);
+            } else {
+                visibleNodesByParentNs.set(parentNamespace, [n]);
+            }
+        }
+    }
+
+    const nodesByContainingNs = new Map<string, IndexedNode[]>();
+    for (const n of index.nodes) {
+        const chain = index.containingNamespacesByNodeId[n.id] ?? [];
+        for (const ns of chain) {
+            const arr = nodesByContainingNs.get(ns);
+            if (arr) {
+                arr.push(n);
+            } else {
+                nodesByContainingNs.set(ns, [n]);
+            }
         }
     }
 
@@ -317,9 +359,7 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
     };
 
     for (const namespace of expandedByDepthDesc) {
-        const directChildRawNodes = visibleRawNodes.filter(
-            (n) => parentNamespaceByVisibleNodeId.get(n.id) === namespace,
-        );
+        const directChildRawNodes = visibleNodesByParentNs.get(namespace) ?? [];
 
         const childOpNodes: WorkerNode[] = directChildRawNodes.map((n) => {
             const toggleNs = toggleNamespaceForNode(index, n.id);
@@ -346,7 +386,8 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
 
         const internalEdgesSeen = new Set<string>();
         const internalEdges: WorkerEdge[] = [];
-        for (const target of index.nodes) {
+        const nodesInThisNs = nodesByContainingNs.get(namespace) ?? [];
+        for (const target of nodesInThisNs) {
             const targetChildId = mapToChildEndpointId(target.id, namespace);
             if (!allChildIds.has(targetChildId)) {
                 continue;
