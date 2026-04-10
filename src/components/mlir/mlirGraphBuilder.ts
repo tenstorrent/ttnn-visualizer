@@ -2,6 +2,7 @@
 /* eslint-disable no-continue */
 import ELK, { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk.bundled';
 import dagre from '@dagrejs/dagre';
+import { Graphviz } from '@hpcc-js/wasm-graphviz';
 import type { BuiltGraph, GraphIndex, IndexedAttr, IndexedNode, WorkerEdge, WorkerNode } from './mlirGraphTypes';
 
 const GROUP_MIN_WIDTH = 260;
@@ -36,8 +37,33 @@ function getElk(): ElkLike {
 }
 
 const DAGRE_NODE_LIMIT = 2000;
+let graphvizInstancePromise: Promise<Graphviz> | null = null;
 
-function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+function getGraphviz(): Promise<Graphviz> {
+    if (!graphvizInstancePromise) {
+        graphvizInstancePromise = Graphviz.load();
+    }
+    return graphvizInstancePromise;
+}
+
+function dotQuoteId(id: string): string {
+    return `"${id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function parseDotPos(pos?: string): { x: number; y: number } | undefined {
+    if (!pos) {
+        return undefined;
+    }
+    const [sx, sy] = pos.split(',');
+    const x = Number(sx);
+    const y = Number(sy);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return undefined;
+    }
+    return { x, y };
+}
+
+async function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<WorkerNode[]> {
     if (nodes.length > DAGRE_NODE_LIMIT) {
         return gridFallbackLayout(nodes, edges);
     }
@@ -88,223 +114,71 @@ function dagreLayoutCore(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[]
     });
 }
 
-function findConnectedComponents(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[][] {
-    const idSet = new Set(nodes.map((n) => n.id));
-    const adj = new Map<string, string[]>();
-    for (const n of nodes) {
-        adj.set(n.id, []);
-    }
-    for (const e of edges) {
-        if (!idSet.has(e.source) || !idSet.has(e.target) || e.source === e.target) {
-            continue;
-        }
-        adj.get(e.source)!.push(e.target);
-        adj.get(e.target)!.push(e.source);
+async function gridFallbackLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<WorkerNode[]> {
+    if (nodes.length === 0) {
+        return nodes;
     }
 
-    const visited = new Set<string>();
-    const components: Set<string>[] = [];
-    for (const n of nodes) {
-        if (visited.has(n.id)) {
-            continue;
+    try {
+        const idSet = new Set(nodes.map((n) => n.id));
+        const validEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target) && e.source !== e.target);
+
+        const lines: string[] = [];
+        lines.push('digraph G {');
+        lines.push('  graph [overlap=false, splines=true];');
+        lines.push('  node [shape=box, fixedsize=true];');
+        for (const n of nodes) {
+            const { width, height } = getNodeLayoutSize(n);
+            const widthIn = Math.max(0.25, width / 72);
+            const heightIn = Math.max(0.25, height / 72);
+            lines.push(`  ${dotQuoteId(n.id)} [width=${widthIn.toFixed(4)}, height=${heightIn.toFixed(4)}];`);
         }
-        const comp = new Set<string>();
-        const stack = [n.id];
-        while (stack.length > 0) {
-            const cur = stack.pop()!;
-            if (visited.has(cur)) {
+        for (const e of validEdges) {
+            lines.push(`  ${dotQuoteId(e.source)} -> ${dotQuoteId(e.target)};`);
+        }
+        lines.push('}');
+
+        const graphviz = await getGraphviz();
+        const layoutJson = graphviz.layout(lines.join('\n'), 'json', 'sfdp');
+        const parsed = JSON.parse(layoutJson) as { objects?: Array<{ name?: string; pos?: string }> };
+
+        const centerById = new Map<string, { x: number; y: number }>();
+        let maxCenterY = -Infinity;
+        for (const obj of parsed.objects ?? []) {
+            if (!obj.name || !idSet.has(obj.name)) {
                 continue;
             }
-            visited.add(cur);
-            comp.add(cur);
-            for (const neighbor of adj.get(cur) ?? []) {
-                if (!visited.has(neighbor)) {
-                    stack.push(neighbor);
-                }
+            const pos = parseDotPos(obj.pos);
+            if (!pos) {
+                continue;
+            }
+            centerById.set(obj.name, pos);
+            if (pos.y > maxCenterY) {
+                maxCenterY = pos.y;
             }
         }
-        components.push(comp);
-    }
-
-    const nodeById = new Map(nodes.map((n) => [n.id, n]));
-    return components.map((comp) => [...comp].map((id) => nodeById.get(id)!)).sort((a, b) => b.length - a.length);
-}
-
-function gridFallbackLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
-    // 1. Compute topological levels to find the "wide header" vs "parallel pipelines"
-    const idSet = new Set(nodes.map((n) => n.id));
-    const indegree = new Map(nodes.map((n) => [n.id, 0]));
-    const outgoing = new Map<string, string[]>();
-    const levelById = new Map(nodes.map((n) => [n.id, 0]));
-
-    for (const e of edges) {
-        if (!idSet.has(e.source) || !idSet.has(e.target) || e.source === e.target) {
-            continue;
+        if (centerById.size === 0 || !Number.isFinite(maxCenterY)) {
+            return singleComponentLayout(nodes, validEdges);
         }
-        indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
-        const outArr = outgoing.get(e.source) ?? [];
-        outArr.push(e.target);
-        outgoing.set(e.source, outArr);
-    }
 
-    const queue: string[] = [];
-    indegree.forEach((deg, id) => {
-        if (deg === 0) {
-            queue.push(id);
-        }
-    });
-
-    for (let qi = 0; qi < queue.length; qi += 1) {
-        const id = queue[qi];
-        const level = levelById.get(id) ?? 0;
-        for (const outId of outgoing.get(id) ?? []) {
-            const prev = levelById.get(outId) ?? 0;
-            if (level + 1 > prev) {
-                levelById.set(outId, level + 1);
-            }
-            const nextDeg = (indegree.get(outId) ?? 0) - 1;
-            indegree.set(outId, nextDeg);
-            if (nextDeg === 0) {
-                queue.push(outId);
-            }
-        }
-    }
-
-    // 2. Find the cutoff level: first level where node count drops below a threshold
-    const byLevel = new Map<number, WorkerNode[]>();
-    for (const n of nodes) {
-        const level = levelById.get(n.id) ?? 0;
-        const arr = byLevel.get(level) ?? [];
-        arr.push(n);
-        byLevel.set(level, arr);
-    }
-    const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
-
-    const WIDE_LEVEL_THRESHOLD = 20;
-    let cutoffLevel = sortedLevels.length > 0 ? sortedLevels[0] : 0;
-    for (const level of sortedLevels) {
-        const count = (byLevel.get(level) ?? []).length;
-        if (count < WIDE_LEVEL_THRESHOLD) {
-            cutoffLevel = level;
-            break;
-        }
-        cutoffLevel = level + 1;
-    }
-
-    // 3. Split nodes into header (wide levels) and pipeline (rest)
-    const headerNodes: WorkerNode[] = [];
-    const pipelineNodes: WorkerNode[] = [];
-    for (const n of nodes) {
-        if ((levelById.get(n.id) ?? 0) < cutoffLevel) {
-            headerNodes.push(n);
-        } else {
-            pipelineNodes.push(n);
-        }
-    }
-
-    // 4. Find connected components among pipeline nodes (without shared headers)
-    const pipelineEdges = edges.filter((e) => {
-        const sl = levelById.get(e.source) ?? 0;
-        const tl = levelById.get(e.target) ?? 0;
-        return sl >= cutoffLevel && tl >= cutoffLevel && idSet.has(e.source) && idSet.has(e.target);
-    });
-    const components = findConnectedComponents(pipelineNodes, pipelineEdges);
-
-    // 5. Layout header nodes in a simple grid row
-    const laidOut: WorkerNode[] = [];
-    const xPad = 40;
-    const yPad = 40;
-    const MAX_PER_ROW = 16;
-
-    let yOffset = 0;
-    for (const level of sortedLevels) {
-        if (level >= cutoffLevel) {
-            break;
-        }
-        const bucket = byLevel.get(level) ?? [];
-        bucket.sort((a, b) => a.id.localeCompare(b.id));
-        let xOffset = 0;
-        let rowMaxHeight = 0;
-        let col = 0;
-        for (const n of bucket) {
-            if (col >= MAX_PER_ROW) {
-                yOffset += rowMaxHeight + yPad;
-                xOffset = 0;
-                rowMaxHeight = 0;
-                col = 0;
+        return nodes.map((n) => {
+            const center = centerById.get(n.id);
+            if (!center) {
+                return n;
             }
             const { width, height } = getNodeLayoutSize(n);
-            laidOut.push({ ...n, position: { x: xOffset, y: yOffset } });
-            xOffset += width + xPad;
-            if (height > rowMaxHeight) {
-                rowMaxHeight = height;
-            }
-            col += 1;
-        }
-        yOffset += rowMaxHeight + yPad;
-    }
-
-    // 6. Layout each pipeline component with dagre, tile side by side
-    if (components.length === 0) {
-        return laidOut;
-    }
-
-    const TILE_PAD = 80;
-    const pipelinesStartY = yOffset + TILE_PAD;
-    let tileX = 0;
-    let tileRowMaxHeight = 0;
-    let tileY = pipelinesStartY;
-    const MAX_TILE_COLS = 8;
-    let tileCol = 0;
-
-    for (const comp of components) {
-        const compIdSet = new Set(comp.map((n) => n.id));
-        const compEdges = pipelineEdges.filter((e) => compIdSet.has(e.source) && compIdSet.has(e.target));
-
-        let positioned: WorkerNode[];
-        if (comp.length <= DAGRE_NODE_LIMIT) {
-            try {
-                positioned = dagreLayoutCore(comp, compEdges);
-            } catch {
-                positioned = singleComponentLayout(comp, compEdges);
-            }
-        } else {
-            positioned = singleComponentLayout(comp, compEdges);
-        }
-
-        if (positioned.length === 0) {
-            continue;
-        }
-
-        const bounds = getBounds(positioned);
-        const compW = bounds.maxX - bounds.minX;
-        const compH = bounds.maxY - bounds.minY;
-
-        if (tileCol >= MAX_TILE_COLS && tileCol > 0) {
-            tileY += tileRowMaxHeight + TILE_PAD;
-            tileX = 0;
-            tileRowMaxHeight = 0;
-            tileCol = 0;
-        }
-
-        for (const n of positioned) {
-            laidOut.push({
+            return {
                 ...n,
                 position: {
-                    x: n.position.x - bounds.minX + tileX,
-                    y: n.position.y - bounds.minY + tileY,
+                    x: center.x - width / 2,
+                    // Graphviz y-axis is bottom-up; React Flow is top-down.
+                    y: maxCenterY - center.y - height / 2,
                 },
-            });
-        }
-
-        tileX += compW + TILE_PAD;
-        if (compH > tileRowMaxHeight) {
-            tileRowMaxHeight = compH;
-        }
-        tileCol += 1;
+            };
+        });
+    } catch {
+        return singleComponentLayout(nodes, edges);
     }
-
-    return laidOut;
 }
 
 function singleComponentLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
