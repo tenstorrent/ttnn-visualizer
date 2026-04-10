@@ -1,6 +1,7 @@
 /* eslint-disable no-await-in-loop */
 /* eslint-disable no-continue */
 import ELK, { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk.bundled';
+import dagre from '@dagrejs/dagre';
 import type { BuiltGraph, GraphIndex, IndexedAttr, IndexedNode, WorkerEdge, WorkerNode } from './mlirGraphTypes';
 
 const GROUP_MIN_WIDTH = 260;
@@ -34,7 +35,103 @@ function getElk(): ElkLike {
     return elkInstance;
 }
 
-function fallbackLayeredLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+const DAGRE_NODE_LIMIT = 2000;
+
+function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+    if (nodes.length > DAGRE_NODE_LIMIT) {
+        return gridFallbackLayout(nodes, edges);
+    }
+    try {
+        return dagreLayoutCore(nodes, edges);
+    } catch {
+        return gridFallbackLayout(nodes, edges);
+    }
+}
+
+function dagreLayoutCore(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({
+        rankdir: 'TB',
+        nodesep: 30,
+        ranksep: 80,
+        edgesep: 10,
+        marginx: 20,
+        marginy: 20,
+    });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    const idSet = new Set<string>();
+    for (const n of nodes) {
+        const { width, height } = getNodeLayoutSize(n);
+        g.setNode(n.id, { width, height });
+        idSet.add(n.id);
+    }
+
+    for (const e of edges) {
+        if (idSet.has(e.source) && idSet.has(e.target) && e.source !== e.target) {
+            g.setEdge(e.source, e.target);
+        }
+    }
+
+    dagre.layout(g);
+
+    return nodes.map((n) => {
+        const pos = g.node(n.id);
+        const { width, height } = getNodeLayoutSize(n);
+        return {
+            ...n,
+            position: {
+                x: pos.x - width / 2,
+                y: pos.y - height / 2,
+            },
+        };
+    });
+}
+
+function findConnectedComponents(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[][] {
+    const idSet = new Set(nodes.map((n) => n.id));
+    const adj = new Map<string, string[]>();
+    for (const n of nodes) {
+        adj.set(n.id, []);
+    }
+    for (const e of edges) {
+        if (!idSet.has(e.source) || !idSet.has(e.target) || e.source === e.target) {
+            continue;
+        }
+        adj.get(e.source)!.push(e.target);
+        adj.get(e.target)!.push(e.source);
+    }
+
+    const visited = new Set<string>();
+    const components: Set<string>[] = [];
+    for (const n of nodes) {
+        if (visited.has(n.id)) {
+            continue;
+        }
+        const comp = new Set<string>();
+        const stack = [n.id];
+        while (stack.length > 0) {
+            const cur = stack.pop()!;
+            if (visited.has(cur)) {
+                continue;
+            }
+            visited.add(cur);
+            comp.add(cur);
+            for (const neighbor of adj.get(cur) ?? []) {
+                if (!visited.has(neighbor)) {
+                    stack.push(neighbor);
+                }
+            }
+        }
+        components.push(comp);
+    }
+
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    return components.map((comp) => [...comp].map((id) => nodeById.get(id)!)).sort((a, b) => b.length - a.length);
+}
+
+function gridFallbackLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+    // 1. Compute topological levels to find the "wide header" vs "parallel pipelines"
     const idSet = new Set(nodes.map((n) => n.id));
     const indegree = new Map(nodes.map((n) => [n.id, 0]));
     const outgoing = new Map<string, string[]>();
@@ -45,9 +142,185 @@ function fallbackLayeredLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Worker
             continue;
         }
         indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
-        const arr = outgoing.get(e.source) ?? [];
-        arr.push(e.target);
-        outgoing.set(e.source, arr);
+        const outArr = outgoing.get(e.source) ?? [];
+        outArr.push(e.target);
+        outgoing.set(e.source, outArr);
+    }
+
+    const queue: string[] = [];
+    indegree.forEach((deg, id) => {
+        if (deg === 0) {
+            queue.push(id);
+        }
+    });
+
+    for (let qi = 0; qi < queue.length; qi += 1) {
+        const id = queue[qi];
+        const level = levelById.get(id) ?? 0;
+        for (const outId of outgoing.get(id) ?? []) {
+            const prev = levelById.get(outId) ?? 0;
+            if (level + 1 > prev) {
+                levelById.set(outId, level + 1);
+            }
+            const nextDeg = (indegree.get(outId) ?? 0) - 1;
+            indegree.set(outId, nextDeg);
+            if (nextDeg === 0) {
+                queue.push(outId);
+            }
+        }
+    }
+
+    // 2. Find the cutoff level: first level where node count drops below a threshold
+    const byLevel = new Map<number, WorkerNode[]>();
+    for (const n of nodes) {
+        const level = levelById.get(n.id) ?? 0;
+        const arr = byLevel.get(level) ?? [];
+        arr.push(n);
+        byLevel.set(level, arr);
+    }
+    const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
+
+    const WIDE_LEVEL_THRESHOLD = 20;
+    let cutoffLevel = sortedLevels.length > 0 ? sortedLevels[0] : 0;
+    for (const level of sortedLevels) {
+        const count = (byLevel.get(level) ?? []).length;
+        if (count < WIDE_LEVEL_THRESHOLD) {
+            cutoffLevel = level;
+            break;
+        }
+        cutoffLevel = level + 1;
+    }
+
+    // 3. Split nodes into header (wide levels) and pipeline (rest)
+    const headerNodes: WorkerNode[] = [];
+    const pipelineNodes: WorkerNode[] = [];
+    for (const n of nodes) {
+        if ((levelById.get(n.id) ?? 0) < cutoffLevel) {
+            headerNodes.push(n);
+        } else {
+            pipelineNodes.push(n);
+        }
+    }
+
+    // 4. Find connected components among pipeline nodes (without shared headers)
+    const pipelineEdges = edges.filter((e) => {
+        const sl = levelById.get(e.source) ?? 0;
+        const tl = levelById.get(e.target) ?? 0;
+        return sl >= cutoffLevel && tl >= cutoffLevel && idSet.has(e.source) && idSet.has(e.target);
+    });
+    const components = findConnectedComponents(pipelineNodes, pipelineEdges);
+
+    // 5. Layout header nodes in a simple grid row
+    const laidOut: WorkerNode[] = [];
+    const xPad = 40;
+    const yPad = 40;
+    const MAX_PER_ROW = 16;
+
+    let yOffset = 0;
+    for (const level of sortedLevels) {
+        if (level >= cutoffLevel) {
+            break;
+        }
+        const bucket = byLevel.get(level) ?? [];
+        bucket.sort((a, b) => a.id.localeCompare(b.id));
+        let xOffset = 0;
+        let rowMaxHeight = 0;
+        let col = 0;
+        for (const n of bucket) {
+            if (col >= MAX_PER_ROW) {
+                yOffset += rowMaxHeight + yPad;
+                xOffset = 0;
+                rowMaxHeight = 0;
+                col = 0;
+            }
+            const { width, height } = getNodeLayoutSize(n);
+            laidOut.push({ ...n, position: { x: xOffset, y: yOffset } });
+            xOffset += width + xPad;
+            if (height > rowMaxHeight) {
+                rowMaxHeight = height;
+            }
+            col += 1;
+        }
+        yOffset += rowMaxHeight + yPad;
+    }
+
+    // 6. Layout each pipeline component with dagre, tile side by side
+    if (components.length === 0) {
+        return laidOut;
+    }
+
+    const TILE_PAD = 80;
+    const pipelinesStartY = yOffset + TILE_PAD;
+    let tileX = 0;
+    let tileRowMaxHeight = 0;
+    let tileY = pipelinesStartY;
+    const MAX_TILE_COLS = 8;
+    let tileCol = 0;
+
+    for (const comp of components) {
+        const compIdSet = new Set(comp.map((n) => n.id));
+        const compEdges = pipelineEdges.filter((e) => compIdSet.has(e.source) && compIdSet.has(e.target));
+
+        let positioned: WorkerNode[];
+        if (comp.length <= DAGRE_NODE_LIMIT) {
+            try {
+                positioned = dagreLayoutCore(comp, compEdges);
+            } catch {
+                positioned = singleComponentLayout(comp, compEdges);
+            }
+        } else {
+            positioned = singleComponentLayout(comp, compEdges);
+        }
+
+        if (positioned.length === 0) {
+            continue;
+        }
+
+        const bounds = getBounds(positioned);
+        const compW = bounds.maxX - bounds.minX;
+        const compH = bounds.maxY - bounds.minY;
+
+        if (tileCol >= MAX_TILE_COLS && tileCol > 0) {
+            tileY += tileRowMaxHeight + TILE_PAD;
+            tileX = 0;
+            tileRowMaxHeight = 0;
+            tileCol = 0;
+        }
+
+        for (const n of positioned) {
+            laidOut.push({
+                ...n,
+                position: {
+                    x: n.position.x - bounds.minX + tileX,
+                    y: n.position.y - bounds.minY + tileY,
+                },
+            });
+        }
+
+        tileX += compW + TILE_PAD;
+        if (compH > tileRowMaxHeight) {
+            tileRowMaxHeight = compH;
+        }
+        tileCol += 1;
+    }
+
+    return laidOut;
+}
+
+function singleComponentLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+    const idSet = new Set(nodes.map((n) => n.id));
+    const indegree = new Map(nodes.map((n) => [n.id, 0]));
+    const outgoing = new Map<string, string[]>();
+    const levelById = new Map(nodes.map((n) => [n.id, 0]));
+
+    for (const e of edges) {
+        if (!idSet.has(e.source) || !idSet.has(e.target) || e.source === e.target) {
+            continue;
+        }
+        indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
+        const outArr = outgoing.get(e.source) ?? [];
+        outArr.push(e.target);
+        outgoing.set(e.source, outArr);
     }
 
     const queue: string[] = [];
@@ -85,7 +358,7 @@ function fallbackLayeredLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Worker
     const laidOut: WorkerNode[] = [];
     const xPad = 40;
     const yPad = 40;
-    const MAX_PER_ROW = 12;
+    const MAX_PER_ROW = 16;
     let yOffset = 0;
     for (const level of sortedLevels) {
         const bucket = byLevel.get(level) ?? [];
@@ -106,7 +379,7 @@ function fallbackLayeredLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Worker
             if (height > rowMaxHeight) {
                 rowMaxHeight = height;
             }
-            col++;
+            col += 1;
         }
         yOffset += rowMaxHeight + yPad;
     }
@@ -176,7 +449,7 @@ async function layoutWithElk(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<
         return nodes;
     }
     if (nodes.length > ELK_NODE_THRESHOLD) {
-        return fallbackLayeredLayout(nodes, edges);
+        return dagreLayout(nodes, edges);
     }
     try {
         const graph = toElkGraph(nodes, edges);
@@ -191,7 +464,7 @@ async function layoutWithElk(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<
         if (message.includes('not a constructor')) {
             elkUnavailable = true;
         }
-        return fallbackLayeredLayout(nodes, edges);
+        return dagreLayout(nodes, edges);
     }
 }
 
