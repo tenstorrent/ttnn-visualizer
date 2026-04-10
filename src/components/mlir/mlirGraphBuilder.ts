@@ -85,21 +85,30 @@ function fallbackLayeredLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Worker
     const laidOut: WorkerNode[] = [];
     const xPad = 40;
     const yPad = 40;
+    const MAX_PER_ROW = 12;
     let yOffset = 0;
     for (const level of sortedLevels) {
         const bucket = byLevel.get(level) ?? [];
         bucket.sort((a, b) => a.id.localeCompare(b.id));
         let xOffset = 0;
-        let maxHeight = 0;
+        let rowMaxHeight = 0;
+        let col = 0;
         for (const n of bucket) {
+            if (col >= MAX_PER_ROW) {
+                yOffset += rowMaxHeight + yPad;
+                xOffset = 0;
+                rowMaxHeight = 0;
+                col = 0;
+            }
             const { width, height } = getNodeLayoutSize(n);
             laidOut.push({ ...n, position: { x: xOffset, y: yOffset } });
             xOffset += width + xPad;
-            if (height > maxHeight) {
-                maxHeight = height;
+            if (height > rowMaxHeight) {
+                rowMaxHeight = height;
             }
+            col++;
         }
-        yOffset += maxHeight + yPad;
+        yOffset += rowMaxHeight + yPad;
     }
     return laidOut;
 }
