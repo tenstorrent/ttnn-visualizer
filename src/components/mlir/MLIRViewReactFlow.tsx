@@ -86,28 +86,6 @@ const getParentNamespace = (namespace: string): string | undefined => {
 
 const getRegionBaseOpLabel = (namespace: string): string => getShortName(namespace).replace(/_\d+$/, '');
 
-const isCollapsibleNamespace = (namespace: string, nodes: GraphBundle['graphs'][0]['nodes']): boolean => {
-    const expectedLabel = getRegionBaseOpLabel(namespace);
-    const hasMatchingInnerOp = nodes.some((n) => n.namespace === namespace && n.label === expectedLabel);
-    if (!hasMatchingInnerOp) {
-        return false;
-    }
-    const hasNestedNamespaceContent = nodes.some((n) => {
-        if (!n.namespace) {
-            return false;
-        }
-        return n.namespace !== namespace && n.namespace.startsWith(`${namespace}/`);
-    });
-    if (hasNestedNamespaceContent) {
-        return true;
-    }
-    const parentNamespace = getParentNamespace(namespace);
-    if (!parentNamespace) {
-        return false;
-    }
-    return nodes.some((n) => n.namespace === parentNamespace && n.label === expectedLabel);
-};
-
 const getNodeAttrValue = (node: GraphBundle['graphs'][0]['nodes'][number], key: string): string | undefined =>
     node.attrs.find((attr) => attr.key === key)?.value;
 
@@ -115,13 +93,6 @@ const getNamespaceOrdinal = (namespace: string): number => {
     const leaf = getShortName(namespace);
     const match = leaf.match(/_(\d+)$/);
     return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
-};
-
-const isNodeInsideNamespaceTree = (nodeNamespace: string | undefined, namespace: string): boolean => {
-    if (!nodeNamespace) {
-        return false;
-    }
-    return nodeNamespace === namespace || nodeNamespace.startsWith(`${namespace}/`);
 };
 
 function builtGraphToReactFlow(built: BuiltGraph): { nodes: MLNode[]; edges: Edge[] } {
@@ -160,20 +131,41 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     } = useMemo(() => {
         const nodeIndexById = new Map(graph.nodes.map((n, idx) => [n.id, idx]));
         const nodesByNamespace = new Map<string, typeof graph.nodes>();
-        const allNamespaces = new Set<string>();
+        const labelsByNamespace = new Map<string, Set<string>>();
+        const namespacesWithChildren = new Set<string>();
         for (const n of graph.nodes) {
-            if (n.namespace) {
-                allNamespaces.add(n.namespace);
-                const arr = nodesByNamespace.get(n.namespace);
-                if (arr) {
-                    arr.push(n);
-                } else {
-                    nodesByNamespace.set(n.namespace, [n]);
-                }
+            if (!n.namespace) {
+                continue;
+            }
+            const arr = nodesByNamespace.get(n.namespace);
+            if (arr) {
+                arr.push(n);
+                labelsByNamespace.get(n.namespace)!.add(n.label);
+            } else {
+                nodesByNamespace.set(n.namespace, [n]);
+                labelsByNamespace.set(n.namespace, new Set([n.label]));
+            }
+            const segments = n.namespace.split('/');
+            for (let i = 1; i < segments.length; i++) {
+                namespacesWithChildren.add(segments.slice(0, i).join('/'));
             }
         }
 
-        const collapsible = Array.from(allNamespaces).filter((ns) => isCollapsibleNamespace(ns, graph.nodes));
+        const collapsible: string[] = [];
+        for (const ns of nodesByNamespace.keys()) {
+            const expectedLabel = getRegionBaseOpLabel(ns);
+            if (!labelsByNamespace.get(ns)?.has(expectedLabel)) {
+                continue;
+            }
+            if (namespacesWithChildren.has(ns)) {
+                collapsible.push(ns);
+                continue;
+            }
+            const parentNs = getParentNamespace(ns);
+            if (parentNs && labelsByNamespace.get(parentNs)?.has(expectedLabel)) {
+                collapsible.push(ns);
+            }
+        }
         const sorted = [...collapsible].sort((a, b) => {
             const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
             return ord !== 0 ? ord : a.localeCompare(b);
@@ -228,27 +220,46 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             }
         }
 
-        const inputMap = new Map<string, string[]>();
-        const returnMap = new Map<string, string>();
-        for (const ns of sorted) {
-            const inputNodes: typeof graph.nodes = [];
-            const returnCandidates: typeof graph.nodes = [];
-            for (const [childNs, childNodes] of nodesByNamespace) {
-                if (!isNodeInsideNamespaceTree(childNs, ns)) {
-                    continue;
+        const sortedSet = new Set(sorted);
+        const inputNodesByNs = new Map<string, typeof graph.nodes>();
+        const returnCandidatesByNs = new Map<string, typeof graph.nodes>();
+        const argPattern = /^%arg\d+$/i;
+        const returnPattern = /\.return$|^return$/i;
+        for (const n of graph.nodes) {
+            if (!n.namespace) {
+                continue;
+            }
+            if (sortedSet.has(n.namespace) && returnPattern.test(n.label)) {
+                const arr = returnCandidatesByNs.get(n.namespace);
+                if (arr) {
+                    arr.push(n);
+                } else {
+                    returnCandidatesByNs.set(n.namespace, [n]);
                 }
-                for (const n of childNodes) {
-                    if (
-                        (n.incomingEdges ?? []).length === 0 &&
-                        (n.namespace?.startsWith(`${ns}/Inputs`) || /^%arg\d+$/i.test(n.label))
-                    ) {
-                        inputNodes.push(n);
+            }
+            if ((n.incomingEdges ?? []).length === 0) {
+                const isArg = argPattern.test(n.label);
+                const segments = n.namespace.split('/');
+                for (let i = 1; i <= segments.length; i++) {
+                    const ancestor = segments.slice(0, i).join('/');
+                    if (!sortedSet.has(ancestor)) {
+                        continue;
                     }
-                    if (n.namespace === ns && /\.return$|^return$/i.test(n.label)) {
-                        returnCandidates.push(n);
+                    if (isArg || n.namespace.startsWith(`${ancestor}/Inputs`)) {
+                        const arr = inputNodesByNs.get(ancestor);
+                        if (arr) {
+                            arr.push(n);
+                        } else {
+                            inputNodesByNs.set(ancestor, [n]);
+                        }
                     }
                 }
             }
+        }
+        const inputMap = new Map<string, string[]>();
+        const returnMap = new Map<string, string>();
+        for (const ns of sorted) {
+            const inputNodes = inputNodesByNs.get(ns) ?? [];
             inputNodes.sort((a, b) => {
                 const aIdx = Number(a.label.match(/^%arg(\d+)$/i)?.[1] ?? Infinity);
                 const bIdx = Number(b.label.match(/^%arg(\d+)$/i)?.[1] ?? Infinity);
@@ -258,6 +269,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 ns,
                 inputNodes.map((n) => n.id),
             );
+            const returnCandidates = returnCandidatesByNs.get(ns) ?? [];
             returnCandidates.sort((a, b) => (nodeIndexById.get(b.id) ?? 0) - (nodeIndexById.get(a.id) ?? 0));
             if (returnCandidates[0]) {
                 returnMap.set(ns, returnCandidates[0].id);
@@ -275,13 +287,20 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     }, [graph]);
 
     const graphIndex: GraphIndex = useMemo(() => {
+        const subgraphNsSet = new Set(subgraphNamespaces);
         const getContainingNamespaces = (namespace?: string): string[] => {
             if (!namespace) {
                 return [];
             }
-            return [...subgraphNamespaces]
-                .filter((candidate) => isNodeInsideNamespaceTree(namespace, candidate))
-                .sort((a, b) => a.length - b.length);
+            const result: string[] = [];
+            const segments = namespace.split('/');
+            for (let i = 1; i <= segments.length; i++) {
+                const ancestor = segments.slice(0, i).join('/');
+                if (subgraphNsSet.has(ancestor)) {
+                    result.push(ancestor);
+                }
+            }
+            return result;
         };
         const containingNamespacesByNodeId: Record<string, string[]> = {};
         for (const n of graph.nodes) {
