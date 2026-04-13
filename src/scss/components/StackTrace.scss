@@ -52,6 +52,7 @@
         color: $tt-grey-5;
         margin-top: 5px;
         margin-bottom: 20px;
+        margin-right: 30px; // Avoids overlapping with source-file-controls
     }
 
     .code-wrapper {

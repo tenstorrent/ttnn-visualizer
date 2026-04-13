@@ -372,20 +372,8 @@ function StackTrace({
                                         intent={Intent.WARNING}
                                         title='Approximate source match'
                                     >
-                                        {isRemote ? (
-                                            <>
-                                                This file was opened using a path under the remote tt-metal tree
-                                                (inferred from your profiler report folder). The path in the stack trace
-                                                pointed elsewhere, so this may not be the same file or revision that
-                                                produced the trace.
-                                            </>
-                                        ) : (
-                                            <>
-                                                This file was opened using your local tt-metal tree. The path in the
-                                                stack trace pointed elsewhere, so this may not be the same file or
-                                                revision that produced the trace.
-                                            </>
-                                        )}
+                                        This file was opened using a remapped path which may not reflect the same file
+                                        or revision that produced the trace.
                                     </Callout>
                                 ) : null}
                                 <p className='stack-trace-path monospace'>{displaySourcePath}</p>
