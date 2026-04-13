@@ -164,7 +164,7 @@ const useRemoteConnection = () => {
 
     const readRemoteFile = async (filePath: string) => {
         try {
-            const response = await axiosInstance.post(
+            const response = await axiosInstance.post<string>(
                 `${Endpoints.REMOTE}/read`,
                 { filePath },
                 {
@@ -174,15 +174,23 @@ const useRemoteConnection = () => {
                 },
             );
 
-            return { data: response.data, error: null };
+            const isRemapped = response.headers['x-ttnn-source-remapped'] === 'true';
+            const resolvedPath = response.headers['x-ttnn-resolved-source-path'] || null;
+
+            return {
+                data: response.data,
+                error: null,
+                isRemapped,
+                resolvedPath: typeof resolvedPath === 'string' ? resolvedPath : null,
+            };
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
                 const errorMessage = error.response?.data?.error || error.message || 'Failed to read remote file';
 
-                return { data: null, error: errorMessage };
+                return { data: null, error: errorMessage, isRemapped: false, resolvedPath: null };
             }
 
-            return { data: null, error: 'An unexpected error occurred' };
+            return { data: null, error: 'An unexpected error occurred', isRemapped: false, resolvedPath: null };
         }
     };
 

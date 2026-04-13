@@ -64,14 +64,17 @@ from ttnn_visualizer.sftp_operations import (
     get_cluster_desc,
     get_remote_performance_folders,
     get_remote_profiler_folders,
-    read_remote_file,
     sync_remote_performance_folders,
     sync_remote_profiler_folders,
 )
 from ttnn_visualizer.ssh_client import SSHClient
+from ttnn_visualizer.stack_trace_source import (
+    read_stack_source_local,
+    read_stack_source_remote,
+    stack_source_response,
+)
 from ttnn_visualizer.utils import (
     create_path_resolver,
-    get_cluster_descriptor_path,
     get_mesh_descriptor_paths,
     read_last_synced_file,
     str_to_bool,
@@ -1576,23 +1579,43 @@ def test_remote_folder():
 @api.route("/remote/read", methods=["POST"])
 @with_instance
 def read_remote_folder(instance: Instance):
-    file_path = request.json.get("filePath")
+    body = request.get_json(silent=True) or {}
+    file_path = body.get("filePath")
+
+    if not file_path or not isinstance(file_path, str):
+        return jsonify({"error": "Missing or invalid filePath"}), HTTPStatus.BAD_REQUEST
 
     remote_connection = instance.remote_connection
-    if not remote_connection:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST,
-            response="No remote connection found in instance.",
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            content, resolved, remapped = read_stack_source_remote(
+                ssh_client, file_path
+            )
+            return stack_source_response(content, resolved, remapped)
+        except RemoteConnectionException as e:
+            return Response(status=e.http_status, response=e.message)
+        except RemoteFileReadException as e:
+            return jsonify({"error": str(e)}), e.http_status
+
+    if current_app.config.get("SERVER_MODE"):
+        return (
+            jsonify(
+                {
+                    "error": "Local stack source reads are not available in server mode.",
+                }
+            ),
+            HTTPStatus.FORBIDDEN,
         )
 
     try:
-        content = read_remote_file(remote_connection, remote_path=file_path)
-    except RemoteConnectionException as e:
-        return Response(status=e.http_status, response=e.message)
-    except RemoteFileReadException as e:
-        return jsonify({"error": str(e)}), e.http_status
-
-    return Response(status=200, response=content)
+        content, resolved, remapped = read_stack_source_local(file_path)
+        return stack_source_response(content, resolved, remapped)
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e) or "File not found."}), HTTPStatus.NOT_FOUND
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), HTTPStatus.FORBIDDEN
 
 
 @api.route("/remote/sync", methods=["POST"])
