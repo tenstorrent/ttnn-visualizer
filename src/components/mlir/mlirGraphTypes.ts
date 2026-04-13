@@ -44,6 +44,8 @@ export type GraphIndex = {
     containingNamespacesByNodeId: Record<string, string[]>;
     /** Outer region op node id → collapsible inner namespace (parent-level toggle). */
     outerNamespaceByNodeId: Record<string, string>;
+    /** Namespaces created by topology-aware sectioning (artificial groups). */
+    sectionNamespaces: string[];
 };
 
 export type WorkerNode = {

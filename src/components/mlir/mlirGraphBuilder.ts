@@ -189,6 +189,11 @@ function toggleNamespaceForNode(index: GraphIndex, nodeId: string): string | und
     return index.anchorNamespaceByNodeId[nodeId] ?? index.outerNamespaceByNodeId[nodeId];
 }
 
+function formatSectionLabel(namespace: string): string {
+    const leaf = namespace.split('/').pop() ?? namespace;
+    return leaf.replace(/_/g, ' ');
+}
+
 function estimateOpNodeDimensions(label: string): { width: number; height: number } {
     const charW = 7.25;
     const padX = 32;
@@ -301,12 +306,17 @@ function getTensorInfoFromAttrs(attrs: IndexedAttr[]) {
     return { label: prettyShape && dtype ? `${prettyShape} ${dtype}` : prettyShape || dtype };
 }
 
-function makeOpNode(node: IndexedNode, toggle?: { namespace: string; state: 'collapsed' | 'expanded' }): WorkerNode {
-    const { width, height } = estimateOpNodeDimensions(node.label);
+function makeOpNode(
+    node: IndexedNode,
+    toggle?: { namespace: string; state: 'collapsed' | 'expanded' },
+    displayLabelOverride?: string,
+): WorkerNode {
+    const label = displayLabelOverride ?? node.label;
+    const { width, height } = estimateOpNodeDimensions(label);
     return {
         id: node.id,
         data: {
-            label: node.label,
+            label,
             kind: 'op',
             namespace: node.namespace,
             ...(toggle ? { collapsedSubgraphNamespace: toggle.namespace, subgraphToggleState: toggle.state } : {}),
@@ -332,6 +342,7 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
     const expandedNamespaces = new Set(expandedNamespacesList);
     const nodeById = new Map(index.nodes.map((n) => [n.id, n]));
     const subgraphNamespaceSet = new Set(index.subgraphNamespaces);
+    const sectionNsSet = new Set(index.sectionNamespaces ?? []);
 
     const resolveRenderedNodeId = (nodeId: string): string => {
         const chain = index.containingNamespacesByNodeId[nodeId] ?? [];
@@ -440,10 +451,14 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
 
         const childOpNodes: WorkerNode[] = directChildRawNodes.map((n) => {
             const toggleNs = toggleNamespaceForNode(index, n.id);
+            const isSectionAnchor = !!toggleNs && sectionNsSet.has(toggleNs);
             return makeOpNode(
                 n,
                 toggleNs
                     ? { namespace: toggleNs, state: expandedNamespaces.has(toggleNs) ? 'expanded' : 'collapsed' }
+                    : undefined,
+                isSectionAnchor && toggleNs && !expandedNamespaces.has(toggleNs)
+                    ? formatSectionLabel(toggleNs)
                     : undefined,
             );
         });
@@ -517,20 +532,25 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
         childNodesByNamespace.set(namespace, normalizedChildren);
         internalEdgesByNamespace.set(namespace, internalEdges);
 
+        const isSection = sectionNsSet.has(namespace);
+        const groupLabel = isSection
+            ? `◇ ${formatSectionLabel(namespace)}`
+            : `▾ ${namespace.split('/').pop()} · click to collapse`;
+
         groupNodeByNamespace.set(namespace, {
             id: groupId,
             type: 'group',
             draggable: false,
-            data: { label: `▾ ${namespace.split('/').pop()} · click to collapse`, kind: 'group', namespace },
+            data: { label: groupLabel, kind: 'group', namespace },
             position: { x: 0, y: 0 },
             width: groupWidth,
             height: groupHeight,
             style: {
                 width: groupWidth,
                 height: groupHeight,
-                border: '2px dashed #7d7d7d',
+                border: isSection ? '2px dashed #9b59b6' : '2px dashed #7d7d7d',
                 borderRadius: 16,
-                background: 'rgba(90, 90, 90, 0.14)',
+                background: isSection ? 'rgba(155, 89, 182, 0.08)' : 'rgba(90, 90, 90, 0.14)',
                 color: '#ddd',
                 padding: '10px 12px',
             },
@@ -541,10 +561,14 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
         .filter((n) => !parentNamespaceByVisibleNodeId.has(n.id))
         .map((n) => {
             const toggleNs = toggleNamespaceForNode(index, n.id);
+            const isSectionAnchor = !!toggleNs && sectionNsSet.has(toggleNs);
             return makeOpNode(
                 n,
                 toggleNs
                     ? { namespace: toggleNs, state: expandedNamespaces.has(toggleNs) ? 'expanded' : 'collapsed' }
+                    : undefined,
+                isSectionAnchor && toggleNs && !expandedNamespaces.has(toggleNs)
+                    ? formatSectionLabel(toggleNs)
                     : undefined,
             );
         });

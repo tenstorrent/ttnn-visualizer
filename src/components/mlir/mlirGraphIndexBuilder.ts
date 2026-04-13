@@ -27,13 +27,141 @@ const getNamespaceOrdinal = (namespace: string): number => {
     return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 };
 
+const SECTION_THRESHOLD = 500;
+const MAX_INITIAL_VISIBLE = 500;
+
+/**
+ * DFS-based topology-aware split inspired by Model Explorer's splitLargeGroupNodes.
+ * Builds a lightweight adjacency map, finds roots, then DFS-traverses filling
+ * fixed-size buckets. Connected sub-trees stay in the same bucket, producing
+ * more meaningful sections than iteration-order bucketing.
+ * Uses an iterative stack to avoid overflow on deep graphs.
+ */
+function splitByTopology(nodes: SourceNode[], threshold: number): SourceNode[][] | null {
+    if (nodes.length <= threshold) {
+        return null;
+    }
+
+    const nodeIdSet = new Set(nodes.map((n) => n.id));
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    const outgoing = new Map<string, string[]>();
+    const hasIncoming = new Set<string>();
+
+    for (const node of nodes) {
+        for (const edge of node.incomingEdges ?? []) {
+            if (!nodeIdSet.has(edge.sourceNodeId) || edge.sourceNodeId === node.id) {
+                continue;
+            }
+            const arr = outgoing.get(edge.sourceNodeId) ?? [];
+            arr.push(node.id);
+            outgoing.set(edge.sourceNodeId, arr);
+            hasIncoming.add(node.id);
+        }
+    }
+
+    const roots: string[] = [];
+    for (const node of nodes) {
+        if (!hasIncoming.has(node.id)) {
+            roots.push(node.id);
+        }
+    }
+
+    const buckets: SourceNode[][] = [];
+    let current: SourceNode[] = [];
+    const visited = new Set<string>();
+
+    // Iterative DFS — push children in reverse so first child is popped first
+    const stack: string[] = [...roots].reverse();
+
+    while (stack.length > 0) {
+        const nodeId = stack.pop()!;
+        if (visited.has(nodeId)) {
+            continue;
+        }
+        visited.add(nodeId);
+        const node = nodeById.get(nodeId);
+        if (!node) {
+            continue;
+        }
+        current.push(node);
+        if (current.length >= threshold) {
+            buckets.push(current);
+            current = [];
+        }
+        const children = outgoing.get(nodeId) ?? [];
+        for (let i = children.length - 1; i >= 0; i--) {
+            if (!visited.has(children[i])) {
+                stack.push(children[i]);
+            }
+        }
+    }
+
+    // Sweep disconnected nodes not reached by DFS
+    for (const node of nodes) {
+        if (!visited.has(node.id)) {
+            current.push(node);
+            if (current.length >= threshold) {
+                buckets.push(current);
+                current = [];
+            }
+        }
+    }
+
+    if (current.length > 0) {
+        buckets.push(current);
+    }
+    return buckets.length > 1 ? buckets : null;
+}
+
+function applyTopologySectioning(nodes: SourceNode[]): {
+    effectiveNodes: SourceNode[];
+    sectionNamespaces: Set<string>;
+} {
+    const sectionNamespaces = new Set<string>();
+
+    // Split namespace-less nodes using topology-aware DFS
+    const namespaceless: SourceNode[] = [];
+    for (const node of nodes) {
+        if (!node.namespace) {
+            namespaceless.push(node);
+        }
+    }
+
+    if (namespaceless.length <= SECTION_THRESHOLD) {
+        return { effectiveNodes: nodes, sectionNamespaces };
+    }
+
+    const buckets = splitByTopology(namespaceless, SECTION_THRESHOLD);
+    if (!buckets || buckets.length <= 1) {
+        return { effectiveNodes: nodes, sectionNamespaces };
+    }
+
+    const remapById = new Map<string, string>();
+    for (let i = 0; i < buckets.length; i++) {
+        const sectionNs = `section_${i + 1}_of_${buckets.length}`;
+        sectionNamespaces.add(sectionNs);
+        for (const node of buckets[i]) {
+            remapById.set(node.id, sectionNs);
+        }
+    }
+
+    const effectiveNodes = nodes.map((node) => {
+        const ns = remapById.get(node.id);
+        return ns ? { ...node, namespace: ns } : node;
+    });
+
+    return { effectiveNodes, sectionNamespaces };
+}
+
 export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphIndex {
-    const nodeIndexById = new Map(nodes.map((n, idx) => [n.id, idx]));
+    const { effectiveNodes, sectionNamespaces } = applyTopologySectioning(nodes);
+
+    const nodeIndexById = new Map(effectiveNodes.map((n, idx) => [n.id, idx]));
     const nodesByNamespace = new Map<string, SourceNode[]>();
     const labelsByNamespace = new Map<string, Set<string>>();
     const namespacesWithChildren = new Set<string>();
 
-    for (const node of nodes) {
+    for (const node of effectiveNodes) {
         if (!node.namespace) {
             continue;
         }
@@ -93,6 +221,30 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         anchorNamespaceByNodeId.set(candidates[0].id, namespace);
     }
 
+    // Phase 3: force-register topology-created section namespaces as collapsible
+    const preSectionNsSet = new Set(subgraphNamespaces);
+    for (const sectionNs of sectionNamespaces) {
+        if (!preSectionNsSet.has(sectionNs)) {
+            subgraphNamespaces.push(sectionNs);
+            preSectionNsSet.add(sectionNs);
+        }
+        if (!anchorByNamespace.has(sectionNs)) {
+            const nodesInSection = [...(nodesByNamespace.get(sectionNs) ?? [])];
+            nodesInSection.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
+            const anchor = nodesInSection.find((n) => !anchorNamespaceByNodeId.has(n.id)) ?? nodesInSection[0];
+            if (anchor) {
+                anchorByNamespace.set(sectionNs, anchor.id);
+                anchorNamespaceByNodeId.set(anchor.id, sectionNs);
+            }
+        }
+    }
+    if (sectionNamespaces.size > 0) {
+        subgraphNamespaces.sort((a, b) => {
+            const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
+            return ord !== 0 ? ord : a.localeCompare(b);
+        });
+    }
+
     const outerNamespaceByNodeId = new Map<string, string>();
     const usedOuterNodeIds = new Set<string>();
     for (const namespace of subgraphNamespaces) {
@@ -126,13 +278,12 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
 
     // Phase 2: Visibility budget — promote additional namespaces to collapsible
     // so the initial fully-collapsed view stays under the node budget.
-    const MAX_INITIAL_VISIBLE = 500;
     const initialSubgraphNsSet = new Set(subgraphNamespaces);
 
     let uncollapsedCount = 0;
     const uncollapsedByNamespace = new Map<string, SourceNode[]>();
 
-    for (const node of nodes) {
+    for (const node of effectiveNodes) {
         if (!node.namespace) {
             uncollapsedCount++;
             continue;
@@ -219,7 +370,7 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
 
     const subgraphNsSet = new Set(subgraphNamespaces);
     const containingNamespacesByNodeId: Record<string, string[]> = {};
-    for (const node of nodes) {
+    for (const node of effectiveNodes) {
         if (!node.namespace) {
             containingNamespacesByNodeId[node.id] = [];
             continue;
@@ -239,7 +390,7 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
     const returnCandidatesByNamespace = new Map<string, SourceNode[]>();
     const argPattern = /^%arg\d+$/i;
     const returnPattern = /\.return$|^return$/i;
-    for (const node of nodes) {
+    for (const node of effectiveNodes) {
         if (!node.namespace) {
             continue;
         }
@@ -292,7 +443,7 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
 
     return {
         graphId,
-        nodes: nodes.map((node) => ({
+        nodes: effectiveNodes.map((node) => ({
             id: node.id,
             label: node.label,
             namespace: node.namespace,
@@ -307,5 +458,6 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         namespaceReturnNodeByNamespace,
         containingNamespacesByNodeId,
         outerNamespaceByNodeId: Object.fromEntries(outerNamespaceByNodeId),
+        sectionNamespaces: [...sectionNamespaces],
     };
 }
