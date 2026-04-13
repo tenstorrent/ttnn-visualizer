@@ -69,6 +69,8 @@ from ttnn_visualizer.sftp_operations import (
 )
 from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.stack_trace_source import (
+    check_stack_source_local,
+    check_stack_source_remote,
     read_stack_source_local,
     read_stack_source_remote,
     stack_source_response,
@@ -1581,11 +1583,27 @@ def test_remote_folder():
 def read_remote_folder(instance: Instance):
     body = request.get_json(silent=True) or {}
     file_path = body.get("filePath")
+    check_path_only = body.get("check_path_only", False)
 
     if not file_path or not isinstance(file_path, str):
         return jsonify({"error": "Missing or invalid filePath"}), HTTPStatus.BAD_REQUEST
 
     remote_connection = instance.remote_connection
+
+    if check_path_only:
+        if remote_connection:
+            try:
+                ssh_client = SSHClient(remote_connection)
+                available = check_stack_source_remote(ssh_client, file_path)
+                return jsonify({"available": available})
+            except RemoteConnectionException:
+                return jsonify({"available": False})
+
+        if current_app.config.get("SERVER_MODE"):
+            return jsonify({"available": False})
+
+        available = check_stack_source_local(file_path)
+        return jsonify({"available": available})
 
     if remote_connection:
         try:

@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 from ttnn_visualizer.stack_trace_source import (
+    _candidate_tt_metal_dirs,
+    check_stack_source_local,
     discover_tt_metal_roots_local,
     extract_suffix_after_tt_metal,
     resolve_local_stack_path,
@@ -92,6 +94,32 @@ def test_discover_tt_metal_roots_dedupes(monkeypatch, tmp_path):
     assert len(roots) == 1
 
 
+def test_candidate_dirs_include_sudo_user_home_tt_metal(monkeypatch):
+    """When sudo leaves HOME as root, /home/$SUDO_USER/tt-metal must still be tried."""
+    monkeypatch.setenv("SUDO_USER", "someuser")
+    assert Path("/home/someuser/tt-metal") in _candidate_tt_metal_dirs()
+
+
+def test_candidate_dirs_include_flask_tt_metal_home(app, tmp_path):
+    custom = tmp_path / "cfg-tt-metal"
+    custom.mkdir()
+    app.config["TT_METAL_HOME"] = str(custom)
+    with app.app_context():
+        candidates = [p.resolve() for p in _candidate_tt_metal_dirs()]
+    assert custom.resolve() in candidates
+
+
+def test_check_stack_source_local_matches_resolve(monkeypatch, tmp_path):
+    metal = tmp_path / "tt-metal"
+    (metal / "ttnn").mkdir(parents=True)
+    target = metal / "ttnn" / "probe.py"
+    target.write_text("# x", encoding="utf-8")
+    monkeypatch.setenv("TT_METAL_HOME", str(metal))
+
+    assert check_stack_source_local("/x/tt-metal/ttnn/probe.py") is True
+    assert check_stack_source_local("/x/tt-metal/ttnn/missing.py") is False
+
+
 def test_read_stack_source_remote_remaps_after_not_found(monkeypatch):
     from http import HTTPStatus
 
@@ -116,9 +144,34 @@ def test_read_stack_source_remote_remaps_after_not_found(monkeypatch):
         raise AssertionError(s)
 
     ssh.read_file.side_effect = read_file
-    monkeypatch.setattr(sts, "discover_tt_metal_root_remote", lambda _ssh: remote_root)
+    monkeypatch.setattr(
+        sts, "discover_tt_metal_roots_remote", lambda _ssh: [remote_root]
+    )
 
     text, resolved, remapped = read_stack_source_remote(ssh, raw)
     assert text == "content"
     assert remapped is True
     assert resolved == f"{remote_root}/foo/bar.c"
+
+
+def test_check_stack_source_remote_tries_each_remapped_root(monkeypatch):
+    import ttnn_visualizer.stack_trace_source as sts
+    from ttnn_visualizer.stack_trace_source import check_stack_source_remote
+
+    monkeypatch.setattr(
+        sts,
+        "discover_tt_metal_roots_remote",
+        lambda _ssh: ["/wrong/tt-metal", "/good/tt-metal"],
+    )
+
+    checked: list[str] = []
+
+    def fake_exists(_ssh, path: str) -> bool:
+        checked.append(path)
+        return path == "/good/tt-metal/u/v.py"
+
+    monkeypatch.setattr(sts, "_remote_regular_file_exists", fake_exists)
+
+    ssh = MagicMock()
+    assert check_stack_source_remote(ssh, "/container/tt-metal/u/v.py") is True
+    assert "/good/tt-metal/u/v.py" in checked

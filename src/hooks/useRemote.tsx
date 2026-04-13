@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import axios from 'axios';
+import { useCallback } from 'react';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import axiosInstance from '../libs/axiosInstance';
@@ -162,6 +163,24 @@ const useRemoteConnection = () => {
         },
     };
 
+    const isStackTraceAvailable = useCallback(async (filePath: string): Promise<boolean> => {
+        try {
+            const { data } = await axiosInstance.post<{ available?: boolean }>(
+                `${Endpoints.REMOTE}/read`,
+                { filePath, check_path_only: true },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                },
+            );
+
+            return data?.available === true;
+        } catch {
+            return false;
+        }
+    }, []);
+
     const readRemoteFile = async (filePath: string) => {
         try {
             const response = await axiosInstance.post<string>(
@@ -202,6 +221,7 @@ const useRemoteConnection = () => {
         mountRemoteFolder,
         persistentState,
         readRemoteFile,
+        isStackTraceAvailable,
     };
 };
 
