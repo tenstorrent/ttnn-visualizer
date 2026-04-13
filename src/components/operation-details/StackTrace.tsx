@@ -176,8 +176,7 @@ function StackTrace({
     const displaySourcePath = (resolvedSourcePath || filePath).trim();
     const isCheckingStackTraceAvailability =
         isFetchingFile || (sourceFileStatus === SourceFileStatus.Pending && !!filePath && canReadSource);
-    const isStackTraceUnavailable =
-        isFetchingFile || !canReadSource || !filePath || sourceFileStatus !== SourceFileStatus.Available;
+    const isStackTraceUnavailable = !canReadSource || !filePath || sourceFileStatus !== SourceFileStatus.Available;
 
     useEffect(() => {
         if (!scrollContainerEl) {
@@ -218,9 +217,10 @@ function StackTrace({
     useEffect(() => {
         setFileContents('');
         setErrorDetails('');
+        setSourceFileStatus(SourceFileStatus.Unavailable);
         setSourceMatchedViaRemap(false);
         setResolvedSourcePath(null);
-    }, [stackTrace]);
+    }, [stackTrace, filePath, canReadSource]);
 
     // Check stack trace file is available
     useEffect(() => {

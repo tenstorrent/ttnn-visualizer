@@ -24,16 +24,39 @@ logger = logging.getLogger(__name__)
 # First occurrence of this substring in a trace path marks the tt-metal repo segment.
 TT_METAL_SEGMENT = "/tt-metal/"
 
-_REMOTE_DISCOVER_SCRIPT = r"""for p in "${TT_METAL_HOME:-}" "$HOME/tt-metal" "/localdev/$(id -un)/tt-metal" "/proj_sw/$(id -un)/tt-metal"; do [ -n "$p" ] && [ -d "$p" ] && printf '%s' "$p" && exit 0; done; exit 1"""
+# Echo every existing tt-metal root, one per line (same priority as local discovery).
+# Includes /home/$SUDO_USER/tt-metal so sudo (HOME=/root) still finds the invoking user's checkout.
+_REMOTE_LIST_ROOTS_SCRIPT = r"""for p in "${TT_METAL_HOME:-}" "$HOME/tt-metal" "/localdev/$(id -un)/tt-metal" "/proj_sw/$(id -un)/tt-metal"; do [ -n "$p" ] && [ -d "$p" ] && printf '%s\n' "$p"; done
+if [ -n "${SUDO_USER:-}" ]; then p="/home/${SUDO_USER}/tt-metal"; [ -d "$p" ] && printf '%s\n' "$p"; fi"""
+
+
+def _tt_metal_home_from_flask_config() -> Optional[str]:
+    """TT_METAL_HOME from Flask app config when handling a request (may differ from os.environ)."""
+    try:
+        from flask import current_app, has_app_context
+
+        if has_app_context():
+            raw = current_app.config.get("TT_METAL_HOME")
+            if raw and str(raw).strip():
+                return str(raw).strip()
+    except Exception:
+        pass
+    return None
 
 
 def _candidate_tt_metal_dirs() -> list[Path]:
     """Ordered search locations (may or may not exist)."""
     out: list[Path] = []
+    cfg = _tt_metal_home_from_flask_config()
+    if cfg:
+        out.append(Path(cfg).expanduser())
     env = (os.environ.get("TT_METAL_HOME") or "").strip()
     if env:
         out.append(Path(env).expanduser())
     out.append(Path.home() / "tt-metal")
+    sudo_user = (os.environ.get("SUDO_USER") or "").strip()
+    if sudo_user:
+        out.append(Path("/home") / sudo_user / "tt-metal")
     user = os.environ.get("USER") or ""
     if user:
         out.append(Path(f"/localdev/{user}/tt-metal"))
@@ -182,17 +205,28 @@ def read_stack_source_local(raw_path: str) -> Tuple[str, str, bool]:
     return text, str(path), remapped
 
 
-def discover_tt_metal_root_remote(ssh_client: "SSHClient") -> Optional[str]:
-    """Return remote tt-metal root path, or None if not found."""
-    cmd = f"bash -lc {shlex.quote(_REMOTE_DISCOVER_SCRIPT)}"
+def discover_tt_metal_roots_remote(ssh_client: "SSHClient") -> list[str]:
+    """All existing remote tt-metal roots, same priority as local (deduped)."""
+    cmd = f"bash -lc {shlex.quote(_REMOTE_LIST_ROOTS_SCRIPT)}"
     try:
-        out = ssh_client.execute_command(cmd, timeout=30).strip()
+        out = ssh_client.execute_command(cmd, timeout=30)
     except Exception as e:
-        logger.warning("Remote tt-metal discovery failed: %s", e)
-        return None
-    if not out:
-        return None
-    return out
+        logger.warning("Remote tt-metal roots discovery failed: %s", e)
+        return []
+    roots: list[str] = []
+    seen: set[str] = set()
+    for line in out.splitlines():
+        line = line.strip()
+        if line and line not in seen:
+            seen.add(line)
+            roots.append(line)
+    return roots
+
+
+def discover_tt_metal_root_remote(ssh_client: "SSHClient") -> Optional[str]:
+    """First remote tt-metal root, or None if none exist."""
+    roots = discover_tt_metal_roots_remote(ssh_client)
+    return roots[0] if roots else None
 
 
 def read_stack_source_remote(
@@ -204,28 +238,85 @@ def read_stack_source_remote(
     :return: (content, resolved_path_str, remapped)
     """
     path_str = str(Path(raw_path))
+    not_found: Optional[RemoteFileReadException] = None
+
     try:
         content = ssh_client.read_file(path_str)
         text = (content or b"").decode("utf-8", errors="replace")
         return text, path_str, False
-    except RemoteFileReadException as first:
-        if first.http_status != HTTPStatus.NOT_FOUND:
+    except RemoteFileReadException as e:
+        if e.http_status != HTTPStatus.NOT_FOUND:
             raise
-        suffix = extract_suffix_after_tt_metal(raw_path)
-        if suffix is None:
-            raise first
+        not_found = e
 
-    root_str = discover_tt_metal_root_remote(ssh_client)
-    if not root_str:
-        raise first
+    assert not_found is not None
+
+    suffix = extract_suffix_after_tt_metal(raw_path)
+    if suffix is None:
+        raise not_found
+
+    roots = discover_tt_metal_roots_remote(ssh_client)
+    if not roots:
+        raise not_found
+
+    last_missing = not_found
+    for root_str in roots:
+        try:
+            remapped_str = join_remote_tt_metal_path(root_str, suffix)
+        except ValueError:
+            continue
+        try:
+            content = ssh_client.read_file(remapped_str)
+            text = (content or b"").decode("utf-8", errors="replace")
+            return text, remapped_str, True
+        except RemoteFileReadException as e:
+            if e.http_status != HTTPStatus.NOT_FOUND:
+                raise
+            last_missing = e
+            continue
+
+    raise last_missing
+
+
+def _remote_regular_file_exists(ssh_client: "SSHClient", posix_path: str) -> bool:
+    """True if remote path exists and is a regular file (SSH test -f)."""
+    from ttnn_visualizer.ssh_client import SSHException
 
     try:
-        remapped_str = join_remote_tt_metal_path(root_str, suffix)
-    except ValueError as e:
-        raise first from e
-    content = ssh_client.read_file(remapped_str)
-    text = (content or b"").decode("utf-8", errors="replace")
-    return text, remapped_str, True
+        ssh_client.execute_command(f"test -f {shlex.quote(posix_path)}", timeout=15)
+        return True
+    except SSHException:
+        return False
+
+
+def check_stack_source_local(raw_path: str) -> bool:
+    """Whether resolve_local_stack_path would succeed (including /tt-metal/ remaps)."""
+    try:
+        resolve_local_stack_path(raw_path)
+        return True
+    except (FileNotFoundError, OSError, ValueError):
+        return False
+
+
+def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
+    """
+    Whether read_stack_source_remote would succeed: literal path or remapped under any
+    discovered tt-metal root (same roots as local).
+    """
+    path_str = str(Path(raw_path))
+    if _remote_regular_file_exists(ssh_client, path_str):
+        return True
+    suffix = extract_suffix_after_tt_metal(raw_path)
+    if suffix is None:
+        return False
+    for root_str in discover_tt_metal_roots_remote(ssh_client):
+        try:
+            remapped_str = join_remote_tt_metal_path(root_str, suffix)
+        except ValueError:
+            continue
+        if _remote_regular_file_exists(ssh_client, remapped_str):
+            return True
+    return False
 
 
 def stack_source_response(text: str, resolved: str, remapped: bool) -> Response:
