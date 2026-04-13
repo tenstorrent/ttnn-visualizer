@@ -305,6 +305,28 @@ function StackTrace({
 
                         {fileWithHighlights && !errorDetails ? (
                             <div className='stack-trace'>
+                                {sourceMatchedViaRemap ? (
+                                    <Callout
+                                        className='stack-trace-source-remap-notice'
+                                        intent={Intent.WARNING}
+                                        title='Approximate source match'
+                                    >
+                                        {isRemote ? (
+                                            <>
+                                                This file was opened using a path under the remote tt-metal tree
+                                                (inferred from your profiler report folder). The path in the stack trace
+                                                pointed elsewhere, so this may not be the same file or revision that
+                                                produced the trace.
+                                            </>
+                                        ) : (
+                                            <>
+                                                This file was opened using your local tt-metal tree. The path in the
+                                                stack trace pointed elsewhere, so this may not be the same file or
+                                                revision that produced the trace.
+                                            </>
+                                        )}
+                                    </Callout>
+                                ) : null}
                                 <p className='stack-trace-path monospace'>{filePath.trim()}</p>
                                 <code
                                     className={`language-${language} code-output`}
