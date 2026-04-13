@@ -2,7 +2,6 @@
 /* eslint-disable no-continue */
 import ELK, { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk.bundled';
 import dagre from '@dagrejs/dagre';
-import { Graphviz } from '@hpcc-js/wasm-graphviz';
 import type { BuiltGraph, GraphIndex, IndexedAttr, IndexedNode, WorkerEdge, WorkerNode } from './mlirGraphTypes';
 
 const GROUP_MIN_WIDTH = 260;
@@ -37,40 +36,15 @@ function getElk(): ElkLike {
 }
 
 const DAGRE_NODE_LIMIT = 2000;
-let graphvizInstancePromise: Promise<Graphviz> | null = null;
 
-function getGraphviz(): Promise<Graphviz> {
-    if (!graphvizInstancePromise) {
-        graphvizInstancePromise = Graphviz.load();
-    }
-    return graphvizInstancePromise;
-}
-
-function dotQuoteId(id: string): string {
-    return `"${id.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-}
-
-function parseDotPos(pos?: string): { x: number; y: number } | undefined {
-    if (!pos) {
-        return undefined;
-    }
-    const [sx, sy] = pos.split(',');
-    const x = Number(sx);
-    const y = Number(sy);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        return undefined;
-    }
-    return { x, y };
-}
-
-async function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<WorkerNode[]> {
+function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
     if (nodes.length > DAGRE_NODE_LIMIT) {
-        return gridFallbackLayout(nodes, edges);
+        return singleComponentLayout(nodes, edges);
     }
     try {
         return dagreLayoutCore(nodes, edges);
     } catch {
-        return gridFallbackLayout(nodes, edges);
+        return singleComponentLayout(nodes, edges);
     }
 }
 
@@ -112,73 +86,6 @@ function dagreLayoutCore(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[]
             },
         };
     });
-}
-
-async function gridFallbackLayout(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<WorkerNode[]> {
-    if (nodes.length === 0) {
-        return nodes;
-    }
-
-    try {
-        const idSet = new Set(nodes.map((n) => n.id));
-        const validEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target) && e.source !== e.target);
-
-        const lines: string[] = [];
-        lines.push('digraph G {');
-        lines.push('  graph [overlap=false, splines=true];');
-        lines.push('  node [shape=box, fixedsize=true];');
-        for (const n of nodes) {
-            const { width, height } = getNodeLayoutSize(n);
-            const widthIn = Math.max(0.25, width / 72);
-            const heightIn = Math.max(0.25, height / 72);
-            lines.push(`  ${dotQuoteId(n.id)} [width=${widthIn.toFixed(4)}, height=${heightIn.toFixed(4)}];`);
-        }
-        for (const e of validEdges) {
-            lines.push(`  ${dotQuoteId(e.source)} -> ${dotQuoteId(e.target)};`);
-        }
-        lines.push('}');
-
-        const graphviz = await getGraphviz();
-        const layoutJson = graphviz.layout(lines.join('\n'), 'json', 'sfdp');
-        const parsed = JSON.parse(layoutJson) as { objects?: Array<{ name?: string; pos?: string }> };
-
-        const centerById = new Map<string, { x: number; y: number }>();
-        let maxCenterY = -Infinity;
-        for (const obj of parsed.objects ?? []) {
-            if (!obj.name || !idSet.has(obj.name)) {
-                continue;
-            }
-            const pos = parseDotPos(obj.pos);
-            if (!pos) {
-                continue;
-            }
-            centerById.set(obj.name, pos);
-            if (pos.y > maxCenterY) {
-                maxCenterY = pos.y;
-            }
-        }
-        if (centerById.size === 0 || !Number.isFinite(maxCenterY)) {
-            return singleComponentLayout(nodes, validEdges);
-        }
-
-        return nodes.map((n) => {
-            const center = centerById.get(n.id);
-            if (!center) {
-                return n;
-            }
-            const { width, height } = getNodeLayoutSize(n);
-            return {
-                ...n,
-                position: {
-                    x: center.x - width / 2,
-                    // Graphviz y-axis is bottom-up; React Flow is top-down.
-                    y: maxCenterY - center.y - height / 2,
-                },
-            };
-        });
-    } catch {
-        return singleComponentLayout(nodes, edges);
-    }
 }
 
 function singleComponentLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {

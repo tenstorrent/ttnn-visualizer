@@ -151,14 +151,6 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         if (!worker) {
             return;
         }
-        worker.onerror = (event) => {
-            // eslint-disable-next-line no-console
-            console.error('mlir layout worker runtime error:', event.message);
-        };
-        worker.onmessageerror = () => {
-            // eslint-disable-next-line no-console
-            console.error('mlir layout worker message serialization error');
-        };
         worker.onmessage = (event: MessageEvent<WorkerOutboundMessage>) => {
             const message = event.data;
             if (message.type === 'indexed') {
