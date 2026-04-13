@@ -41,43 +41,43 @@ export interface StackedTableColumn {
 }
 
 export interface StackedPerfRow {
-    '%': string;
-    op_code: string;
-    Device: string;
-    Device_Time_Sum_us: string;
-    Ops_count: string;
-    Op_Category: OperationCategories;
-    Flops_min: string;
-    Flops_max: string;
-    Flops_mean: string;
-    Flops_std: string;
-    Flops_weighted_mean: string;
+    [StackedColumnKeys.Percent]: string;
+    [StackedColumnKeys.OpCode]: string;
+    [StackedColumnKeys.Device]: string;
+    [StackedColumnKeys.DeviceTimeSumUs]: string;
+    [StackedColumnKeys.OpsCount]: string;
+    [StackedColumnKeys.OpCategory]: OperationCategories;
+    [StackedColumnKeys.FlopsMin]: string;
+    [StackedColumnKeys.FlopsMax]: string;
+    [StackedColumnKeys.FlopsMean]: string;
+    [StackedColumnKeys.FlopsStd]: string;
+    [StackedColumnKeys.FlopsWeightedMean]: string;
     op_type: OpType;
 }
 
 export interface TypedStackedPerfRow extends Omit<
     StackedPerfRow,
-    | '%'
-    | 'Device'
-    | 'Device_Time_Sum_us'
-    | 'Ops_count'
-    | 'Op_Category'
-    | 'Flops_min'
-    | 'Flops_max'
-    | 'Flops_mean'
-    | 'Flops_std'
-    | 'Flops_weighted_mean'
+    | StackedColumnKeys.Percent
+    | StackedColumnKeys.Device
+    | StackedColumnKeys.DeviceTimeSumUs
+    | StackedColumnKeys.OpsCount
+    | StackedColumnKeys.OpCategory
+    | StackedColumnKeys.FlopsMin
+    | StackedColumnKeys.FlopsMax
+    | StackedColumnKeys.FlopsMean
+    | StackedColumnKeys.FlopsStd
+    | StackedColumnKeys.FlopsWeightedMean
 > {
-    '%': number | null;
-    Device: number | null;
-    Device_Time_Sum_us: number | null;
-    Ops_count: number | null;
-    Flops_min: number | null;
-    Flops_max: number | null;
-    Flops_mean: number | null;
-    Flops_std: number | null;
-    Flops_weighted_mean: number | null;
-    Op_Category: OperationCategories;
+    [StackedColumnKeys.Percent]: number | null;
+    [StackedColumnKeys.Device]: number | null;
+    [StackedColumnKeys.DeviceTimeSumUs]: number | null;
+    [StackedColumnKeys.OpsCount]: number | null;
+    [StackedColumnKeys.OpCategory]: OperationCategories;
+    [StackedColumnKeys.FlopsMin]: number | null;
+    [StackedColumnKeys.FlopsMax]: number | null;
+    [StackedColumnKeys.FlopsMean]: number | null;
+    [StackedColumnKeys.FlopsStd]: number | null;
+    [StackedColumnKeys.FlopsWeightedMean]: number | null;
 }
 
 export const stackedTableColumns: StackedTableColumn[] = [
@@ -104,4 +104,4 @@ export const filterableStackedColumnKeys = stackedTableColumns
     .filter((column) => column.filterable)
     .map((column) => column.key);
 
-export type StackedTableFilter = Record<StackedColumnKeys, string> | null;
+export type StackedTableFilter = Partial<Record<StackedColumnKeys, string>> | null;

@@ -117,9 +117,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         >,
     );
     const [stackedFilters, setStackedFilters] = useState<StackedTableFilter>(
-        Object.fromEntries(
-            filterableStackedColumnKeys.map((key) => [key, ''] as [StackedColumnKeys, string]),
-        ) as Record<StackedColumnKeys, string>,
+        Object.fromEntries(filterableStackedColumnKeys.map((key) => [key, ''])) as StackedTableFilter,
     );
 
     const isSignpostsDisabled = !signposts || signposts.length === 0;

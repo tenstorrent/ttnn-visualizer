@@ -9,8 +9,8 @@ import {
     filterableStackedColumnKeys,
 } from '../definitions/StackedPerfTable';
 
-const isFiltersActive = (filters: Record<StackedColumnKeys, string> | null) =>
-    filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
+const isFiltersActive = (filters: StackedTableFilter) =>
+    filters ? Object.values(filters).some((filter) => filter && filter.length > 0) : false;
 
 const getCellText = (buffer: TypedStackedPerfRow, key: StackedColumnKeys) => {
     const textValue = buffer[key]?.toString() || '';
