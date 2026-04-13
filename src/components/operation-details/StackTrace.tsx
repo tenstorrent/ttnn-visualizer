@@ -173,7 +173,20 @@ function StackTrace({
         }
     };
 
-    const displaySourcePath = (resolvedSourcePath || filePath).trim();
+    const displaySourcePath = useMemo(() => {
+        const path = (resolvedSourcePath || filePath).trim();
+
+        if (isRemote && persistentState.selectedConnection) {
+            const connection = persistentState.selectedConnection;
+            const connectionLabel =
+                typeof connection === 'string'
+                    ? connection
+                    : `${connection.username || 'user'}@${connection.host || 'host'}`;
+            return `[${connectionLabel}] ${path}`;
+        }
+
+        return path;
+    }, [isRemote, persistentState.selectedConnection, resolvedSourcePath, filePath]);
     const isCheckingStackTraceAvailability =
         isFetchingFile || (sourceFileStatus === SourceFileStatus.Pending && !!filePath && canReadSource);
     const isStackTraceUnavailable = !canReadSource || !filePath || sourceFileStatus !== SourceFileStatus.Available;
@@ -423,13 +436,13 @@ function getSourceTooltipContents(
     sourceFileStatus: SourceFileStatus,
 ): string {
     if (serverMode && !isRemote) {
-        return 'Source viewing is not available in server mode';
+        return 'Source viewing is not available';
     }
     if (!filePath) {
-        return 'No file path found in this stack trace';
+        return 'No file path found for this stack trace';
     }
     if (!canReadSource) {
-        return isRemote ? 'Configure a remote connection to view source files' : 'Cannot view source';
+        return isRemote ? 'Remote connection cannot be established' : 'Cannot read source file';
     }
     if (sourceFileStatus === SourceFileStatus.Pending) {
         return 'Checking whether source file is available…';
@@ -437,7 +450,7 @@ function getSourceTooltipContents(
     if (sourceFileStatus === SourceFileStatus.Unavailable) {
         return 'Source file is not available';
     }
-    return isRemote ? 'View external source file' : 'View source file';
+    return 'View source file';
 }
 
 export default StackTrace;
