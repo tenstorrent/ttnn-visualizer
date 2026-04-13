@@ -93,23 +93,10 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         fromPosition: { x: number; y: number };
     } | null>(null);
     const hasFitInitiallyRef = useRef(false);
+    const postedGraphIdRef = useRef<string | null>(null);
     const workerRef = useRef<Worker | null>(null);
     const nextRequestIdRef = useRef(0);
     const activeRequestIdRef = useRef(0);
-
-    const sourceNodes: SourceNode[] = useMemo(
-        () =>
-            graph.nodes.map((node) => ({
-                id: node.id,
-                label: node.label,
-                namespace: node.namespace,
-                attrs: node.attrs,
-                incomingEdges: node.incomingEdges,
-                outputsMetadata: node.outputsMetadata,
-                config: node.config,
-            })),
-        [graph.nodes],
-    );
 
     useEffect(() => {
         hasFitInitiallyRef.current = false;
@@ -155,6 +142,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         return () => {
             worker.terminate();
             workerRef.current = null;
+            postedGraphIdRef.current = null;
         };
     }, []);
 
@@ -163,6 +151,14 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         if (!worker) {
             return;
         }
+        worker.onerror = (event) => {
+            // eslint-disable-next-line no-console
+            console.error('mlir layout worker runtime error:', event.message);
+        };
+        worker.onmessageerror = () => {
+            // eslint-disable-next-line no-console
+            console.error('mlir layout worker message serialization error');
+        };
         worker.onmessage = (event: MessageEvent<WorkerOutboundMessage>) => {
             const message = event.data;
             if (message.type === 'indexed') {
@@ -172,12 +168,15 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 }
                 return;
             }
-            if (message.requestId !== activeRequestIdRef.current) {
-                return;
-            }
             if (message.type === 'error') {
+                if (message.requestId !== 0 && message.requestId !== activeRequestIdRef.current) {
+                    return;
+                }
                 // eslint-disable-next-line no-console
                 console.error('mlir layout worker:', message.error);
+                return;
+            }
+            if (message.requestId !== activeRequestIdRef.current) {
                 return;
             }
             if (message.graphId !== graph.id) {
@@ -217,13 +216,26 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         if (!worker) {
             return;
         }
+        if (postedGraphIdRef.current === graph.id) {
+            return;
+        }
+        postedGraphIdRef.current = graph.id;
         setIndexReadyGraphId(null);
+        const sourceNodes: SourceNode[] = graph.nodes.map((node) => ({
+            id: node.id,
+            label: node.label,
+            namespace: node.namespace,
+            attrs: node.attrs,
+            incomingEdges: node.incomingEdges,
+            outputsMetadata: node.outputsMetadata,
+            config: node.config,
+        }));
         worker.postMessage({
             type: 'set-graph',
             graphId: graph.id,
             nodes: sourceNodes,
         });
-    }, [graph.id, sourceNodes]);
+    }, [graph.id, graph.nodes]);
 
     const onSubgraphNodeClick = useCallback(
         (_event: MouseEvent, node: MLNode) => {
