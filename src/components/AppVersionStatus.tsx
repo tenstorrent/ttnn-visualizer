@@ -11,7 +11,7 @@ import 'styles/components/AppVersionStatus.scss';
 
 interface AppVersionStatusProps {
     appVersion: string;
-    latestAppVersion: string;
+    latestAppVersion?: string;
     isServerMode?: boolean;
 }
 

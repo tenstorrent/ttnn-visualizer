@@ -28,6 +28,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
+import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
@@ -1213,12 +1214,13 @@ const fetchLatestAppVersion = async (): Promise<string | null> => {
 };
 
 export const useGetLatestAppVersion = () => {
-    const response = useQuery<string | null, AxiosError>({
+    const isServerMode = !!getServerConfig().SERVER_MODE;
+
+    return useQuery<string | null, AxiosError>({
         queryFn: () => fetchLatestAppVersion(),
         queryKey: ['get-latest-app-version'],
         retry: false,
         staleTime: Infinity,
+        enabled: !isServerMode,
     });
-
-    return response.data;
 };

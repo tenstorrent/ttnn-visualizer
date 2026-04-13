@@ -30,7 +30,6 @@ $version-outdated-three-color: #ff7272;
 
     .app-version {
         color: inherit;
-        font-weight: 500;
     }
 
     .version-status-icon {
@@ -79,10 +78,4 @@ $version-outdated-three-color: #ff7272;
             color: $version-outdated-three-color;
         }
     }
-}
-
-.version-container > .app-version {
-    font-size: 12px;
-    font-weight: 500;
-    color: $version-up-to-date-color;
 }

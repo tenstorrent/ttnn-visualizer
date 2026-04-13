@@ -41,7 +41,7 @@ function FooterInfobar() {
     const serverConfig = getServerConfig();
     const isServerMode = serverConfig.SERVER_MODE;
 
-    const latestAppVersion = useGetLatestAppVersion();
+    const { data: latestAppVersion, isPending: isLatestAppPending } = useGetLatestAppVersion();
     const appVersion = import.meta.env.APP_VERSION;
 
     const activeProfilerReportPath = activeProfilerReport?.path;
@@ -78,15 +78,24 @@ function FooterInfobar() {
         }
     }, [isAllowedRoute]);
 
-    const versionStatus: ReactNode = latestAppVersion ? (
-        <AppVersionStatus
-            appVersion={appVersion}
-            latestAppVersion={latestAppVersion}
-            isServerMode={isServerMode}
-        />
-    ) : (
-        <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
-    );
+    let versionStatus: ReactNode;
+    if (isServerMode) {
+        versionStatus = (
+            <AppVersionStatus
+                appVersion={appVersion}
+                isServerMode
+            />
+        );
+    } else if (isLatestAppPending) {
+        versionStatus = <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />;
+    } else {
+        versionStatus = (
+            <AppVersionStatus
+                appVersion={appVersion}
+                latestAppVersion={latestAppVersion ?? undefined}
+            />
+        );
+    }
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
