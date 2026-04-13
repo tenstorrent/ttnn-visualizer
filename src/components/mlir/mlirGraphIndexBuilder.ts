@@ -124,6 +124,99 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         usedOuterNodeIds.add(outerNode.id);
     }
 
+    // Phase 2: Visibility budget — promote additional namespaces to collapsible
+    // so the initial fully-collapsed view stays under the node budget.
+    const MAX_INITIAL_VISIBLE = 500;
+    const initialSubgraphNsSet = new Set(subgraphNamespaces);
+
+    let uncollapsedCount = 0;
+    const uncollapsedByNamespace = new Map<string, SourceNode[]>();
+
+    for (const node of nodes) {
+        if (!node.namespace) {
+            uncollapsedCount++;
+            continue;
+        }
+        const segments = node.namespace.split('/');
+        let collapsed = false;
+        for (let i = 1; i <= segments.length; i++) {
+            if (initialSubgraphNsSet.has(segments.slice(0, i).join('/'))) {
+                collapsed = true;
+                break;
+            }
+        }
+        if (!collapsed) {
+            uncollapsedCount++;
+            const arr = uncollapsedByNamespace.get(node.namespace) ?? [];
+            arr.push(node);
+            uncollapsedByNamespace.set(node.namespace, arr);
+        }
+    }
+
+    if (uncollapsedCount > MAX_INITIAL_VISIBLE) {
+        const candidates = [...uncollapsedByNamespace.entries()]
+            .filter(([ns, group]) => group.length >= 2 && !initialSubgraphNsSet.has(ns))
+            .sort(([, a], [, b]) => b.length - a.length);
+
+        for (const [ns, group] of candidates) {
+            if (uncollapsedCount <= MAX_INITIAL_VISIBLE) {
+                break;
+            }
+            subgraphNamespaces.push(ns);
+
+            if (!anchorByNamespace.has(ns)) {
+                group.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
+                anchorByNamespace.set(ns, group[0].id);
+                anchorNamespaceByNodeId.set(group[0].id, ns);
+            }
+
+            uncollapsedCount -= group.length - 1;
+        }
+
+        // Second pass: try parent-namespace prefixes for remaining singletons
+        if (uncollapsedCount > MAX_INITIAL_VISIBLE) {
+            const updatedNsSet = new Set(subgraphNamespaces);
+            const uncollapsedByParent = new Map<string, SourceNode[]>();
+
+            for (const [ns, group] of uncollapsedByNamespace) {
+                if (updatedNsSet.has(ns)) {
+                    continue;
+                }
+                const parentNs = getParentNamespace(ns);
+                if (!parentNs || updatedNsSet.has(parentNs)) {
+                    continue;
+                }
+                const arr = uncollapsedByParent.get(parentNs) ?? [];
+                arr.push(...group);
+                uncollapsedByParent.set(parentNs, arr);
+            }
+
+            const parentCandidates = [...uncollapsedByParent.entries()]
+                .filter(([, group]) => group.length >= 2)
+                .sort(([, a], [, b]) => b.length - a.length);
+
+            for (const [parentNs, group] of parentCandidates) {
+                if (uncollapsedCount <= MAX_INITIAL_VISIBLE) {
+                    break;
+                }
+                subgraphNamespaces.push(parentNs);
+
+                if (!anchorByNamespace.has(parentNs)) {
+                    group.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
+                    anchorByNamespace.set(parentNs, group[0].id);
+                    anchorNamespaceByNodeId.set(group[0].id, parentNs);
+                }
+
+                uncollapsedCount -= group.length - 1;
+            }
+        }
+
+        subgraphNamespaces.sort((a, b) => {
+            const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
+            return ord !== 0 ? ord : a.localeCompare(b);
+        });
+    }
+
     const subgraphNsSet = new Set(subgraphNamespaces);
     const containingNamespacesByNodeId: Record<string, string[]> = {};
     for (const node of nodes) {
