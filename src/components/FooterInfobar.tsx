@@ -38,10 +38,14 @@ function FooterInfobar() {
 
     const { data: instance } = useInstance();
     const location = useLocation();
+    const {
+        data: latestAppVersion,
+        isPending: isLatestAppPending,
+        isError: isLatestAppVersionError,
+    } = useGetLatestAppVersion();
     const serverConfig = getServerConfig();
-    const isServerMode = serverConfig.SERVER_MODE;
 
-    const { data: latestAppVersion, isPending: isLatestAppPending } = useGetLatestAppVersion();
+    const isServerMode = serverConfig.SERVER_MODE || false;
     const appVersion = import.meta.env.APP_VERSION;
 
     const activeProfilerReportPath = activeProfilerReport?.path;
@@ -72,30 +76,19 @@ function FooterInfobar() {
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
+    const versionStatus = getAppVersionStatus(
+        appVersion,
+        isLatestAppPending,
+        isServerMode,
+        latestAppVersion,
+        isLatestAppVersionError,
+    );
+
     useEffect(() => {
         if (!isAllowedRoute()) {
             setSliderIsOpen(false);
         }
     }, [isAllowedRoute]);
-
-    let versionStatus: ReactNode;
-    if (isServerMode) {
-        versionStatus = (
-            <AppVersionStatus
-                appVersion={appVersion}
-                isServerMode
-            />
-        );
-    } else if (isLatestAppPending) {
-        versionStatus = <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />;
-    } else {
-        versionStatus = (
-            <AppVersionStatus
-                appVersion={appVersion}
-                latestAppVersion={latestAppVersion ?? undefined}
-            />
-        );
-    }
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
@@ -225,6 +218,43 @@ const formatName = (str: string): string => {
     }
 
     return str;
+};
+
+const getAppVersionStatus = (
+    appVersion: string,
+    isLatestAppPending: boolean,
+    isServerMode: boolean,
+    latestAppVersion: string | null | undefined,
+    isLatestAppVersionError: boolean,
+): ReactNode => {
+    if (isServerMode) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                isServerMode
+            />
+        );
+    }
+
+    if (isLatestAppPending) {
+        return <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />;
+    }
+
+    if (isLatestAppVersionError && latestAppVersion == null) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                latestVersionCheckFailed
+            />
+        );
+    }
+
+    return (
+        <AppVersionStatus
+            appVersion={appVersion}
+            latestAppVersion={latestAppVersion ?? undefined}
+        />
+    );
 };
 
 export default FooterInfobar;
