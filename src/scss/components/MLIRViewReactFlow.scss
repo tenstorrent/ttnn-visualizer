@@ -8,6 +8,9 @@
 .react-flow {
     --xy-edge-label-color: #{$tt-grey-7};
     --xy-edge-label-background-color: transparent;
+    --xy-controls-button-color: #{$tt-grey-2};
+    --xy-minimap-node-stroke-color: #{$tt-grey-2};
+    --xy-minimap-node-stroke-width: 1px;
 }
 
 .react-flow__edge-text {
