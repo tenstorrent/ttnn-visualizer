@@ -22,7 +22,7 @@ import {
 } from '@blueprintjs/core';
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { TableFilter, TableKeys, TypedPerfTableRow, filterableColumnKeys } from '../../definitions/PerfTable';
+import { ColumnKeys, Columns, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
@@ -45,9 +45,9 @@ import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableDa
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
+    StackedColumnKeys,
     StackedGroupBy,
     StackedTableFilter,
-    StackedTableKeys,
     TypedStackedPerfRow,
     filterableStackedColumnKeys,
 } from '../../definitions/StackedPerfTable';
@@ -105,17 +105,19 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState(true);
     // const [showHashColumn, setShowHashColumn] = useState(false);
-    const [filters, setFilters] = useState<TableFilter>(
-        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
-            TableKeys,
+    const filterableColumnKeys = useMemo(
+        () => Columns.filter((column) => column.filterable).map((column) => column.key),
+        [],
+    );
+
+    const [filters, setFilters] = useState(
+        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [ColumnKeys, string])) as Record<
+            ColumnKeys,
             string
         >,
     );
     const [stackedFilters, setStackedFilters] = useState<StackedTableFilter>(
-        Object.fromEntries(filterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
-            StackedTableKeys,
-            string
-        >,
+        Object.fromEntries(filterableStackedColumnKeys.map((key) => [key, ''])) as StackedTableFilter,
     );
 
     const isSignpostsDisabled = !signposts || signposts.length === 0;
@@ -205,15 +207,17 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         [comparisonIndex, comparisonStackedData, stackedFilters, activeRawOpCodeFilterList, isGroupedByMemory],
     );
 
-    const updateColumnFilter = (key: TableKeys, value: string) => {
-        const updatedFilters = {
-            ...filters,
-            [key]: value ?? '',
-        };
+    const updateColumnFilter = (_key: ColumnKeys.OpCode | StackedColumnKeys.OpCode, value: string) => {
+        // Only OpCode filter is shared between standard and stacked views
+        setFilters((prevFilters) => ({
+            ...prevFilters,
+            [ColumnKeys.OpCode]: value ?? '',
+        }));
 
-        // TODO: Sort this madness out
-        setStackedFilters(updatedFilters as Record<StackedTableKeys, string>);
-        setFilters(updatedFilters as TableFilter);
+        setStackedFilters((prevStackedFilters) => ({
+            ...prevStackedFilters,
+            [StackedColumnKeys.OpCode]: value ?? '',
+        }));
     };
 
     // Resets various state if we remove all comparison reports
@@ -464,7 +468,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     >
                         <ButtonGroup className='select-group'>
                             <SearchField
-                                onQueryChanged={(value) => updateColumnFilter('op_code', value)}
+                                onQueryChanged={(value) => updateColumnFilter(ColumnKeys.OpCode, value)}
                                 placeholder='Filter by operation name'
                                 searchQuery={filters?.op_code || ''}
                             />
