@@ -1,5 +1,4 @@
 /* eslint-disable no-restricted-globals */
-/* eslint-disable no-await-in-loop */
 /* eslint-disable no-continue */
 import { buildVisibleGraph } from './mlirGraphBuilder';
 import { buildGraphIndex } from './mlirGraphIndexBuilder';
@@ -24,7 +23,7 @@ const postWorkerError = (requestId: number, error: unknown) => {
     });
 };
 
-async function processLatestBuild(graphId: string): Promise<void> {
+function processLatestBuild(graphId: string): void {
     if (processingGraphIds.has(graphId)) {
         return;
     }
@@ -68,7 +67,7 @@ async function processLatestBuild(graphId: string): Promise<void> {
             }
 
             try {
-                const built = await buildVisibleGraph(index, request.expandedNamespaces);
+                const built = buildVisibleGraph(index, request.expandedNamespaces);
                 cache.set(request.cacheKey, built);
                 const newerRequestExists = latestBuildByGraphId.has(graphId);
                 const graphVersionChanged = request.graphVersion !== getGraphVersion(graphId);
@@ -90,14 +89,13 @@ async function processLatestBuild(graphId: string): Promise<void> {
     } finally {
         processingGraphIds.delete(graphId);
         if (latestBuildByGraphId.has(graphId)) {
-            processLatestBuild(graphId).catch(() => {});
+            processLatestBuild(graphId);
         }
     }
 }
 
-// Use addEventListener instead of self.onmessage because elkjs/lib/elk-worker.min.js
-// overwrites self.onmessage with its own dispatcher when it detects a worker context.
-// addEventListener is immune to that overwrite.
+// Use addEventListener instead of self.onmessage for robustness — some third-party
+// libraries (e.g. ELK) overwrite self.onmessage when loaded inside a worker.
 self.addEventListener('message', (event: MessageEvent<WorkerInboundMessage>) => {
     const message = event.data;
 
@@ -131,5 +129,5 @@ self.addEventListener('message', (event: MessageEvent<WorkerInboundMessage>) => 
         cacheKey: message.cacheKey,
         graphVersion: getGraphVersion(message.graphId),
     });
-    processLatestBuild(message.graphId).catch(() => {});
+    processLatestBuild(message.graphId);
 });

@@ -1,6 +1,4 @@
-/* eslint-disable no-await-in-loop */
 /* eslint-disable no-continue */
-import ELK, { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk.bundled';
 import dagre from '@dagrejs/dagre';
 import type { BuiltGraph, GraphIndex, IndexedAttr, IndexedNode, WorkerEdge, WorkerNode } from './mlirGraphTypes';
 
@@ -10,51 +8,142 @@ const GROUP_PADDING_X = 24;
 const GROUP_PADDING_TOP = 36;
 const GROUP_PADDING_BOTTOM = 20;
 
-type ElkLike = {
-    layout: (graph: ElkNode) => Promise<ElkNode>;
+const DAGRE_NODE_LIMIT = 2000;
+const MAX_RANK_WIDTH = 6;
+const WRAP_ROW_GAP = 16;
+
+type DagreOptions = {
+    nodesep?: number;
+    ranksep?: number;
+    edgesep?: number;
+    ranker?: string;
 };
 
-let elkInstance: ElkLike | null = null;
-let elkUnavailable = false;
-
-function getElk(): ElkLike {
-    if (elkUnavailable) {
-        throw new Error('ELK disabled after previous initialization failure');
-    }
-    if (elkInstance) {
-        return elkInstance;
-    }
-    const maybeCtor = ELK as unknown as { new (): ElkLike } | ElkLike;
-    if (typeof maybeCtor === 'function') {
-        elkInstance = new (maybeCtor as { new (): ElkLike })();
-    } else if (maybeCtor && typeof (maybeCtor as ElkLike).layout === 'function') {
-        elkInstance = maybeCtor as ElkLike;
-    } else {
-        throw new Error('ELK initialization failed: unexpected export shape');
-    }
-    return elkInstance;
-}
-
-const DAGRE_NODE_LIMIT = 2000;
-
 function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
-    if (nodes.length > DAGRE_NODE_LIMIT) {
-        return singleComponentLayout(nodes, edges);
+    if (nodes.length === 0) {
+        return nodes;
     }
+    const opts: DagreOptions =
+        nodes.length > DAGRE_NODE_LIMIT
+            ? { nodesep: 10, ranksep: 50, edgesep: 5, ranker: 'tight-tree' }
+            : { ranker: 'tight-tree' };
     try {
-        return dagreLayoutCore(nodes, edges);
+        const result = dagreLayoutCore(nodes, edges, opts);
+        return wrapWideRanks(result);
     } catch {
-        return singleComponentLayout(nodes, edges);
+        return dagreLayoutCore(nodes, edges, { nodesep: 12, ranksep: 50, edgesep: 5 });
     }
 }
 
-function dagreLayoutCore(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+/**
+ * After Dagre assigns positions, some ranks may contain many more nodes than
+ * can be read on screen.  This pass detects ranks wider than MAX_RANK_WIDTH
+ * nodes and wraps the overflow into sub-rows, then shifts everything below
+ * downward so nothing overlaps.  The result preserves Dagre's topological
+ * ordering within each rank while keeping the graph readable.
+ */
+function wrapWideRanks(nodes: WorkerNode[]): WorkerNode[] {
+    const RANK_Y_TOLERANCE = 4;
+
+    const rankMap = new Map<number, WorkerNode[]>();
+    for (const n of nodes) {
+        let assigned = false;
+        for (const [key] of rankMap) {
+            if (Math.abs(n.position.y - key) <= RANK_Y_TOLERANCE) {
+                rankMap.get(key)!.push(n);
+                assigned = true;
+                break;
+            }
+        }
+        if (!assigned) {
+            rankMap.set(n.position.y, [n]);
+        }
+    }
+
+    const needsWrap = [...rankMap.values()].some((group) => group.length > MAX_RANK_WIDTH);
+    if (!needsWrap) {
+        return nodes;
+    }
+
+    const sortedRankYs = [...rankMap.keys()].sort((a, b) => a - b);
+    const yShiftByOriginalY = new Map<number, number>();
+    let cumulativeShift = 0;
+
+    for (const rankY of sortedRankYs) {
+        yShiftByOriginalY.set(rankY, cumulativeShift);
+        const group = rankMap.get(rankY)!;
+        if (group.length <= MAX_RANK_WIDTH) {
+            continue;
+        }
+        group.sort((a, b) => a.position.x - b.position.x);
+        const extraRows = Math.ceil(group.length / MAX_RANK_WIDTH) - 1;
+        let maxRowHeight = 0;
+        for (const n of group) {
+            const { height } = getNodeLayoutSize(n);
+            if (height > maxRowHeight) {
+                maxRowHeight = height;
+            }
+        }
+        cumulativeShift += extraRows * (maxRowHeight + WRAP_ROW_GAP);
+    }
+
+    if (cumulativeShift === 0) {
+        return nodes;
+    }
+
+    const result: WorkerNode[] = [];
+    for (const n of nodes) {
+        let rankKey = n.position.y;
+        for (const [key] of rankMap) {
+            if (Math.abs(n.position.y - key) <= RANK_Y_TOLERANCE) {
+                rankKey = key;
+                break;
+            }
+        }
+        const group = rankMap.get(rankKey)!;
+        const baseShift = yShiftByOriginalY.get(rankKey) ?? 0;
+
+        if (group.length <= MAX_RANK_WIDTH) {
+            result.push({ ...n, position: { x: n.position.x, y: n.position.y + baseShift } });
+            continue;
+        }
+
+        const idx = group.indexOf(n);
+        const row = Math.floor(idx / MAX_RANK_WIDTH);
+        const col = idx % MAX_RANK_WIDTH;
+
+        let maxRowHeight = 0;
+        for (const gn of group) {
+            const { height } = getNodeLayoutSize(gn);
+            if (height > maxRowHeight) {
+                maxRowHeight = height;
+            }
+        }
+
+        const nodesep = 20;
+        let xPos = 0;
+        for (let c = 0; c < col; c++) {
+            const prev = group[row * MAX_RANK_WIDTH + c];
+            if (prev) {
+                xPos += getNodeLayoutSize(prev).width + nodesep;
+            }
+        }
+
+        const yPos = n.position.y + baseShift + row * (maxRowHeight + WRAP_ROW_GAP);
+        result.push({ ...n, position: { x: xPos, y: yPos } });
+    }
+
+    return result;
+}
+
+function dagreLayoutCore(nodes: WorkerNode[], edges: WorkerEdge[], opts?: DagreOptions): WorkerNode[] {
     const g = new dagre.graphlib.Graph();
     g.setGraph({
         rankdir: 'TB',
-        nodesep: 30,
-        ranksep: 80,
-        edgesep: 10,
+        nodesep: opts?.nodesep ?? 30,
+        ranksep: opts?.ranksep ?? 80,
+        edgesep: opts?.edgesep ?? 10,
+        ranker: opts?.ranker ?? 'network-simplex',
         marginx: 20,
         marginy: 20,
     });
@@ -88,103 +177,6 @@ function dagreLayoutCore(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[]
     });
 }
 
-function singleComponentLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
-    const idSet = new Set(nodes.map((n) => n.id));
-    const indegree = new Map(nodes.map((n) => [n.id, 0]));
-    const outgoing = new Map<string, string[]>();
-    const levelById = new Map(nodes.map((n) => [n.id, 0]));
-
-    for (const e of edges) {
-        if (!idSet.has(e.source) || !idSet.has(e.target) || e.source === e.target) {
-            continue;
-        }
-        indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
-        const outArr = outgoing.get(e.source) ?? [];
-        outArr.push(e.target);
-        outgoing.set(e.source, outArr);
-    }
-
-    const queue: string[] = [];
-    indegree.forEach((deg, id) => {
-        if (deg === 0) {
-            queue.push(id);
-        }
-    });
-
-    for (let qi = 0; qi < queue.length; qi += 1) {
-        const id = queue[qi];
-        const level = levelById.get(id) ?? 0;
-        for (const outId of outgoing.get(id) ?? []) {
-            const prev = levelById.get(outId) ?? 0;
-            if (level + 1 > prev) {
-                levelById.set(outId, level + 1);
-            }
-            const nextDeg = (indegree.get(outId) ?? 0) - 1;
-            indegree.set(outId, nextDeg);
-            if (nextDeg === 0) {
-                queue.push(outId);
-            }
-        }
-    }
-
-    const byLevel = new Map<number, WorkerNode[]>();
-    for (const n of nodes) {
-        const level = levelById.get(n.id) ?? 0;
-        const arr = byLevel.get(level) ?? [];
-        arr.push(n);
-        byLevel.set(level, arr);
-    }
-
-    const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
-    const laidOut: WorkerNode[] = [];
-    const xPad = 40;
-    const yPad = 40;
-    const MAX_PER_ROW = 16;
-    let yOffset = 0;
-    for (const level of sortedLevels) {
-        const bucket = byLevel.get(level) ?? [];
-        bucket.sort((a, b) => a.id.localeCompare(b.id));
-        let xOffset = 0;
-        let rowMaxHeight = 0;
-        let col = 0;
-        for (const n of bucket) {
-            if (col >= MAX_PER_ROW) {
-                yOffset += rowMaxHeight + yPad;
-                xOffset = 0;
-                rowMaxHeight = 0;
-                col = 0;
-            }
-            const { width, height } = getNodeLayoutSize(n);
-            laidOut.push({ ...n, position: { x: xOffset, y: yOffset } });
-            xOffset += width + xPad;
-            if (height > rowMaxHeight) {
-                rowMaxHeight = height;
-            }
-            col += 1;
-        }
-        yOffset += rowMaxHeight + yPad;
-    }
-    return laidOut;
-}
-
-const elkOptions: Record<string, string> = {
-    'elk.algorithm': 'layered',
-    'elk.direction': 'DOWN',
-    'elk.spacing.nodeNode': '40',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '120',
-    'elk.spacing.edgeNode': '16',
-    'elk.spacing.edgeEdge': '12',
-    'elk.edgeRouting': 'ORTHOGONAL',
-    'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-    'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-    'elk.layered.crossingMinimization.semiInteractive': 'false',
-    'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
-    'elk.layered.thoroughness': '10',
-    'elk.layered.unnecessaryBendpoints': 'true',
-    'elk.layered.mergeEdges': 'false',
-    'elk.layered.cycleBreaking.strategy': 'GREEDY',
-};
-
 function toggleNamespaceForNode(index: GraphIndex, nodeId: string): string | undefined {
     return index.anchorNamespaceByNodeId[nodeId] ?? index.outerNamespaceByNodeId[nodeId];
 }
@@ -210,48 +202,6 @@ function getNodeLayoutSize(n: WorkerNode): { width: number; height: number } {
     const width = typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : 180;
     const height = typeof h === 'number' && Number.isFinite(h) && h > 0 ? h : 48;
     return { width, height };
-}
-
-function toElkGraph(nodes: WorkerNode[], edges: WorkerEdge[]): ElkNode {
-    return {
-        id: 'root',
-        layoutOptions: elkOptions,
-        children: nodes.map((n) => {
-            const { width, height } = getNodeLayoutSize(n);
-            return { id: n.id, width, height };
-        }),
-        edges: edges.map((e) => ({
-            id: e.id,
-            sources: [e.source],
-            targets: [e.target],
-        })) as ElkExtendedEdge[],
-    };
-}
-
-const ELK_NODE_THRESHOLD = 200;
-
-async function layoutWithElk(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<WorkerNode[]> {
-    if (nodes.length === 0) {
-        return nodes;
-    }
-    if (nodes.length > ELK_NODE_THRESHOLD) {
-        return dagreLayout(nodes, edges);
-    }
-    try {
-        const graph = toElkGraph(nodes, edges);
-        const laidOut = await getElk().layout(graph);
-        const positions = new Map<string, { x: number; y: number }>();
-        (laidOut.children ?? []).forEach((c) => {
-            positions.set(c.id, { x: c.x ?? 0, y: c.y ?? 0 });
-        });
-        return nodes.map((n) => ({ ...n, position: positions.get(n.id) ?? { x: 0, y: 0 } }));
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('not a constructor')) {
-            elkUnavailable = true;
-        }
-        return dagreLayout(nodes, edges);
-    }
 }
 
 function getBounds(nodes: WorkerNode[]) {
@@ -338,7 +288,7 @@ function makeOpNode(
     };
 }
 
-export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: string[]): Promise<BuiltGraph> {
+export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: string[]): BuiltGraph {
     const expandedNamespaces = new Set(expandedNamespacesList);
     const nodeById = new Map(index.nodes.map((n) => [n.id, n]));
     const subgraphNamespaceSet = new Set(index.subgraphNamespaces);
@@ -507,7 +457,7 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
             }
         }
 
-        const laidOutChildren = await layoutWithElk(allChildNodes, internalEdges);
+        const laidOutChildren = dagreLayout(allChildNodes, internalEdges);
         const bounds = laidOutChildren.length > 0 ? getBounds(laidOutChildren) : undefined;
         const groupWidth = bounds
             ? Math.max(GROUP_MIN_WIDTH, bounds.maxX - bounds.minX + GROUP_PADDING_X * 2)
@@ -681,7 +631,7 @@ export async function buildVisibleGraph(index: GraphIndex, expandedNamespacesLis
     const topLevelEdgesForElk = topLevelEdgesForLayout.filter(
         (e) => topLevelNodeIdSet.has(e.source) && topLevelNodeIdSet.has(e.target),
     );
-    const laidOutTopLevelNodes = await layoutWithElk(topLevelNodes, topLevelEdgesForElk);
+    const laidOutTopLevelNodes = dagreLayout(topLevelNodes, topLevelEdgesForElk);
     const topLevelNodeById = new Map(laidOutTopLevelNodes.map((n) => [n.id, n]));
 
     const finalNodes: WorkerNode[] = [];
