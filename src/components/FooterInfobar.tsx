@@ -5,7 +5,7 @@
 import classNames from 'classnames';
 import { Button, Classes, Collapse, Icon, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
@@ -38,10 +38,14 @@ function FooterInfobar() {
 
     const { data: instance } = useInstance();
     const location = useLocation();
+    const {
+        data: latestAppVersion,
+        isPending: isLatestAppPending,
+        isError: isLatestAppVersionError,
+    } = useGetLatestAppVersion();
     const serverConfig = getServerConfig();
-    const isServerMode = serverConfig.SERVER_MODE;
 
-    const latestAppVersion = useGetLatestAppVersion();
+    const isServerMode = serverConfig.SERVER_MODE || false;
     const appVersion = import.meta.env.APP_VERSION;
 
     const activeProfilerReportPath = activeProfilerReport?.path;
@@ -72,6 +76,14 @@ function FooterInfobar() {
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
+    const versionStatus = getAppVersionStatus(
+        appVersion,
+        isLatestAppPending,
+        isServerMode,
+        latestAppVersion,
+        isLatestAppVersionError,
+    );
+
     useEffect(() => {
         if (!isAllowedRoute()) {
             setSliderIsOpen(false);
@@ -81,18 +93,7 @@ function FooterInfobar() {
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
-                {!isServerMode ? (
-                    <div className='version-container'>
-                        {latestAppVersion ? (
-                            <AppVersionStatus
-                                appVersion={appVersion}
-                                latestAppVersion={latestAppVersion}
-                            />
-                        ) : (
-                            <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
-                        )}
-                    </div>
-                ) : null}
+                <div className='version-container'>{versionStatus}</div>
 
                 <div className='active-reports'>
                     {!isServerMode && (
@@ -217,6 +218,43 @@ const formatName = (str: string): string => {
     }
 
     return str;
+};
+
+const getAppVersionStatus = (
+    appVersion: string,
+    isLatestAppPending: boolean,
+    isServerMode: boolean,
+    latestAppVersion: string | null | undefined,
+    isLatestAppVersionError: boolean,
+): ReactNode => {
+    if (isServerMode) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                isServerMode
+            />
+        );
+    }
+
+    if (isLatestAppPending) {
+        return <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />;
+    }
+
+    if (isLatestAppVersionError && latestAppVersion == null) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                latestVersionCheckFailed
+            />
+        );
+    }
+
+    return (
+        <AppVersionStatus
+            appVersion={appVersion}
+            latestAppVersion={latestAppVersion ?? undefined}
+        />
+    );
 };
 
 export default FooterInfobar;
