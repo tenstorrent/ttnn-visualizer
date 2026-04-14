@@ -1582,7 +1582,7 @@ def test_remote_folder():
 @with_instance
 def read_remote_folder(instance: Instance):
     body = request.get_json(silent=True) or {}
-    file_path = body.get("filePath")
+    file_path = body.get("filePath", None)
     check_path_only = body.get("check_path_only", False)
 
     if not file_path or not isinstance(file_path, str):

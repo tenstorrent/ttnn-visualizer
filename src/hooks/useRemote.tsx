@@ -203,13 +203,21 @@ const useRemoteConnection = () => {
                 resolvedPath: typeof resolvedPath === 'string' ? resolvedPath : null,
             };
         } catch (error: unknown) {
-            if (axios.isAxiosError(error)) {
-                const errorMessage = error.response?.data?.error || error.message || 'Failed to read remote file';
+            const standardError = {
+                data: null,
+                isRemapped: false,
+                resolvedPath: null,
+                error: 'An unexpected error occurred',
+            };
 
-                return { data: null, error: errorMessage, isRemapped: false, resolvedPath: null };
+            if (axios.isAxiosError(error)) {
+                return {
+                    ...standardError,
+                    error: error.response?.data?.error || error.message || 'Failed to read remote file',
+                };
             }
 
-            return { data: null, error: 'An unexpected error occurred', isRemapped: false, resolvedPath: null };
+            return standardError;
         }
     };
 
