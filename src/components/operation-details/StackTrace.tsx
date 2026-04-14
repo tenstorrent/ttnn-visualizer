@@ -259,7 +259,7 @@ function StackTrace({
         return () => {
             fetchCancelled = true;
         };
-    }, [shouldShowSourceControls, filePath, canReadSource, stackTrace, isSourceFileAvailable]);
+    }, [shouldShowSourceControls, filePath, canReadSource, isSourceFileAvailable]);
 
     return (
         <div className={classNames('stack-trace', className)}>
