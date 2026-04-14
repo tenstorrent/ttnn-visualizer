@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shlex
 from http import HTTPStatus
 from pathlib import Path
@@ -29,6 +30,7 @@ TT_METAL_SEGMENT = "/tt-metal/"
 _REMOTE_LIST_ROOTS_SCRIPT = r"""for p in "${TT_METAL_HOME:-}" "$HOME/tt-metal"; do [ -n "$p" ] && [ -d "$p" ] && printf '%s\n' "$p"; done
 if [ -n "${SUDO_USER:-}" ]; then p="/home/${SUDO_USER}/tt-metal"; [ -d "$p" ] && printf '%s\n' "$p"; fi
 for p in "/localdev/$(id -un)/tt-metal" "/proj_sw/$(id -un)/tt-metal"; do [ -n "$p" ] && [ -d "$p" ] && printf '%s\n' "$p"; done"""
+_USER_ROOT_PREFIX_RE = re.compile(r"^/(localdev|proj_sw)/[^/]+/tt-metal(?:/|$)")
 
 
 def _tt_metal_home_from_flask_config() -> Optional[str]:
@@ -254,6 +256,30 @@ def _discover_tt_metal_roots_remote(ssh_client: "SSHClient") -> list[str]:
     return roots
 
 
+def _preferred_remote_user_root_for_raw_path(
+    ssh_client: "SSHClient", raw_path: str
+) -> Optional[str]:
+    """
+    If raw_path points into /localdev/<user>/tt-metal or /proj_sw/<user>/tt-metal,
+    prefer trying the same prefix with the current SSH username.
+    """
+    match = _USER_ROOT_PREFIX_RE.match(raw_path)
+    username = (getattr(ssh_client.connection, "username", None) or "").strip()
+    if not match or not username:
+        return None
+    return f"/{match.group(1)}/{username}/tt-metal"
+
+
+def _remote_roots_for_raw_path(ssh_client: "SSHClient", raw_path: str) -> list[str]:
+    roots = _discover_tt_metal_roots_remote(ssh_client)
+    preferred_root = _preferred_remote_user_root_for_raw_path(ssh_client, raw_path)
+    if not preferred_root:
+        return roots
+    if preferred_root in roots:
+        return [preferred_root, *[r for r in roots if r != preferred_root]]
+    return [preferred_root, *roots]
+
+
 def read_stack_source_remote(
     ssh_client: "SSHClient", raw_path: str
 ) -> Tuple[str, str, bool]:
@@ -280,7 +306,7 @@ def read_stack_source_remote(
     if suffix is None:
         raise not_found
 
-    roots = _discover_tt_metal_roots_remote(ssh_client)
+    roots = _remote_roots_for_raw_path(ssh_client, raw_path)
     if not roots:
         raise not_found
 
@@ -337,7 +363,7 @@ def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
     suffix = _extract_suffix_after_tt_metal(raw_path)
     if suffix is None:
         return False
-    for root_str in _discover_tt_metal_roots_remote(ssh_client):
+    for root_str in _remote_roots_for_raw_path(ssh_client, raw_path):
         try:
             remapped_str = _join_remote_tt_metal_path(root_str, suffix)
         except ValueError:

@@ -11,6 +11,8 @@ from ttnn_visualizer.stack_trace_source import (
     _candidate_tt_metal_dirs,
     _discover_tt_metal_roots_local,
     _extract_suffix_after_tt_metal,
+    _preferred_remote_user_root_for_raw_path,
+    _remote_roots_for_raw_path,
     _resolve_local_stack_path,
     _safe_join_under_tt_metal_root,
     check_stack_source_local,
@@ -200,3 +202,39 @@ def test_check_stack_source_remote_tries_each_remapped_root(monkeypatch):
     ssh = MagicMock()
     assert check_stack_source_remote(ssh, "/container/tt-metal/u/v.py") is True
     assert "/good/tt-metal/u/v.py" in checked
+
+
+def test_preferred_remote_user_root_for_raw_path_uses_connection_username():
+    from types import SimpleNamespace
+
+    ssh = SimpleNamespace(connection=SimpleNamespace(username="ctr-dblundell"))
+    assert (
+        _preferred_remote_user_root_for_raw_path(
+            ssh, "/localdev/bjanjic/tt-metal/ttnn/ttnn/operations/normalization.py"
+        )
+        == "/localdev/ctr-dblundell/tt-metal"
+    )
+    assert (
+        _preferred_remote_user_root_for_raw_path(
+            ssh, "/proj_sw/bjanjic/tt-metal/ttnn/ops/normalization.py"
+        )
+        == "/proj_sw/ctr-dblundell/tt-metal"
+    )
+
+
+def test_remote_roots_for_raw_path_prioritizes_preferred_user_root(monkeypatch):
+    from types import SimpleNamespace
+
+    import ttnn_visualizer.stack_trace_source as sts
+
+    ssh = SimpleNamespace(connection=SimpleNamespace(username="ctr-dblundell"))
+    monkeypatch.setattr(
+        sts,
+        "_discover_tt_metal_roots_remote",
+        lambda _ssh: ["/localdev/root/tt-metal", "/proj_sw/root/tt-metal"],
+    )
+
+    roots = _remote_roots_for_raw_path(
+        ssh, "/localdev/bjanjic/tt-metal/ttnn/ttnn/operations/normalization.py"
+    )
+    assert roots[0] == "/localdev/ctr-dblundell/tt-metal"
