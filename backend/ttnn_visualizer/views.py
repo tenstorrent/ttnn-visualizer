@@ -1615,7 +1615,10 @@ def read_remote_folder(instance: Instance):
         except RemoteConnectionException as e:
             return Response(status=e.http_status, response=e.message)
         except RemoteFileReadException as e:
-            return jsonify({"error": str(e)}), e.http_status
+            error_payload = {"error": str(e)}
+            if e.detail:
+                error_payload["detail"] = e.detail
+            return jsonify(error_payload), e.http_status
 
     if current_app.config.get("SERVER_MODE"):
         return (

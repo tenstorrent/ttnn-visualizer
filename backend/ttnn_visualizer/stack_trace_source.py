@@ -24,10 +24,11 @@ logger = logging.getLogger(__name__)
 # First occurrence of this substring in a trace path marks the tt-metal repo segment.
 TT_METAL_SEGMENT = "/tt-metal/"
 
-# Echo every existing tt-metal root, one per line (same priority as local discovery).
+# Echo every existing tt-metal root, one per line, matching local discovery priority.
 # Includes /home/$SUDO_USER/tt-metal so sudo (HOME=/root) still finds the invoking user's checkout.
-_REMOTE_LIST_ROOTS_SCRIPT = r"""for p in "${TT_METAL_HOME:-}" "$HOME/tt-metal" "/localdev/$(id -un)/tt-metal" "/proj_sw/$(id -un)/tt-metal"; do [ -n "$p" ] && [ -d "$p" ] && printf '%s\n' "$p"; done
-if [ -n "${SUDO_USER:-}" ]; then p="/home/${SUDO_USER}/tt-metal"; [ -d "$p" ] && printf '%s\n' "$p"; fi"""
+_REMOTE_LIST_ROOTS_SCRIPT = r"""for p in "${TT_METAL_HOME:-}" "$HOME/tt-metal"; do [ -n "$p" ] && [ -d "$p" ] && printf '%s\n' "$p"; done
+if [ -n "${SUDO_USER:-}" ]; then p="/home/${SUDO_USER}/tt-metal"; [ -d "$p" ] && printf '%s\n' "$p"; fi
+for p in "/localdev/$(id -un)/tt-metal" "/proj_sw/$(id -un)/tt-metal"; do [ -n "$p" ] && [ -d "$p" ] && printf '%s\n' "$p"; done"""
 
 
 def _tt_metal_home_from_flask_config() -> Optional[str]:

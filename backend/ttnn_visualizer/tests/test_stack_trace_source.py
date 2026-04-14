@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from ttnn_visualizer.stack_trace_source import (
+    _REMOTE_LIST_ROOTS_SCRIPT,
     _candidate_tt_metal_dirs,
     _discover_tt_metal_roots_local,
     _extract_suffix_after_tt_metal,
@@ -113,6 +114,15 @@ def test_candidate_dirs_include_sudo_user_home_tt_metal(monkeypatch):
     """When sudo leaves HOME as root, /home/$SUDO_USER/tt-metal must still be tried."""
     monkeypatch.setenv("SUDO_USER", "someuser")
     assert Path("/home/someuser/tt-metal") in _candidate_tt_metal_dirs()
+
+
+def test_remote_root_script_matches_local_priority_order():
+    home_idx = _REMOTE_LIST_ROOTS_SCRIPT.index('"$HOME/tt-metal"')
+    sudo_idx = _REMOTE_LIST_ROOTS_SCRIPT.index("/home/${SUDO_USER}/tt-metal")
+    localdev_idx = _REMOTE_LIST_ROOTS_SCRIPT.index('"/localdev/$(id -un)/tt-metal"')
+    proj_sw_idx = _REMOTE_LIST_ROOTS_SCRIPT.index('"/proj_sw/$(id -un)/tt-metal"')
+
+    assert home_idx < sudo_idx < localdev_idx < proj_sw_idx
 
 
 def test_candidate_dirs_include_flask_tt_metal_home(app, tmp_path):

@@ -63,7 +63,7 @@ function StackTrace({
     const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
     const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
 
-    const { readRemoteFile, isStackTraceAvailable, persistentState } = useRemoteConnection();
+    const { readRemoteFile, isSourceFileAvailable, persistentState } = useRemoteConnection();
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
     const sourceControlsRef = useRef<null | HTMLDivElement>(null);
 
@@ -116,6 +116,7 @@ function StackTrace({
     const serverMode = !!getServerConfig()?.SERVER_MODE;
     const canReadSource = isRemote ? !!persistentState.selectedConnection : !serverMode;
 
+    const shouldShowSourceControls = !hideSourceButton;
     const sourceTooltip = useMemo(
         () => getSourceTooltipContents(serverMode, isRemote, filePath, canReadSource, sourceFileStatus),
         [serverMode, isRemote, filePath, canReadSource, sourceFileStatus],
@@ -234,7 +235,7 @@ function StackTrace({
 
     // Check stack trace file is available
     useEffect(() => {
-        if (!filePath || !canReadSource) {
+        if (!shouldShowSourceControls || !filePath || !canReadSource) {
             setSourceFileStatus(SourceFileStatus.Unavailable);
             return undefined;
         }
@@ -244,7 +245,7 @@ function StackTrace({
 
         (async () => {
             try {
-                const ok = await isStackTraceAvailable(filePath);
+                const ok = await isSourceFileAvailable(filePath);
                 if (!fetchCancelled) {
                     setSourceFileStatus(ok ? SourceFileStatus.Available : SourceFileStatus.Unavailable);
                 }
@@ -258,7 +259,7 @@ function StackTrace({
         return () => {
             fetchCancelled = true;
         };
-    }, [filePath, canReadSource, stackTrace, isStackTraceAvailable]);
+    }, [shouldShowSourceControls, filePath, canReadSource, stackTrace, isSourceFileAvailable]);
 
     return (
         <div className={classNames('stack-trace', className)}>

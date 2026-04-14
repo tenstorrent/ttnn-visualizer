@@ -163,7 +163,7 @@ const useRemoteConnection = () => {
         },
     };
 
-    const isStackTraceAvailable = useCallback(async (filePath: string): Promise<boolean> => {
+    const isSourceFileAvailable = useCallback(async (filePath: string): Promise<boolean> => {
         try {
             const { data } = await axiosInstance.post<{ available?: boolean }>(
                 `${Endpoints.REMOTE}/read`,
@@ -221,7 +221,7 @@ const useRemoteConnection = () => {
         mountRemoteFolder,
         persistentState,
         readRemoteFile,
-        isStackTraceAvailable,
+        isSourceFileAvailable,
     };
 };
 
