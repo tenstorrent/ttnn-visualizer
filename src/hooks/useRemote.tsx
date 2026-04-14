@@ -163,12 +163,13 @@ const useRemoteConnection = () => {
         },
     };
 
-    const isSourceFileAvailable = useCallback(async (filePath: string): Promise<boolean> => {
+    const isSourceFileAvailable = useCallback(async (filePath: string, signal?: AbortSignal): Promise<boolean> => {
         try {
             const { data } = await axiosInstance.post<{ available?: boolean }>(
                 `${Endpoints.REMOTE}/read`,
                 { filePath, check_path_only: true },
                 {
+                    signal,
                     headers: {
                         'Content-Type': 'application/json',
                     },

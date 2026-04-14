@@ -240,12 +240,13 @@ function StackTrace({
             return undefined;
         }
 
+        const controller = new AbortController();
         let fetchCancelled = false;
         setSourceFileStatus(SourceFileStatus.Pending);
 
         (async () => {
             try {
-                const ok = await isSourceFileAvailable(filePath);
+                const ok = await isSourceFileAvailable(filePath, controller.signal);
                 if (!fetchCancelled) {
                     setSourceFileStatus(ok ? SourceFileStatus.Available : SourceFileStatus.Unavailable);
                 }
@@ -258,6 +259,7 @@ function StackTrace({
 
         return () => {
             fetchCancelled = true;
+            controller.abort();
         };
     }, [shouldShowSourceControls, filePath, canReadSource, isSourceFileAvailable]);
 
