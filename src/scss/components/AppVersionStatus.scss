@@ -8,6 +8,7 @@ $version-up-to-date-color: #76fd92;
 $version-outdated-one-color: #ffe454;
 $version-outdated-two-color: #fb854b;
 $version-outdated-three-color: #ff7272;
+$version-unknown-color: $version-outdated-one-color;
 
 .version-info {
     display: flex;
@@ -30,7 +31,6 @@ $version-outdated-three-color: #ff7272;
 
     .app-version {
         color: inherit;
-        font-weight: 500;
     }
 
     .version-status-icon {
@@ -77,6 +77,14 @@ $version-outdated-three-color: #ff7272;
 
         .version-status-icon {
             color: $version-outdated-three-color;
+        }
+    }
+
+    &--latest-check-unknown {
+        color: $version-unknown-color;
+
+        .version-status-icon {
+            color: $version-unknown-color;
         }
     }
 }

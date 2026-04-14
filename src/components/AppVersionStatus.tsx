@@ -11,7 +11,9 @@ import 'styles/components/AppVersionStatus.scss';
 
 interface AppVersionStatusProps {
     appVersion: string;
-    latestAppVersion: string;
+    latestAppVersion?: string;
+    isServerMode?: boolean;
+    latestVersionCheckFailed?: boolean;
 }
 
 enum OutdatedLevel {
@@ -31,15 +33,49 @@ const OUTDATED_CLASS_MAP: Record<OutdatedLevel, string> = {
 const PYPI_SOURCE_URL = 'https://pypi.org/project/ttnn-visualizer/';
 const VERSION_ICON_SIZE = 14;
 
-function AppVersionStatus({ appVersion, latestAppVersion }: AppVersionStatusProps) {
+function AppVersionStatus({
+    appVersion,
+    latestAppVersion,
+    isServerMode,
+    latestVersionCheckFailed,
+}: AppVersionStatusProps) {
     const versionOutdatedLevel: OutdatedLevel = useMemo(
-        () => (latestAppVersion ? getVersionOutdatedLevel(appVersion, latestAppVersion) : OutdatedLevel.NONE),
-        [latestAppVersion, appVersion],
+        () =>
+            isServerMode || !latestAppVersion
+                ? OutdatedLevel.NONE
+                : getVersionOutdatedLevel(appVersion, latestAppVersion),
+        [isServerMode, latestAppVersion, appVersion],
     );
     const isAppOutdated = versionOutdatedLevel > OutdatedLevel.NONE;
     const versionClasses = classNames('version-info', OUTDATED_CLASS_MAP[versionOutdatedLevel], {
         'is-anchor': isAppOutdated,
     });
+
+    if (isServerMode) {
+        return (
+            <div className='version-info'>
+                <span className='app-version'>v{appVersion}</span>
+            </div>
+        );
+    }
+
+    if (latestVersionCheckFailed) {
+        return (
+            <Tooltip
+                content='Could not check for the latest version'
+                position={PopoverPosition.TOP}
+            >
+                <div className='version-info version-info--latest-check-unknown'>
+                    <Icon
+                        className='version-status-icon'
+                        icon={IconNames.ISSUE}
+                        size={VERSION_ICON_SIZE}
+                    />
+                    <span className='app-version'>v{appVersion}</span>
+                </div>
+            </Tooltip>
+        );
+    }
 
     return (
         <Tooltip

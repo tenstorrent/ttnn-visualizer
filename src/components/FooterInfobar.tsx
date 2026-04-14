@@ -3,9 +3,20 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, Classes, Collapse, Icon, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    Classes,
+    Collapse,
+    Icon,
+    Intent,
+    NumberRange,
+    PopoverPosition,
+    Size,
+    Tag,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
@@ -13,8 +24,11 @@ import {
     activeProfilerReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
+    performanceReportLocationAtom,
+    profilerReportLocationAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
+import { ReportLocation } from '../definitions/Reports';
 import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
@@ -35,13 +49,19 @@ function FooterInfobar() {
     const performanceRange = useAtomValue(performanceRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const profilerReportLocation = useAtomValue(profilerReportLocationAtom);
+    const performanceReportLocation = useAtomValue(performanceReportLocationAtom);
 
     const { data: instance } = useInstance();
     const location = useLocation();
+    const {
+        data: latestAppVersion,
+        isPending: isLatestAppPending,
+        isError: isLatestAppVersionError,
+    } = useGetLatestAppVersion();
     const serverConfig = getServerConfig();
-    const isServerMode = serverConfig.SERVER_MODE;
 
-    const latestAppVersion = useGetLatestAppVersion();
+    const isServerMode = serverConfig.SERVER_MODE || false;
     const appVersion = import.meta.env.APP_VERSION;
 
     const activeProfilerReportPath = activeProfilerReport?.path;
@@ -72,6 +92,14 @@ function FooterInfobar() {
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
+    const versionStatus = getAppVersionStatus(
+        appVersion,
+        isLatestAppPending,
+        isServerMode,
+        latestAppVersion,
+        isLatestAppVersionError,
+    );
+
     useEffect(() => {
         if (!isAllowedRoute()) {
             setSliderIsOpen(false);
@@ -81,18 +109,7 @@ function FooterInfobar() {
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
-                {!isServerMode ? (
-                    <div className='version-container'>
-                        {latestAppVersion ? (
-                            <AppVersionStatus
-                                appVersion={appVersion}
-                                latestAppVersion={latestAppVersion}
-                            />
-                        ) : (
-                            <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
-                        )}
-                    </div>
-                ) : null}
+                <div className='version-container'>{versionStatus}</div>
 
                 <div className='active-reports'>
                     {!isServerMode && (
@@ -129,6 +146,9 @@ function FooterInfobar() {
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
                                     {formatName(activeProfilerReportPath)}
                                 </span>
+                                {profilerReportLocation !== null && (
+                                    <ReportLocationTag location={profilerReportLocation} />
+                                )}
                             </div>
                         </Tooltip>
                     )}
@@ -146,6 +166,9 @@ function FooterInfobar() {
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
                                     {formatName(activePerformanceReportPath)}
                                 </span>
+                                {performanceReportLocation !== null && (
+                                    <ReportLocationTag location={performanceReportLocation} />
+                                )}
                             </div>
                         </Tooltip>
                     )}
@@ -180,6 +203,22 @@ function FooterInfobar() {
         </footer>
     );
 }
+
+const ReportLocationTag = ({ location }: { location: ReportLocation }) => {
+    const isRemote = location === ReportLocation.REMOTE;
+    const label = isRemote ? 'Remote' : 'Local';
+
+    return (
+        <Tag
+            minimal
+            className='report-source-tag'
+            aria-label={`Report source: ${label}`}
+            intent={Intent.PRIMARY}
+        >
+            {label}
+        </Tag>
+    );
+};
 
 const hasRangeSelected = (selectedRange: NumberRange | null, operationRange: NumberRange | null): boolean =>
     !!(
@@ -217,6 +256,43 @@ const formatName = (str: string): string => {
     }
 
     return str;
+};
+
+const getAppVersionStatus = (
+    appVersion: string,
+    isLatestAppPending: boolean,
+    isServerMode: boolean,
+    latestAppVersion: string | null | undefined,
+    isLatestAppVersionError: boolean,
+): ReactNode => {
+    if (isServerMode) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                isServerMode
+            />
+        );
+    }
+
+    if (isLatestAppPending) {
+        return <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />;
+    }
+
+    if (isLatestAppVersionError && latestAppVersion == null) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                latestVersionCheckFailed
+            />
+        );
+    }
+
+    return (
+        <AppVersionStatus
+            appVersion={appVersion}
+            latestAppVersion={latestAppVersion ?? undefined}
+        />
+    );
 };
 
 export default FooterInfobar;

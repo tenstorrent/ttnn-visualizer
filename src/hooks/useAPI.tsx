@@ -28,6 +28,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
+import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
@@ -59,7 +60,6 @@ import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification, { ToastType } from '../functions/createToastNotification';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
-import getServerConfig from '../functions/getServerConfig';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -1214,16 +1214,13 @@ const fetchLatestAppVersion = async (): Promise<string | null> => {
 };
 
 export const useGetLatestAppVersion = () => {
-    const serverConfig = getServerConfig();
-    const isServerMode = serverConfig.SERVER_MODE;
+    const isServerMode = !!getServerConfig().SERVER_MODE;
 
-    const response = useQuery<string | null, AxiosError>({
+    return useQuery<string | null, AxiosError>({
         queryFn: () => fetchLatestAppVersion(),
         queryKey: ['get-latest-app-version'],
         retry: false,
         staleTime: Infinity,
-        enabled: !isServerMode, // Disable in server mode
+        enabled: !isServerMode,
     });
-
-    return response.data;
 };
