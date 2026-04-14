@@ -177,16 +177,13 @@ function StackTrace({
         const path = (resolvedSourcePath || filePath).trim();
 
         if (isRemote && persistentState.selectedConnection) {
-            const connection = persistentState.selectedConnection;
-            const connectionLabel =
-                typeof connection === 'string'
-                    ? connection
-                    : `${connection.username || 'user'}@${connection.host || 'host'}`;
+            const { selectedConnection: remoteConnection } = persistentState;
+            const connectionLabel = `${remoteConnection.username || 'user'}@${remoteConnection.host || 'host'}`;
             return `[${connectionLabel}] ${path}`;
         }
 
         return path;
-    }, [isRemote, persistentState.selectedConnection, resolvedSourcePath, filePath]);
+    }, [isRemote, persistentState, resolvedSourcePath, filePath]);
     const isCheckingStackTraceAvailability =
         isFetchingFile || (sourceFileStatus === SourceFileStatus.Pending && !!filePath && canReadSource);
     const isStackTraceUnavailable = !canReadSource || !filePath || sourceFileStatus !== SourceFileStatus.Available;

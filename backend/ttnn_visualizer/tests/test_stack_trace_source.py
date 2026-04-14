@@ -8,35 +8,50 @@ from unittest.mock import MagicMock
 import pytest
 from ttnn_visualizer.stack_trace_source import (
     _candidate_tt_metal_dirs,
+    _discover_tt_metal_roots_local,
+    _extract_suffix_after_tt_metal,
+    _resolve_local_stack_path,
+    _safe_join_under_tt_metal_root,
     check_stack_source_local,
-    discover_tt_metal_roots_local,
-    extract_suffix_after_tt_metal,
-    resolve_local_stack_path,
-    safe_join_under_tt_metal_root,
 )
 
 
 def test_extract_suffix_after_tt_metal():
-    assert extract_suffix_after_tt_metal("/foo/tt-metal/ttnn/x.py") == "ttnn/x.py"
-    assert extract_suffix_after_tt_metal("/tt-metal/tt_metal/y.cc") == "tt_metal/y.cc"
-    assert extract_suffix_after_tt_metal("/prefix/tt-metal") == ""
-    assert extract_suffix_after_tt_metal("/opt/foo/bar") is None
+    assert _extract_suffix_after_tt_metal("/foo/tt-metal/ttnn/x.py") == "ttnn/x.py"
+    assert _extract_suffix_after_tt_metal("/tt-metal/tt_metal/y.cc") == "tt_metal/y.cc"
+    assert _extract_suffix_after_tt_metal("/prefix/tt-metal") == ""
+    assert _extract_suffix_after_tt_metal("/opt/foo/bar") is None
 
 
-def test_safe_join_under_tt_metal_root_rejects_dotdot(tmp_path):
+def test__safe_join_under_tt_metal_root_rejects_dotdot(tmp_path):
     root = tmp_path / "tt-metal"
     root.mkdir()
     with pytest.raises(ValueError, match="Unsafe"):
-        safe_join_under_tt_metal_root(root, "a/../../etc/passwd")
+        _safe_join_under_tt_metal_root(root, "a/../../etc/passwd")
 
 
-def test_safe_join_under_tt_metal_root_ok(tmp_path):
+def test__safe_join_under_tt_metal_root_ok(tmp_path):
     root = tmp_path / "tt-metal"
     (root / "ttnn").mkdir(parents=True)
     f = root / "ttnn" / "a.py"
     f.write_text("x", encoding="utf-8")
-    p = safe_join_under_tt_metal_root(root, "ttnn/a.py")
+    p = _safe_join_under_tt_metal_root(root, "ttnn/a.py")
     assert p == f.resolve()
+
+
+def test_resolve_tt_metal_path_direct_same_file_not_remapped(monkeypatch, tmp_path):
+    """Canonical path under a discovered root should not set remapped=True."""
+    metal = tmp_path / "tt-metal"
+    (metal / "ttnn").mkdir(parents=True)
+    target = metal / "ttnn" / "hello.py"
+    target.write_text("# hi", encoding="utf-8")
+    monkeypatch.setenv("TT_METAL_HOME", str(metal))
+
+    raw = str(target)
+    assert "/tt-metal/" in raw
+    path, remapped = _resolve_local_stack_path(raw)
+    assert remapped is False
+    assert path.resolve() == target.resolve()
 
 
 def test_resolve_remaps_under_tt_metal_marker(monkeypatch, tmp_path):
@@ -55,7 +70,7 @@ def test_resolve_remaps_under_tt_metal_marker(monkeypatch, tmp_path):
     monkeypatch.setenv("TT_METAL_HOME", str(metal))
 
     raw = "/anything/tt-metal/ttnn/hello.py"
-    path, remapped = resolve_local_stack_path(raw)
+    path, remapped = _resolve_local_stack_path(raw)
     assert remapped is True
     assert path.resolve() == target.resolve()
 
@@ -69,7 +84,7 @@ def test_resolve_rejects_path_outside_roots(monkeypatch, tmp_path):
     other.write_text("z", encoding="utf-8")
 
     with pytest.raises(FileNotFoundError, match="outside"):
-        resolve_local_stack_path(str(other))
+        _resolve_local_stack_path(str(other))
 
 
 def test_discover_tt_metal_priority_tt_metal_home(monkeypatch, tmp_path):
@@ -79,7 +94,7 @@ def test_discover_tt_metal_priority_tt_metal_home(monkeypatch, tmp_path):
     b.mkdir()
     monkeypatch.setenv("TT_METAL_HOME", str(a))
     monkeypatch.setenv("HOME", str(tmp_path))
-    roots = discover_tt_metal_roots_local()
+    roots = _discover_tt_metal_roots_local()
     assert roots[0] == a.resolve()
 
 
@@ -90,7 +105,7 @@ def test_discover_tt_metal_roots_dedupes(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     # home/tt-metal same as metal if HOME is parent
     (tmp_path / "tt-metal").mkdir(exist_ok=True)
-    roots = discover_tt_metal_roots_local()
+    roots = _discover_tt_metal_roots_local()
     assert len(roots) == 1
 
 
@@ -145,7 +160,7 @@ def test_read_stack_source_remote_remaps_after_not_found(monkeypatch):
 
     ssh.read_file.side_effect = read_file
     monkeypatch.setattr(
-        sts, "discover_tt_metal_roots_remote", lambda _ssh: [remote_root]
+        sts, "_discover_tt_metal_roots_remote", lambda _ssh: [remote_root]
     )
 
     text, resolved, remapped = read_stack_source_remote(ssh, raw)
@@ -160,7 +175,7 @@ def test_check_stack_source_remote_tries_each_remapped_root(monkeypatch):
 
     monkeypatch.setattr(
         sts,
-        "discover_tt_metal_roots_remote",
+        "_discover_tt_metal_roots_remote",
         lambda _ssh: ["/wrong/tt-metal", "/good/tt-metal"],
     )
 

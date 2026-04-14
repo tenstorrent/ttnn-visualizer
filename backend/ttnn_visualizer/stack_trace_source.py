@@ -64,7 +64,7 @@ def _candidate_tt_metal_dirs() -> list[Path]:
     return out
 
 
-def discover_tt_metal_roots_local() -> list[Path]:
+def _discover_tt_metal_roots_local() -> list[Path]:
     """All existing candidate roots (deduped), in priority order."""
     seen: set[str] = set()
     out: list[Path] = []
@@ -80,7 +80,7 @@ def discover_tt_metal_roots_local() -> list[Path]:
     return out
 
 
-def extract_suffix_after_tt_metal(raw_path: str) -> Optional[str]:
+def _extract_suffix_after_tt_metal(raw_path: str) -> Optional[str]:
     """
     If raw_path contains '/tt-metal/', return the relative suffix (may be empty).
     Trailing '/tt-metal' without a following slash yields empty suffix (repo root).
@@ -101,7 +101,7 @@ def _is_safe_suffix(suffix: str) -> bool:
     return True
 
 
-def safe_join_under_tt_metal_root(root: Path, suffix: str) -> Path:
+def _safe_join_under_tt_metal_root(root: Path, suffix: str) -> Path:
     """
     Join root with suffix and ensure the result stays under root (after resolve).
     """
@@ -119,7 +119,7 @@ def safe_join_under_tt_metal_root(root: Path, suffix: str) -> Path:
     raise ValueError("Path escapes tt-metal root")
 
 
-def join_remote_tt_metal_path(remote_root: str, suffix: str) -> str:
+def _join_remote_tt_metal_path(remote_root: str, suffix: str) -> str:
     """
     POSIX join for paths passed to SSH. Do not use local Path.resolve() — the
     remote filesystem layout is not the same as the machine running Flask.
@@ -138,28 +138,58 @@ def join_remote_tt_metal_path(remote_root: str, suffix: str) -> str:
     return joined
 
 
-def read_text_file(path: Path) -> str:
+def _read_text_file(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def resolve_local_stack_path(raw_path: str) -> Tuple[Path, bool]:
+def _is_readable_regular_file(path: Path) -> bool:
+    """True if path is a regular file and readable by this process."""
+    try:
+        return path.is_file() and os.access(path, os.R_OK)
+    except OSError:
+        return False
+
+
+def _resolve_local_stack_path(raw_path: str) -> Tuple[Path, bool]:
     """
     Resolve a filesystem path for reading local stack trace source.
 
     Returns (path, remapped) where remapped is True if a /tt-metal/ remap was applied.
     """
-    roots = discover_tt_metal_roots_local()
-    suffix = extract_suffix_after_tt_metal(raw_path)
+    roots = _discover_tt_metal_roots_local()
+    suffix = _extract_suffix_after_tt_metal(raw_path)
     if suffix is not None:
         if not roots:
             raise FileNotFoundError(
                 "No local tt-metal directory found for path remapping"
             )
+        expanded = Path(raw_path).expanduser()
+        resolved_direct: Optional[Path] = None
+        try:
+            resolved_direct = expanded.resolve()
+        except OSError:
+            pass
+        if resolved_direct is not None:
+            for root in roots:
+                try:
+                    root_r = root.resolve()
+                    if resolved_direct == root_r or resolved_direct.is_relative_to(
+                        root_r
+                    ):
+                        if _is_readable_regular_file(resolved_direct):
+                            return resolved_direct, False
+                        break
+                except (ValueError, OSError):
+                    continue
+
         last_err: Optional[Exception] = None
         for root in roots:
             try:
-                candidate = safe_join_under_tt_metal_root(root, suffix)
-                if candidate.is_file():
+                candidate = _safe_join_under_tt_metal_root(root, suffix)
+                if _is_readable_regular_file(candidate):
+                    cand_res = candidate.resolve()
+                    if resolved_direct is not None and cand_res == resolved_direct:
+                        return candidate, False
                     return candidate, True
             except (ValueError, OSError) as e:
                 last_err = e
@@ -185,7 +215,7 @@ def resolve_local_stack_path(raw_path: str) -> Tuple[Path, bool]:
     for root in roots:
         try:
             if resolved == root.resolve() or resolved.is_relative_to(root.resolve()):
-                if resolved.is_file():
+                if _is_readable_regular_file(resolved):
                     return resolved, False
                 raise FileNotFoundError(f"Not a file: {resolved}")
         except (ValueError, OSError):
@@ -200,12 +230,12 @@ def read_stack_source_local(raw_path: str) -> Tuple[str, str, bool]:
 
     :return: (content, resolved_path_str, remapped)
     """
-    path, remapped = resolve_local_stack_path(raw_path)
-    text = read_text_file(path)
+    path, remapped = _resolve_local_stack_path(raw_path)
+    text = _read_text_file(path)
     return text, str(path), remapped
 
 
-def discover_tt_metal_roots_remote(ssh_client: "SSHClient") -> list[str]:
+def _discover_tt_metal_roots_remote(ssh_client: "SSHClient") -> list[str]:
     """All existing remote tt-metal roots, same priority as local (deduped)."""
     cmd = f"bash -lc {shlex.quote(_REMOTE_LIST_ROOTS_SCRIPT)}"
     try:
@@ -221,12 +251,6 @@ def discover_tt_metal_roots_remote(ssh_client: "SSHClient") -> list[str]:
             seen.add(line)
             roots.append(line)
     return roots
-
-
-def discover_tt_metal_root_remote(ssh_client: "SSHClient") -> Optional[str]:
-    """First remote tt-metal root, or None if none exist."""
-    roots = discover_tt_metal_roots_remote(ssh_client)
-    return roots[0] if roots else None
 
 
 def read_stack_source_remote(
@@ -251,18 +275,18 @@ def read_stack_source_remote(
 
     assert not_found is not None
 
-    suffix = extract_suffix_after_tt_metal(raw_path)
+    suffix = _extract_suffix_after_tt_metal(raw_path)
     if suffix is None:
         raise not_found
 
-    roots = discover_tt_metal_roots_remote(ssh_client)
+    roots = _discover_tt_metal_roots_remote(ssh_client)
     if not roots:
         raise not_found
 
     last_missing = not_found
     for root_str in roots:
         try:
-            remapped_str = join_remote_tt_metal_path(root_str, suffix)
+            remapped_str = _join_remote_tt_metal_path(root_str, suffix)
         except ValueError:
             continue
         try:
@@ -279,20 +303,23 @@ def read_stack_source_remote(
 
 
 def _remote_regular_file_exists(ssh_client: "SSHClient", posix_path: str) -> bool:
-    """True if remote path exists and is a regular file (SSH test -f)."""
+    """True if remote path exists, is a regular file, and is readable (SSH test -f/-r)."""
     from ttnn_visualizer.ssh_client import SSHException
 
+    quoted_path = shlex.quote(posix_path)
     try:
-        ssh_client.execute_command(f"test -f {shlex.quote(posix_path)}", timeout=15)
+        ssh_client.execute_command(
+            f"test -f {quoted_path} && test -r {quoted_path}", timeout=15
+        )
         return True
     except SSHException:
         return False
 
 
 def check_stack_source_local(raw_path: str) -> bool:
-    """Whether resolve_local_stack_path would succeed (including /tt-metal/ remaps)."""
+    """Whether _resolve_local_stack_path would succeed (including /tt-metal/ remaps)."""
     try:
-        resolve_local_stack_path(raw_path)
+        _resolve_local_stack_path(raw_path)
         return True
     except (FileNotFoundError, OSError, ValueError):
         return False
@@ -306,12 +333,12 @@ def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
     path_str = str(Path(raw_path))
     if _remote_regular_file_exists(ssh_client, path_str):
         return True
-    suffix = extract_suffix_after_tt_metal(raw_path)
+    suffix = _extract_suffix_after_tt_metal(raw_path)
     if suffix is None:
         return False
-    for root_str in discover_tt_metal_roots_remote(ssh_client):
+    for root_str in _discover_tt_metal_roots_remote(ssh_client):
         try:
-            remapped_str = join_remote_tt_metal_path(root_str, suffix)
+            remapped_str = _join_remote_tt_metal_path(root_str, suffix)
         except ValueError:
             continue
         if _remote_regular_file_exists(ssh_client, remapped_str):
