@@ -95,7 +95,10 @@ async function processLatestBuild(graphId: string): Promise<void> {
     }
 }
 
-self.onmessage = (event: MessageEvent<WorkerInboundMessage>) => {
+// Use addEventListener instead of self.onmessage because elkjs/lib/elk-worker.min.js
+// overwrites self.onmessage with its own dispatcher when it detects a worker context.
+// addEventListener is immune to that overwrite.
+self.addEventListener('message', (event: MessageEvent<WorkerInboundMessage>) => {
     const message = event.data;
 
     if (message.type === 'set-graph') {
@@ -129,4 +132,4 @@ self.onmessage = (event: MessageEvent<WorkerInboundMessage>) => {
         graphVersion: getGraphVersion(message.graphId),
     });
     processLatestBuild(message.graphId).catch(() => {});
-};
+});

@@ -189,7 +189,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             activeRequestIdRef.current = requestId;
             const expandedSorted = Array.from(expanded).sort((a, b) => a.localeCompare(b));
             worker.postMessage({
-                type: 'build',
+                type: 'build' as const,
                 requestId,
                 graphId: graph.id,
                 expandedNamespaces: expandedSorted,

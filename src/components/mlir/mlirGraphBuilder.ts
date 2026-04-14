@@ -228,7 +228,7 @@ function toElkGraph(nodes: WorkerNode[], edges: WorkerEdge[]): ElkNode {
     };
 }
 
-const ELK_NODE_THRESHOLD = 500;
+const ELK_NODE_THRESHOLD = 200;
 
 async function layoutWithElk(nodes: WorkerNode[], edges: WorkerEdge[]): Promise<WorkerNode[]> {
     if (nodes.length === 0) {
