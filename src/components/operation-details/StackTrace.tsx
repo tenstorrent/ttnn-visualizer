@@ -231,7 +231,7 @@ function StackTrace({
         setSourceFileStatus(SourceFileStatus.Unavailable);
         setSourceMatchedViaRemap(false);
         setResolvedSourcePath(null);
-    }, [stackTrace, filePath, canReadSource]);
+    }, [filePath, canReadSource]);
 
     // Check stack trace file is available
     useEffect(() => {
