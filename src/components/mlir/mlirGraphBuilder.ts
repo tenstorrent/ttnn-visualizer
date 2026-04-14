@@ -9,8 +9,6 @@ const GROUP_PADDING_TOP = 36;
 const GROUP_PADDING_BOTTOM = 20;
 
 const DAGRE_NODE_LIMIT = 2000;
-const MAX_RANK_WIDTH = 6;
-const WRAP_ROW_GAP = 16;
 
 type DagreOptions = {
     nodesep?: number;
@@ -28,112 +26,10 @@ function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
             ? { nodesep: 10, ranksep: 50, edgesep: 5, ranker: 'tight-tree' }
             : { ranker: 'tight-tree' };
     try {
-        const result = dagreLayoutCore(nodes, edges, opts);
-        return wrapWideRanks(result);
+        return dagreLayoutCore(nodes, edges, opts);
     } catch {
         return dagreLayoutCore(nodes, edges, { nodesep: 12, ranksep: 50, edgesep: 5 });
     }
-}
-
-/**
- * After Dagre assigns positions, some ranks may contain many more nodes than
- * can be read on screen.  This pass detects ranks wider than MAX_RANK_WIDTH
- * nodes and wraps the overflow into sub-rows, then shifts everything below
- * downward so nothing overlaps.  The result preserves Dagre's topological
- * ordering within each rank while keeping the graph readable.
- */
-function wrapWideRanks(nodes: WorkerNode[]): WorkerNode[] {
-    const RANK_Y_TOLERANCE = 4;
-
-    const rankMap = new Map<number, WorkerNode[]>();
-    for (const n of nodes) {
-        let assigned = false;
-        for (const [key] of rankMap) {
-            if (Math.abs(n.position.y - key) <= RANK_Y_TOLERANCE) {
-                rankMap.get(key)!.push(n);
-                assigned = true;
-                break;
-            }
-        }
-        if (!assigned) {
-            rankMap.set(n.position.y, [n]);
-        }
-    }
-
-    const needsWrap = [...rankMap.values()].some((group) => group.length > MAX_RANK_WIDTH);
-    if (!needsWrap) {
-        return nodes;
-    }
-
-    const sortedRankYs = [...rankMap.keys()].sort((a, b) => a - b);
-    const yShiftByOriginalY = new Map<number, number>();
-    let cumulativeShift = 0;
-
-    for (const rankY of sortedRankYs) {
-        yShiftByOriginalY.set(rankY, cumulativeShift);
-        const group = rankMap.get(rankY)!;
-        if (group.length <= MAX_RANK_WIDTH) {
-            continue;
-        }
-        group.sort((a, b) => a.position.x - b.position.x);
-        const extraRows = Math.ceil(group.length / MAX_RANK_WIDTH) - 1;
-        let maxRowHeight = 0;
-        for (const n of group) {
-            const { height } = getNodeLayoutSize(n);
-            if (height > maxRowHeight) {
-                maxRowHeight = height;
-            }
-        }
-        cumulativeShift += extraRows * (maxRowHeight + WRAP_ROW_GAP);
-    }
-
-    if (cumulativeShift === 0) {
-        return nodes;
-    }
-
-    const result: WorkerNode[] = [];
-    for (const n of nodes) {
-        let rankKey = n.position.y;
-        for (const [key] of rankMap) {
-            if (Math.abs(n.position.y - key) <= RANK_Y_TOLERANCE) {
-                rankKey = key;
-                break;
-            }
-        }
-        const group = rankMap.get(rankKey)!;
-        const baseShift = yShiftByOriginalY.get(rankKey) ?? 0;
-
-        if (group.length <= MAX_RANK_WIDTH) {
-            result.push({ ...n, position: { x: n.position.x, y: n.position.y + baseShift } });
-            continue;
-        }
-
-        const idx = group.indexOf(n);
-        const row = Math.floor(idx / MAX_RANK_WIDTH);
-        const col = idx % MAX_RANK_WIDTH;
-
-        let maxRowHeight = 0;
-        for (const gn of group) {
-            const { height } = getNodeLayoutSize(gn);
-            if (height > maxRowHeight) {
-                maxRowHeight = height;
-            }
-        }
-
-        const nodesep = 20;
-        let xPos = 0;
-        for (let c = 0; c < col; c++) {
-            const prev = group[row * MAX_RANK_WIDTH + c];
-            if (prev) {
-                xPos += getNodeLayoutSize(prev).width + nodesep;
-            }
-        }
-
-        const yPos = n.position.y + baseShift + row * (maxRowHeight + WRAP_ROW_GAP);
-        result.push({ ...n, position: { x: xPos, y: yPos } });
-    }
-
-    return result;
 }
 
 function dagreLayoutCore(nodes: WorkerNode[], edges: WorkerEdge[], opts?: DagreOptions): WorkerNode[] {
@@ -426,7 +322,17 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         const allChildNodes = [...childOpNodes, ...nestedGroupNodes];
         const allChildIds = new Set(allChildNodes.map((n) => n.id));
 
+        const collapsedChildIds = new Set(
+            directChildRawNodes
+                .filter((n) => {
+                    const toggleNs = toggleNamespaceForNode(index, n.id);
+                    return toggleNs && !expandedNamespaces.has(toggleNs);
+                })
+                .map((n) => n.id),
+        );
+
         const internalEdgesSeen = new Set<string>();
+        const internalPairSeen = new Set<string>();
         const internalEdges: WorkerEdge[] = [];
         const nodesInThisNs = nodesByContainingNs.get(namespace) ?? [];
         for (const target of nodesInThisNs) {
@@ -439,11 +345,19 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 if (!allChildIds.has(sourceChildId) || sourceChildId === targetChildId) {
                     continue;
                 }
-                const edgeId = `internal:${sourceChildId}->${targetChildId}:${incoming.targetNodeInputId}`;
+                const bothCollapsed = collapsedChildIds.has(sourceChildId) && collapsedChildIds.has(targetChildId);
+                const pairKey = `${sourceChildId}->${targetChildId}`;
+                if (bothCollapsed && internalPairSeen.has(pairKey)) {
+                    continue;
+                }
+                const edgeId = bothCollapsed
+                    ? `internal:${pairKey}`
+                    : `internal:${pairKey}:${incoming.targetNodeInputId}`;
                 if (internalEdgesSeen.has(edgeId)) {
                     continue;
                 }
                 internalEdgesSeen.add(edgeId);
+                internalPairSeen.add(pairKey);
                 const sourceRawNode = nodeById.get(incoming.sourceNodeId);
                 const outputMeta = sourceRawNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
                 const edgeLabel = outputMeta ? getTensorInfoFromAttrs(outputMeta.attrs).label : undefined;
@@ -691,11 +605,16 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
             if (srcParentNs && srcParentNs === tgtParentNs) {
                 continue;
             }
+            const bothTopLevel = !srcParentNs && !tgtParentNs;
+            const pairKey = `${sourceId}->${targetId}`;
+            if (bothTopLevel && finalEdgePairSeen.has(pairKey)) {
+                continue;
+            }
             const sourceNode = nodeById.get(incoming.sourceNodeId);
             const outputMeta = sourceNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
             const edgeLabel = outputMeta ? getTensorInfoFromAttrs(outputMeta.attrs).label : undefined;
             addEdgeSafe({
-                id: `top:${sourceId}->${targetId}:${incoming.targetNodeInputId}`,
+                id: bothTopLevel ? `top:${pairKey}` : `top:${pairKey}:${incoming.targetNodeInputId}`,
                 source: sourceId,
                 target: targetId,
                 label: edgeLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`,

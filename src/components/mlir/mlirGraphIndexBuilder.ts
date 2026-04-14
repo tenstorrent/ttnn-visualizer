@@ -113,13 +113,74 @@ function splitByTopology(nodes: SourceNode[], threshold: number): SourceNode[][]
     return buckets.length > 1 ? buckets : null;
 }
 
+const OP_GROUP_MIN_SIZE = 3;
+
+/**
+ * Groups root-level sibling namespaces that share the same base operation type
+ * (e.g. stablehlo.reduce_1, stablehlo.reduce_2 → parent "stablehlo.reduce").
+ * This inserts a virtual parent namespace so the index builder can collapse
+ * all instances under one group node.
+ */
+function applyOpTypeGrouping(nodes: SourceNode[]): {
+    effectiveNodes: SourceNode[];
+    opGroupNamespaces: Set<string>;
+} {
+    const opGroupNamespaces = new Set<string>();
+
+    const seenRootNs = new Set<string>();
+    for (const node of nodes) {
+        if (node.namespace && !node.namespace.includes('/')) {
+            seenRootNs.add(node.namespace);
+        }
+    }
+
+    const rootNsByBase = new Map<string, string[]>();
+    for (const ns of seenRootNs) {
+        const base = ns.replace(/_\d+$/, '');
+        if (base === ns) {
+            continue;
+        }
+        const arr = rootNsByBase.get(base) ?? [];
+        arr.push(ns);
+        rootNsByBase.set(base, arr);
+    }
+
+    const nsRemap = new Map<string, string>();
+    for (const [base, namespaces] of rootNsByBase) {
+        if (namespaces.length < OP_GROUP_MIN_SIZE) {
+            continue;
+        }
+        opGroupNamespaces.add(base);
+        for (const ns of namespaces) {
+            nsRemap.set(ns, `${base}/${ns}`);
+        }
+    }
+
+    if (nsRemap.size === 0) {
+        return { effectiveNodes: nodes, opGroupNamespaces };
+    }
+
+    const effectiveNodes = nodes.map((node) => {
+        if (!node.namespace) {
+            return node;
+        }
+        const rootSegment = node.namespace.split('/')[0];
+        const remapped = nsRemap.get(rootSegment);
+        if (!remapped) {
+            return node;
+        }
+        return { ...node, namespace: `${remapped}${node.namespace.slice(rootSegment.length)}` };
+    });
+
+    return { effectiveNodes, opGroupNamespaces };
+}
+
 function applyTopologySectioning(nodes: SourceNode[]): {
     effectiveNodes: SourceNode[];
     sectionNamespaces: Set<string>;
 } {
     const sectionNamespaces = new Set<string>();
 
-    // Split namespace-less nodes using topology-aware DFS
     const namespaceless: SourceNode[] = [];
     for (const node of nodes) {
         if (!node.namespace) {
@@ -154,7 +215,9 @@ function applyTopologySectioning(nodes: SourceNode[]): {
 }
 
 export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphIndex {
-    const { effectiveNodes, sectionNamespaces } = applyTopologySectioning(nodes);
+    const { effectiveNodes: groupedNodes, opGroupNamespaces } = applyOpTypeGrouping(nodes);
+    const { effectiveNodes, sectionNamespaces } = applyTopologySectioning(groupedNodes);
+    const allSyntheticNamespaces = new Set([...sectionNamespaces, ...opGroupNamespaces]);
 
     const nodeIndexById = new Map(effectiveNodes.map((n, idx) => [n.id, idx]));
     const nodesByNamespace = new Map<string, SourceNode[]>();
@@ -221,24 +284,32 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         anchorNamespaceByNodeId.set(candidates[0].id, namespace);
     }
 
-    // Phase 3: force-register topology-created section namespaces as collapsible
-    const preSectionNsSet = new Set(subgraphNamespaces);
-    for (const sectionNs of sectionNamespaces) {
-        if (!preSectionNsSet.has(sectionNs)) {
-            subgraphNamespaces.push(sectionNs);
-            preSectionNsSet.add(sectionNs);
+    // Phase 3: force-register synthetic namespaces (topology sections + op-type groups)
+    const preSyntheticNsSet = new Set(subgraphNamespaces);
+    for (const syntheticNs of allSyntheticNamespaces) {
+        if (!preSyntheticNsSet.has(syntheticNs)) {
+            subgraphNamespaces.push(syntheticNs);
+            preSyntheticNsSet.add(syntheticNs);
         }
-        if (!anchorByNamespace.has(sectionNs)) {
-            const nodesInSection = [...(nodesByNamespace.get(sectionNs) ?? [])];
-            nodesInSection.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
-            const anchor = nodesInSection.find((n) => !anchorNamespaceByNodeId.has(n.id)) ?? nodesInSection[0];
+        if (!anchorByNamespace.has(syntheticNs)) {
+            // For op-type groups (e.g. "stablehlo.reduce"), nodes aren't directly
+            // in the parent — they're in children like "stablehlo.reduce/stablehlo.reduce_48".
+            // Collect all nodes whose namespace starts with this prefix.
+            let candidateNodes = nodesByNamespace.get(syntheticNs) ?? [];
+            if (candidateNodes.length === 0) {
+                candidateNodes = effectiveNodes.filter(
+                    (n) => n.namespace && (n.namespace === syntheticNs || n.namespace.startsWith(`${syntheticNs}/`)),
+                );
+            }
+            candidateNodes.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
+            const anchor = candidateNodes.find((n) => !anchorNamespaceByNodeId.has(n.id)) ?? candidateNodes[0];
             if (anchor) {
-                anchorByNamespace.set(sectionNs, anchor.id);
-                anchorNamespaceByNodeId.set(anchor.id, sectionNs);
+                anchorByNamespace.set(syntheticNs, anchor.id);
+                anchorNamespaceByNodeId.set(anchor.id, syntheticNs);
             }
         }
     }
-    if (sectionNamespaces.size > 0) {
+    if (allSyntheticNamespaces.size > 0) {
         subgraphNamespaces.sort((a, b) => {
             const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
             return ord !== 0 ? ord : a.localeCompare(b);
@@ -458,6 +529,6 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         namespaceReturnNodeByNamespace,
         containingNamespacesByNodeId,
         outerNamespaceByNodeId: Object.fromEntries(outerNamespaceByNodeId),
-        sectionNamespaces: [...sectionNamespaces],
+        sectionNamespaces: [...allSyntheticNamespaces],
     };
 }
