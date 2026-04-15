@@ -64,6 +64,7 @@ function FooterInfobar() {
     const isServerMode = serverConfig.SERVER_MODE || false;
     const appVersion = import.meta.env.APP_VERSION;
 
+    const activeProfilerReportName = activeProfilerReport?.reportName;
     const activeProfilerReportPath = activeProfilerReport?.path;
     const hasLoadedRemoteReport =
         instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
@@ -102,9 +103,11 @@ function FooterInfobar() {
 
     useEffect(() => {
         if (!isAllowedRoute()) {
+            // Synchronize slider state with route availability
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSliderIsOpen(false);
         }
-    }, [isAllowedRoute]);
+    }, [location.pathname, isAllowedRoute]);
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
@@ -144,7 +147,7 @@ function FooterInfobar() {
                             <div className='title'>
                                 <strong>Memory:</strong>
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
-                                    {formatName(activeProfilerReportPath)}
+                                    {activeProfilerReportName || formatName(activeProfilerReportPath)}
                                 </span>
                                 {profilerReportLocation !== null && (
                                     <ReportLocationTag location={profilerReportLocation} />

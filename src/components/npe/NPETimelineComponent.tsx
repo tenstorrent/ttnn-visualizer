@@ -67,6 +67,8 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                         start: zone.start / cyclesPerTimestep,
                         end: zone.end / cyclesPerTimestep,
                     } as ZoneDrawingInfo,
+                    // TODO: @aidemsined to look at this
+                    // eslint-disable-next-line react-hooks/immutability
                     ...getZoneDrawingModel(zone.zones, depth + 1),
                 ];
             });

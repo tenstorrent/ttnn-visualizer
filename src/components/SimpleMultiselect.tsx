@@ -21,12 +21,8 @@ const SimpleMultiselect = ({
 }) => {
     const [selected, setSelected] = useState<string[]>(initialValue ?? []);
     const handleItemSelect = (item: string) => {
-        let list: string[] = [];
-        if (!selected.includes(item)) {
-            list = [...selected, item];
-        } else {
-            list = selected.filter((v) => v !== item);
-        }
+        const list = !selected.includes(item) ? [...selected, item] : selected.filter((v) => v !== item);
+
         setSelected(list);
         onUpdateHandler(list);
     };

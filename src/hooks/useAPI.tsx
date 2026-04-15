@@ -518,13 +518,23 @@ export const useOperationDetails = (operationId: number | null) => {
         return Array.from(uniqueBuffers.values());
     }, [operationDetails.data]);
 
-    if (operationDetails.data) {
-        operationDetails.data.buffersSummary = buffersSummary;
-    }
+    const augmentedOperationDetails = useMemo(() => {
+        if (!operationDetails.data) {
+            return operationDetails;
+        }
+
+        return {
+            ...operationDetails,
+            data: {
+                ...operationDetails.data,
+                buffersSummary,
+            },
+        };
+    }, [operationDetails, buffersSummary]);
 
     return {
         operation,
-        operationDetails,
+        operationDetails: augmentedOperationDetails,
     };
 };
 
@@ -826,7 +836,14 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
 
     return useMemo(() => {
         if (response.data && range && useRange) {
-            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
+            const filteredData = response.data.filter(
+                (operation) => operation.id >= range[0] && operation.id <= range[1],
+            );
+
+            return {
+                ...response,
+                data: filteredData,
+            };
         }
 
         return response;

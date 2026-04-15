@@ -186,6 +186,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         );
     };
 
+    // TODO: React Compiler optimization warning, look into this
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const tableRows = useMemo<SummaryTableBuffer[]>(() => {
         let filteredRows = listOfBuffers;
 
@@ -211,6 +213,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         return [...sortTableFields(filteredRows as [])];
     }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensorId, showOnlySelected]);
 
+    // TODO: React Compiler optimization warning, look into this
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const selectedRows = useMemo(() => {
         if (userSelectedRows.length) {
             return userSelectedRows;
@@ -228,20 +232,26 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             return arr;
         }, []);
 
-        if (tableRef?.current?.scrollToRegion && matchingBuffers.length) {
-            tableRef.current.scrollToRegion({ rows: [matchingBuffers[0], matchingBuffers[0]] });
-        }
-
         return matchingBuffers;
+        // TODO: React Compiler optimization warning, look into this
+        // eslint-disable-next-line react-hooks/preserve-manual-memoization
     }, [tableRows, selectedTensorId, userSelectedRows]);
 
     useEffect(() => {
         if (selectedTensorId) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setUserSelectedRows([]);
         } else {
             setShowOnlySelected(false);
         }
     }, [selectedTensorId]);
+
+    useEffect(() => {
+        if (tableRef?.current?.scrollToRegion && selectedRows.length) {
+            tableRef.current.scrollToRegion({ rows: [selectedRows[0], selectedRows[0]] });
+        }
+    }, [selectedRows]);
 
     return tableRows ? (
         <HotkeysProvider>
