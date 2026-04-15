@@ -98,12 +98,6 @@ export default function Performance() {
         [opCodeOptions],
     );
 
-    if (appliedOpCodeOptionsKey === null || opCodeOptionsKey !== appliedOpCodeOptionsKey) {
-        setAppliedOpCodeOptionsKey(opCodeOptionsKey);
-        setHasUserChangedOpCodeFilter(false);
-        setSelectedOpCodes(opCodeOptions);
-    }
-
     const rangedData = useMemo(
         () =>
             selectedRange && perfData
@@ -186,6 +180,14 @@ export default function Performance() {
             setSelectedRange([perfRange[0], perfRange[1]]);
         }
     }, [comparisonReportList, setSelectedRange, perfRange]);
+
+    useEffect(() => {
+        if (appliedOpCodeOptionsKey === null || opCodeOptionsKey !== appliedOpCodeOptionsKey) {
+            setAppliedOpCodeOptionsKey(opCodeOptionsKey);
+            setHasUserChangedOpCodeFilter(false);
+            setSelectedOpCodes(opCodeOptions);
+        }
+    }, [appliedOpCodeOptionsKey, opCodeOptionsKey, opCodeOptions]);
 
     if (isLoadingPerformance && !perfDataError) {
         return <LoadingSpinner />;

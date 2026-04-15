@@ -36,16 +36,16 @@ const useRestoreInstance = () => {
         const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
 
         const profilerReportPath = instance?.active_report?.profiler_name || null;
-        const profilerReportName =
-            (isProfilerRemote && profilerReportPath) || instance?.remote_profiler_folder
-                ? getRemoteReportName(remoteFolders, profilerReportPath) || profilerReportPath
-                : profilerReportPath;
+        const shouldResolveRemoteProfilerReportName = isProfilerRemote || !!instance?.remote_profiler_folder;
+        const profilerReportName = shouldResolveRemoteProfilerReportName
+            ? getRemoteReportName(remoteFolders, profilerReportPath)
+            : profilerReportPath;
         const perfReportPath = instance?.active_report?.performance_name || null;
 
         const activeProfilerReport = profilerReportPath
             ? {
                   path: profilerReportPath,
-                  reportName: profilerReportName || profilerReportPath,
+                  reportName: profilerReportName ?? profilerReportPath,
               }
             : null;
         const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
