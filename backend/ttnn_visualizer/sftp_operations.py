@@ -4,29 +4,105 @@
 
 import json
 import logging
+import os
 import subprocess
 import time
 from pathlib import Path
 from threading import Thread
 from typing import List, Optional
 
+import yaml
 from flask import current_app
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
+    AuthenticationException,
     NoProjectsException,
+    NoValidConnectionsError,
     RemoteConnectionException,
     SSHException,
 )
-from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
+from ttnn_visualizer.models import Instance, RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
-from ttnn_visualizer.ssh_client import SSHClient
+from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE, SSHClient
 from ttnn_visualizer.utils import update_last_synced
 
 logger = logging.getLogger(__name__)
 
 TEST_CONFIG_FILE = "config.json"
+TEST_DB_FILE = "db.sqlite"
 TEST_PROFILER_FILE = "profile_log_device.csv"
+
+
+def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
+    """Build SSH command prefix (never prompts for password). Includes BatchMode=yes and optional identity file."""
+    cmd = ["ssh"]
+    identity = (getattr(remote_connection, "identityFile", None) or "").strip()
+    if identity:
+        cmd.extend(["-F", os.devnull])
+    cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+    if identity:
+        cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
+    if remote_connection.port != 22:
+        cmd.extend(["-p", str(remote_connection.port)])
+    cmd.append(f"{remote_connection.username}@{remote_connection.host}")
+    return cmd
+
+
+def _sftp_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
+    """Build SFTP command prefix (never prompts for password). Includes BatchMode=yes and optional identity file."""
+    cmd = ["sftp"]
+    identity = (getattr(remote_connection, "identityFile", None) or "").strip()
+    if identity:
+        cmd.extend(["-F", os.devnull])
+    cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+    if identity:
+        cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
+    if remote_connection.port != 22:
+        cmd.extend(["-P", str(remote_connection.port)])
+    cmd.extend(["-b", "-", f"{remote_connection.username}@{remote_connection.host}"])
+    return cmd
+
+
+def handle_ssh_subprocess_error(
+    e: subprocess.CalledProcessError, remote_connection: RemoteConnection
+) -> None:
+    """
+    Convert subprocess SSH errors to appropriate exceptions with clear messages.
+    Never returns; raises AuthenticationException, NoValidConnectionsError, or SSHException.
+    """
+    stderr = (e.stderr or "").lower()
+    raw_error = (e.stderr or "").strip() or "No stderr output"
+    logger.warning(
+        f"SSH error for {remote_connection.username}@{remote_connection.host}: {raw_error}"
+    )
+    if any(
+        auth_err in stderr
+        for auth_err in [
+            "permission denied",
+            "authentication failed",
+            "publickey",
+            "password",
+            "host key verification failed",
+        ]
+    ):
+        raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
+    if any(
+        conn_err in stderr
+        for conn_err in [
+            "connection refused",
+            "network is unreachable",
+            "no route to host",
+            "name or service not known",
+            "could not resolve hostname",
+            "connection timed out",
+            "nodename nor servname provided",
+        ]
+    ):
+        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+    if "ssh:" in stderr or "protocol" in stderr:
+        raise SSHException(f"SSH protocol error: {e.stderr}")
+    raise SSHException(f"SSH command failed: {e.stderr}")
 
 
 def start_background_task(task, *args):
@@ -53,18 +129,8 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     :raises FileNotFoundError: If no files match the pattern.
     """
     if "*" in file_path:
-        # Build SSH command to list files matching the pattern
-        ssh_cmd = [
-            "ssh",
-            f"{remote_connection.username}@{remote_connection.host}",
-        ]
-
-        # Handle non-standard SSH port
-        if remote_connection.port != 22:
-            ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-        # Add the ls command
-        ssh_cmd.append(f"ls -1 {file_path}")
+        # Build SSH command to list files matching the pattern (never prompts for password)
+        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [f"ls -1 '{file_path}'"]
 
         try:
             result = subprocess.run(ssh_cmd, capture_output=True, text=True, check=True)
@@ -94,115 +160,15 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     return file_path
 
 
-def get_cluster_desc_path(remote_connection: RemoteConnection) -> Optional[str]:
-    """
-    List all folders matching '/tmp/umd_*' on the remote machine, filter for those containing
-    'cluster_descriptor.yaml', and return the full path to the most recently modified YAML file.
+def get_cluster_desc(instance: Instance):
+    if not instance.profiler_path:
+        return None
+    report_path = Path(instance.profiler_path).parent
+    cluster_path = report_path / "cluster_descriptor.yaml"
 
-    :param remote_connection: RemoteConnection object containing SSH connection details.
-    :return: Full path to the most recently modified 'cluster_descriptor.yaml' file, or None.
-    """
-    latest_yaml_path = None
-    latest_mod_time = 0
-    cluster_desc_file = "cluster_descriptor.yaml"
-
-    try:
-        # Build SSH command to list folders matching '/tmp/umd_*'
-        ssh_cmd = [
-            "ssh",
-            f"{remote_connection.username}@{remote_connection.host}",
-        ]
-
-        # Handle non-standard SSH port
-        if remote_connection.port != 22:
-            ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-        # Add the ls command
-        ssh_cmd.append("ls -1d /tmp/umd_* 2>/dev/null")
-
-        # Execute SSH command to list folders
-        result = subprocess.run(
-            ssh_cmd,
-            capture_output=True,
-            text=True,
-            check=False,  # Don't raise exception on non-zero exit (in case no folders found)
-        )
-
-        # Get the list of folders
-        folder_paths = (
-            result.stdout.strip().splitlines() if result.stdout.strip() else []
-        )
-
-        if not folder_paths:
-            logger.info("No folders found matching the pattern '/tmp/umd_*'")
-            return None
-
-        # Check each folder for 'cluster_descriptor.yaml' and track the most recent one
-        for folder in folder_paths:
-            yaml_file_path = f"{folder}/{cluster_desc_file}"
-
-            # Build SSH command to check if file exists and get its modification time
-            stat_cmd = [
-                "ssh",
-                "-o",
-                "PasswordAuthentication=no",
-                f"{remote_connection.username}@{remote_connection.host}",
-            ]
-
-            if remote_connection.port != 22:
-                stat_cmd.extend(["-p", str(remote_connection.port)])
-
-            # Use stat to get modification time (seconds since epoch)
-            stat_cmd.append(f"stat -c %Y '{yaml_file_path}' 2>/dev/null")
-
-            try:
-                stat_result = subprocess.run(
-                    stat_cmd, capture_output=True, text=True, check=True
-                )
-
-                mod_time = float(stat_result.stdout.strip())
-
-                # Update the latest file if this one is newer
-                if mod_time > latest_mod_time:
-                    latest_mod_time = mod_time
-                    latest_yaml_path = yaml_file_path
-                    logger.info(f"Found newer {cluster_desc_file}: {yaml_file_path}")
-
-            except subprocess.CalledProcessError as e:
-                # Check if it's an SSH-specific error
-                if e.returncode == 255:  # SSH returns 255 for SSH protocol errors
-                    handle_ssh_subprocess_error(e, remote_connection)
-                else:
-                    # File not found or other command error
-                    logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
-                    continue
-            except ValueError:
-                logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
-                continue
-
-        if latest_yaml_path:
-            logger.info(
-                f"Most recently modified {cluster_desc_file}: {latest_yaml_path}"
-            )
-        else:
-            logger.info(
-                f"No {cluster_desc_file} files found in any '/tmp/umd_*' folders"
-            )
-        return latest_yaml_path
-
-    except Exception as e:
-        logger.error(f"Error retrieving {cluster_desc_file} path: {e}")
-        raise RemoteConnectionException(
-            message=f"Failed to get '{cluster_desc_file}' path",
-            status=ConnectionTestStates.FAILED,
-        )
-
-
-@remote_exception_handler
-def get_cluster_desc(remote_connection: RemoteConnection):
-    cluster_path = get_cluster_desc_path(remote_connection)
-    if cluster_path:
-        return read_remote_file(remote_connection, cluster_path)
+    if cluster_path.exists():
+        with open(cluster_path, "r", encoding="utf-8") as cluster_desc_file:
+            return yaml.safe_load(cluster_desc_file)
     else:
         return None
 
@@ -323,19 +289,10 @@ def get_remote_file_list(
     """Get a list of all files in the remote directory recursively, applying exclusion patterns."""
     exclude_patterns = exclude_patterns or []
 
-    # Build SSH command to find all files recursively
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-    ssh_cmd.extend(
-        [
-            f"{remote_connection.username}@{remote_connection.host}",
-            f"find '{remote_folder}' -type f",
-        ]
-    )
+    # Build SSH command to find all files recursively (never prompts for password)
+    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
+        f"find '{remote_folder}' -type f",
+    ]
 
     try:
         result = subprocess.run(
@@ -373,19 +330,10 @@ def get_remote_directory_list(
     """Get a list of all directories in the remote directory recursively, applying exclusion patterns."""
     exclude_patterns = exclude_patterns or []
 
-    # Build SSH command to find all directories recursively
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-    ssh_cmd.extend(
-        [
-            f"{remote_connection.username}@{remote_connection.host}",
-            f"find '{remote_folder}' -type d",
-        ]
-    )
+    # Build SSH command to find all directories recursively (never prompts for password)
+    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
+        f"find '{remote_folder}' -type d",
+    ]
 
     try:
         result = subprocess.run(
@@ -424,21 +372,8 @@ def download_single_file_sftp(
     # Ensure local directory exists
     local_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Build SFTP command
-    sftp_cmd = ["sftp", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        sftp_cmd.extend(["-P", str(remote_connection.port)])
-
-    # Add batch mode and other options
-    sftp_cmd.extend(
-        [
-            "-b",
-            "-",  # Read commands from stdin
-            f"{remote_connection.username}@{remote_connection.host}",
-        ]
-    )
+    # Build SFTP command (never prompts for password)
+    sftp_cmd = _sftp_cmd_prefix(remote_connection)
 
     # SFTP commands to execute
     sftp_commands = f"get '{remote_file}' '{local_file}'\nquit\n"
@@ -473,21 +408,14 @@ def get_remote_profiler_folder_from_config_path(
     remote_connection: RemoteConnection, config_path: str
 ) -> RemoteReportFolder:
     """Read a remote config file and return RemoteFolder object."""
+    folder_path = Path(config_path).parent
+    parent_folder_name = folder_path.name
+
     try:
-        # Build SSH command to get file modification time
-        stat_cmd = [
-            "ssh",
-            "-o",
-            "PasswordAuthentication=no",
-            f"{remote_connection.username}@{remote_connection.host}",
+        # Build SSH command to get file modification time (never prompts for password)
+        stat_cmd = _ssh_cmd_prefix(remote_connection) + [
+            f"stat -c %Y '{config_path}' 2>/dev/null",
         ]
-
-        # Handle non-standard SSH port
-        if remote_connection.port != 22:
-            stat_cmd.extend(["-p", str(remote_connection.port)])
-
-        # Get modification time using stat command
-        stat_cmd.append(f"stat -c %Y '{config_path}' 2>/dev/null")
 
         stat_result = subprocess.run(
             stat_cmd, capture_output=True, text=True, check=True
@@ -495,29 +423,17 @@ def get_remote_profiler_folder_from_config_path(
 
         last_modified = int(float(stat_result.stdout.strip()))
 
-        # Build SSH command to read file content
-        cat_cmd = [
-            "ssh",
-            "-o",
-            "PasswordAuthentication=no",
-            f"{remote_connection.username}@{remote_connection.host}",
-        ]
-
-        if remote_connection.port != 22:
-            cat_cmd.extend(["-p", str(remote_connection.port)])
-
-        # Read file content using cat command
-        cat_cmd.append(f"cat '{config_path}'")
+        # Build SSH command to read file content (never prompts for password)
+        cat_cmd = _ssh_cmd_prefix(remote_connection) + [f"cat '{config_path}'"]
 
         cat_result = subprocess.run(cat_cmd, capture_output=True, text=True, check=True)
 
         # Parse JSON data
         data = json.loads(cat_result.stdout)
         report_name = data.get("report_name")
-        logger.info(f"********* report_name: {report_name}")
 
         return RemoteReportFolder(
-            remotePath=str(Path(config_path).parent),
+            remotePath=str(folder_path),
             reportName=report_name,
             lastModified=last_modified,
         )
@@ -531,23 +447,23 @@ def get_remote_profiler_folder_from_config_path(
             handle_ssh_subprocess_error(e, remote_connection)
             # This line never executes as handle_ssh_subprocess_error raises an exception
             return RemoteReportFolder(
-                remotePath=str(Path(config_path).parent),
-                reportName="",
+                remotePath=str(folder_path),
+                reportName=parent_folder_name,
                 lastModified=int(time.time()),
             )
         else:
             # Fall back to current time if we can't get modification time
             return RemoteReportFolder(
-                remotePath=str(Path(config_path).parent),
-                reportName="",
+                remotePath=str(folder_path),
+                reportName=parent_folder_name,
                 lastModified=int(time.time()),
             )
     except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"Error parsing config file {config_path}: {e}")
         # Fall back to current time and no report name
         return RemoteReportFolder(
-            remotePath=str(Path(config_path).parent),
-            reportName="",
+            remotePath=str(folder_path),
+            reportName=parent_folder_name,
             lastModified=int(time.time()),
         )
 
@@ -561,15 +477,9 @@ def get_remote_performance_folder(
 
     # Get modification time using subprocess SSH command
     try:
-        ssh_command = ["ssh", "-o", "PasswordAuthentication=no"]
-        if remote_connection.port != 22:
-            ssh_command.extend(["-p", str(remote_connection.port)])
-        ssh_command.extend(
-            [
-                f"{remote_connection.username}@{remote_connection.host}",
-                f"stat -c %Y '{profile_folder}'",
-            ]
-        )
+        ssh_command = _ssh_cmd_prefix(remote_connection) + [
+            f"stat -c %Y '{profile_folder}'",
+        ]
 
         result = subprocess.run(ssh_command, capture_output=True, text=True, timeout=30)
 
@@ -621,7 +531,7 @@ def check_remote_path_for_reports(remote_connection):
     remote_profiler_paths = []
     if remote_connection.profilerPath:
         remote_profiler_paths = find_folders_by_files(
-            remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
+            remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
         )
     else:
         logger.info("No profiler path configured; skipping check")
@@ -693,19 +603,10 @@ def find_folders_by_files(
 
     matched_folders: List[str] = []
 
-    # Build SSH command to find directories in root_folder
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-    ssh_cmd.extend(
-        [
-            f"{remote_connection.username}@{remote_connection.host}",
-            f"find '{root_folder}' -maxdepth 1 -type d -not -path '{root_folder}'",
-        ]
-    )
+    # Build SSH command to find directories in root_folder (never prompts for password)
+    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
+        f"find '{root_folder}' -maxdepth 1 -type d -not -path '{root_folder}'",
+    ]
 
     try:
         result = subprocess.run(
@@ -721,21 +622,12 @@ def find_folders_by_files(
                 continue
 
             # Build SSH command to check for files in this directory
-            file_checks = []
-            for file_name in file_names:
-                file_checks.append(f"test -f '{directory}/{file_name}'")
-
-            # Use OR logic to check if any of the files exist
-            check_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-            if remote_connection.port != 22:
-                check_cmd.extend(["-p", str(remote_connection.port)])
-
-            check_cmd.extend(
-                [
-                    f"{remote_connection.username}@{remote_connection.host}",
-                    f"({' || '.join(file_checks)})",
-                ]
-            )
+            file_checks = [
+                f"test -f '{directory}/{file_name}'" for file_name in file_names
+            ]
+            check_cmd = _ssh_cmd_prefix(remote_connection) + [
+                f"({' || '.join(file_checks)})",
+            ]
 
             try:
                 check_result = subprocess.run(
@@ -807,19 +699,19 @@ def get_remote_performance_folders(
             get_remote_performance_folder(remote_connection, path)
         )
 
-    return remote_folder_data
+    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
 
 
 @remote_exception_handler
 def get_remote_profiler_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
-    """Return a list of remote folders containing a config.json file."""
+    """Return a list of remote folders containing a db.sqlite file."""
     profiler_paths = []
 
     if remote_connection.profilerPath:
         profiler_paths = find_folders_by_files(
-            remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
+            remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
         )
     else:
         error = f"No profiler reports found at {remote_connection.profilerPath}"
@@ -838,7 +730,7 @@ def get_remote_profiler_folders(
         )
         remote_folder_data.append(remote_folder)
 
-    return remote_folder_data
+    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
 
 
 @remote_exception_handler

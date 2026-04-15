@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
@@ -30,10 +30,10 @@ import NonFilterablePerfCharts from '../components/performance/NonFilterablePerf
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
-import { OpType, PerfTabIds } from '../definitions/Performance';
+import { HIGH_DISPATCH_THRESHOLD_MS, OpType, PerfTabIds } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
-import { StackedColumnHeaders, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
+import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
@@ -43,6 +43,13 @@ export default function Performance() {
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
     const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>([]);
+    const [hasUserChangedOpCodeFilter, setHasUserChangedOpCodeFilter] = useState(false);
+    const [appliedOpCodeOptionsKey, setAppliedOpCodeOptionsKey] = useState<string | null>(null);
+
+    const setSelectedOpCodesFromUser = useCallback((update: Marker[] | ((previous: Marker[]) => Marker[])) => {
+        setHasUserChangedOpCodeFilter(true);
+        setSelectedOpCodes(update);
+    }, []);
 
     const {
         data,
@@ -86,6 +93,11 @@ export default function Performance() {
         }));
     }, [perfData, comparisonPerfData]);
 
+    const opCodeOptionsKey = useMemo(
+        () => opCodeOptions.map((o) => `${o.opCode}:${o.colour}`).join('|'),
+        [opCodeOptions],
+    );
+
     const rangedData = useMemo(
         () =>
             selectedRange && perfData
@@ -102,6 +114,51 @@ export default function Performance() {
         () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [],
         [comparisonPerfData, opIdsMap],
     );
+
+    const selectedOpCodeSet = useMemo(
+        () => new Set(selectedOpCodes.map((selected) => selected.opCode)),
+        [selectedOpCodes],
+    );
+
+    const filteredEnrichedData = useMemo(() => {
+        if (opCodeOptions.length === 0) {
+            return enrichedData;
+        }
+
+        if (selectedOpCodes.length === 0) {
+            if (!hasUserChangedOpCodeFilter) {
+                return enrichedData;
+            }
+
+            return [];
+        }
+
+        return enrichedData.filter((row) => row.raw_op_code !== undefined && selectedOpCodeSet.has(row.raw_op_code));
+    }, [enrichedData, hasUserChangedOpCodeFilter, opCodeOptions.length, selectedOpCodes.length, selectedOpCodeSet]);
+
+    const filteredEnrichedComparisonData = useMemo(() => {
+        if (opCodeOptions.length === 0) {
+            return enrichedComparisonData;
+        }
+
+        if (selectedOpCodes.length === 0) {
+            if (!hasUserChangedOpCodeFilter) {
+                return enrichedComparisonData;
+            }
+
+            return enrichedComparisonData.map(() => []);
+        }
+
+        return enrichedComparisonData.map((dataset) =>
+            dataset.filter((row) => row.raw_op_code !== undefined && selectedOpCodeSet.has(row.raw_op_code)),
+        );
+    }, [
+        enrichedComparisonData,
+        hasUserChangedOpCodeFilter,
+        opCodeOptions.length,
+        selectedOpCodes.length,
+        selectedOpCodeSet,
+    ]);
     const enrichedStackedData = useMemo(() => (stackedData ? enrichStackedRowData(stackedData) : []), [stackedData]);
     const enrichedComparisonStackedData = useMemo(
         () => comparisonStackedData?.map((dataset) => enrichStackedRowData(dataset)) || [],
@@ -125,8 +182,14 @@ export default function Performance() {
     }, [comparisonReportList, setSelectedRange, perfRange]);
 
     useEffect(() => {
-        setSelectedOpCodes(opCodeOptions);
-    }, [opCodeOptions]);
+        if (appliedOpCodeOptionsKey === null || opCodeOptionsKey !== appliedOpCodeOptionsKey) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setAppliedOpCodeOptionsKey(opCodeOptionsKey);
+            setHasUserChangedOpCodeFilter(false);
+            setSelectedOpCodes(opCodeOptions);
+        }
+    }, [appliedOpCodeOptionsKey, opCodeOptionsKey, opCodeOptions]);
 
     if (isLoadingPerformance && !perfDataError) {
         return <LoadingSpinner />;
@@ -135,7 +198,7 @@ export default function Performance() {
     if (perfDataError?.status === HttpStatusCode.UnprocessableEntity) {
         return (
             <>
-                <h2>Unable to process performance data</h2>
+                <h2>Unable to load performance data</h2>
                 <p>
                     Data format is not supported, try using{' '}
                     <a href='https://github.com/tenstorrent/ttnn-visualizer/releases/tag/v0.49.0'>
@@ -144,6 +207,8 @@ export default function Performance() {
                     or earlier, or regenerate performance report using a newer version of{' '}
                     <a href='https://github.com/tenstorrent/tt-metal/'>TT-Metal</a>.
                 </p>
+
+                <code className='formatted-code'>{perfDataError?.response?.data as string}</code>
             </>
         );
     }
@@ -209,12 +274,12 @@ export default function Performance() {
                                         <PerfChartFilter
                                             opCodeOptions={opCodeOptions}
                                             selectedOpCodes={selectedOpCodes}
-                                            updateOpCodes={setSelectedOpCodes}
+                                            updateOpCodes={setSelectedOpCodesFromUser}
                                         />
 
                                         <PerfCharts
-                                            filteredPerfData={enrichedData}
-                                            comparisonData={enrichedComparisonData || []}
+                                            filteredPerfData={filteredEnrichedData}
+                                            comparisonData={filteredEnrichedComparisonData}
                                             selectedOpCodes={selectedOpCodes}
                                         />
                                     </div>
@@ -239,8 +304,6 @@ export default function Performance() {
         </div>
     );
 }
-
-const HIGH_DISPATCH_THRESHOLD = 6.5;
 
 interface RowAttributes {
     buffer_type: BufferType | null;
@@ -274,7 +337,7 @@ const getRowAttributes = (row: PerfTableRow): RowAttributes => {
 };
 
 const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
-    return rows.map((row) => {
+    const typedRows = rows.map((row) => {
         const val = parseInt(row.op_to_op_gap, 10);
         const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
         const op = opStr !== undefined ? Number(opStr) : undefined;
@@ -282,7 +345,7 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
         return {
             ...row,
             op,
-            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
+            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD_MS,
             id: parseInt(row.id, 10),
             total_percent: parseFloat(row.total_percent),
             device: parseInt(row.device, 10) ?? null,
@@ -295,38 +358,48 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
             pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
             ...getRowAttributes(row),
+            isFirstHashOccurrence: true, // Default to true, will be updated if needed in next step
         };
     });
+
+    // Mark which rows are the first occurrence of each hash
+    const hashFirstOccurrence = new Map<string | null, boolean>();
+    for (const row of typedRows) {
+        if (row.hash && !hashFirstOccurrence.has(row.hash)) {
+            hashFirstOccurrence.set(row.hash, true);
+            row.isFirstHashOccurrence = true;
+        } else if (row.hash) {
+            row.isFirstHashOccurrence = false;
+        }
+    }
+
+    return typedRows;
 };
 
 const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
     rows.map((row) => ({
         ...row,
-        [StackedColumnHeaders.Percent]: row[StackedColumnHeaders.Percent]
-            ? parseFloat(row[StackedColumnHeaders.Percent])
+        [StackedColumnKeys.Percent]: row[StackedColumnKeys.Percent] ? parseFloat(row[StackedColumnKeys.Percent]) : null,
+        [StackedColumnKeys.Device]: row[StackedColumnKeys.Device] ? parseInt(row[StackedColumnKeys.Device], 10) : null,
+        [StackedColumnKeys.DeviceTimeSumUs]: row[StackedColumnKeys.DeviceTimeSumUs]
+            ? parseFloat(row[StackedColumnKeys.DeviceTimeSumUs])
             : null,
-        [StackedColumnHeaders.Device]: row[StackedColumnHeaders.Device]
-            ? parseInt(row[StackedColumnHeaders.Device], 10)
+        [StackedColumnKeys.OpsCount]: row[StackedColumnKeys.OpsCount]
+            ? parseFloat(row[StackedColumnKeys.OpsCount])
             : null,
-        [StackedColumnHeaders.DeviceTimeSumUs]: row[StackedColumnHeaders.DeviceTimeSumUs]
-            ? parseFloat(row[StackedColumnHeaders.DeviceTimeSumUs])
+        [StackedColumnKeys.FlopsMin]: row[StackedColumnKeys.FlopsMin]
+            ? parseFloat(row[StackedColumnKeys.FlopsMin])
             : null,
-        [StackedColumnHeaders.OpsCount]: row[StackedColumnHeaders.OpsCount]
-            ? parseFloat(row[StackedColumnHeaders.OpsCount])
+        [StackedColumnKeys.FlopsMax]: row[StackedColumnKeys.FlopsMax]
+            ? parseFloat(row[StackedColumnKeys.FlopsMax])
             : null,
-        [StackedColumnHeaders.FlopsMin]: row[StackedColumnHeaders.FlopsMin]
-            ? parseFloat(row[StackedColumnHeaders.FlopsMin])
+        [StackedColumnKeys.FlopsMean]: row[StackedColumnKeys.FlopsMean]
+            ? parseFloat(row[StackedColumnKeys.FlopsMean])
             : null,
-        [StackedColumnHeaders.FlopsMax]: row[StackedColumnHeaders.FlopsMax]
-            ? parseFloat(row[StackedColumnHeaders.FlopsMax])
+        [StackedColumnKeys.FlopsStd]: row[StackedColumnKeys.FlopsStd]
+            ? parseFloat(row[StackedColumnKeys.FlopsStd])
             : null,
-        [StackedColumnHeaders.FlopsMean]: row[StackedColumnHeaders.FlopsMean]
-            ? parseFloat(row[StackedColumnHeaders.FlopsMean])
-            : null,
-        [StackedColumnHeaders.FlopsStd]: row[StackedColumnHeaders.FlopsStd]
-            ? parseFloat(row[StackedColumnHeaders.FlopsStd])
-            : null,
-        [StackedColumnHeaders.FlopsWeightedMean]: row[StackedColumnHeaders.FlopsWeightedMean]
-            ? parseFloat(row[StackedColumnHeaders.FlopsWeightedMean])
+        [StackedColumnKeys.FlopsWeightedMean]: row[StackedColumnKeys.FlopsWeightedMean]
+            ? parseFloat(row[StackedColumnKeys.FlopsWeightedMean])
             : null,
     }));

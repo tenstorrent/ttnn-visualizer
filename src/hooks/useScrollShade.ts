@@ -3,7 +3,6 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useState } from 'react';
-import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 
 interface UseScrollShade {
     hasScrolledFromTop: boolean;
@@ -12,6 +11,8 @@ interface UseScrollShade {
     resetScrollShade: () => void;
     shadeClasses: Record<'top' | 'bottom', string>;
 }
+
+const SCROLL_TOLERANCE_PX = 1; // Tolerance for sub-pixel rendering issues in Chrome
 
 const SHADE_CLASSES = {
     top: 'scroll-shade-top',

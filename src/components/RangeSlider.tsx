@@ -7,8 +7,10 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
+import axios from 'axios';
 import {
     activePerformanceReportAtom,
+    activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
     hasClusterDescriptionAtom,
     operationRangeAtom,
@@ -35,7 +37,8 @@ import createToastNotification, { ToastType } from '../functions/createToastNoti
 const RANGE_STEP = 25;
 
 function Range() {
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
     const setOperationRange = useSetAtom(operationRangeAtom);
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
@@ -47,7 +50,7 @@ function Range() {
 
     const { data: operations } = useOperationsList();
     const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport?.reportName || null);
-    const { data: clusterData } = useGetClusterDescription();
+    const { data: clusterData, error: clusterError } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
@@ -159,13 +162,24 @@ function Range() {
 
     useEffect(() => {
         if (perfDataError && activePerformanceReport) {
+            const message = axios.isAxiosError(perfDataError)
+                ? `Error loading report: ${perfDataError.response?.data as string}`
+                : 'Failed to load performance data';
+
+            createToastNotification(message, activePerformanceReport?.reportName, ToastType.ERROR);
+            setActivePerformanceReport(null);
+        }
+    }, [perfDataError, activePerformanceReport, setActivePerformanceReport]);
+
+    useEffect(() => {
+        if (clusterError && activeProfilerReport) {
             createToastNotification(
-                'Performance data format is not supported, use TT-NN Visualizer v0.49.0',
-                activePerformanceReport?.reportName,
+                'Cluster description not found, Topology unavailable',
+                activeProfilerReport?.reportName,
                 ToastType.WARNING,
             );
         }
-    }, [perfDataError, activePerformanceReport]);
+    }, [clusterError, activeProfilerReport]);
 
     return selectedOperationRange || selectedPerformanceRange ? (
         <div className='range-slider'>

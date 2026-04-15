@@ -4,13 +4,8 @@
 
 import React from 'react';
 import HighlightedText from '../components/HighlightedText';
-import { formatSize } from './math';
-import {
-    StackedColumnHeaders,
-    StackedTableColumn,
-    StackedTableKeys,
-    TypedStackedPerfRow,
-} from '../definitions/StackedPerfTable';
+import { formatPercentage, formatSize } from './math';
+import { StackedColumnKeys, StackedTableColumn, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 export enum CellColour {
     White = 'white',
@@ -48,8 +43,8 @@ export const formatStackedCell = (
     highlight?: string | null,
 ): React.JSX.Element | string => {
     const { key, unit, decimals } = column;
-    let formatted: string | boolean | string[];
     const value = row[key];
+    let formatted: string | boolean | string[];
 
     if (value === null || value === '' || value === undefined) {
         return '';
@@ -62,7 +57,11 @@ export const formatStackedCell = (
     }
 
     if (unit) {
-        formatted += ` ${unit}`;
+        if (unit === '%') {
+            formatted = formatPercentage(Number(value), decimals);
+        } else {
+            formatted += ` ${unit}`;
+        }
     }
 
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
@@ -86,18 +85,18 @@ export const getCellMarkup = (text: string, colour?: CellColour, highlight?: str
     return <span className={colour}>{text}</span>;
 };
 
-export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): CellColour => {
+export const getCellColour = (row: TypedStackedPerfRow, key: StackedColumnKeys): CellColour => {
     const value = row[key];
 
-    if (key === StackedColumnHeaders.OpCode) {
+    if (key === StackedColumnKeys.OpCode) {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) =>
-            row[StackedColumnHeaders.OpCode].includes(opCodeKey),
+            row[StackedColumnKeys.OpCode].includes(opCodeKey),
         );
 
         return match ? OPERATION_COLOURS[match] : FALLBACK_COLOUR;
     }
 
-    if (key === StackedColumnHeaders.OpsCount || key === StackedColumnHeaders.DeviceTimeSumUs) {
+    if (key === StackedColumnKeys.OpsCount || key === StackedColumnKeys.DeviceTimeSumUs) {
         return DEFAULT_COLOUR;
     }
 
@@ -105,7 +104,7 @@ export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): 
         return value > 0 ? DEFAULT_COLOUR : FALLBACK_COLOUR;
     }
 
-    if (key === StackedColumnHeaders.OpCategory) {
+    if (key === StackedColumnKeys.OpCategory) {
         return DEFAULT_COLOUR;
     }
 

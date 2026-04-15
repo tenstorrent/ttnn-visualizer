@@ -188,12 +188,20 @@ $row-background: $tt-grey-2;
 }
 
 .bp6-tag {
-    &.tag-l1 {
-        background-color: $tt-yellow-accent;
-    }
+    &.memory-tag {
+        background-color: $tt-grey-6;
 
-    &.tag-dram {
-        background-color: $tt-teal-shade;
+        &.tag-l1 {
+            background-color: $tt-yellow-accent;
+        }
+
+        &.tag-dram {
+            background-color: $tt-teal-shade;
+        }
+
+        &.tag-l1-small {
+            background-color: $tt-yellow-tint-1;
+        }
     }
 }
 

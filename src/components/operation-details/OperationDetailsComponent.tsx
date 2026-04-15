@@ -23,8 +23,6 @@ import { L1RenderZoomoutConfiguration, PlotMouseEventCustom } from '../../defini
 import {
     isFullStackTraceAtom,
     renderMemoryLayoutAtom,
-    selectedAddressAtom,
-    selectedTensorAtom,
     showDeallocationReportAtom,
     showHexAtom,
     showMemoryRegionsAtom,
@@ -44,7 +42,7 @@ import useBufferFocus from '../../hooks/useBufferFocus';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
-import { formatSize } from '../../functions/math';
+import { getMemoryAddress } from '../../functions/math';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -52,12 +50,11 @@ interface OperationDetailsProps {
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const [renderMemoryLayoutPattern, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
-    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
-    const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const [showFullStackTrace, setShowFullStackTrace] = useAtom(isFullStackTraceAtom);
     const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
+    const { selectedTensorId, selectedAddress } = useBufferFocus();
 
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
@@ -82,7 +79,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     } = useOperationDetails(operationId);
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
-    const { createToast, resetToasts } = useBufferFocus();
+    const { resetToasts, updateBufferFocus } = useBufferFocus();
 
     const onClickOutside = () => {
         resetToasts();
@@ -90,19 +87,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const operation = operations?.find((op) => op.id === operationId);
     const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
+    let details: OperationDetails | null = null;
 
     useEffect(() => {
-        // TODO: look into resetting this value
         if (didInitZoomRange.current) {
             return;
         }
-        if (!isLoading && !isPrevLoading && operationDetails && previousOperationDetails) {
+        if (!isLoading && !isPrevLoading && operationDetails && previousOperationDetails && details !== null) {
             const { plotZoomRangeStart, plotZoomRangeEnd } = calculatePlotZoomRange();
             setZoomRangeStart(plotZoomRangeStart);
             setZoomRangeEnd(plotZoomRangeEnd);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isLoading, isPrevLoading, operationDetails, previousOperationDetails]);
+    }, [details, isLoading, isPrevLoading, operationDetails, previousOperationDetails]);
 
     useEffect(() => {
         didInitZoomRange.current = false;
@@ -120,7 +117,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
     const deallocationReport = lateDeallocationsByOperation.get(operation?.id || -1) || [];
-    const details: OperationDetails | null = new OperationDetails(
+    details = new OperationDetails(
         operationDetails,
         operations,
         deallocationReport,
@@ -165,12 +162,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const { plotZoomRangeStart, plotZoomRangeEnd } = calculatePlotZoomRange();
 
-    const updateBufferFocus = (address?: number, tensorId?: number): void => {
-        setSelectedAddress(address ?? null);
-        setSelectedTensorId(tensorId ?? null);
-        createToast(address, tensorId);
-    };
-
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
         updateBufferFocus(address, tensor?.id);
@@ -182,16 +173,22 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id);
+        // TODO: Find a more robust way to determine if the click should not produce a toast
+        const { hovertemplate } = event.points[0].data;
+        const isCBSummary = typeof hovertemplate === 'string' && hovertemplate.includes('CBs Summary');
+        const { address, tensor, colorVariance } = event.points[0].data.memoryData;
+
+        if (!isCBSummary) {
+            updateBufferFocus(address, tensor?.id, colorVariance);
+        }
     };
 
     const onTensorClick = (address?: number, tensorId?: number): void => {
         updateBufferFocus(address, tensorId);
     };
 
-    const onLegendClick = (address: number, tensorId?: number) => {
-        updateBufferFocus(address, tensorId);
+    const onLegendClick = (address: number, tensorId?: number, colorVariance?: number) => {
+        updateBufferFocus(address, tensorId, colorVariance);
     };
 
     const inputOutputList = details.inputs.concat(details.outputs);
@@ -247,6 +244,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 label='Buffer zoom'
                                 checked={zoomedInViewMainMemory}
                                 onChange={() => {
+                                    // if (!zoomedInViewMainMemory) {
+                                    //     setZoomRangeStart(plotZoomRangeStart);
+                                    //     setZoomRangeEnd(plotZoomRangeEnd);
+                                    // }
                                     setZoomedInViewMainMemory(!zoomedInViewMainMemory);
                                 }}
                             />
@@ -283,7 +284,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             />
 
                             <GlobalSwitch
-                                label='Hex axis labels'
+                                label='Use Hex'
                                 checked={showHex}
                                 onChange={() => {
                                     setShowHex(!showHex);
@@ -402,27 +403,24 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         memorySize={memorySizeL1}
                                         configuration={L1RenderZoomoutConfiguration}
                                     />
-
-                                    <RangeSlider
-                                        min={plotZoomRangeStart}
-                                        max={plotZoomRangeEnd}
-                                        disabled={!zoomedInViewMainMemory}
-                                        intent={Intent.WARNING}
-                                        labelStepSize={
-                                            (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
-                                        }
-                                        labelRenderer={(value) => {
-                                            return showHex
-                                                ? `0x${value.toString(16).toUpperCase()}`
-                                                : formatSize(value);
-                                        }}
-                                        value={[zoomRangeStart, zoomRangeEnd]}
-                                        onChange={(value: number[]) => {
-                                            setZoomRangeStart(value[0]);
-                                            setZoomRangeEnd(value[1]);
-                                        }}
-                                        className='memory-zoom-range'
-                                    />
+                                    <div className='zoom-range-wrap'>
+                                        <RangeSlider
+                                            min={plotZoomRangeStart}
+                                            max={plotZoomRangeEnd}
+                                            disabled={!zoomedInViewMainMemory}
+                                            intent={Intent.WARNING}
+                                            labelStepSize={
+                                                (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
+                                            }
+                                            labelRenderer={(value) => getMemoryAddress(value, showHex)}
+                                            value={[zoomRangeStart, zoomRangeEnd]}
+                                            onChange={(value: number[]) => {
+                                                setZoomRangeStart(value[0]);
+                                                setZoomRangeEnd(value[1]);
+                                            }}
+                                            className='memory-zoom-range'
+                                        />
+                                    </div>
 
                                     <L1Plots
                                         operationDetails={details}

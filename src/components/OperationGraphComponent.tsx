@@ -17,19 +17,11 @@ import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
 import { toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
-import { cssVar } from '../functions/colour';
 import MemoryTag from './MemoryTag';
+import { GRAPH_COLORS } from '../definitions/GraphColors';
+import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 
 type OperationList = OperationDescription[];
-const DEALLOCATE_OP_NAME = 'ttnn.deallocate';
-
-const GRAPH_COLORS = {
-    inputNode: cssVar(`--graph-input-node`),
-    outputNode: cssVar(`--graph-output-node`),
-    inputEdge: cssVar(`--graph-input-edge`),
-    outputEdge: cssVar(`--graph-output-edge`),
-    normal: cssVar(`--graph-normal`),
-};
 
 const OperationGraph: React.FC<{
     operationList: OperationList;
@@ -100,10 +92,12 @@ const OperationGraph: React.FC<{
             new DataSet(
                 operationList
                     .filter((op) => connectedNodeIds.has(op.id))
-                    .filter((op) => !filterOutDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
+                    .filter((op) => !filterOutDeallocate || !DEALLOCATE_OP_NAME_LIST.includes(op.name.toLowerCase()))
                     .map((op) => ({
                         id: op.id,
-                        label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
+                        label: `${op.id} ${op.name}${
+                            op.operationFileIdentifier ? `\n${op.operationFileIdentifier}` : ''
+                        }`,
                         shape: 'box',
                         filterString: `${op.name}`,
                         deviceOpFilter: op.deviceOperationNameList.join(' '),
@@ -432,12 +426,8 @@ const OperationGraph: React.FC<{
                 <div className='operation-graph-nav'>
                     <Tooltip
                         placement={PopoverPosition.TOP}
-                        content={
-                            previousOperation
-                                ? `Go to previous operation ${previousOperation}`
-                                : 'No previous operation'
-                        }
-                        disabled={isLoading}
+                        content={`Go to previous operation ${previousOperation}`}
+                        disabled={isLoading || !previousOperation}
                     >
                         <Button
                             icon={IconNames.ArrowLeft}
@@ -467,8 +457,8 @@ const OperationGraph: React.FC<{
                     </Tooltip>
                     <Tooltip
                         placement={PopoverPosition.TOP}
-                        content={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
-                        disabled={isLoading}
+                        content={`Go to next operation ${nextOperation}`}
+                        disabled={isLoading || !nextOperation}
                     >
                         <Button
                             icon={IconNames.ArrowRight}
@@ -561,7 +551,8 @@ const OperationGraph: React.FC<{
             />
 
             <aside className='aside'>
-                Scroll to zoom. Drag to pan. Click a node to see operation details. Drag a node.
+                Scroll or pinch graph to zoom. Drag to pan. Click a node to see operation details. Drag a node to move
+                horizontally.
             </aside>
         </div>
     );

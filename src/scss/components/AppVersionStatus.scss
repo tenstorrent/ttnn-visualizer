@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+$version-up-to-date-color: #76fd92;
+$version-outdated-one-color: #ffe454;
+$version-outdated-two-color: #fb854b;
+$version-outdated-three-color: #ff7272;
+$version-unknown-color: $version-outdated-one-color;
+
+.version-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-right: 10px;
+    font-size: 12px;
+    color: $version-up-to-date-color;
+    transition: color 0.3s ease;
+
+    &.is-anchor {
+        color: inherit;
+        text-decoration: none;
+
+        &:hover,
+        &:focus {
+            text-decoration: underline;
+        }
+    }
+
+    .app-version {
+        color: inherit;
+    }
+
+    .version-status-icon {
+        color: $version-up-to-date-color;
+        transition: color 0.3s ease;
+    }
+
+    // Level one - yellow
+    &.is-outdated-one {
+        color: $version-outdated-one-color;
+
+        &:hover,
+        &:focus {
+            color: $version-outdated-one-color;
+        }
+
+        .version-status-icon {
+            color: $version-outdated-one-color;
+        }
+    }
+
+    // Level two - orange
+    &.is-outdated-two {
+        color: $version-outdated-two-color;
+
+        &:hover,
+        &:focus {
+            color: $version-outdated-two-color;
+        }
+
+        .version-status-icon {
+            color: $version-outdated-two-color;
+        }
+    }
+
+    // Level three - red
+    &.is-outdated-three {
+        color: $version-outdated-three-color;
+
+        &:hover,
+        &:focus {
+            color: $version-outdated-three-color;
+        }
+
+        .version-status-icon {
+            color: $version-outdated-three-color;
+        }
+    }
+
+    &--latest-check-unknown {
+        color: $version-unknown-color;
+
+        .version-status-icon {
+            color: $version-unknown-color;
+        }
+    }
+}

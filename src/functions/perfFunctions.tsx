@@ -3,25 +3,19 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React from 'react';
-import { Icon, Tooltip } from '@blueprintjs/core';
+import { Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import {
-    BoundType,
-    ColumnHeaders,
-    MathFidelity,
-    TableColumn,
-    TableKeys,
-    TypedPerfTableRow,
-} from '../definitions/PerfTable';
+import { BoundType, ColumnDefinition, ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
-import { OpType } from '../definitions/Performance';
+import { HIGH_DISPATCH_THRESHOLD_MS, OpType } from '../definitions/Performance';
 import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 import { NormalisedPerfData } from './normalisePerformanceData';
-import { BufferTypeLabel } from '../model/BufferType';
+import MemoryTag from '../components/MemoryTag';
+import { BufferType, BufferTypeLabel } from '../model/BufferType';
 
 export enum CellColour {
     White = 'white',
@@ -61,56 +55,58 @@ const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
-// TODO: Check if we still need this formatting step because we're using typed data
+// https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
     row: TypedPerfTableRow,
-    column: TableColumn,
+    column: ColumnDefinition,
     operations?: OperationDescription[],
     highlight?: string | null,
 ): React.JSX.Element | string => {
     const { key, unit, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
     const isHost = isHostOp(row.bound);
+    const value = row[key];
     let formatted: string | boolean | string[];
-    let value = row[key];
 
     if (value === null || value === '' || Number.isNaN(value)) {
         return '';
     }
 
+    // Signposts only have a few meaningful columns
     if (isSignpost) {
-        // Signposts only have a few meaningful columns
-        if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code) {
+        if (key !== ColumnKeys.Id && key !== ColumnKeys.OpCode) {
             return '';
         }
-
-        value = value !== null ? String(value) : '';
     }
 
+    // Host Ops only have a few meaningful columns
     if (isHost) {
-        // Host Ops only have a few meaningful columns
-        if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code && key !== ColumnHeaders.bound) {
+        if (key !== ColumnKeys.Id && key !== ColumnKeys.OpCode && key !== ColumnKeys.Bound) {
             return '';
         }
     }
 
-    if (key === ColumnHeaders.buffer_type) {
-        return BufferTypeLabel[value as number];
+    if (key === ColumnKeys.BufferType) {
+        return <MemoryTag memory={BufferTypeLabel[value as BufferType]} />;
     }
 
-    if (key === ColumnHeaders.high_dispatch) {
-        return (
-            <Tooltip content='Op with > 6 µs dispatch latency'>
+    if (key === ColumnKeys.HighDispatch) {
+        const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency`;
+
+        return row?.[ColumnKeys.DeviceTime] !== null && row?.[ColumnKeys.DeviceTime] > HIGH_DISPATCH_THRESHOLD_MS ? (
+            <Tooltip content={tooltipMessage}>
                 <Icon
                     className={WARNING_COLOUR}
                     icon={IconNames.WARNING_SIGN}
-                    title='Op with > 6 µs dispatch latency'
+                    title={tooltipMessage}
                 />
             </Tooltip>
+        ) : (
+            ''
         );
     }
 
-    if (key === ColumnHeaders.OP && operations) {
+    if (key === ColumnKeys.OP && operations) {
         return (
             <Tooltip
                 content={
@@ -125,14 +121,66 @@ export const formatCell = (
         );
     }
 
-    if (typeof value === 'number' && key !== ColumnHeaders.id) {
+    if (key === ColumnKeys.Hash) {
+        const hashText = value?.toString() || '';
+
+        return hashText || '';
+    }
+
+    if (key === ColumnKeys.CacheHit) {
+        if (typeof value !== 'boolean') {
+            return '';
+        }
+
+        // Only show icon if this is not the first occurrence of the hash
+        if (row.isFirstHashOccurrence) {
+            return '';
+        }
+
+        const tooltipMessage =
+            value === true ? (
+                <>
+                    Operation result reused from cache
+                    <br />
+                    <strong>Hash:</strong> {row[ColumnKeys.Hash]}
+                </>
+            ) : (
+                <>
+                    Operation result was recomputed
+                    <br />
+                    <strong>Hash:</strong> {row[ColumnKeys.Hash]}
+                </>
+            );
+
+        return value === true ? (
+            <Tooltip content={tooltipMessage}>
+                <Icon
+                    intent={Intent.SUCCESS}
+                    icon={IconNames.TICK}
+                />
+            </Tooltip>
+        ) : (
+            <Tooltip content={tooltipMessage}>
+                <Icon
+                    intent={Intent.WARNING}
+                    icon={IconNames.WARNING_SIGN}
+                />
+            </Tooltip>
+        );
+    }
+
+    if (typeof value === 'number' && key !== ColumnKeys.Id) {
         formatted = formatSize(value, decimals);
     } else {
         formatted = value?.toString() || '';
     }
 
     if (unit) {
-        formatted += ` ${unit}`;
+        if (unit === '%') {
+            formatted = formatPercentage(Number(value), decimals);
+        } else {
+            formatted += ` ${unit}`;
+        }
     }
 
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
@@ -160,7 +208,7 @@ export const getCellMarkup = (text: string, colour?: CellColour, highlight?: str
     return <span>{text}</span>;
 };
 
-export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColour => {
+export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColour => {
     const keyValue = row[key];
     const percentage = row.total_percent;
 
@@ -172,11 +220,11 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.id || key === ColumnHeaders.total_percent || key === ColumnHeaders.device_time) {
+    if (key === ColumnKeys.Id || key === ColumnKeys.TotalPercent || key === ColumnKeys.DeviceTime) {
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.bound) {
+    if (key === ColumnKeys.Bound) {
         if (keyValue === BoundType.HOST) {
             return CellColour.Green;
         }
@@ -195,19 +243,19 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     }
 
     if (
-        key === ColumnHeaders.dram ||
-        key === ColumnHeaders.dram_percent ||
-        key === ColumnHeaders.flops ||
-        key === ColumnHeaders.flops_percent
+        key === ColumnKeys.Dram ||
+        key === ColumnKeys.DramPercent ||
+        key === ColumnKeys.Flops ||
+        key === ColumnKeys.FlopsPercent
     ) {
         if (row.bound === BoundType.DRAM) {
-            if (key === ColumnHeaders.dram || key === ColumnHeaders.dram_percent) {
+            if (key === ColumnKeys.Dram || key === ColumnKeys.DramPercent) {
                 return CellColour.Green;
             }
         }
 
         if (row.bound === BoundType.FLOP) {
-            if (key === ColumnHeaders.flops || key === ColumnHeaders.flops_percent) {
+            if (key === ColumnKeys.Flops || key === ColumnKeys.FlopsPercent) {
                 return CellColour.Green;
             }
         }
@@ -222,10 +270,10 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         if (row.bound === BoundType.SLOW) {
             if (dramP != null && flopsP != null) {
                 if (dramP > flopsP) {
-                    if (key === ColumnHeaders.dram || key === ColumnHeaders.dram_percent) {
+                    if (key === ColumnKeys.Dram || key === ColumnKeys.DramPercent) {
                         return CellColour.Yellow;
                     }
-                } else if (key === ColumnHeaders.flops || key === ColumnHeaders.flops_percent) {
+                } else if (key === ColumnKeys.Flops || key === ColumnKeys.FlopsPercent) {
                     return CellColour.Yellow;
                 }
             }
@@ -234,17 +282,24 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.cores && keyValue != null) {
+    if (key === ColumnKeys.Cores && keyValue != null) {
         return getCoreColour(keyValue);
     }
 
-    if (key === ColumnHeaders.op_code) {
+    if (key === ColumnKeys.OpCode) {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.math_fidelity && typeof keyValue === 'string') {
+    if (key === ColumnKeys.Hash) {
+        // Highlight hash in red if there's a cache miss
+        if (row.cache_hit === false) {
+            return CellColour.Red;
+        }
+    }
+
+    if (key === ColumnKeys.MathFidelity && typeof keyValue === 'string') {
         const parts = keyValue.split(' ');
         const mathFidelity = parts[0] as MathFidelity;
         const input0Datatype = row.input_0_datatype || '';
@@ -267,7 +322,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.op_to_op_gap) {
+    if (key === ColumnKeys.OpToOpGap) {
         return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : FALLBACK_COLOUR;
     }
 
@@ -292,7 +347,7 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
 };
 
 export const getOpToOpGapColour = (value: number): CellColour => {
-    return value > 6.5 ? CellColour.Red : FALLBACK_COLOUR;
+    return value > HIGH_DISPATCH_THRESHOLD_MS ? CellColour.Red : FALLBACK_COLOUR;
 };
 
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
@@ -300,7 +355,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
         .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
         .filter(([_, opData]) => {
             const val = opData.op_to_op_gap;
-            return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
+            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_MS;
         });
 
     if (highDispatchOps.length === 0) {
@@ -311,7 +366,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
         const val = opData.op_to_op_gap || 0;
 
-        return acc + (val - 6);
+        return acc + (val - HIGH_DISPATCH_THRESHOLD_MS);
     }, 0);
 
     // Compute total_duration as sum of device times + Op-to-Op Gaps
@@ -333,7 +388,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     return (
         <div className='high-dispatch-advice'>
             <p>
-                Marked ops have &gt; 6 µs dispatch latency. Running with tracing could save{' '}
+                Marked ops have &gt; {HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency. Running with tracing could save{' '}
                 {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
                 {formatPercentage(percentageSaved, 1)} of overall time).
             </p>
@@ -341,6 +396,12 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
         </div>
     );
 };
+
+export enum MathFidelity {
+    HiFi4 = 'HiFi4',
+    HiFi2 = 'HiFi2',
+    LoFi = 'LoFi',
+}
 
 export function evaluateFidelity(
     input0Datatype: string,
@@ -442,7 +503,7 @@ export const getStandardViewCounts = (
     comparisonMaxLength?: number,
 ) => {
     const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
-    let total = 0;
+    let total: number;
     let delta = 0;
 
     if (normalisedData) {

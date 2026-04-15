@@ -31,7 +31,7 @@ interface DramPlotProps {
     zoomedInViewMainMemory: boolean;
     onDramBufferClick: (event: Readonly<PlotMouseEventCustom>) => void;
     onDramDeltaClick: (event: Readonly<PlotMouseEventCustom>) => void;
-    onLegendClick: (address: number, tensorId?: number) => void;
+    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }
 
 function DRAMPlots({

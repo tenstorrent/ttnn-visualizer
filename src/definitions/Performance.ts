@@ -17,3 +17,5 @@ export enum OpType {
 }
 
 export const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss
+
+export const HIGH_DISPATCH_THRESHOLD_MS = 6.5; // Threshold for flagging high dispatch latency ops

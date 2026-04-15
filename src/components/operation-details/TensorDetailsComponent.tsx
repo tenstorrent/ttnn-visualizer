@@ -6,11 +6,10 @@ import React, { useState } from 'react';
 import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-
 import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
-import { prettyPrintAddress, toHex } from '../../functions/math';
+import { getMemoryAddress } from '../../functions/math';
 import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
@@ -20,12 +19,12 @@ import TensorVisualisationComponent from '../tensor-sharding-visualization/Tenso
 import 'styles/components/TensorDetailsComponent.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
-import { selectedTensorAtom } from '../../store/app';
 import MemoryTag from '../MemoryTag';
+import useBufferFocus from '../../hooks/useBufferFocus';
+import { showHexAtom } from '../../store/app';
 
 export interface TensorDetailsComponentProps {
     tensor: Tensor;
-    memorySize: number;
     onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
     zoomRange: [number, number];
@@ -33,17 +32,17 @@ export interface TensorDetailsComponentProps {
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     tensor,
-    memorySize,
     onTensorClick,
     operationId,
     zoomRange,
 }) => {
+    const [overlayOpen, setOverlayOpen] = useState(false);
+    const useHex = useAtomValue(showHexAtom);
+
     const { address } = tensor;
     const { data: operations } = useOperationsList();
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
-    const selectedTensorId = useAtomValue(selectedTensorAtom);
-
-    const [overlayOpen, setOverlayOpen] = useState(false);
+    const { selectedTensorId } = useBufferFocus();
 
     const shardSpec = tensor.memory_config?.shard_spec;
 
@@ -88,12 +87,12 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
                 {isValidNumber(nextAllocationOperationId) && isValidNumber(address) && operations ? (
                     <Tooltip
-                        content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
+                        content={`Next allocation of ${getMemoryAddress(address, useHex)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         placement={PopoverPosition.TOP}
                     >
                         <Icon
                             icon={IconNames.INFO_SIGN}
-                            title={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
+                            title={`Next allocation of ${getMemoryAddress(address, useHex)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         />
                     </Tooltip>
                 ) : null}
@@ -114,7 +113,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
             <div className='tensor-meta'>
                 <p>
-                    Address: <strong> {prettyPrintAddress(tensor.address, memorySize)}</strong>
+                    Address: <strong>{getMemoryAddress(tensor.address, useHex)}</strong>
                 </p>
                 {tensor.buffer_type !== null && (
                     <p>
@@ -125,15 +124,15 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     Shape:<strong> {toReadableShape(tensor.shape)}</strong>
                 </p>
                 <p>
-                    Dtype:<strong> {toReadableType(tensor.dtype)}</strong>
+                    Type:<strong> {toReadableType(tensor.dtype)}</strong>
                 </p>
                 <p>
-                    Layout:<strong> {tensor.layout}</strong>
+                    Layout:<strong> {toReadableLayout(tensor.layout)}</strong>
                 </p>
                 <p>
                     {tensor.memory_config?.memory_layout && (
                         <>
-                            Memory layout:<strong> {toReadableLayout(tensor.memory_config.memory_layout)}</strong>
+                            Memory:<strong> {toReadableLayout(tensor.memory_config.memory_layout)}</strong>
                         </>
                     )}
                 </p>

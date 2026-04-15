@@ -40,22 +40,23 @@ const NPEDemoSelect: FC<{
     setDemoData: (data: NPEData | null) => void;
 }> = ({ selectedDemo, setSelectedDemo, setDemoData }) => {
     const renderItem: ItemRenderer<NPEDemoData> = (item, { handleClick, modifiers }) => (
-        <MenuItem
+        <div
+            className='folder-picker-menu-item'
             key={item.reportFile}
-            textClassName='folder-picker-label'
-            text={item.label}
-            labelClassName='folder-picker-name-label'
-            active={item.reportFile === selectedDemo?.reportFile}
-            roleStructure='listoption'
-            disabled={modifiers.disabled}
-            onClick={handleClick}
-            icon={IconNames.SAVED}
-        />
+        >
+            <MenuItem
+                text={item.label}
+                active={item.reportFile === selectedDemo?.reportFile}
+                roleStructure='listoption'
+                disabled={modifiers.disabled}
+                onClick={handleClick}
+                icon={IconNames.SAVED}
+            />
+        </div>
     );
 
     return (
         <Select
-            className=''
             items={NPE_DEMO_DATA}
             itemRenderer={renderItem}
             noResults={

@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -54,6 +55,15 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
+    debug_logging = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
+    log_level = logging.DEBUG if debug_logging else logging.INFO
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    for handler in root_logger.handlers:
+        handler.setLevel(log_level)
+    if not root_logger.handlers:
+        logging.basicConfig(level=log_level)
+
     flask_env = environ.get("FLASK_ENV", "development")
 
     config = cast(DefaultConfig, Config())
@@ -64,8 +74,6 @@ def create_app(settings_override=None):
         static_url_path=f"{config.BASE_PATH}static",
     )
 
-    # logging.basicConfig(level=app.config.get("LOG_LEVEL", "DEBUG"))
-    logging.basicConfig(level=logging.DEBUG)
     app.config.from_object(config)
 
     if settings_override:
@@ -78,6 +86,16 @@ def create_app(settings_override=None):
     extensions(app)
 
     if flask_env == "production":
+
+        @app.route(f"{app.config['BASE_PATH']}robots.txt")
+        def robots_txt():
+            """Serve a permissive robots.txt so analyzers don't get SPA HTML."""
+            body = "User-agent: *\nAllow: /\n"
+            return flask.Response(
+                body,
+                mimetype="text/plain",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
 
         @app.route(f"{app.config['BASE_PATH']}", defaults={"path": ""})
         @app.route(f"{app.config['BASE_PATH']}<path:path>")
@@ -173,6 +191,7 @@ def middleware(app: flask.Flask):
     CORS(
         app,
         origins=origins,
+        expose_headers=["X-TTNN-Resolved-Source-Path", "X-TTNN-Source-Remapped"],
     )
 
     return None
@@ -213,6 +232,23 @@ def open_browser(host, port, instance_id=None):
                 webbrowser.open(url)
         except webbrowser.Error as e:
             print(f"Could not open the default browser: {e}")
+
+
+def check_socket_bind(host: str, port) -> tuple[bool, str | None]:
+    """
+    Try to bind to (host, port). Returns (True, None) if bind succeeds,
+    (False, error_message) if it fails (e.g. address already in use).
+    The socket is closed before returning so the port can be used by gunicorn.
+    """
+    port_int = int(port)
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port_int))
+        sock.close()
+        return True, None
+    except OSError as e:
+        return False, str(e)
 
 
 def parse_args():
@@ -433,6 +469,20 @@ def main():
 
     if args.daemon:
         gunicorn_args.insert(1, "--daemon")
+
+    # When not daemon, check that we can bind before starting gunicorn (and possibly
+    # the browser). If we can't bind, exit with a clear message and do not open browser.
+    if not args.daemon:
+        can_bind, bind_error = check_socket_bind(config.HOST, config.PORT)
+        if not can_bind:
+            print(
+                "Could not bind to the requested address. The port may already be in use.\n"
+                "Try a different port with --port or a different host with --host (e.g. "
+                "--port 8001 or --host 127.0.0.1)."
+            )
+            if bind_error:
+                print(f"Details: {bind_error}")
+            sys.exit(1)
 
     if config.LAUNCH_BROWSER_ON_START and not args.daemon:
         flask_env = os.getenv("FLASK_ENV", "development")

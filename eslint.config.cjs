@@ -5,7 +5,8 @@ const globals = require('globals');
 const { fixupConfigRules, fixupPluginRules } = require('@eslint/compat');
 
 const tsParser = require('@typescript-eslint/parser');
-const reactRefresh = require('eslint-plugin-react-refresh');
+const reactRefreshModule = require('eslint-plugin-react-refresh');
+const reactRefresh = reactRefreshModule.default || reactRefreshModule;
 const unusedImports = require('eslint-plugin-unused-imports');
 const jsxA11Y = require('eslint-plugin-jsx-a11y');
 const _import = require('eslint-plugin-import');

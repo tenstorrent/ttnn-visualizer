@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import axios from 'axios';
+import { useCallback } from 'react';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import axiosInstance from '../libs/axiosInstance';
@@ -18,6 +19,8 @@ const FAILED_NO_PATH = {
     status: ConnectionTestStates.FAILED,
     message: 'Please provide at least one folder path.',
 };
+export const LOCAL_STORAGE_KEY_CONNECTIONS = 'remoteConnections';
+export const LOCAL_STORAGE_KEY_SELECTED = 'selectedConnection';
 
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
@@ -97,32 +100,54 @@ const useRemoteConnection = () => {
     };
 
     const persistentState = {
-        get savedConnectionList() {
-            return JSON.parse(getAppConfig('remoteConnections') ?? '[]') as RemoteConnection[];
+        get savedConnectionList(): RemoteConnection[] {
+            const connectionList = safeJsonParse(getAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS), []);
+            const parsedList = Array.isArray(connectionList) ? connectionList.filter(isValidConnection) : [];
+
+            return parsedList;
         },
         set savedConnectionList(connectionList: RemoteConnection[]) {
-            setAppConfig('remoteConnections', JSON.stringify(connectionList));
+            setAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS, safeJsonStringify(connectionList, '[]'));
         },
-        get selectedConnection() {
-            const savedSelectedConnection = JSON.parse(getAppConfig('selectedConnection') ?? 'null');
-            return (savedSelectedConnection ?? this.savedConnectionList[0]) as RemoteConnection | undefined;
+        get selectedConnection(): RemoteConnection | undefined {
+            const savedSelectedConnection = safeJsonParse(
+                getAppConfig(LOCAL_STORAGE_KEY_SELECTED),
+                null,
+            ) as RemoteConnection | null;
+
+            const connectionList = this.savedConnectionList;
+
+            if (!savedSelectedConnection || !isValidConnection(savedSelectedConnection)) {
+                return connectionList[0];
+            }
+
+            const existingConnection = connectionList.find(
+                (connection) => connection.name === savedSelectedConnection.name,
+            );
+
+            return existingConnection ?? connectionList[0];
         },
         set selectedConnection(connection: RemoteConnection | undefined) {
-            setAppConfig('selectedConnection', JSON.stringify(connection ?? null));
+            setAppConfig(LOCAL_STORAGE_KEY_SELECTED, safeJsonStringify(connection ?? null));
         },
-        getSavedReportFolders: (connection?: RemoteConnection) =>
-            JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]') as RemoteFolder[],
+        getSavedReportFolders: (connection?: RemoteConnection): RemoteFolder[] => {
+            const parsedList = safeJsonParse(getAppConfig(`${connection?.name} - reportFolders`), []);
 
+            return Array.isArray(parsedList) ? parsedList : [];
+        },
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name} - reportFolders`, JSON.stringify(folders));
+            setAppConfig(`${connection?.name} - reportFolders`, safeJsonStringify(folders, '[]'));
         },
         deleteSavedReportFolders: (connection?: RemoteConnection) => {
             deleteAppConfig(`${connection?.name} - reportFolders`);
         },
-        getSavedPerformanceFolders: (connection?: RemoteConnection) =>
-            JSON.parse(getAppConfig(`${connection?.name} - performanceFolders`) ?? '[]') as RemoteFolder[],
+        getSavedPerformanceFolders: (connection?: RemoteConnection): RemoteFolder[] => {
+            const parsedList = safeJsonParse(getAppConfig(`${connection?.name} - performanceFolders`), []);
+
+            return Array.isArray(parsedList) ? parsedList : [];
+        },
         setSavedPerformanceFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name} - performanceFolders`, JSON.stringify(folders));
+            setAppConfig(`${connection?.name} - performanceFolders`, safeJsonStringify(folders, '[]'));
         },
         deleteSavedPerformanceFolders: (connection?: RemoteConnection) => {
             deleteAppConfig(`${connection?.name} - performanceFolders`);
@@ -138,9 +163,28 @@ const useRemoteConnection = () => {
         },
     };
 
+    const isSourceFileAvailable = useCallback(async (filePath: string, signal?: AbortSignal): Promise<boolean> => {
+        try {
+            const { data } = await axiosInstance.post<{ available?: boolean }>(
+                `${Endpoints.REMOTE}/read`,
+                { filePath, check_path_only: true },
+                {
+                    signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                },
+            );
+
+            return data?.available === true;
+        } catch {
+            return false;
+        }
+    }, []);
+
     const readRemoteFile = async (filePath: string) => {
         try {
-            const response = await axiosInstance.post(
+            const response = await axiosInstance.post<string>(
                 `${Endpoints.REMOTE}/read`,
                 { filePath },
                 {
@@ -150,9 +194,31 @@ const useRemoteConnection = () => {
                 },
             );
 
-            return response.data;
-        } catch (error) {
-            return axios.isAxiosError(error) ? error.message : error;
+            const isRemapped = response.headers['x-ttnn-source-remapped'] === 'true';
+            const resolvedPath = response.headers['x-ttnn-resolved-source-path'] || null;
+
+            return {
+                data: response.data,
+                error: null,
+                isRemapped,
+                resolvedPath: typeof resolvedPath === 'string' ? resolvedPath : null,
+            };
+        } catch (error: unknown) {
+            const standardError = {
+                data: null,
+                isRemapped: false,
+                resolvedPath: null,
+                error: 'An unexpected error occurred',
+            };
+
+            if (axios.isAxiosError(error)) {
+                return {
+                    ...standardError,
+                    error: error.response?.data?.error || error.message || 'Failed to read remote file',
+                };
+            }
+
+            return standardError;
         }
     };
 
@@ -164,7 +230,39 @@ const useRemoteConnection = () => {
         mountRemoteFolder,
         persistentState,
         readRemoteFile,
+        isSourceFileAvailable,
     };
+};
+
+// Could make these more generic but they're only used in useRemote right now
+const safeJsonParse = <T,>(value: string | null, fallback: T): T => {
+    try {
+        return value ? JSON.parse(value) : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
+const safeJsonStringify = <T,>(value: T, fallback: string = 'null'): string => {
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return fallback;
+    }
+};
+
+const isValidConnection = (connection?: Partial<RemoteConnection>) => {
+    if (
+        !connection?.name ||
+        !connection?.username ||
+        !connection?.host ||
+        !connection?.port ||
+        (!connection?.profilerPath && !connection?.performancePath)
+    ) {
+        return false;
+    }
+
+    return true;
 };
 
 export default useRemoteConnection;

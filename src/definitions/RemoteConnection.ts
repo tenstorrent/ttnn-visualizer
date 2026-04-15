@@ -11,6 +11,7 @@ export interface RemoteConnection {
     port: number;
     profilerPath: string;
     performancePath?: string;
+    identityFile?: string; // Optional path to SSH private key.
 }
 
 export interface RemoteFolder {
@@ -37,4 +38,6 @@ export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
 
 export const getUTCFromEpoch = (epoch: number): Date => new Date(epoch * 1000);
 
-export const NEVER_SYNCED_LABEL = 'never';
+export const NEVER_SYNCED_LABEL = 'Never synced';
+export const REPORT_OUTDATED_LABEL = 'Report is stale';
+export const REPORT_UP_TO_DATE_LABEL = 'Report recently synced';

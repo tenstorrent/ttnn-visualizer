@@ -5,14 +5,14 @@
 import 'styles/components/BufferSummaryRow.scss';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
-import { useAtom, useAtomValue } from 'jotai/index';
+import { useAtomValue } from 'jotai/index';
 import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { formatMemorySize, toHex } from '../../functions/math';
+import { formatMemorySize, getMemoryAddress } from '../../functions/math';
 import { toReadableShape, toReadableType } from '../../functions/formatting';
-import { selectedAddressAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
+import { showHexAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
@@ -23,7 +23,7 @@ interface BufferSummaryRowProps {
     memoryStart: number;
     memoryEnd: number;
     memoryPadding: number;
-    tensorList: Map<number, Tensor>;
+    tensorList?: Map<number, Tensor>;
     showMemoryLayout?: boolean;
     className?: string;
     tensorDeallocationReport?: TensorDeallocationReport[];
@@ -39,21 +39,19 @@ const BufferSummaryRow = ({
     memoryStart,
     memoryEnd,
     memoryPadding,
-    tensorList,
+    tensorList = new Map(),
     className = '',
     tensorDeallocationReport = [],
     showMemoryLayout,
 }: BufferSummaryRowProps) => {
-    const computedMemorySize = memoryEnd - memoryStart;
-    const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
-
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
-    const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
-    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const showHex = useAtomValue(showHexAtom);
 
-    const { createToast, resetToasts } = useBufferFocus();
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const { selectedTensorId, selectedAddress, resetToasts, updateBufferFocus } = useBufferFocus();
+
+    const computedMemorySize = memoryEnd - memoryStart;
+    const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
 
     const interactivityList = useMemo(() => {
         return buffers.map((buffer) => {
@@ -84,42 +82,6 @@ const BufferSummaryRow = ({
             };
         });
     }, [buffers, computedMemorySize, memoryStart, tensorList, tensorDeallocationReport]);
-
-    useEffect(() => {
-        const canvas = canvasRef.current;
-
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-
-            if (ctx) {
-                ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-                interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor, notDeallocated }) => {
-                    let activeColor = color;
-                    const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
-
-                    if (selectedTensor && selectedTensor === tensor?.id) {
-                        activeColor = color;
-                    } else if (selectedAddress && selectedAddress !== buffer.address) {
-                        activeColor = dimmedColor;
-                    } else if (selectedAddress === buffer.address && selectedTensor && selectedTensor !== tensor?.id) {
-                        activeColor = dimmedColor;
-                    }
-
-                    ctx.fillStyle = activeColor;
-                    ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
-
-                    if (showMemoryLayout && tensorMemoryLayout && !notDeallocated) {
-                        getCanvasBackgroundPattern(ctx, tensorMemoryLayout, position, size, CANVAS_HEIGHT);
-                    }
-
-                    if (notDeallocated) {
-                        getWarningPattern(ctx, position, size);
-                    }
-                });
-            }
-        }
-    }, [interactivityList, selectedAddress, selectedTensor, showMemoryLayout]);
 
     const findBufferForInteraction = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
@@ -154,9 +116,8 @@ const BufferSummaryRow = ({
             clearFocusedBuffer();
             return;
         }
-        setSelectedTensor(tensor?.id === selectedTensor ? null : (tensor?.id ?? null));
-        setSelectedAddress(tensor?.address === selectedTensor ? null : (tensor?.address ?? buffer.address));
-        createToast(tensor?.address ?? buffer.address, tensor?.id);
+
+        updateBufferFocus(tensor?.address ?? buffer.address, tensor?.id);
     };
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -193,7 +154,7 @@ const BufferSummaryRow = ({
                     <div>
                         <strong>
                             <span style={{ fontSize: '20px', color, marginRight: '2px' }}>&#9632;</span>
-                            {showHex ? toHex(interactiveBuffer.buffer.address) : interactiveBuffer.buffer.address} (
+                            {getMemoryAddress(interactiveBuffer.buffer.address, showHex)} (
                             {formatMemorySize(interactiveBuffer.buffer.size, 2)})<br />
                             {interactiveBuffer.tensor?.shape
                                 ? toReadableShape(interactiveBuffer.tensor.shape)
@@ -219,6 +180,46 @@ const BufferSummaryRow = ({
     const handleMouseLeave = () => {
         setTooltip(null);
     };
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+
+            if (ctx) {
+                ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor, notDeallocated }) => {
+                    let activeColor = color;
+                    const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
+
+                    if (selectedTensorId && selectedTensorId === tensor?.id) {
+                        activeColor = color;
+                    } else if (selectedAddress && selectedAddress !== buffer.address) {
+                        activeColor = dimmedColor;
+                    } else if (
+                        selectedAddress === buffer.address &&
+                        selectedTensorId &&
+                        selectedTensorId !== tensor?.id
+                    ) {
+                        activeColor = dimmedColor;
+                    }
+
+                    ctx.fillStyle = activeColor;
+                    ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
+
+                    if (showMemoryLayout && tensorMemoryLayout && !notDeallocated) {
+                        getCanvasBackgroundPattern(ctx, tensorMemoryLayout, position, size, CANVAS_HEIGHT);
+                    }
+
+                    if (notDeallocated) {
+                        getWarningPattern(ctx, position, size);
+                    }
+                });
+            }
+        }
+    }, [interactivityList, selectedAddress, selectedTensorId, showMemoryLayout]);
 
     return (
         <div
