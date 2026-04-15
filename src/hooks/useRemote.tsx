@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import axios from 'axios';
+import { useCallback } from 'react';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import axiosInstance from '../libs/axiosInstance';
@@ -162,9 +163,28 @@ const useRemoteConnection = () => {
         },
     };
 
+    const isSourceFileAvailable = useCallback(async (filePath: string, signal?: AbortSignal): Promise<boolean> => {
+        try {
+            const { data } = await axiosInstance.post<{ available?: boolean }>(
+                `${Endpoints.REMOTE}/read`,
+                { filePath, check_path_only: true },
+                {
+                    signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                },
+            );
+
+            return data?.available === true;
+        } catch {
+            return false;
+        }
+    }, []);
+
     const readRemoteFile = async (filePath: string) => {
         try {
-            const response = await axiosInstance.post(
+            const response = await axiosInstance.post<string>(
                 `${Endpoints.REMOTE}/read`,
                 { filePath },
                 {
@@ -174,15 +194,31 @@ const useRemoteConnection = () => {
                 },
             );
 
-            return { data: response.data, error: null };
-        } catch (error: unknown) {
-            if (axios.isAxiosError(error)) {
-                const errorMessage = error.response?.data?.error || error.message || 'Failed to read remote file';
+            const isRemapped = response.headers['x-ttnn-source-remapped'] === 'true';
+            const resolvedPath = response.headers['x-ttnn-resolved-source-path'] || null;
 
-                return { data: null, error: errorMessage };
+            return {
+                data: response.data,
+                error: null,
+                isRemapped,
+                resolvedPath: typeof resolvedPath === 'string' ? resolvedPath : null,
+            };
+        } catch (error: unknown) {
+            const standardError = {
+                data: null,
+                isRemapped: false,
+                resolvedPath: null,
+                error: 'An unexpected error occurred',
+            };
+
+            if (axios.isAxiosError(error)) {
+                return {
+                    ...standardError,
+                    error: error.response?.data?.error || error.message || 'Failed to read remote file',
+                };
             }
 
-            return { data: null, error: 'An unexpected error occurred' };
+            return standardError;
         }
     };
 
@@ -194,6 +230,7 @@ const useRemoteConnection = () => {
         mountRemoteFolder,
         persistentState,
         readRemoteFile,
+        isSourceFileAvailable,
     };
 };
 

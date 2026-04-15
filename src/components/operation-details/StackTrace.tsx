@@ -7,7 +7,7 @@ import python from 'highlight.js/lib/languages/python';
 import cpp from 'highlight.js/lib/languages/cpp';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
-import { Button, ButtonVariant, Classes, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Callout, Classes, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
@@ -16,7 +16,8 @@ import useRemoteConnection from '../../hooks/useRemote';
 import Overlay from '../Overlay';
 import 'styles/components/StackTrace.scss';
 import { ReportLocation } from '../../definitions/Reports';
-import { StackTraceLanguage } from '../../definitions/StackTrace';
+import { SourceFileStatus, StackTraceLanguage } from '../../definitions/StackTrace';
+import getServerConfig from '../../functions/getServerConfig';
 
 hljs.registerLanguage(StackTraceLanguage.PYTHON, python);
 hljs.registerLanguage(StackTraceLanguage.CPP, cpp);
@@ -48,8 +49,6 @@ function StackTrace({
     className,
     intent = Intent.NONE,
 }: StackTraceProps) {
-    // See if you can read the remote file and use setCanReadRemoteFile appropriately - https://github.com/tenstorrent/ttnn-visualizer/issues/1271
-    // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
 
     const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded || false);
@@ -57,11 +56,14 @@ function StackTrace({
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
     const [errorDetails, setErrorDetails] = useState('');
+    const [sourceMatchedViaRemap, setSourceMatchedViaRemap] = useState(false);
+    const [resolvedSourcePath, setResolvedSourcePath] = useState<string | null>(null);
+    const [sourceFileStatus, setSourceFileStatus] = useState<SourceFileStatus>(SourceFileStatus.Unavailable);
     const [isViewingSourceFile, setIsViewingSourceFile] = useState(false);
     const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
     const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
 
-    const { readRemoteFile, persistentState } = useRemoteConnection();
+    const { readRemoteFile, isSourceFileAvailable, persistentState } = useRemoteConnection();
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
     const sourceControlsRef = useRef<null | HTMLDivElement>(null);
 
@@ -111,30 +113,41 @@ function StackTrace({
 
     const toggleViewingFile = useCallback(() => setIsViewingSourceFile((open) => !open), [setIsViewingSourceFile]);
 
-    const handleReadRemoteFile = async () => {
-        const { selectedConnection } = persistentState;
+    const serverMode = !!getServerConfig()?.SERVER_MODE;
+    const canReadSource = isRemote ? !!persistentState.selectedConnection : !serverMode;
+
+    const shouldShowSourceControls = !hideSourceButton;
+    const sourceTooltip = useMemo(
+        () => getSourceTooltipContents(serverMode, isRemote, filePath, canReadSource, sourceFileStatus),
+        [serverMode, isRemote, filePath, canReadSource, sourceFileStatus],
+    );
+
+    const handleReadSource = async () => {
+        if (!canReadSource || !filePath || sourceFileStatus !== SourceFileStatus.Available) {
+            return;
+        }
 
         if (fileContents) {
             setIsViewingSourceFile(true);
             return;
         }
 
-        if (selectedConnection && !fileContents && isRemote) {
-            setIsFetchingFile(true);
+        setIsFetchingFile(true);
 
-            const { data, error } = await readRemoteFile(filePath);
+        const { data, error, isRemapped, resolvedPath } = await readRemoteFile(filePath);
 
-            setErrorDetails('');
+        setErrorDetails('');
+        setSourceMatchedViaRemap(!!isRemapped);
+        setResolvedSourcePath(resolvedPath);
 
-            if (error) {
-                setErrorDetails(error);
-            } else if (data) {
-                setFileContents(data);
-            }
-
-            setIsFetchingFile(false);
-            setIsViewingSourceFile(true);
+        if (error) {
+            setErrorDetails(error);
+        } else if (data) {
+            setFileContents(data);
         }
+
+        setIsFetchingFile(false);
+        setIsViewingSourceFile(true);
     };
 
     const handleToggleStackTrace = () => {
@@ -160,6 +173,21 @@ function StackTrace({
             scrollContainerEl.scrollTo({ top: scrollContainerEl.scrollHeight, behavior: 'smooth' });
         }
     };
+
+    const displaySourcePath = useMemo(() => {
+        const path = (resolvedSourcePath || filePath).trim();
+
+        if (isRemote && persistentState.selectedConnection) {
+            const { selectedConnection: remoteConnection } = persistentState;
+            const connectionLabel = `${remoteConnection.username || 'user'}@${remoteConnection.host || 'host'}`;
+            return `[${connectionLabel}] ${path}`;
+        }
+
+        return path;
+    }, [isRemote, persistentState, resolvedSourcePath, filePath]);
+    const isCheckingStackTraceAvailability =
+        isFetchingFile || (sourceFileStatus === SourceFileStatus.Pending && !!filePath && canReadSource);
+    const isStackTraceUnavailable = !canReadSource || !filePath || sourceFileStatus !== SourceFileStatus.Available;
 
     useEffect(() => {
         if (!scrollContainerEl) {
@@ -200,7 +228,40 @@ function StackTrace({
     useEffect(() => {
         setFileContents('');
         setErrorDetails('');
-    }, [stackTrace]);
+        setSourceFileStatus(SourceFileStatus.Unavailable);
+        setSourceMatchedViaRemap(false);
+        setResolvedSourcePath(null);
+    }, [filePath, canReadSource]);
+
+    // Check stack trace file is available
+    useEffect(() => {
+        if (!shouldShowSourceControls || !filePath || !canReadSource) {
+            setSourceFileStatus(SourceFileStatus.Unavailable);
+            return undefined;
+        }
+
+        const controller = new AbortController();
+        let fetchCancelled = false;
+        setSourceFileStatus(SourceFileStatus.Pending);
+
+        (async () => {
+            try {
+                const ok = await isSourceFileAvailable(filePath, controller.signal);
+                if (!fetchCancelled) {
+                    setSourceFileStatus(ok ? SourceFileStatus.Available : SourceFileStatus.Unavailable);
+                }
+            } catch {
+                if (!fetchCancelled) {
+                    setSourceFileStatus(SourceFileStatus.Unavailable);
+                }
+            }
+        })();
+
+        return () => {
+            fetchCancelled = true;
+            controller.abort();
+        };
+    }, [shouldShowSourceControls, filePath, canReadSource, isSourceFileAvailable]);
 
     return (
         <div className={classNames('stack-trace', className)}>
@@ -243,17 +304,17 @@ function StackTrace({
 
                     {!hideSourceButton && (
                         <Tooltip
-                            content={isRemote ? 'View external source file' : 'Cannot view local source file'}
+                            content={sourceTooltip}
                             placement={PopoverPosition.TOP}
                         >
                             <Button
                                 variant={ButtonVariant.MINIMAL}
                                 intent={Intent.SUCCESS}
-                                onClick={handleReadRemoteFile}
+                                onClick={handleReadSource}
                                 endIcon={IconNames.DOCUMENT_OPEN}
                                 text='Source'
-                                disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
-                                loading={isFetchingFile}
+                                disabled={isStackTraceUnavailable}
+                                loading={isCheckingStackTraceAvailability}
                             />
                         </Tooltip>
                     )}
@@ -296,7 +357,7 @@ function StackTrace({
                         ) : null}
                         {errorDetails ? (
                             <div className='stack-trace-error'>
-                                <p className='stack-trace-path monospace'>{filePath.trim()}</p>
+                                <p className='stack-trace-path monospace'>{displaySourcePath}</p>
                                 <div className='error-details'>
                                     <pre>{errorDetails}</pre>
                                 </div>
@@ -305,7 +366,17 @@ function StackTrace({
 
                         {fileWithHighlights && !errorDetails ? (
                             <div className='stack-trace'>
-                                <p className='stack-trace-path monospace'>{filePath.trim()}</p>
+                                {sourceMatchedViaRemap ? (
+                                    <Callout
+                                        className='stack-trace-source-remap-notice'
+                                        intent={Intent.WARNING}
+                                        title='Approximate source match'
+                                    >
+                                        This file was opened using a remapped path which may not reflect the same file
+                                        or revision that produced the trace.
+                                    </Callout>
+                                ) : null}
+                                <p className='stack-trace-path monospace'>{displaySourcePath}</p>
                                 <code
                                     className={`language-${language} code-output`}
                                     // eslint-disable-next-line react/no-danger
@@ -344,5 +415,30 @@ const scrollToLineNumberInFile = () => {
         lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 };
+
+function getSourceTooltipContents(
+    serverMode: boolean,
+    isRemote: boolean,
+    filePath: string,
+    canReadSource: boolean,
+    sourceFileStatus: SourceFileStatus,
+): string {
+    if (serverMode && !isRemote) {
+        return 'Source viewing is not available';
+    }
+    if (!filePath) {
+        return 'No file path found for this stack trace';
+    }
+    if (!canReadSource) {
+        return isRemote ? 'Remote connection cannot be established' : 'Cannot read source file';
+    }
+    if (sourceFileStatus === SourceFileStatus.Pending) {
+        return 'Checking whether source file is available…';
+    }
+    if (sourceFileStatus === SourceFileStatus.Unavailable) {
+        return 'Source file is not available';
+    }
+    return 'View source file';
+}
 
 export default StackTrace;
