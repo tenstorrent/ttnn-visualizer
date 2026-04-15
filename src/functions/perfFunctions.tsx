@@ -503,7 +503,7 @@ export const getStandardViewCounts = (
     comparisonMaxLength?: number,
 ) => {
     const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
-    let total = 0;
+    let total: number;
     let delta = 0;
 
     if (normalisedData) {

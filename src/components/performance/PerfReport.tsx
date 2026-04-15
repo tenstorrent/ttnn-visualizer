@@ -223,6 +223,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     // Resets various state if we remove all comparison reports
     useEffect(() => {
         if (!activeComparisonReportList?.includes(selectedTabId as string) && selectedTabId !== INITIAL_TAB_ID) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedTabId(INITIAL_TAB_ID);
         }
 
@@ -237,6 +239,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             isNormalisationApplied && processedComparisonRows?.[comparisonIndex]?.length === 0;
 
         if (isSelectedTabDisabled) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedTabId(INITIAL_TAB_ID);
         }
     }, [selectedTabId, processedComparisonRows, comparisonIndex, isNormalisationApplied]);

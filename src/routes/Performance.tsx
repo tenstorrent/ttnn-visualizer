@@ -44,6 +44,7 @@ export default function Performance() {
     const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>([]);
     const [hasUserChangedOpCodeFilter, setHasUserChangedOpCodeFilter] = useState(false);
+    const [appliedOpCodeOptionsKey, setAppliedOpCodeOptionsKey] = useState<string | null>(null);
 
     const setSelectedOpCodesFromUser = useCallback((update: Marker[] | ((previous: Marker[]) => Marker[])) => {
         setHasUserChangedOpCodeFilter(true);
@@ -91,6 +92,11 @@ export default function Performance() {
             colour: MarkerColours[index],
         }));
     }, [perfData, comparisonPerfData]);
+
+    const opCodeOptionsKey = useMemo(
+        () => opCodeOptions.map((o) => `${o.opCode}:${o.colour}`).join('|'),
+        [opCodeOptions],
+    );
 
     const rangedData = useMemo(
         () =>
@@ -176,9 +182,14 @@ export default function Performance() {
     }, [comparisonReportList, setSelectedRange, perfRange]);
 
     useEffect(() => {
-        setHasUserChangedOpCodeFilter(false);
-        setSelectedOpCodes(opCodeOptions);
-    }, [opCodeOptions]);
+        if (appliedOpCodeOptionsKey === null || opCodeOptionsKey !== appliedOpCodeOptionsKey) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setAppliedOpCodeOptionsKey(opCodeOptionsKey);
+            setHasUserChangedOpCodeFilter(false);
+            setSelectedOpCodes(opCodeOptions);
+        }
+    }, [appliedOpCodeOptionsKey, opCodeOptionsKey, opCodeOptions]);
 
     if (isLoadingPerformance && !perfDataError) {
         return <LoadingSpinner />;
