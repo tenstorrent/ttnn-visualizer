@@ -183,6 +183,8 @@ export default function Performance() {
 
     useEffect(() => {
         if (appliedOpCodeOptionsKey === null || opCodeOptionsKey !== appliedOpCodeOptionsKey) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setAppliedOpCodeOptionsKey(opCodeOptionsKey);
             setHasUserChangedOpCodeFilter(false);
             setSelectedOpCodes(opCodeOptions);
