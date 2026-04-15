@@ -1583,6 +1583,7 @@ def test_remote_folder():
 def read_remote_folder(instance: Instance):
     body = request.get_json(silent=True) or {}
     file_path = body.get("filePath", None)
+    # TODO: @smountenay-tt: Personally instead of a check_path_only query var, I would have made another API for checking if a remote path exists, like /api/remote/check_path?path=/path-to-check instead of having it in /remote/read.
     check_path_only = body.get("check_path_only", False)
 
     if not file_path or not isinstance(file_path, str):
