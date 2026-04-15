@@ -1591,18 +1591,18 @@ def read_remote_folder(instance: Instance):
     remote_connection = instance.remote_connection
 
     if check_path_only:
+        available = False
+
         if remote_connection:
             try:
                 ssh_client = SSHClient(remote_connection)
                 available = check_stack_source_remote(ssh_client, file_path)
-                return jsonify({"available": available})
             except RemoteConnectionException:
                 return jsonify({"available": False})
+        else:
+            if not current_app.config.get("SERVER_MODE"):
+                available = check_stack_source_local(file_path)
 
-        if current_app.config.get("SERVER_MODE"):
-            return jsonify({"available": False})
-
-        available = check_stack_source_local(file_path)
         return jsonify({"available": available})
 
     if remote_connection:

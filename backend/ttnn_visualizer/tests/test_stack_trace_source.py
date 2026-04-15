@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -26,14 +26,14 @@ def test_extract_suffix_after_tt_metal():
     assert _extract_suffix_after_tt_metal("/opt/foo/bar") is None
 
 
-def test__safe_join_under_tt_metal_root_rejects_dotdot(tmp_path):
+def test_safe_join_under_tt_metal_root_rejects_dotdot(tmp_path):
     root = tmp_path / "tt-metal"
     root.mkdir()
     with pytest.raises(ValueError, match="Unsafe"):
         _safe_join_under_tt_metal_root(root, "a/../../etc/passwd")
 
 
-def test__safe_join_under_tt_metal_root_ok(tmp_path):
+def test_safe_join_under_tt_metal_root_ok(tmp_path):
     root = tmp_path / "tt-metal"
     (root / "ttnn").mkdir(parents=True)
     f = root / "ttnn" / "a.py"

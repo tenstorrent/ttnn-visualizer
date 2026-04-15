@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 """Resolve stack trace file paths against a tt-metal checkout and read source (local or SSH)."""
 
@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Optional, Tuple
 
 from flask import Response
 from ttnn_visualizer.exceptions import RemoteFileReadException
+from ttnn_visualizer.ssh_client import SSHException
 
 if TYPE_CHECKING:
     from ttnn_visualizer.ssh_client import SSHClient
@@ -331,7 +332,6 @@ def read_stack_source_remote(
 
 def _remote_regular_file_exists(ssh_client: "SSHClient", posix_path: str) -> bool:
     """True if remote path exists, is a regular file, and is readable (SSH test -f/-r)."""
-    from ttnn_visualizer.ssh_client import SSHException
 
     quoted_path = shlex.quote(posix_path)
     try:
