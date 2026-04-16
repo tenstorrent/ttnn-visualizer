@@ -81,17 +81,22 @@ function BufferSummaryPlotRendererDRAM({
 
     const zoomedMemoryOptions = useMemo(
         () =>
-            segmentedChartData.map((segment) => {
-                const buffers = segment.flatMap((op) => op.buffers);
-                const zoomStart = buffers[0].address;
-                const zoomEnd = buffers[buffers.length - 1].address + buffers[buffers.length - 1].size;
+            segmentedChartData
+                .map((segment) => {
+                    if (segment.length > 0) {
+                        const buffers = segment.flatMap((op) => op.buffers);
+                        const zoomStart = buffers[0].address;
+                        const zoomEnd = buffers[buffers.length - 1].address + buffers[buffers.length - 1].size;
 
-                return {
-                    start: zoomStart,
-                    end: zoomEnd,
-                    padding: (zoomEnd - zoomStart) * MEMORY_ZOOM_PADDING_RATIO,
-                };
-            }),
+                        return {
+                            start: zoomStart,
+                            end: zoomEnd,
+                            padding: (zoomEnd - zoomStart) * MEMORY_ZOOM_PADDING_RATIO,
+                        };
+                    }
+                    return null;
+                })
+                .filter((elt) => elt !== null),
         [segmentedChartData],
     );
 
@@ -154,18 +159,21 @@ function BufferSummaryPlotRendererDRAM({
             <p className='x-axis-label'>Memory Address</p>
 
             {segmentedChartData.slice(0, 1).map((segment, index) => (
-                <Fragment key={`${segment[index].name}-${index}`}>
+                <Fragment key={`${segment[index]?.name}-${index}`}>
                     <div className='chart-position'>
                         <MemoryPlotRenderer
                             className='buffer-summary-plot'
                             chartDataList={CHART_DATA}
                             isZoomedIn={isZoomedIn}
-                            memorySize={isZoomedIn ? zoomedMemoryOptions[index].end : MEMORY_SIZE}
+                            memorySize={isZoomedIn ? (zoomedMemoryOptions[index]?.end ?? MEMORY_SIZE) : MEMORY_SIZE}
                             plotZoomRange={
                                 isZoomedIn
                                     ? [
-                                          zoomedMemoryOptions[index].start - zoomedMemoryOptions[index].padding,
-                                          zoomedMemoryOptions[index].end + zoomedMemoryOptions[index].padding,
+                                          (zoomedMemoryOptions[index]?.start ?? 0) -
+                                              (zoomedMemoryOptions[index]?.padding ?? 0),
+
+                                          (zoomedMemoryOptions[index]?.end ?? 0) -
+                                              (zoomedMemoryOptions[index]?.padding ?? 0),
                                       ]
                                     : [0, MEMORY_SIZE]
                             }
@@ -210,9 +218,13 @@ function BufferSummaryPlotRendererDRAM({
                                                 className={classNames({ 'is-active': operation.id === activeRow })}
                                                 buffers={operation.buffers}
                                                 // operationId={operation.id}
-                                                memoryStart={isZoomedIn ? zoomedMemoryOptions[index].start : 0}
-                                                memoryEnd={isZoomedIn ? zoomedMemoryOptions[index].end : MEMORY_SIZE}
-                                                memoryPadding={zoomedMemoryOptions[index].padding}
+                                                memoryStart={isZoomedIn ? (zoomedMemoryOptions[index]?.start ?? 0) : 0}
+                                                memoryEnd={
+                                                    isZoomedIn
+                                                        ? (zoomedMemoryOptions[index]?.end ?? MEMORY_SIZE)
+                                                        : MEMORY_SIZE
+                                                }
+                                                memoryPadding={zoomedMemoryOptions[index]?.padding ?? 0}
                                                 tensorList={tensorListByOperation.get(operation.id)}
                                                 showMemoryLayout={showMemoryLayout}
                                             />
