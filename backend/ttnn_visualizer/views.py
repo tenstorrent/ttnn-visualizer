@@ -1045,7 +1045,7 @@ def get_performance_results_report(instance: Instance):
         )
     except DataFormatError as error:
         return (
-            jsonify(str(error)),
+            jsonify({"error": str(error)}),
             HTTPStatus.UNPROCESSABLE_ENTITY,
         )
 
@@ -1396,7 +1396,7 @@ def get_remote_folders_profiler():
             mimetype="application/json",
         )
     except RemoteConnectionException as e:
-        return Response(status=e.http_status, response=e.message)
+        return jsonify({"error": e.message}), e.http_status
 
 
 @api.route("/remote/performance", methods=["POST"])
@@ -1434,7 +1434,7 @@ def get_remote_folders_performance():
             mimetype="application/json",
         )
     except RemoteConnectionException as e:
-        return Response(status=e.http_status, response=e.message)
+        return jsonify({"error": e.message}), e.http_status
 
 
 @api.route("/cluster-descriptor", methods=["GET"])
@@ -1614,7 +1614,7 @@ def read_remote_folder(instance: Instance):
             )
             return stack_source_response(content, resolved, remapped)
         except RemoteConnectionException as e:
-            return Response(status=e.http_status, response=e.message)
+            return jsonify({"error": e.message}), e.http_status
         except RemoteFileReadException as e:
             error_payload = {"error": str(e)}
             if e.detail:
@@ -1674,7 +1674,7 @@ def sync_remote_folder():
             return performance_folder.model_dump()
 
         except RemoteConnectionException as e:
-            return Response(status=e.http_status, response=e.message)
+            return jsonify({"error": e.message}), e.http_status
 
     try:
         remote_profiler_folder = RemoteReportFolder.model_validate(
@@ -1697,7 +1697,7 @@ def sync_remote_folder():
         )
 
     except RemoteConnectionException as e:
-        return Response(status=e.http_status, response=e.message)
+        return jsonify({"error": e.message}), e.http_status
 
 
 @api.route("/remote/use", methods=["POST"])

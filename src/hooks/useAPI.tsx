@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import axios, { AxiosError } from 'axios';
+import { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -24,7 +24,6 @@ import {
     Tensor,
     defaultBuffer,
     defaultOperation,
-    defaultTensorData,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
@@ -78,15 +77,13 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
 };
 
 export const fetchInstance = async (): Promise<Instance | null> => {
-    // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.get<Instance>(Endpoints.INSTANCE).catch();
-    return response?.data;
+    const response = await axiosInstance.get<Instance>(Endpoints.INSTANCE);
+    return response?.data ?? null;
 };
 
 export const updateInstance = async (payload: Partial<Instance>): Promise<Instance | null> => {
-    // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.put<Instance>(Endpoints.INSTANCE, payload).catch();
-    return response?.data;
+    const response = await axiosInstance.put<Instance>(Endpoints.INSTANCE, payload);
+    return response?.data ?? null;
 };
 
 export const fetchBufferPages = async (
@@ -110,31 +107,17 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         return defaultOperation;
     }
 
-    try {
-        const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(
-            `${Endpoints.OPERATIONS_LIST}/${id}`,
-            {
-                maxRedirects: 1,
-            },
-        );
+    const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(
+        `${Endpoints.OPERATIONS_LIST}/${id}`,
+        {
+            maxRedirects: 1,
+        },
+    );
 
-        return {
-            ...operationDetails,
-            operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
-        };
-    } catch (error: unknown) {
-        if (axios.isAxiosError(error)) {
-            if (error.response && error.response.status >= 400 && error.response.status < 500) {
-                // we may want to handle this differently
-                throw error;
-            }
-            if (error.response && error.response.status >= 500) {
-                throw error;
-            }
-        }
-    }
-
-    return defaultOperation;
+    return {
+        ...operationDetails,
+        operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
+    };
 };
 
 const fetchOperations = async (): Promise<OperationDescription[]> => {
@@ -728,39 +711,25 @@ export const useBufferPages = (operationId: number, address?: number | string, b
 };
 
 export const fetchTensors = async (): Promise<Tensor[]> => {
-    try {
-        const { data: tensorList } = await axiosInstance.get<Tensor[]>(Endpoints.TENSOR_LIST, {
-            maxRedirects: 1,
-        });
+    const { data: tensorList } = await axiosInstance.get<Tensor[]>(Endpoints.TENSOR_LIST, {
+        maxRedirects: 1,
+    });
 
-        const operationsList = await fetchOperations();
+    const operationsList = await fetchOperations();
 
-        for (const tensor of tensorList) {
-            if (tensor.producers.length > 0) {
-                const producerId = tensor.producers[0];
-                const operationDetails = operationsList.find((operation) => operation.id === producerId);
-                const outputTensor = operationDetails?.outputs.find((output) => output.id === tensor.id);
+    for (const tensor of tensorList) {
+        if (tensor.producers.length > 0) {
+            const producerId = tensor.producers[0];
+            const operationDetails = operationsList.find((operation) => operation.id === producerId);
+            const outputTensor = operationDetails?.outputs.find((output) => output.id === tensor.id);
 
-                if (outputTensor) {
-                    tensor.operationIdentifier = outputTensor.operationIdentifier;
-                }
-            }
-        }
-
-        return tensorList;
-    } catch (error: unknown) {
-        if (axios.isAxiosError(error)) {
-            if (error.response && error.response.status >= 400 && error.response.status < 500) {
-                // we may want to handle this differently
-                throw error;
-            }
-            if (error.response && error.response.status >= 500) {
-                throw error;
+            if (outputTensor) {
+                tensor.operationIdentifier = outputTensor.operationIdentifier;
             }
         }
     }
 
-    return [defaultTensorData];
+    return tensorList;
 };
 
 export const useTensors = () => {

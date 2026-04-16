@@ -7,7 +7,6 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -33,6 +32,7 @@ import { OperationDescription } from '../model/APIData';
 import { PerfTableRow } from '../definitions/PerfTable';
 import LoadingSpinner from './LoadingSpinner';
 import createToastNotification, { ToastType } from '../functions/createToastNotification';
+import getResponseError from '../functions/getResponseError';
 
 const RANGE_STEP = 25;
 
@@ -162,9 +162,7 @@ function Range() {
 
     useEffect(() => {
         if (perfDataError && activePerformanceReport) {
-            const message = axios.isAxiosError(perfDataError)
-                ? `Error loading report: ${perfDataError.response?.data as string}`
-                : 'Failed to load performance data';
+            const message = `Error loading report: ${getResponseError(perfDataError, 'Failed to load performance data')}`;
 
             createToastNotification(message, activePerformanceReport?.reportName, ToastType.ERROR);
             setActivePerformanceReport(null);

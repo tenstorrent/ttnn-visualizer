@@ -18,6 +18,7 @@ import {
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
+import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import {
     PERFORMANCE_FOLDER_QUERY_KEY,
@@ -70,11 +71,6 @@ const invalidProfilerStatus: ConnectionStatus = {
 const directoryErrorStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
     message: 'Selected directory does not contain a valid report',
-};
-
-const connectionFailedStatus: ConnectionStatus = {
-    status: ConnectionTestStates.FAILED,
-    message: 'Unable to upload selected directory',
 };
 
 const LocalFolderOptions: FC = () => {
@@ -140,16 +136,12 @@ const LocalFolderOptions: FC = () => {
             return;
         }
 
-        let connectionStatus = connectionOkStatus;
-
         setIsUploadingReport(true);
         setProfilerUploadLabel(`${files.length} files selected.`);
 
-        const response = await uploadLocalFolder(files);
+        try {
+            const response = await uploadLocalFolder(files);
 
-        if (response.status !== 200) {
-            connectionStatus = connectionFailedStatus;
-        } else {
             setProfilerUploadLabel(`${files.length} files uploaded`);
             response.data = normaliseReportFolder(response.data);
 
@@ -165,11 +157,14 @@ const LocalFolderOptions: FC = () => {
             setActiveProfilerReport(updatedReport);
             createToastNotification('Active memory report', updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);
+            setProfilerFolder(connectionOkStatus);
+        } catch (err: unknown) {
+            const message = getResponseError(err, 'Unable to upload selected directory');
+            setProfilerFolder({ status: ConnectionTestStates.FAILED, message });
+        } finally {
+            queryClient.clear();
+            setIsUploadingReport(false);
         }
-
-        queryClient.clear();
-        setIsUploadingReport(false);
-        setProfilerFolder(connectionStatus);
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -185,28 +180,29 @@ const LocalFolderOptions: FC = () => {
             return;
         }
 
-        let connectionStatus = connectionOkStatus;
-
         setIsPerformanceUploading(true);
         setPerformanceDataUploadLabel(`${files.length} files selected`);
 
-        const response = await uploadLocalPerformanceFolder(files);
+        try {
+            const response = await uploadLocalPerformanceFolder(files);
 
-        if (response.status !== 200) {
-            connectionStatus = connectionFailedStatus;
-        } else if (response?.data?.status !== ConnectionTestStates.OK) {
-            connectionStatus = directoryErrorStatus;
-        } else {
-            const fileName = getFolderName(files);
-            setPerformanceDataUploadLabel(`${files.length} files uploaded`);
-            setPerformanceReportLocation(ReportLocation.LOCAL);
-            setActivePerformanceReport({ path: fileName, reportName: fileName });
-            createToastNotification('Active performance report', fileName, ToastType.SUCCESS);
+            if (response?.data?.status !== ConnectionTestStates.OK) {
+                setPerformanceFolder(directoryErrorStatus);
+            } else {
+                const fileName = getFolderName(files);
+                setPerformanceDataUploadLabel(`${files.length} files uploaded`);
+                setPerformanceReportLocation(ReportLocation.LOCAL);
+                setActivePerformanceReport({ path: fileName, reportName: fileName });
+                createToastNotification('Active performance report', fileName, ToastType.SUCCESS);
+                setPerformanceFolder(connectionOkStatus);
+            }
+        } catch (err: unknown) {
+            const message = getResponseError(err, 'Unable to upload selected directory');
+            setPerformanceFolder({ status: ConnectionTestStates.FAILED, message });
+        } finally {
+            queryClient.clear();
+            setIsPerformanceUploading(false);
         }
-
-        queryClient.clear();
-        setIsPerformanceUploading(false);
-        setPerformanceFolder(connectionStatus);
     };
 
     const handleSelectProfiler = async (folder: ReportFolder) => {
