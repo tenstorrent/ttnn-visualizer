@@ -9,6 +9,7 @@ import { ItemRendererProps, Select } from '@blueprintjs/select';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
 import { isEqual } from '../../functions/math';
+import HighlightedText from '../HighlightedText';
 
 interface RemoteConnectionSelectorProps {
     connectionList: RemoteConnection[];
@@ -140,7 +141,7 @@ type RenderRemoteConnectionProps<T> = (
 
 const renderRemoteConnection: RenderRemoteConnectionProps<RemoteConnection> = (
     connection,
-    { handleClick, modifiers },
+    { handleClick, modifiers, query },
     selectedConnection,
 ) => {
     if (!modifiers.matchesPredicate) {
@@ -153,7 +154,12 @@ const renderRemoteConnection: RenderRemoteConnectionProps<RemoteConnection> = (
             disabled={modifiers.disabled}
             key={formatConnectionString(connection)}
             onClick={handleClick}
-            text={formatConnectionString(connection)}
+            text={
+                <HighlightedText
+                    text={formatConnectionString(connection)}
+                    filter={query}
+                />
+            }
         />
     );
 };
