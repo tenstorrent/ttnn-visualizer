@@ -10,11 +10,11 @@
 
 .buffer-summary-table {
     display: flex;
-    height: 600px;
     flex-direction: column;
+    height: 600px;
     width: 100%;
-    max-width: 1120px;
-    position: relative;
+    max-width: 1200px;
+    overflow-y: auto;
 
     .aside-container {
         display: flex;
