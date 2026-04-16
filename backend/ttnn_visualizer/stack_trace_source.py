@@ -2,7 +2,14 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Resolve stack trace file paths against a tt-metal checkout and read source (local or SSH)."""
+"""Resolve stack trace source paths and read source (local or SSH).
+
+Security model summary:
+- Local source reads are restricted to discovered tt-metal roots.
+- Remote source reads first try the literal path provided by the trace for
+  compatibility with remote/container layouts, then optionally remap any
+  ``.../tt-metal/...`` path segment under discovered tt-metal roots.
+"""
 
 from __future__ import annotations
 
@@ -285,7 +292,17 @@ def read_stack_source_remote(
     ssh_client: "SSHClient", raw_path: str
 ) -> Tuple[str, str, bool]:
     """
-    Read stack trace source from remote via SSH, trying remap after /tt-metal/ on failure.
+    Read stack trace source from remote via SSH.
+
+    Behaviour:
+    1. Try the literal ``raw_path`` first for compatibility with remote traces.
+    2. If that path is missing and ``raw_path`` contains ``/tt-metal/``, retry by
+       remapping the suffix under discovered remote tt-metal roots.
+
+    Security notes:
+    - Remapped paths are validated by ``_join_remote_tt_metal_path``.
+    - A direct/literal read is attempted before remap to preserve expected
+      behaviour when the trace path is already valid on the remote host.
 
     :return: (content, resolved_path_str, remapped)
     """
@@ -354,8 +371,10 @@ def check_stack_source_local(raw_path: str) -> bool:
 
 def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
     """
-    Whether read_stack_source_remote would succeed: literal path or remapped under any
-    discovered tt-metal root (same roots as local).
+    Whether ``read_stack_source_remote`` would succeed.
+
+    Checks both the literal path and (when applicable) remapped ``/tt-metal/``
+    suffix candidates under discovered tt-metal roots.
     """
     path_str = str(Path(raw_path))
     if _remote_regular_file_exists(ssh_client, path_str):
