@@ -2,8 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { DeviceOperationTypes, Node, NodeType } from '../model/APIData';
+import { DeviceOperationNode, Node, NodeType } from '../model/APIData';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
+import { StringBufferType } from '../model/BufferType';
 
 export type AllocationDetails = {
     id: number;
@@ -24,7 +25,7 @@ export function processMemoryAllocations(
 } {
     let peakMemoryLoad = 0;
     const memoryAllocationList: AllocationDetails[] = [];
-    const curOp: { name: string; id: number; deviceId?: string | number }[] = [];
+    const curOpList: { name: string; id: number; deviceId?: string | number }[] = [];
     let totalCb = 0;
     let totalBuffer = 0;
 
@@ -33,7 +34,7 @@ export function processMemoryAllocations(
         const node = graph[i];
         i += 1;
         if (node.node_type === NodeType.function_start) {
-            // logic below calculates inputs sizes. its is deemed unnessisary for now
+            // logic below calculates inputs sizes. its is deemed unnecessary for now
             // keeping for a while
             // if (node.inputs?.length > 0) {
             //     // eslint-disable-next-line no-loop-func
@@ -46,14 +47,20 @@ export function processMemoryAllocations(
             // }
 
             const { name } = node.params;
-            curOp.push({ name, id: node.id, deviceId: node.params.device_id });
+            curOpList.push({ name, id: node.id, deviceId: node.params.device_id });
         }
+        const currentOp = curOpList[curOpList.length - 1];
 
-        if (node.params.device_id !== undefined && curOp.length > 1) {
-            curOp[curOp.length - 1].deviceId = node.params.device_id;
+        if (node.params?.device_id !== undefined && curOpList.length > 1) {
+            curOpList[curOpList.length - 1].deviceId = node.params.device_id;
         }
 
         if (node.node_type === NodeType.circular_buffer_allocate) {
+            // this is the only sane way to track allocation op for color variance. not a fan
+            if (currentOp) {
+                node.params.allocateOperationId = currentOp.id;
+                node.params.allocateOperationName = currentOp.name;
+            }
             totalCb += parseInt(node.params.size, 10);
         }
 
@@ -61,15 +68,14 @@ export function processMemoryAllocations(
             totalCb = 0;
         }
 
-        if (node.node_type === NodeType.buffer_allocate && node.params.type === DeviceOperationTypes.L1) {
-            const defaultNumberCores = node.params.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
-            const numCores = parseInt(node.params.num_cores, 10) || defaultNumberCores;
+        if (node.node_type === NodeType.buffer_allocate && node.params.type === StringBufferType.L1) {
+            const numCores = parseInt(node.params.num_cores, 10) || L1_NUM_CORES;
             const totalSize = parseInt(node.params.size, 10);
             totalBuffer += totalSize / numCores;
         }
 
         if (node.node_type === NodeType.function_end) {
-            curOp.pop();
+            curOpList.pop();
         }
 
         if (node.node_type === NodeType.buffer_deallocate) {
@@ -80,10 +86,10 @@ export function processMemoryAllocations(
             }
         }
 
-        if (curOp.length > 0) {
+        if (curOpList.length > 0) {
             const obj: AllocationDetails = {
-                name: curOp[curOp.length - 1].name,
-                deviceId: curOp[curOp.length - 1].deviceId as number,
+                name: curOpList[curOpList.length - 1].name,
+                deviceId: curOpList[curOpList.length - 1].deviceId as number,
                 id: node.id,
                 type: node.node_type,
                 total_cb: totalCb,
@@ -98,3 +104,34 @@ export function processMemoryAllocations(
 
     return { peakMemoryLoad, memoryAllocationList };
 }
+
+export const processInputsOutputs = (graph: Node[]): DeviceOperationNode[] => {
+    if (!Array.isArray(graph)) {
+        return [];
+    }
+    const operations: DeviceOperationNode[] = [];
+    const nodeByNodeId = new Map<number, Node>(graph.map((op) => [op.id, { ...op }]));
+
+    const connected = (node: Node): Node[] =>
+        (node.connections ?? []).map((id) => nodeByNodeId.get(id)).filter((n): n is Node => Boolean(n));
+
+    for (const op of nodeByNodeId.values()) {
+        if (op.node_type !== NodeType.function_start) {
+            // eslint-disable-next-line no-continue
+            continue;
+        }
+
+        operations.push(op);
+
+        op.inputs = (op.input_tensors ?? [])
+            .map((id) => nodeByNodeId.get(id))
+            .filter((n): n is Node => Boolean(n && n.node_type === NodeType.tensor));
+
+        op.outputs = connected(op)
+            .filter((n) => n.node_type === NodeType.function_end)
+            .flatMap((end) => connected(end))
+            .filter((n): n is Node => n.node_type === NodeType.tensor);
+    }
+
+    return operations;
+};

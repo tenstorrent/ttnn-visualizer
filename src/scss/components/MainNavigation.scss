@@ -63,7 +63,7 @@
         }
 
         &.buffers-button {
-            @include button-styles($tt-buffers, $tt-buffers-active, 'small-square');
+            @include button-styles($tt-buffers, $tt-buffers-active, 'horizontal-bar-chart');
         }
 
         &.graph-button {

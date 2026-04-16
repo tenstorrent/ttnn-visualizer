@@ -83,7 +83,7 @@ const useLocalConnection = () => {
     };
 
     const checkRequiredReportFiles = (files: FileList): boolean => {
-        const requiredFiles = ['db.sqlite', 'config.json'];
+        const requiredFiles = ['db.sqlite'];
         const fileSet = new Set<string>();
 
         Array.from(files).forEach((file) => {

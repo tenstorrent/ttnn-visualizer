@@ -3,7 +3,9 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import logging
+import os
 import subprocess
+from http import HTTPStatus
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -13,11 +15,20 @@ from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
+    RemoteFileReadException,
     SSHException,
 )
 from ttnn_visualizer.models import RemoteConnection
 
 logger = logging.getLogger(__name__)
+
+# User-facing message for SSH auth failures (key-based auth required, no password).
+SSH_AUTH_FAILURE_MESSAGE = (
+    "SSH authentication failed. This application requires SSH key-based authentication. "
+    "Add your public key to ~/.ssh/authorized_keys on the remote server. "
+    "Password authentication is not supported. "
+    "If your key has a passphrase, add it to ssh-agent once (e.g. ssh-add) so you are not prompted."
+)
 
 
 class SSHClient:
@@ -28,26 +39,40 @@ class SSHClient:
 
     def __init__(self, connection: RemoteConnection):
         self.connection = connection
+        identity = getattr(connection, "identityFile", None)
+        logger.debug(
+            "SSHClient connection.identityFile=%r (will use only this key if set)",
+            identity,
+        )
         self._base_ssh_cmd = self._build_base_ssh_cmd()
         self._base_sftp_cmd = self._build_base_sftp_cmd()
 
     def _build_base_ssh_cmd(self) -> List[str]:
-        """Build the base SSH command with common options."""
-        cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
+        """Build the base SSH command with common options. Never prompts for password."""
+        cmd = ["ssh"]
+        identity = (getattr(self.connection, "identityFile", None) or "").strip()
+        if identity:
+            # Use empty config so only our -i key is tried (ignore ~/.ssh/config IdentityFile).
+            cmd.extend(["-F", os.devnull])
+        cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+        if identity:
+            cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
         if self.connection.port != 22:
             cmd.extend(["-p", str(self.connection.port)])
-
         cmd.append(f"{self.connection.username}@{self.connection.host}")
         return cmd
 
     def _build_base_sftp_cmd(self) -> List[str]:
-        """Build the base SFTP command with common options."""
-        cmd = ["sftp", "-o", "PasswordAuthentication=no"]
-
+        """Build the base SFTP command with common options. Never prompts for password."""
+        cmd = ["sftp"]
+        identity = (getattr(self.connection, "identityFile", None) or "").strip()
+        if identity:
+            cmd.extend(["-F", os.devnull])
+        cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+        if identity:
+            cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
         if self.connection.port != 22:
             cmd.extend(["-P", str(self.connection.port)])
-
         cmd.extend(["-b", "-"])  # Read commands from stdin
         cmd.append(f"{self.connection.username}@{self.connection.host}")
         return cmd
@@ -81,9 +106,7 @@ class SSHClient:
                 "host key verification failed",
             ]
         ):
-            raise AuthenticationException(
-                f"SSH authentication failed: {self.connection.username}@{self.connection.host}: Permission denied (publickey,password)"
-            )
+            raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
 
         # Check for connection failures (including DNS resolution failures)
         elif any(
@@ -154,17 +177,13 @@ class SSHClient:
             return True
         except AuthenticationException as e:
             # Convert to AuthenticationFailedException for proper HTTP 422 response
-            user_message = (
-                "SSH authentication failed. This application requires SSH key-based authentication. "
-                "Please ensure your SSH public key is added to the authorized_keys file on the remote server. "
-                "Password authentication is not supported."
-            )
             logger.info(
                 f"SSH authentication failed for {self.connection.username}@{self.connection.host}"
             )
-            # Get the raw error details from the last SSH operation
             raw_error = getattr(self, "_last_raw_error", None)
-            raise AuthenticationFailedException(message=user_message, detail=raw_error)
+            raise AuthenticationFailedException(
+                message=SSH_AUTH_FAILURE_MESSAGE, detail=raw_error
+            )
         except NoValidConnectionsError as ssh_err:
             user_message = (
                 f"Unable to establish SSH connection to {self.connection.host}. "
@@ -216,8 +235,8 @@ class SSHClient:
 
         :param remote_path: Path to the remote file
         :param timeout: Timeout in seconds
-        :return: File contents as bytes, or None if file not found
-        :raises: AuthenticationException, NoValidConnectionsError, SSHException
+        :return: File contents as bytes
+        :raises: RemoteFileReadException
         """
         path = Path(remote_path)
         logger.info(f"Reading remote file {path}")
@@ -226,9 +245,25 @@ class SSHClient:
             result = self.execute_command(f"cat '{path}'", timeout=timeout)
             return result.encode("utf-8")
         except SSHException as e:
-            if "No such file" in str(e) or "cannot open" in str(e):
-                return None
-            raise
+            msg = str(e).lower()
+            # Map only clear "not found" errors to 404; handle other SSH failures appropriately.
+            if "no such file" in msg or "not found" in msg:
+                raise RemoteFileReadException(
+                    message="File not found.",
+                    http_status_code=HTTPStatus.NOT_FOUND,
+                    detail=str(e),
+                )
+            if "permission denied" in msg or "access denied" in msg:
+                raise RemoteFileReadException(
+                    message="Permission denied when reading remote file.",
+                    http_status_code=HTTPStatus.FORBIDDEN,
+                    detail=str(e),
+                )
+            raise RemoteFileReadException(
+                message="Failed to read remote file.",
+                http_status_code=HTTPStatus.BAD_GATEWAY,
+                detail=str(e),
+            )
 
     def check_path_exists(
         self, remote_path: Union[str, Path], timeout: int = 10

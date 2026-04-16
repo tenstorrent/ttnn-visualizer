@@ -40,7 +40,7 @@
 
     &.empty-collapsible {
         .collapsible-controls {
-            [type='button'] {
+            [type='button'].collapsible-button {
                 cursor: default;
 
                 &:hover {

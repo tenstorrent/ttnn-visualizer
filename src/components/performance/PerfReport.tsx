@@ -8,7 +8,6 @@ import {
     Button,
     ButtonGroup,
     ButtonVariant,
-    Callout,
     FormGroup,
     Intent,
     MenuItem,
@@ -23,7 +22,7 @@ import {
 } from '@blueprintjs/core';
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { TableFilter, TableKeys, TypedPerfTableRow, filterableColumnKeys } from '../../definitions/PerfTable';
+import { ColumnKeys, Columns, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
@@ -34,6 +33,7 @@ import {
     filterBySignpostAtom,
     hideHostOpsAtom,
     isStackedViewAtom,
+    layoutFilterListAtom,
     mathFilterListAtom,
     mergeDevicesAtom,
     rawOpCodeFilterListAtom,
@@ -45,9 +45,9 @@ import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableDa
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
+    StackedColumnKeys,
     StackedGroupBy,
     StackedTableFilter,
-    StackedTableKeys,
     TypedStackedPerfRow,
     filterableStackedColumnKeys,
 } from '../../definitions/StackedPerfTable';
@@ -58,6 +58,7 @@ import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { OpType } from '../../definitions/Performance';
 import { capitalizeString } from '../../functions/formatting';
+import { DeviceOperationLayoutTypes } from '../../model/APIData';
 
 enum SignpostSelectType {
     START,
@@ -93,6 +94,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
+    const [activeLayoutFilterList, setActiveLayoutFilterList] = useAtom(layoutFilterListAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -102,17 +104,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState(true);
-    const [filters, setFilters] = useState<TableFilter>(
-        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
-            TableKeys,
+    // const [showHashColumn, setShowHashColumn] = useState(false);
+    const filterableColumnKeys = useMemo(
+        () => Columns.filter((column) => column.filterable).map((column) => column.key),
+        [],
+    );
+
+    const [filters, setFilters] = useState(
+        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [ColumnKeys, string])) as Record<
+            ColumnKeys,
             string
         >,
     );
     const [stackedFilters, setStackedFilters] = useState<StackedTableFilter>(
-        Object.fromEntries(filterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
-            StackedTableKeys,
-            string
-        >,
+        Object.fromEntries(filterableStackedColumnKeys.map((key) => [key, ''])) as StackedTableFilter,
     );
 
     const isSignpostsDisabled = !signposts || signposts.length === 0;
@@ -142,6 +147,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
                 activeBufferTypeFilterList,
+                activeLayoutFilterList,
                 filterBySignpost,
             ),
         [
@@ -150,6 +156,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             activeMathFilterList,
             activeRawOpCodeFilterList,
             activeBufferTypeFilterList,
+            activeLayoutFilterList,
             filterBySignpost,
         ],
     );
@@ -163,6 +170,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
                 activeBufferTypeFilterList,
+                activeLayoutFilterList,
                 filterBySignpost,
             ),
         [
@@ -172,6 +180,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             activeRawOpCodeFilterList,
             activeMathFilterList,
             activeBufferTypeFilterList,
+            activeLayoutFilterList,
             filterBySignpost,
         ],
     );
@@ -198,20 +207,24 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         [comparisonIndex, comparisonStackedData, stackedFilters, activeRawOpCodeFilterList, isGroupedByMemory],
     );
 
-    const updateColumnFilter = (key: TableKeys, value: string) => {
-        const updatedFilters = {
-            ...filters,
-            [key]: value ?? '',
-        };
+    const updateColumnFilter = (_key: ColumnKeys.OpCode | StackedColumnKeys.OpCode, value: string) => {
+        // Only OpCode filter is shared between standard and stacked views
+        setFilters((prevFilters) => ({
+            ...prevFilters,
+            [ColumnKeys.OpCode]: value ?? '',
+        }));
 
-        // TODO: Sort this madness out
-        setStackedFilters(updatedFilters as Record<StackedTableKeys, string>);
-        setFilters(updatedFilters as TableFilter);
+        setStackedFilters((prevStackedFilters) => ({
+            ...prevStackedFilters,
+            [StackedColumnKeys.OpCode]: value ?? '',
+        }));
     };
 
     // Resets various state if we remove all comparison reports
     useEffect(() => {
         if (!activeComparisonReportList?.includes(selectedTabId as string) && selectedTabId !== INITIAL_TAB_ID) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedTabId(INITIAL_TAB_ID);
         }
 
@@ -226,6 +239,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             isNormalisationApplied && processedComparisonRows?.[comparisonIndex]?.length === 0;
 
         if (isSelectedTabDisabled) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedTabId(INITIAL_TAB_ID);
         }
     }, [selectedTabId, processedComparisonRows, comparisonIndex, isNormalisationApplied]);
@@ -295,12 +310,32 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     </div>
                 </div>
 
-                <div className='filters'>
+                <ButtonGroup
+                    variant={ButtonVariant.OUTLINED}
+                    size={Size.SMALL}
+                >
+                    <Button
+                        text='Standard'
+                        icon={IconNames.LIST}
+                        active={!isStackedView}
+                        onClick={() => setIsStackedView(false)}
+                        intent={!isStackedView ? Intent.PRIMARY : Intent.NONE}
+                    />
+                    <Button
+                        text='Stacked'
+                        icon={IconNames.LAYOUT_TWO_ROWS}
+                        active={isStackedView}
+                        onClick={() => setIsStackedView(true)}
+                        intent={isStackedView ? Intent.PRIMARY : Intent.NONE}
+                    />
+                </ButtonGroup>
+
+                <div className='option-row'>
                     <FormGroup
-                        className='signpost-filters'
-                        subLabel='Filter between signposts'
+                        subLabel='Input data options'
+                        className='form-group'
                     >
-                        <ButtonGroup className='signpost-group'>
+                        <ButtonGroup className='select-group'>
                             <Select<Signpost>
                                 items={signposts || []}
                                 itemPredicate={filterSignpost}
@@ -340,7 +375,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             />
                         </ButtonGroup>
 
-                        <ButtonGroup className='signpost-group'>
+                        <ButtonGroup className='select-group'>
                             <Select<Signpost>
                                 items={signposts || []}
                                 itemPredicate={filterSignpost}
@@ -377,19 +412,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 aria-label={filterBySignpost[1] ? `Remove end signpost` : 'No end signpost selected'}
                             />
                         </ButtonGroup>
-                    </FormGroup>
 
-                    <FormGroup
-                        className='toggle-filters'
-                        subLabel='Data options'
-                    >
-                        <ButtonGroup className='toggle-group'>
+                        <ButtonGroup className='switch-group'>
                             <Switch
                                 label='Hide host ops'
                                 onChange={() => setHideHostOps(!hideHostOps)}
                                 checked={hideHostOps}
                                 className='option-switch'
-                                // TODO: Host Ops are missing when not grouped by memory is disabled
+                                // Host Ops are missing when not grouped by memory is disabled - https://github.com/tenstorrent/ttnn-visualizer/issues/1268
                                 disabled={!isGroupedByMemory && isStackedView}
                             />
 
@@ -413,13 +443,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             </Tooltip>
                         </ButtonGroup>
                     </FormGroup>
-
                     {isStackedView && (
                         <FormGroup
-                            className='toggle-filters'
                             subLabel='Stacked data grouping'
+                            className='form-group'
                         >
-                            <ButtonGroup className='toggle-group'>
+                            <ButtonGroup className='select-group'>
                                 <Select<StackedGroupBy>
                                     activeItem={stackedGroupBy}
                                     items={STACKED_GROUP_BY}
@@ -436,129 +465,119 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     )}
                 </div>
 
-                <div className='filters'>
-                    <SearchField
-                        onQueryChanged={(value) => updateColumnFilter('op_code', value)}
-                        placeholder='Filter by operation name'
-                        searchQuery={filters?.op_code || ''}
-                    />
-
-                    <MultiSelectField<TypedPerfTableRow, 'raw_op_code'>
-                        keyName='raw_op_code'
-                        options={getRawOpCodeOptions(processedRows) || []}
-                        placeholder='Select Op Codes...'
-                        values={activeRawOpCodeFilterList}
-                        updateHandler={setActiveRawOpCodeFilterList}
-                    />
-                </div>
-
-                <div className='view-options'>
-                    <ButtonGroup
-                        variant={ButtonVariant.OUTLINED}
-                        size={Size.SMALL}
+                <div className='option-row'>
+                    <FormGroup
+                        subLabel='Filters'
+                        className='form-group'
                     >
-                        <Button
-                            text='Standard'
-                            icon={IconNames.LIST}
-                            active={!isStackedView}
-                            onClick={() => setIsStackedView(false)}
-                            intent={!isStackedView ? Intent.PRIMARY : Intent.NONE}
-                        />
-                        <Button
-                            text='Stacked'
-                            icon={IconNames.LAYOUT_TWO_ROWS}
-                            active={isStackedView}
-                            onClick={() => setIsStackedView(true)}
-                            intent={isStackedView ? Intent.PRIMARY : Intent.NONE}
-                        />
-                    </ButtonGroup>
-                </div>
-
-                <div className='data-options'>
-                    {!isStackedView && (
-                        <>
-                            <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
-                                keyName='buffer_type'
-                                options={processedRows || []}
-                                labelFormatter={(value: BufferType | null) =>
-                                    value !== null ? BufferTypeLabel[value] : 'No value'
-                                }
-                                placeholder='Select Buffer Type...'
-                                values={activeBufferTypeFilterList}
-                                updateHandler={setActiveBufferTypeFilterList}
+                        <ButtonGroup className='select-group'>
+                            <SearchField
+                                onQueryChanged={(value) => updateColumnFilter(ColumnKeys.OpCode, value)}
+                                placeholder='Filter by operation name'
+                                searchQuery={filters?.op_code || ''}
                             />
 
-                            <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
-                                keyName='math_fidelity'
-                                options={processedRows || []}
-                                placeholder='Select Math Fidelity...'
-                                values={activeMathFilterList}
-                                updateHandler={setActiveMathFilterList}
-                                disabled={isStackedView}
+                            <MultiSelectField<TypedPerfTableRow, 'raw_op_code'>
+                                keyName='raw_op_code'
+                                options={getRawOpCodeOptions(processedRows) || []}
+                                placeholder='Select Op Codes...'
+                                values={activeRawOpCodeFilterList}
+                                updateHandler={setActiveRawOpCodeFilterList}
                             />
+                        </ButtonGroup>
 
-                            <Switch
-                                label='Matmul optimization analysis'
-                                onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
-                                checked={provideMatmulAdvice}
-                                className='option-switch'
-                                disabled={isStackedView}
-                            />
+                        {!isStackedView && (
+                            <>
+                                <ButtonGroup className='select-group'>
+                                    <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
+                                        keyName='buffer_type'
+                                        options={processedRows || []}
+                                        labelFormatter={(value: BufferType | null) =>
+                                            value !== null ? BufferTypeLabel[value] : 'No value'
+                                        }
+                                        placeholder='Select Buffer Type...'
+                                        values={activeBufferTypeFilterList}
+                                        updateHandler={setActiveBufferTypeFilterList}
+                                    />
 
-                            <Switch
-                                label='Highlight high dispatch ops'
-                                onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
-                                checked={hiliteHighDispatch}
-                                className='option-switch'
-                                disabled={isStackedView}
-                            />
-                        </>
-                    )}
+                                    <MultiSelectField<TypedPerfTableRow, 'layout'>
+                                        keyName='layout'
+                                        options={processedRows || []}
+                                        labelFormatter={(value: DeviceOperationLayoutTypes | null) =>
+                                            value !== null ? value : 'No value'
+                                        }
+                                        placeholder='Select Layout...'
+                                        values={activeLayoutFilterList}
+                                        updateHandler={setActiveLayoutFilterList}
+                                    />
 
-                    {!isStackedView && (
-                        <>
+                                    <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
+                                        keyName='math_fidelity'
+                                        options={processedRows || []}
+                                        placeholder='Select Math Fidelity...'
+                                        values={activeMathFilterList}
+                                        updateHandler={setActiveMathFilterList}
+                                        disabled={isStackedView}
+                                    />
+                                </ButtonGroup>
+
+                                <ButtonGroup className='switch-group'>
+                                    <Switch
+                                        label='Matmul optimization analysis'
+                                        onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                                        checked={provideMatmulAdvice}
+                                        className='option-switch'
+                                        disabled={isStackedView}
+                                    />
+
+                                    <Switch
+                                        label='Highlight high dispatch ops'
+                                        onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                                        checked={hiliteHighDispatch}
+                                        className='option-switch'
+                                        disabled={isStackedView}
+                                    />
+
+                                    <Tooltip
+                                        content='Tries to match up operations between the performance reports'
+                                        position={Position.TOP}
+                                    >
+                                        <Switch
+                                            label='Normalise data'
+                                            disabled={!activeComparisonReportList || isStackedView}
+                                            onChange={() => setUseNormalisedData(!useNormalisedData)}
+                                            checked={useNormalisedData}
+                                            className='option-switch'
+                                        />
+                                    </Tooltip>
+                                </ButtonGroup>
+                            </>
+                        )}
+
+                        {activeComparisonReportList && useNormalisedData && (
                             <Tooltip
-                                content='Tries to match up operations between the performance reports'
+                                content='Highlights rows where ops have been added or are missing after normalising the data'
                                 position={Position.TOP}
                             >
                                 <Switch
-                                    label='Normalise data'
-                                    disabled={!activeComparisonReportList || isStackedView}
-                                    onChange={() => setUseNormalisedData(!useNormalisedData)}
-                                    checked={useNormalisedData}
+                                    label='Highlight row differences'
+                                    onChange={() => setHighlightRows(!highlightRows)}
+                                    disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
+                                    checked={highlightRows}
                                     className='option-switch'
                                 />
                             </Tooltip>
+                        )}
 
-                            {activeComparisonReportList && useNormalisedData && (
-                                <Tooltip
-                                    content='Highlights rows where ops have been added or are missing after normalising the data'
-                                    position={Position.TOP}
-                                >
-                                    <Switch
-                                        label='Highlight row differences'
-                                        onChange={() => setHighlightRows(!highlightRows)}
-                                        disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
-                                        checked={highlightRows}
-                                        className='option-switch'
-                                    />
-                                </Tooltip>
-                            )}
-                        </>
-                    )}
+                        {/* May keep this or remove it - undecided as yet */}
+                        {/* <Switch
+                            label='Show Hash Column'
+                            onChange={() => setShowHashColumn(!showHashColumn)}
+                            checked={showHashColumn}
+                            className='option-switch'
+                        /> */}
+                    </FormGroup>
                 </div>
-
-                {mergeDevices && (
-                    <Callout
-                        className='multi-device-note'
-                        intent={Intent.PRIMARY}
-                        icon={IconNames.INFO_SIGN}
-                        compact
-                    >
-                        Multi device operations are merged into single rows using <u>average duration</u> for collective
-                        operations (AllGather, ReduceScatter, AllReduce) and <u>maximum duration</u> for all others.
-                    </Callout>
-                )}
 
                 <Tabs
                     selectedTabId={selectedTabId}
@@ -590,6 +609,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
                                     reportName={activePerformanceReport?.reportName || null}
+                                    showHashColumn={false}
                                 />
                             )
                         }
@@ -653,6 +673,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}
                                         reportName={report}
+                                        showHashColumn={false}
                                     />
                                 )
                             }

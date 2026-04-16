@@ -8,7 +8,7 @@ import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import {
-    StackedColumnHeaders,
+    StackedColumnKeys,
     StackedTableColumn,
     TypedStackedPerfRow,
     stackedTableColumns,
@@ -23,6 +23,7 @@ import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import LoadingSpinner from '../LoadingSpinner';
 import { PATTERN_COUNT } from '../../definitions/Performance';
 import { mergeDevicesAtom } from '../../store/app';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -50,7 +51,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
     const computedTableColumns = useMemo<StackedTableColumn[]>(
         () =>
             mergeDevices
-                ? stackedTableColumns.filter((column) => column.key !== StackedColumnHeaders.Device)
+                ? stackedTableColumns.filter((column) => column.key !== StackedColumnKeys.Device)
                 : stackedTableColumns,
         [mergeDevices],
     );
@@ -76,6 +77,8 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                 data={data}
                 reportName={reportName}
             />
+
+            {mergeDevices && <PerfMultiDeviceNotice />}
 
             {stackedData && stackedData?.length > 0 ? (
                 <table className='perf-table monospace'>
@@ -149,8 +152,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                 {stackedComparisonData.map((comparisonDataset, datasetIndex) => {
                                     const matchingRow = comparisonDataset.find(
                                         (stackedRow) =>
-                                            stackedRow[StackedColumnHeaders.OpCode] ===
-                                            row[StackedColumnHeaders.OpCode],
+                                            stackedRow[StackedColumnKeys.OpCode] === row[StackedColumnKeys.OpCode],
                                     );
 
                                     return (
@@ -186,7 +188,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                     <td
                                         key={`footer-${column.key}`}
                                         className={classNames({
-                                            'no-wrap': column.key === StackedColumnHeaders.OpCode,
+                                            'no-wrap': column.key === StackedColumnKeys.OpCode,
                                         })}
                                     >
                                         {getTotalsForFooter(column, stackedData)}
@@ -205,23 +207,23 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 };
 
 const getTotalsForFooter = (column: StackedTableColumn, data: TypedStackedPerfRow[]): string => {
-    if (column.key === StackedColumnHeaders.Percent) {
-        return `100 %`;
+    if (column.key === StackedColumnKeys.Percent) {
+        return `100%`;
     }
 
-    if (column.key === StackedColumnHeaders.DeviceTimeSumUs) {
+    if (column.key === StackedColumnKeys.DeviceTimeSumUs) {
         return `${formatSize(
-            data?.reduce((acc, curr) => acc + (curr[StackedColumnHeaders.DeviceTimeSumUs] || 0), 0),
+            data?.reduce((acc, curr) => acc + (curr[StackedColumnKeys.DeviceTimeSumUs] || 0), 0),
             2,
         )} µs`;
     }
 
-    if (column.key === StackedColumnHeaders.OpCode) {
+    if (column.key === StackedColumnKeys.OpCode) {
         return `${data.length} op types`;
     }
 
-    if (column.key === StackedColumnHeaders.OpsCount) {
-        return `${data?.reduce((acc, curr) => acc + (curr[StackedColumnHeaders.OpsCount] || 0), 0)}`;
+    if (column.key === StackedColumnKeys.OpsCount) {
+        return `${data?.reduce((acc, curr) => acc + (curr[StackedColumnKeys.OpsCount] || 0), 0)}`;
     }
 
     return '';

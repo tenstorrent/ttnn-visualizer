@@ -2,22 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import {
-    TableFilter,
-    TableKeys,
-    TypedPerfTableRow,
-    filterableColumnKeys,
-    signpostRowDefaults,
-} from '../definitions/PerfTable';
+import { ColumnKeys, PerfTableFilters, TypedPerfTableRow, signpostRowDefaults } from '../definitions/PerfTable';
+import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import { Signpost } from './perfFunctions';
 
 const SIGNPOST_MARKER = '(signpost)';
 
-const isFiltersActive = (filters: TableFilter) =>
+const isFiltersActive = (filters: PerfTableFilters) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
-const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
+const getCellText = (buffer: TypedPerfTableRow, key: ColumnKeys) => {
     const textValue = buffer[key]?.toString() || '';
 
     return textValue;
@@ -25,10 +20,11 @@ const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
 
 const sortAndFilterPerfTableData = (
     data: TypedPerfTableRow[],
-    filters: TableFilter,
+    filters: PerfTableFilters,
     rawOpCodeFilter: string[],
     mathFilter: string[],
     bufferTypeFilter: (BufferType | null)[],
+    activeLayoutFilterList: (DeviceOperationLayoutTypes | null)[],
     filterBySignpost: (Signpost | null)[],
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
@@ -63,14 +59,14 @@ const sortAndFilterPerfTableData = (
         ];
     }
 
-    if (isFiltersActive(filters) && filterableColumnKeys) {
+    if (isFiltersActive(filters)) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&
                 Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
-                        const bufferValue = getCellText(row, key as TableKeys);
+                        const bufferValue = getCellText(row, key as ColumnKeys);
 
                         return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
                     });
@@ -94,6 +90,12 @@ const sortAndFilterPerfTableData = (
     if (bufferTypeFilter?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) => row?.buffer_type !== null && bufferTypeFilter.includes(row.buffer_type),
+        );
+    }
+
+    if (activeLayoutFilterList?.length > 0) {
+        filteredRows = filteredRows.filter(
+            (row) => row?.layout !== null && activeLayoutFilterList.includes(row.layout),
         );
     }
 

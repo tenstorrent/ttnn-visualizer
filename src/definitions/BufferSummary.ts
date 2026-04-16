@@ -12,7 +12,19 @@ export enum TAB_IDS {
     DRAM = 'DRAM',
 }
 
-export interface ColumnDefinition {
+export enum ColumnKeys {
+    OperationId = 'operation_id',
+    TensorId = 'tensor_id',
+    Address = 'address',
+    Size = 'size',
+    BufferType = 'buffer_type',
+    BufferLayout = 'buffer_layout',
+    Dtype = 'dtype',
+    Shape = 'shape',
+    DeviceId = 'device_id',
+}
+
+interface ColumnDefinition {
     name: string;
     key: ColumnKeys;
     width: number;
@@ -20,63 +32,66 @@ export interface ColumnDefinition {
     filterable?: boolean;
 }
 
-export enum ColumnHeaders {
-    operation_id = 'Operation',
-    tensor_id = 'Tensor',
-    address = 'Address',
-    hexAddress = 'Address (hex)',
-    size = 'Size',
-    buffer_type = 'Buffer Type',
-    device_id = 'Device Id',
-}
-
-export type ColumnKeys = keyof typeof ColumnHeaders;
-
-const DEFAULT_COLUMN_WIDTH = 120;
+const DEFAULT_COLUMN_WIDTH = 140;
 
 export const Columns: ColumnDefinition[] = [
     {
-        name: ColumnHeaders.operation_id,
-        key: 'operation_id',
-        sortable: true,
+        name: 'Operation',
+        key: ColumnKeys.OperationId,
         filterable: true,
+        sortable: true,
         width: 200,
     },
     {
-        name: ColumnHeaders.tensor_id,
-        key: 'tensor_id',
-        sortable: true,
+        name: 'Tensor',
+        key: ColumnKeys.TensorId,
         filterable: true,
+        sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
-        name: ColumnHeaders.address,
-        key: 'address',
-        sortable: true,
+        name: 'Address',
+        key: ColumnKeys.Address,
         filterable: true,
-        width: DEFAULT_COLUMN_WIDTH,
+        sortable: true,
+        width: 100,
     },
     {
-        name: ColumnHeaders.hexAddress,
-        key: 'hexAddress',
-        sortable: true,
+        name: 'Size',
+        key: ColumnKeys.Size,
         filterable: true,
-        width: 140,
+        sortable: true,
+        width: 100,
     },
     {
-        name: ColumnHeaders.size,
-        key: 'size',
+        name: 'Shape',
+        key: ColumnKeys.Shape,
+        filterable: true,
         sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
-        name: ColumnHeaders.buffer_type,
-        key: 'buffer_type',
+        name: 'Data Type',
+        key: ColumnKeys.Dtype,
+        filterable: true,
+        sortable: true,
+        width: 150,
+    },
+    {
+        name: 'Buffer Layout',
+        key: ColumnKeys.BufferLayout,
+        filterable: true,
+        sortable: true,
         width: DEFAULT_COLUMN_WIDTH,
     },
     {
-        name: ColumnHeaders.device_id,
-        key: 'device_id',
+        name: 'Buffer Type',
+        key: ColumnKeys.BufferType,
+        width: 105,
+    },
+    {
+        name: 'Device Id',
+        key: ColumnKeys.DeviceId,
         width: 100,
     },
 ];

@@ -81,7 +81,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
 
     return (
         <>
-            {maxY2Value > 1 && mergeDevices && <PerfMultiDeviceNotice />}
+            {maxY2Value > 0 && mergeDevices && <PerfMultiDeviceNotice />}
             <PerfChart
                 title='Core Count + Utilization'
                 chartData={[...chartDataDuration, ...chartDataUtilization]}

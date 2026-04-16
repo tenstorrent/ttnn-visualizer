@@ -2,15 +2,19 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { DataSet, Network } from 'vis-network/standalone';
-import { Edge } from 'vis-network';
+/* eslint-disable no-continue */
+
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Network } from 'vis-network/standalone';
+import { DataSet } from 'vis-data';
+import { Edge, IdType } from 'vis-network';
 import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Node } from '../../model/APIData';
-import { getTensorColor } from '../../functions/colorGenerator';
+import { DeviceOperationNode, Node, TensorNode } from '../../model/APIData';
 import 'styles/components/DeviceOperationsGraphComponent.scss';
+import { isExtendedDeviceOperation } from '../../functions/filterOperations';
 import { toReadableShape } from '../../functions/formatting';
+import { GRAPH_COLORS } from '../../definitions/GraphColors';
 
 export interface GraphComponentProps {
     data: Node[];
@@ -18,15 +22,262 @@ export interface GraphComponentProps {
     onClose: () => void;
 }
 
+type ConnectedDeviceOperation = DeviceOperationNode & {
+    inputs: Node[];
+    outputs: Node[];
+    graphInputs: TensorNode[];
+    graphOutputs: TensorNode[];
+};
+
+const formatOperationName = (item: DeviceOperationNode) => {
+    return item.params.name ? `${item.params.name}()` : '';
+};
+
+function removeRedundantEdgesViaIntermediateNodes(edges: Edge[]): Edge[] {
+    const outgoing = new Map<number, Edge[]>();
+    for (const e of edges) {
+        const from = Number(e.from);
+        const arr = outgoing.get(from) ?? [];
+        arr.push(e);
+        outgoing.set(from, arr);
+    }
+
+    const canReachWithIntermediate = (from: number, to: number, skipEdgeId: IdType | undefined): boolean => {
+        const nodesWithDepth: Array<{ node: number; depth: number }> = [];
+        const visited = new Set<number>([from]);
+
+        for (const edge of outgoing.get(from) ?? []) {
+            if (edge.id === skipEdgeId) {
+                continue;
+            }
+            const next = Number(edge.to);
+
+            if (next === to) {
+                continue;
+            }
+
+            if (!visited.has(next)) {
+                visited.add(next);
+                nodesWithDepth.push({ node: next, depth: 1 });
+            }
+        }
+
+        while (nodesWithDepth.length) {
+            const pointer = nodesWithDepth.shift()!;
+            const nextEdges = outgoing.get(pointer.node) ?? [];
+            for (const e of nextEdges) {
+                if (e.id === skipEdgeId) {
+                    continue;
+                }
+                const next = Number(e.to);
+
+                if (next === to) {
+                    if (pointer.depth + 1 >= 2) {
+                        return true;
+                    }
+                }
+
+                if (!visited.has(next)) {
+                    visited.add(next);
+                    nodesWithDepth.push({ node: next, depth: pointer.depth + 1 });
+                }
+            }
+        }
+
+        return false;
+    };
+
+    return edges.filter((e) => {
+        const from = Number(e.from);
+        const to = Number(e.to);
+        return !canReachWithIntermediate(from, to, e.id);
+    });
+}
+
 const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) => {
     const networkRef = useRef<Network | null>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
-    const [tooltipContent, setTooltipContent] = useState<React.ReactNode>(null);
+
+    const ops: ConnectedDeviceOperation[] = useMemo(() => {
+        return (data ?? [])
+            .filter((op) => op.node_type === 'function_start')
+            .map((op) => {
+                const inputTensors = op.inputs?.filter((i) => i.node_type === 'tensor') ?? [];
+                const outputTensors = op.outputs?.filter((o) => o.node_type === 'tensor') ?? [];
+                return { ...op, graphInputs: inputTensors, graphOutputs: outputTensors } as ConnectedDeviceOperation;
+            });
+    }, [data]);
+
+    const displayedOps = useMemo(() => ops.filter((op) => isExtendedDeviceOperation(op.params.name)), [ops]);
+    const displayedIds = useMemo(() => new Set(displayedOps.map((o) => o.id)), [displayedOps]);
+
+    const { edgesByProducer, tensorShapeById } = useMemo(() => {
+        const tensorShapeByIdLocal = new Map<number, string>();
+        const producersByTensorId = new Map<number, number[]>();
+        const consumersByTensorId = new Map<number, number[]>();
+
+        for (const op of ops) {
+            for (const tensor of op.graphOutputs) {
+                const tensorId = Number(tensor.params.tensor_id);
+                if (tensor.params.shape && !tensorShapeByIdLocal.has(tensorId)) {
+                    tensorShapeByIdLocal.set(tensorId, tensor.params.shape);
+                }
+                const idList = producersByTensorId.get(tensorId) ?? [];
+                idList.push(op.id);
+                producersByTensorId.set(tensorId, idList);
+            }
+
+            for (const tensor of op.graphInputs) {
+                const tensorId = Number(tensor.params.tensor_id);
+                if (tensor.params.shape && !tensorShapeByIdLocal.has(tensorId)) {
+                    tensorShapeByIdLocal.set(tensorId, tensor.params.shape);
+                }
+                const idList = consumersByTensorId.get(tensorId) ?? [];
+                idList.push(op.id);
+                consumersByTensorId.set(tensorId, idList);
+            }
+        }
+
+        const edgesByProducerLocal = new Map<number, Array<{ to: number; tid: number }>>();
+        for (const [tid, producers] of producersByTensorId.entries()) {
+            const consumers = consumersByTensorId.get(tid) ?? [];
+            for (const from of producers) {
+                for (const to of consumers) {
+                    if (from === to) {
+                        continue;
+                    }
+                    const connectionList = edgesByProducerLocal.get(from) ?? [];
+                    connectionList.push({ to, tid });
+                    edgesByProducerLocal.set(from, connectionList);
+                }
+            }
+        }
+
+        return { edgesByProducer: edgesByProducerLocal, tensorShapeById: tensorShapeByIdLocal };
+    }, [ops]);
+
+    const buildCompressedEdges = useCallback((): Edge[] => {
+        const result: Edge[] = [];
+        const seenEdge = new Set<string>();
+
+        for (const start of displayedOps) {
+            const q: Array<{ id: number; via?: { tensorId: number } }> = [{ id: start.id }];
+
+            const visited = new Set<string>([`${start.id}#_`]);
+
+            while (q.length) {
+                const cur = q.shift()!;
+                const nexts = edgesByProducer.get(cur.id) ?? [];
+
+                for (const e of nexts) {
+                    const via = cur.via ?? { tensorId: e.tid };
+                    const visitKey = `${e.to}#${via.tensorId}`;
+                    if (visited.has(visitKey)) {
+                        continue;
+                    }
+                    visited.add(visitKey);
+
+                    if (displayedIds.has(e.to) && e.to !== start.id) {
+                        const edgeId = `${start.id}->${e.to}#${via.tensorId}`;
+
+                        if (!seenEdge.has(edgeId)) {
+                            seenEdge.add(edgeId);
+
+                            const shape = tensorShapeById.get(via.tensorId);
+                            const label = shape ? `T${via.tensorId} ${toReadableShape(shape)}` : `T${via.tensorId}`;
+
+                            result.push({
+                                id: edgeId,
+                                from: start.id,
+                                to: e.to,
+                                label,
+                                color: GRAPH_COLORS.normal,
+                            });
+                        }
+                        continue;
+                    }
+
+                    q.push({ id: e.to, via });
+                }
+            }
+        }
+
+        return removeRedundantEdgesViaIntermediateNodes(result);
+    }, [displayedOps, displayedIds, edgesByProducer, tensorShapeById]);
+
+    const edges = useMemo(() => {
+        return new DataSet(buildCompressedEdges());
+    }, [buildCompressedEdges]);
+
+    const nodes = useMemo(() => {
+        return new DataSet(
+            displayedOps.map((op) => ({ id: op.id, label: ` ${formatOperationName(op)}`, shape: 'box' })),
+        );
+    }, [displayedOps]);
+
+    const colorHighlightIO = useCallback(
+        (selectedNodeId: IdType) => {
+            const allNodes = nodes.get();
+            const allEdges = edges.get();
+
+            const inputNodeIds = new Set<IdType | undefined>();
+            const outputNodeIds = new Set<IdType | undefined>();
+            const inputEdgeIds = new Set<IdType>();
+            const outputEdgeIds = new Set<IdType>();
+
+            for (const edge of allEdges) {
+                if (edge.to === selectedNodeId) {
+                    inputNodeIds.add(edge.from);
+                    inputEdgeIds.add(edge.id);
+                }
+                if (edge.from === selectedNodeId) {
+                    outputNodeIds.add(edge.to);
+                    outputEdgeIds.add(edge.id);
+                }
+            }
+
+            nodes.update(
+                allNodes.map((node) => {
+                    if (node.id === selectedNodeId) {
+                        return node;
+                    }
+
+                    if (inputNodeIds.has(node.id)) {
+                        return { id: node.id, color: { background: GRAPH_COLORS.inputNode } };
+                    }
+                    if (outputNodeIds.has(node.id)) {
+                        return { id: node.id, color: { background: GRAPH_COLORS.outputNode } };
+                    }
+                    return { id: node.id, color: { background: GRAPH_COLORS.normal } };
+                }),
+            );
+
+            const edgesToUpdate = allEdges
+                .map((edge) => {
+                    if (inputEdgeIds.has(edge.id)) {
+                        return { id: edge.id, color: GRAPH_COLORS.inputEdge };
+                    }
+                    if (outputEdgeIds.has(edge.id)) {
+                        return { id: edge.id, color: GRAPH_COLORS.outputEdge };
+                    }
+                    if (edge.color !== GRAPH_COLORS.normal) {
+                        return { id: edge.id, color: GRAPH_COLORS.normal };
+                    }
+                    return null;
+                })
+                .filter(Boolean) as Array<{ id: IdType; color: string }>;
+
+            edges.update(edgesToUpdate);
+        },
+        [nodes, edges],
+    );
+
     const focusOnNode = useCallback(
         (nodeId: number | null, center: boolean = false) => {
             if (nodeId === null) {
                 return;
             }
+
             if (networkRef.current) {
                 if (center) {
                     networkRef.current.focus(nodeId, {
@@ -37,113 +288,18 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
 
                 const nodeData = data.find((node) => node.id === nodeId);
                 if (nodeData && tooltipRef.current) {
-                    setTooltipContent(generateTooltipContent(nodeData));
-                    tooltipRef.current.classList.add('visible');
+                    // tooltipRef.current.classList.add('visible');
                 }
             }
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         [data],
     );
-
-    const formatOperationName = (item: Node) => {
-        // const prefix = item.node_type === 'function_start' ? 'Start ' : '';
-        // const suffix = item.node_type === 'function_end' ? 'end' : '';
-        return item.params.name ? `${item.params.name}()` : '';
-    };
-    const getTensorSquare = (tensorId: number | null) => {
-        return (
-            tensorId && (
-                <div
-                    className='memory-color-block'
-                    style={{
-                        backgroundColor: getTensorColor(tensorId),
-                    }}
-                />
-            )
-        );
-    };
-
-    const generateTooltipContent = (node: Node) => {
-        const tensorSquare = getTensorSquare(node.params.tensor_id);
-        return (
-            <>
-                {tensorSquare}
-                <strong>{formatOperationName(node)}</strong>
-            </>
-        );
-    };
 
     const initializeGraph = useCallback(
         (container: HTMLDivElement | null) => {
             if (!container) {
                 return;
             }
-
-            const consumersByTensorId = new Map<number, number[]>();
-            const producersByTensorId = new Map<number, number>();
-
-            const ops = data
-                .filter((op) => op.node_type === 'function_start')
-                .map((op) => {
-                    const inputTensors = op.inputs.filter((input) => input.node_type === 'tensor') || [];
-                    const outputTensors = op.outputs.filter((output) => output.node_type === 'tensor') || [];
-
-                    outputTensors.forEach((tensor) => {
-                        const tid = Number(tensor.params.tensor_id);
-                        producersByTensorId.set(tid, op.id);
-                    });
-
-                    inputTensors.forEach((tensor) => {
-                        const tid = Number(tensor.params.tensor_id);
-                        const existing = consumersByTensorId.get(tid) || [];
-                        existing.push(op.id);
-                        consumersByTensorId.set(tid, existing);
-                    });
-
-                    return { ...op, graphInputs: inputTensors, graphOutputs: outputTensors };
-                });
-
-            const nodeList = ops.map((node) => ({
-                id: node.id,
-                label: ` ${formatOperationName(node)}`,
-                shape: 'box',
-            }));
-
-            const edgesArray: Edge[] = [];
-
-            ops.forEach((consumer) => {
-                consumer.graphInputs.forEach((tensor) => {
-                    const tid = Number(tensor.params.tensor_id);
-                    const producerId = producersByTensorId.get(tid);
-                    if (producerId === undefined) {
-                        return;
-                    }
-
-                    edgesArray.push({
-                        id: `${producerId}->${consumer.id}#${tid}`,
-                        from: producerId,
-                        to: consumer.id,
-                        label: `${toReadableShape(tensor.params.shape)}`,
-                    });
-                });
-            });
-
-            // dedupe works now
-            const seen = new Set<string>();
-            const dedupedEdges = edgesArray.filter((e) =>
-                seen.has(String(e.id)) ? false : (seen.add(String(e.id)), true),
-            );
-
-            const edges = new DataSet(dedupedEdges);
-
-            const ids = new Set<string>();
-            edges.forEach(({ from, to }) => {
-                ids.add(String(from));
-                ids.add(String(to));
-            });
-
-            const nodes = new DataSet(nodeList.filter((op) => ids.has(String(op.id))));
 
             const networkData = { nodes, edges };
 
@@ -160,87 +316,72 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     labelHighlightBold: false,
                     fixed: false,
                 },
+
                 edges: {
-                    font: {
-                        color: '#f5e2ba',
-                        size: 18,
-                        strokeColor: '#000',
-                        smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
-                        // align: 'middle',
-                        // align: 'top',
-                        physics: true,
-                    },
                     color: '#f5e2ba',
-                    smooth: false,
                     arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                    font: { color: '#f5e2ba', size: 14, strokeColor: '#000' },
+                    smooth: { enabled: true, type: 'cubicBezier', roundness: 0.35 },
+                    width: 1,
+                    selectionWidth: 2,
+                    hoverWidth: 2,
                 },
+
                 autoResize: true,
+
                 layout: {
                     hierarchical: {
                         enabled: true,
-                        levelSeparation: 100,
-                        nodeSpacing: 300,
-                        treeSpacing: 300,
-                        blockShifting: true,
-                        edgeMinimization: false,
                         direction: 'UD',
                         sortMethod: 'directed',
+                        levelSeparation: 160,
+                        nodeSpacing: 220,
+                        treeSpacing: 220,
+                        blockShifting: true,
+                        edgeMinimization: true,
                         shakeTowards: 'leaves',
+                        parentCentralization: true,
                     },
                     improvedLayout: true,
                 },
+
                 interaction: {
                     dragNodes: true,
                     dragView: true,
                     zoomView: true,
                     zoomSpeed: 0.4,
+                    hover: true,
                 },
-                physics: {
-                    enabled: false,
-                    solver: 'forceAtlas2Based',
-                    forceAtlas2Based: {
-                        gravitationalConstant: -30,
-                        centralGravity: 0.01,
-                        springLength: 100,
-                        springConstant: 0.08,
-                    },
-                    stabilization: {
-                        enabled: true,
-                        iterations: 1000,
-                    },
-                },
+
+                physics: { enabled: false },
             };
 
             networkRef.current = new Network(container, networkData, options);
 
             networkRef.current.on('blurNode', () => {
-                if (tooltipRef.current) {
-                    tooltipRef.current.classList.remove('visible');
-                }
+                tooltipRef.current?.classList.remove('visible');
             });
+
             networkRef.current.on('dragStart', () => {
-                if (tooltipRef.current) {
-                    tooltipRef.current.classList.remove('visible');
-                }
+                tooltipRef.current?.classList.remove('visible');
             });
 
             networkRef.current.on('click', (params) => {
-                if (tooltipRef.current) {
-                    tooltipRef.current.classList.remove('visible');
-                }
                 if (params.nodes.length > 0) {
                     const nodeId = params.nodes[0];
                     focusOnNode(nodeId);
+                    colorHighlightIO(nodeId);
+                } else {
+                    networkRef.current?.selectNodes([], true);
                 }
             });
         },
-        [data, focusOnNode],
+        [colorHighlightIO, edges, focusOnNode, nodes],
     );
+
     useEffect(() => {
         return () => {
-            if (networkRef.current) {
-                networkRef.current.destroy();
-            }
+            networkRef.current?.destroy();
         };
     }, []);
 
@@ -267,6 +408,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                         />
                     </h3>
                 </div>
+
                 <div className='graph-component'>
                     <div
                         className='graph'
@@ -275,15 +417,11 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     <div
                         className='graph-tooltip'
                         ref={tooltipRef}
-                    >
-                        {tooltipContent}
-                    </div>
+                    />
                 </div>
+
                 <div>
-                    <aside>
-                        Scroll to zoom. Drag to pan. Click an edge to go to connecting node. Click node to see details.
-                        Drag nodes horizontally.
-                    </aside>
+                    <aside>Scroll to zoom. Drag to pan. Drag nodes horizontally.</aside>
                 </div>
             </Card>
         </Overlay2>

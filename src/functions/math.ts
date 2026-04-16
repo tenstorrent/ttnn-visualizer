@@ -43,9 +43,18 @@ export const toSecondsPretty = (us: number, min: number = 1000): string => {
     return `( ${(us / 1_000_000).toFixed(3)}s )`;
 };
 
-export const prettyPrintAddress = (address: number | null, memorySize: number): string => {
+// Pretty print an address, with option to display in hex or decimal, and pad with leading zeros based on memory size
+export const prettyPrintAddress = (address: number | null, memorySize: number, isHex: boolean = false): string => {
     if (address === null) {
         return 'NULL';
+    }
+
+    if (isHex) {
+        // eslint-disable-next-line no-bitwise
+        const hexStr = (address >>> 0).toString(16).toUpperCase();
+        // eslint-disable-next-line no-bitwise
+        const maxHexLength = (memorySize >>> 0).toString(16).length;
+        return `0x${hexStr.padStart(maxHexLength, '0')}`;
     }
 
     return address.toString().padStart(memorySize?.toString().length, '0');
@@ -126,7 +135,7 @@ export const getCoresInRange = (rangeString: string): number => {
 };
 
 /**
- * Convert bytes to human readable format using binary units (1024-based)
+ * Convert bytes to human-readable format using binary units (1024-based)
  * Appropriate for memory sizes (L1, DRAM, etc.) as memory is organized in powers of 2
  * @param bytes - The number of bytes to convert
  * @param decimals - Number of decimal places (default: 0 for B/KiB, 2 for MiB+)
@@ -134,8 +143,12 @@ export const getCoresInRange = (rangeString: string): number => {
  * @example convertBytes(163840) // "160 KiB"
  * @example convertBytes(22370304) // "21.33 MiB"
  */
-export const formatMemorySize = (bytes: number, decimals = 0): string => {
+export const formatMemorySize = (bytes: number | undefined, decimals = 0): string => {
     const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+
+    if (bytes === undefined) {
+        return 'N/A';
+    }
 
     if (bytes === 0) {
         return `0 ${sizes[0]}`;
@@ -151,4 +164,13 @@ export const formatMemorySize = (bytes: number, decimals = 0): string => {
     const value = formatSize(bytes / 1024 ** denominationIndex, fractionDigits);
 
     return `${value} ${sizes[denominationIndex]}`;
+};
+
+// Formats a memory address to a string with optional hex formatting
+export const getMemoryAddress = (address: number | null, showHex: boolean): string => {
+    if (address === null) {
+        return 'NULL';
+    }
+
+    return showHex ? toHex(address) : address.toString();
 };

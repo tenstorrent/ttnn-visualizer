@@ -24,8 +24,8 @@ const CLUSTER_CHIP_SIZE_SMALL = 150;
 
 function ClusterRenderer() {
     const navigate = useNavigate();
-    const clusterDescription = useGetClusterDescription();
-    const { data } = clusterDescription;
+    const { data } = useGetClusterDescription();
+
     // we don't support mixed architecture for now
     // we will default to wormhole
     const arch = stringToArchitecture((data?.arch.length && data.arch[0]) || DEFAULT_ARCHITECTURE);

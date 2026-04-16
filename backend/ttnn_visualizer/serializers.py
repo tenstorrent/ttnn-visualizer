@@ -9,6 +9,27 @@ from typing import List
 from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
 
 
+def _stack_trace_for_operation(stack_traces_by_key, operation):
+    key = (operation.operation_id, operation.rank)
+    if key in stack_traces_by_key:
+        return stack_traces_by_key[key]
+    return stack_traces_by_key.get((operation.operation_id, 0))
+
+
+def _error_for_operation(errors_by_key, operation):
+    key = (operation.operation_id, operation.rank)
+    if key in errors_by_key:
+        return errors_by_key[key]
+    return errors_by_key.get((operation.operation_id, 0))
+
+
+def _device_ops_for_operation(device_ops_by_key, operation):
+    key = (operation.operation_id, operation.rank)
+    if key in device_ops_by_key:
+        return device_ops_by_key[key]
+    return device_ops_by_key.get((operation.operation_id, 0), [])
+
+
 def serialize_operations(
     inputs,
     operation_arguments,
@@ -21,19 +42,21 @@ def serialize_operations(
     device_operations,
     error_records=None,
 ):
-    tensors_dict = {t.tensor_id: t for t in tensors}
+    tensors_dict = {(t.tensor_id, t.rank): t for t in tensors}
     device_operations_dict = {
-        do.operation_id: do.captured_graph
+        (do.operation_id, do.rank): do.captured_graph
         for do in device_operations
         if hasattr(do, "operation_id")
     }
 
-    stack_traces_dict = {st.operation_id: st.stack_trace for st in stack_traces}
+    stack_traces_dict = {
+        (st.operation_id, st.rank): st.stack_trace for st in stack_traces
+    }
 
     errors_dict = {}
     if error_records:
         for error in error_records:
-            errors_dict[error.operation_id] = error.to_nested_dict()
+            errors_dict[(error.operation_id, error.rank)] = error.to_nested_dict()
 
     arguments_dict = defaultdict(list)
     for argument in operation_arguments:
@@ -50,18 +73,18 @@ def serialize_operations(
         arguments = [a.to_dict() for a in arguments_dict[operation.operation_id]]
         operation_data = operation.to_dict()
         operation_data["id"] = operation.operation_id
-        operation_device_operations = device_operations_dict.get(
-            operation.operation_id, []
+        operation_device_operations = _device_ops_for_operation(
+            device_operations_dict, operation
         )
         id = operation_data.pop("operation_id", None)
 
-        error_data = errors_dict.get(operation.operation_id)
+        error_data = _error_for_operation(errors_dict, operation)
 
         results.append(
             {
                 **operation_data,
                 "id": id,
-                "stack_trace": stack_traces_dict.get(operation.operation_id),
+                "stack_trace": _stack_trace_for_operation(stack_traces_dict, operation),
                 "device_operations": operation_device_operations,
                 "arguments": arguments,
                 "inputs": inputs,
@@ -79,14 +102,22 @@ def serialize_inputs_outputs(
     tensors_dict,
     comparisons=None,
 ):
-    producers_consumers_dict = {pc.tensor_id: pc for pc in producers_consumers}
+    producers_consumers_dict = {
+        (pc.tensor_id, pc.rank): pc for pc in producers_consumers
+    }
 
     def attach_tensor_data(values):
         values_dict = defaultdict(list)
         for value in values:
-            tensor = tensors_dict.get(value.tensor_id)
+            tensor = tensors_dict.get((value.tensor_id, value.rank))
+            if tensor is None:
+                tensor = tensors_dict.get((value.tensor_id, 0))
+            if tensor is None:
+                continue
             tensor_dict = tensor.to_dict()
-            pc = producers_consumers_dict.get(value.tensor_id)
+            pc = producers_consumers_dict.get((value.tensor_id, value.rank))
+            if pc is None:
+                pc = producers_consumers_dict.get((value.tensor_id, 0))
             value_dict = dataclasses.asdict(value)
             value_dict.pop("tensor_id", None)
             value_dict.update(
@@ -155,7 +186,7 @@ def serialize_operation(
     device_operations,
     error_record=None,
 ):
-    tensors_dict = {t.tensor_id: t for t in tensors}
+    tensors_dict = {(t.tensor_id, t.rank): t for t in tensors}
     comparisons = comparisons_by_tensor_id(
         local_tensor_comparisons, global_tensor_comparisons
     )
@@ -181,10 +212,17 @@ def serialize_operation(
     id = operation_data.pop("operation_id", None)
 
     device_operations_data = []
+    chosen = False
     for do in device_operations:
-        if do.operation_id == operation.operation_id:
+        if do.operation_id == operation.operation_id and do.rank == operation.rank:
             device_operations_data = do.captured_graph
+            chosen = True
             break
+    if not chosen:
+        for do in device_operations:
+            if do.operation_id == operation.operation_id:
+                device_operations_data = do.captured_graph
+                break
 
     # Convert error record to nested dict if it exists (excludes operation_id and operation_name)
     error_data = error_record.to_nested_dict() if error_record else None
@@ -216,6 +254,7 @@ def serialize_operation_buffers(operation: Operation, operation_buffers):
             ),
             "buffer_layout": b.buffer_layout,
             "size": b.max_size_per_bank,
+            "rank": b.rank,
         }
         buffer_data.append(buffer_dict)
 
@@ -244,6 +283,7 @@ def serialize_operations_buffers(operations, buffers):
             ),
             "buffer_layout": b.buffer_layout,
             "size": b.max_size_per_bank,
+            "rank": b.rank,
         }
         serialized_buffers[b.operation_id].append(buffer_dict)
 
@@ -267,32 +307,30 @@ def serialize_buffer(buffer):
         "device_id": buffer.device_id,
         "size": buffer.max_size_per_bank,
         "address": buffer.address,
+        "rank": buffer.rank,
     }
 
 
 def serialize_tensors(
     tensors, producers_consumers, local_comparisons, global_comparisons
 ):
-    producers_consumers_dict = {pc.tensor_id: pc for pc in producers_consumers}
+    producers_consumers_dict = {
+        (pc.tensor_id, pc.rank): pc for pc in producers_consumers
+    }
     results = []
     comparisons = comparisons_by_tensor_id(local_comparisons, global_comparisons)
     for tensor in tensors:
         tensor_data = tensor.to_dict()
         tensor_id = tensor_data.pop("tensor_id")
+        pc = producers_consumers_dict.get((tensor_id, tensor.rank))
+        if pc is None:
+            pc = producers_consumers_dict.get((tensor_id, 0))
         tensor_data.update(
             {
                 "id": tensor_id,
                 "comparison": comparisons.get(tensor_id),
-                "consumers": (
-                    producers_consumers_dict[tensor_id].consumers
-                    if tensor_id in producers_consumers_dict
-                    else []
-                ),
-                "producers": (
-                    producers_consumers_dict[tensor_id].producers
-                    if tensor_id in producers_consumers_dict
-                    else []
-                ),
+                "consumers": pc.consumers if pc else [],
+                "producers": pc.producers if pc else [],
             }
         )
         results.append(tensor_data)

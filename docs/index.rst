@@ -7,12 +7,14 @@ Welcome to TT-NN Visualizer documentation!
 
    src/what-is-ttnn-visualizer
    src/installing
+   src/running-the-application
 
 .. toctree::
    :maxdepth: 3
    :caption: User Guide
 
    src/remote-sync
+   src/linking-reports
    src/running-from-source
 
 

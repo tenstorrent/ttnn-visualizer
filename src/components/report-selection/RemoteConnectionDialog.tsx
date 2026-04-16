@@ -172,6 +172,24 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
 
                 <FormGroup
+                    label='SSH identity file (optional)'
+                    subLabel='Path to your private key on this machine (e.g. ~/.ssh/id_ed25519). Leave empty for default.'
+                    labelFor='remote-ssh-identity'
+                >
+                    <InputGroup
+                        id='remote-ssh-identity'
+                        placeholder='Leave empty for default key'
+                        value={connection.identityFile ?? ''}
+                        onChange={(e) =>
+                            setConnection({
+                                ...connection,
+                                identityFile: e.target.value.trim() || undefined,
+                            })
+                        }
+                    />
+                </FormGroup>
+
+                <FormGroup
                     label='Memory report folder path'
                     subLabel='Path to a remote folder containing memory reports (e.g., "/<PATH TO TT METAL>/generated/ttnn/reports/")'
                     labelFor='remote-memory-path'
@@ -224,7 +242,10 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             <DialogFooter
                 minimal
                 actions={
-                    <Tooltip content={!isValidConnection ? 'Ensure connection passes all tests' : ''}>
+                    <Tooltip
+                        content='Ensure connection passes all tests'
+                        disabled={isValidConnection}
+                    >
                         <Button
                             text={buttonLabel}
                             disabled={!isValidConnection}

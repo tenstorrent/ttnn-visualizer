@@ -7,6 +7,7 @@ import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { PlotData } from 'plotly.js';
 import classNames from 'classnames';
+import { useAtomValue } from 'jotai';
 import { BufferType } from '../../model/BufferType';
 import { useBufferPages, useDevices } from '../../hooks/useAPI';
 import '../../scss/components/TensorVisualizationComponent.scss';
@@ -17,6 +18,7 @@ import getChartData, { pageDataToChunkArray } from '../../functions/getChartData
 import { L1RenderConfiguration } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
+import { showHexAtom } from '../../store/app';
 
 export interface TensorVisualisationComponentProps {
     title: string;
@@ -56,6 +58,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
 }) => {
     const { data } = useBufferPages(operationId, address, bufferType);
     const { data: devices } = useDevices();
+    const showHex = useAtomValue(showHexAtom);
 
     const [selectedTensix, setSelectedTensix] = useState<number | null>(null);
     const [chartData, setChartData] = useState<Partial<PlotData>[]>([]);
@@ -171,6 +174,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                             getChartData(
                                                 pageDataToChunkArray(buffersByBankId[matchIndex]),
                                                 (id) => tensorByAddress?.get(id) || null,
+                                                undefined,
+                                                { showHex },
                                             ),
                                         );
                                     }}

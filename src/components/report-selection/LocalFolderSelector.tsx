@@ -4,23 +4,21 @@
 
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, type FC, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, type FC, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
-    selectedDeviceAtom,
 } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getServerConfig from '../../functions/getServerConfig';
-import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import {
     PERFORMANCE_FOLDER_QUERY_KEY,
     PROFILER_FOLDER_QUERY_KEY,
@@ -38,6 +36,7 @@ import {
     normaliseReportFolder,
 } from '../../functions/validateReportFolder';
 import { TEST_IDS } from '../../definitions/TestIds';
+import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -65,24 +64,23 @@ const invalidReportStatus: ConnectionStatus = {
 
 const invalidProfilerStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
-    message: 'Selected directory is not a valid profiler run',
+    message: 'Selected directory does not contain a valid report',
 };
 
 const directoryErrorStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
-    message: 'Selected directory does not contain a valid report.',
+    message: 'Selected directory does not contain a valid report',
 };
 
 const connectionFailedStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
-    message: 'Unable to upload selected directory.',
+    message: 'Unable to upload selected directory',
 };
 
 const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
     const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
-    const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
 
@@ -95,6 +93,7 @@ const LocalFolderOptions: FC = () => {
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
     const { data: reportFolderList } = useReportFolderList();
+    const { resetListStates } = useRestoreScrollPosition();
 
     const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
@@ -163,15 +162,14 @@ const LocalFolderOptions: FC = () => {
                 reportName: response.data.reportName,
             };
 
-            setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveProfilerReport(updatedReport);
             createToastNotification('Active memory report', updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);
-            setProfilerFolder(connectionStatus);
         }
 
         queryClient.clear();
         setIsUploadingReport(false);
+        setProfilerFolder(connectionStatus);
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -224,6 +222,7 @@ const LocalFolderOptions: FC = () => {
         createToastNotification('Active memory report', folder.reportName ?? '', ToastType.SUCCESS);
         setActiveProfilerReport(folder);
         setProfilerReportLocation(ReportLocation.LOCAL);
+        resetListStates();
     };
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {
@@ -263,22 +262,6 @@ const LocalFolderOptions: FC = () => {
         }
     };
 
-    useEffect(() => {
-        if (isUploadingReport) {
-            setProfilerFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-
-        if (isUploadingPerformance) {
-            setPerformanceFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-    }, [isUploadingReport, isUploadingPerformance]);
-
     return (
         <>
             <FormGroup
@@ -292,6 +275,7 @@ const LocalFolderOptions: FC = () => {
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
+                    showReportName
                 />
             </FormGroup>
 
@@ -315,17 +299,16 @@ const LocalFolderOptions: FC = () => {
 
                         {profilerFolder && !isUploadingReport && (
                             <div
-                                className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}
+                                className='folder-upload-status'
                                 data-testid={TEST_IDS.LOCAL_PROFILER_STATUS}
                             >
                                 <Icon
-                                    className='connection-status-icon'
                                     icon={ICON_MAP[profilerFolder.status]}
                                     size={20}
                                     intent={INTENT_MAP[profilerFolder.status]}
                                 />
 
-                                <span className='connection-status-text'>{profilerFolder.message}</span>
+                                <span className='message'>{profilerFolder.message}</span>
                             </div>
                         )}
                     </div>
@@ -363,17 +346,16 @@ const LocalFolderOptions: FC = () => {
 
                         {performanceFolder && !isUploadingPerformance && (
                             <div
-                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
+                                className='folder-upload-status'
                                 data-testid={TEST_IDS.LOCAL_PERFORMANCE_STATUS}
                             >
                                 <Icon
-                                    className='connection-status-icon'
                                     icon={ICON_MAP[performanceFolder.status]}
                                     size={20}
                                     intent={INTENT_MAP[performanceFolder.status]}
                                 />
 
-                                <span className='connection-status-text'>{performanceFolder.message}</span>
+                                <span className='message'>{performanceFolder.message}</span>
                             </div>
                         )}
                     </div>

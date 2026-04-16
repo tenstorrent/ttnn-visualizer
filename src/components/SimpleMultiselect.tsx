@@ -10,19 +10,19 @@ const SimpleMultiselect = ({
     label,
     optionList,
     onUpdateHandler,
+    initialValue,
+    className,
 }: {
     label: string;
     optionList: string[];
     onUpdateHandler: (values: string[]) => void;
+    initialValue?: string[];
+    className?: string;
 }) => {
-    const [selected, setSelected] = useState<string[]>([]);
+    const [selected, setSelected] = useState<string[]>(initialValue ?? []);
     const handleItemSelect = (item: string) => {
-        let list: string[] = [];
-        if (!selected.includes(item)) {
-            list = [...selected, item];
-        } else {
-            list = selected.filter((v) => v !== item);
-        }
+        const list = !selected.includes(item) ? [...selected, item] : selected.filter((v) => v !== item);
+
         setSelected(list);
         onUpdateHandler(list);
     };
@@ -52,6 +52,7 @@ const SimpleMultiselect = ({
 
     return (
         <MultiSelect<string>
+            className={className ?? ''}
             items={optionList}
             itemRenderer={renderOption}
             onItemSelect={handleItemSelect}

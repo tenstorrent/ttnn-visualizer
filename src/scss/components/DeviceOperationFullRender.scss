@@ -13,11 +13,37 @@
     }
 }
 
-.standard-flex-layout {
+.device-operation-label {
+    .operation-arrow {
+        font-size: 12px;
+        padding-top: 1px;
+    }
+
+    &.failed-op-analysis {
+        background-color: rgba($tt-yellow-accent, 0.2);
+    }
+}
+
+.tensor-details-layout {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 5px;
+    position: relative;
+    top: 1px;
+    font-size: 14px;
+
+    .memory-color-block {
+        width: 11px;
+        height: 11px;
+    }
+
+    .has-tooltip {
+        border-bottom-color: $tt-teal;
+        border-bottom-width: 2px;
+        padding-bottom: 1px;
+        margin-top: 2px;
+    }
 }
 
 .arg-tensor-tooltip {
@@ -50,6 +76,8 @@
     }
 
     .device-operation {
+        margin-bottom: 10px;
+
         hr {
             opacity: 0.2;
             padding-top: 5px;
@@ -59,6 +87,16 @@
             padding-left: 20px;
             margin-top: 10px;
         }
+
+        /* stylelint-disable selector-class-pattern */
+        .title {
+            &.node-type-buffer_allocate,
+            &.node-type-buffer_deallocate {
+                margin-bottom: 10px;
+            }
+        }
+
+        /* stylelint-enable selector-class-pattern */
 
         .collapsible-controls {
             h4 {
@@ -71,13 +109,28 @@
             }
         }
 
+        .collapsible-label-wrap {
+            display: inline-flex;
+            padding-right: 8px;
+
+            // padding-left: 8px;
+        }
+
         .params {
             font-weight: lighter;
+
+            &:empty {
+                display: none;
+            }
         }
     }
 
     .end-function {
         padding-top: 10px;
+
+        &:empty {
+            display: none;
+        }
     }
 
     .function-content {

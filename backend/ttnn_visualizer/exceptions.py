@@ -88,3 +88,22 @@ class NoValidConnectionsError(SSHException):
     """Raised when SSH connection cannot be established"""
 
     pass
+
+
+class RemoteFileReadException(Exception):
+    """Raised when a remote file cannot be read"""
+
+    def __init__(
+        self,
+        message: str,
+        http_status_code: HTTPStatus = HTTPStatus.INTERNAL_SERVER_ERROR,
+        detail: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.message = message
+        self._http_status_code = http_status_code
+        self.detail = detail
+
+    @property
+    def http_status(self):
+        return self._http_status_code

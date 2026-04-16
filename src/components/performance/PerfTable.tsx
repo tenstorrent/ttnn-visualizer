@@ -9,12 +9,12 @@ import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
 import {
-    ColumnHeaders,
-    TableColumn,
-    TableFilter,
+    ColumnDefinition,
+    ColumnKeys,
+    Columns,
+    PerfTableFilters,
     TypedPerfTableRow,
     comparisonKeys,
-    tableColumns,
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
@@ -22,24 +22,27 @@ import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
-import { formatSize } from '../../functions/math';
+import { formatPercentage, formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
-import { hideHostOpsAtom } from '../../store/app';
+import { hideHostOpsAtom, mergeDevicesAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
 import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
-    filters: TableFilter;
+    filters: PerfTableFilters;
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
     reportName: string | null;
+    showHashColumn: boolean;
 }
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
+const CACHE_HIT_INSERTION_POINT = 15;
 
 const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
@@ -49,8 +52,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     hiliteHighDispatch,
     shouldHighlightRows,
     reportName,
+    showHashColumn,
 }) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
@@ -79,23 +84,25 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     );
 
     const visibleColumns = [
-        ...tableColumns.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: ColumnHeaders.OP, sortable: true }] : []),
-        ...tableColumns.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: ColumnHeaders.high_dispatch }] : []),
-        ...tableColumns.slice(HIGH_DISPATCH_INSERTION_POINT),
-        ...(npeManifest && npeManifest.length > 0 ? [{ label: 'NPE', key: ColumnHeaders.global_call_count }] : []),
-    ] as TableColumn[];
+        ...Columns.slice(0, OP_ID_INSERTION_POINT),
+        ...(opIdsMap.length > 0 ? [{ name: 'OP', key: ColumnKeys.OP, sortable: true }] : []),
+        ...Columns.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...(hiliteHighDispatch ? [{ name: 'Slow', key: ColumnKeys.HighDispatch }] : []),
+        ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT, CACHE_HIT_INSERTION_POINT),
+        ...(showHashColumn ? [{ name: 'Hash', key: ColumnKeys.Hash }] : []),
+        ...Columns.slice(CACHE_HIT_INSERTION_POINT),
+        ...(npeManifest && npeManifest.length > 0 ? [{ name: 'NPE', key: ColumnKeys.GlobalCallCount }] : []),
+    ];
 
     const cellFormattingProxy = (
         row: TypedPerfTableRow,
-        column: TableColumn,
+        column: ColumnDefinition,
         operations?: OperationDescription[],
         highlight?: string | null,
     ) => {
         const { key } = column;
 
-        if (key === ColumnHeaders.global_call_count) {
+        if (key === ColumnKeys.GlobalCallCount) {
             // TODO: this is an inefficient way of doing things but its also temporary. will update next iteration
             const value = parseInt(String(row[key]), 10) || -1; // apparently npe is using 0 as a default value as opposed to no value.
             const manifestRecord = npeManifest?.find((el) => {
@@ -146,6 +153,8 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 reportName={reportName}
             />
 
+            {mergeDevices && <PerfMultiDeviceNotice />}
+
             {data?.length > 0 ? (
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
@@ -170,7 +179,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 variant={ButtonVariant.MINIMAL}
                                                 size={Size.SMALL}
                                             >
-                                                <span className='header-label'>{h.label}</span>
+                                                <span className='header-label'>{h.name}</span>
 
                                                 {sortingColumn === h.key ? (
                                                     <Icon
@@ -194,7 +203,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 )}
                                             </Button>
                                         ) : (
-                                            <span className='header-label no-button'>{h.label}</span>
+                                            <span className='header-label no-button'>{h.name}</span>
                                         )}
 
                                         {/* TODO: May want this in the near future */}
@@ -228,8 +237,8 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                         <td
                                             key={h.key}
                                             className={classNames('cell', {
-                                                'align-right': h.key === ColumnHeaders.math_fidelity,
-                                                'break-word': h.key === ColumnHeaders.op_code,
+                                                'align-right': h.key === ColumnKeys.MathFidelity,
+                                                'break-word': h.key === ColumnKeys.OpCode,
                                             })}
                                         >
                                             {cellFormattingProxy(row, h, operationsList, filters?.[h.key])}
@@ -255,8 +264,8 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 <td
                                                     key={h.key}
                                                     className={classNames('cell', {
-                                                        'align-right': h.key === ColumnHeaders.math_fidelity,
-                                                        'break-word': h.key === ColumnHeaders.op_code,
+                                                        'align-right': h.key === ColumnKeys.MathFidelity,
+                                                        'break-word': h.key === ColumnKeys.OpCode,
                                                     })}
                                                 >
                                                     {comparisonKeys.includes(h.key) &&
@@ -294,7 +303,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                         <td
                                             key={header.key}
                                             className={classNames({
-                                                'pre-wrap': header.key === ColumnHeaders.op_code,
+                                                'pre-wrap': header.key === ColumnKeys.OpCode,
                                             })}
                                             colSpan={header.footerSpan ?? undefined}
                                         >
@@ -313,19 +322,19 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     );
 };
 
-const getTotalsForFooter = (column: TableColumn, data: TypedPerfTableRow[], hideHostOps: boolean): string => {
-    if (column.key === ColumnHeaders.total_percent) {
-        return `100 %`;
+const getTotalsForFooter = (column: ColumnDefinition, data: TypedPerfTableRow[], hideHostOps: boolean): string => {
+    if (column.key === ColumnKeys.TotalPercent) {
+        return `100%`;
     }
 
-    if (column.key === ColumnHeaders.device_time) {
+    if (column.key === ColumnKeys.DeviceTime) {
         return `${formatSize(
             data?.reduce((acc, curr) => acc + (curr.device_time || 0), 0),
             2,
         )} µs`;
     }
 
-    if (column.key === ColumnHeaders.op_code) {
+    if (column.key === ColumnKeys.OpCode) {
         const hostOpsCount = data.filter((row) => isHostOp(row.bound)).length;
         const deviceOpsCount = data.length - hostOpsCount;
 
@@ -334,11 +343,19 @@ const getTotalsForFooter = (column: TableColumn, data: TypedPerfTableRow[], hide
             : `${data.length} ops\n(${deviceOpsCount} device ops + ${hostOpsCount} host ops)`;
     }
 
-    if (column.key === ColumnHeaders.op_to_op_gap) {
+    if (column.key === ColumnKeys.OpToOpGap) {
         return `${formatSize(
             data?.reduce((acc, curr) => acc + (curr.op_to_op_gap || 0), 0),
             2,
         )} µs`;
+    }
+
+    if (column.key === ColumnKeys.CacheHit) {
+        const nonUniqueOps = data.filter((row) => !row.isFirstHashOccurrence);
+        const cacheHits = nonUniqueOps.filter((row) => row.cache_hit).length;
+        const cacheHitPercent = nonUniqueOps.length > 0 ? (cacheHits / nonUniqueOps.length) * 100 : 0;
+
+        return `${formatPercentage(cacheHitPercent).toString()} expected cache hits`;
     }
 
     return '';

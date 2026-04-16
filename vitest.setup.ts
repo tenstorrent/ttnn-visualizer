@@ -2,8 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { vi } from 'vitest';
+import { beforeAll, vi } from 'vitest';
 import 'vitest-canvas-mock';
+
+beforeAll(() => {
+    vi.resetModules();
+});
 
 if (!window.URL) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -20,11 +20,6 @@ export default defineConfig((configEnv) =>
                         },
                     },
                 },
-                poolOptions: {
-                    threads: {
-                        singleThread: true,
-                    },
-                },
                 environmentOptions: {
                     jsdom: {
                         resources: 'usable',

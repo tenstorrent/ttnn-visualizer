@@ -29,20 +29,17 @@
 
 .legend-item {
     display: inline-grid;
-    grid-template-columns: 15px 0.2fr 0.2fr 0.2fr 7fr 3fr;
+    grid-template-columns: 15px 0.5fr 2fr 13fr 3fr;
     column-gap: 15px;
     text-align: left;
 
     &.extra-info {
-        grid-template-columns: 15px 0.2fr 0.2fr 0.2fr 6fr 3fr 3fr;
+        grid-template-columns: 15px 0.5fr 2fr 10fr 3fr 3fr;
     }
 
     &.button {
+        &:hover,
         &:focus {
-            background-color: $tt-bg-highlight;
-        }
-
-        &:hover {
             background-color: rgba($tt-bg-highlight, 0.5);
         }
     }
@@ -61,10 +58,6 @@
 
     .format-numbers {
         text-align: right;
-
-        &.keep-left {
-            text-align: left;
-        }
     }
 
     .nowrap {

@@ -12,8 +12,9 @@
     flex-direction: column;
     z-index: 1;
     width: 100%;
-    background-color: rgba($tt-grey-4, 0.9);
+    background-color: rgba($tt-black, 0.9);
     padding: 5px 15px;
+    min-height: 34px; // Closed height
 
     &.is-open {
         gap: 5px;
@@ -21,9 +22,15 @@
 
     .active-reports {
         display: flex;
-        gap: 15px;
-        align-items: center;
+        flex-grow: 1;
+        gap: 10px;
         margin-right: 10px;
+    }
+
+    .version-container {
+        display: flex;
+        align-items: center;
+        border-right: 1px solid $tt-grey-5;
     }
 
     .slider-controls {
@@ -41,12 +48,20 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 12px;
+    }
+
+    .report-source-tag {
+        flex-shrink: 0;
+        font-size: 10px;
+        line-height: 1.2;
+        padding: 1px 5px;
     }
 
     .title {
         display: flex;
-        align-items: center;
         gap: 5px;
+        align-items: center;
 
         .report-name {
             display: inline-block;
@@ -57,8 +72,8 @@
         }
     }
 
-    .path-button {
-        min-height: 24px;
-        min-width: 26px;
+    .no-sync-status-icon {
+        color: $tt-grey-5;
+        opacity: 0.4;
     }
 }

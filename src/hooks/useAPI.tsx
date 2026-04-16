@@ -15,19 +15,20 @@ import {
     BufferPage,
     BuffersByOperation,
     DeviceInfo,
+    DeviceOperationParams,
     Instance,
     NodeType,
     Operation,
     OperationDescription,
     OperationDetailsData,
-    ReportMetaData,
     Tensor,
     defaultBuffer,
-    defaultOperationDetailsData,
+    defaultOperation,
     defaultTensorData,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
+import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
@@ -49,16 +50,23 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
-import createToastNotification, { ToastType } from '../functions/createToastNotification';
-import { normaliseReportFolder } from '../functions/validateReportFolder';
+import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import Endpoints from '../definitions/Endpoints';
+import { ReportFolder } from '../definitions/Reports';
+import { RemoteFolder } from '../definitions/RemoteConnection';
+import createToastNotification, { ToastType } from '../functions/createToastNotification';
+import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
+import { processInputsOutputs } from '../functions/processMemoryAllocations';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
+    if (!stackTrace) {
+        return '';
+    }
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
     const match = stackTrace.match(regex);
 
@@ -99,8 +107,9 @@ export const fetchBufferPages = async (
 
 const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
     if (id === null) {
-        return defaultOperationDetailsData;
+        return defaultOperation;
     }
+
     try {
         const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(
             `${Endpoints.OPERATIONS_LIST}/${id}`,
@@ -124,7 +133,8 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
             }
         }
     }
-    return defaultOperationDetailsData;
+
+    return defaultOperation;
 };
 
 const fetchOperations = async (): Promise<OperationDescription[]> => {
@@ -133,11 +143,14 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     const operationList = response.data;
 
     const getDeviceOperationNameList = (operation: OperationDescription) => {
+        if (!Array.isArray(operation.device_operations)) {
+            return [];
+        }
         return operation.device_operations
             .filter((op) => {
                 return op.node_type === NodeType.function_start && isDeviceOperation(op.params.name);
             })
-            .map((op) => op.params.name);
+            .map((op) => (op.params as DeviceOperationParams).name);
     };
 
     return operationList.map((operation: OperationDescription) => {
@@ -181,6 +194,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             inputs,
             arguments: argumentsWithParsedValues,
             deviceOperationNameList: getDeviceOperationNameList(operation),
+            processedConnections: processInputsOutputs(operation.device_operations),
         } as OperationDescription;
     });
 };
@@ -289,20 +303,20 @@ export const useOperationBuffers = (operationId: number) => {
     });
 };
 
-const fetchReportMeta = async (): Promise<ReportMetaData> => {
-    const { data: meta } = await axiosInstance.get<ReportMetaData>(Endpoints.CONFIG);
+// Not currently used
+// const fetchReportMeta = async (): Promise<ReportMetaData> => {
+//     const { data: meta } = await axiosInstance.get<ReportMetaData>(Endpoints.CONFIG);
 
-    return meta;
-};
+//     return meta;
+// };
 
-const fetchDevices = async (reportName: string) => {
+const fetchDevices = async (report: ReportFolder | RemoteFolder) => {
     const { data: meta } = await axiosInstance.get<DeviceInfo[]>(Endpoints.DEVICES);
 
     if (meta.length === 0) {
-        // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
         createToastNotification(
             'Data integrity warning: No device information provided.',
-            `/${reportName}`,
+            getErroredReportFolderLabel(report),
             ToastType.WARNING,
         );
     }
@@ -399,8 +413,10 @@ const fetchDeviceMeta = async (name: string | null) => {
 
 const fetchClusterDescription = async (): Promise<ClusterModel> => {
     const { data } = await axiosInstance.get<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR);
+
     try {
         const { data: meshData } = await axiosInstance.get<MeshData>(Endpoints.MESH_DESCRIPTOR);
+
         if (meshData?.chips) {
             data.chips = meshData.chips;
         }
@@ -408,6 +424,7 @@ const fetchClusterDescription = async (): Promise<ClusterModel> => {
         // eslint-disable-next-line no-console
         console.error('mesh-descriptor not found', err);
     }
+
     return data;
 };
 
@@ -438,7 +455,7 @@ export const useOperationListRange = (): NumberRange | null => {
     return useMemo(
         () => (response?.data?.length ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
         // TODO: this used to rely on response.isLoading... which iis an invalid dependency. will have to wait for david to come back.
-        // this fixes #613 https://github.com/tenstorrent/ttnn-visualizer/issues/613
+        // this fixes https://github.com/tenstorrent/ttnn-visualizer/issues/613
         [response.data],
     );
 };
@@ -501,13 +518,23 @@ export const useOperationDetails = (operationId: number | null) => {
         return Array.from(uniqueBuffers.values());
     }, [operationDetails.data]);
 
-    if (operationDetails.data) {
-        operationDetails.data.buffersSummary = buffersSummary;
-    }
+    const augmentedOperationDetails = useMemo(() => {
+        if (!operationDetails.data) {
+            return operationDetails;
+        }
+
+        return {
+            ...operationDetails,
+            data: {
+                ...operationDetails.data,
+                buffersSummary,
+            },
+        };
+    }, [operationDetails, buffersSummary]);
 
     return {
         operation,
-        operationDetails,
+        operationDetails: augmentedOperationDetails,
     };
 };
 
@@ -683,14 +710,14 @@ export const usePerformanceRange = (): NumberRange | null => {
 };
 
 // Not currently used
-export const useReportMeta = () => {
-    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+// export const useReportMeta = () => {
+//     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<ReportMetaData, AxiosError>({
-        queryKey: ['get-report-config', activeProfilerReport?.path],
-        queryFn: () => fetchReportMeta(),
-    });
-};
+//     return useQuery<ReportMetaData, AxiosError>({
+//         queryKey: ['get-report-config', activeProfilerReport?.path],
+//         queryFn: () => fetchReportMeta(),
+//     });
+// };
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
     return useQuery<BufferPage[], AxiosError>({
@@ -751,7 +778,7 @@ export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<DeviceInfo[], AxiosError>({
-        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport?.path) : Promise.resolve([])),
+        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport) : Promise.resolve([])),
         queryKey: ['get-devices', activeProfilerReport?.path],
         retry: false,
         staleTime: Infinity,
@@ -809,7 +836,14 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
 
     return useMemo(() => {
         if (response.data && range && useRange) {
-            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
+            const filteredData = response.data.filter(
+                (operation) => operation.id >= range[0] && operation.id <= range[1],
+            );
+
+            return {
+                ...response,
+                data: filteredData,
+            };
         }
 
         return response;
@@ -856,7 +890,7 @@ export const usePerformanceReport = (name: string | null) => {
             `groupBy:${groupBy}`,
         ],
         enabled: name !== null,
-        retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
+        retry: false,
         staleTime: Infinity,
     });
 
@@ -922,7 +956,6 @@ export const useInstance = () => {
     return useQuery({
         queryFn: () => fetchInstance(),
         queryKey: ['fetch-instance', activeProfilerReport?.path, activePerformanceReport?.path, activeNpe],
-        initialData: null,
     });
 };
 
@@ -1045,10 +1078,10 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
     const { data: buffersByOperation } = useBuffers(bufferType);
     const { data: operations } = useOperationsList();
 
-    const tensorsByOperationByAddress: TensorsByOperationByAddress = new Map();
     const uniqueBuffersByOperationList = useMemo(() => {
         return buffersByOperation?.map((operation) => {
             const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+
             operation.buffers.forEach((buffer) => {
                 const { address, size } = buffer;
                 if (address) {
@@ -1058,6 +1091,7 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
                     }
                 }
             });
+
             return {
                 ...operation,
                 buffers: Array.from(uniqueBuffers.values()),
@@ -1065,60 +1099,66 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         });
     }, [buffersByOperation]);
 
-    if (!operations || !buffersByOperation) {
-        return tensorsByOperationByAddress;
-    }
+    const tensorsByOperationByAddress = useMemo(() => {
+        const result: TensorsByOperationByAddress = new Map();
 
-    const buffersByOpId = new Map<number, Buffer[]>();
-    uniqueBuffersByOperationList?.forEach((op) => {
-        buffersByOpId.set(op.id, op.buffers);
-    });
+        if (!operations || !buffersByOperation) {
+            return result;
+        }
 
-    const latestTensorByAddress = new Map<number, Tensor>();
+        const buffersByOpId = new Map<number, Buffer[]>();
+        uniqueBuffersByOperationList?.forEach((op) => {
+            buffersByOpId.set(op.id, op.buffers);
+        });
 
-    for (const op of operations) {
-        if (op.inputs) {
-            for (const t of op.inputs) {
-                if (t && t.address !== null && t.address !== undefined) {
-                    latestTensorByAddress.set(t.address, t);
+        const latestTensorByAddress = new Map<number, Tensor>();
+
+        for (const op of operations) {
+            if (op.inputs) {
+                for (const t of op.inputs) {
+                    if (t && t.address !== null && t.address !== undefined) {
+                        latestTensorByAddress.set(t.address, t);
+                    }
                 }
             }
-        }
-        if (op.outputs) {
-            for (const t of op.outputs) {
-                if (t && t.address !== null && t.address !== undefined) {
-                    latestTensorByAddress.set(t.address, t);
+            if (op.outputs) {
+                for (const t of op.outputs) {
+                    if (t && t.address !== null && t.address !== undefined) {
+                        latestTensorByAddress.set(t.address, t);
+                    }
                 }
             }
-        }
 
-        const buffers = buffersByOpId.get(op.id);
-        if (!buffers?.length) {
-            tensorsByOperationByAddress.set(op.id, new Map());
-            // eslint-disable-next-line no-continue
-            continue;
-        }
-
-        const tensorsByBufferAddress = new Map<number, Tensor>();
-
-        for (const buffer of buffers) {
-            const addr = buffer.address;
-            if (addr === null || addr === undefined) {
+            const buffers = buffersByOpId.get(op.id);
+            if (!buffers?.length) {
+                result.set(op.id, new Map());
                 // eslint-disable-next-line no-continue
                 continue;
             }
 
-            const tensor = latestTensorByAddress.get(addr);
-            if (tensor) {
-                tensorsByBufferAddress.set(addr, {
-                    ...tensor,
-                    buffer_type: buffer.buffer_type,
-                });
+            const tensorsByBufferAddress = new Map<number, Tensor>();
+
+            for (const buffer of buffers) {
+                const addr = buffer.address;
+                if (addr === null || addr === undefined) {
+                    // eslint-disable-next-line no-continue
+                    continue;
+                }
+
+                const tensor = latestTensorByAddress.get(addr);
+                if (tensor) {
+                    tensorsByBufferAddress.set(addr, {
+                        ...tensor,
+                        buffer_type: buffer.buffer_type,
+                    });
+                }
             }
+
+            result.set(op.id, tensorsByBufferAddress);
         }
 
-        tensorsByOperationByAddress.set(op.id, tensorsByBufferAddress);
-    }
+        return result;
+    }, [buffersByOperation, operations, uniqueBuffersByOperationList]);
 
     return tensorsByOperationByAddress;
 };
@@ -1142,7 +1182,7 @@ export const useGetTensorDeallocationReportByOperation = () => {
                 const lastConsumerOperationId = list.sort().pop() || -1;
                 const lastConsumerName = operationsById.get(lastConsumerOperationId)?.name || '';
 
-                if (lastConsumerOperationId > -1 && !lastConsumerName.includes('ttnn.deallocate')) {
+                if (lastConsumerOperationId > -1 && !DEALLOCATE_OP_NAME_LIST.includes(lastConsumerName.toLowerCase())) {
                     return { lastConsumerOperationId, lastConsumerName };
                 }
             }
@@ -1176,4 +1216,28 @@ export const useGetTensorDeallocationReportByOperation = () => {
 
         return { lateDeallocationsByOperation, nonDeallocatedTensorList: nonDeallocatedTensorListById };
     }, [operationsById, tensorListByOperation]);
+};
+
+const fetchLatestAppVersion = async (): Promise<string | null> => {
+    try {
+        const response = await axiosInstance.get<string>(Endpoints.LATEST_VERSION);
+
+        return response.data;
+    } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch latest app version:', error);
+        throw error;
+    }
+};
+
+export const useGetLatestAppVersion = () => {
+    const isServerMode = !!getServerConfig().SERVER_MODE;
+
+    return useQuery<string | null, AxiosError>({
+        queryFn: () => fetchLatestAppVersion(),
+        queryKey: ['get-latest-app-version'],
+        retry: false,
+        staleTime: Infinity,
+        enabled: !isServerMode,
+    });
 };
