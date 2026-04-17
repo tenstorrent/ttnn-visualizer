@@ -120,6 +120,15 @@ _NONZERO_RANK_UNSUPPORTED_MSG = (
 )
 
 
+def error_response(
+    status: HTTPStatus, message: Optional[str] = None, detail: Optional[str] = None
+):
+    payload = {"error": message or status.phrase}
+    if detail:
+        payload["detail"] = detail
+    return jsonify(payload), status
+
+
 def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
     """
     Legacy reports only represent rank 0. If the client asks for a different rank
@@ -248,7 +257,7 @@ def operation_detail(operation_id, instance: Instance):
         )
 
         if not operations:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return error_response(HTTPStatus.NOT_FOUND)
 
         operation = operations[0]
 
@@ -525,12 +534,12 @@ def buffer_detail(instance: Instance):
     operation_id = request.args.get("operation_id")
 
     if not address or not operation_id:
-        return Response(status=HTTPStatus.BAD_REQUEST)
+        return error_response(HTTPStatus.BAD_REQUEST)
 
     if operation_id and str.isdigit(operation_id):
         operation_id = int(operation_id)
     else:
-        return Response(status=HTTPStatus.BAD_REQUEST)
+        return error_response(HTTPStatus.BAD_REQUEST)
 
     rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
@@ -539,7 +548,7 @@ def buffer_detail(instance: Instance):
             return rejected
         buffer = db.query_next_buffer(operation_id, address, rank=rank)
         if not buffer:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return error_response(HTTPStatus.NOT_FOUND)
         return Response(
             orjson.dumps(dataclasses.asdict(buffer)),
             mimetype="application/json",
@@ -604,7 +613,7 @@ def tensor_detail(tensor_id, instance: Instance):
             )
         )
         if not tensors:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return error_response(HTTPStatus.NOT_FOUND)
 
         return Response(
             orjson.dumps(dataclasses.asdict(tensors[0])),
@@ -699,7 +708,7 @@ def get_operation_buffers(operation_id, instance: Instance):
             )
         )
         if not operations:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return error_response(HTTPStatus.NOT_FOUND)
         operation = operations[0]
         buffers = list(
             db.query_buffers(
@@ -715,7 +724,7 @@ def get_operation_buffers(operation_id, instance: Instance):
             )
         )
         if not operation:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return error_response(HTTPStatus.NOT_FOUND)
 
         return Response(
             orjson.dumps(serialize_operation_buffers(operation, buffers)),
@@ -811,9 +820,7 @@ def delete_profiler_report(profiler_name, instance: Instance):
     data_directory = Path(current_app.config[config_key])
 
     if not profiler_name:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Report name is required."
-        )
+        return error_response(HTTPStatus.BAD_REQUEST, "Report name is required.")
 
     if is_remote:
         connection = RemoteConnection.model_validate(
@@ -838,9 +845,7 @@ def delete_profiler_report(profiler_name, instance: Instance):
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
     else:
-        return Response(
-            status=HTTPStatus.NOT_FOUND, response=f"Report does not exist: {path}"
-        )
+        return error_response(HTTPStatus.NOT_FOUND, f"Report does not exist: {path}")
 
     return Response(
         status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}"
@@ -927,7 +932,7 @@ def get_performance_data_list(instance: Instance):
 @with_instance
 def get_performance_data(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
 
     with DeviceLogProfilerQueries(instance) as csv:
         result = csv.get_all_entries(as_dict=True, limit=100)
@@ -938,7 +943,7 @@ def get_performance_data(instance: Instance):
 @with_instance
 def get_profiler_performance_data(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
     with OpsPerformanceQueries(instance) as csv:
         # result = csv.query_by_op_code(op_code="(torch) contiguous", as_dict=True)
         result = csv.get_all_entries(as_dict=True, limit=100)
@@ -957,9 +962,7 @@ def delete_performance_report(performance_name, instance: Instance):
     data_directory = Path(current_app.config[config_key])
 
     if not performance_name:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Report name is required."
-        )
+        return error_response(HTTPStatus.BAD_REQUEST, "Report name is required.")
 
     if is_remote:
         connection = RemoteConnection.model_validate(
@@ -987,9 +990,7 @@ def delete_performance_report(performance_name, instance: Instance):
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
     else:
-        return Response(
-            status=HTTPStatus.NOT_FOUND, response=f"Report does not exist: {path}"
-        )
+        return error_response(HTTPStatus.NOT_FOUND, f"Report does not exist: {path}")
 
     return Response(
         status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}"
@@ -1000,7 +1001,7 @@ def delete_performance_report(performance_name, instance: Instance):
 @with_instance
 def get_performance_results_data_raw(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
     content = OpsPerformanceQueries.get_raw_csv(instance)
     return Response(
         content,
@@ -1013,9 +1014,9 @@ def get_performance_results_data_raw(instance: Instance):
 @with_instance
 def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST,
-            response="No performance data found for instance.",
+        return error_response(
+            HTTPStatus.BAD_REQUEST,
+            "No performance data found for instance.",
         )
 
     name = request.args.get("name", None)
@@ -1057,7 +1058,7 @@ def get_performance_results_report(instance: Instance):
 @with_instance
 def get_performance_data_raw(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
 
     name = request.args.get("name", None)
 
@@ -1100,7 +1101,7 @@ def get_performance_device_meta(instance: Instance):
     name = request.args.get("name", None)
 
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -1113,7 +1114,7 @@ def get_performance_device_meta(instance: Instance):
     )
 
     if not file_path.exists():
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
 
     try:
         first_line = get_first_line(file_path)
@@ -1122,14 +1123,14 @@ def get_performance_device_meta(instance: Instance):
 
     except Exception as e:
         logger.exception("Failed to parse device meta")
-        return Response(str(e), status=HTTPStatus.INTERNAL_SERVER_ERROR)
+        return error_response(HTTPStatus.INTERNAL_SERVER_ERROR, str(e))
 
 
 @api.route("/performance/npe/manifest", methods=["GET"])
 @with_instance
 def get_npe_manifest(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
     try:
         content = NPEQueries.get_npe_manifest(instance)
     except FileNotFoundError:
@@ -1142,7 +1143,7 @@ def get_npe_manifest(instance: Instance):
 @with_instance
 def get_npe_timeline(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
 
     filename = request.args.get("filename", default=None)
 
@@ -1163,7 +1164,7 @@ def get_npe_timeline(instance: Instance):
 @with_instance
 def get_zone_statistics(zone, instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(instance) as csv:
         result = csv.query_zone_statistics(zone_name=zone, as_dict=True)
         return Response(orjson.dumps(result), mimetype="application/json")
@@ -1214,7 +1215,7 @@ def create_profiler_files():
     try:
         paths = save_uploaded_files(files, profiler_directory, folder_name)
     except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        return error_response(HTTPStatus.UNPROCESSABLE_ENTITY)
 
     profiler_path = next((p for p in paths if Path(p).name == "db.sqlite"), None)
 
@@ -1291,7 +1292,7 @@ def create_performance_files():
             folder_name,
         )
     except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        return error_response(HTTPStatus.UNPROCESSABLE_ENTITY)
 
     performance_path = str(paths[0].parent)
 
@@ -1339,7 +1340,7 @@ def create_npe_files():
     try:
         paths = save_uploaded_files(files, target_directory)
     except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        return error_response(HTTPStatus.UNPROCESSABLE_ENTITY)
 
     instance_id = request.args.get("instanceId")
     npe_path = str(paths[0])
@@ -1366,9 +1367,7 @@ def get_remote_folders_profiler():
     connection_data = request.get_json()
 
     if not connection_data:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
-        )
+        return error_response(HTTPStatus.BAD_REQUEST, "Missing connection data")
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
 
@@ -1404,9 +1403,7 @@ def get_remote_folders_performance():
     connection_data = request.get_json()
 
     if not connection_data:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
-        )
+        return error_response(HTTPStatus.BAD_REQUEST, "Missing connection data")
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
 
@@ -1493,9 +1490,7 @@ def test_remote_folder():
     connection_data = request.json
 
     if not connection_data:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
-        )
+        return error_response(HTTPStatus.BAD_REQUEST, "Missing connection data")
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
     logger.debug(
@@ -1708,8 +1703,9 @@ def use_remote_folder():
     performance = data.get("performance")
 
     if not connection_data or not (profiler or performance):
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Missing connection or report data"
+        return error_response(
+            HTTPStatus.BAD_REQUEST,
+            "Missing connection or report data",
         )
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
@@ -1764,7 +1760,7 @@ def update_current_instance(instance: Instance):
         update_data = request.get_json()
 
         if not update_data:
-            return Response(status=HTTPStatus.BAD_REQUEST, response="No data provided.")
+            return error_response(HTTPStatus.BAD_REQUEST, "No data provided.")
 
         # Use current instance unless a different one is specified
         instance_id = update_data.get("instance_id") or instance.instance_id
@@ -1790,9 +1786,9 @@ def update_current_instance(instance: Instance):
     except Exception as e:
         logger.error(f"Error updating instance: {str(e)}")
 
-        return Response(
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
-            response="An error occurred while updating the instance.",
+        return error_response(
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+            "An error occurred while updating the instance.",
         )
 
 
@@ -1802,7 +1798,7 @@ def update_current_instance(instance: Instance):
 def get_npe_data(instance: Instance):
     if not instance.npe_path:
         logger.error("NPE path is not set in the instance.")
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
 
     if instance.npe_path.endswith(".zst"):
         compressed_path = Path(instance.npe_path)
@@ -1820,7 +1816,7 @@ def get_npe_data(instance: Instance):
         logger.error(
             f"NPE file does not exist: {compressed_path} / {uncompressed_path}"
         )
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return error_response(HTTPStatus.NOT_FOUND)
 
     try:
         if compressed_path and compressed_path.exists():
@@ -1832,7 +1828,7 @@ def get_npe_data(instance: Instance):
                 npe_data = file.read()
     except Exception as e:
         logger.error(f"Error reading NPE file: {e}")
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        return error_response(HTTPStatus.UNPROCESSABLE_ENTITY)
 
     return Response(npe_data, mimetype="application/json")
 
