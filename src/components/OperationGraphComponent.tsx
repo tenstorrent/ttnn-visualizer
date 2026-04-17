@@ -40,7 +40,7 @@ const OperationGraph: React.FC<{
     const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
     const [filterOutDeallocate, setFilterOutDeallocate] = useState<boolean>(true);
     const networkRef = useRef<Network | null>(null);
-    const currentOpIdRef = useRef<number>(currentOperationId);
+    const currentOpIdRef = useRef<number | null>(currentOperationId);
     const [compactView, setCompactView] = useState<boolean>(false);
 
     const edges = useMemo((): Edge[] => {
@@ -81,10 +81,13 @@ const OperationGraph: React.FC<{
     }, [edges]);
 
     if (currentOperationId !== null && !connectedNodeIds.has(currentOperationId)) {
-        const val = connectedNodeIds.values().next().value;
+        const node = connectedNodeIds.values().next();
 
-        focusNodeId = val;
-        setCurrentOperationId(val);
+        if (!node.done) {
+            const val = node.value;
+            focusNodeId = val;
+            setCurrentOperationId(val);
+        }
     }
 
     const nodes = useMemo(
@@ -211,7 +214,6 @@ const OperationGraph: React.FC<{
                 try {
                     networkRef.current.selectNodes([nodeId], true);
                     setCurrentOperationId(nodeId);
-                    // @ts-expect-error this is normal
                     currentOpIdRef.current = nodeId;
                 } catch (e) {
                     // eslint-disable-next-line no-console
@@ -346,7 +348,6 @@ const OperationGraph: React.FC<{
                         networkRef.current?.moveTo({ scale });
                         focusOnNode(currentOperationId);
                         setIsLoading(false);
-                        // @ts-expect-error this is normal
                         currentOpIdRef.current = focusNodeId;
                     });
 
@@ -370,7 +371,6 @@ const OperationGraph: React.FC<{
                         } else {
                             networkRef.current?.selectNodes([], true);
                             setCurrentOperationId(null);
-                            // @ts-expect-error this is normal
                             currentOpIdRef.current = null;
                         }
                     });

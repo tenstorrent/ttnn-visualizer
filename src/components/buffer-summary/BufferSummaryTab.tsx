@@ -16,8 +16,8 @@ import { useBuffers, useCreateTensorsByOperationByIdList } from '../../hooks/use
 import LoadingSpinner from '../LoadingSpinner';
 
 interface BufferSummaryTabProps {
-    plotRef: RefObject<HTMLHeadingElement>;
-    tableRef: RefObject<HTMLHeadingElement>;
+    plotRef: RefObject<HTMLHeadingElement | null>;
+    tableRef: RefObject<HTMLHeadingElement | null>;
 }
 
 function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
