@@ -182,10 +182,13 @@ def middleware(app: flask.Flask):
         message = error.description or error.name or "Request failed"
         return jsonify({"error": message}), error.code or 500
 
-    @app.errorhandler(Exception)
-    def handle_unexpected_error(error: Exception):
-        logger.exception("Unhandled server error", exc_info=error)
-        return jsonify({"error": "Internal server error"}), 500
+    # Preserve the interactive traceback in debug mode.
+    if not app.debug:
+
+        @app.errorhandler(Exception)
+        def handle_unexpected_error(error: Exception):
+            logger.exception("Unhandled server error", exc_info=error)
+            return jsonify({"error": "Internal server error"}), 500
 
     # Only use the middleware if running in pure WSGI (HTTP requests)
     if not app.config.get("USE_WEBSOCKETS"):
