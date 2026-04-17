@@ -1510,7 +1510,7 @@ def test_remote_folder():
 
     def has_failures():
         return any(
-            status.status != ConnectionTestStates.OK.value for status in statuses
+            status.status == ConnectionTestStates.FAILED.value for status in statuses
         )
 
     # Test SSH Connection
@@ -1524,9 +1524,7 @@ def test_remote_folder():
         )
         return jsonify([status.model_dump() for status in statuses]), e.http_status
     except RemoteConnectionException as e:
-        add_status(
-            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-        )
+        add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     # Test Directory Configuration
     if not has_failures() and connection.profilerPath:
@@ -1539,9 +1537,7 @@ def test_remote_folder():
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
+            add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     # Test Directory Configuration (perf)
     if not has_failures() and connection.performancePath:
@@ -1554,9 +1550,7 @@ def test_remote_folder():
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
+            add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     # Check for Project Configurations
     if not has_failures():
@@ -1568,9 +1562,7 @@ def test_remote_folder():
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
+            add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     return Response(
         orjson.dumps([status.model_dump() for status in statuses]),

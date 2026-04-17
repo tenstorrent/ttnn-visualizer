@@ -17,6 +17,7 @@ const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.PROGRESS]: IconNames.DOT,
     [ConnectionTestStates.FAILED]: IconNames.CROSS,
     [ConnectionTestStates.OK]: IconNames.TICK,
+    [ConnectionTestStates.WARNING]: IconNames.WARNING_SIGN,
 };
 
 const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
@@ -24,6 +25,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.PROGRESS]: Intent.WARNING,
     [ConnectionTestStates.FAILED]: Intent.DANGER,
     [ConnectionTestStates.OK]: Intent.SUCCESS,
+    [ConnectionTestStates.WARNING]: Intent.WARNING,
 };
 
 const NPEFileLoader: React.FC = () => {

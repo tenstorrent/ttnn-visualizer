@@ -49,8 +49,9 @@ const useRemoteConnection = () => {
         }
 
         const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/profiler`, connection);
+        const reportFolders = Array.isArray(response.data) ? response.data : [];
 
-        return response.data.map(normaliseReportFolder) as RemoteFolder[];
+        return reportFolders.map(normaliseReportFolder) as RemoteFolder[];
     };
 
     const listPerformanceFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
@@ -63,8 +64,9 @@ const useRemoteConnection = () => {
         }
 
         const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/performance`, connection);
+        const performanceFolders = Array.isArray(response.data) ? response.data : [];
 
-        return response.data;
+        return performanceFolders;
     };
 
     const syncRemoteFolder = async (
