@@ -172,7 +172,7 @@ function BufferSummaryPlotRendererDRAM({
                                           (zoomedMemoryOptions[index]?.start ?? 0) -
                                               (zoomedMemoryOptions[index]?.padding ?? 0),
 
-                                          (zoomedMemoryOptions[index]?.end ?? 0) -
+                                          (zoomedMemoryOptions[index]?.end ?? MEMORY_SIZE) -
                                               (zoomedMemoryOptions[index]?.padding ?? 0),
                                       ]
                                     : [0, MEMORY_SIZE]
