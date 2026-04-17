@@ -51,7 +51,7 @@ module.exports = defineConfig([
                 'eslint:recommended',
                 'plugin:@typescript-eslint/recommended',
                 'plugin:react/recommended',
-                'plugin:react-hooks/recommended',
+                'plugin:react-hooks/recommended-latest',
                 'airbnb-base',
                 'erb',
                 'plugin:import/recommended',
@@ -75,7 +75,7 @@ module.exports = defineConfig([
 
         settings: {
             react: {
-                version: '18',
+                version: '19',
             },
 
             'import/parsers': {

@@ -4,7 +4,8 @@
 
 import { defineConfig } from 'vite';
 import path, { join } from 'path';
-import react from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 // @ts-expect-error don't have types declaration for node-build-scripts
 import { sassNodeModulesLoadPaths } from '@blueprintjs/node-build-scripts';
 // @ts-expect-error don't have types declaration for legacySassSvgInlinerFactory
@@ -23,7 +24,12 @@ export default defineConfig(({ command }) => {
         define: {
             'import.meta.env.APP_VERSION': JSON.stringify(version),
         },
-        plugins: [react()],
+        plugins: [
+            react(),
+            babel({
+                presets: [reactCompilerPreset()],
+            }),
+        ],
         server: {
             proxy: {
                 '/api': 'http://localhost:8000',

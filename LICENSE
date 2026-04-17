@@ -100,7 +100,9 @@ The following separate and independent dependencies are utilized by this project
 - @typescript-eslint/eslint-plugin - MIT - https://github.com/typescript-eslint/typescript-eslint/blob/main/LICENSE
 - @typescript-eslint/parser - MIT - https://github.com/typescript-eslint/typescript-eslint/blob/main/LICENSE
 - @vitejs/plugin-react - MIT - https://github.com/vitejs/vite-plugin-react/blob/main/LICENSE
+- @rolldown/plugin-babel - MIT - https://github.com/rolldown/plugins/blob/main/packages/babel/LICENSE
 - ajv - MIT - https://github.com/ajv-validator/ajv/blob/master/LICENSE
+- babel-plugin-react-compiler - MIT - https://github.com/facebook/react/blob/main/LICENSE
 - axios - MIT - https://github.com/axios/axios/blob/v1.x/LICENSE
 - classnames - MIT - https://github.com/JedWatson/classnames/blob/main/LICENSE
 - css-select - BSD‑2-Clause - https://github.com/fb55/css-select/blob/master/LICENSE
