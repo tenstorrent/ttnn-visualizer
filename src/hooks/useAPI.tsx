@@ -258,11 +258,11 @@ export const useGetUniqueDeviceOperationsList = (): string[] => {
  */
 export const useGetL1SmallMarker = (): number => {
     const { data: buffers } = useGetAllBuffers(BufferType.L1_SMALL);
-
+    const l1Size = useGetL1Size();
     return useMemo(() => {
         const addresses = buffers?.map((buffer) => {
             return buffer.address;
-        }) || [L1_DEFAULT_MEMORY_SIZE];
+        }) || [l1Size ?? L1_DEFAULT_MEMORY_SIZE];
 
         let min = Infinity;
         for (let i = 0; i < addresses.length; i++) {
@@ -270,8 +270,8 @@ export const useGetL1SmallMarker = (): number => {
                 min = addresses[i];
             }
         }
-        return min === Infinity ? L1_DEFAULT_MEMORY_SIZE : min;
-    }, [buffers]);
+        return min === Infinity ? (l1Size ?? L1_DEFAULT_MEMORY_SIZE) : min;
+    }, [buffers, l1Size]);
 };
 
 /**
@@ -283,6 +283,17 @@ export const useGetL1StartMarker = (): number => {
     return useMemo(() => {
         if (devices && devices.length > 0) {
             return devices[0].address_at_first_l1_cb_buffer;
+        }
+        return 0;
+    }, [devices]);
+};
+
+export const useGetL1Size = (): number => {
+    const { data: devices } = useDevices();
+
+    return useMemo(() => {
+        if (devices && devices.length > 0) {
+            return devices[0].worker_l1_size;
         }
         return 0;
     }, [devices]);
