@@ -6,6 +6,7 @@ import { Callout, Icon, Intent } from '@blueprintjs/core';
 import { IconName } from '@blueprintjs/icons';
 import React from 'react';
 import 'styles/components/FolderFieldset.scss';
+import classNames from 'classnames';
 import { TEST_IDS } from '../../definitions/TestIds';
 
 interface FolderFieldsetProps {
@@ -17,7 +18,7 @@ interface FolderFieldsetProps {
 
 const FolderFieldset = ({ title, icon, isFeatureDisabled = false, children }: FolderFieldsetProps) => {
     return (
-        <fieldset className='folder-fieldset'>
+        <fieldset className={classNames('folder-fieldset', { 'with-disabled-overlay': isFeatureDisabled })}>
             <legend>
                 <h2 className='legend-title'>{title}</h2>
             </legend>

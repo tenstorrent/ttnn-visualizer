@@ -5,7 +5,6 @@
 @use '../definitions/colours' as *;
 
 .folder-fieldset {
-    position: relative;
     border: solid 1px $tt-grey-5;
     border-radius: 5px;
     padding: 5px 20px 20px;
@@ -17,6 +16,10 @@
     flex-basis: 45%;
     flex-grow: 1;
     max-width: 550px;
+
+    &.with-disabled-overlay {
+        position: relative;
+    }
 
     .legend-title {
         font-size: 30px;
