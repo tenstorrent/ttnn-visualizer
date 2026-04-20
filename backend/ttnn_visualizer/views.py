@@ -1376,6 +1376,8 @@ def get_remote_folders_profiler():
         remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
             connection
         )
+        if not remote_folders:
+            return Response(status=HTTPStatus.NO_CONTENT)
 
         for rf in remote_folders:
             directory_name = Path(rf.remotePath).name
@@ -1414,6 +1416,8 @@ def get_remote_folders_performance():
         remote_performance_folders: List[RemoteReportFolder] = (
             get_remote_performance_folders(connection)
         )
+        if not remote_performance_folders:
+            return Response(status=HTTPStatus.NO_CONTENT)
 
         for rf in remote_performance_folders:
             performance_name = Path(rf.remotePath).name

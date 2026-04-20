@@ -31,6 +31,27 @@ import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 
 const GENERIC_ERROR_MESSAGE = 'An unknown error occurred.';
 
+const getAxiosErrorMessage = (err: unknown): string => {
+    if (!axios.isAxiosError(err)) {
+        return GENERIC_ERROR_MESSAGE;
+    }
+
+    const responseData = err.response?.data;
+    if (typeof responseData === 'string' && responseData.trim().length > 0) {
+        return responseData;
+    }
+
+    if (responseData && typeof responseData === 'object' && 'message' in responseData) {
+        const { message } = responseData;
+
+        if (typeof message === 'string' && message.trim().length > 0) {
+            return message;
+        }
+    }
+
+    return err.message || GENERIC_ERROR_MESSAGE;
+};
+
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
     const queryClient = useQueryClient();
@@ -359,27 +380,45 @@ const RemoteSyncConfigurator: FC = () => {
                             setIsFetching(true);
 
                             if (remote.persistentState.selectedConnection) {
-                                const [fetchedReportFolders, fetchedPerformanceFolders] = await Promise.all([
+                                const [reportFolders, performanceFolders] = await Promise.allSettled([
                                     remote.persistentState.selectedConnection.profilerPath
                                         ? remote.listReportFolders(remote.persistentState.selectedConnection)
-                                        : [],
+                                        : Promise.resolve([]),
                                     remote.persistentState.selectedConnection.performancePath
                                         ? remote.listPerformanceFolders(remote.persistentState.selectedConnection)
-                                        : [],
+                                        : Promise.resolve([]),
                                 ]);
 
-                                updateSavedReportFolders(
-                                    remote.persistentState.selectedConnection,
-                                    fetchedReportFolders,
-                                );
+                                const fetchErrors: string[] = [];
 
-                                updateSavedPerformanceFolders(
-                                    remote.persistentState.selectedConnection,
-                                    fetchedPerformanceFolders,
-                                );
+                                if (reportFolders.status === 'fulfilled') {
+                                    updateSavedReportFolders(
+                                        remote.persistentState.selectedConnection,
+                                        reportFolders.value,
+                                    );
+                                } else {
+                                    fetchErrors.push(getAxiosErrorMessage(reportFolders.reason));
+                                }
+
+                                if (performanceFolders.status === 'fulfilled') {
+                                    updateSavedPerformanceFolders(
+                                        remote.persistentState.selectedConnection,
+                                        performanceFolders.value,
+                                    );
+                                } else {
+                                    fetchErrors.push(getAxiosErrorMessage(performanceFolders.reason));
+                                }
+
+                                if (fetchErrors.length > 0) {
+                                    createToastNotification(
+                                        'Folder list sync error',
+                                        fetchErrors.join('; '),
+                                        ToastType.ERROR,
+                                    );
+                                }
                             }
                         } catch (err: unknown) {
-                            const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
+                            const message = getAxiosErrorMessage(err);
 
                             createToastNotification('Folder list sync error', message, ToastType.ERROR);
                         } finally {

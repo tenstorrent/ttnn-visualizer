@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import axios from 'axios';
+import axios, { HttpStatusCode } from 'axios';
 import { useCallback } from 'react';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
@@ -49,6 +49,11 @@ const useRemoteConnection = () => {
         }
 
         const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/profiler`, connection);
+
+        if (response.status === HttpStatusCode.NoContent) {
+            return [];
+        }
+
         const reportFolders = Array.isArray(response.data) ? response.data : [];
 
         return reportFolders.map(normaliseReportFolder) as RemoteFolder[];
@@ -64,6 +69,11 @@ const useRemoteConnection = () => {
         }
 
         const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/performance`, connection);
+
+        if (response.status === HttpStatusCode.NoContent) {
+            return [];
+        }
+
         const performanceFolders = Array.isArray(response.data) ? response.data : [];
 
         return performanceFolders;
