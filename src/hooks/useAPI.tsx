@@ -63,6 +63,32 @@ import { processInputsOutputs } from '../functions/processMemoryAllocations';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
+/**
+ * Normalises device_operations nodes coming from the backend.
+ *
+ * Older report databases stored the node identifier under `counter` while
+ * the frontend (and newer backends) expect `id`. Rather than transforming
+ * the JSON on the server, we intercept the response here and rewrite any
+ * `counter` field to `id`. Nodes that already expose `id` are left alone.
+ *
+ * Mutates the passed array in place for performance — these arrays can be
+ * very large and are consumed immediately by the hooks below.
+ */
+const updateDeviceOperationId = (nodes: unknown): void => {
+    if (!Array.isArray(nodes)) {
+        return;
+    }
+    for (const node of nodes) {
+        if (node && typeof node === 'object' && 'counter' in node) {
+            const typedNode = node as Record<string, unknown>;
+            if (!('id' in typedNode) || typedNode.id === undefined) {
+                typedNode.id = typedNode.counter;
+            }
+            delete typedNode.counter;
+        }
+    }
+};
+
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     if (!stackTrace) {
         return '';
@@ -118,6 +144,8 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
             },
         );
 
+        updateDeviceOperationId(operationDetails.device_operations);
+
         return {
             ...operationDetails,
             operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
@@ -154,6 +182,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     };
 
     return operationList.map((operation: OperationDescription) => {
+        updateDeviceOperationId(operation.device_operations);
         operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
 
         const outputs = operation.outputs.map((tensor) => {
