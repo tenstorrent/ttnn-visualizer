@@ -7,7 +7,6 @@ import { FC, useEffect, useMemo, useState } from 'react';
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom } from 'jotai';
-import axios from 'axios';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
@@ -29,29 +28,6 @@ import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
-
-const GENERIC_ERROR_MESSAGE = 'An unknown error occurred.';
-
-const getAxiosErrorMessage = (err: unknown): string => {
-    if (!axios.isAxiosError(err)) {
-        return GENERIC_ERROR_MESSAGE;
-    }
-
-    const responseData = err.response?.data;
-    if (typeof responseData === 'string' && responseData.trim().length > 0) {
-        return responseData;
-    }
-
-    if (responseData && typeof responseData === 'object' && 'message' in responseData) {
-        const { message } = responseData;
-
-        if (typeof message === 'string' && message.trim().length > 0) {
-            return message;
-        }
-    }
-
-    return err.message || GENERIC_ERROR_MESSAGE;
-};
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
@@ -394,7 +370,7 @@ const RemoteSyncConfigurator: FC = () => {
                                         reportFolders.value,
                                     );
                                 } else {
-                                    fetchErrors.push(getAxiosErrorMessage(reportFolders.reason));
+                                    fetchErrors.push(getResponseError(reportFolders.reason));
                                 }
 
                                 if (performanceFolders.status === 'fulfilled') {
@@ -403,7 +379,7 @@ const RemoteSyncConfigurator: FC = () => {
                                         performanceFolders.value,
                                     );
                                 } else {
-                                    fetchErrors.push(getAxiosErrorMessage(performanceFolders.reason));
+                                    fetchErrors.push(getResponseError(performanceFolders.reason));
                                 }
 
                                 if (fetchErrors.length > 0) {
@@ -415,11 +391,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 }
                             }
                         } catch (err: unknown) {
-                            createToastNotification(
-                                'Folder list sync error',
-                                getAxiosErrorMessage(err),
-                                ToastType.ERROR,
-                            );
+                            createToastNotification('Folder list sync error', getResponseError(err), ToastType.ERROR);
                         } finally {
                             setIsFetching(false);
                         }
