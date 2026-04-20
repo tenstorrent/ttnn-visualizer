@@ -83,7 +83,7 @@ function BufferSummaryPlotRendererDRAM({
         () =>
             segmentedChartData
                 .map((segment) => {
-                    if (segment.length > 0) {
+                    if (segment.length > 1) {
                         const buffers = segment.flatMap((op) => op.buffers);
                         const zoomStart = buffers[0].address;
                         const zoomEnd = buffers[buffers.length - 1].address + buffers[buffers.length - 1].size;
@@ -172,7 +172,7 @@ function BufferSummaryPlotRendererDRAM({
                                           (zoomedMemoryOptions[index]?.start ?? 0) -
                                               (zoomedMemoryOptions[index]?.padding ?? 0),
 
-                                          (zoomedMemoryOptions[index]?.end ?? MEMORY_SIZE) -
+                                          (zoomedMemoryOptions[index]?.end ?? MEMORY_SIZE) +
                                               (zoomedMemoryOptions[index]?.padding ?? 0),
                                       ]
                                     : [0, MEMORY_SIZE]
