@@ -70,9 +70,7 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
                                 y2={line.y2}
                                 stroke={line.color}
                                 strokeWidth={1}
-                                // eslint-disable-next-line react/jsx-props-no-spreading
                                 {...(isMulticolor ? { strokeDasharray: dashArray.get(line.nocId)!.join(',') } : {})}
-                                // eslint-disable-next-line react/jsx-props-no-spreading
                                 {...(isMulticolor
                                     ? { strokeDashoffset: multiplier * dashArray.get(line.nocId)![0] }
                                     : {})}
