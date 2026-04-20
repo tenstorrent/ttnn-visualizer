@@ -139,9 +139,8 @@ def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
         return None
     if db.report_has_rank_column():
         return None
-    return (
-        jsonify({"error": _NONZERO_RANK_UNSUPPORTED_MSG}),
-        HTTPStatus.UNPROCESSABLE_ENTITY,
+    return error_response(
+        HTTPStatus.UNPROCESSABLE_ENTITY, _NONZERO_RANK_UNSUPPORTED_MSG
     )
 
 
@@ -1045,10 +1044,7 @@ def get_performance_results_report(instance: Instance):
             group_by=group_by,
         )
     except DataFormatError as error:
-        return (
-            jsonify({"error": str(error)}),
-            HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
+        return error_response(HTTPStatus.UNPROCESSABLE_ENTITY, str(error))
 
     return Response(orjson.dumps(report), mimetype="application/json")
 
@@ -1395,7 +1391,7 @@ def get_remote_folders_profiler():
             mimetype="application/json",
         )
     except RemoteConnectionException as e:
-        return jsonify({"error": e.message}), e.http_status
+        return error_response(e.http_status, e.message)
 
 
 @api.route("/remote/performance", methods=["POST"])
@@ -1431,7 +1427,7 @@ def get_remote_folders_performance():
             mimetype="application/json",
         )
     except RemoteConnectionException as e:
-        return jsonify({"error": e.message}), e.http_status
+        return error_response(e.http_status, e.message)
 
 
 @api.route("/cluster-descriptor", methods=["GET"])
@@ -1441,23 +1437,19 @@ def get_cluster_descriptor(instance: Instance):
         cluster_desc = get_cluster_desc(instance)
 
         if not cluster_desc:
-            return (
-                jsonify({"error": "cluster_descriptor.yaml not found"}),
-                HTTPStatus.NOT_FOUND,
+            return error_response(
+                HTTPStatus.NOT_FOUND, "cluster_descriptor.yaml not found"
             )
 
         return jsonify(cluster_desc), HTTPStatus.OK
 
     except yaml.YAMLError as e:
-        return (
-            jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
-            HTTPStatus.BAD_REQUEST,
-        )
+        return error_response(HTTPStatus.BAD_REQUEST, f"Failed to parse YAML: {str(e)}")
 
     except Exception as e:
-        return (
-            jsonify({"error": f"An unexpected error occurred: {str(e)}"}),
+        return error_response(
             HTTPStatus.INTERNAL_SERVER_ERROR,
+            f"An unexpected error occurred: {str(e)}",
         )
 
 
@@ -1479,10 +1471,7 @@ def get_mesh_descriptor(instance: Instance):
             yaml_data = yaml.safe_load(mesh_descriptor_path)
             return jsonify(yaml_data)  # yaml_data is not compatible with orjson
     except yaml.YAMLError as e:
-        return (
-            jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
-            HTTPStatus.BAD_REQUEST,
-        )
+        return error_response(HTTPStatus.BAD_REQUEST, f"Failed to parse YAML: {str(e)}")
 
 
 @api.route("/remote/test", methods=["POST"])
@@ -1582,7 +1571,7 @@ def read_remote_folder(instance: Instance):
     check_path_only = body.get("check_path_only", False)
 
     if not file_path or not isinstance(file_path, str):
-        return jsonify({"error": "Missing or invalid filePath"}), HTTPStatus.BAD_REQUEST
+        return error_response(HTTPStatus.BAD_REQUEST, "Missing or invalid filePath")
 
     remote_connection = instance.remote_connection
 
@@ -1609,7 +1598,7 @@ def read_remote_folder(instance: Instance):
             )
             return stack_source_response(content, resolved, remapped)
         except RemoteConnectionException as e:
-            return jsonify({"error": e.message}), e.http_status
+            return error_response(e.http_status, e.message)
         except RemoteFileReadException as e:
             error_payload = {"error": str(e)}
             if e.detail:
@@ -1630,9 +1619,9 @@ def read_remote_folder(instance: Instance):
         content, resolved, remapped = read_stack_source_local(file_path)
         return stack_source_response(content, resolved, remapped)
     except FileNotFoundError as e:
-        return jsonify({"error": str(e) or "File not found."}), HTTPStatus.NOT_FOUND
+        return error_response(HTTPStatus.NOT_FOUND, str(e) or "File not found.")
     except PermissionError as e:
-        return jsonify({"error": str(e)}), HTTPStatus.FORBIDDEN
+        return error_response(HTTPStatus.FORBIDDEN, str(e))
 
 
 @api.route("/remote/sync", methods=["POST"])
@@ -1642,7 +1631,7 @@ def sync_remote_folder():
 
     # Check if request_body is None or not a dictionary
     if not request_body or not isinstance(request_body, dict):
-        return jsonify({"error": "Invalid or missing JSON data"}), 400
+        return error_response(HTTPStatus.BAD_REQUEST, "Invalid or missing JSON data")
 
     profiler = request_body.get("profiler")
     performance = request_body.get("performance", None)
@@ -1669,7 +1658,7 @@ def sync_remote_folder():
             return performance_folder.model_dump()
 
         except RemoteConnectionException as e:
-            return jsonify({"error": e.message}), e.http_status
+            return error_response(e.http_status, e.message)
 
     try:
         remote_profiler_folder = RemoteReportFolder.model_validate(
@@ -1692,7 +1681,7 @@ def sync_remote_folder():
         )
 
     except RemoteConnectionException as e:
-        return jsonify({"error": e.message}), e.http_status
+        return error_response(e.http_status, e.message)
 
 
 @api.route("/remote/use", methods=["POST"])
@@ -1847,13 +1836,13 @@ def notify_report_update():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
+            return error_response(HTTPStatus.BAD_REQUEST, "No JSON data provided")
 
         report_name = data.get("report_name")
         exit_status_str = data.get("exit_status")
 
         if not report_name:
-            return jsonify({"error": "report_name is required"}), 400
+            return error_response(HTTPStatus.BAD_REQUEST, "report_name is required")
 
         # Validate status
         try:
@@ -1861,10 +1850,7 @@ def notify_report_update():
                 ExitStatus(exit_status_str.upper()) if exit_status_str else None
             )
         except ValueError:
-            return (
-                jsonify({"error": "Invalid exit_status."}),
-                400,
-            )
+            return error_response(HTTPStatus.BAD_REQUEST, "Invalid exit_status.")
 
         # Create and emit the report update
         report_generated = ReportGenerated(
