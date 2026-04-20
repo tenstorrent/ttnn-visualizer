@@ -6,11 +6,12 @@ import { FC, useEffect, useMemo, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { useAtom } from 'jotai';
+import axios from 'axios';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
+import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
@@ -224,9 +225,7 @@ const RemoteSyncConfigurator: FC = () => {
                 }
             }
         } catch (err: unknown) {
-            const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
-
-            createToastNotification('Folder sync error', message, ToastType.ERROR);
+            createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
         } finally {
             setIsSyncingReportFolder(false);
         }
@@ -273,9 +272,7 @@ const RemoteSyncConfigurator: FC = () => {
                 }
             }
         } catch (err: unknown) {
-            const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
-
-            createToastNotification('Folder sync error', message, ToastType.ERROR);
+            createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
         } finally {
             setIsSyncingPerformanceFolder(false);
         }
@@ -418,9 +415,11 @@ const RemoteSyncConfigurator: FC = () => {
                                 }
                             }
                         } catch (err: unknown) {
-                            const message = getAxiosErrorMessage(err);
-
-                            createToastNotification('Folder list sync error', message, ToastType.ERROR);
+                            createToastNotification(
+                                'Folder list sync error',
+                                getAxiosErrorMessage(err),
+                                ToastType.ERROR,
+                            );
                         } finally {
                             setIsFetching(false);
                         }

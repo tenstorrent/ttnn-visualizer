@@ -106,7 +106,6 @@ export const MemoryLegendElement: React.FC<{
                 },
                 className,
             )}
-            // eslint-disable-next-line react/jsx-props-no-spreading
             {...(!chunk.empty && chunk.markerType !== MarkerType.L1_SMALL && chunk.markerType !== MarkerType.L1_START
                 ? {
                       type: 'button',
