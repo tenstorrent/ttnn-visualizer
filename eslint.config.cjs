@@ -98,6 +98,7 @@ module.exports = defineConfig([
                     allowConstantExport: true,
                 },
             ],
+            'react/jsx-props-no-spreading': 'off',
 
             'import/no-unresolved': 'error',
             'import/no-extraneous-dependencies': 'off',
