@@ -8,6 +8,7 @@ import { Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
+import getResponseError from '../functions/getResponseError';
 import {
     useOpToPerfIdFiltered,
     usePerfFolderList,
@@ -208,7 +209,7 @@ export default function Performance() {
                     <a href='https://github.com/tenstorrent/tt-metal/'>TT-Metal</a>.
                 </p>
 
-                <code className='formatted-code'>{perfDataError?.response?.data as string}</code>
+                <code className='formatted-code'>{getResponseError(perfDataError)}</code>
             </>
         );
     }

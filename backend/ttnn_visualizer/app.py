@@ -36,6 +36,7 @@ from ttnn_visualizer.utils import (
     migrate_old_data_directory,
 )
 from werkzeug.debug import DebuggedApplication
+from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
@@ -175,6 +176,19 @@ def middleware(app: flask.Flask):
         response = jsonify({"error": str(error)})
         response.status_code = 404
         return response
+
+    @app.errorhandler(HTTPException)
+    def handle_http_error(error: HTTPException):
+        message = error.description or error.name or "Request failed"
+        return jsonify({"error": message}), error.code or 500
+
+    # Preserve the interactive traceback in debug mode.
+    if not app.debug:
+
+        @app.errorhandler(Exception)
+        def handle_unexpected_error(error: Exception):
+            logger.exception("Unhandled server error", exc_info=error)
+            return jsonify({"error": "Internal server error"}), 500
 
     # Only use the middleware if running in pure WSGI (HTTP requests)
     if not app.config.get("USE_WEBSOCKETS"):
