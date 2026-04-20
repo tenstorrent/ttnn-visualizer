@@ -1490,7 +1490,6 @@ def test_remote_folder():
         test_ssh_connection(connection)
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except AuthenticationFailedException as e:
-        # Return 422 for authentication failures
         add_status(
             ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
         )
