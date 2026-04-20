@@ -4,9 +4,9 @@
 
 import { Callout, Icon, Intent } from '@blueprintjs/core';
 import { IconName } from '@blueprintjs/icons';
+import classNames from 'classnames';
 import React from 'react';
 import 'styles/components/FolderFieldset.scss';
-import classNames from 'classnames';
 import { TEST_IDS } from '../../definitions/TestIds';
 
 interface FolderFieldsetProps {
