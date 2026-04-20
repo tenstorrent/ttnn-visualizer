@@ -62,6 +62,32 @@ import { processInputsOutputs } from '../functions/processMemoryAllocations';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
+/**
+ * Normalises device_operations nodes coming from the backend.
+ *
+ * Older report databases stored the node identifier under `counter` while
+ * the frontend (and newer backends) expect `id`. Rather than transforming
+ * the JSON on the server, we intercept the response here and rewrite any
+ * `counter` field to `id`. Nodes that already expose `id` are left alone.
+ *
+ * Mutates the passed array in place for performance — these arrays can be
+ * very large and are consumed immediately by the hooks below.
+ */
+const updateDeviceOperationId = (nodes: unknown): void => {
+    if (!Array.isArray(nodes)) {
+        return;
+    }
+    for (const node of nodes) {
+        if (node && typeof node === 'object' && 'counter' in node) {
+            const typedNode = node as Record<string, unknown>;
+            if (!('id' in typedNode) || typedNode.id === undefined) {
+                typedNode.id = typedNode.counter;
+            }
+            delete typedNode.counter;
+        }
+    }
+};
+
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     if (!stackTrace) {
         return '';
@@ -114,6 +140,8 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         },
     );
 
+    updateDeviceOperationId(operationDetails.device_operations);
+
     return {
         ...operationDetails,
         operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
@@ -137,6 +165,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     };
 
     return operationList.map((operation: OperationDescription) => {
+        updateDeviceOperationId(operation.device_operations);
         operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
 
         const outputs = operation.outputs.map((tensor) => {
@@ -241,11 +270,11 @@ export const useGetUniqueDeviceOperationsList = (): string[] => {
  */
 export const useGetL1SmallMarker = (): number => {
     const { data: buffers } = useGetAllBuffers(BufferType.L1_SMALL);
-
+    const l1Size = useGetL1Size();
     return useMemo(() => {
         const addresses = buffers?.map((buffer) => {
             return buffer.address;
-        }) || [L1_DEFAULT_MEMORY_SIZE];
+        }) || [l1Size ?? L1_DEFAULT_MEMORY_SIZE];
 
         let min = Infinity;
         for (let i = 0; i < addresses.length; i++) {
@@ -253,8 +282,8 @@ export const useGetL1SmallMarker = (): number => {
                 min = addresses[i];
             }
         }
-        return min === Infinity ? L1_DEFAULT_MEMORY_SIZE : min;
-    }, [buffers]);
+        return min === Infinity ? (l1Size ?? L1_DEFAULT_MEMORY_SIZE) : min;
+    }, [buffers, l1Size]);
 };
 
 /**
@@ -266,6 +295,17 @@ export const useGetL1StartMarker = (): number => {
     return useMemo(() => {
         if (devices && devices.length > 0) {
             return devices[0].address_at_first_l1_cb_buffer;
+        }
+        return 0;
+    }, [devices]);
+};
+
+export const useGetL1Size = (): number => {
+    const { data: devices } = useDevices();
+
+    return useMemo(() => {
+        if (devices && devices.length > 0) {
+            return devices[0].worker_l1_size;
         }
         return 0;
     }, [devices]);

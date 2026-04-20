@@ -80,12 +80,21 @@ const OperationGraph: React.FC<{
         return ids;
     }, [edges]);
 
-    if (currentOperationId !== null && !connectedNodeIds.has(currentOperationId)) {
-        const val = connectedNodeIds.values().next().value;
-
-        focusNodeId = val;
-        setCurrentOperationId(val);
+    if (currentOperationId !== null && connectedNodeIds.size > 0 && !connectedNodeIds.has(currentOperationId)) {
+        focusNodeId = connectedNodeIds.values().next().value ?? focusNodeId;
     }
+
+    useEffect(() => {
+        if (connectedNodeIds.size === 0) {
+            return;
+        }
+        if (currentOperationId !== null && !connectedNodeIds.has(currentOperationId)) {
+            const fallbackId = connectedNodeIds.values().next().value;
+            if (fallbackId !== undefined && fallbackId !== currentOperationId) {
+                setCurrentOperationId(fallbackId);
+            }
+        }
+    }, [connectedNodeIds, currentOperationId]);
 
     const nodes = useMemo(
         () =>
