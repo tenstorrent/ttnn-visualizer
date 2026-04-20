@@ -421,13 +421,8 @@ def errors_list(instance: Instance):
         if rejected is not None:
             return rejected
         if not db._check_table_exists("errors"):
-            return (
-                jsonify(
-                    {
-                        "error": "Error records table does not exist in this report database."
-                    }
-                ),
-                HTTPStatus.UNPROCESSABLE_ENTITY,
+            return response_unprocessable_entity(
+                message="Error records table does not exist in this report database."
             )
 
         error_records = list(
@@ -447,13 +442,8 @@ def errors_list(instance: Instance):
 def report_metadata(instance: Instance):
     with DatabaseQueries(instance) as db:
         if not db._check_table_exists("report_metadata"):
-            return (
-                jsonify(
-                    {
-                        "error": "Report metadata table does not exist in this report database."
-                    }
-                ),
-                HTTPStatus.UNPROCESSABLE_ENTITY,
+            return response_unprocessable_entity(
+                message="Report metadata table does not exist in this report database."
             )
         rows = db.query_report_metadata()
         payload = {row[0]: row[1] for row in rows}
@@ -1555,19 +1545,19 @@ def read_remote_folder(instance: Instance):
     remote_connection = instance.remote_connection
 
     if check_path_only:
-        available = False
+        is_available = False
 
         if remote_connection:
             try:
                 ssh_client = SSHClient(remote_connection)
-                available = check_stack_source_remote(ssh_client, file_path)
+                is_available = check_stack_source_remote(ssh_client, file_path)
             except RemoteConnectionException:
                 return jsonify({"available": False})
         else:
             if not current_app.config.get("SERVER_MODE"):
-                available = check_stack_source_local(file_path)
+                is_available = check_stack_source_local(file_path)
 
-        return jsonify({"available": available})
+        return jsonify({"available": is_available})
 
     if remote_connection:
         try:
