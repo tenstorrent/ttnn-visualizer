@@ -35,7 +35,6 @@ interface PerformanceTableProps {
     filters: PerfTableFilters;
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
-    shouldHighlightRows: boolean;
     reportName: string | null;
     showHashColumn: boolean;
 }
@@ -50,7 +49,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     filters,
     provideMatmulAdvice,
     hiliteHighDispatch,
-    shouldHighlightRows,
     reportName,
     showHashColumn,
 }) => {
@@ -229,7 +227,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                             <Fragment key={i}>
                                 <tr
                                     className={classNames({
-                                        'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
+                                        'missing-data': row.raw_op_code.includes('MISSING'),
                                         'signpost-op': row.op_type === OpType.SIGNPOST,
                                     })}
                                 >
@@ -252,9 +250,8 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                             key={`comparison-${i}-${index}`}
                                             className={classNames(
                                                 {
-                                                    'missing-data':
-                                                        shouldHighlightRows &&
-                                                        dataset[i]?.raw_op_code.includes('MISSING'),
+                                                    'missing-data': dataset[i]?.raw_op_code.includes('MISSING'),
+                                                    'signpost-op': dataset[i]?.op_type === OpType.SIGNPOST,
                                                 },
                                                 'comparison-row',
                                                 `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
