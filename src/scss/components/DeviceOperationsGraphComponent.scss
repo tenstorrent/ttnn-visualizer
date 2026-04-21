@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .graph-component {
     position: relative;
@@ -22,7 +23,7 @@
         border-radius: 2px;
         box-shadow: rgb(0 0 0 / 20%) 0 4px 8px;
         pointer-events: none;
-        z-index: 10;
+        z-index: variables.$z-index-3;
         color: rgb(32 32 32);
         flex-direction: column;
 

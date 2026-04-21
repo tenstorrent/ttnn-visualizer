@@ -4,6 +4,7 @@
 
 @use 'sass:color';
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 $list-color: $tt-purple-shade;
 $border-radius: 2px;
@@ -15,7 +16,7 @@ $icon-gap: 8px;
     position: fixed;
     top: 60px;
     right: 20px;
-    z-index: 10;
+    z-index: variables.$z-index-3;
     background-color: color.adjust($list-color, $lightness: 0%);
     border-radius: $border-radius;
     box-shadow: 6px 6px 8px 0 rgb(0 0 0 / 25%);

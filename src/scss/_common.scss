@@ -184,7 +184,7 @@ $row-background: $tt-grey-2;
     height: 100%;
     position: fixed;
     top: 0;
-    z-index: 0;
+    z-index: variables.$z-index-0;
 }
 
 .bp6-tag {

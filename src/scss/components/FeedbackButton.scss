@@ -4,6 +4,7 @@
 
 @use 'sass:color';
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 :root {
     --feedback-animation-duration: 2.2s;
@@ -19,7 +20,7 @@ $button-rotation: -90deg; // Rotate the button to face upwards
     position: fixed;
     top: 42vh;
     right: -3px;
-    z-index: 10;
+    z-index: variables.$z-index-3;
     background-color: $tt-blue-accent;
     border-radius: 2px 2px 0 0;
     font-size: 16px;

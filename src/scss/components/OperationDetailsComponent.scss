@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 @use '../mixins/scrollShade' as scrollShade;
 
 .operation-details-component {
@@ -149,7 +150,7 @@
             height: 16px;
             top: 4.5px;
             border: 1px solid #000;
-            z-index: -1;
+            z-index: variables.$z-index-below;
         }
 
         &::before {
@@ -206,6 +207,6 @@
     }
 
     .memory-zoom-range-reset {
-        z-index: 1;
+        z-index: variables.$z-index-1;
     }
 }

@@ -13,7 +13,7 @@ $monospace-font: monospace;
 $bp-large: 1300px;
 $bp-medium: 1100px;
 
-// Colors
+// Colours
 // TODO: Temporary placing of these here - reconcile with usage in _blueprintjs.scss
 $dark-button-background-base: $tt-grey-2;
 $tt-dark-minimal-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: 5%);
@@ -22,6 +22,14 @@ $tt-dark-minimal-button-background-color-hover: color.adjust($dark-button-backgr
 $npe-highlight-src: #ff0;
 $npe-highlight-dst: #ff4500;
 
-// We should refactor ALL z-indexes across the code base. none use vars - https://github.com/tenstorrent/ttnn-visualizer/issues/1265
-$z-index-active-transfer-details: 10;
+// z-index scale
+$z-index-below: -1;
+$z-index-0: 0;
+$z-index-1: 1;
+$z-index-2: 5; // NPE only
+$z-index-3: 10;
+$z-index-4: 20; // NPE only
+$z-index-5: 100;
+
+// Component-specific variables
 $active-transfer-width: 380px;

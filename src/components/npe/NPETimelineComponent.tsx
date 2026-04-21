@@ -366,15 +366,9 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                     }}
                 >
                     <div
+                        className='timeline-tooltip-anchor'
                         style={{
-                            //
-                            position: 'absolute',
-                            top: 0,
                             left: `${tooltip.x}px`,
-                            width: '0',
-                            height: '0',
-                            backgroundColor: '#fff',
-                            zIndex: 100,
                         }}
                     />
                 </Tooltip>
