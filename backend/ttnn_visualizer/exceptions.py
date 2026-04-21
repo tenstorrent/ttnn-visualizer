@@ -65,6 +65,8 @@ class RemoteConnectionException(Exception):
         # Default behavior
         if self.status == ConnectionTestStates.FAILED:
             return HTTPStatus.INTERNAL_SERVER_ERROR
+        if self.status == ConnectionTestStates.WARNING:
+            return HTTPStatus.OK
         if self.status == ConnectionTestStates.OK:
             return HTTPStatus.OK
 
@@ -86,7 +88,7 @@ class AuthenticationFailedException(RemoteConnectionException):
         )
 
 
-class NoProjectsException(RemoteConnectionException):
+class NoReportsException(RemoteConnectionException):
     pass
 
 

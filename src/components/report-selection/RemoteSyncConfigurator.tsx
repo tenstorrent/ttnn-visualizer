@@ -353,24 +353,42 @@ const RemoteSyncConfigurator: FC = () => {
                             setIsFetching(true);
 
                             if (remote.persistentState.selectedConnection) {
-                                const [fetchedReportFolders, fetchedPerformanceFolders] = await Promise.all([
+                                const [reportFolders, performanceFolders] = await Promise.allSettled([
                                     remote.persistentState.selectedConnection.profilerPath
                                         ? remote.listReportFolders(remote.persistentState.selectedConnection)
-                                        : [],
+                                        : Promise.resolve([]),
                                     remote.persistentState.selectedConnection.performancePath
                                         ? remote.listPerformanceFolders(remote.persistentState.selectedConnection)
-                                        : [],
+                                        : Promise.resolve([]),
                                 ]);
 
-                                updateSavedReportFolders(
-                                    remote.persistentState.selectedConnection,
-                                    fetchedReportFolders,
-                                );
+                                const fetchErrors: string[] = [];
 
-                                updateSavedPerformanceFolders(
-                                    remote.persistentState.selectedConnection,
-                                    fetchedPerformanceFolders,
-                                );
+                                if (reportFolders.status === 'fulfilled') {
+                                    updateSavedReportFolders(
+                                        remote.persistentState.selectedConnection,
+                                        reportFolders.value,
+                                    );
+                                } else {
+                                    fetchErrors.push(getResponseError(reportFolders.reason));
+                                }
+
+                                if (performanceFolders.status === 'fulfilled') {
+                                    updateSavedPerformanceFolders(
+                                        remote.persistentState.selectedConnection,
+                                        performanceFolders.value,
+                                    );
+                                } else {
+                                    fetchErrors.push(getResponseError(performanceFolders.reason));
+                                }
+
+                                if (fetchErrors.length > 0) {
+                                    createToastNotification(
+                                        'Folder list sync error',
+                                        fetchErrors.join('; '),
+                                        ToastType.ERROR,
+                                    );
+                                }
                             }
                         } catch (err: unknown) {
                             createToastNotification('Folder list sync error', getResponseError(err), ToastType.ERROR);
