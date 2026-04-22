@@ -140,10 +140,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     }, [data, comparisonData, useNormalisedData]);
 
     const isNormalisationApplied = !isStackedView && useNormalisedData;
-    const rawOpCodeOptions = useMemo(
-        () => getRawOpCodeOptions([processedRows, ...processedComparisonRows].flat()),
+    const combinedRows = useMemo(
+        () => [processedRows, ...processedComparisonRows].flat(),
         [processedRows, processedComparisonRows],
     );
+    const rawOpCodeOptions = useMemo(() => getRawOpCodeOptions(combinedRows), [combinedRows]);
     const availableRawOpCodeOptionSet = useMemo(
         () =>
             new Set(rawOpCodeOptions.map((row) => row.raw_op_code).filter((value): value is string => value !== null)),
@@ -604,7 +605,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 <ButtonGroup className='select-group'>
                                     <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
                                         keyName='buffer_type'
-                                        options={processedRows || []}
+                                        options={combinedRows}
                                         labelFormatter={(value: BufferType | null) =>
                                             value !== null ? BufferTypeLabel[value] : 'No value'
                                         }
@@ -615,7 +616,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                                     <MultiSelectField<TypedPerfTableRow, 'layout'>
                                         keyName='layout'
-                                        options={processedRows || []}
+                                        options={combinedRows}
                                         labelFormatter={(value: DeviceOperationLayoutTypes | null) =>
                                             value !== null ? value : 'No value'
                                         }
@@ -626,7 +627,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                                     <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
                                         keyName='math_fidelity'
-                                        options={processedRows || []}
+                                        options={combinedRows}
                                         placeholder='Select Math Fidelity...'
                                         values={activeMathFilterList}
                                         updateHandler={setActiveMathFilterList}
