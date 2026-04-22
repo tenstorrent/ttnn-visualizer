@@ -28,6 +28,10 @@
         &.empty {
             padding: 20px;
             color: $tt-grey-5;
+
+            h3 {
+                padding-left: 0;
+            }
         }
 
         h3,
@@ -39,7 +43,7 @@
 
         h3 {
             margin: 0;
-            padding: 20px 20px 12px 0;
+            padding: 20px 20px 12px;
         }
     }
 
