@@ -97,6 +97,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             const { plotZoomRangeStart, plotZoomRangeEnd } = calculatePlotZoomRange();
             setZoomRangeStart(plotZoomRangeStart);
             setZoomRangeEnd(plotZoomRangeEnd);
+            didInitZoomRange.current = true;
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [details, isLoading, isPrevLoading, operationDetails, previousOperationDetails]);
