@@ -20,7 +20,7 @@ $button-rotation: -90deg; // Rotate the button to face upwards
     position: fixed;
     top: 42vh;
     right: -3px;
-    z-index: variables.$z-index-3;
+    z-index: variables.$z-index-2-interactive;
     background-color: $tt-blue-accent;
     border-radius: 2px 2px 0 0;
     font-size: 16px;

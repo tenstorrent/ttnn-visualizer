@@ -16,7 +16,7 @@ $icon-gap: 8px;
     position: fixed;
     top: 60px;
     right: 20px;
-    z-index: variables.$z-index-3;
+    z-index: variables.$z-index-3-overlay;
     background-color: color.adjust($list-color, $lightness: 0%);
     border-radius: $border-radius;
     box-shadow: 6px 6px 8px 0 rgb(0 0 0 / 25%);

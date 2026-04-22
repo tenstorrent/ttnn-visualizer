@@ -23,13 +23,10 @@ $npe-highlight-src: #ff0;
 $npe-highlight-dst: #ff4500;
 
 // z-index scale
-$z-index-below: -1;
-$z-index-0: 0;
-$z-index-1: 1;
-$z-index-2: 5; // NPE only
-$z-index-3: 10;
-$z-index-4: 20; // NPE only
-$z-index-5: 100;
+$z-index-0-background: -1;
+$z-index-1-base: 0;
+$z-index-2-interactive: 1;
+$z-index-3-overlay: 1000;
 
 // Component-specific variables
 $active-transfer-width: 380px;

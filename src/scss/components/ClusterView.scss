@@ -12,7 +12,7 @@
     width: 100%;
     height: calc(100% - 80px);
     bottom: 0;
-    z-index: variables.$z-index-3;
+    z-index: variables.$z-index-3-overlay;
     padding: 10px;
 
     .cluster-view-header {
