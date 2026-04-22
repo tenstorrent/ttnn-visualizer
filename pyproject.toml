@@ -18,7 +18,7 @@ dependencies = [
     "pandas==2.2.3",
     "pydantic_core==2.41.5",
     "pydantic==2.12.5",
-    "python-dotenv==1.0.1",
+    "python-dotenv==1.2.2",
     "PyYAML==6.0.2",
     "tt-perf-report==1.2.3",
     "uvicorn==0.30.1",
