@@ -421,13 +421,8 @@ def errors_list(instance: Instance):
         if rejected is not None:
             return rejected
         if not db._check_table_exists("errors"):
-            return (
-                jsonify(
-                    {
-                        "error": "Error records table does not exist in this report database."
-                    }
-                ),
-                HTTPStatus.UNPROCESSABLE_ENTITY,
+            return response_unprocessable_entity(
+                message="Error records table does not exist in this report database."
             )
 
         error_records = list(
@@ -447,13 +442,8 @@ def errors_list(instance: Instance):
 def report_metadata(instance: Instance):
     with DatabaseQueries(instance) as db:
         if not db._check_table_exists("report_metadata"):
-            return (
-                jsonify(
-                    {
-                        "error": "Report metadata table does not exist in this report database."
-                    }
-                ),
-                HTTPStatus.UNPROCESSABLE_ENTITY,
+            return response_unprocessable_entity(
+                message="Report metadata table does not exist in this report database."
             )
         rows = db.query_report_metadata()
         payload = {row[0]: row[1] for row in rows}
@@ -1363,6 +1353,8 @@ def get_remote_folders_profiler():
         remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
             connection
         )
+        if not remote_folders:
+            return Response(status=HTTPStatus.NO_CONTENT)
 
         for rf in remote_folders:
             directory_name = Path(rf.remotePath).name
@@ -1399,6 +1391,8 @@ def get_remote_folders_performance():
         remote_performance_folders: List[RemoteReportFolder] = (
             get_remote_performance_folders(connection)
         )
+        if not remote_performance_folders:
+            return Response(status=HTTPStatus.NO_CONTENT)
 
         for rf in remote_performance_folders:
             performance_name = Path(rf.remotePath).name
@@ -1478,7 +1472,7 @@ def test_remote_folder():
 
     def has_failures():
         return any(
-            status.status != ConnectionTestStates.OK.value for status in statuses
+            status.status == ConnectionTestStates.FAILED.value for status in statuses
         )
 
     # Test SSH Connection
@@ -1486,15 +1480,12 @@ def test_remote_folder():
         test_ssh_connection(connection)
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except AuthenticationFailedException as e:
-        # Return 422 for authentication failures
         add_status(
             ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
         )
         return jsonify([status.model_dump() for status in statuses]), e.http_status
     except RemoteConnectionException as e:
-        add_status(
-            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-        )
+        add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     # Test Directory Configuration
     if not has_failures() and connection.profilerPath:
@@ -1507,9 +1498,7 @@ def test_remote_folder():
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
+            add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     # Test Directory Configuration (perf)
     if not has_failures() and connection.performancePath:
@@ -1522,9 +1511,7 @@ def test_remote_folder():
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
+            add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     # Check for Project Configurations
     if not has_failures():
@@ -1536,9 +1523,7 @@ def test_remote_folder():
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
+            add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     return Response(
         orjson.dumps([status.model_dump() for status in statuses]),
@@ -1560,19 +1545,19 @@ def read_remote_folder(instance: Instance):
     remote_connection = instance.remote_connection
 
     if check_path_only:
-        available = False
+        is_available = False
 
         if remote_connection:
             try:
                 ssh_client = SSHClient(remote_connection)
-                available = check_stack_source_remote(ssh_client, file_path)
+                is_available = check_stack_source_remote(ssh_client, file_path)
             except RemoteConnectionException:
                 return jsonify({"available": False})
         else:
             if not current_app.config.get("SERVER_MODE"):
-                available = check_stack_source_local(file_path)
+                is_available = check_stack_source_local(file_path)
 
-        return jsonify({"available": available})
+        return jsonify({"available": is_available})
 
     if remote_connection:
         try:

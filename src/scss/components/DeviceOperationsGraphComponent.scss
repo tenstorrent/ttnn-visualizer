@@ -6,29 +6,111 @@
 @use '../definitions/variables' as variables;
 
 .graph-component {
-    position: relative;
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
 
     .graph {
-        width: 80vw;
+        flex: 1;
+        min-width: 0;
         height: 80vh;
     }
 
-    .graph-tooltip {
-        position: absolute;
-        display: none;
-        top: 0;
-        padding: 10px;
-        background-color: $tt-white;
-        border: 1px solid $tt-grey-6;
-        border-radius: 2px;
-        box-shadow: rgb(0 0 0 / 20%) 0 4px 8px;
-        pointer-events: none;
-        z-index: variables.$z-index-3-overlay;
-        color: rgb(32 32 32);
-        flex-direction: column;
+    .graph-side-panel {
+        width: 420px;
+        min-width: 420px;
+        max-height: 80vh;
+        overflow-y: auto;
+        padding: 0 0 20px;
+        background-color: rgba($tt-grey-2, 0.9);
+        color: $tt-white;
 
-        &.visible {
-            display: inline-flex;
+        &.empty {
+            padding: 20px;
+            color: $tt-grey-5;
+        }
+
+        h3,
+        h4,
+        h5,
+        p {
+            margin-top: 0;
+        }
+
+        h3 {
+            margin: 0;
+            padding: 20px 20px 12px 0;
+        }
+    }
+
+    .graph-operation-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 0 20px 16px;
+        color: $tt-grey-6;
+    }
+
+    .graph-details-section + .graph-details-section {
+        margin-top: 12px;
+    }
+
+    .graph-details-section {
+        > h4 {
+            background-color: $tt-grey-4;
+            padding: 5px 20px;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+    }
+
+    .graph-details-empty {
+        color: $tt-grey-5;
+        padding: 0 20px;
+    }
+
+    .graph-tensor-list {
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+        padding: 0 20px;
+    }
+
+    .graph-tensor-card {
+        padding-left: 12px;
+        border-left: 3px solid transparent;
+        color: $tt-white;
+    }
+
+    .graph-tensor-card h5 {
+        color: $tt-white;
+        margin-bottom: 6px;
+    }
+
+    .graph-tensor-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        color: $tt-white;
+        margin-left: 14px;
+    }
+
+    .graph-details-section.inputs {
+        .graph-tensor-card {
+            border-left-color: var(--graph-input-edge);
+        }
+    }
+
+    .graph-details-section.outputs {
+        .graph-tensor-card {
+            border-left-color: var(--graph-output-edge);
+        }
+    }
+
+    @media screen and (width <= #{variables.$bp-large}) {
+        .graph-side-panel {
+            width: 350px;
+            min-width: 350px;
         }
     }
 }
