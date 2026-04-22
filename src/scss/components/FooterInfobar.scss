@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .app-footer {
     position: fixed;
@@ -10,7 +11,7 @@
     left: 0;
     display: flex;
     flex-direction: column;
-    z-index: 1;
+    z-index: variables.$z-index-2-interactive;
     width: 100%;
     background-color: rgba($tt-black, 0.9);
     padding: 5px 15px;

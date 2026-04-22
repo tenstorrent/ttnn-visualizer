@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .stack-trace {
     margin-top: 0;
@@ -35,7 +36,7 @@
             .stack-trace-buttons.is-sticky {
                 position: sticky;
                 top: 5px;
-                z-index: 10;
+                z-index: variables.$z-index-2-interactive;
             }
         }
 
@@ -115,7 +116,7 @@
     position: absolute;
     top: 20px;
     right: 20px;
-    z-index: 1000;
+    z-index: variables.$z-index-2-interactive;
     opacity: 0.5;
 
     &:hover {
