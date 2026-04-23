@@ -578,11 +578,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     )}
                 </div>
 
-                <div className='option-row'>
+                <div className='filters-container'>
                     <FormGroup
                         subLabel='Filters'
                         helperText={filterScopeHelperText}
-                        className='form-group'
+                        className='form-group option-row'
                     >
                         <ButtonGroup className='select-group'>
                             <SearchField
@@ -599,83 +599,83 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 updateHandler={setActiveRawOpCodeFilterList}
                             />
                         </ButtonGroup>
-
-                        {!isStackedView && (
-                            <>
-                                <ButtonGroup className='select-group'>
-                                    <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
-                                        keyName='buffer_type'
-                                        options={combinedRows}
-                                        labelFormatter={(value: BufferType | null) =>
-                                            value !== null ? BufferTypeLabel[value] : 'No value'
-                                        }
-                                        placeholder='Select Buffer Type...'
-                                        values={activeBufferTypeFilterList}
-                                        updateHandler={setActiveBufferTypeFilterList}
-                                    />
-
-                                    <MultiSelectField<TypedPerfTableRow, 'layout'>
-                                        keyName='layout'
-                                        options={combinedRows}
-                                        labelFormatter={(value: DeviceOperationLayoutTypes | null) =>
-                                            value !== null ? value : 'No value'
-                                        }
-                                        placeholder='Select Layout...'
-                                        values={activeLayoutFilterList}
-                                        updateHandler={setActiveLayoutFilterList}
-                                    />
-
-                                    <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
-                                        keyName='math_fidelity'
-                                        options={combinedRows}
-                                        placeholder='Select Math Fidelity...'
-                                        values={activeMathFilterList}
-                                        updateHandler={setActiveMathFilterList}
-                                        disabled={isStackedView}
-                                    />
-                                </ButtonGroup>
-
-                                <ButtonGroup className='switch-group'>
-                                    <Switch
-                                        label='Matmul optimization analysis'
-                                        onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
-                                        checked={provideMatmulAdvice}
-                                        className='option-switch'
-                                        disabled={isStackedView}
-                                    />
-
-                                    <Switch
-                                        label='Highlight high dispatch ops'
-                                        onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
-                                        checked={hiliteHighDispatch}
-                                        className='option-switch'
-                                        disabled={isStackedView}
-                                    />
-
-                                    <Tooltip
-                                        content='Tries to match up operations between the performance reports'
-                                        position={Position.TOP}
-                                    >
-                                        <Switch
-                                            label='Normalise data'
-                                            disabled={!activeComparisonReportList || isStackedView}
-                                            onChange={() => setUseNormalisedData(!useNormalisedData)}
-                                            checked={useNormalisedData}
-                                            className='option-switch'
-                                        />
-                                    </Tooltip>
-                                </ButtonGroup>
-                            </>
-                        )}
-
-                        {/* May keep this or remove it - undecided as yet */}
-                        {/* <Switch
-                            label='Show Hash Column'
-                            onChange={() => setShowHashColumn(!showHashColumn)}
-                            checked={showHashColumn}
-                            className='option-switch'
-                        /> */}
                     </FormGroup>
+
+                    {!isStackedView && (
+                        <FormGroup className='option-row'>
+                            <ButtonGroup className='select-group'>
+                                <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
+                                    keyName='buffer_type'
+                                    options={combinedRows}
+                                    labelFormatter={(value: BufferType | null) =>
+                                        value !== null ? BufferTypeLabel[value] : 'No value'
+                                    }
+                                    placeholder='Select Buffer Type...'
+                                    values={activeBufferTypeFilterList}
+                                    updateHandler={setActiveBufferTypeFilterList}
+                                />
+
+                                <MultiSelectField<TypedPerfTableRow, 'layout'>
+                                    keyName='layout'
+                                    options={combinedRows}
+                                    labelFormatter={(value: DeviceOperationLayoutTypes | null) =>
+                                        value !== null ? value : 'No value'
+                                    }
+                                    placeholder='Select Layout...'
+                                    values={activeLayoutFilterList}
+                                    updateHandler={setActiveLayoutFilterList}
+                                />
+
+                                <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
+                                    keyName='math_fidelity'
+                                    options={combinedRows}
+                                    placeholder='Select Math Fidelity...'
+                                    values={activeMathFilterList}
+                                    updateHandler={setActiveMathFilterList}
+                                    disabled={isStackedView}
+                                />
+                            </ButtonGroup>
+
+                            <ButtonGroup className='switch-group'>
+                                <Switch
+                                    label='Matmul optimization analysis'
+                                    onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                                    checked={provideMatmulAdvice}
+                                    className='option-switch'
+                                    disabled={isStackedView}
+                                />
+
+                                <Switch
+                                    label='Highlight high dispatch ops'
+                                    onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                                    checked={hiliteHighDispatch}
+                                    className='option-switch'
+                                    disabled={isStackedView}
+                                />
+
+                                <Tooltip
+                                    content='Tries to match up operations between the performance reports'
+                                    position={Position.TOP}
+                                >
+                                    <Switch
+                                        label='Normalise data'
+                                        disabled={!activeComparisonReportList || isStackedView}
+                                        onChange={() => setUseNormalisedData(!useNormalisedData)}
+                                        checked={useNormalisedData}
+                                        className='option-switch'
+                                    />
+                                </Tooltip>
+                            </ButtonGroup>
+                        </FormGroup>
+                    )}
+
+                    {/* May keep this or remove it - undecided as yet */}
+                    {/* <Switch
+                        label='Show Hash Column'
+                        onChange={() => setShowHashColumn(!showHashColumn)}
+                        checked={showHashColumn}
+                        className='option-switch'
+                    /> */}
                 </div>
 
                 <Tabs
