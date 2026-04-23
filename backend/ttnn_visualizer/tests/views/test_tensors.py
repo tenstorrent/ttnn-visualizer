@@ -185,11 +185,10 @@ def test_tensors_list_with_full_lifetime(app, client):
         # tensor_id must not appear inside the nested lifetime object.
         assert "tensor_id" not in t10["lifetime"]
 
-        # Tensor 20 has no lifetime row — should still be a dict (table exists)
-        # but all values are None.
+        # Tensor 20 has no lifetime row — lifetime must be null even though the
+        # table exists, to avoid sending empty objects in large responses.
         t20 = tensor_map[20]
-        assert t20["lifetime"] is not None
-        assert all(v is None for v in t20["lifetime"].values())
+        assert t20["lifetime"] is None
     finally:
         Path(path).unlink(missing_ok=True)
 
@@ -218,10 +217,9 @@ def test_tensors_list_partial_lifetime_fields_are_nullable(app, client):
         assert t20["lifetime"]["last_use_source_file"] is None
         assert t20["lifetime"]["last_use_source_line"] is None
 
-        # Tensor 10 has no lifetime row at all — all fields should be None.
+        # Tensor 10 has no lifetime row at all — lifetime must be null.
         t10 = tensor_map[10]
-        assert t10["lifetime"] is not None
-        assert all(v is None for v in t10["lifetime"].values())
+        assert t10["lifetime"] is None
     finally:
         Path(path).unlink(missing_ok=True)
 

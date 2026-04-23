@@ -458,10 +458,22 @@ class DatabaseQueries:
                 last_use_source_line,
             ) = row[i : i + 7]
 
-            # Only build a TensorLifetime object when the row actually joined
-            # (i.e., the table exists and at least one column has a value).
+            # Only build a TensorLifetime object when the LEFT JOIN produced at
+            # least one non-NULL value, i.e. this tensor has a lifetime row.
+            # An all-NULL result means the table exists but has no entry for
+            # this tensor_id, so we keep lifetime=None to avoid sending empty
+            # objects for every unmatched tensor in large responses.
             lifetime: Optional[TensorLifetime] = None
-            if tensor_lifetime_exists:
+            lifetime_values = (
+                producer_operation_id,
+                last_use_operation_id,
+                deallocate_operation_id,
+                producer_source_file,
+                producer_source_line,
+                last_use_source_file,
+                last_use_source_line,
+            )
+            if tensor_lifetime_exists and any(v is not None for v in lifetime_values):
                 lifetime = TensorLifetime(
                     producer_operation_id=producer_operation_id,
                     last_use_operation_id=last_use_operation_id,
