@@ -28,22 +28,18 @@ The application will sync the files from the remote server to your local machine
 
 ## Preload data on launch
 
-The `ttnn-visualizer` command supports the following CLI arguments:
+The `ttnn-visualizer` command supports CLI arguments for passing custom data paths:
 
 * `--profiler-path` - specify the local path to the folder containing profiler data
 * `--performance-path` - specify the local path to the folder containing performance data
 * `--tt-metal-home` - specify the path to the TT Metal repo when running directly on the machine where reports are being generated
-* `--host` - set the host to bind the backend server to
-* `--port` - set the port to bind the backend server to
-* `--server` - enable server mode and bind to all network interfaces (`0.0.0.0`)
-* `-d`, `--daemon` - run the backend server as a daemon process
 
 These options allow you to pass the folders when starting the visualizer, instead of uploading the report and profiler
 data files from the browser after loading the site. This can be used for starting `ttnn-visualizer` from other tools
 with the data preloaded, or for restarting the visualizer with the same data, without having to upload it again.
 
 ```bash
-ttnn-visualizer --performance-path ~/Downloads/report/generated/profiler/reports/2025_02_24_23_17_27 --profiler-path ~/Downloads/report/generated/ttnn/reports/17274205533343344897
+ttnn-visualizer --profiler-path ~/Downloads/report/generated/ttnn/reports/17274205533343344897 --performance-path ~/Downloads/report/generated/profiler/reports/2025_02_24_23_17_27
 ```
 
 ### TT-Metal Home
