@@ -23,6 +23,7 @@ from ttnn_visualizer.models import (
     StackTrace,
     Tensor,
     TensorComparisonRecord,
+    TensorLifetime,
 )
 
 
@@ -300,6 +301,7 @@ class DatabaseQueries:
         rank_on_tensors = "rank" in tensor_columns
 
         device_tensors_exists = self._check_table_exists("device_tensors")
+        tensor_lifetime_exists = self._check_table_exists("tensor_lifetime")
         dt_rank = device_tensors_exists and "rank" in self._get_table_columns(
             "device_tensors"
         )
@@ -343,6 +345,31 @@ class DatabaseQueries:
         else:
             select_parts.append("NULL AS device_tensors_data")
 
+        if tensor_lifetime_exists:
+            select_parts.extend(
+                [
+                    "tl.producer_operation_id",
+                    "tl.last_use_operation_id",
+                    "tl.deallocate_operation_id",
+                    "tl.producer_source_file",
+                    "tl.producer_source_line",
+                    "tl.last_use_source_file",
+                    "tl.last_use_source_line",
+                ]
+            )
+        else:
+            select_parts.extend(
+                [
+                    "NULL AS producer_operation_id",
+                    "NULL AS last_use_operation_id",
+                    "NULL AS deallocate_operation_id",
+                    "NULL AS producer_source_file",
+                    "NULL AS producer_source_line",
+                    "NULL AS last_use_source_file",
+                    "NULL AS last_use_source_line",
+                ]
+            )
+
         select_sql = ",\n                        ".join(select_parts)
 
         group_by = "t.tensor_id"
@@ -353,6 +380,10 @@ class DatabaseQueries:
             join_lines = []
             if device_tensors_exists:
                 join_lines.append(f"LEFT JOIN device_tensors dt ON {dt_join}")
+            if tensor_lifetime_exists:
+                join_lines.append(
+                    "LEFT JOIN tensor_lifetime tl ON tl.tensor_id = t.tensor_id"
+                )
             join_sql = (
                 "\n                    " + "\n                    ".join(join_lines)
                 if join_lines
@@ -372,6 +403,10 @@ class DatabaseQueries:
             ]
             if device_tensors_exists:
                 join_lines.append(f"LEFT JOIN device_tensors dt ON {dt_join}")
+            if tensor_lifetime_exists:
+                join_lines.append(
+                    "LEFT JOIN tensor_lifetime tl ON tl.tensor_id = t.tensor_id"
+                )
             join_sql = "\n                    " + "\n                    ".join(
                 join_lines
             )
@@ -410,6 +445,32 @@ class DatabaseQueries:
             size = row[i]
             i += 1
             device_tensors_data = row[i]
+            i += 1
+
+            # Lifetime columns are always present in the SELECT (either real or NULL).
+            (
+                producer_operation_id,
+                last_use_operation_id,
+                deallocate_operation_id,
+                producer_source_file,
+                producer_source_line,
+                last_use_source_file,
+                last_use_source_line,
+            ) = row[i : i + 7]
+
+            # Only build a TensorLifetime object when the row actually joined
+            # (i.e., the table exists and at least one column has a value).
+            lifetime: Optional[TensorLifetime] = None
+            if tensor_lifetime_exists:
+                lifetime = TensorLifetime(
+                    producer_operation_id=producer_operation_id,
+                    last_use_operation_id=last_use_operation_id,
+                    deallocate_operation_id=deallocate_operation_id,
+                    producer_source_file=producer_source_file,
+                    producer_source_line=producer_source_line,
+                    last_use_source_file=last_use_source_file,
+                    last_use_source_line=last_use_source_line,
+                )
 
             device_addresses: List[Any] = []
 
@@ -441,6 +502,7 @@ class DatabaseQueries:
                 row[7],
                 device_addresses,
                 size=size,
+                lifetime=lifetime,
                 rank=rank_val,
             )
 
