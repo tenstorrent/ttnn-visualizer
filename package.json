@@ -18,23 +18,26 @@
     "pnpm": ">=10"
   },
   "scripts": {
+    "build:docs": "sphinx-build ./docs ./docs/output",
     "build:wheel": "pnpm run build && python -m build --wheel",
     "build": "vite build",
-    "build:docs": "sphinx-build ./docs ./docs/output",
     "dev:server": "VITE_SERVER_MODE=1 vite",
     "dev": "vite",
-    "flask:lint": "isort --check-only backend/ttnn_visualizer && black --check backend/ttnn_visualizer",
     "flask:format": "isort backend/ttnn_visualizer && black backend/ttnn_visualizer",
+    "flask:lint": "isort --check-only backend/ttnn_visualizer && black --check backend/ttnn_visualizer",
     "flask:mypy": "PYTHONPATH=backend mypy backend/ttnn_visualizer",
     "flask:start-debug": "DEBUG=true PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:start": "PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:test": "PYTHONPATH=backend pytest backend/ttnn_visualizer/tests",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
     "lint:fix": "eslint . --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "lint:spdx": "node scripts/check-spdx.mjs",
-    "lint:licenses": "pnpm licenses ls --json | node ./scripts/check-missing-dep-licenses.mjs",
     "lint:licenses:fix": "pnpm licenses ls --json | node scripts/check-missing-dep-licenses.mjs --fix=true",
-    "lint:ts": "npx tsc --noEmit",
+    "lint:licenses": "pnpm licenses ls --json | node ./scripts/check-missing-dep-licenses.mjs",
+    "lint:precommit": "pnpm run lint:fix && pnpm run format && pnpm run lint:scss:fix && pnpm run flask:format",
+    "lint:scss:fix": "stylelint --fix 'src/**/*.scss'",
+    "lint:scss": "stylelint 'src/**/*.scss'",
+    "lint:spdx": "node scripts/check-spdx.mjs",
+    "lint:ts": "pnpx tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
@@ -133,10 +136,8 @@
     }
   },
   "lint-staged": {
-    "**/*.{ts,tsx}": [
-      "eslint --fix --report-unused-disable-directives --max-warnings 0"
-    ],
-    "**/*.scss": "npx stylelint --fix",
+    "**/*.{ts,tsx}": "pnpm run lint:fix",
+    "**/*.scss": "pnpm run lint:scss:fix",
     "**/*.{js,jsx,ts,tsx,css,scss}": "pnpm run format",
     "backend/ttnn_visualizer/**/*.py": "pnpm run flask:format"
   }
