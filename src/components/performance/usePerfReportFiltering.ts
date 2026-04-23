@@ -31,10 +31,17 @@ interface UsePerfReportFilteringReturn {
 }
 
 const getRawOpCodeOptions = (rows: TypedPerfTableRow[]): TypedPerfTableRow[] => {
-    // Don't want signposts here
-    const options = rows.filter((row) => row.op_type !== OpType.SIGNPOST);
+    const opCodes = new Set<TypedPerfTableRow['raw_op_code']>();
 
-    return Array.from(new Set(options));
+    // Keep first row for each raw op code and skip signposts.
+    return rows.filter((row) => {
+        if (row.op_type === OpType.SIGNPOST || opCodes.has(row.raw_op_code)) {
+            return false;
+        }
+
+        opCodes.add(row.raw_op_code);
+        return true;
+    });
 };
 
 const usePerfReportFiltering = ({
@@ -67,24 +74,28 @@ const usePerfReportFiltering = ({
     );
 
     const rawOpCodeOptions = useMemo(() => getRawOpCodeOptions(combinedRows), [combinedRows]);
+    const rawOpCodeFilterSet = useMemo(() => new Set(activeRawOpCodeFilterList), [activeRawOpCodeFilterList]);
     const activeMathFilters = useMemo(
         () => (isNormalisationApplied ? [] : activeMathFilterList),
         [isNormalisationApplied, activeMathFilterList],
     );
+    const mathFilterSet = useMemo(() => new Set(activeMathFilters), [activeMathFilters]);
     const activeBufferTypeFilters = useMemo(
         () => (isNormalisationApplied ? [] : activeBufferTypeFilterList),
         [isNormalisationApplied, activeBufferTypeFilterList],
     );
+    const bufferTypeFilterSet = useMemo(() => new Set(activeBufferTypeFilters), [activeBufferTypeFilters]);
     const activeLayoutFilters = useMemo(
         () => (isNormalisationApplied ? [] : activeLayoutFilterList),
         [isNormalisationApplied, activeLayoutFilterList],
     );
+    const layoutFilterSet = useMemo(() => new Set(activeLayoutFilters), [activeLayoutFilters]);
 
     const { filteredRows, filteredComparisonRowsList } = useMemo(() => {
         if (!isNormalisationApplied) {
             const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
             const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
-            const hasRawOpCodeFilter = activeRawOpCodeFilterList.length > 0;
+            const hasRawOpCodeFilter = rawOpCodeFilterSet.size > 0;
             const hasMathFilter = activeMathFilters.length > 0;
             const hasBufferTypeFilter = activeBufferTypeFilters.length > 0;
             const hasLayoutFilter = activeLayoutFilters.length > 0;
@@ -127,16 +138,16 @@ const usePerfReportFiltering = ({
                         ? alignedRow.op_code.toLowerCase().includes(opCodeFilterValue)
                         : true;
                     const matchesRawOpCode = hasRawOpCodeFilter
-                        ? alignedRow.raw_op_code !== null && activeRawOpCodeFilterList.includes(alignedRow.raw_op_code)
+                        ? alignedRow.raw_op_code !== null && rawOpCodeFilterSet.has(alignedRow.raw_op_code)
                         : true;
                     const matchesMathFidelity = hasMathFilter
-                        ? alignedRow.math_fidelity !== null && activeMathFilters.includes(alignedRow.math_fidelity)
+                        ? alignedRow.math_fidelity !== null && mathFilterSet.has(alignedRow.math_fidelity)
                         : true;
                     const matchesBufferType = hasBufferTypeFilter
-                        ? alignedRow.buffer_type !== null && activeBufferTypeFilters.includes(alignedRow.buffer_type)
+                        ? alignedRow.buffer_type !== null && bufferTypeFilterSet.has(alignedRow.buffer_type)
                         : true;
                     const matchesLayout = hasLayoutFilter
-                        ? alignedRow.layout !== null && activeLayoutFilters.includes(alignedRow.layout)
+                        ? alignedRow.layout !== null && layoutFilterSet.has(alignedRow.layout)
                         : true;
 
                     return (
@@ -165,7 +176,7 @@ const usePerfReportFiltering = ({
 
         const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
         const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
-        const hasRawOpCodeFilter = activeRawOpCodeFilterList.length > 0;
+        const hasRawOpCodeFilter = rawOpCodeFilterSet.size > 0;
         const hasOpFilters = hasOpCodeTextFilter || hasRawOpCodeFilter;
         const filtersWithoutOpCode = {
             ...filters,
@@ -199,7 +210,7 @@ const usePerfReportFiltering = ({
                     ? alignedRow.op_code.toLowerCase().includes(opCodeFilterValue)
                     : true;
                 const matchesRawOpCode = hasRawOpCodeFilter
-                    ? alignedRow.raw_op_code !== null && activeRawOpCodeFilterList.includes(alignedRow.raw_op_code)
+                    ? alignedRow.raw_op_code !== null && rawOpCodeFilterSet.has(alignedRow.raw_op_code)
                     : true;
 
                 return matchesOpCodeText && matchesRawOpCode;
@@ -221,9 +232,12 @@ const usePerfReportFiltering = ({
         processedRows,
         filters,
         activeMathFilters,
-        activeRawOpCodeFilterList,
+        rawOpCodeFilterSet,
         activeBufferTypeFilters,
         activeLayoutFilters,
+        mathFilterSet,
+        bufferTypeFilterSet,
+        layoutFilterSet,
         filterBySignpost,
         processedComparisonRows,
     ]);
