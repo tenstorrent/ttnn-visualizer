@@ -26,7 +26,6 @@ interface UsePerfReportFilteringReturn {
     processedComparisonRows: TypedPerfTableRow[][];
     combinedRows: TypedPerfTableRow[];
     rawOpCodeOptions: TypedPerfTableRow[];
-    effectiveRawOpCodeFilterList: string[];
     filteredRows: TypedPerfTableRow[];
     filteredComparisonRowsList: TypedPerfTableRow[][];
 }
@@ -66,84 +65,26 @@ const usePerfReportFiltering = ({
         () => [processedRows, ...processedComparisonRows].flat(),
         [processedRows, processedComparisonRows],
     );
+
     const rawOpCodeOptions = useMemo(() => getRawOpCodeOptions(combinedRows), [combinedRows]);
-    const availableRawOpCodeOptionSet = useMemo(
-        () =>
-            new Set(rawOpCodeOptions.map((row) => row.raw_op_code).filter((value): value is string => value !== null)),
-        [rawOpCodeOptions],
-    );
-    const effectiveRawOpCodeFilterList = useMemo(
-        () => activeRawOpCodeFilterList.filter((value): value is string => availableRawOpCodeOptionSet.has(value)),
-        [activeRawOpCodeFilterList, availableRawOpCodeOptionSet],
-    );
-    const availableMathOptionSet = useMemo(
-        () =>
-            new Set(
-                combinedRows
-                    .map((row) => row.math_fidelity)
-                    .filter((value): value is string => value !== null && value !== ''),
-            ),
-        [combinedRows],
-    );
-    const effectiveMathFilterList = useMemo(
-        () =>
-            activeMathFilterList.filter(
-                (value): value is string => value !== null && availableMathOptionSet.has(value),
-            ),
-        [activeMathFilterList, availableMathOptionSet],
-    );
-    const availableBufferTypeOptionSet = useMemo(
-        () =>
-            new Set(
-                combinedRows
-                    .map((row) => row.buffer_type)
-                    .filter((value): value is NonNullable<TypedPerfTableRow['buffer_type']> => value !== null),
-            ),
-        [combinedRows],
-    );
-    const effectiveBufferTypeFilterList = useMemo(
-        () =>
-            activeBufferTypeFilterList.filter(
-                (value): value is NonNullable<TypedPerfTableRow['buffer_type']> =>
-                    value !== null && availableBufferTypeOptionSet.has(value),
-            ),
-        [activeBufferTypeFilterList, availableBufferTypeOptionSet],
-    );
-    const availableLayoutOptionSet = useMemo(
-        () =>
-            new Set(
-                combinedRows
-                    .map((row) => row.layout)
-                    .filter((value): value is NonNullable<TypedPerfTableRow['layout']> => value !== null),
-            ),
-        [combinedRows],
-    );
-    const effectiveLayoutFilterList = useMemo(
-        () =>
-            activeLayoutFilterList.filter(
-                (value): value is NonNullable<TypedPerfTableRow['layout']> =>
-                    value !== null && availableLayoutOptionSet.has(value),
-            ),
-        [activeLayoutFilterList, availableLayoutOptionSet],
-    );
     const activeMathFilters = useMemo(
-        () => (isNormalisationApplied ? [] : effectiveMathFilterList),
-        [isNormalisationApplied, effectiveMathFilterList],
+        () => (isNormalisationApplied ? [] : activeMathFilterList),
+        [isNormalisationApplied, activeMathFilterList],
     );
     const activeBufferTypeFilters = useMemo(
-        () => (isNormalisationApplied ? [] : effectiveBufferTypeFilterList),
-        [isNormalisationApplied, effectiveBufferTypeFilterList],
+        () => (isNormalisationApplied ? [] : activeBufferTypeFilterList),
+        [isNormalisationApplied, activeBufferTypeFilterList],
     );
     const activeLayoutFilters = useMemo(
-        () => (isNormalisationApplied ? [] : effectiveLayoutFilterList),
-        [isNormalisationApplied, effectiveLayoutFilterList],
+        () => (isNormalisationApplied ? [] : activeLayoutFilterList),
+        [isNormalisationApplied, activeLayoutFilterList],
     );
 
     const { filteredRows, filteredComparisonRowsList } = useMemo(() => {
         if (!isNormalisationApplied) {
             const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
             const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
-            const hasRawOpCodeFilter = effectiveRawOpCodeFilterList.length > 0;
+            const hasRawOpCodeFilter = activeRawOpCodeFilterList.length > 0;
             const hasMathFilter = activeMathFilters.length > 0;
             const hasBufferTypeFilter = activeBufferTypeFilters.length > 0;
             const hasLayoutFilter = activeLayoutFilters.length > 0;
@@ -186,8 +127,7 @@ const usePerfReportFiltering = ({
                         ? alignedRow.op_code.toLowerCase().includes(opCodeFilterValue)
                         : true;
                     const matchesRawOpCode = hasRawOpCodeFilter
-                        ? alignedRow.raw_op_code !== null &&
-                          effectiveRawOpCodeFilterList.includes(alignedRow.raw_op_code)
+                        ? alignedRow.raw_op_code !== null && activeRawOpCodeFilterList.includes(alignedRow.raw_op_code)
                         : true;
                     const matchesMathFidelity = hasMathFilter
                         ? alignedRow.math_fidelity !== null && activeMathFilters.includes(alignedRow.math_fidelity)
@@ -225,7 +165,7 @@ const usePerfReportFiltering = ({
 
         const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
         const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
-        const hasRawOpCodeFilter = effectiveRawOpCodeFilterList.length > 0;
+        const hasRawOpCodeFilter = activeRawOpCodeFilterList.length > 0;
         const hasOpFilters = hasOpCodeTextFilter || hasRawOpCodeFilter;
         const filtersWithoutOpCode = {
             ...filters,
@@ -259,7 +199,7 @@ const usePerfReportFiltering = ({
                     ? alignedRow.op_code.toLowerCase().includes(opCodeFilterValue)
                     : true;
                 const matchesRawOpCode = hasRawOpCodeFilter
-                    ? alignedRow.raw_op_code !== null && effectiveRawOpCodeFilterList.includes(alignedRow.raw_op_code)
+                    ? alignedRow.raw_op_code !== null && activeRawOpCodeFilterList.includes(alignedRow.raw_op_code)
                     : true;
 
                 return matchesOpCodeText && matchesRawOpCode;
@@ -281,7 +221,7 @@ const usePerfReportFiltering = ({
         processedRows,
         filters,
         activeMathFilters,
-        effectiveRawOpCodeFilterList,
+        activeRawOpCodeFilterList,
         activeBufferTypeFilters,
         activeLayoutFilters,
         filterBySignpost,
@@ -293,7 +233,6 @@ const usePerfReportFiltering = ({
         processedComparisonRows,
         combinedRows,
         rawOpCodeOptions,
-        effectiveRawOpCodeFilterList,
         filteredRows,
         filteredComparisonRowsList,
     };

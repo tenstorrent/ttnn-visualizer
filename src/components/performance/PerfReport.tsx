@@ -130,7 +130,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         processedComparisonRows,
         combinedRows,
         rawOpCodeOptions,
-        effectiveRawOpCodeFilterList,
         filteredRows,
         filteredComparisonRowsList,
     } = usePerfReportFiltering({
@@ -144,6 +143,38 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         activeLayoutFilterList,
         filterBySignpost,
     });
+    const validRawOpCodeValues = useMemo(
+        () => new Set(rawOpCodeOptions.flatMap((row) => (row.raw_op_code !== null ? [row.raw_op_code] : []))),
+        [rawOpCodeOptions],
+    );
+    const validMathFilterValues = useMemo(
+        () =>
+            new Set(
+                combinedRows
+                    .map((row) => row.math_fidelity)
+                    .filter((value): value is string => value !== null && value !== ''),
+            ),
+        [combinedRows],
+    );
+    const validBufferTypeValues = useMemo(
+        () =>
+            new Set(
+                combinedRows
+                    .map((row) => row.buffer_type)
+                    .filter((value): value is NonNullable<TypedPerfTableRow['buffer_type']> => value !== null),
+            ),
+        [combinedRows],
+    );
+    const validLayoutValues = useMemo(
+        () =>
+            new Set(
+                combinedRows
+                    .map((row) => row.layout)
+                    .filter((value): value is NonNullable<TypedPerfTableRow['layout']> => value !== null),
+            ),
+        [combinedRows],
+    );
+
     const filteredComparisonRows = useMemo(
         () => filteredComparisonRowsList[comparisonIndex] || [],
         [filteredComparisonRowsList, comparisonIndex],
@@ -154,10 +185,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             sortAndFilterStackedPerfTableData(
                 stackedData,
                 stackedFilters,
-                effectiveRawOpCodeFilterList,
+                activeRawOpCodeFilterList,
                 isGroupedByMemory,
             ),
-        [stackedData, stackedFilters, effectiveRawOpCodeFilterList, isGroupedByMemory],
+        [stackedData, stackedFilters, activeRawOpCodeFilterList, isGroupedByMemory],
     );
 
     const filteredComparisonStackedRowsList = useMemo(
@@ -166,11 +197,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 sortAndFilterStackedPerfTableData(
                     dataset,
                     stackedFilters,
-                    effectiveRawOpCodeFilterList,
+                    activeRawOpCodeFilterList,
                     isGroupedByMemory,
                 ),
             ),
-        [comparisonStackedData, stackedFilters, effectiveRawOpCodeFilterList, isGroupedByMemory],
+        [comparisonStackedData, stackedFilters, activeRawOpCodeFilterList, isGroupedByMemory],
     );
     const filteredComparisonStackedRows = useMemo(
         () => filteredComparisonStackedRowsList[comparisonIndex] || [],
@@ -202,18 +233,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             setUseNormalisedData(false);
         }
     }, [activeComparisonReportList, selectedTabId]);
-
-    // If currently selected tab is disabled, reset to initial tab
-    useEffect(() => {
-        const isSelectedTabDisabled =
-            isNormalisationApplied && processedComparisonRows?.[comparisonIndex]?.length === 0;
-
-        if (isSelectedTabDisabled) {
-            // Has sufficient guard conditions
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setSelectedTabId(INITIAL_TAB_ID);
-        }
-    }, [selectedTabId, processedComparisonRows, comparisonIndex, isNormalisationApplied]);
 
     const isInitialTab = selectedTabId === INITIAL_TAB_ID;
 
@@ -250,6 +269,68 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         filteredComparisonRows,
         processedComparisonRows,
         filteredComparisonStackedRows,
+    ]);
+
+    // If currently selected tab is disabled, reset to initial tab
+    useEffect(() => {
+        const isSelectedTabDisabled =
+            isNormalisationApplied && processedComparisonRows?.[comparisonIndex]?.length === 0;
+
+        if (isSelectedTabDisabled) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setSelectedTabId(INITIAL_TAB_ID);
+        }
+    }, [selectedTabId, processedComparisonRows, comparisonIndex, isNormalisationApplied]);
+
+    useEffect(() => {
+        setActiveRawOpCodeFilterList((currentFilters) => {
+            const nextFilters = currentFilters.filter((value) => validRawOpCodeValues.has(value));
+
+            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
+        });
+    }, [validRawOpCodeValues, setActiveRawOpCodeFilterList]);
+
+    useEffect(() => {
+        if (isNormalisationApplied) {
+            if (activeMathFilterList.length > 0) {
+                setActiveMathFilterList([]);
+            }
+            if (activeBufferTypeFilterList.length > 0) {
+                setActiveBufferTypeFilterList([]);
+            }
+            if (activeLayoutFilterList.length > 0) {
+                setActiveLayoutFilterList([]);
+            }
+            return;
+        }
+
+        setActiveMathFilterList((currentFilters) => {
+            const nextFilters = currentFilters.filter((value) => validMathFilterValues.has(value));
+
+            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
+        });
+        setActiveBufferTypeFilterList((currentFilters) => {
+            const nextFilters = currentFilters.filter((value) => value !== null && validBufferTypeValues.has(value));
+
+            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
+        });
+        setActiveLayoutFilterList((currentFilters) => {
+            const nextFilters = currentFilters.filter((value) => value !== null && validLayoutValues.has(value));
+
+            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
+        });
+    }, [
+        isNormalisationApplied,
+        activeMathFilterList.length,
+        activeBufferTypeFilterList.length,
+        activeLayoutFilterList.length,
+        validMathFilterValues,
+        validBufferTypeValues,
+        validLayoutValues,
+        setActiveMathFilterList,
+        setActiveBufferTypeFilterList,
+        setActiveLayoutFilterList,
     ]);
 
     return (
