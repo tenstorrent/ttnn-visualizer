@@ -581,7 +581,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 <div className='filters-container'>
                     <FormGroup
                         subLabel='Filters'
-                        helperText={filterScopeHelperText}
                         className='form-group option-row'
                     >
                         <ButtonGroup className='select-group'>
@@ -602,7 +601,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     </FormGroup>
 
                     {!isStackedView && (
-                        <FormGroup className='option-row'>
+                        <FormGroup
+                            className='option-row'
+                            helperText={filterScopeHelperText}
+                        >
                             <ButtonGroup className='select-group'>
                                 <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
                                     keyName='buffer_type'
