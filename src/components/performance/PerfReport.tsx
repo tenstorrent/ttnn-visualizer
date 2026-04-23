@@ -122,7 +122,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const isGroupedByMemory = stackedGroupBy === StackedGroupBy.MEMORY;
     const filterScopeHelperText =
         activeComparisonReportList?.length &&
-        'Comparison rows may not be filtered in order to maintain row data alignment';
+        'Comparison rows are filtered together with the active report to maintain row data alignment';
 
     const isNormalisationApplied = !isStackedView && useNormalisedData;
     const {
