@@ -40,8 +40,6 @@ import {
     stackedGroupByAtom,
     tracingModeAtom,
 } from '../../store/app';
-import alignByOpCode from '../../functions/normalisePerformanceData';
-import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
@@ -56,9 +54,9 @@ import HighlightedText from '../HighlightedText';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
-import { OpType } from '../../definitions/Performance';
 import { capitalizeString } from '../../functions/formatting';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
+import usePerfReportFiltering from './usePerfReportFiltering';
 
 enum SignpostSelectType {
     START,
@@ -126,167 +124,26 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         activeComparisonReportList?.length &&
         'Comparison rows may not be filtered in order to maintain row data alignment';
 
-    const {
-        data: [processedRows, ...processedComparisonRows],
-    } = useMemo(() => {
-        const rows = data || [];
-        const compRows = comparisonData?.map((dataset) => dataset || []) || [];
-
-        if (useNormalisedData && rows.length > 0 && compRows.length > 0) {
-            return alignByOpCode(rows, compRows);
-        }
-
-        return { data: [rows, ...compRows], missingRows: [] };
-    }, [data, comparisonData, useNormalisedData]);
-
     const isNormalisationApplied = !isStackedView && useNormalisedData;
-    const combinedRows = useMemo(
-        () => [processedRows, ...processedComparisonRows].flat(),
-        [processedRows, processedComparisonRows],
-    );
-    const rawOpCodeOptions = useMemo(() => getRawOpCodeOptions(combinedRows), [combinedRows]);
-    const availableRawOpCodeOptionSet = useMemo(
-        () =>
-            new Set(rawOpCodeOptions.map((row) => row.raw_op_code).filter((value): value is string => value !== null)),
-        [rawOpCodeOptions],
-    );
-    const effectiveRawOpCodeFilterList = useMemo(
-        () => activeRawOpCodeFilterList.filter((value) => availableRawOpCodeOptionSet.has(value)),
-        [activeRawOpCodeFilterList, availableRawOpCodeOptionSet],
-    );
-
-    const { filteredRows, filteredComparisonRowsList } = useMemo(() => {
-        if (!isNormalisationApplied) {
-            const opCodeFilterValue = filters[ColumnKeys.OpCode]?.toLowerCase() || '';
-            const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
-            const hasRawOpCodeFilter = effectiveRawOpCodeFilterList.length > 0;
-            const hasOpFilters = hasOpCodeTextFilter || hasRawOpCodeFilter;
-            const filtersWithoutOpCode = {
-                ...filters,
-                [ColumnKeys.OpCode]: '',
-            };
-            const allDatasets = [processedRows, ...processedComparisonRows];
-            const datasetsWithoutOpFilters = allDatasets.map((dataset) =>
-                sortAndFilterPerfTableData(dataset, {
-                    filters: filtersWithoutOpCode,
-                    mathFilter: activeMathFilterList,
-                    bufferTypeFilter: activeBufferTypeFilterList,
-                    activeLayoutFilterList,
-                }),
-            );
-            const datasetRowSets = datasetsWithoutOpFilters.map((dataset) => new Set(dataset));
-
-            if (!hasOpFilters) {
-                const [filteredSourceRows, ...filteredComparisonRows] = datasetsWithoutOpFilters.map((dataset) =>
-                    sortAndFilterPerfTableData(dataset, { filterBySignpost }),
-                );
-
-                return {
-                    filteredRows: filteredSourceRows || [],
-                    filteredComparisonRowsList: filteredComparisonRows,
-                };
-            }
-
-            const maxDatasetLength = allDatasets.reduce((length, dataset) => Math.max(length, dataset.length), 0);
-            const keepRowMask = Array.from({ length: maxDatasetLength }, (_, index) => {
-                const alignedRows = allDatasets
-                    .map((dataset, datasetIndex) => {
-                        const row = dataset[index];
-                        return row && datasetRowSets[datasetIndex].has(row) ? row : null;
-                    })
-                    .filter((value): value is TypedPerfTableRow => Boolean(value));
-
-                return alignedRows.some((alignedRow) => {
-                    const matchesOpCodeText = hasOpCodeTextFilter
-                        ? alignedRow.op_code.toLowerCase().includes(opCodeFilterValue)
-                        : true;
-                    const matchesRawOpCode = hasRawOpCodeFilter
-                        ? alignedRow.raw_op_code !== null &&
-                          effectiveRawOpCodeFilterList.includes(alignedRow.raw_op_code)
-                        : true;
-
-                    return matchesOpCodeText && matchesRawOpCode;
-                });
-            });
-            const [unifiedFilteredRows, ...unifiedFilteredComparisonRows] = allDatasets.map((dataset, datasetIndex) =>
-                sortAndFilterPerfTableData(
-                    dataset.filter((row, index) => datasetRowSets[datasetIndex].has(row) && keepRowMask[index]),
-                    {
-                        filterBySignpost,
-                    },
-                ),
-            );
-
-            return {
-                filteredRows: unifiedFilteredRows || [],
-                filteredComparisonRowsList: unifiedFilteredComparisonRows,
-            };
-        }
-
-        const opCodeFilterValue = filters[ColumnKeys.OpCode]?.toLowerCase() || '';
-        const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
-        const hasRawOpCodeFilter = effectiveRawOpCodeFilterList.length > 0;
-        const hasOpFilters = hasOpCodeTextFilter || hasRawOpCodeFilter;
-        const filtersWithoutOpCode = {
-            ...filters,
-            [ColumnKeys.OpCode]: '',
-        };
-        const sourceRowsWithoutSignposts = sortAndFilterPerfTableData(processedRows, {
-            filters: filtersWithoutOpCode,
-            mathFilter: activeMathFilterList,
-            bufferTypeFilter: activeBufferTypeFilterList,
-            activeLayoutFilterList,
-        });
-        const sourceRowSet = new Set(sourceRowsWithoutSignposts);
-        const keepRowMask = processedRows.map((row, index) => {
-            if (!sourceRowSet.has(row)) {
-                return false;
-            }
-
-            if (!hasOpFilters) {
-                return true;
-            }
-
-            const alignedRows = [
-                row,
-                ...processedComparisonRows
-                    .map((dataset) => dataset[index])
-                    .filter((value): value is TypedPerfTableRow => Boolean(value)),
-            ];
-
-            return alignedRows.some((alignedRow) => {
-                const matchesOpCodeText = hasOpCodeTextFilter
-                    ? alignedRow.op_code.toLowerCase().includes(opCodeFilterValue)
-                    : true;
-                const matchesRawOpCode = hasRawOpCodeFilter
-                    ? alignedRow.raw_op_code !== null && effectiveRawOpCodeFilterList.includes(alignedRow.raw_op_code)
-                    : true;
-
-                return matchesOpCodeText && matchesRawOpCode;
-            });
-        });
-
-        const applyMask = (dataset: TypedPerfTableRow[]) => dataset.filter((_, index) => keepRowMask[index]);
-        const filteredAlignedSourceRows = applyMask(processedRows);
-        const filteredAlignedComparisonRows = processedComparisonRows.map(applyMask);
-
-        return {
-            filteredRows: sortAndFilterPerfTableData(filteredAlignedSourceRows, { filterBySignpost }),
-            filteredComparisonRowsList: filteredAlignedComparisonRows.map((dataset) =>
-                sortAndFilterPerfTableData(dataset, { filterBySignpost }),
-            ),
-        };
-    }, [
-        isNormalisationApplied,
+    const {
         processedRows,
+        processedComparisonRows,
+        combinedRows,
+        rawOpCodeOptions,
+        effectiveRawOpCodeFilterList,
+        filteredRows,
+        filteredComparisonRowsList,
+    } = usePerfReportFiltering({
+        data,
+        comparisonData,
+        isNormalisationApplied,
         filters,
         activeMathFilterList,
-        effectiveRawOpCodeFilterList,
+        activeRawOpCodeFilterList,
         activeBufferTypeFilterList,
         activeLayoutFilterList,
         filterBySignpost,
-        processedComparisonRows,
-    ]);
+    });
     const filteredComparisonRows = useMemo(
         () => filteredComparisonRowsList[comparisonIndex] || [],
         [filteredComparisonRowsList, comparisonIndex],
@@ -838,13 +695,6 @@ const renderSignpost: RenderSignpostProps<Signpost> = (
 
 const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
     return signpost.op_code.toLowerCase().includes(query.toLowerCase());
-};
-
-const getRawOpCodeOptions = (rows: TypedPerfTableRow[]): TypedPerfTableRow[] => {
-    // Don't want signposts here
-    const options = rows.filter((row) => row.op_type !== OpType.SIGNPOST);
-
-    return Array.from(new Set(options));
 };
 
 interface RenderStackedGroupByProps<T> {
