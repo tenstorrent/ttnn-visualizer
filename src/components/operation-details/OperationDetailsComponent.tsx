@@ -43,7 +43,7 @@ import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { getMemoryAddress } from '../../functions/math';
-import useL1ZoomRange from '../../hooks/useL1ZoomRange';
+import useMemoryZoomRange from '../../hooks/useMemoryZoomRange';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -119,11 +119,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         memory = details.memoryData().memory;
     }
 
-    const { plotZoomRangeMin, plotZoomRangeMax, zoomRangeStart, zoomRangeEnd, handleSetZoomRange } = useL1ZoomRange({
-        operationId,
-        memorySizeL1,
-        memory,
-    });
+    const { plotZoomRangeMin, plotZoomRangeMax, zoomRangeStart, zoomRangeEnd, handleSetZoomRange } = useMemoryZoomRange(
+        {
+            operationId,
+            memorySizeL1,
+            memory,
+        },
+    );
 
     if (!hasRequiredData || !details || !previousDetails) {
         return (

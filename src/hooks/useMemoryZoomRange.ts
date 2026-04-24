@@ -29,7 +29,7 @@ interface ZoomRange {
     end: number;
 }
 
-const useL1ZoomRange = ({ operationId, memorySizeL1, memory }: UseZoomRangeProps): UseZoomRange => {
+const useMemoryZoomRange = ({ operationId, memorySizeL1, memory }: UseZoomRangeProps): UseZoomRange => {
     const [zoomRange, setZoomRange] = useState<ZoomRange | null>(null);
     const currentOperationKey = useMemo(() => Symbol(String(operationId)), [operationId]);
     const isCurrentOperation = zoomRange?.operationKey === currentOperationKey;
@@ -67,4 +67,4 @@ const useL1ZoomRange = ({ operationId, memorySizeL1, memory }: UseZoomRangeProps
     };
 };
 
-export default useL1ZoomRange;
+export default useMemoryZoomRange;
