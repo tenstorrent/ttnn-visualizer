@@ -49,6 +49,15 @@ pnpm run flask:start-debug
 
 When both the frontend and backend are running you can access the app on [http://localhost:5173](http://localhost:5173), but an alternative local URI may be provided in the terminal when running `pnpm run dev`.
 
+## CLI arguments
+* `--profiler-path` - specify the local path to the folder containing profiler data
+* `--performance-path` - specify the local path to the folder containing performance data
+* `--tt-metal-home` - specify the path to the TT Metal repo when running directly on the machine where reports are being generated
+* `--host` - set the host to bind the backend server to
+* `--port` - set the port to bind the backend server to
+* `--server` - enable server mode and bind to all network interfaces (`0.0.0.0`)
+* `-d`, `--daemon` - run the backend server as a daemon process
+
 ## Environment variables
 
 The application should run out of the box, but should you need to you can adjust certain values in the front end or back end code using a `.env` file. See [.env.sample](https://github.com/tenstorrent/ttnn-visualizer/blob/dev/.env.sample) for some of the key variables available.
