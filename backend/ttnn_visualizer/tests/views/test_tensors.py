@@ -3,67 +3,12 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 """
-API tests for tensor endpoints, including optional tensor_lifetime support.
+API tests for tensor endpoints.
 """
 
 from http import HTTPStatus
 
-# ---------------------------------------------------------------------------
-# Schema versions
-# ---------------------------------------------------------------------------
-
-_SCHEMA_BASE = """
-CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
-CREATE TABLE tensors (
-    tensor_id int UNIQUE,
-    shape text,
-    dtype text,
-    layout text,
-    memory_config text,
-    device_id int,
-    address int,
-    buffer_type int
-);
-CREATE TABLE input_tensors (operation_id int, input_index int, tensor_id int);
-CREATE TABLE output_tensors (operation_id int, output_index int, tensor_id int);
-CREATE TABLE buffers (
-    operation_id int,
-    device_id int,
-    address int,
-    max_size_per_bank int,
-    buffer_type int
-);
-CREATE TABLE local_tensor_comparison_records (
-    tensor_id int,
-    golden_tensor_id int,
-    matches int,
-    desired_pcc float,
-    actual_pcc float
-);
-CREATE TABLE global_tensor_comparison_records (
-    tensor_id int,
-    golden_tensor_id int,
-    matches int,
-    desired_pcc float,
-    actual_pcc float
-);
-"""
-
-_SCHEMA_WITH_LIFETIME = (
-    _SCHEMA_BASE
-    + """
-CREATE TABLE tensor_lifetime (
-    tensor_id int UNIQUE,
-    producer_operation_id int,
-    last_use_operation_id int,
-    deallocate_operation_id int,
-    producer_source_file text,
-    producer_source_line int,
-    last_use_source_file text,
-    last_use_source_line int
-);
-"""
-)
+from ttnn_visualizer.tests.report_schemas import SCHEMA_V2, SCHEMA_V2_WITH_LIFETIME
 
 # ---------------------------------------------------------------------------
 # Shared inserts
@@ -75,8 +20,8 @@ INSERT INTO tensors VALUES (10, '(2, 4)', 'bfloat16', 'TILE', '{}', 0, 200, 0);
 INSERT INTO tensors VALUES (20, '(1,)', 'float32', 'ROW_MAJOR', '{}', 0, 300, 0);
 INSERT INTO output_tensors VALUES (1, 0, 10);
 INSERT INTO input_tensors VALUES (1, 0, 20);
-INSERT INTO buffers VALUES (1, 0, 200, 512, 0);
-INSERT INTO buffers VALUES (1, 0, 300, 256, 0);
+INSERT INTO buffers VALUES (1, 0, 200, 512, 0, NULL);
+INSERT INTO buffers VALUES (1, 0, 300, 256, 0, NULL);
 """
 
 # All lifetime fields populated for tensor 10.
@@ -96,7 +41,7 @@ INSERT INTO tensor_lifetime VALUES (20, 1, NULL, NULL, NULL, NULL, NULL, NULL);
 
 def test_tensors_list_no_lifetime_table_returns_null_lifetime(client, make_report):
     """Older databases without tensor_lifetime should return lifetime: null."""
-    instance_id = make_report(_SCHEMA_BASE, _BASE_INSERTS)
+    instance_id = make_report(_BASE_INSERTS, SCHEMA_V2)
 
     response = client.get("/api/tensors", query_string={"instanceId": instance_id})
     assert response.status_code == HTTPStatus.OK
@@ -113,7 +58,7 @@ def test_tensors_list_no_lifetime_table_returns_null_lifetime(client, make_repor
 def test_tensors_list_with_full_lifetime(client, make_report):
     """Tensors with a tensor_lifetime row should include a populated lifetime object."""
     instance_id = make_report(
-        _SCHEMA_WITH_LIFETIME, _BASE_INSERTS + _FULL_LIFETIME_INSERT
+        _BASE_INSERTS + _FULL_LIFETIME_INSERT, SCHEMA_V2_WITH_LIFETIME
     )
 
     response = client.get("/api/tensors", query_string={"instanceId": instance_id})
@@ -145,7 +90,7 @@ def test_tensors_list_with_full_lifetime(client, make_report):
 def test_tensors_list_partial_lifetime_fields_are_nullable(client, make_report):
     """A tensor_lifetime row with some NULL fields is serialised with None values."""
     instance_id = make_report(
-        _SCHEMA_WITH_LIFETIME, _BASE_INSERTS + _PARTIAL_LIFETIME_INSERT
+        _BASE_INSERTS + _PARTIAL_LIFETIME_INSERT, SCHEMA_V2_WITH_LIFETIME
     )
 
     response = client.get("/api/tensors", query_string={"instanceId": instance_id})
@@ -176,7 +121,7 @@ def test_tensors_list_partial_lifetime_fields_are_nullable(client, make_report):
 
 def test_tensor_detail_no_lifetime_table(client, make_report):
     """Detail endpoint returns lifetime: null when table is absent."""
-    instance_id = make_report(_SCHEMA_BASE, _BASE_INSERTS)
+    instance_id = make_report(_BASE_INSERTS, SCHEMA_V2)
 
     response = client.get("/api/tensors/10", query_string={"instanceId": instance_id})
     assert response.status_code == HTTPStatus.OK
@@ -190,7 +135,7 @@ def test_tensor_detail_no_lifetime_table(client, make_report):
 def test_tensor_detail_with_lifetime(client, make_report):
     """Detail endpoint includes a populated lifetime object when the table exists."""
     instance_id = make_report(
-        _SCHEMA_WITH_LIFETIME, _BASE_INSERTS + _FULL_LIFETIME_INSERT
+        _BASE_INSERTS + _FULL_LIFETIME_INSERT, SCHEMA_V2_WITH_LIFETIME
     )
 
     response = client.get("/api/tensors/10", query_string={"instanceId": instance_id})
@@ -212,7 +157,7 @@ def test_tensor_detail_with_lifetime(client, make_report):
 
 def test_tensor_detail_not_found(client, make_report):
     """Requesting a non-existent tensor returns 404."""
-    instance_id = make_report(_SCHEMA_BASE, _BASE_INSERTS)
+    instance_id = make_report(_BASE_INSERTS)
 
     response = client.get("/api/tensors/9999", query_string={"instanceId": instance_id})
     assert response.status_code == HTTPStatus.NOT_FOUND

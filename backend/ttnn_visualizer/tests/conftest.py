@@ -15,6 +15,7 @@ import pytest
 from ttnn_visualizer.app import create_app
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.tests.report_schemas import SCHEMA_V2
 
 
 @pytest.fixture
@@ -51,13 +52,13 @@ def make_report(app):
 
     Yields an inner function::
 
-        instance_id = make_report(schema_sql, inserts_sql="")
+        instance_id = make_report(inserts_sql="", schema_sql=SCHEMA_V2)
 
-    *schema_sql* should contain the ``CREATE TABLE`` statements for the schema
-    version under test.  *inserts_sql* is an optional second script with the
-    ``INSERT`` statements for that test's data.  The two scripts are executed
-    separately so that schema constants can be reused across tests while only
-    the data varies.
+    *inserts_sql* is an optional script with the ``INSERT`` statements for
+    that test's data.  *schema_sql* defaults to ``SCHEMA_V2`` (the current
+    baseline schema) and can be overridden to test backwards compatibility with
+    older schema versions.  Both arguments are optional so a bare
+    ``make_report()`` call produces an empty database with the default schema.
 
     The inner function registers the database as a profiler instance and
     returns the ``instance_id`` string to pass as ``?instanceId=`` in API
@@ -66,7 +67,7 @@ def make_report(app):
     paths = []
     counter = [0]
 
-    def _make(schema_sql, inserts_sql=""):
+    def _make(inserts_sql="", schema_sql=SCHEMA_V2):
         counter[0] += 1
         instance_id = f"pytest-make-report-{counter[0]}"
 
