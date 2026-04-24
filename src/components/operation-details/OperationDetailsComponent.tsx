@@ -119,7 +119,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         memory = details.memoryData().memory;
     }
 
-    const { plotZoomRangeStart, plotZoomRangeEnd, zoomRangeStart, zoomRangeEnd, handleSetZoomRange } = useL1ZoomRange({
+    const { plotZoomRangeMin, plotZoomRangeMax, zoomRangeStart, zoomRangeEnd, handleSetZoomRange } = useL1ZoomRange({
         operationId,
         memorySizeL1,
         memory,
@@ -355,15 +355,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             className='memory-zoom-range-reset'
                                             disabled={
                                                 !zoomedInViewMainMemory ||
-                                                (plotZoomRangeStart === zoomRangeStart &&
-                                                    plotZoomRangeEnd === zoomRangeEnd)
+                                                (plotZoomRangeMin === zoomRangeStart &&
+                                                    plotZoomRangeMax === zoomRangeEnd)
                                             }
                                             size={Size.SMALL}
                                             variant={ButtonVariant.MINIMAL}
                                             icon={IconNames.RESET}
                                             intent={Intent.WARNING}
                                             onClick={() => {
-                                                handleSetZoomRange(plotZoomRangeStart, plotZoomRangeEnd);
+                                                handleSetZoomRange(plotZoomRangeMin, plotZoomRangeMax);
                                             }}
                                         />
                                         {!zoomedInViewMainMemory && '(Requires buffer zoom to be enabled)'}
@@ -373,7 +373,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         className={classNames('l1-memory-renderer zoom-reference', {
                                             disabled: !zoomedInViewMainMemory,
                                         })}
-                                        plotZoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                                        plotZoomRange={[plotZoomRangeMin, plotZoomRangeMax]}
                                         chartDataList={[chartData]}
                                         isZoomedIn={zoomedInViewMainMemory}
                                         memorySize={memorySizeL1}
@@ -381,12 +381,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     />
                                     <div className='zoom-range-wrap'>
                                         <RangeSlider
-                                            min={plotZoomRangeStart}
-                                            max={plotZoomRangeEnd}
+                                            min={plotZoomRangeMin}
+                                            max={plotZoomRangeMax}
                                             disabled={!zoomedInViewMainMemory}
                                             intent={Intent.WARNING}
                                             labelStepSize={
-                                                (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
+                                                (plotZoomRangeMax - plotZoomRangeMin) / 3 || L1_DEFAULT_MEMORY_SIZE
                                             }
                                             labelRenderer={(value) => getMemoryAddress(value, showHex)}
                                             value={[zoomRangeStart, zoomRangeEnd]}

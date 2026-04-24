@@ -16,8 +16,8 @@ interface UseZoomRangeProps {
 }
 
 interface UseZoomRange {
-    plotZoomRangeStart: number;
-    plotZoomRangeEnd: number;
+    plotZoomRangeMin: number;
+    plotZoomRangeMax: number;
     zoomRangeStart: number;
     zoomRangeEnd: number;
     handleSetZoomRange: (start: number, end: number) => void;
@@ -32,21 +32,21 @@ interface ZoomRange {
 const useL1ZoomRange = ({ operationId, memorySizeL1, memory }: UseZoomRangeProps): UseZoomRange => {
     const [zoomRange, setZoomRange] = useState<ZoomRange | null>(null);
     const currentOperationKey = useMemo(() => Symbol(String(operationId)), [operationId]);
-    const canUserSetRange = zoomRange?.operationKey === currentOperationKey;
+    const isCurrentOperation = zoomRange?.operationKey === currentOperationKey;
 
-    const { plotZoomRangeStart, plotZoomRangeEnd } = useMemo(() => {
-        let nextPlotZoomRangeStart = memory[0]?.address || memorySizeL1;
-        let nextPlotZoomRangeEnd =
+    const { plotZoomRangeMin, plotZoomRangeMax } = useMemo(() => {
+        let updatedPlotZoomRangeMin = memory[0]?.address || memorySizeL1;
+        let updatedPlotZoomRangeMax =
             memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0;
 
-        if (nextPlotZoomRangeEnd < nextPlotZoomRangeStart) {
-            nextPlotZoomRangeStart = 0;
-            nextPlotZoomRangeEnd = memorySizeL1;
+        if (updatedPlotZoomRangeMax < updatedPlotZoomRangeMin) {
+            updatedPlotZoomRangeMin = 0;
+            updatedPlotZoomRangeMax = memorySizeL1;
         }
 
         return {
-            plotZoomRangeStart: nextPlotZoomRangeStart,
-            plotZoomRangeEnd: nextPlotZoomRangeEnd,
+            plotZoomRangeMin: updatedPlotZoomRangeMin,
+            plotZoomRangeMax: updatedPlotZoomRangeMax,
         };
     }, [memory, memorySizeL1]);
 
@@ -59,10 +59,10 @@ const useL1ZoomRange = ({ operationId, memorySizeL1, memory }: UseZoomRangeProps
     };
 
     return {
-        plotZoomRangeStart,
-        plotZoomRangeEnd,
-        zoomRangeStart: canUserSetRange ? zoomRange?.start : plotZoomRangeStart,
-        zoomRangeEnd: canUserSetRange ? zoomRange?.end : plotZoomRangeEnd,
+        plotZoomRangeMin,
+        plotZoomRangeMax,
+        zoomRangeStart: isCurrentOperation ? zoomRange?.start : plotZoomRangeMin,
+        zoomRangeEnd: isCurrentOperation ? zoomRange?.end : plotZoomRangeMax,
         handleSetZoomRange,
     };
 };
