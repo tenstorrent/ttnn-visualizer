@@ -33,7 +33,7 @@
     "lint:fix": "eslint . --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:licenses:fix": "pnpm licenses ls --json | node scripts/check-missing-dep-licenses.mjs --fix=true",
     "lint:licenses": "pnpm licenses ls --json | node ./scripts/check-missing-dep-licenses.mjs",
-    "lint:precommit": "pnpm run lint:fix && pnpm run format && pnpm run lint:scss:fix && pnpm run flask:format",
+    "lint:precommit": "pnpm exec lint-staged",
     "lint:staged:fix": "eslint --fix --report-unused-disable-directives --max-warnings 0",
     "lint:scss:fix": "stylelint --fix \"src/**/*.scss\"",
     "lint:scss": "stylelint \"src/**/*.scss\"",
