@@ -88,7 +88,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const operation = operations?.find((op) => op.id === operationId);
     const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
-    const hasRequiredData =
+    const hasOperationDetails =
         !isLoading && !isPrevLoading && !!operationDetails && !!previousOperationDetails && !!operations;
 
     let details: OperationDetails | null = null;
@@ -96,7 +96,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     let memorySizeL1 = L1_DEFAULT_MEMORY_SIZE;
     let memory: ZoomMemoryChunk[] = [];
 
-    if (hasRequiredData) {
+    if (hasOperationDetails) {
         const deallocationReport = lateDeallocationsByOperation.get(operation?.id || -1) || [];
         details = new OperationDetails(
             operationDetails,
@@ -127,7 +127,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         },
     );
 
-    if (!hasRequiredData || !details || !previousDetails) {
+    if (!hasOperationDetails || !details || !previousDetails) {
         return (
             <>
                 <OperationDetailsNavigation
