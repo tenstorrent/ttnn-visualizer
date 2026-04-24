@@ -35,7 +35,7 @@ const useMemoryZoomRange = ({ operationId, memorySizeL1, memory }: UseZoomRangeP
     const isCurrentOperation = zoomRange?.operationKey === currentOperationKey;
 
     const { plotZoomRangeMin, plotZoomRangeMax } = useMemo(() => {
-        let updatedPlotZoomRangeMin = memory[0]?.address || memorySizeL1;
+        let updatedPlotZoomRangeMin = memory[0]?.address ?? memorySizeL1;
         let updatedPlotZoomRangeMax =
             memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0;
 
@@ -58,11 +58,13 @@ const useMemoryZoomRange = ({ operationId, memorySizeL1, memory }: UseZoomRangeP
         });
     };
 
+    const selectedZoomRange = isCurrentOperation && zoomRange !== null ? zoomRange : null;
+
     return {
         plotZoomRangeMin,
         plotZoomRangeMax,
-        zoomRangeStart: isCurrentOperation ? zoomRange?.start : plotZoomRangeMin,
-        zoomRangeEnd: isCurrentOperation ? zoomRange?.end : plotZoomRangeMax,
+        zoomRangeStart: selectedZoomRange ? selectedZoomRange.start : plotZoomRangeMin,
+        zoomRangeEnd: selectedZoomRange ? selectedZoomRange.end : plotZoomRangeMax,
         handleSetZoomRange,
     };
 };

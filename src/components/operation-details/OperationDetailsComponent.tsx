@@ -93,11 +93,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     let details: OperationDetails | null = null;
     let previousDetails: OperationDetails | null = null;
+    let l1MemoryData: ReturnType<OperationDetails['memoryData']> | null = null;
     let memorySizeL1 = L1_DEFAULT_MEMORY_SIZE;
     let memory: ZoomMemoryChunk[] = [];
 
     if (hasOperationDetails) {
         const deallocationReport = lateDeallocationsByOperation.get(operation?.id || -1) || [];
+
         details = new OperationDetails(
             operationDetails,
             operations,
@@ -115,8 +117,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             l1end,
         });
 
+        l1MemoryData = details.memoryData();
         memorySizeL1 = details.memorySizeL1;
-        memory = details.memoryData().memory;
+        memory = l1MemoryData.memory;
     }
 
     const { plotZoomRangeMin, plotZoomRangeMax, zoomRangeStart, zoomRangeEnd, handleSetZoomRange } = useMemoryZoomRange(
@@ -127,7 +130,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         },
     );
 
-    if (!hasOperationDetails || !details || !previousDetails) {
+    if (!hasOperationDetails || !details || !previousDetails || !l1MemoryData) {
         return (
             <>
                 <OperationDetailsNavigation
@@ -139,7 +142,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
     const l1Small = details.memoryData(BufferType.L1_SMALL);
-    const { cbChartDataByOperation } = details.memoryData();
+    const { cbChartDataByOperation, chartData } = l1MemoryData;
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
@@ -172,8 +175,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const inputOutputList = details.inputs.concat(details.outputs);
     const inputOutputAddressList: string = inputOutputList.map((tensor) => tensor.address).join(',');
-    const { chartData } = details.memoryData();
-
     return (
         <>
             <OperationDetailsNavigation
