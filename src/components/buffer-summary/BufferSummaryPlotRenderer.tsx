@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Tooltip } from '@blueprintjs/core';
@@ -61,7 +61,6 @@ function BufferSummaryPlotRenderer({
     const renderMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
     const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
     const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
-    const [activeRow, setActiveRow] = useState<number | null>(null);
 
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const { data: operations } = useOperationsList();
@@ -80,7 +79,7 @@ function BufferSummaryPlotRenderer({
     const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
         estimateSize: () => OPERATION_EL_HEIGHT,
         getScrollElement: () => scrollElementRef.current,
-        overscan: 20,
+        overscan: 10,
         initialMeasurementsCache: restoredMeasurementsCache,
         count: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
@@ -234,12 +233,8 @@ function BufferSummaryPlotRenderer({
                                     className='buffer-summary-plot-container'
                                     key={virtualRow.key}
                                     data-index={virtualRow.index}
-                                    ref={virtualizer.measureElement}
-                                    onMouseEnter={() => setActiveRow(operation.id)}
-                                    onMouseLeave={() => setActiveRow(null)}
                                 >
                                     <BufferSummaryRow
-                                        className={classNames({ 'is-active': operation.id === activeRow })}
                                         buffers={operation.buffers}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
