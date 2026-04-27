@@ -10,7 +10,7 @@ import tempfile
 import traceback
 from io import StringIO
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, cast
 
 import pandas as pd
 import zstd
@@ -44,10 +44,10 @@ class LocalCSVQueryRunner:
 
     def execute_query(
         self,
-        columns: List[str],
-        filters: Dict[str, Union[str, None]] = None,
+        columns: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Union[str, None]]] = None,
         as_dict: bool = False,
-        limit: int = None,
+        limit: Optional[int] = None,
     ) -> Union[
         List[List[Optional[Union[str, float, int]]]],
         List[Dict[str, Optional[Union[str, float, int]]]],
@@ -104,6 +104,8 @@ class NPEQueries:
 
     @staticmethod
     def get_npe_manifest(instance: Instance):
+        if not instance.performance_path:
+            raise ValueError("instance.performance_path is None")
         file_path = Path(
             instance.performance_path,
             NPEQueries.NPE_FOLDER,
@@ -158,12 +160,14 @@ class DeviceLogProfilerQueries:
         The instance determines whether to use a local or remote runner.
         """
         self.instance = instance
-        self.runner = None
+        self.runner: Optional[LocalCSVQueryRunner] = None
 
     def __enter__(self):
         """
         Determine the appropriate query runner based on the instance's remote connection.
         """
+        if not self.instance.performance_path:
+            raise ValueError("instance.performance_path is None")
         self.runner = LocalCSVQueryRunner(
             file_path=Path(self.instance.performance_path).joinpath(
                 self.DEVICE_LOG_FILE
@@ -191,37 +195,60 @@ class DeviceLogProfilerQueries:
         """
         Example query: Filter rows by a specific timer_id and optionally return results as dictionaries.
         """
-        return self.runner.execute_query(
-            columns=[],
-            filters={"timer_id": timer_id},
-            as_dict=as_dict,
+        if self.runner is None:
+            raise RuntimeError(
+                "DeviceLogProfilerQueries must be used as a context manager"
+            )
+        return cast(
+            Union[List[List[str]], List[Dict[str, str]]],
+            self.runner.execute_query(
+                columns=[],
+                filters={"timer_id": timer_id},
+                as_dict=as_dict,
+            ),
         )
 
     def query_zone_statistics(
-        self, zone_name: str, as_dict: bool = False, limit: int = None
+        self, zone_name: str, as_dict: bool = False, limit: Optional[int] = None
     ) -> Union[List[List[str]], List[Dict[str, str]]]:
         """
         Example query: Retrieve statistics for a specific zone name.
         """
-        return self.runner.execute_query(
-            columns=[],
-            filters={"zone name": zone_name},
-            as_dict=as_dict,
-            limit=limit,
+        if self.runner is None:
+            raise RuntimeError(
+                "DeviceLogProfilerQueries must be used as a context manager"
+            )
+        return cast(
+            Union[List[List[str]], List[Dict[str, str]]],
+            self.runner.execute_query(
+                columns=[],
+                filters={"zone name": zone_name},
+                as_dict=as_dict,
+                limit=limit,
+            ),
         )
 
     def get_all_entries(
-        self, as_dict: bool = False, limit: int = None
+        self, as_dict: bool = False, limit: Optional[int] = None
     ) -> List[List[str]]:
         """
         Fetch all entries from the device log.
         """
-        return self.runner.execute_query(
-            columns=self.DEVICE_LOG_COLUMNS, as_dict=as_dict, limit=limit
+        if self.runner is None:
+            raise RuntimeError(
+                "DeviceLogProfilerQueries must be used as a context manager"
+            )
+        return cast(
+            List[List[str]],
+            self.runner.execute_query(
+                columns=self.DEVICE_LOG_COLUMNS, as_dict=as_dict, limit=limit
+            ),
         )
 
     @staticmethod
     def get_raw_csv(instance: Instance):
+        if not instance.performance_path:
+            raise ValueError("instance.performance_path is None")
         file_path = Path(
             instance.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
         )
@@ -237,7 +264,7 @@ class OpsPerformanceQueries:
         Initialize the performance profiler with a instance object.
         """
         self.instance = instance
-        self.runner = None
+        self.runner: Optional[LocalCSVQueryRunner] = None
 
     def __enter__(self):
         """
@@ -253,6 +280,8 @@ class OpsPerformanceQueries:
 
     @staticmethod
     def get_local_ops_perf_file_path(instance):
+        if not instance.performance_path:
+            raise ValueError("instance.performance_path is None")
         performance_path = Path(instance.performance_path)
 
         # Find the latest file with the correct prefix
@@ -298,18 +327,33 @@ class OpsPerformanceQueries:
         """
         Query for rows with a specific OP CODE.
         """
-        return self.runner.execute_query(
-            filters={"OP CODE": op_code}, as_dict=as_dict, columns=None
+        if self.runner is None:
+            raise RuntimeError(
+                "OpsPerformanceQueries must be used as a context manager"
+            )
+        return cast(
+            Union[List[List[str]], List[Dict[str, str]]],
+            self.runner.execute_query(
+                filters={"OP CODE": op_code}, as_dict=as_dict, columns=None
+            ),
         )
 
     def get_all_entries(
-        self, as_dict: bool = False, limit: int = None
+        self, as_dict: bool = False, limit: Optional[int] = None
     ) -> List[List[str]]:
         """
         Fetch all entries from the performance log.
         """
-        return self.runner.execute_query(columns=[], as_dict=as_dict, limit=limit)
+        if self.runner is None:
+            raise RuntimeError(
+                "OpsPerformanceQueries must be used as a context manager"
+            )
+        return cast(
+            List[List[str]],
+            self.runner.execute_query(columns=[], as_dict=as_dict, limit=limit),
+        )
 
+    @staticmethod
     def get_all_folders(directory: str) -> List[str]:
         """
         Get a list of all folder names in the specified directory.
