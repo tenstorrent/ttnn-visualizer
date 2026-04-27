@@ -44,8 +44,8 @@ import BufferSummaryPlotControls from './BufferSummaryPlotControls';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
-const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
-const TOTAL_SHADE_HEIGHT = 20; // Total height in px of 'scroll-shade' pseudo elements
+const OPERATION_EL_HEIGHT = 25; // Height in px of each list item (including padding/margin)
+const TOTAL_SHADE_HEIGHT = 20; // Combined height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {

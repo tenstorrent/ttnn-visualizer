@@ -9,10 +9,6 @@
     position: relative;
     overflow: hidden; // Prevents the buffer data from overflowing the row when a buffer is questionably large
 
-    &:hover {
-        background-color: rgb(0 0 0 / 10%);
-    }
-
     .buffer-data {
         height: 100%;
         position: absolute;
