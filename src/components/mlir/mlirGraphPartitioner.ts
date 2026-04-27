@@ -23,6 +23,14 @@ export type PartitionOptions = {
     maxSize?: number;
     /** Communities smaller than this are merged into their best-connected neighbour. Default: 8. */
     minSize?: number;
+    /** Hard cap on the number of TOP-LEVEL super-groups; smaller communities are greedily merged into their best-connected neighbour until the count is met. 0 disables. Default: 0. */
+    targetK?: number;
+    /**
+     * Resolution parameter γ for the modularity objective (Reichardt-Bornholdt).
+     * γ = 1 is the classic Louvain. γ < 1 produces fewer, LARGER communities (penalty for joining a large community is reduced). γ > 1 produces more, smaller ones.
+     * Default: 1.0.
+     */
+    resolution?: number;
     /** Maximum recursion depth when splitting oversized communities. Default: 2. */
     maxDepth?: number;
     /** Maximum Louvain levels per partition pass. Default: 8. */
@@ -34,6 +42,8 @@ export type PartitionOptions = {
 const DEFAULT_OPTS: Required<PartitionOptions> = {
     maxSize: 800,
     minSize: 8,
+    targetK: 0,
+    resolution: 1.0,
     maxDepth: 2,
     maxLevels: 8,
     maxLocalPasses: 16,
@@ -85,6 +95,13 @@ function partitionRecursively(nodes: SourceNode[], opts: Required<PartitionOptio
 
     if (opts.minSize > 1) {
         groups = mergeTinyCommunities(groups, communityByIndex, adj, opts.minSize);
+    }
+
+    // Cap the super-group count at the top level. Inner recursion runs
+    // unconstrained so we can still find natural sub-structure within an
+    // oversized community.
+    if (depth === 0 && opts.targetK > 0 && groups.size > opts.targetK) {
+        groups = mergeUntilTargetK(groups, communityByIndex, adj, opts.targetK);
     }
 
     // Largest first so visual hierarchy reads top-to-bottom by importance.
@@ -178,7 +195,7 @@ function louvain(adj: Adjacency, opts: Required<PartitionOptions>): Int32Array {
             communityByIndex[i] = i;
         }
 
-        const moved = localMoving(currentAdj, communityByIndex, opts.maxLocalPasses);
+        const moved = localMoving(currentAdj, communityByIndex, opts.maxLocalPasses, opts.resolution);
         if (!moved) {
             break;
         }
@@ -214,13 +231,16 @@ function louvain(adj: Adjacency, opts: Required<PartitionOptions>): Int32Array {
  * to each neighbour's community, and pick the best (positive) move. Repeat until
  * a full pass produces no movement.
  *
- * Modularity gain for moving isolated node i into community C is:
- *     ΔQ = k_{i,C}/m − (Σtot_C · k_i) / (2m²)
+ * Modularity gain for moving isolated node i into community C, with resolution
+ * parameter γ (Reichardt-Bornholdt):
+ *     ΔQ = k_{i,C}/m − γ · (Σtot_C · k_i) / (2m²)
  * where k_{i,C} is the sum of edge weights from i to nodes already in C,
  * Σtot_C is the sum of degrees in C (with i removed), m is the total edge weight,
- * and k_i is i's degree. Derivation: Blondel et al. 2008, eq. 2 simplified.
+ * and k_i is i's degree. γ = 1 recovers classic Louvain (Blondel et al. 2008,
+ * eq. 2 simplified); γ < 1 favours larger communities (smaller penalty for
+ * joining big ones); γ > 1 favours more, smaller communities.
  */
-function localMoving(adj: Adjacency, communityByIndex: Int32Array, maxPasses: number): boolean {
+function localMoving(adj: Adjacency, communityByIndex: Int32Array, maxPasses: number, resolution: number): boolean {
     const { n, neighbours, degree, m } = adj;
     if (m === 0) {
         return false;
@@ -255,7 +275,7 @@ function localMoving(adj: Adjacency, communityByIndex: Int32Array, maxPasses: nu
             let bestDelta = 0;
 
             for (const [cn, kIC] of weightToCommunity) {
-                const delta = kIC / m - (sumTot[cn] * ki) / twoMSquared;
+                const delta = kIC / m - (resolution * sumTot[cn] * ki) / twoMSquared;
                 if (delta > bestDelta + 1e-12) {
                     bestDelta = delta;
                     bestC = cn;
@@ -400,4 +420,121 @@ function mergeTinyCommunities(
         }
     }
     return merged;
+}
+
+/**
+ * Hard-cap the number of communities at `targetK` by greedily merging the
+ * smallest community into its strongest-connected non-isolated neighbour, one
+ * at a time, until the count is met. Inter-community edge weights are
+ * incrementally maintained so each iteration is fast.
+ *
+ * This is post-Louvain, so it's not modularity-optimal — but for "user wants
+ * ~10 super-groups" it gets the cross-cut right by absorbing the lowest-impact
+ * splits first.
+ */
+function mergeUntilTargetK(
+    groups: Map<number, SourceNode[]>,
+    communityByIndex: Int32Array,
+    adj: Adjacency,
+    targetK: number,
+): Map<number, SourceNode[]> {
+    if (groups.size <= targetK) {
+        return groups;
+    }
+
+    // Build inter-community edge weights from the original adjacency.
+    const interEdges = new Map<number, Map<number, number>>();
+    const ensure = (c: number): Map<number, number> => {
+        let m = interEdges.get(c);
+        if (!m) {
+            m = new Map();
+            interEdges.set(c, m);
+        }
+        return m;
+    };
+    for (let i = 0; i < adj.n; i++) {
+        const ci = communityByIndex[i];
+        for (const { idx, weight } of adj.neighbours[i]) {
+            if (idx <= i) {
+                continue;
+            }
+            const cj = communityByIndex[idx];
+            if (ci === cj) {
+                continue;
+            }
+            const a = ensure(ci);
+            a.set(cj, (a.get(cj) ?? 0) + weight);
+            const b = ensure(cj);
+            b.set(ci, (b.get(ci) ?? 0) + weight);
+        }
+    }
+
+    const working = new Map<number, SourceNode[]>();
+    for (const [c, members] of groups) {
+        working.set(c, [...members]);
+    }
+
+    while (working.size > targetK) {
+        // Smallest community wins (lowest absorption cost).
+        let smallestC = -1;
+        let smallestSize = Infinity;
+        for (const [c, members] of working) {
+            if (members.length < smallestSize) {
+                smallestSize = members.length;
+                smallestC = c;
+            }
+        }
+        if (smallestC === -1) {
+            break;
+        }
+
+        // Pick the neighbour it shares the most edge weight with.
+        let bestC = -1;
+        let bestWeight = -Infinity;
+        for (const [cn, w] of interEdges.get(smallestC) ?? []) {
+            if (cn !== smallestC && working.has(cn) && w > bestWeight) {
+                bestWeight = w;
+                bestC = cn;
+            }
+        }
+
+        // Isolated community (no edges to anything else) — fall back to merging
+        // into the next-smallest community so we still hit targetK.
+        if (bestC === -1) {
+            let fallbackSize = Infinity;
+            for (const [c, members] of working) {
+                if (c !== smallestC && members.length < fallbackSize) {
+                    fallbackSize = members.length;
+                    bestC = c;
+                }
+            }
+            if (bestC === -1) {
+                break;
+            }
+        }
+
+        // Merge members.
+        const mergedMembers = [...(working.get(bestC) ?? []), ...(working.get(smallestC) ?? [])];
+        working.set(bestC, mergedMembers);
+        working.delete(smallestC);
+
+        // Redirect smallestC's inter-community edges into bestC.
+        const smallEdges = interEdges.get(smallestC) ?? new Map<number, number>();
+        const bestEdges = ensure(bestC);
+        for (const [cn, w] of smallEdges) {
+            if (cn === bestC) {
+                continue;
+            }
+            bestEdges.set(cn, (bestEdges.get(cn) ?? 0) + w);
+            const cnEdges = interEdges.get(cn);
+            if (cnEdges) {
+                cnEdges.delete(smallestC);
+                cnEdges.set(bestC, (cnEdges.get(bestC) ?? 0) + w);
+            }
+        }
+        bestEdges.delete(smallestC);
+        interEdges.delete(smallestC);
+    }
+
+    return working;
 }

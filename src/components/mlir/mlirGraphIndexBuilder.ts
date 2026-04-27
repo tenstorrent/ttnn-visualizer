@@ -34,6 +34,21 @@ const MAX_INITIAL_VISIBLE = 500;
 const COMMUNITY_MAX_SIZE = 800;
 /** Communities smaller than this get folded into their best-connected neighbour. */
 const COMMUNITY_MIN_SIZE = 8;
+/**
+ * Hard cap on top-level super-group count. Smaller communities are greedily
+ * merged into their strongest-connected neighbour until the count is met. This
+ * dominates the visual outcome — too many super-groups → spaghetti between them;
+ * too few → each super-group is internally too dense to navigate.
+ */
+const COMMUNITY_TARGET_K = 12;
+/**
+ * Louvain resolution parameter γ. γ < 1 favours fewer, larger natural
+ * communities (smaller penalty for joining a big one), reducing how much
+ * post-merging mergeUntilTargetK has to do. ML compiler graphs tend to have
+ * many fine-grained natural communities at γ=1 (matmul→bias→activation chains),
+ * so a sub-1 default gives noticeably coarser, more useful sections.
+ */
+const COMMUNITY_RESOLUTION = 0.5;
 
 /**
  * Fallback DFS-based topology-aware split (inspired by Model Explorer's
@@ -204,6 +219,8 @@ function applyTopologySectioning(nodes: SourceNode[]): {
     let buckets = partitionByCommunity(namespaceless, SECTION_THRESHOLD, {
         maxSize: COMMUNITY_MAX_SIZE,
         minSize: COMMUNITY_MIN_SIZE,
+        targetK: COMMUNITY_TARGET_K,
+        resolution: COMMUNITY_RESOLUTION,
     });
 
     // Fallback: fixed-size DFS bucketer. Only triggers for graphs Louvain
