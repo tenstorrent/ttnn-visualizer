@@ -1,4 +1,5 @@
 /* eslint-disable no-continue */
+import { partitionByCommunity } from './mlirGraphPartitioner';
 import type { GraphIndex, SourceNode } from './mlirGraphTypes';
 
 const getNamespaceSegments = (namespace?: string): string[] => (namespace ? namespace.split('/').filter(Boolean) : []);
@@ -29,13 +30,17 @@ const getNamespaceOrdinal = (namespace: string): number => {
 
 const SECTION_THRESHOLD = 500;
 const MAX_INITIAL_VISIBLE = 500;
+/** Communities larger than this get recursively re-partitioned by Louvain. */
+const COMMUNITY_MAX_SIZE = 800;
+/** Communities smaller than this get folded into their best-connected neighbour. */
+const COMMUNITY_MIN_SIZE = 8;
 
 /**
- * DFS-based topology-aware split inspired by Model Explorer's splitLargeGroupNodes.
+ * Fallback DFS-based topology-aware split (inspired by Model Explorer's
+ * splitLargeGroupNodes). Used only when modularity-based partitioning fails to
+ * produce a meaningful split — e.g. for fully disconnected or pathological inputs.
  * Builds a lightweight adjacency map, finds roots, then DFS-traverses filling
- * fixed-size buckets. Connected sub-trees stay in the same bucket, producing
- * more meaningful sections than iteration-order bucketing.
- * Uses an iterative stack to avoid overflow on deep graphs.
+ * fixed-size buckets. Iterative stack to avoid overflow on deep graphs.
  */
 function splitByTopology(nodes: SourceNode[], threshold: number): SourceNode[][] | null {
     if (nodes.length <= threshold) {
@@ -192,7 +197,20 @@ function applyTopologySectioning(nodes: SourceNode[]): {
         return { effectiveNodes: nodes, sectionNamespaces };
     }
 
-    const buckets = splitByTopology(namespaceless, SECTION_THRESHOLD);
+    // Primary: community detection (Louvain) — produces super-groups that
+    // correspond to densely-connected sub-regions with sparse links between them.
+    // Recurses into oversized communities so a single dominant community can't
+    // swallow the entire graph.
+    let buckets = partitionByCommunity(namespaceless, SECTION_THRESHOLD, {
+        maxSize: COMMUNITY_MAX_SIZE,
+        minSize: COMMUNITY_MIN_SIZE,
+    });
+
+    // Fallback: fixed-size DFS bucketer. Only triggers for graphs Louvain
+    // couldn't meaningfully split (e.g. disconnected singletons).
+    if (!buckets || buckets.length <= 1) {
+        buckets = splitByTopology(namespaceless, SECTION_THRESHOLD);
+    }
     if (!buckets || buckets.length <= 1) {
         return { effectiveNodes: nodes, sectionNamespaces };
     }
