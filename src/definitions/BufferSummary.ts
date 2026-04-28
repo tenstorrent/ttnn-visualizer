@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { PlotData } from 'plotly.js';
+import type { PlotData } from 'plotly.js';
 
 export enum SECTION_IDS {
     PLOT = 'plot',
