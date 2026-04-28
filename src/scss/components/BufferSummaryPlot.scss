@@ -37,7 +37,8 @@ $height-offset: 15px;
     .buffer-summary-plot-container {
         display: grid;
         grid-template-columns: 1fr $label-width;
-        padding-bottom: 5px;
+        padding-top: 3px;
+        padding-bottom: 3px;
 
         &:hover {
             background-color: rgb(0 0 0 / 10%);

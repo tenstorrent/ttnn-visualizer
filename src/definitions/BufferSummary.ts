@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { PlotData } from 'plotly.js';
+
 export enum SECTION_IDS {
     PLOT = 'plot',
     TABLE = 'table',
@@ -97,3 +99,22 @@ export const Columns: ColumnDefinition[] = [
 ];
 
 export type BufferTableFilters = Record<ColumnKeys, string>;
+
+export const PLACEHOLDER_ARRAY_SIZE = 50;
+export const OPERATION_EL_HEIGHT = 28; // Height in px of each list item (including padding/margin)
+export const TOTAL_SHADE_HEIGHT = 20; // Combined height in px of 'scroll-shade' pseudo elements
+export const MEMORY_ZOOM_PADDING_RATIO = 0.01;
+
+export const CHART_DATA: Partial<PlotData>[][] = [
+    [
+        {
+            x: [0],
+            y: [1],
+            type: 'bar',
+            width: [0],
+            marker: {
+                color: 'transparent',
+            },
+        },
+    ],
+];
