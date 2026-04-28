@@ -64,15 +64,21 @@ function BufferSummaryPlotRenderer({
     );
 
     const zoomedMemorySize = useMemo(() => {
-        const addresses = uniqueBuffersByOperationList.flatMap((operation) =>
-            operation.buffers.flatMap((buffer) => [buffer.address, buffer.address + buffer.size]),
-        );
+        let minAddress = Number.POSITIVE_INFINITY;
+        let maxAddress = Number.NEGATIVE_INFINITY;
 
-        if (addresses.length === 0) {
+        uniqueBuffersByOperationList.forEach((operation) => {
+            operation.buffers.forEach((buffer) => {
+                minAddress = Math.min(minAddress, buffer.address);
+                maxAddress = Math.max(maxAddress, buffer.address + buffer.size);
+            });
+        });
+
+        if (!Number.isFinite(minAddress) || !Number.isFinite(maxAddress)) {
             return [0, memorySize];
         }
 
-        return [Math.min(...addresses), Math.max(...addresses)];
+        return [minAddress, maxAddress];
     }, [uniqueBuffersByOperationList, memorySize]);
 
     const memoryRegionsMarkers = showMemoryRegions

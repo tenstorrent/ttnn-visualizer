@@ -41,6 +41,9 @@ interface BufferSummaryVirtualizedListProps {
     renderOperationLink: (operation: BuffersByOperation) => React.ReactNode;
 }
 
+const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
+const DEFAULT_GET_TENSOR_DEALLOCATION_REPORT = () => EMPTY_TENSOR_DEALLOCATION_REPORT;
+
 function BufferSummaryVirtualizedList({
     operations,
     tensorListByOperation,
@@ -53,7 +56,7 @@ function BufferSummaryVirtualizedList({
     memoryPadding,
     axisConfiguration,
     markers,
-    getTensorDeallocationReport = () => [],
+    getTensorDeallocationReport = DEFAULT_GET_TENSOR_DEALLOCATION_REPORT,
     getOperationTooltipContent,
     renderOperationLink,
 }: BufferSummaryVirtualizedListProps) {
