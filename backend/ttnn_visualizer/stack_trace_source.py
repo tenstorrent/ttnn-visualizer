@@ -69,9 +69,9 @@ def _validate_stack_trace_raw_path(
     return s
 
 
-def _normalize_remote_posix_path(validated: str) -> str:
+def _normalize_remote_posix_path(validated_path: str) -> str:
     """Stable POSIX path string for remote SSH operations (no local Path.resolve)."""
-    return PurePosixPath(validated).as_posix()
+    return PurePosixPath(validated_path).as_posix()
 
 
 def _tt_metal_home_from_flask_config() -> Optional[str]:
@@ -335,7 +335,7 @@ def read_stack_source_remote(
     :return: (content, resolved_path_str, remapped)
     """
     try:
-        validated = _validate_stack_trace_raw_path(
+        validated_path = _validate_stack_trace_raw_path(
             raw_path, require_absolute_posix=True
         )
     except ValueError as e:
@@ -343,7 +343,7 @@ def read_stack_source_remote(
             str(e), http_status_code=HTTPStatus.BAD_REQUEST
         ) from e
 
-    path_str = _normalize_remote_posix_path(validated)
+    path_str = _normalize_remote_posix_path(validated_path)
     not_found: Optional[RemoteFileReadException] = None
 
     try:
@@ -357,11 +357,11 @@ def read_stack_source_remote(
 
     assert not_found is not None
 
-    suffix = _extract_suffix_after_tt_metal(validated)
+    suffix = _extract_suffix_after_tt_metal(validated_path)
     if suffix is None:
         raise not_found
 
-    roots = _remote_roots_for_raw_path(ssh_client, validated)
+    roots = _remote_roots_for_raw_path(ssh_client, validated_path)
     if not roots:
         raise not_found
 
@@ -381,12 +381,7 @@ def read_stack_source_remote(
             last_missing = e
             continue
 
-    if last_missing is not None:
-        raise last_missing
-    raise RemoteFileReadException(
-        "File not found.",
-        http_status_code=HTTPStatus.NOT_FOUND,
-    )
+    raise last_missing
 
 
 def _remote_regular_file_exists(ssh_client: "SSHClient", posix_path: str) -> bool:
@@ -417,19 +412,19 @@ def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
     discovered tt-metal root (same roots as local).
     """
     try:
-        validated = _validate_stack_trace_raw_path(
+        validated_path = _validate_stack_trace_raw_path(
             raw_path, require_absolute_posix=True
         )
     except ValueError:
         return False
 
-    path_str = _normalize_remote_posix_path(validated)
+    path_str = _normalize_remote_posix_path(validated_path)
     if _remote_regular_file_exists(ssh_client, path_str):
         return True
-    suffix = _extract_suffix_after_tt_metal(validated)
+    suffix = _extract_suffix_after_tt_metal(validated_path)
     if suffix is None:
         return False
-    roots = _remote_roots_for_raw_path(ssh_client, validated)
+    roots = _remote_roots_for_raw_path(ssh_client, validated_path)
     for root_str in roots:
         try:
             remapped_str = _join_remote_tt_metal_path(root_str, suffix)
