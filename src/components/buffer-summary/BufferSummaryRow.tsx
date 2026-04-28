@@ -27,6 +27,7 @@ interface BufferSummaryRowProps {
     showMemoryLayout?: boolean;
     className?: string;
     tensorDeallocationReport?: TensorDeallocationReport[];
+    isScrolling?: boolean;
 }
 
 const SCALE = 100;
@@ -45,6 +46,7 @@ const BufferSummaryRow = ({
     className = '',
     tensorDeallocationReport = EMPTY_TENSOR_DEALLOCATION_REPORT,
     showMemoryLayout,
+    isScrolling = false,
 }: BufferSummaryRowProps) => {
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const showHex = useAtomValue(showHexAtom);
@@ -129,7 +131,12 @@ const BufferSummaryRow = ({
     };
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+        if (isScrolling) {
+            return;
+        }
+
         const { interactiveBuffer, scaleX, canvas } = findBufferForInteraction(event);
+
         if (interactiveBuffer) {
             canvas.style.cursor = 'pointer';
             const x = interactiveBuffer.position / scaleX;
