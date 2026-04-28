@@ -12,10 +12,13 @@ from ttnn_visualizer.stack_trace_source import (
     _discover_tt_metal_roots_local,
     _extract_suffix_after_tt_metal,
     _preferred_remote_user_root_for_raw_path,
+    _remote_literal_read_allowed,
     _remote_roots_for_raw_path,
     _resolve_local_stack_path,
     _safe_join_under_tt_metal_root,
+    _validate_stack_trace_raw_path,
     check_stack_source_local,
+    read_stack_source_remote,
 )
 
 
@@ -152,7 +155,6 @@ def test_read_stack_source_remote_remaps_after_not_found(monkeypatch):
 
     import ttnn_visualizer.stack_trace_source as sts
     from ttnn_visualizer.exceptions import RemoteFileReadException
-    from ttnn_visualizer.stack_trace_source import read_stack_source_remote
 
     raw = "/container/tt-metal/foo/bar.c"
     remote_root = "/home/dev/tt-metal"
@@ -161,14 +163,11 @@ def test_read_stack_source_remote_remaps_after_not_found(monkeypatch):
 
     def read_file(p):
         s = str(p)
-        if s == raw:
-            raise RemoteFileReadException(
-                message="File not found.",
-                http_status_code=HTTPStatus.NOT_FOUND,
-            )
         if s == f"{remote_root}/foo/bar.c":
             return b"content"
-        raise AssertionError(s)
+        raise AssertionError(
+            f"Unexpected read; literal path under roots is not tried for {raw!r}, got {s!r}"
+        )
 
     ssh.read_file.side_effect = read_file
     monkeypatch.setattr(
@@ -220,6 +219,62 @@ def test_preferred_remote_user_root_for_raw_path_uses_connection_username():
         )
         == "/proj_sw/ctr-dblundell/tt-metal"
     )
+
+
+def test_read_stack_source_remote_literal_only_under_discovered_root(monkeypatch):
+    """Arbitrary absolute paths (e.g. /etc/passwd) are not read; only safelisted roots."""
+    from http import HTTPStatus
+
+    import ttnn_visualizer.stack_trace_source as sts
+    from ttnn_visualizer.exceptions import RemoteFileReadException
+
+    ssh = MagicMock()
+    called: list[str] = []
+
+    def read_file(p):
+        called.append(str(p))
+        raise RemoteFileReadException(
+            message="File not found.",
+            http_status_code=HTTPStatus.NOT_FOUND,
+        )
+
+    ssh.read_file.side_effect = read_file
+    monkeypatch.setattr(
+        sts, "_discover_tt_metal_roots_remote", lambda _ssh: ["/home/u/tt-metal"]
+    )
+    with pytest.raises(RemoteFileReadException) as excinfo:
+        read_stack_source_remote(ssh, "/etc/passwd")
+    assert excinfo.value.http_status > 0
+    assert not called
+
+
+def test_read_stack_source_remote_succeeds_literal_when_under_root(monkeypatch):
+    import ttnn_visualizer.stack_trace_source as sts
+
+    ssh = MagicMock()
+    root = "/home/dev/tt-metal"
+    path = f"{root}/ttnn/x.py"
+    ssh.read_file.return_value = b"ok"
+    monkeypatch.setattr(sts, "_discover_tt_metal_roots_remote", lambda _ssh: [root])
+    text, resolved, remapped = read_stack_source_remote(ssh, path)
+    assert text == "ok"
+    assert remapped is False
+    assert resolved == path
+    ssh.read_file.assert_called_once_with(path)
+
+
+def test_validate_stack_trace_raw_path_rejects_unsafe():
+    with pytest.raises(ValueError, match="null"):
+        _validate_stack_trace_raw_path("a\x00b")
+    with pytest.raises(ValueError, match="\\.\\."):
+        _validate_stack_trace_raw_path("/a/../b")
+    with pytest.raises(ValueError, match="absolute"):
+        _validate_stack_trace_raw_path("relative-only", require_absolute_posix=True)
+
+
+def test_remote_literal_read_allowed_prefix_safe():
+    assert _remote_literal_read_allowed("/a/tt-metal/x", ["/a/tt-metal", "/b/tt-metal"])
+    assert not _remote_literal_read_allowed("/a/tt-metal-evil/x", ["/a/tt-metal"])
 
 
 def test_remote_roots_for_raw_path_prioritizes_preferred_user_root(monkeypatch):
