@@ -86,6 +86,13 @@ function BufferSummaryVirtualizedList({
 
     const virtualItems = virtualizer.getVirtualItems();
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
+    const rowMemoryStart = isZoomedIn ? zoomStart : 0;
+    const rowMemoryEnd = isZoomedIn ? zoomEnd : memorySize;
+    const plotMemorySize = isZoomedIn ? zoomEnd : memorySize;
+    const plotZoomRange = useMemo<[number, number]>(
+        () => (isZoomedIn ? [zoomStart - memoryPadding, zoomEnd + memoryPadding] : [0, memorySize]),
+        [isZoomedIn, zoomStart, zoomEnd, memoryPadding, memorySize],
+    );
 
     // Store latest values in refs for unmount cleanup
     const scrollOffsetRef = useRef(virtualizer.scrollOffset);
@@ -127,8 +134,8 @@ function BufferSummaryVirtualizedList({
                     className='buffer-summary-plot'
                     chartDataList={CHART_DATA}
                     isZoomedIn={isZoomedIn}
-                    memorySize={isZoomedIn ? zoomEnd : memorySize}
-                    plotZoomRange={isZoomedIn ? [zoomStart - memoryPadding, zoomEnd + memoryPadding] : [0, memorySize]}
+                    memorySize={plotMemorySize}
+                    plotZoomRange={plotZoomRange}
                     configuration={axisConfiguration}
                     markers={markers}
                 />
@@ -166,8 +173,8 @@ function BufferSummaryVirtualizedList({
                                 >
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
-                                        memoryStart={isZoomedIn ? zoomStart : 0}
-                                        memoryEnd={isZoomedIn ? zoomEnd : memorySize}
+                                        memoryStart={rowMemoryStart}
+                                        memoryEnd={rowMemoryEnd}
                                         memoryPadding={memoryPadding}
                                         tensorList={tensorListByOperation.get(operation.id)}
                                         tensorDeallocationReport={getTensorDeallocationReport(operation.id)}
