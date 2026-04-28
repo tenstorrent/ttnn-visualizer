@@ -8,11 +8,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from logging import getLogger
+from typing import Any
 
 from flask_socketio import disconnect, join_room, leave_room
 from ttnn_visualizer.utils import SerializeableDataclass
 
 logger = getLogger(__name__)
+
+# Set in register_handlers; may be None when websockets are disabled
+socketio: Any | None = None
 
 
 class Messages(object):

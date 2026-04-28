@@ -736,6 +736,7 @@ def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]
     memory_layout = memory_layout_match.group(1) if memory_layout_match else None
 
     shard_spec_match = SHARD_SPEC_PATTERN.search(captured_string)
+    shard_spec: str | dict[str, Any]
     if shard_spec_match:
         shard_spec = {
             "grid": shard_spec_match.group(1),
