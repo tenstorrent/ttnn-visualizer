@@ -48,6 +48,9 @@ def _validate_stack_trace_raw_path(
     """
     Normalize and reject unsafe stack-trace path strings (shared local/remote).
 
+    All DB-supplied paths must pass through here before filesystem or SSH access so
+    toolchains can verify inputs are bounded and non-traversal.
+
     Raises ValueError when the input must not be used with filesystem or SSH paths.
     """
     if not isinstance(raw_path, str):
@@ -69,21 +72,6 @@ def _validate_stack_trace_raw_path(
 def _normalize_remote_posix_path(validated: str) -> str:
     """Stable POSIX path string for remote SSH operations (no local Path.resolve)."""
     return PurePosixPath(validated).as_posix()
-
-
-def _remote_path_under_tt_metal_root(file_posix: str, root: str) -> bool:
-    """True if file_posix is the root or a file/dir inside root (POSIX prefix rules)."""
-    root_norm = root.rstrip("/") or "/"
-    if file_posix == root_norm:
-        return True
-    return file_posix.startswith(root_norm + "/")
-
-
-def _remote_literal_read_allowed(path_posix: str, roots: list[str]) -> bool:
-    """Only pass literal paths to SSH when they fall under a discovered tt-metal root."""
-    if not path_posix.startswith("/"):
-        return False
-    return any(_remote_path_under_tt_metal_root(path_posix, r) for r in roots)
 
 
 def _tt_metal_home_from_flask_config() -> Optional[str]:
@@ -338,10 +326,11 @@ def read_stack_source_remote(
     ssh_client: "SSHClient", raw_path: str
 ) -> Tuple[str, str, bool]:
     """
-    Read stack trace source from remote via SSH, trying remap after /tt-metal/ on failure.
+    Read stack trace source from remote via SSH.
 
-    Literal paths are only read when they lie under a discovered remote tt-metal root;
-    otherwise only remapped paths (suffix after ``/tt-metal/``) are attempted.
+    Tries the validated path as stored in the trace first (any layout on the user's
+    remote machine), then falls back to remapping after ``/tt-metal/`` using
+    discovered remote roots when the literal path is not found.
 
     :return: (content, resolved_path_str, remapped)
     """
@@ -355,40 +344,26 @@ def read_stack_source_remote(
         ) from e
 
     path_str = _normalize_remote_posix_path(validated)
-    roots = _remote_roots_for_raw_path(ssh_client, validated)
     not_found: Optional[RemoteFileReadException] = None
 
-    if roots and _remote_literal_read_allowed(path_str, roots):
-        try:
-            content = ssh_client.read_file(path_str)
-            text = (content or b"").decode("utf-8", errors="replace")
-            return text, path_str, False
-        except RemoteFileReadException as e:
-            if e.http_status != HTTPStatus.NOT_FOUND:
-                raise
-            not_found = e
+    try:
+        content = ssh_client.read_file(path_str)
+        text = (content or b"").decode("utf-8", errors="replace")
+        return text, path_str, False
+    except RemoteFileReadException as e:
+        if e.http_status != HTTPStatus.NOT_FOUND:
+            raise
+        not_found = e
+
+    assert not_found is not None
 
     suffix = _extract_suffix_after_tt_metal(validated)
     if suffix is None:
-        if not_found is not None:
-            raise not_found
-        raise RemoteFileReadException(
-            "File not found.",
-            http_status_code=HTTPStatus.NOT_FOUND,
-            detail=(
-                "Path is not under discovered tt-metal roots on the remote host "
-                "and has no /tt-metal/ segment for remapping."
-            ),
-        )
+        raise not_found
 
+    roots = _remote_roots_for_raw_path(ssh_client, validated)
     if not roots:
-        if not_found is not None:
-            raise not_found
-        raise RemoteFileReadException(
-            "File not found.",
-            http_status_code=HTTPStatus.NOT_FOUND,
-            detail="No tt-metal roots discovered on the remote host for remapping.",
-        )
+        raise not_found
 
     last_missing = not_found
     for root_str in roots:
@@ -449,13 +424,12 @@ def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
         return False
 
     path_str = _normalize_remote_posix_path(validated)
-    roots = _remote_roots_for_raw_path(ssh_client, validated)
-    if roots and _remote_literal_read_allowed(path_str, roots):
-        if _remote_regular_file_exists(ssh_client, path_str):
-            return True
+    if _remote_regular_file_exists(ssh_client, path_str):
+        return True
     suffix = _extract_suffix_after_tt_metal(validated)
     if suffix is None:
         return False
+    roots = _remote_roots_for_raw_path(ssh_client, validated)
     for root_str in roots:
         try:
             remapped_str = _join_remote_tt_metal_path(root_str, suffix)
