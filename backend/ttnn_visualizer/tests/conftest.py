@@ -24,6 +24,7 @@ def app():
             "TESTING": True,
             "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
             "SERVER_MODE": True,
+            "USE_WEBSOCKETS": True,
             "APP_DATA_DIRECTORY": tmpdir,
             "REPORT_DATA_DIRECTORY": tmpdir,
             "LOCAL_DATA_DIRECTORY": str(Path(tmpdir) / "local"),
