@@ -38,7 +38,7 @@ dev = [
     "mypy",
     "playwright==1.58.0",
     "pytest==8.4.1",
-    "types-PyYAML",
+    "types-PyYAML==6.0.12.20240311",
 ]
 docs = [
     "myst_parser==4.0.1",
