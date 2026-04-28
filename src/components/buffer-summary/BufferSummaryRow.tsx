@@ -33,25 +33,33 @@ const SCALE = 100;
 const CANVAS_WIDTH = 1200;
 const CANVAS_HEIGHT = 20;
 const TARGET_SCALE = (CANVAS_WIDTH / SCALE) * 100;
+const EMPTY_TENSOR_LIST = new Map<number, Tensor>();
+const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
 
 const BufferSummaryRow = ({
     buffers,
     memoryStart,
     memoryEnd,
     memoryPadding,
-    tensorList = new Map(),
+    tensorList = EMPTY_TENSOR_LIST,
     className = '',
-    tensorDeallocationReport = [],
+    tensorDeallocationReport = EMPTY_TENSOR_DEALLOCATION_REPORT,
     showMemoryLayout,
 }: BufferSummaryRowProps) => {
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const showHex = useAtomValue(showHexAtom);
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const hoveredBufferAddressRef = useRef<number | null>(null);
     const { selectedTensorId, selectedAddress, resetToasts, updateBufferFocus } = useBufferFocus();
 
     const computedMemorySize = memoryEnd - memoryStart;
     const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
+
+    const deallocationReportByAddress = useMemo(
+        () => new Map(tensorDeallocationReport.map((report) => [report.address, report])),
+        [tensorDeallocationReport],
+    );
 
     const interactivityList = useMemo(() => {
         return buffers.map((buffer) => {
@@ -63,7 +71,7 @@ const BufferSummaryRow = ({
             let notDeallocated = false;
             let consumerOperationId = -1;
             let consumerName = '';
-            const result = tensorDeallocationReport?.find((report) => report.address === buffer.address);
+            const result = deallocationReportByAddress.get(buffer.address);
             if (result !== undefined) {
                 notDeallocated = true;
                 consumerOperationId = result.lastConsumerOperationId;
@@ -81,7 +89,7 @@ const BufferSummaryRow = ({
                 consumerName,
             };
         });
-    }, [buffers, computedMemorySize, memoryStart, tensorList, tensorDeallocationReport]);
+    }, [buffers, computedMemorySize, memoryStart, tensorList, deallocationReportByAddress]);
 
     const findBufferForInteraction = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
@@ -125,8 +133,15 @@ const BufferSummaryRow = ({
         if (interactiveBuffer) {
             canvas.style.cursor = 'pointer';
             const x = interactiveBuffer.position / scaleX;
-            const { color } = interactiveBuffer;
+            const hoveredAddress = interactiveBuffer.buffer.address;
 
+            if (hoveredBufferAddressRef.current === hoveredAddress) {
+                return;
+            }
+
+            hoveredBufferAddressRef.current = hoveredAddress;
+
+            const { color } = interactiveBuffer;
             const tensorId = interactiveBuffer.tensor ? `Tensor ${interactiveBuffer.tensor.id}` : '';
             const tensor = interactiveBuffer.notDeallocated ? (
                 <>
@@ -173,11 +188,13 @@ const BufferSummaryRow = ({
         } else {
             // eslint-disable-next-line no-unused-expressions, @typescript-eslint/no-unused-expressions
             canvasRef.current && (canvasRef.current.style.cursor = 'default');
+            hoveredBufferAddressRef.current = null;
             setTooltip(null);
         }
     };
 
     const handleMouseLeave = () => {
+        hoveredBufferAddressRef.current = null;
         setTooltip(null);
     };
 
@@ -296,4 +313,4 @@ function getWarningPattern(ctx: CanvasRenderingContext2D, position: number, size
     ctx.strokeRect(position, 1, size, CANVAS_HEIGHT - 2);
 }
 
-export default BufferSummaryRow;
+export default React.memo(BufferSummaryRow);
