@@ -40,7 +40,8 @@ $height-offset: 15px;
         padding-top: 3px;
         padding-bottom: 3px;
 
-        &:hover {
+        &:hover,
+        &:focus-within {
             background-color: rgb(0 0 0 / 10%);
         }
 
