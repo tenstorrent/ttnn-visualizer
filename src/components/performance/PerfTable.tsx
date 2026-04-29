@@ -249,7 +249,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                             key={`comparison-${i}-${index}`}
                                             className={classNames(
                                                 {
-                                                    'missing-data': dataset[i]?.raw_op_code.includes('MISSING'),
+                                                    'missing-data': dataset[i]?.raw_op_code?.includes('MISSING'),
                                                     'signpost-op': dataset[i]?.op_type === OpType.SIGNPOST,
                                                 },
                                                 'comparison-row',
