@@ -236,7 +236,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                             key={h.key}
                                             className={classNames('cell', {
                                                 'align-right': h.key === ColumnKeys.MathFidelity,
-                                                'break-word': h.key === ColumnKeys.OpCode,
                                             })}
                                         >
                                             {cellFormattingProxy(row, h, operationsList, filters?.[h.key])}
@@ -262,7 +261,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                     key={h.key}
                                                     className={classNames('cell', {
                                                         'align-right': h.key === ColumnKeys.MathFidelity,
-                                                        'break-word': h.key === ColumnKeys.OpCode,
                                                     })}
                                                 >
                                                     {comparisonKeys.includes(h.key) &&
