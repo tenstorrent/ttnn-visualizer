@@ -137,9 +137,7 @@ CREATE TABLE buffer_pages (
 );
 """
 
-SCHEMA_V2_WITH_LIFETIME = (
-    SCHEMA_V2
-    + """
+SCHEMA_V2_WITH_LIFETIME = SCHEMA_V2 + """
 CREATE TABLE tensor_lifetime (
     tensor_id int UNIQUE,
     producer_operation_id int,
@@ -151,4 +149,3 @@ CREATE TABLE tensor_lifetime (
     last_use_source_line int
 );
 """
-)

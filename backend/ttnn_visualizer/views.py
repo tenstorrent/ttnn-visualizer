@@ -1583,6 +1583,8 @@ def read_remote_folder(instance: Instance):
     try:
         content, resolved, remapped = read_stack_source_local(file_path)
         return stack_source_response(content, resolved, remapped)
+    except ValueError as e:
+        return response_bad_request(str(e))
     except FileNotFoundError as e:
         return response_not_found(str(e) or "File not found.")
     except PermissionError as e:

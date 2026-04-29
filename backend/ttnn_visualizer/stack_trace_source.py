@@ -11,7 +11,7 @@ import os
 import re
 import shlex
 from http import HTTPStatus
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Optional, Tuple
 
 from flask import Response
@@ -32,6 +32,46 @@ _REMOTE_LIST_ROOTS_SCRIPT = r"""for p in "${TT_METAL_HOME:-}" "$HOME/tt-metal"; 
 if [ -n "${SUDO_USER:-}" ]; then p="/home/${SUDO_USER}/tt-metal"; [ -d "$p" ] && printf '%s\n' "$p"; fi
 for p in "/localdev/$(id -un)/tt-metal" "/proj_sw/$(id -un)/tt-metal"; do [ -n "$p" ] && [ -d "$p" ] && printf '%s\n' "$p"; done"""
 _USER_ROOT_PREFIX_RE = re.compile(r"^/(localdev|proj_sw)/[^/]+/tt-metal(?:/|$)")
+
+# Stack trace paths come from DB / API clients; cap length to contain resource usage.
+_MAX_STACK_TRACE_PATH_LEN = 8192
+
+
+def _path_parts_contain_dotdot(path: str) -> bool:
+    """True if any path component is '..', before filesystem resolution."""
+    return any(part == ".." for part in path.split("/"))
+
+
+def _validate_stack_trace_raw_path(
+    raw_path: str, *, require_absolute_posix: bool = False
+) -> str:
+    """
+    Normalize and reject unsafe stack-trace path strings (shared local/remote).
+
+    All DB-supplied paths must pass through here before filesystem or SSH access so
+    toolchains can verify inputs are bounded and non-traversal.
+
+    Raises ValueError when the input must not be used with filesystem or SSH paths.
+    """
+    if not isinstance(raw_path, str):
+        raise ValueError("Path must be a string")
+    s = raw_path.strip()
+    if not s:
+        raise ValueError("Empty path")
+    if len(s) > _MAX_STACK_TRACE_PATH_LEN:
+        raise ValueError("Path exceeds maximum length")
+    if "\x00" in s:
+        raise ValueError("Path contains null byte")
+    if _path_parts_contain_dotdot(s):
+        raise ValueError("Path must not contain '..' components")
+    if require_absolute_posix and not s.startswith("/"):
+        raise ValueError("Remote stack trace path must be absolute")
+    return s
+
+
+def _normalize_remote_posix_path(validated_path: str) -> str:
+    """Stable POSIX path string for remote SSH operations (no local Path.resolve)."""
+    return PurePosixPath(validated_path).as_posix()
 
 
 def _tt_metal_home_from_flask_config() -> Optional[str]:
@@ -160,6 +200,7 @@ def _resolve_local_stack_path(raw_path: str) -> Tuple[Path, bool]:
 
     Returns (path, remapped) where remapped is True if a /tt-metal/ remap was applied.
     """
+    raw_path = _validate_stack_trace_raw_path(raw_path)
     roots = _discover_tt_metal_roots_local()
     suffix = _extract_suffix_after_tt_metal(raw_path)
     if suffix is not None:
@@ -285,11 +326,24 @@ def read_stack_source_remote(
     ssh_client: "SSHClient", raw_path: str
 ) -> Tuple[str, str, bool]:
     """
-    Read stack trace source from remote via SSH, trying remap after /tt-metal/ on failure.
+    Read stack trace source from remote via SSH.
+
+    Tries the validated path as stored in the trace first (any layout on the user's
+    remote machine), then falls back to remapping after ``/tt-metal/`` using
+    discovered remote roots when the literal path is not found.
 
     :return: (content, resolved_path_str, remapped)
     """
-    path_str = str(Path(raw_path))
+    try:
+        validated_path = _validate_stack_trace_raw_path(
+            raw_path, require_absolute_posix=True
+        )
+    except ValueError as e:
+        raise RemoteFileReadException(
+            str(e), http_status_code=HTTPStatus.BAD_REQUEST
+        ) from e
+
+    path_str = _normalize_remote_posix_path(validated_path)
     not_found: Optional[RemoteFileReadException] = None
 
     try:
@@ -303,11 +357,11 @@ def read_stack_source_remote(
 
     assert not_found is not None
 
-    suffix = _extract_suffix_after_tt_metal(raw_path)
+    suffix = _extract_suffix_after_tt_metal(validated_path)
     if suffix is None:
         raise not_found
 
-    roots = _remote_roots_for_raw_path(ssh_client, raw_path)
+    roots = _remote_roots_for_raw_path(ssh_client, validated_path)
     if not roots:
         raise not_found
 
@@ -357,13 +411,21 @@ def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
     Whether read_stack_source_remote would succeed: literal path or remapped under any
     discovered tt-metal root (same roots as local).
     """
-    path_str = str(Path(raw_path))
+    try:
+        validated_path = _validate_stack_trace_raw_path(
+            raw_path, require_absolute_posix=True
+        )
+    except ValueError:
+        return False
+
+    path_str = _normalize_remote_posix_path(validated_path)
     if _remote_regular_file_exists(ssh_client, path_str):
         return True
-    suffix = _extract_suffix_after_tt_metal(raw_path)
+    suffix = _extract_suffix_after_tt_metal(validated_path)
     if suffix is None:
         return False
-    for root_str in _remote_roots_for_raw_path(ssh_client, raw_path):
+    roots = _remote_roots_for_raw_path(ssh_client, validated_path)
+    for root_str in roots:
         try:
             remapped_str = _join_remote_tt_metal_path(root_str, suffix)
         except ValueError:
