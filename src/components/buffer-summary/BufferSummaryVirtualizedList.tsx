@@ -17,12 +17,7 @@ import { BuffersByOperation } from '../../model/APIData';
 import useBufferNavigation from '../../hooks/useBufferNavigation';
 import BufferSummaryPlotControls from './BufferSummaryPlotControls';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
-import {
-    CHART_DATA,
-    OPERATION_EL_HEIGHT,
-    PLACEHOLDER_ARRAY_SIZE,
-    TOTAL_SHADE_HEIGHT,
-} from '../../definitions/BufferSummary';
+import { CHART_DATA, OPERATION_EL_HEIGHT, TOTAL_SHADE_HEIGHT } from '../../definitions/BufferSummary';
 
 interface BufferSummaryVirtualizedListProps {
     operations: BuffersByOperation[];
@@ -74,7 +69,7 @@ function BufferSummaryVirtualizedList({
         getScrollElement: () => scrollElementRef.current,
         overscan: 10,
         initialMeasurementsCache: restoredMeasurementsCache,
-        count: operations.length || PLACEHOLDER_ARRAY_SIZE,
+        count: operations.length,
         initialOffset: restoredOffset || 0,
     });
 

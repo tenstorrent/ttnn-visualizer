@@ -100,7 +100,6 @@ export const Columns: ColumnDefinition[] = [
 
 export type BufferTableFilters = Record<ColumnKeys, string>;
 
-export const PLACEHOLDER_ARRAY_SIZE = 50;
 export const OPERATION_EL_HEIGHT = 28; // Height in px of each list item (including padding/margin)
 export const TOTAL_SHADE_HEIGHT = 20; // Combined height in px of 'scroll-shade' pseudo elements
 export const MEMORY_ZOOM_PADDING_RATIO = 0.01;
