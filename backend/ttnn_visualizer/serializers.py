@@ -4,7 +4,7 @@
 
 import dataclasses
 from collections import defaultdict
-from typing import List
+from typing import DefaultDict, List
 
 import orjson
 from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
@@ -174,8 +174,8 @@ def serialize_buffer_pages(buffer_pages):
 def comparisons_by_tensor_id(
     local_comparisons: List[TensorComparisonRecord],
     global_comparisons: List[TensorComparisonRecord],
-):
-    comparisons = defaultdict(dict)
+) -> DefaultDict[int, dict[str, TensorComparisonRecord]]:
+    comparisons: DefaultDict[int, dict[str, TensorComparisonRecord]] = defaultdict(dict)
     for local_comparison in local_comparisons:
         comparisons[local_comparison.tensor_id].update({"local": local_comparison})
     for global_comparison in global_comparisons:
