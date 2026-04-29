@@ -75,20 +75,11 @@ const usePerfReportFiltering = ({
 
     const rawOpCodeOptions = useMemo(() => getRawOpCodeOptions(combinedRows), [combinedRows]);
     const rawOpCodeFilterSet = useMemo(() => new Set(activeRawOpCodeFilterList), [activeRawOpCodeFilterList]);
-    const activeMathFilters = useMemo(
-        () => (isNormalisationApplied ? [] : activeMathFilterList),
-        [isNormalisationApplied, activeMathFilterList],
-    );
+    const activeMathFilters = useMemo(() => activeMathFilterList, [activeMathFilterList]);
     const mathFilterSet = useMemo(() => new Set(activeMathFilters), [activeMathFilters]);
-    const activeBufferTypeFilters = useMemo(
-        () => (isNormalisationApplied ? [] : activeBufferTypeFilterList),
-        [isNormalisationApplied, activeBufferTypeFilterList],
-    );
+    const activeBufferTypeFilters = useMemo(() => activeBufferTypeFilterList, [activeBufferTypeFilterList]);
     const bufferTypeFilterSet = useMemo(() => new Set(activeBufferTypeFilters), [activeBufferTypeFilters]);
-    const activeLayoutFilters = useMemo(
-        () => (isNormalisationApplied ? [] : activeLayoutFilterList),
-        [isNormalisationApplied, activeLayoutFilterList],
-    );
+    const activeLayoutFilters = useMemo(() => activeLayoutFilterList, [activeLayoutFilterList]);
     const layoutFilterSet = useMemo(() => new Set(activeLayoutFilters), [activeLayoutFilters]);
 
     const { filteredRows, filteredComparisonRowsList } = useMemo(() => {

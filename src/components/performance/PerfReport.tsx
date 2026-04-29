@@ -292,19 +292,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     }, [validRawOpCodeValues, setActiveRawOpCodeFilterList]);
 
     useEffect(() => {
-        if (isNormalisationApplied) {
-            if (activeMathFilterList.length > 0) {
-                setActiveMathFilterList([]);
-            }
-            if (activeBufferTypeFilterList.length > 0) {
-                setActiveBufferTypeFilterList([]);
-            }
-            if (activeLayoutFilterList.length > 0) {
-                setActiveLayoutFilterList([]);
-            }
-            return;
-        }
-
         setActiveMathFilterList((currentFilters) => {
             const nextFilters = currentFilters.filter((value) => validMathFilterValues.has(value));
 
@@ -321,10 +308,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
         });
     }, [
-        isNormalisationApplied,
-        activeMathFilterList.length,
-        activeBufferTypeFilterList.length,
-        activeLayoutFilterList.length,
         validMathFilterValues,
         validBufferTypeValues,
         validLayoutValues,
