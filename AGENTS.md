@@ -72,6 +72,8 @@ All **Python** code in this project should satisfy **Black**, **isort**, and **m
 
 All **frontend** (TypeScript/React) changes should pass **ESLint**. Run **`pnpm lint`** to check, or **`pnpm lint:fix`** to apply automatic fixes where supported.
 
+Any **new source code files** you add must include a **valid SPDX license identifier** in the file header, consistent with how existing files in this repository are annotated. The **`pnpm lint:spdx`** script (see **`package.json`**) validates SPDX headers for supported paths.
+
 ## Repository and issue tracking
 
 Development happens on GitHub under:
