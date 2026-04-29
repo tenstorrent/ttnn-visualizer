@@ -419,8 +419,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 onChange={() => setHideHostOps(!hideHostOps)}
                                 checked={hideHostOps}
                                 className='option-switch'
-                                // Host Ops are missing when not grouped by memory is disabled - https://github.com/tenstorrent/ttnn-visualizer/issues/1268
-                                disabled={!isGroupedByMemory && isStackedView}
                             />
 
                             <Switch
