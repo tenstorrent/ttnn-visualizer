@@ -106,6 +106,17 @@ class ProducersConsumers(SerializeableDataclass):
 
 
 @dataclasses.dataclass
+class TensorLifetime(SerializeableDataclass):
+    producer_operation_id: Optional[int] = None
+    last_use_operation_id: Optional[int] = None
+    deallocate_operation_id: Optional[int] = None
+    producer_source_file: Optional[str] = None
+    producer_source_line: Optional[int] = None
+    last_use_source_file: Optional[str] = None
+    last_use_source_line: Optional[int] = None
+
+
+@dataclasses.dataclass
 class Tensor(SerializeableDataclass):
     tensor_id: int
     shape: str
@@ -117,6 +128,7 @@ class Tensor(SerializeableDataclass):
     buffer_type: BufferType
     device_addresses: list[int]
     size: Optional[int] = None
+    lifetime: Optional[TensorLifetime] = None
     rank: int = 0
 
     def __post_init__(self):

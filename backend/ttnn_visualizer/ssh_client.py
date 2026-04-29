@@ -8,7 +8,7 @@ import shlex
 import subprocess
 from http import HTTPStatus
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, NoReturn, Optional, Union
 
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
@@ -78,7 +78,7 @@ class SSHClient:
         cmd.append(f"{self.connection.username}@{self.connection.host}")
         return cmd
 
-    def _handle_subprocess_error(self, e: subprocess.CalledProcessError):
+    def _handle_subprocess_error(self, e: subprocess.CalledProcessError) -> NoReturn:
         """
         Convert subprocess SSH errors to appropriate SSH exceptions.
 

@@ -126,6 +126,7 @@ class TestSerializers(unittest.TestCase):
                         "buffer_type": 0,
                         "device_addresses": [25],
                         "size": None,
+                        "lifetime": None,
                     }
                 ],
                 "outputs": [
@@ -148,6 +149,7 @@ class TestSerializers(unittest.TestCase):
                         "buffer_type": 0,
                         "device_addresses": [25],
                         "size": None,
+                        "lifetime": None,
                     }
                 ],
                 "error": None,
@@ -341,6 +343,7 @@ class TestSerializers(unittest.TestCase):
                     "buffer_type": 0,
                     "device_addresses": [25],
                     "size": None,
+                    "lifetime": None,
                 }
             ]
         }
@@ -366,6 +369,7 @@ class TestSerializers(unittest.TestCase):
                     "buffer_type": 0,
                     "device_addresses": [25],
                     "size": None,
+                    "lifetime": None,
                 }
             ]
         }
@@ -450,6 +454,7 @@ class TestSerializers(unittest.TestCase):
                     "shape": "shape1",
                     "device_addresses": [200, 300],
                     "size": None,
+                    "lifetime": None,
                     "rank": 0,
                 }
             ],
@@ -474,6 +479,7 @@ class TestSerializers(unittest.TestCase):
                     "shape": "shape1",
                     "device_addresses": [200, 300],
                     "size": None,
+                    "lifetime": None,
                     "rank": 0,
                 }
             ],
@@ -596,6 +602,7 @@ class TestSerializers(unittest.TestCase):
                 "producers": [2],
                 "device_addresses": [500, 1500],
                 "size": None,
+                "lifetime": None,
                 "rank": 0,
             },
             {
@@ -615,6 +622,7 @@ class TestSerializers(unittest.TestCase):
                 "producers": [],
                 "device_addresses": [2000, 2500],
                 "size": None,
+                "lifetime": None,
                 "rank": 0,
             },
         ]

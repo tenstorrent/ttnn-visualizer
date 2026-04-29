@@ -118,6 +118,7 @@ def _optional_rank_query_param() -> Optional[int]:
             400,
             description="Invalid query parameter 'rank': expected an integer.",
         )
+        return None
 
 
 _NONZERO_RANK_UNSUPPORTED_MSG = (
@@ -1775,6 +1776,8 @@ def get_npe_data(instance: Instance):
                 compressed_data = file.read()
                 npe_data = zstd.uncompress(compressed_data)
         else:
+            if uncompressed_path is None:
+                return response_not_found()
             with open(uncompressed_path, "r") as file:
                 npe_data = file.read()
     except Exception as e:

@@ -126,7 +126,7 @@ def scan_uploaded_files(
     scanned_files = []
 
     for file in files:
-        (_, temp_path) = tempfile.mkstemp()
+        _, temp_path = tempfile.mkstemp()
         file.save(temp_path)
         dest_path = construct_dest_path(file, target_directory, folder_name)
 
