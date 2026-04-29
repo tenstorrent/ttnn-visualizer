@@ -137,36 +137,37 @@ const OperationGraph: React.FC<{
 
             const allEdges = edgesDataSetRef.current.get();
 
-            const inputNodeIds = new Set<IdType | undefined>();
-            const outputNodeIds = new Set<IdType | undefined>();
+            const nextInputNodeIds = new Set<IdType>();
+            const nextOutputNodeIds = new Set<IdType>();
             const inputEdgeIds = new Set<IdType | undefined>();
             const outputEdgeIds = new Set<IdType | undefined>();
 
             for (const edge of allEdges) {
-                if (edge.to === selectedNodeId) {
-                    inputNodeIds.add(edge.from);
+                if (edge.to === selectedNodeId && edge.from !== undefined) {
+                    nextInputNodeIds.add(edge.from);
                     inputEdgeIds.add(edge.id);
                 }
 
-                if (edge.from === selectedNodeId) {
-                    outputNodeIds.add(edge.to);
+                if (edge.from === selectedNodeId && edge.to !== undefined) {
+                    nextOutputNodeIds.add(edge.to);
                     outputEdgeIds.add(edge.id);
                 }
             }
+
             nodes.update(
                 allNodes.map((node) => {
                     if (node.id === selectedNodeId) {
                         return node;
                     }
 
-                    if (inputNodeIds.has(node.id)) {
+                    if (nextInputNodeIds.has(node.id)) {
                         return {
                             id: node.id,
                             color: { background: GRAPH_COLORS.inputNode },
                         };
                     }
 
-                    if (outputNodeIds.has(node.id)) {
+                    if (nextOutputNodeIds.has(node.id)) {
                         return {
                             id: node.id,
                             color: { background: GRAPH_COLORS.outputNode },
@@ -594,12 +595,66 @@ const TensorDetailsComponent: React.FC<{ tensor: Tensor }> = ({ tensor }) => {
         </div>
     );
 };
+type ConnectedOpGroup = {
+    key: string;
+    label: string;
+    tensors: Tensor[];
+};
+
+const groupTensorsByConnectedOp = (
+    tensors: Tensor[] | undefined,
+    direction: 'input' | 'output',
+    operationList: OperationList,
+): ConnectedOpGroup[] => {
+    if (!tensors?.length) {
+        return [];
+    }
+
+    const groups = new Map<string, ConnectedOpGroup>();
+
+    tensors.forEach((tensor) => {
+        const ids = direction === 'input' ? tensor.producers : tensor.consumers;
+        const names = direction === 'input' ? tensor.producerNames : tensor.consumerNames;
+
+        if (!ids.length) {
+            const key = direction === 'input' ? 'external-input' : 'external-output';
+            const label = direction === 'input' ? 'External input' : 'Unconsumed output';
+            const group = groups.get(key) ?? { key, label, tensors: [] };
+            group.tensors.push(tensor);
+            groups.set(key, group);
+            return;
+        }
+
+        ids.forEach((opId, index) => {
+            const key = String(opId);
+            const opFromList = operationList.find((op) => op.id === opId);
+            const name = opFromList?.name ?? names[index] ?? '';
+            const label = `${opId} ${name}`.trim();
+            const group = groups.get(key) ?? { key, label, tensors: [] };
+            group.tensors.push(tensor);
+            groups.set(key, group);
+        });
+    });
+
+    return Array.from(groups.values());
+};
+
 const OperationGraphInfoComponent: React.FC<{
     currentOperationId: number;
     operationList: OperationList;
     onNavigate: NavigateFunction;
 }> = ({ currentOperationId, operationList, onNavigate }) => {
     const operation = operationList.find((op) => op.id === currentOperationId);
+
+    const inputGroups = useMemo(
+        () => groupTensorsByConnectedOp(operation?.inputs, 'input', operationList),
+        [operation, operationList],
+    );
+    const outputGroups = useMemo(
+        () => groupTensorsByConnectedOp(operation?.outputs, 'output', operationList),
+        [operation, operationList],
+    );
+
     return (
         <div className='operation-graph-props'>
             <h2 className='operation-name'>
@@ -619,22 +674,38 @@ const OperationGraphInfoComponent: React.FC<{
                 Memory Details
             </Button>
 
-            <h3>Inputs:</h3>
+            <h3 className='inputs'>Inputs:</h3>
             <div className='inputs tensors'>
-                {operation?.inputs.map((tensor, index) => (
-                    <TensorDetailsComponent
-                        tensor={tensor}
-                        key={`input-${currentOperationId} ${tensor.id} ${index}`}
-                    />
+                {inputGroups.map((group) => (
+                    <div
+                        className='connected-op'
+                        key={`input-op-${currentOperationId}-${group.key}`}
+                    >
+                        <h2 className='connected-op-name'>{group.label}</h2>
+                        {group.tensors.map((tensor, index) => (
+                            <TensorDetailsComponent
+                                tensor={tensor}
+                                key={`input-${currentOperationId}-${group.key}-${tensor.id}-${index}`}
+                            />
+                        ))}
+                    </div>
                 ))}
             </div>
-            <h3>Outputs:</h3>
+            <h3 className='outputs'>Outputs:</h3>
             <div className='outputs tensors'>
-                {operation?.outputs.map((tensor, index) => (
-                    <TensorDetailsComponent
-                        tensor={tensor}
-                        key={`output-${currentOperationId} ${tensor.id} ${index}`}
-                    />
+                {outputGroups.map((group) => (
+                    <div
+                        className='connected-op'
+                        key={`output-op-${currentOperationId}-${group.key}`}
+                    >
+                        <h2 className='connected-op-name'>{group.label}</h2>
+                        {group.tensors.map((tensor, index) => (
+                            <TensorDetailsComponent
+                                tensor={tensor}
+                                key={`output-${currentOperationId}-${group.key}-${tensor.id}-${index}`}
+                            />
+                        ))}
+                    </div>
                 ))}
             </div>
         </div>
