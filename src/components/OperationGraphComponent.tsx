@@ -80,6 +80,12 @@ const OperationGraph: React.FC<{
         return ids;
     }, [edges]);
 
+    const operationNamesById = useMemo(() => {
+        const map = new Map<number, string>();
+        operationList.forEach((op) => map.set(op.id, op.name));
+        return map;
+    }, [operationList]);
+
     if (currentOperationId !== null && connectedNodeIds.size > 0 && !connectedNodeIds.has(currentOperationId)) {
         focusNodeId = connectedNodeIds.values().next().value ?? focusNodeId;
     }
@@ -546,6 +552,7 @@ const OperationGraph: React.FC<{
             {currentOperationId !== null && !isLoading && (
                 <OperationGraphInfoComponent
                     operationList={operationList}
+                    operationNamesById={operationNamesById}
                     currentOperationId={currentOperationId}
                     onNavigate={navigate}
                 />
@@ -604,7 +611,7 @@ type ConnectedOpGroup = {
 const groupTensorsByConnectedOp = (
     tensors: Tensor[] | undefined,
     direction: 'input' | 'output',
-    operationList: OperationList,
+    operationNamesById: Map<number, string>,
 ): ConnectedOpGroup[] => {
     if (!tensors?.length) {
         return [];
@@ -627,8 +634,7 @@ const groupTensorsByConnectedOp = (
 
         ids.forEach((opId, index) => {
             const key = String(opId);
-            const opFromList = operationList.find((op) => op.id === opId);
-            const name = opFromList?.name ?? names[index] ?? '';
+            const name = operationNamesById.get(opId) ?? names[index] ?? '';
             const label = `${opId} ${name}`.trim();
             const group = groups.get(key) ?? { key, label, tensors: [] };
             group.tensors.push(tensor);
@@ -642,17 +648,18 @@ const groupTensorsByConnectedOp = (
 const OperationGraphInfoComponent: React.FC<{
     currentOperationId: number;
     operationList: OperationList;
+    operationNamesById: Map<number, string>;
     onNavigate: NavigateFunction;
-}> = ({ currentOperationId, operationList, onNavigate }) => {
+}> = ({ currentOperationId, operationList, operationNamesById, onNavigate }) => {
     const operation = operationList.find((op) => op.id === currentOperationId);
 
     const inputGroups = useMemo(
-        () => groupTensorsByConnectedOp(operation?.inputs, 'input', operationList),
-        [operation, operationList],
+        () => groupTensorsByConnectedOp(operation?.inputs, 'input', operationNamesById),
+        [operation, operationNamesById],
     );
     const outputGroups = useMemo(
-        () => groupTensorsByConnectedOp(operation?.outputs, 'output', operationList),
-        [operation, operationList],
+        () => groupTensorsByConnectedOp(operation?.outputs, 'output', operationNamesById),
+        [operation, operationNamesById],
     );
 
     return (
