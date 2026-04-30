@@ -15,7 +15,9 @@ from ttnn_visualizer.stack_trace_source import (
     _remote_roots_for_raw_path,
     _resolve_local_stack_path,
     _safe_join_under_tt_metal_root,
+    _validate_stack_trace_raw_path,
     check_stack_source_local,
+    read_stack_source_remote,
 )
 
 
@@ -152,7 +154,6 @@ def test_read_stack_source_remote_remaps_after_not_found(monkeypatch):
 
     import ttnn_visualizer.stack_trace_source as sts
     from ttnn_visualizer.exceptions import RemoteFileReadException
-    from ttnn_visualizer.stack_trace_source import read_stack_source_remote
 
     raw = "/container/tt-metal/foo/bar.c"
     remote_root = "/home/dev/tt-metal"
@@ -201,6 +202,7 @@ def test_check_stack_source_remote_tries_each_remapped_root(monkeypatch):
 
     ssh = MagicMock()
     assert check_stack_source_remote(ssh, "/container/tt-metal/u/v.py") is True
+    assert checked[0] == "/container/tt-metal/u/v.py"
     assert "/good/tt-metal/u/v.py" in checked
 
 
@@ -220,6 +222,48 @@ def test_preferred_remote_user_root_for_raw_path_uses_connection_username():
         )
         == "/proj_sw/ctr-dblundell/tt-metal"
     )
+
+
+def test_read_stack_source_remote_literal_attempts_validated_path_first():
+    """Validated literal path is tried before remap (user's remote layout)."""
+    from http import HTTPStatus
+
+    from ttnn_visualizer.exceptions import RemoteFileReadException
+
+    ssh = MagicMock()
+    called: list[str] = []
+
+    def read_file(p):
+        called.append(str(p))
+        raise RemoteFileReadException(
+            message="File not found.",
+            http_status_code=HTTPStatus.NOT_FOUND,
+        )
+
+    ssh.read_file.side_effect = read_file
+    with pytest.raises(RemoteFileReadException):
+        read_stack_source_remote(ssh, "/etc/passwd")
+    assert called == ["/etc/passwd"]
+
+
+def test_read_stack_source_remote_succeeds_literal_when_under_root():
+    ssh = MagicMock()
+    path = "/home/dev/tt-metal/ttnn/x.py"
+    ssh.read_file.return_value = b"ok"
+    text, resolved, remapped = read_stack_source_remote(ssh, path)
+    assert text == "ok"
+    assert remapped is False
+    assert resolved == path
+    ssh.read_file.assert_called_once_with(path)
+
+
+def test_validate_stack_trace_raw_path_rejects_unsafe():
+    with pytest.raises(ValueError, match="null"):
+        _validate_stack_trace_raw_path("a\x00b")
+    with pytest.raises(ValueError, match="\\.\\."):
+        _validate_stack_trace_raw_path("/a/../b")
+    with pytest.raises(ValueError, match="absolute"):
+        _validate_stack_trace_raw_path("relative-only", require_absolute_posix=True)
 
 
 def test_remote_roots_for_raw_path_prioritizes_preferred_user_root(monkeypatch):

@@ -5,7 +5,41 @@
 from http import HTTPStatus
 from typing import Optional
 
+from flask import jsonify
 from ttnn_visualizer.enums import ConnectionTestStates
+
+
+def error_response(
+    status: HTTPStatus, message: Optional[str] = None, detail: Optional[str] = None
+):
+    payload = {"error": message or status.phrase}
+    if detail:
+        payload["detail"] = detail
+    return jsonify(payload), status
+
+
+def response_bad_request(message: Optional[str] = None, detail: Optional[str] = None):
+    return error_response(HTTPStatus.BAD_REQUEST, message, detail)
+
+
+def response_not_found(message: Optional[str] = None, detail: Optional[str] = None):
+    return error_response(HTTPStatus.NOT_FOUND, message, detail)
+
+
+def response_unprocessable_entity(
+    message: Optional[str] = None, detail: Optional[str] = None
+):
+    return error_response(HTTPStatus.UNPROCESSABLE_ENTITY, message, detail)
+
+
+def response_internal_server_error(
+    message: Optional[str] = None, detail: Optional[str] = None
+):
+    return error_response(HTTPStatus.INTERNAL_SERVER_ERROR, message, detail)
+
+
+def response_forbidden(message: Optional[str] = None, detail: Optional[str] = None):
+    return error_response(HTTPStatus.FORBIDDEN, message, detail)
 
 
 class RemoteConnectionException(Exception):
@@ -31,6 +65,8 @@ class RemoteConnectionException(Exception):
         # Default behavior
         if self.status == ConnectionTestStates.FAILED:
             return HTTPStatus.INTERNAL_SERVER_ERROR
+        if self.status == ConnectionTestStates.WARNING:
+            return HTTPStatus.OK
         if self.status == ConnectionTestStates.OK:
             return HTTPStatus.OK
 
@@ -52,7 +88,7 @@ class AuthenticationFailedException(RemoteConnectionException):
         )
 
 
-class NoProjectsException(RemoteConnectionException):
+class NoReportsException(RemoteConnectionException):
     pass
 
 

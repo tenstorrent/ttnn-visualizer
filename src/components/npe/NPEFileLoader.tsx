@@ -10,6 +10,7 @@ import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { activeNpeOpTraceAtom } from '../../store/app';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
+import getResponseError from '../../functions/getResponseError';
 import 'styles/components/NPEFileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -17,6 +18,7 @@ const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.PROGRESS]: IconNames.DOT,
     [ConnectionTestStates.FAILED]: IconNames.CROSS,
     [ConnectionTestStates.OK]: IconNames.TICK,
+    [ConnectionTestStates.WARNING]: IconNames.WARNING_SIGN,
 };
 
 const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
@@ -24,6 +26,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.PROGRESS]: Intent.WARNING,
     [ConnectionTestStates.FAILED]: Intent.DANGER,
     [ConnectionTestStates.OK]: Intent.SUCCESS,
+    [ConnectionTestStates.WARNING]: Intent.WARNING,
 };
 
 const NPEFileLoader: React.FC = () => {
@@ -41,20 +44,23 @@ const NPEFileLoader: React.FC = () => {
         }
 
         const file = event.target.files?.[0];
-        const response = await uploadNpeFile(event.target.files);
 
-        if (response.status !== 200) {
+        try {
+            const response = await uploadNpeFile(event.target.files);
+
+            if (response?.data?.status !== ConnectionTestStates.OK) {
+                setUploadStatus(ConnectionTestStates.FAILED);
+                setErrorMessage(response?.data?.message ?? 'Upload failed');
+            } else {
+                const fileName = file.name;
+                setActiveNpe(sanitiseFileName(fileName));
+                createToastNotification('Active NPE', fileName, ToastType.SUCCESS);
+                setUploadStatus(ConnectionTestStates.OK);
+                setErrorMessage(`${fileName} uploaded successfully`);
+            }
+        } catch (err: unknown) {
             setUploadStatus(ConnectionTestStates.FAILED);
-            setErrorMessage(response?.data?.message);
-        } else if (response?.data?.status !== ConnectionTestStates.OK) {
-            setUploadStatus(ConnectionTestStates.FAILED);
-            setErrorMessage(response?.data?.message);
-        } else {
-            const fileName = file.name;
-            setActiveNpe(sanitiseFileName(fileName));
-            createToastNotification('Active NPE', fileName, ToastType.SUCCESS);
-            setUploadStatus(ConnectionTestStates.OK);
-            setErrorMessage(`${fileName} uploaded successfully`);
+            setErrorMessage(getResponseError(err, 'Unable to upload file'));
         }
     };
 

@@ -7,6 +7,7 @@ export enum ConnectionTestStates {
     PROGRESS,
     FAILED,
     OK,
+    WARNING,
 }
 
 export interface ConnectionStatus {

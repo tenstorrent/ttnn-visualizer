@@ -19,7 +19,6 @@
         position: sticky;
         top: 0;
         background-color: $tt-grey-2;
-        z-index: 5;
     }
 
     .npe-controls {
@@ -63,7 +62,7 @@
             left: 0;
             bottom: 0;
             position: absolute;
-            z-index: -1;
+            z-index: variables.$z-index-0-background;
         }
     }
 
@@ -92,7 +91,7 @@
         top: -100px;
         gap: 5px;
         background-color: rgba($tt-grey-2, 0.87);
-        z-index: 10;
+        z-index: variables.$z-index-3-overlay;
 
         .collapsible-component {
             width: 100%;
@@ -145,7 +144,7 @@
 
         &.empty {
             position: absolute;
-            z-index: -1;
+            z-index: variables.$z-index-0-background;
             top: 0;
             left: 0;
             border: 2px dashed $tt-grey-5;
@@ -160,7 +159,7 @@
         }
 
         &.transfer-single {
-            z-index: 1;
+            z-index: variables.$z-index-2-interactive;
         }
 
         .chip-id {
@@ -178,7 +177,7 @@
             display: flex;
             flex-direction: column;
             border: 1px solid transparent;
-            z-index: 1;
+            z-index: variables.$z-index-2-interactive;
             cursor: pointer;
             overflow: hidden;
             position: relative;
@@ -320,6 +319,15 @@
         align-items: center;
         justify-content: center;
     }
+}
+
+.timeline-tooltip-anchor {
+    position: absolute;
+    top: 0;
+    width: 0;
+    height: 0;
+    background-color: $tt-white;
+    z-index: variables.$z-index-2-interactive;
 }
 
 .congestion-heatmap-tooltip {

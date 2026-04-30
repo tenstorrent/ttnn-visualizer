@@ -17,7 +17,7 @@
         justify-content: flex-start;
         align-items: flex-start;
         gap: 20px;
-        z-index: 1;
+        z-index: variables.$z-index-2-interactive;
         position: fixed;
         background-color: rgba($tt-grey-2, 0.6);
     }
@@ -52,7 +52,7 @@
 
     .operation-graph-props {
         position: fixed;
-        z-index: 1;
+        z-index: variables.$z-index-2-interactive;
         width: 450px;
         height: calc(100% - 80px - 15px - 40px);
         right: 0;
@@ -68,6 +68,15 @@
             background-color: $tt-grey-4;
             padding: 5px;
             font-size: 16px;
+            border-left: 3px solid transparent;
+
+            &.inputs {
+                border-left-color: var(--graph-input-edge);
+            }
+
+            &.outputs {
+                border-left-color: var(--graph-output-edge);
+            }
         }
 
         .device-operation-list {
@@ -85,6 +94,18 @@
             h3 {
                 margin: 0;
                 margin-bottom: 2px;
+            }
+
+            .connected-op {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+
+                .connected-op-name {
+                    margin: 0;
+                    font-size: 14px;
+                    font-weight: 600;
+                }
             }
 
             .tensor-details {

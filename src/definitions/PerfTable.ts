@@ -170,8 +170,8 @@ export const Columns: ColumnDefinition[] = [
         filterable: true,
         footerSpan: 3,
     },
-    { name: 'Device ID', key: ColumnKeys.Device, footerSpan: 0 },
-    { name: 'Buffer Type', key: ColumnKeys.BufferType, sortable: true, filterable: true, footerSpan: 0 },
+    { name: 'Device', key: ColumnKeys.Device, footerSpan: 0 },
+    { name: 'Type', key: ColumnKeys.BufferType, sortable: true, filterable: true, footerSpan: 0 },
     { name: 'Layout', key: ColumnKeys.Layout, sortable: true, filterable: true },
     { name: 'Device Time', key: ColumnKeys.DeviceTime, unit: 'µs', decimals: 0, sortable: true },
     { name: 'Op-to-Op Gap', key: ColumnKeys.OpToOpGap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
@@ -185,19 +185,22 @@ export const Columns: ColumnDefinition[] = [
 ];
 
 export const comparisonKeys: ColumnKeys[] = [
-    ColumnKeys.OpCode,
     ColumnKeys.Bound,
-    ColumnKeys.TotalPercent,
-    ColumnKeys.DeviceTime,
-    ColumnKeys.OpToOpGap,
+    ColumnKeys.BufferType,
     ColumnKeys.Cores,
+    ColumnKeys.Device,
+    ColumnKeys.DeviceTime,
     ColumnKeys.Dram,
     ColumnKeys.DramPercent,
     ColumnKeys.Flops,
     ColumnKeys.FlopsPercent,
-    ColumnKeys.MathFidelity,
-    ColumnKeys.HighDispatch,
     ColumnKeys.GlobalCallCount,
+    ColumnKeys.HighDispatch,
+    ColumnKeys.Layout,
+    ColumnKeys.MathFidelity,
+    ColumnKeys.OpCode,
+    ColumnKeys.OpToOpGap,
+    ColumnKeys.TotalPercent,
 ];
 
 export const signpostRowDefaults = Object.freeze({

@@ -4,8 +4,6 @@
 
 import dataclasses
 import enum
-import json
-from json import JSONDecodeError
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -66,16 +64,11 @@ class DeviceOperation(SerializeableDataclass):
     rank: int = 0
 
     def __post_init__(self):
-        try:
-            captured_graph = json.loads(self.captured_graph)
-            for graph in captured_graph:
-                id = graph.pop("counter")
-                graph.update({"id": id})
-
-            self.captured_graph = captured_graph
-
-        except JSONDecodeError:
-            self.captured_graph = json.dumps({})
+        # captured_graph is already valid JSON from the report DB; we keep it
+        # as a raw string and splice it directly into API responses via
+        # orjson.Fragment, avoiding an unnecessary parse/re-dump round trip.
+        if not self.captured_graph:
+            self.captured_graph = "[]"
 
 
 @dataclasses.dataclass
@@ -113,6 +106,17 @@ class ProducersConsumers(SerializeableDataclass):
 
 
 @dataclasses.dataclass
+class TensorLifetime(SerializeableDataclass):
+    producer_operation_id: Optional[int] = None
+    last_use_operation_id: Optional[int] = None
+    deallocate_operation_id: Optional[int] = None
+    producer_source_file: Optional[str] = None
+    producer_source_line: Optional[int] = None
+    last_use_source_file: Optional[str] = None
+    last_use_source_line: Optional[int] = None
+
+
+@dataclasses.dataclass
 class Tensor(SerializeableDataclass):
     tensor_id: int
     shape: str
@@ -124,6 +128,7 @@ class Tensor(SerializeableDataclass):
     buffer_type: BufferType
     device_addresses: list[int]
     size: Optional[int] = None
+    lifetime: Optional[TensorLifetime] = None
     rank: int = 0
 
     def __post_init__(self):

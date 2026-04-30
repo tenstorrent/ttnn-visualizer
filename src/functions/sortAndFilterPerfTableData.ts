@@ -9,7 +9,7 @@ import { Signpost } from './perfFunctions';
 
 const SIGNPOST_MARKER = '(signpost)';
 
-const isFiltersActive = (filters: PerfTableFilters) =>
+const isFiltersActive = (filters?: PerfTableFilters) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
 const getCellText = (buffer: TypedPerfTableRow, key: ColumnKeys) => {
@@ -18,16 +18,27 @@ const getCellText = (buffer: TypedPerfTableRow, key: ColumnKeys) => {
     return textValue;
 };
 
+interface SortAndFilterPerfTableDataOptions {
+    filters?: PerfTableFilters;
+    rawOpCodeFilter?: string[];
+    mathFilter?: string[];
+    bufferTypeFilter?: (BufferType | null)[];
+    activeLayoutFilterList?: (DeviceOperationLayoutTypes | null)[];
+    filterBySignpost?: (Signpost | null)[];
+}
+
 const sortAndFilterPerfTableData = (
-    data: TypedPerfTableRow[],
-    filters: PerfTableFilters,
-    rawOpCodeFilter: string[],
-    mathFilter: string[],
-    bufferTypeFilter: (BufferType | null)[],
-    activeLayoutFilterList: (DeviceOperationLayoutTypes | null)[],
-    filterBySignpost: (Signpost | null)[],
+    data: TypedPerfTableRow[] = [],
+    {
+        filters,
+        rawOpCodeFilter = [],
+        mathFilter = [],
+        bufferTypeFilter = [],
+        activeLayoutFilterList = [],
+        filterBySignpost = [],
+    }: SortAndFilterPerfTableDataOptions = {},
 ): TypedPerfTableRow[] => {
-    if (data?.length === 0) {
+    if (data.length === 0) {
         return data;
     }
 

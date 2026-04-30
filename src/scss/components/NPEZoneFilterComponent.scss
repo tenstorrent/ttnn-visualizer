@@ -7,7 +7,7 @@
 @use '../definitions/variables' as variables;
 
 .zones-renderer {
-    z-index: 20;
+    z-index: variables.$z-index-3-overlay;
     position: fixed;
     top: 0;
     left: 0;
@@ -31,7 +31,7 @@
     .zones-controls {
         position: sticky;
         top: 0;
-        z-index: 1;
+        z-index: variables.$z-index-2-interactive;
         background-color: $tt-background;
 
         h3 {

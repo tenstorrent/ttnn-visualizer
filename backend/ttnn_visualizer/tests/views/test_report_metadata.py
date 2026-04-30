@@ -53,14 +53,12 @@ def test_report_metadata_returns_metadata_on_success(app, client):
         path = f.name
     try:
         conn = sqlite3.connect(path)
-        conn.executescript(
-            """
+        conn.executescript("""
             CREATE TABLE report_metadata (key text UNIQUE, value text);
             INSERT INTO report_metadata VALUES ('schema_version', '2');
             INSERT INTO report_metadata VALUES ('capture_timestamp_ns', '1773424287168605099');
             INSERT INTO report_metadata VALUES ('total_duration_ns', '22119664963');
-        """
-        )
+        """)
         conn.commit()
         conn.close()
 

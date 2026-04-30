@@ -57,7 +57,10 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     const [isTestingConnection, setIsTestingconnection] = useState(false);
 
     const isValidConnection =
-        connectionTests.length > 0 && connectionTests.every((status) => status.status === ConnectionTestStates.OK);
+        connectionTests.length > 0 &&
+        connectionTests.every(
+            ({ status }) => status === ConnectionTestStates.OK || status === ConnectionTestStates.WARNING,
+        );
 
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
@@ -243,7 +246,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 minimal
                 actions={
                     <Tooltip
-                        content='Ensure connection passes all tests'
+                        content='Resolve any failed checks before saving'
                         disabled={isValidConnection}
                     >
                         <Button

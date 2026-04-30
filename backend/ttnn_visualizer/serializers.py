@@ -4,9 +4,21 @@
 
 import dataclasses
 from collections import defaultdict
-from typing import List
+from typing import DefaultDict, List
 
+import orjson
 from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
+
+_EMPTY_DEVICE_OPERATIONS = orjson.Fragment(b"[]")
+
+
+def _captured_graph_fragment(captured_graph):
+    """Wrap a raw captured_graph JSON string so orjson splices it in as-is."""
+    if isinstance(captured_graph, orjson.Fragment):
+        return captured_graph
+    if not captured_graph:
+        return _EMPTY_DEVICE_OPERATIONS
+    return orjson.Fragment(captured_graph)
 
 
 def _stack_trace_for_operation(stack_traces_by_key, operation):
@@ -27,7 +39,7 @@ def _device_ops_for_operation(device_ops_by_key, operation):
     key = (operation.operation_id, operation.rank)
     if key in device_ops_by_key:
         return device_ops_by_key[key]
-    return device_ops_by_key.get((operation.operation_id, 0), [])
+    return device_ops_by_key.get((operation.operation_id, 0), _EMPTY_DEVICE_OPERATIONS)
 
 
 def serialize_operations(
@@ -44,7 +56,7 @@ def serialize_operations(
 ):
     tensors_dict = {(t.tensor_id, t.rank): t for t in tensors}
     device_operations_dict = {
-        (do.operation_id, do.rank): do.captured_graph
+        (do.operation_id, do.rank): _captured_graph_fragment(do.captured_graph)
         for do in device_operations
         if hasattr(do, "operation_id")
     }
@@ -162,8 +174,8 @@ def serialize_buffer_pages(buffer_pages):
 def comparisons_by_tensor_id(
     local_comparisons: List[TensorComparisonRecord],
     global_comparisons: List[TensorComparisonRecord],
-):
-    comparisons = defaultdict(dict)
+) -> DefaultDict[int, dict[str, TensorComparisonRecord]]:
+    comparisons: DefaultDict[int, dict[str, TensorComparisonRecord]] = defaultdict(dict)
     for local_comparison in local_comparisons:
         comparisons[local_comparison.tensor_id].update({"local": local_comparison})
     for global_comparison in global_comparisons:
@@ -211,17 +223,17 @@ def serialize_operation(
 
     id = operation_data.pop("operation_id", None)
 
-    device_operations_data = []
+    device_operations_data = _EMPTY_DEVICE_OPERATIONS
     chosen = False
     for do in device_operations:
         if do.operation_id == operation.operation_id and do.rank == operation.rank:
-            device_operations_data = do.captured_graph
+            device_operations_data = _captured_graph_fragment(do.captured_graph)
             chosen = True
             break
     if not chosen:
         for do in device_operations:
             if do.operation_id == operation.operation_id:
-                device_operations_data = do.captured_graph
+                device_operations_data = _captured_graph_fragment(do.captured_graph)
                 break
 
     # Convert error record to nested dict if it exists (excludes operation_id and operation_name)

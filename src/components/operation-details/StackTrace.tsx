@@ -277,6 +277,7 @@ function StackTrace({
                     <div className='code-wrapper'>
                         <code
                             className={`language-${language} code-output`}
+                            // HTML tags are escaped by hljs
                             // eslint-disable-next-line react/no-danger
                             dangerouslySetInnerHTML={{ __html: stackTraceWithHighlights }}
                         />
@@ -285,6 +286,7 @@ function StackTrace({
                     <div className='code-wrapper'>
                         <code
                             className={`language-${language} code-output`}
+                            // HTML tags are escaped by hljs
                             // eslint-disable-next-line react/no-danger
                             dangerouslySetInnerHTML={{
                                 __html: getStackTracePreview(stackTraceWithHighlights),
@@ -379,6 +381,7 @@ function StackTrace({
                                 <p className='stack-trace-path monospace'>{displaySourcePath}</p>
                                 <code
                                     className={`language-${language} code-output`}
+                                    // HTML tags are escaped by hljs
                                     // eslint-disable-next-line react/no-danger
                                     dangerouslySetInnerHTML={{
                                         __html: fileWithHighlights,

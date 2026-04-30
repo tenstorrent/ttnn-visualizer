@@ -4,6 +4,7 @@
 
 import unittest
 
+import orjson
 from ttnn_visualizer.models import (
     Buffer,
     BufferPage,
@@ -69,7 +70,7 @@ class TestSerializers(unittest.TestCase):
             Device(1, 4, 4, 2, 2, 256, 4, 64, 0, 0, 1, 2, 256, 128, 64, 1, 512, 0)
         ]
         producers_consumers = [ProducersConsumers(1, [2], [3])]
-        device_operations = [DeviceOperation(1, '[{"counter": 1, "op_id": 1}]')]
+        device_operations = [DeviceOperation(1, '[{"id": 1, "op_id": 1}]')]
 
         result = serialize_operations(
             inputs,
@@ -125,6 +126,7 @@ class TestSerializers(unittest.TestCase):
                         "buffer_type": 0,
                         "device_addresses": [25],
                         "size": None,
+                        "lifetime": None,
                     }
                 ],
                 "outputs": [
@@ -147,13 +149,14 @@ class TestSerializers(unittest.TestCase):
                         "buffer_type": 0,
                         "device_addresses": [25],
                         "size": None,
+                        "lifetime": None,
                     }
                 ],
                 "error": None,
             }
         ]
 
-        self.assertEqual(result, expected)
+        self.assertEqual(orjson.loads(orjson.dumps(result)), expected)
 
     def test_serialize_operations_buffers(self):
         operations = [
@@ -340,6 +343,7 @@ class TestSerializers(unittest.TestCase):
                     "buffer_type": 0,
                     "device_addresses": [25],
                     "size": None,
+                    "lifetime": None,
                 }
             ]
         }
@@ -365,6 +369,7 @@ class TestSerializers(unittest.TestCase):
                     "buffer_type": 0,
                     "device_addresses": [25],
                     "size": None,
+                    "lifetime": None,
                 }
             ]
         }
@@ -426,7 +431,7 @@ class TestSerializers(unittest.TestCase):
                     "rank": 0,
                 }
             ],
-            "device_operations": [{"id": 1, "op_id": 1}],
+            "device_operations": [{"counter": 1, "op_id": 1}],
             "duration": 0.5,
             "id": 1,
             "rank": 0,
@@ -449,6 +454,7 @@ class TestSerializers(unittest.TestCase):
                     "shape": "shape1",
                     "device_addresses": [200, 300],
                     "size": None,
+                    "lifetime": None,
                     "rank": 0,
                 }
             ],
@@ -473,6 +479,7 @@ class TestSerializers(unittest.TestCase):
                     "shape": "shape1",
                     "device_addresses": [200, 300],
                     "size": None,
+                    "lifetime": None,
                     "rank": 0,
                 }
             ],
@@ -480,7 +487,7 @@ class TestSerializers(unittest.TestCase):
             "error": None,
         }
 
-        self.assertEqual(result, expected)
+        self.assertEqual(orjson.loads(orjson.dumps(result)), expected)
 
     def test_serialize_buffer_pages(self):
         buffer_pages = [
@@ -595,6 +602,7 @@ class TestSerializers(unittest.TestCase):
                 "producers": [2],
                 "device_addresses": [500, 1500],
                 "size": None,
+                "lifetime": None,
                 "rank": 0,
             },
             {
@@ -614,6 +622,7 @@ class TestSerializers(unittest.TestCase):
                 "producers": [],
                 "device_addresses": [2000, 2500],
                 "size": None,
+                "lifetime": None,
                 "rank": 0,
             },
         ]
