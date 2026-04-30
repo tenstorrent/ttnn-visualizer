@@ -25,7 +25,7 @@ Do **not** assume a multi-tenant hosted SaaS model for defaults, threat model, o
 ## Python environment
 
 - Use a **Python virtual environment** when running or developing the backend.
-- The **main target** Python version is **3.10** (aligned with project and packaging expectations).
+- Supported versions are Python 3.10, 3.11, 3.12 and 3.14.
 
 Backend package layout lives under `backend/` (e.g. `python -m ttnn_visualizer.app` with `PYTHONPATH=backend`).
 
