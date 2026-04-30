@@ -68,9 +68,19 @@ Both must be running for full local dev with live frontend updates.
 
 ## Code quality and linting
 
+### Backend
+
 All **Python** code in this project should satisfy **Black**, **isort**, and **mypy** as configured here. The exact `pnpm` wrappers live in **`package.json`** (for example `flask:lint`, `flask:format`, `flask:mypy`); use those scripts so flags and paths stay consistent with CI.
 
-All **frontend** (TypeScript/React) changes should pass **ESLint**. Run **`pnpm lint`** to check, or **`pnpm lint:fix`** to apply automatic fixes where supported.
+### Frontend
+
+Treat **`tsconfig*`**, **ESLint**, **Stylelint**, and **Prettier** as the source of truth for TypeScript/React and stylesheet work (including `.css`, `.scss`, and `.sass`). Prefer the style already present in files you edit when it stays compatible with those configs, and keep typing strict under the project compiler options.
+
+Avoid introducing lint suppressions unless the user explicitly asks for them. For edits you make, run linters when practical and fix problems your change causes; format touched code with Prettier and stay within ignore boundaries rather than reformatting unrelated paths. When a formatter and a linter disagree, follow how this repository wires them together instead of ad-hoc overrides; if a rule genuinely blocks the right fix, surface that and confirm before relaxing standards.
+
+All frontend changes should pass **ESLint**: run **`pnpm lint`** to check, or **`pnpm lint:fix`** where automatic fixes apply.
+
+### SPDX
 
 Any **new source code files** you add must include a **valid SPDX license identifier** in the file header, consistent with how existing files in this repository are annotated. The **`pnpm lint:spdx`** script (see **`package.json`**) validates SPDX headers for supported paths. When creating a new source code file, ensure the year in the SPDX header is the current year. If editing an existing file, do not change the year unless explicitly requested to do so.
 
