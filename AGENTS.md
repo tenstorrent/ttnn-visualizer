@@ -86,5 +86,3 @@ When looking up **issues, pull requests, or releases**, use **github.com/tenstor
 ### Pull request base branch
 
 Open pull requests with **`dev`** as the base branch by default.
-
-Only open a PR against **`main`** when the user has **said it is a hotfix** or the **branch name starts with `hotfix`** (for example `hotfix/fix-sync-timeout`). In all other cases, use **`dev`**.
