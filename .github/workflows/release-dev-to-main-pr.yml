@@ -1,0 +1,48 @@
+name: Release — open dev → main PR
+
+# When a release is published, open a PR to merge `dev` into `main`.
+# PR title is the `version` field from `package.json` on `dev` (not the git tag).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-merge-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Read version from package.json
+        id: pkg
+        run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Create pull request (if none open)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${{ steps.pkg.outputs.version }}"
+          existing="$(gh pr list --repo "${GITHUB_REPOSITORY}" --base main --head dev --state open --json number --jq '.[0].number // empty')"
+          if [ -n "${existing}" ]; then
+            echo "An open PR from dev to main already exists (#${existing}). Skipping."
+            exit 0
+          fi
+          body="$(printf '%s\n\n%s' \
+            "Automated PR to merge \`dev\` into \`main\` after [${{ github.event.release.tag_name }}](${{ github.event.release.html_url }}) was published." \
+            "**package.json version on \`dev\`:** ${version}")"
+          gh pr create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --base main \
+            --head dev \
+            --title "${version}" \
+            --body "${body}"
