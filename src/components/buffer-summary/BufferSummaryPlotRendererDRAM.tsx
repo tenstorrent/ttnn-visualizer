@@ -13,7 +13,7 @@ import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import { ScrollLocations } from '../../definitions/VirtualLists';
 import { BuffersByOperation } from '../../model/APIData';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
+import { MAX_DRAM_BUFFERS_FOR_GAP_SPLIT, MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
 import BufferSummaryVirtualizedList from './BufferSummaryVirtualizedList';
 
 const MEMORY_SIZE = DRAM_MEMORY_SIZE;
@@ -40,11 +40,17 @@ function BufferSummaryPlotRendererDRAM({
     const showMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
 
     const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
-        if (isZoomedIn) {
-            return getSplitBuffers(uniqueBuffersByOperationList);
+        if (!isZoomedIn) {
+            return [uniqueBuffersByOperationList];
         }
 
-        return [uniqueBuffersByOperationList];
+        const totalBuffers = countBuffersAcrossOperations(uniqueBuffersByOperationList);
+
+        if (totalBuffers > MAX_DRAM_BUFFERS_FOR_GAP_SPLIT) {
+            return [uniqueBuffersByOperationList];
+        }
+
+        return getSplitBuffers(uniqueBuffersByOperationList);
     }, [uniqueBuffersByOperationList, isZoomedIn]);
 
     const zoomedMemoryOption = useMemo(() => {
@@ -102,6 +108,14 @@ function BufferSummaryPlotRendererDRAM({
     ) : (
         <LoadingSpinner />
     );
+}
+
+function countBuffersAcrossOperations(operations: BuffersByOperation[]): number {
+    let count = 0;
+    for (const op of operations) {
+        count += op.buffers.length;
+    }
+    return count;
 }
 
 function getSplitBuffers(data: BuffersByOperation[]): BuffersByOperation[][] {
