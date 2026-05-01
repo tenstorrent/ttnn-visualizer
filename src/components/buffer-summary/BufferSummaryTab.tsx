@@ -2,14 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { RefObject, useMemo } from 'react';
+import { RefObject } from 'react';
 import { useAtomValue } from 'jotai';
 import { Callout, Intent } from '@blueprintjs/core';
 import BufferSummaryPlotRenderer from './BufferSummaryPlotRenderer';
 import BufferSummaryTable from './BufferSummaryTable';
 import { SECTION_IDS, TAB_IDS } from '../../definitions/BufferSummary';
 import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
-import { Buffer } from '../../model/APIData';
 import { activeProfilerReportAtom, selectedBufferSummaryTabAtom } from '../../store/app';
 import { BufferType } from '../../model/BufferType';
 import { useBuffers, useCreateTensorsByOperationByIdList } from '../../hooks/useAPI';
@@ -25,30 +24,9 @@ function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
     const activePerformanceReport = useAtomValue(activeProfilerReportAtom);
     const selectedBufferType = selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM;
 
-    const tensorListByOperation = useCreateTensorsByOperationByIdList(selectedBufferType);
+    const { tensorListByOperation, uniqueBuffersByOperationList } =
+        useCreateTensorsByOperationByIdList(selectedBufferType);
     const { data: buffersByOperation, error: buffersError } = useBuffers(selectedBufferType, true);
-
-    const uniqueBuffersByOperationList = useMemo(
-        () =>
-            buffersByOperation?.map((operation) => {
-                const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
-                operation.buffers.forEach((buffer) => {
-                    const { address, size } = buffer;
-                    if (address) {
-                        const existingBuffer = uniqueBuffers.get(address);
-                        if (!existingBuffer || size > existingBuffer.size) {
-                            uniqueBuffers.set(address, buffer);
-                        }
-                    }
-                });
-
-                return {
-                    ...operation,
-                    buffers: Array.from(uniqueBuffers.values()),
-                };
-            }),
-        [buffersByOperation],
-    );
 
     if (buffersError) {
         return (
@@ -94,6 +72,7 @@ function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
                 <BufferSummaryTable
                     buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)}
                     tensorListByOperation={tensorListByOperation}
+                    uniqueBuffersByOperationList={uniqueBuffersByOperationList}
                 />
             </div>
         </>

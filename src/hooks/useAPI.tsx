@@ -1084,7 +1084,7 @@ export const usePerfFolderList = () => {
 };
 
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
-    const { data: buffersByOperation } = useBuffers(bufferType);
+    const { data: buffersByOperation } = useBuffers(bufferType, true);
     const { data: operations } = useOperationsList();
 
     const uniqueBuffersByOperationList = useMemo(() => {
@@ -1169,11 +1169,14 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         return result;
     }, [buffersByOperation, operations, uniqueBuffersByOperationList]);
 
-    return tensorsByOperationByAddress;
+    return {
+        tensorListByOperation: tensorsByOperationByAddress,
+        uniqueBuffersByOperationList,
+    };
 };
 
 export const useGetTensorDeallocationReportByOperation = () => {
-    const tensorListByOperation = useCreateTensorsByOperationByIdList();
+    const { tensorListByOperation } = useCreateTensorsByOperationByIdList();
     const { data: operations } = useOperationsList();
 
     const operationsById = useMemo(() => {
