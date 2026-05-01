@@ -65,3 +65,16 @@ with a larger timeout value than the default. For example:
 ```shell
 python -m tracy -r -v -m pytest --timeout 900 /path/to/demo.py
 ```
+
+(cluster-descriptor-missing)=
+## Missing cluster descriptor (cluster / topology view)
+
+The cluster layout view reads `cluster_descriptor.yaml` from the same folder as `db.sqlite` for the active memory report (for example `${TT_METAL_HOME}/generated/ttnn/reports/<report_folder>/cluster_descriptor.yaml`), but sometimes it has not been generated.
+
+Run topology to generate the cluster descriptor.
+
+   ```shell
+   "${TT_METAL_HOME}/build/tools/umd/topology"
+   ```
+
+By default it will be output into a temporary directory `{temp_directory}/umd_XXXXXX/` which will be picked up when you generate your memory report.
