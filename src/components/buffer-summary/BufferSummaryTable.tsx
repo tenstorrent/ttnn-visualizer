@@ -28,6 +28,8 @@ import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperation[];
     tensorListByOperation: TensorsByOperationByAddress;
+    /** When set, skips a second address-dedupe pass (same list as the plot hook). */
+    uniqueBuffersByOperationList?: BuffersByOperation[];
 }
 
 interface SummaryTableBuffer extends BufferData {
@@ -39,7 +41,11 @@ interface SummaryTableBuffer extends BufferData {
     shape?: string;
 }
 
-function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
+function BufferSummaryTable({
+    buffersByOperation,
+    tensorListByOperation,
+    uniqueBuffersByOperationList: uniqueBuffersFromParent,
+}: BufferSummaryTableProps) {
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
     const [mergedByDevice, setMergedByDevice] = useState(true);
@@ -65,8 +71,11 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         return allDeviceIds.size > 1;
     }, [buffersByOperation]);
 
-    // TODO: move this to a hook. eventually
     const uniqueBuffersByOperationList = useMemo(() => {
+        if (uniqueBuffersFromParent) {
+            return uniqueBuffersFromParent;
+        }
+
         return buffersByOperation.map((operation) => {
             const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
             operation.buffers.forEach((buffer) => {
@@ -75,7 +84,6 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     const existingBuffer = uniqueBuffers.get(address);
                     if (!existingBuffer || size > existingBuffer.size) {
                         uniqueBuffers.set(address, buffer);
-                        // TODO: add device list to buffer for rendering maybe
                     }
                 }
             });
@@ -84,7 +92,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 buffers: Array.from(uniqueBuffers.values()),
             };
         });
-    }, [buffersByOperation]);
+    }, [buffersByOperation, uniqueBuffersFromParent]);
 
     const listOfBuffers = useMemo(() => {
         const targetList = mergedByDevice ? uniqueBuffersByOperationList : buffersByOperation;

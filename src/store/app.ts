@@ -68,6 +68,7 @@ export const shouldSortBySizeAtom = atom<SortingOptions>(SortingOptions.OFF);
 // Buffers route
 export const selectedBufferSummaryTabAtom = atom<TAB_IDS>(TAB_IDS.L1);
 export const showBufferSummaryZoomedAtom = atomWithStorage('showBufferSummary', false);
+export const isBufferZoomAvailableAtom = atom(true);
 
 // Performance route
 export const comparisonPerformanceReportListAtom = atom<string[] | null>(null);

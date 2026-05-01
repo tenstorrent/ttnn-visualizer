@@ -2,21 +2,30 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
 import LoadingSpinner from '../LoadingSpinner';
 import ROUTES from '../../definitions/Routes';
-import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom } from '../../store/app';
+import { isBufferZoomAvailableAtom, renderMemoryLayoutAtom, showBufferSummaryZoomedAtom } from '../../store/app';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import { ScrollLocations } from '../../definitions/VirtualLists';
 import { BuffersByOperation } from '../../model/APIData';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
+import { MAX_DRAM_BUFFERS_FOR_GAP_SPLIT, MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
 import BufferSummaryVirtualizedList from './BufferSummaryVirtualizedList';
 
 const MEMORY_SIZE = DRAM_MEMORY_SIZE;
+const SPLIT_THRESHOLD_RATIO = 2;
+
+type FlattenedBuffer = {
+    address: number;
+    size: number;
+    opId: number;
+    opName: string;
+    buffer: BuffersByOperation['buffers'][number];
+};
 
 interface BufferSummaryPlotRendererDRAMProps {
     uniqueBuffersByOperationList: BuffersByOperation[];
@@ -29,66 +38,123 @@ function BufferSummaryPlotRendererDRAM({
 }: BufferSummaryPlotRendererDRAMProps) {
     const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
     const showMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
+    const setZoomAvailable = useSetAtom(isBufferZoomAvailableAtom);
 
-    const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
-        if (isZoomedIn) {
-            return getSplitBuffers(uniqueBuffersByOperationList);
+    const dramGapSplit = useMemo(() => {
+        const totalBuffers = countBuffersAcrossOperations(uniqueBuffersByOperationList);
+
+        if (totalBuffers > MAX_DRAM_BUFFERS_FOR_GAP_SPLIT) {
+            return { zoomAvailability: false, splitSegments: null as BuffersByOperation[][] | null };
         }
 
-        return [uniqueBuffersByOperationList];
-    }, [uniqueBuffersByOperationList, isZoomedIn]);
+        const splitSegments = getSplitBuffers(uniqueBuffersByOperationList);
 
-    const zoomedMemoryOptions = useMemo(
-        () =>
-            segmentedChartData
-                .map((segment) => {
-                    if (segment.length > 1) {
-                        const buffers = segment.flatMap((op) => op.buffers);
-                        const zoomStart = buffers[0].address;
-                        const zoomEnd = buffers[buffers.length - 1].address + buffers[buffers.length - 1].size;
+        return {
+            zoomAvailability: splitSegments.some((segment) => segment.length > 1),
+            splitSegments,
+        };
+    }, [uniqueBuffersByOperationList]);
 
-                        return {
-                            start: zoomStart,
-                            end: zoomEnd,
-                            padding: (zoomEnd - zoomStart) * MEMORY_ZOOM_PADDING_RATIO,
-                        };
-                    }
-                    return null;
-                })
-                .filter((elt) => elt !== null),
-        [segmentedChartData],
+    const { zoomAvailability, splitSegments } = dramGapSplit;
+    const shouldApplyZoom = isZoomedIn && zoomAvailability;
+
+    const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
+        if (!shouldApplyZoom || !splitSegments) {
+            return [uniqueBuffersByOperationList];
+        }
+
+        return splitSegments;
+    }, [uniqueBuffersByOperationList, shouldApplyZoom, splitSegments]);
+
+    const zoomedMemoryOption = useMemo(() => {
+        if (!shouldApplyZoom) {
+            return null;
+        }
+
+        const segment = segmentedChartData.find((segmentedOperations) => segmentedOperations.length > 1);
+
+        if (!segment) {
+            return null;
+        }
+
+        const firstBuffer = segment[0]?.buffers[0];
+        const lastOperationBuffers = segment[segment.length - 1]?.buffers;
+        const lastBuffer = lastOperationBuffers?.[lastOperationBuffers.length - 1];
+
+        if (!firstBuffer || !lastBuffer) {
+            return null;
+        }
+
+        const zoomStart = firstBuffer.address;
+        const zoomEnd = lastBuffer.address + lastBuffer.size;
+
+        return {
+            start: zoomStart,
+            end: zoomEnd,
+            padding: (zoomEnd - zoomStart) * MEMORY_ZOOM_PADDING_RATIO,
+        };
+    }, [segmentedChartData, shouldApplyZoom]);
+    const getOperationTooltipContent = useCallback(
+        (operation: BuffersByOperation) => `${operation.id} ${operation.name}`,
+        [],
     );
+    const renderOperationLink = useCallback(
+        (operation: BuffersByOperation) => (
+            <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
+                {operation.id}&nbsp;{operation.name}
+            </Link>
+        ),
+        [],
+    );
+
+    useEffect(() => {
+        setZoomAvailable(zoomAvailability);
+    }, [zoomAvailability, setZoomAvailable]);
 
     return uniqueBuffersByOperationList && tensorListByOperation ? (
         <BufferSummaryVirtualizedList
             operations={segmentedChartData[0] || []}
             tensorListByOperation={tensorListByOperation}
-            isZoomedIn={isZoomedIn}
+            isZoomedIn={shouldApplyZoom}
             showMemoryLayout={showMemoryLayout}
             scrollLocation={ScrollLocations.BUFFER_SUMMARY_DRAM}
             memorySize={MEMORY_SIZE}
-            zoomStart={zoomedMemoryOptions[0]?.start ?? 0}
-            zoomEnd={zoomedMemoryOptions[0]?.end ?? MEMORY_SIZE}
-            memoryPadding={zoomedMemoryOptions[0]?.padding ?? 0}
+            zoomStart={zoomedMemoryOption?.start ?? 0}
+            zoomEnd={zoomedMemoryOption?.end ?? MEMORY_SIZE}
+            memoryPadding={zoomedMemoryOption?.padding ?? 0}
             axisConfiguration={BufferSummaryAxisConfiguration}
-            getOperationTooltipContent={(operation) => `${operation.id} ${operation.name}`}
-            renderOperationLink={(operation) => (
-                <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
-                    {operation.id}&nbsp;{operation.name}
-                </Link>
-            )}
+            getOperationTooltipContent={getOperationTooltipContent}
+            renderOperationLink={renderOperationLink}
         />
     ) : (
         <LoadingSpinner />
     );
 }
 
-const SPLIT_THRESHOLD_RATIO = 2;
+function countBuffersAcrossOperations(operations: BuffersByOperation[]): number {
+    let count = 0;
+    for (const op of operations) {
+        count += op.buffers.length;
+    }
+    return count;
+}
 
 function getSplitBuffers(data: BuffersByOperation[]): BuffersByOperation[][] {
-    const buffers = data
-        .flatMap((op) => op.buffers.map((buffer) => ({ ...buffer, opName: op.name, opId: op.id })))
-        .sort((a, b) => a.address - b.address);
+    const buffers: FlattenedBuffer[] = [];
+
+    data.forEach((operation) => {
+        operation.buffers.forEach((buffer) => {
+            buffers.push({
+                address: buffer.address,
+                size: buffer.size,
+                opId: operation.id,
+                opName: operation.name,
+                buffer,
+            });
+        });
+    });
+
+    buffers.sort((a, b) => a.address - b.address);
 
     const lastDataPoint = buffers.at(-1);
     const splitThreshold = lastDataPoint ? (lastDataPoint.address + lastDataPoint.size) / SPLIT_THRESHOLD_RATIO : 0;
@@ -115,12 +181,11 @@ function getSplitBuffers(data: BuffersByOperation[]): BuffersByOperation[][] {
     return result.map((buffersGroup) => {
         const operationsMap = new Map<number, BuffersByOperation>();
 
-        buffersGroup.forEach((buffer) => {
-            const { opId, opName, ...originalBuffer } = buffer;
-            if (!operationsMap.has(opId)) {
-                operationsMap.set(opId, { id: opId, name: opName, buffers: [] });
+        buffersGroup.forEach((entry) => {
+            if (!operationsMap.has(entry.opId)) {
+                operationsMap.set(entry.opId, { id: entry.opId, name: entry.opName, buffers: [] });
             }
-            operationsMap.get(opId)!.buffers.push(originalBuffer);
+            operationsMap.get(entry.opId)!.buffers.push(entry.buffer);
         });
 
         return Array.from(operationsMap.values());

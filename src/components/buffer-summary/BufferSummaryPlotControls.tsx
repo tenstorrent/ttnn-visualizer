@@ -6,6 +6,7 @@ import { Switch } from '@blueprintjs/core';
 import { useAtom, useAtomValue } from 'jotai';
 import GlobalSwitch from '../GlobalSwitch';
 import {
+    isBufferZoomAvailableAtom,
     renderMemoryLayoutAtom,
     selectedBufferSummaryTabAtom,
     showBufferSummaryZoomedAtom,
@@ -22,6 +23,7 @@ const BufferSummaryPlotControls = () => {
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+    const isZoomAvailable = useAtomValue(isBufferZoomAvailableAtom);
     const selectedTabId = useAtomValue(selectedBufferSummaryTabAtom);
 
     return (
@@ -29,9 +31,8 @@ const BufferSummaryPlotControls = () => {
             <Switch
                 label='Buffer zoom'
                 checked={isZoomedIn}
-                onChange={() => {
-                    setIsZoomedIn(!isZoomedIn);
-                }}
+                disabled={!isZoomAvailable}
+                onChange={() => setIsZoomedIn(!isZoomedIn)}
             />
 
             {selectedTabId === TAB_IDS.L1 ? (

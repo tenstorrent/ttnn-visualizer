@@ -81,15 +81,33 @@ function BufferSummaryVirtualizedList({
 
     const virtualItems = virtualizer.getVirtualItems();
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
+    const isVirtualizerScrolling = virtualizer.isScrolling;
+    const rowMemoryStart = isZoomedIn ? zoomStart : 0;
+    const rowMemoryEnd = isZoomedIn ? zoomEnd : memorySize;
+    const plotMemorySize = isZoomedIn ? zoomEnd : memorySize;
+    const plotZoomRange = useMemo<[number, number]>(
+        () => (isZoomedIn ? [zoomStart - memoryPadding, zoomEnd + memoryPadding] : [0, memorySize]),
+        [isZoomedIn, zoomStart, zoomEnd, memoryPadding, memorySize],
+    );
 
     // Store latest values in refs for unmount cleanup
     const scrollOffsetRef = useRef(virtualizer.scrollOffset);
     const measurementsCacheRef = useRef(virtualizer.measurementsCache);
+    const scrollShadeAnimationRef = useRef<number | null>(null);
 
     const handleUserScrolling = useCallback(() => {
-        if (scrollElementRef.current) {
-            updateScrollShade(scrollElementRef.current);
+        if (!scrollElementRef.current || scrollShadeAnimationRef.current !== null) {
+            return;
         }
+
+        // Avoid state churn on every scroll event callback.
+        scrollShadeAnimationRef.current = window.requestAnimationFrame(() => {
+            scrollShadeAnimationRef.current = null;
+
+            if (scrollElementRef.current) {
+                updateScrollShade(scrollElementRef.current);
+            }
+        });
     }, [updateScrollShade]);
 
     // Keep stored refs updated
@@ -100,6 +118,15 @@ function BufferSummaryVirtualizedList({
     useEffect(() => {
         measurementsCacheRef.current = virtualizer.measurementsCache;
     }, [virtualizer.measurementsCache]);
+
+    useEffect(
+        () => () => {
+            if (scrollShadeAnimationRef.current !== null) {
+                window.cancelAnimationFrame(scrollShadeAnimationRef.current);
+            }
+        },
+        [],
+    );
 
     // Update stored list state on unmount
     useEffect(() => {
@@ -122,8 +149,8 @@ function BufferSummaryVirtualizedList({
                     className='buffer-summary-plot'
                     chartDataList={CHART_DATA}
                     isZoomedIn={isZoomedIn}
-                    memorySize={isZoomedIn ? zoomEnd : memorySize}
-                    plotZoomRange={isZoomedIn ? [zoomStart - memoryPadding, zoomEnd + memoryPadding] : [0, memorySize]}
+                    memorySize={plotMemorySize}
+                    plotZoomRange={plotZoomRange}
                     configuration={axisConfiguration}
                     markers={markers}
                 />
@@ -161,20 +188,25 @@ function BufferSummaryVirtualizedList({
                                 >
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
-                                        memoryStart={isZoomedIn ? zoomStart : 0}
-                                        memoryEnd={isZoomedIn ? zoomEnd : memorySize}
+                                        memoryStart={rowMemoryStart}
+                                        memoryEnd={rowMemoryEnd}
                                         memoryPadding={memoryPadding}
                                         tensorList={tensorListByOperation.get(operation.id)}
                                         tensorDeallocationReport={getTensorDeallocationReport(operation.id)}
                                         showMemoryLayout={showMemoryLayout}
+                                        isScrolling={isVirtualizerScrolling}
                                     />
 
-                                    <Tooltip
-                                        content={getOperationTooltipContent(operation)}
-                                        className='y-axis-tick'
-                                    >
-                                        {renderOperationLink(operation)}
-                                    </Tooltip>
+                                    {isVirtualizerScrolling ? (
+                                        <span className='y-axis-tick'>{renderOperationLink(operation)}</span>
+                                    ) : (
+                                        <Tooltip
+                                            content={getOperationTooltipContent(operation)}
+                                            className='y-axis-tick'
+                                        >
+                                            {renderOperationLink(operation)}
+                                        </Tooltip>
+                                    )}
                                 </div>
                             ) : null;
                         })}
