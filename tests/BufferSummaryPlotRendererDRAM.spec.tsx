@@ -77,6 +77,7 @@ describe('BufferSummaryPlotRendererDRAM', () => {
         renderDRAMRenderer([opA, opB]);
 
         const props = bufferSummaryVirtualizedListMock.mock.calls[0][0];
+        expect(props.isZoomedIn).toBe(false);
         expect(props.zoomStart).toBe(0);
         expect(props.zoomEnd).toBe(DRAM_MEMORY_SIZE);
         expect(props.memoryPadding).toBe(0);

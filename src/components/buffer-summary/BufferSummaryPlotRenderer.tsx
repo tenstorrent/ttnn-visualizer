@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import {
     BufferSummaryAxisConfiguration,
     L1_SMALL_MARKER_COLOR,
@@ -20,6 +20,7 @@ import {
 import LoadingSpinner from '../LoadingSpinner';
 import ROUTES from '../../definitions/Routes';
 import {
+    isBufferZoomAvailableAtom,
     renderMemoryLayoutAtom,
     showBufferSummaryZoomedAtom,
     showDeallocationReportAtom,
@@ -48,6 +49,7 @@ function BufferSummaryPlotRenderer({
     const showMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
     const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
     const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
+    const setZoomAvailable = useSetAtom(isBufferZoomAvailableAtom);
 
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const { data: operations } = useOperationsList();
@@ -117,6 +119,11 @@ function BufferSummaryPlotRenderer({
         ),
         [],
     );
+
+    // L1 always has zoom available
+    useEffect(() => {
+        setZoomAvailable(true);
+    }, [setZoomAvailable]);
 
     return uniqueBuffersByOperationList && !isLoadingDevices && tensorListByOperation ? (
         <BufferSummaryVirtualizedList

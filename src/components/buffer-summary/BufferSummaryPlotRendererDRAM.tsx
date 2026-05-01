@@ -2,13 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
 import LoadingSpinner from '../LoadingSpinner';
 import ROUTES from '../../definitions/Routes';
-import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom } from '../../store/app';
+import { isBufferZoomAvailableAtom, renderMemoryLayoutAtom, showBufferSummaryZoomedAtom } from '../../store/app';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import { ScrollLocations } from '../../definitions/VirtualLists';
 import { BuffersByOperation } from '../../model/APIData';
@@ -38,22 +38,39 @@ function BufferSummaryPlotRendererDRAM({
 }: BufferSummaryPlotRendererDRAMProps) {
     const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
     const showMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
+    const setZoomAvailable = useSetAtom(isBufferZoomAvailableAtom);
 
-    const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
-        if (!isZoomedIn) {
-            return [uniqueBuffersByOperationList];
-        }
-
+    const dramGapSplit = useMemo(() => {
         const totalBuffers = countBuffersAcrossOperations(uniqueBuffersByOperationList);
 
         if (totalBuffers > MAX_DRAM_BUFFERS_FOR_GAP_SPLIT) {
+            return { zoomAvailability: false, splitSegments: null as BuffersByOperation[][] | null };
+        }
+
+        const splitSegments = getSplitBuffers(uniqueBuffersByOperationList);
+
+        return {
+            zoomAvailability: splitSegments.some((segment) => segment.length > 1),
+            splitSegments,
+        };
+    }, [uniqueBuffersByOperationList]);
+
+    const { zoomAvailability, splitSegments } = dramGapSplit;
+    const shouldApplyZoom = isZoomedIn && zoomAvailability;
+
+    const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
+        if (!shouldApplyZoom || !splitSegments) {
             return [uniqueBuffersByOperationList];
         }
 
-        return getSplitBuffers(uniqueBuffersByOperationList);
-    }, [uniqueBuffersByOperationList, isZoomedIn]);
+        return splitSegments;
+    }, [uniqueBuffersByOperationList, shouldApplyZoom, splitSegments]);
 
     const zoomedMemoryOption = useMemo(() => {
+        if (!shouldApplyZoom) {
+            return null;
+        }
+
         const segment = segmentedChartData.find((segmentedOperations) => segmentedOperations.length > 1);
 
         if (!segment) {
@@ -76,7 +93,7 @@ function BufferSummaryPlotRendererDRAM({
             end: zoomEnd,
             padding: (zoomEnd - zoomStart) * MEMORY_ZOOM_PADDING_RATIO,
         };
-    }, [segmentedChartData]);
+    }, [segmentedChartData, shouldApplyZoom]);
     const getOperationTooltipContent = useCallback(
         (operation: BuffersByOperation) => `${operation.id} ${operation.name}`,
         [],
@@ -90,11 +107,15 @@ function BufferSummaryPlotRendererDRAM({
         [],
     );
 
+    useEffect(() => {
+        setZoomAvailable(zoomAvailability);
+    }, [zoomAvailability, setZoomAvailable]);
+
     return uniqueBuffersByOperationList && tensorListByOperation ? (
         <BufferSummaryVirtualizedList
             operations={segmentedChartData[0] || []}
             tensorListByOperation={tensorListByOperation}
-            isZoomedIn={isZoomedIn}
+            isZoomedIn={shouldApplyZoom}
             showMemoryLayout={showMemoryLayout}
             scrollLocation={ScrollLocations.BUFFER_SUMMARY_DRAM}
             memorySize={MEMORY_SIZE}
