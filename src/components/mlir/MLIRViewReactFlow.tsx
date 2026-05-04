@@ -520,35 +520,54 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode, mlirGroup: MlirGroupNode }) as const, []);
 
-    // Edge filter:
-    // - Internal edges (both endpoints inside the same expanded community): shown
-    // - Pure top-level edges (neither endpoint inside an expanded community):
-    //   shown — these are the community-to-community edges in the collapsed view
-    // - Cross-boundary edges (one or both endpoints inside an expanded community,
-    //   but not the same one): hidden by default; shown end-to-end with label
-    //   only when one endpoint is the currently selected node.
+    // Edge display rules:
+    // 1. Same-parent edges (both endpoints share a parent — internal to an
+    //    expanded group, or both at top level): shown end-to-end.
+    // 2. Selection edges: when a node is selected, every edge that touches it
+    //    (including specific cross-boundary edges) is shown end-to-end so the
+    //    user can trace exact connections.
+    // 3. Cross-boundary edges (otherwise): rerouted to the expanded-group
+    //    boundary instead of being hidden. The endpoint that lies inside the
+    //    expanded group is replaced with the group node itself, and identical
+    //    aggregate edges are de-duplicated. This gives the user "section A
+    //    connects to section B" affordance even when A is expanded — without
+    //    drawing 50 fan-out lines from each inner op (the original clutter
+    //    issue) — while still letting selection reveal the specific edge.
     const displayedEdges = useMemo<Edge[]>(() => {
         if (edges.length === 0) {
             return edges;
         }
         const nodeById = new Map<string, MLNode>(nodes.map((n) => [n.id, n]));
         const result: Edge[] = [];
+        const seenAggregatePairs = new Set<string>();
         for (const e of edges) {
             const srcParent = nodeById.get(e.source)?.parentId;
             const tgtParent = nodeById.get(e.target)?.parentId;
-            if (srcParent && srcParent === tgtParent) {
+            if (srcParent === tgtParent) {
                 result.push(e);
                 continue;
             }
-            if (!srcParent && !tgtParent) {
+            if (e.source === selectedNodeId || e.target === selectedNodeId) {
                 result.push(e);
                 continue;
             }
-            const srcIsSelected = e.source === selectedNodeId;
-            const tgtIsSelected = e.target === selectedNodeId;
-            if (srcIsSelected || tgtIsSelected) {
-                result.push(e);
+            const aggSrc = srcParent ?? e.source;
+            const aggTgt = tgtParent ?? e.target;
+            if (aggSrc === aggTgt) {
+                continue;
             }
+            const pairKey = `${aggSrc}|${aggTgt}`;
+            if (seenAggregatePairs.has(pairKey)) {
+                continue;
+            }
+            seenAggregatePairs.add(pairKey);
+            result.push({
+                ...e,
+                id: `agg:${pairKey}`,
+                source: aggSrc,
+                target: aggTgt,
+                label: undefined,
+            });
         }
         return result;
     }, [edges, nodes, selectedNodeId]);
@@ -646,7 +665,6 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                     minZoom={0.003}
                     maxZoom={1.5}
                     fitView
-                    onlyRenderVisibleElements
                     connectionLineType={ConnectionLineType.SmoothStep}
                     selectNodesOnDrag={false}
                 >
