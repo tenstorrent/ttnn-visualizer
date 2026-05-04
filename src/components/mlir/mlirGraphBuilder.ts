@@ -613,16 +613,18 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
             if (bothTopLevel && finalEdgePairSeen.has(pairKey)) {
                 continue;
             }
-            // An endpoint that is the anchor of a collapsed namespace represents
-            // many underlying nodes. Edges to/from such anchors are aggregated, so
-            // the per-edge tensor label is meaningless and visually noisy.
+            // Strip labels only for edges between two top-level nodes where at least
+            // one is a collapsed group anchor (truly aggregated, no selection can recover
+            // per-edge meaning). Edges crossing expanded-community boundaries keep their
+            // labels — the main thread decides per-selection whether to display the
+            // labeled inner-endpoint edge or redirect it to the community boundary.
             const srcIsCollapsedAnchor =
                 !!index.anchorNamespaceByNodeId[sourceId] &&
                 !expandedNamespaces.has(index.anchorNamespaceByNodeId[sourceId]);
             const tgtIsCollapsedAnchor =
                 !!index.anchorNamespaceByNodeId[targetId] &&
                 !expandedNamespaces.has(index.anchorNamespaceByNodeId[targetId]);
-            const isAggregatedEdge = srcIsCollapsedAnchor || tgtIsCollapsedAnchor;
+            const isAggregatedAtTopLevel = bothTopLevel && (srcIsCollapsedAnchor || tgtIsCollapsedAnchor);
             const sourceNode = nodeById.get(incoming.sourceNodeId);
             const outputMeta = sourceNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
             const edgeLabel = outputMeta ? getTensorInfoFromAttrs(outputMeta.attrs).label : undefined;
@@ -630,7 +632,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 id: bothTopLevel ? `top:${pairKey}` : `top:${pairKey}:${incoming.targetNodeInputId}`,
                 source: sourceId,
                 target: targetId,
-                label: isAggregatedEdge
+                label: isAggregatedAtTopLevel
                     ? undefined
                     : edgeLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`,
                 markerEnd: { type: 'arrowclosed', height: 20, width: 20 },

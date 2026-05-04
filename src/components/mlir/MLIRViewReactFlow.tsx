@@ -1,5 +1,6 @@
 /* eslint-disable no-void */
 /* eslint-disable react/prop-types */
+/* eslint-disable no-continue */
 
 import React, { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'styles/components/MLIRViewReactFlow.scss';
@@ -311,11 +312,70 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode }) as const, []);
 
+    // Edges crossing an expanded community boundary are redirected to terminate
+    // at that community's group container, except for edges incident to the
+    // currently selected node — which are shown end-to-end with their label.
+    // Aggregated boundary edges are pair-deduped per direction and unlabeled.
+    const displayedEdges = useMemo<Edge[]>(() => {
+        if (edges.length === 0) {
+            return edges;
+        }
+        const nodeById = new Map<string, MLNode>(nodes.map((n) => [n.id, n]));
+        const result: Edge[] = [];
+        const seenAggregatedPairs = new Set<string>();
+        for (const e of edges) {
+            const srcParent = nodeById.get(e.source)?.parentId;
+            const tgtParent = nodeById.get(e.target)?.parentId;
+            if (srcParent && srcParent === tgtParent) {
+                result.push(e);
+                continue;
+            }
+            const srcIsInner = !!srcParent;
+            const tgtIsInner = !!tgtParent;
+            if (!srcIsInner && !tgtIsInner) {
+                result.push(e);
+                continue;
+            }
+            let newSrc = e.source;
+            let newTgt = e.target;
+            let redirected = false;
+            if (srcIsInner && e.source !== selectedNodeId) {
+                newSrc = srcParent!;
+                redirected = true;
+            }
+            if (tgtIsInner && e.target !== selectedNodeId) {
+                newTgt = tgtParent!;
+                redirected = true;
+            }
+            if (newSrc === newTgt) {
+                continue;
+            }
+            if (!redirected) {
+                result.push(e);
+                continue;
+            }
+            const pairKey = `${newSrc}->${newTgt}`;
+            if (seenAggregatedPairs.has(pairKey)) {
+                continue;
+            }
+            seenAggregatedPairs.add(pairKey);
+            result.push({
+                id: `agg:${pairKey}`,
+                source: newSrc,
+                target: newTgt,
+                type: e.type,
+                markerEnd: e.markerEnd,
+                style: e.style,
+            });
+        }
+        return result;
+    }, [edges, nodes, selectedNodeId]);
+
     return (
         <div style={{ width: '100%', height: 'calc(100vh - 92px - 30px - 56px - 40px)' }}>
             <ReactFlow
                 nodes={nodes}
-                edges={edges}
+                edges={displayedEdges}
                 onNodeClick={onSubgraphNodeClick}
                 onPaneClick={onPaneClick}
                 onNodesChange={onNodesChange}
