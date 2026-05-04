@@ -54,6 +54,8 @@ export type WorkerNode = {
     parentId?: string;
     extent?: 'parent';
     draggable?: boolean;
+    /** CSS selector that constrains where the node can be dragged from (e.g. group header). */
+    dragHandle?: string;
     position: { x: number; y: number };
     width?: number;
     height?: number;
@@ -63,6 +65,12 @@ export type WorkerNode = {
         namespace: string;
         collapsedSubgraphNamespace?: string;
         subgraphToggleState?: 'collapsed' | 'expanded';
+        /** Group headers: human-readable group name (e.g. "section 1 of 7", "Inputs"). */
+        displayName?: string;
+        /** Group headers: total count of nodes inside this group (descendants included). */
+        nodeCount?: number;
+        /** Group headers: classification used for header iconography/tooltips. */
+        groupKind?: 'section' | 'opType' | 'region' | 'plain';
     };
     style?: Record<string, unknown>;
 };

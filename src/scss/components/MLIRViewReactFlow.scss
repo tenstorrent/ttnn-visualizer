@@ -41,9 +41,118 @@
     }
 }
 
-.react-flow__node-group.selected {
+.react-flow__node-group.selected,
+.react-flow__node-mlirGroup.selected {
     box-shadow: 0 0 0 3px $tt-blue-accent;
     outline: none;
+}
+
+/* Custom group node: transparent body, visible dashed border, sticky header bar.
+ *
+ * The wrapper and body are `pointer-events: none` so clicks on empty areas
+ * inside the group fall through to the `.react-flow__nodes` container (which
+ * is also pointer-events: none) and onward to the pane behind, letting the
+ * user pan the entire canvas by dragging the group's background. Only the
+ * header (`.mlir-group-handle`) re-enables pointer events to receive collapse
+ * clicks and drag-to-move gestures (events from descendants still bubble up to
+ * React Flow's wrapper-level click/drag listeners).
+ *
+ * The double `.react-flow__node.react-flow__node-mlirGroup` selector matches
+ * the specificity of React Flow's own `.react-flow__node.draggable { pointer-
+ * events: all }` rule so our pass-through wins by source order. */
+.react-flow__node.react-flow__node-mlirGroup {
+    background: transparent;
+    padding: 0;
+    border: none;
+    pointer-events: none;
+}
+
+.mlir-group-body {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border: 2px dashed rgb(125 125 125 / 80%);
+    border-radius: 16px;
+    background: rgb(90 90 90 / 14%);
+    color: #ddd;
+    position: relative;
+    pointer-events: none;
+
+    &.is-section {
+        border-color: #9b59b6;
+        background: rgb(155 89 182 / 8%);
+    }
+}
+
+.mlir-group-handle {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    height: 24px;
+    max-width: min(280px, calc(100% - 24px));
+    width: max-content;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    background: rgb(30 30 30 / 88%);
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1;
+    color: #eee;
+    cursor: grab;
+    user-select: none;
+    pointer-events: auto;
+
+    /* Establish own stacking context so it sits above the group body / children. */
+    z-index: 2;
+
+    &:active {
+        cursor: grabbing;
+    }
+
+    &:hover {
+        background: rgb(45 45 45 / 95%);
+        border-color: rgb(255 255 255 / 24%);
+    }
+
+    .is-section & {
+        background: rgb(80 35 110 / 92%);
+        border-color: rgb(155 89 182 / 60%);
+
+        &:hover {
+            background: rgb(110 55 145 / 95%);
+        }
+    }
+}
+
+.mlir-group-handle-icon {
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+.mlir-group-handle-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.mlir-group-handle-count {
+    opacity: 0.7;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.mlir-group-handle-grip {
+    margin-left: auto;
+    opacity: 0.55;
+    letter-spacing: -2px;
+    pointer-events: none;
 }
 
 .mlir-op-node-collapse-hint {

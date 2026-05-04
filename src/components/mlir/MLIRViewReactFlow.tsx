@@ -32,6 +32,9 @@ type MLNodeData = {
     namespace: string;
     collapsedSubgraphNamespace?: string;
     subgraphToggleState?: 'collapsed' | 'expanded';
+    displayName?: string;
+    nodeCount?: number;
+    groupKind?: 'section' | 'opType' | 'region' | 'plain';
 };
 
 interface ViewProps {
@@ -69,10 +72,42 @@ const MlirOpNode = memo<NodeProps<MLNode>>(({ id, data }) => (
     </>
 ));
 
+// Custom group node with a sticky header that doubles as the drag handle and
+// collapse control. The body is otherwise transparent so children render at
+// their assigned positions inside the group rectangle.
+const MlirGroupNode = memo<NodeProps<MLNode>>(({ data }) => {
+    const isSection = data.groupKind === 'section';
+    const countText = typeof data.nodeCount === 'number' && data.nodeCount > 0 ? ` · ${data.nodeCount} nodes` : '';
+    return (
+        <div className={`mlir-group-body${isSection ? ' is-section' : ''}`}>
+            <div
+                className='mlir-group-handle'
+                title='Click header to collapse · drag header to move group'
+            >
+                <span
+                    className='mlir-group-handle-icon'
+                    aria-hidden='true'
+                >
+                    ▾
+                </span>
+                <span className='mlir-group-handle-name'>{data.displayName ?? data.label}</span>
+                <span className='mlir-group-handle-count'>{countText}</span>
+                <span
+                    className='mlir-group-handle-grip'
+                    aria-hidden='true'
+                    title='Drag to move'
+                >
+                    ⋮⋮
+                </span>
+            </div>
+        </div>
+    );
+});
+
 function builtGraphToReactFlow(built: BuiltGraph): { nodes: MLNode[]; edges: Edge[] } {
     const nodes: MLNode[] = built.nodes.map((n) => ({
         ...n,
-        type: n.type === 'group' ? 'group' : 'mlirOp',
+        type: n.type === 'mlirGroup' ? 'mlirGroup' : 'mlirOp',
         data: n.data as MLNodeData,
     }));
     const edges: Edge[] = built.edges.map((e) => ({
@@ -258,15 +293,26 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     }, [graph.id, graph.nodes]);
 
     const onSubgraphNodeClick = useCallback(
-        (_event: MouseEvent, node: MLNode) => {
-            setSelectedNodeId(node.id);
-            if (node.type === 'group') {
-                return;
+        (event: MouseEvent, node: MLNode) => {
+            // For group nodes, only the header (`.mlir-group-handle`) is a click
+            // target; clicks on the empty group body should be ignored. The
+            // header doubles as the React Flow drag handle, so an actual drag
+            // never fires `onNodeClick`.
+            if (node.type === 'mlirGroup') {
+                const target = event.target as Element | null;
+                const headerHit = target?.closest?.('.mlir-group-handle');
+                if (!headerHit) {
+                    return;
+                }
+            } else {
+                setSelectedNodeId(node.id);
             }
+            // Trust the worker's decision on which clicks toggle a subgraph.
+            // The worker explicitly omits `collapsedSubgraphNamespace` when a
+            // node should NOT act as a toggle (e.g. the inner anchor of its
+            // own already-expanded group — the group header handles collapse).
             const toggleNamespace =
-                node.data?.collapsedSubgraphNamespace ??
-                interactionIndex?.anchorNamespaceByNodeId[node.id] ??
-                interactionIndex?.outerNamespaceByNodeId[node.id];
+                node.type === 'mlirGroup' ? node.data?.namespace : node.data?.collapsedSubgraphNamespace;
             if (toggleNamespace) {
                 const isExpanded = expandedNamespaces.has(toggleNamespace);
                 if (isExpanded) {
@@ -311,7 +357,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         setSelectedNodeId(null);
     }, []);
 
-    const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode }) as const, []);
+    const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode, mlirGroup: MlirGroupNode }) as const, []);
 
     // Edge filter:
     // - Internal edges (both endpoints inside the same expanded community): shown

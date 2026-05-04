@@ -298,9 +298,15 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         const childOpNodes: WorkerNode[] = directChildRawNodes.map((n) => {
             const toggleNs = toggleNamespaceForNode(index, n.id);
             const isSectionAnchor = !!toggleNs && sectionNsSet.has(toggleNs);
+            // The group's own header now provides the collapse control. If the
+            // anchor for THIS namespace happens to render inside this expanded
+            // group, don't decorate it as a per-node toggle — that's misleading
+            // (a single op shouldn't appear to "control" the whole group).
+            const isOwnGroupAnchor = toggleNs === namespace;
+            const showToggleHint = !!toggleNs && !isOwnGroupAnchor;
             return makeOpNode(
                 n,
-                toggleNs
+                showToggleHint && toggleNs
                     ? { namespace: toggleNs, state: expandedNamespaces.has(toggleNs) ? 'expanded' : 'collapsed' }
                     : undefined,
                 isSectionAnchor && toggleNs && !expandedNamespaces.has(toggleNs)
@@ -400,26 +406,31 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         internalEdgesByNamespace.set(namespace, internalEdges);
 
         const isSection = sectionNsSet.has(namespace);
-        const groupLabel = isSection
-            ? `◇ ${formatSectionLabel(namespace)}`
-            : `▾ ${namespace.split('/').pop()} · click to collapse`;
+        const leafName = namespace.split('/').pop() ?? namespace;
+        const displayName = isSection ? formatSectionLabel(namespace) : leafName;
+        const nodeCount = nodesByContainingNs.get(namespace)?.length ?? 0;
 
         groupNodeByNamespace.set(namespace, {
             id: groupId,
-            type: 'group',
-            draggable: false,
-            data: { label: groupLabel, kind: 'group', namespace },
+            type: 'mlirGroup',
+            draggable: true,
+            dragHandle: '.mlir-group-handle',
+            data: {
+                label: displayName,
+                kind: 'group',
+                namespace,
+                displayName,
+                nodeCount,
+                groupKind: isSection ? 'section' : 'plain',
+            },
             position: { x: 0, y: 0 },
             width: groupWidth,
             height: groupHeight,
             style: {
                 width: groupWidth,
                 height: groupHeight,
-                border: isSection ? '2px dashed #9b59b6' : '2px dashed #7d7d7d',
-                borderRadius: 16,
-                background: isSection ? 'rgba(155, 89, 182, 0.08)' : 'rgba(90, 90, 90, 0.14)',
-                color: '#ddd',
-                padding: '10px 12px',
+                background: 'transparent',
+                padding: 0,
             },
         });
     }
