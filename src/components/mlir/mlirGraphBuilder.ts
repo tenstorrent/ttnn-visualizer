@@ -346,6 +346,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                     continue;
                 }
                 const bothCollapsed = collapsedChildIds.has(sourceChildId) && collapsedChildIds.has(targetChildId);
+                const eitherCollapsed = collapsedChildIds.has(sourceChildId) || collapsedChildIds.has(targetChildId);
                 const pairKey = `${sourceChildId}->${targetChildId}`;
                 if (bothCollapsed && internalPairSeen.has(pairKey)) {
                     continue;
@@ -365,7 +366,9 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                     id: edgeId,
                     source: sourceChildId,
                     target: targetChildId,
-                    label: edgeLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`,
+                    label: eitherCollapsed
+                        ? undefined
+                        : edgeLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`,
                     markerEnd: { type: 'arrowclosed', height: 20, width: 20 },
                 });
             }
@@ -610,6 +613,16 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
             if (bothTopLevel && finalEdgePairSeen.has(pairKey)) {
                 continue;
             }
+            // An endpoint that is the anchor of a collapsed namespace represents
+            // many underlying nodes. Edges to/from such anchors are aggregated, so
+            // the per-edge tensor label is meaningless and visually noisy.
+            const srcIsCollapsedAnchor =
+                !!index.anchorNamespaceByNodeId[sourceId] &&
+                !expandedNamespaces.has(index.anchorNamespaceByNodeId[sourceId]);
+            const tgtIsCollapsedAnchor =
+                !!index.anchorNamespaceByNodeId[targetId] &&
+                !expandedNamespaces.has(index.anchorNamespaceByNodeId[targetId]);
+            const isAggregatedEdge = srcIsCollapsedAnchor || tgtIsCollapsedAnchor;
             const sourceNode = nodeById.get(incoming.sourceNodeId);
             const outputMeta = sourceNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
             const edgeLabel = outputMeta ? getTensorInfoFromAttrs(outputMeta.attrs).label : undefined;
@@ -617,7 +630,9 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 id: bothTopLevel ? `top:${pairKey}` : `top:${pairKey}:${incoming.targetNodeInputId}`,
                 source: sourceId,
                 target: targetId,
-                label: edgeLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`,
+                label: isAggregatedEdge
+                    ? undefined
+                    : edgeLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`,
                 markerEnd: { type: 'arrowclosed', height: 20, width: 20 },
             });
         }

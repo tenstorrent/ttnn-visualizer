@@ -28,25 +28,27 @@ const getNamespaceOrdinal = (namespace: string): number => {
     return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 };
 
-const SECTION_THRESHOLD = 500;
+const SECTION_THRESHOLD = 1000;
 const MAX_INITIAL_VISIBLE = 500;
-/** Communities larger than this get recursively re-partitioned by Louvain. */
-const COMMUNITY_MAX_SIZE = 800;
-/** Communities smaller than this get folded into their best-connected neighbour. */
-const COMMUNITY_MIN_SIZE = 8;
 /**
- * Hard cap on top-level super-group count. Smaller communities are greedily
- * merged into their strongest-connected neighbour until the count is met. This
- * dominates the visual outcome — too many super-groups → spaghetti between them;
- * too few → each super-group is internally too dense to navigate.
+ * Communities larger than this get recursively re-partitioned by Louvain.
+ * Combined with COMMUNITY_MIN_SIZE, this targets ~1000 nodes per community —
+ * the user-defined visual-readability sweet spot.
  */
-const COMMUNITY_TARGET_K = 12;
+const COMMUNITY_MAX_SIZE = 1500;
+/** Communities smaller than this get folded into their best-connected neighbour. */
+const COMMUNITY_MIN_SIZE = 500;
+/**
+ * 0 = no hard cap on top-level super-group count. We let community structure
+ * determine how many groups emerge. With min/max=500/1500 the count naturally
+ * tracks total graph size at ~1000 nodes per community.
+ */
+const COMMUNITY_TARGET_K = 0;
 /**
  * Louvain resolution parameter γ. γ < 1 favours fewer, larger natural
- * communities (smaller penalty for joining a big one), reducing how much
- * post-merging mergeUntilTargetK has to do. ML compiler graphs tend to have
- * many fine-grained natural communities at γ=1 (matmul→bias→activation chains),
- * so a sub-1 default gives noticeably coarser, more useful sections.
+ * communities (smaller penalty for joining a big one). ML compiler graphs tend
+ * to have many fine-grained natural communities at γ=1 (matmul→bias→activation
+ * chains), so a sub-1 default gives noticeably coarser, more useful sections.
  */
 const COMMUNITY_RESOLUTION = 0.5;
 
