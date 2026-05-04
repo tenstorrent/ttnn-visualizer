@@ -7,6 +7,10 @@ on:
     types: [published]
   workflow_dispatch:
 
+concurrency:
+  group: release-dev-to-main-pr
+  cancel-in-progress: false
+
 permissions:
   contents: read
   pull-requests: write
@@ -32,14 +36,22 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ steps.pkg.outputs.version }}"
+          if [ -z "${version}" ] || [ "${version}" = "null" ]; then
+            echo "::error::package.json version is missing or null; refusing to open PR."
+            exit 1
+          fi
           existing="$(gh pr list --repo "${GITHUB_REPOSITORY}" --base main --head dev --state open --json number --jq '.[0].number // empty')"
           if [ -n "${existing}" ]; then
             echo "An open PR from dev to main already exists (#${existing}). Skipping."
             exit 0
           fi
-          body="$(printf '%s\n\n%s' \
-            "Automated PR to merge \`dev\` into \`main\` after [${{ github.event.release.tag_name }}](${{ github.event.release.html_url }}) was published." \
-            "**package.json version on \`dev\`:** ${version}")"
+          event_name="${{ github.event_name }}"
+          if [ "${event_name}" = "release" ]; then
+            intro="Automated PR to merge \`dev\` into \`main\` after [${{ github.event.release.tag_name }}](${{ github.event.release.html_url }}) was published."
+          else
+            intro="Automated PR to merge \`dev\` into \`main\` (manual run via workflow_dispatch)."
+          fi
+          body="$(printf '%s\n\n%s' "${intro}" "**package.json version on \`dev\`:** ${version}")"
           gh pr create \
             --repo "${GITHUB_REPOSITORY}" \
             --base main \
