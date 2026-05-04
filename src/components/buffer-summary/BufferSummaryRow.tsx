@@ -52,7 +52,7 @@ const BufferSummaryRow = ({
     const showHex = useAtomValue(showHexAtom);
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const hoveredBufferAddressRef = useRef<number | null>(null);
+    const tooltipCacheKeyRef = useRef<string | null>(null);
     const { selectedTensorId, selectedAddress, resetToasts, updateBufferFocus } = useBufferFocus();
 
     const computedMemorySize = memoryEnd - memoryStart;
@@ -141,12 +141,18 @@ const BufferSummaryRow = ({
             canvas.style.cursor = 'pointer';
             const x = interactiveBuffer.position / scaleX;
             const hoveredAddress = interactiveBuffer.buffer.address;
+            const deallocationKey = interactiveBuffer.notDeallocated
+                ? `${interactiveBuffer.consumerOperationId}:${interactiveBuffer.consumerName}`
+                : '0';
+            const tooltipCacheKey = [hoveredAddress, showHex, interactiveBuffer.tensor?.id ?? '', deallocationKey].join(
+                '\0',
+            );
 
-            if (hoveredBufferAddressRef.current === hoveredAddress) {
+            if (tooltipCacheKeyRef.current === tooltipCacheKey) {
                 return;
             }
 
-            hoveredBufferAddressRef.current = hoveredAddress;
+            tooltipCacheKeyRef.current = tooltipCacheKey;
 
             const { color } = interactiveBuffer;
             const tensorId = interactiveBuffer.tensor ? `Tensor ${interactiveBuffer.tensor.id}` : '';
@@ -195,13 +201,13 @@ const BufferSummaryRow = ({
         } else {
             // eslint-disable-next-line no-unused-expressions, @typescript-eslint/no-unused-expressions
             canvasRef.current && (canvasRef.current.style.cursor = 'default');
-            hoveredBufferAddressRef.current = null;
+            tooltipCacheKeyRef.current = null;
             setTooltip(null);
         }
     };
 
     const handleMouseLeave = () => {
-        hoveredBufferAddressRef.current = null;
+        tooltipCacheKeyRef.current = null;
         setTooltip(null);
     };
 

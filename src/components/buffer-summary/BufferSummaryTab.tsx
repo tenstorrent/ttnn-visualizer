@@ -6,7 +6,6 @@ import { RefObject } from 'react';
 import { useAtomValue } from 'jotai';
 import { Callout, Intent } from '@blueprintjs/core';
 import BufferSummaryPlotRenderer from './BufferSummaryPlotRenderer';
-import BufferSummaryTable from './BufferSummaryTable';
 import { SECTION_IDS, TAB_IDS } from '../../definitions/BufferSummary';
 import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
 import { activeProfilerReportAtom, selectedBufferSummaryTabAtom } from '../../store/app';
@@ -69,11 +68,11 @@ function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
                 ref={tableRef}
                 id={SECTION_IDS.TABLE}
             >
-                <BufferSummaryTable
+                {/* <BufferSummaryTable
                     buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)}
                     tensorListByOperation={tensorListByOperation}
                     uniqueBuffersByOperationList={uniqueBuffersByOperationList}
-                />
+                /> */}
             </div>
         </>
     ) : (
