@@ -335,18 +335,19 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         }
     }
 
+    // Honor namespaces: every distinct namespace (including ancestors that only
+    // exist as path segments like "func.func_main" with children but no direct
+    // nodes) becomes a collapsible subgroup, collapsed by default. The original
+    // MLIR region pattern (namespace contains a node labeled with the base op,
+    // e.g. "stablehlo.reduce_8" → contains "stablehlo.reduce") is still detected
+    // first to preserve outer-op anchoring; non-region namespaces fall through
+    // and are anchored by their first non-claimed inner node.
+    const allNamespaces = new Set<string>([...nodesByNamespace.keys(), ...namespacesWithChildren]);
     const collapsibleNamespaces: string[] = [];
-    for (const namespace of nodesByNamespace.keys()) {
-        const expectedLabel = getRegionBaseOpLabel(namespace);
-        if (!labelsByNamespace.get(namespace)?.has(expectedLabel)) {
-            continue;
-        }
-        if (namespacesWithChildren.has(namespace)) {
-            collapsibleNamespaces.push(namespace);
-            continue;
-        }
-        const parentNamespace = getParentNamespace(namespace);
-        if (parentNamespace && labelsByNamespace.get(parentNamespace)?.has(expectedLabel)) {
+    for (const namespace of allNamespaces) {
+        const directNodeCount = nodesByNamespace.get(namespace)?.length ?? 0;
+        const hasChildren = namespacesWithChildren.has(namespace);
+        if (directNodeCount >= 2 || hasChildren) {
             collapsibleNamespaces.push(namespace);
         }
     }
@@ -369,36 +370,54 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
             }
             return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
         });
-        if (!candidates[0]) {
+        let anchor = candidates.find((n) => !anchorNamespaceByNodeId.has(n.id));
+        if (!anchor) {
+            // Fallback for non-region namespaces (e.g. "Inputs", "func.func_main"):
+            // pick the first direct node whose id isn't already an anchor for a
+            // deeper namespace. If the namespace has no direct nodes (path-only
+            // ancestor), Phase 3 below will assign an anchor by descending into
+            // descendants.
+            const directNodes = (nodesByNamespace.get(namespace) ?? []).slice().sort((a, b) => {
+                const aPinned = a.config?.pinToGroupTop ? 1 : 0;
+                const bPinned = b.config?.pinToGroupTop ? 1 : 0;
+                if (aPinned !== bPinned) {
+                    return bPinned - aPinned;
+                }
+                return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
+            });
+            anchor = directNodes.find((n) => !anchorNamespaceByNodeId.has(n.id));
+        }
+        if (!anchor) {
             continue;
         }
-        anchorByNamespace.set(namespace, candidates[0].id);
-        anchorNamespaceByNodeId.set(candidates[0].id, namespace);
+        anchorByNamespace.set(namespace, anchor.id);
+        anchorNamespaceByNodeId.set(anchor.id, namespace);
     }
 
-    // Phase 3: force-register synthetic namespaces (topology sections + op-type groups)
+    // Phase 3: force-register synthetic namespaces (topology sections + op-type
+    // groups), and assign anchors to any path-only ancestor namespaces that have
+    // children but no direct nodes (e.g. "func.func_main" in graphs where every
+    // op also lives in a deeper region). Descend into descendants to find an
+    // anchor in those cases.
     const preSyntheticNsSet = new Set(subgraphNamespaces);
     for (const syntheticNs of allSyntheticNamespaces) {
         if (!preSyntheticNsSet.has(syntheticNs)) {
             subgraphNamespaces.push(syntheticNs);
             preSyntheticNsSet.add(syntheticNs);
         }
-        if (!anchorByNamespace.has(syntheticNs)) {
-            // For op-type groups (e.g. "stablehlo.reduce"), nodes aren't directly
-            // in the parent — they're in children like "stablehlo.reduce/stablehlo.reduce_48".
-            // Collect all nodes whose namespace starts with this prefix.
-            let candidateNodes = nodesByNamespace.get(syntheticNs) ?? [];
-            if (candidateNodes.length === 0) {
-                candidateNodes = effectiveNodes.filter(
-                    (n) => n.namespace && (n.namespace === syntheticNs || n.namespace.startsWith(`${syntheticNs}/`)),
-                );
-            }
-            candidateNodes.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
-            const anchor = candidateNodes.find((n) => !anchorNamespaceByNodeId.has(n.id)) ?? candidateNodes[0];
-            if (anchor) {
-                anchorByNamespace.set(syntheticNs, anchor.id);
-                anchorNamespaceByNodeId.set(anchor.id, syntheticNs);
-            }
+    }
+    for (const namespace of subgraphNamespaces) {
+        if (anchorByNamespace.has(namespace)) {
+            continue;
+        }
+        const candidateNodes = effectiveNodes.filter(
+            (n) => n.namespace && (n.namespace === namespace || n.namespace.startsWith(`${namespace}/`)),
+        );
+        candidateNodes.sort((a, b) => (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0));
+        const anchor = candidateNodes.find((n) => !anchorNamespaceByNodeId.has(n.id)) ?? candidateNodes[0];
+        if (anchor) {
+            anchorByNamespace.set(namespace, anchor.id);
+            anchorNamespaceByNodeId.set(anchor.id, namespace);
         }
     }
     if (allSyntheticNamespaces.size > 0) {
