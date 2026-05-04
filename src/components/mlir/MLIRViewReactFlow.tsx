@@ -312,17 +312,19 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode }) as const, []);
 
-    // Edges crossing an expanded community boundary are redirected to terminate
-    // at that community's group container, except for edges incident to the
-    // currently selected node — which are shown end-to-end with their label.
-    // Aggregated boundary edges are pair-deduped per direction and unlabeled.
+    // Edge filter:
+    // - Internal edges (both endpoints inside the same expanded community): shown
+    // - Pure top-level edges (neither endpoint inside an expanded community):
+    //   shown — these are the community-to-community edges in the collapsed view
+    // - Cross-boundary edges (one or both endpoints inside an expanded community,
+    //   but not the same one): hidden by default; shown end-to-end with label
+    //   only when one endpoint is the currently selected node.
     const displayedEdges = useMemo<Edge[]>(() => {
         if (edges.length === 0) {
             return edges;
         }
         const nodeById = new Map<string, MLNode>(nodes.map((n) => [n.id, n]));
         const result: Edge[] = [];
-        const seenAggregatedPairs = new Set<string>();
         for (const e of edges) {
             const srcParent = nodeById.get(e.source)?.parentId;
             const tgtParent = nodeById.get(e.target)?.parentId;
@@ -330,43 +332,15 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 result.push(e);
                 continue;
             }
-            const srcIsInner = !!srcParent;
-            const tgtIsInner = !!tgtParent;
-            if (!srcIsInner && !tgtIsInner) {
+            if (!srcParent && !tgtParent) {
                 result.push(e);
                 continue;
             }
-            let newSrc = e.source;
-            let newTgt = e.target;
-            let redirected = false;
-            if (srcIsInner && e.source !== selectedNodeId) {
-                newSrc = srcParent!;
-                redirected = true;
-            }
-            if (tgtIsInner && e.target !== selectedNodeId) {
-                newTgt = tgtParent!;
-                redirected = true;
-            }
-            if (newSrc === newTgt) {
-                continue;
-            }
-            if (!redirected) {
+            const srcIsSelected = e.source === selectedNodeId;
+            const tgtIsSelected = e.target === selectedNodeId;
+            if (srcIsSelected || tgtIsSelected) {
                 result.push(e);
-                continue;
             }
-            const pairKey = `${newSrc}->${newTgt}`;
-            if (seenAggregatedPairs.has(pairKey)) {
-                continue;
-            }
-            seenAggregatedPairs.add(pairKey);
-            result.push({
-                id: `agg:${pairKey}`,
-                source: newSrc,
-                target: newTgt,
-                type: e.type,
-                markerEnd: e.markerEnd,
-                style: e.style,
-            });
         }
         return result;
     }, [edges, nodes, selectedNodeId]);

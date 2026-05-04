@@ -36,21 +36,19 @@ const MAX_INITIAL_VISIBLE = 500;
  * the user-defined visual-readability sweet spot.
  */
 const COMMUNITY_MAX_SIZE = 1500;
-/** Communities smaller than this get folded into their best-connected neighbour. */
-const COMMUNITY_MIN_SIZE = 500;
 /**
- * 0 = no hard cap on top-level super-group count. We let community structure
- * determine how many groups emerge. With min/max=500/1500 the count naturally
- * tracks total graph size at ~1000 nodes per community.
+ * Communities smaller than this get folded into their best-connected neighbour
+ * during Louvain post-processing. mergeUntilTargetK (driven by a dynamic
+ * targetK = ceil(N/1000)) handles the bulk of the size enforcement.
  */
-const COMMUNITY_TARGET_K = 0;
+const COMMUNITY_MIN_SIZE = 50;
 /**
- * Louvain resolution parameter γ. γ < 1 favours fewer, larger natural
- * communities (smaller penalty for joining a big one). ML compiler graphs tend
- * to have many fine-grained natural communities at γ=1 (matmul→bias→activation
- * chains), so a sub-1 default gives noticeably coarser, more useful sections.
+ * Louvain resolution parameter γ. γ = 1 is the classic Louvain. γ < 1 favours
+ * fewer, larger communities; γ > 1 favours more, smaller ones. Combined with
+ * min/max size enforcement (500/1500) and post-hoc DFS splitting of oversized
+ * buckets, γ=1 reliably lands communities in the ~1000-node range.
  */
-const COMMUNITY_RESOLUTION = 0.5;
+const COMMUNITY_RESOLUTION = 1.0;
 
 /**
  * Fallback DFS-based topology-aware split (inspired by Model Explorer's
@@ -197,42 +195,72 @@ function applyOpTypeGrouping(nodes: SourceNode[]): {
     return { effectiveNodes, opGroupNamespaces };
 }
 
+/**
+ * Section the full node set into ~1000-node communities. Operates on ALL nodes
+ * (not just namespace-less ones) so even fully-namespaced graphs get grouped
+ * into target-sized communities. A node's existing namespace, if any, is
+ * preserved as a child path under its section: `section_K_of_N/<original>`.
+ */
 function applyTopologySectioning(nodes: SourceNode[]): {
     effectiveNodes: SourceNode[];
     sectionNamespaces: Set<string>;
 } {
     const sectionNamespaces = new Set<string>();
 
-    const namespaceless: SourceNode[] = [];
-    for (const node of nodes) {
-        if (!node.namespace) {
-            namespaceless.push(node);
-        }
-    }
-
-    if (namespaceless.length <= SECTION_THRESHOLD) {
+    if (nodes.length <= SECTION_THRESHOLD) {
         return { effectiveNodes: nodes, sectionNamespaces };
     }
+
+    // Target ~1000 nodes per section. Both ends are bounded so densely-connected
+    // graphs (which Louvain leaves as one mega-community) and sparsely-connected
+    // graphs (where Louvain finds many tiny communities, like one per MLIR
+    // region) both converge to the same target count.
+    const targetK = Math.max(2, Math.ceil(nodes.length / SECTION_THRESHOLD));
 
     // Primary: community detection (Louvain) — produces super-groups that
     // correspond to densely-connected sub-regions with sparse links between them.
-    // Recurses into oversized communities so a single dominant community can't
-    // swallow the entire graph.
-    let buckets = partitionByCommunity(namespaceless, SECTION_THRESHOLD, {
+    // mergeUntilTargetK collapses small communities into their best-connected
+    // neighbours until we hit targetK. Internal recursion is disabled
+    // (maxDepth: 1) because it shatters merged-down communities at depth=1
+    // (no targetK enforcement at that level), undoing our size targeting.
+    // Oversized buckets are split by the DFS safety net below instead.
+    let buckets = partitionByCommunity(nodes, SECTION_THRESHOLD, {
         maxSize: COMMUNITY_MAX_SIZE,
         minSize: COMMUNITY_MIN_SIZE,
-        targetK: COMMUNITY_TARGET_K,
+        targetK,
         resolution: COMMUNITY_RESOLUTION,
+        maxDepth: 1,
     });
 
-    // Fallback: fixed-size DFS bucketer. Only triggers for graphs Louvain
-    // couldn't meaningfully split (e.g. disconnected singletons).
+    // Fallback: fixed-size DFS bucketer. Triggers when Louvain couldn't find
+    // ANY meaningful split (e.g. fully disconnected singletons, or one
+    // dominant community).
     if (!buckets || buckets.length <= 1) {
-        buckets = splitByTopology(namespaceless, SECTION_THRESHOLD);
+        buckets = splitByTopology(nodes, SECTION_THRESHOLD);
     }
     if (!buckets || buckets.length <= 1) {
         return { effectiveNodes: nodes, sectionNamespaces };
     }
+
+    // Safety net: even after Louvain + recursion, individual buckets can still
+    // exceed the target size when the graph is densely connected. Force-split
+    // any oversized bucket with DFS bucketing so no single section dwarfs the
+    // others. Keeps community semantics for well-sized buckets, falls back to
+    // topology slicing only where Louvain failed to do so.
+    const enforcedBuckets: SourceNode[][] = [];
+    for (const bucket of buckets) {
+        if (bucket.length <= COMMUNITY_MAX_SIZE) {
+            enforcedBuckets.push(bucket);
+            continue;
+        }
+        const split = splitByTopology(bucket, SECTION_THRESHOLD);
+        if (split && split.length > 1) {
+            enforcedBuckets.push(...split);
+        } else {
+            enforcedBuckets.push(bucket);
+        }
+    }
+    buckets = enforcedBuckets;
 
     const remapById = new Map<string, string>();
     for (let i = 0; i < buckets.length; i++) {
@@ -244,8 +272,14 @@ function applyTopologySectioning(nodes: SourceNode[]): {
     }
 
     const effectiveNodes = nodes.map((node) => {
-        const ns = remapById.get(node.id);
-        return ns ? { ...node, namespace: ns } : node;
+        const sectionNs = remapById.get(node.id);
+        if (!sectionNs) {
+            return node;
+        }
+        return {
+            ...node,
+            namespace: node.namespace ? `${sectionNs}/${node.namespace}` : sectionNs,
+        };
     });
 
     return { effectiveNodes, sectionNamespaces };
@@ -254,7 +288,28 @@ function applyTopologySectioning(nodes: SourceNode[]): {
 export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphIndex {
     const { effectiveNodes: groupedNodes, opGroupNamespaces } = applyOpTypeGrouping(nodes);
     const { effectiveNodes, sectionNamespaces } = applyTopologySectioning(groupedNodes);
-    const allSyntheticNamespaces = new Set([...sectionNamespaces, ...opGroupNamespaces]);
+
+    // Sectioning prefixes namespaces with `section_K/...`, so op-type group
+    // names like `stablehlo.reduce` need rewriting into the section paths they
+    // actually live under. A single op-type group can split across multiple
+    // sections — register each occurrence as its own synthetic namespace.
+    const sectionedOpGroupNamespaces = new Set<string>();
+    if (sectionNamespaces.size > 0 && opGroupNamespaces.size > 0) {
+        for (const node of effectiveNodes) {
+            if (!node.namespace) {
+                continue;
+            }
+            for (const opGroupNs of opGroupNamespaces) {
+                const marker = `/${opGroupNs}/`;
+                const idx = node.namespace.indexOf(marker);
+                if (idx > 0) {
+                    sectionedOpGroupNamespaces.add(node.namespace.slice(0, idx + marker.length - 1));
+                }
+            }
+        }
+    }
+    const effectiveOpGroupNamespaces = sectionNamespaces.size > 0 ? sectionedOpGroupNamespaces : opGroupNamespaces;
+    const allSyntheticNamespaces = new Set([...sectionNamespaces, ...effectiveOpGroupNamespaces]);
 
     const nodeIndexById = new Map(effectiveNodes.map((n, idx) => [n.id, idx]));
     const nodesByNamespace = new Map<string, SourceNode[]>();
