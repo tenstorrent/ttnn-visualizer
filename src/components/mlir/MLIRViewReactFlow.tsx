@@ -418,8 +418,6 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 if (!headerHit) {
                     return;
                 }
-            } else {
-                setSelectedNodeId(node.id);
             }
             // Trust the worker's decision on which clicks toggle a subgraph.
             // The worker explicitly omits `collapsedSubgraphNamespace` when a
@@ -427,6 +425,16 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             // own already-expanded group — the group header handles collapse).
             const toggleNamespace =
                 node.type === 'mlirGroup' ? node.data?.namespace : node.data?.collapsedSubgraphNamespace;
+            // A click on a "toggle node" (an mlirGroup header, or an op node
+            // whose body acts as a collapsed-namespace anchor) is a structural
+            // navigation gesture — expand/collapse only. Don't treat it as a
+            // selection too: a collapsed section anchor stands in for hundreds
+            // of inner ops, so highlighting its aggregated edges floods the
+            // canvas and is not what the user intended. Selection is reserved
+            // for actual leaf ops (no collapsedSubgraphNamespace).
+            if (!toggleNamespace && node.type !== 'mlirGroup') {
+                setSelectedNodeId(node.id);
+            }
             if (toggleNamespace) {
                 const isExpanded = expandedNamespaces.has(toggleNamespace);
                 if (isExpanded) {
