@@ -36,13 +36,13 @@
     overflow: hidden;
 
     &.selected {
-        box-shadow: 0 0 0 2px $tt-purple-tint-1;
+        box-shadow: 0 0 0 3px $tt-blue-accent;
         outline: none;
     }
 }
 
 .react-flow__node-group.selected {
-    box-shadow: 0 0 0 2px $tt-purple-tint-1;
+    box-shadow: 0 0 0 3px $tt-blue-accent;
     outline: none;
 }
 

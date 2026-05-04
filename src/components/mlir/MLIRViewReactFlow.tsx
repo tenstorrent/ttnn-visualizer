@@ -24,6 +24,7 @@ import '@xyflow/react/dist/style.css';
 import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
 import type { BuiltGraph, SourceNode, WorkerInteractionIndex, WorkerOutboundMessage } from './mlirGraphTypes';
+import { GRAPH_COLORS } from '../../definitions/GraphColors';
 
 type MLNodeData = {
     label: string;
@@ -345,11 +346,90 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         return result;
     }, [edges, nodes, selectedNodeId]);
 
+    // Focus context: the selected node, its directly connected neighbours, and
+    // the edges that connect them. Held as derived state so the rest of the
+    // component (and any future side panels) can render details about the
+    // current focus without re-walking the edge list.
+    const focusedConnections = useMemo(() => {
+        const inputNodeIds = new Set<string>();
+        const outputNodeIds = new Set<string>();
+        const inputEdgeIds = new Set<string>();
+        const outputEdgeIds = new Set<string>();
+        if (selectedNodeId) {
+            for (const e of displayedEdges) {
+                if (e.target === selectedNodeId) {
+                    inputNodeIds.add(e.source);
+                    inputEdgeIds.add(e.id);
+                }
+                if (e.source === selectedNodeId) {
+                    outputNodeIds.add(e.target);
+                    outputEdgeIds.add(e.id);
+                }
+            }
+        }
+        return { inputNodeIds, outputNodeIds, inputEdgeIds, outputEdgeIds };
+    }, [displayedEdges, selectedNodeId]);
+
+    // Highlight input neighbours green and output neighbours yellow. The
+    // selected node itself gets its blue ring from CSS (`.selected`).
+    const styledNodes = useMemo<MLNode[]>(() => {
+        if (!selectedNodeId) {
+            return nodes;
+        }
+        const { inputNodeIds, outputNodeIds } = focusedConnections;
+        if (inputNodeIds.size === 0 && outputNodeIds.size === 0) {
+            return nodes;
+        }
+        return nodes.map((n) => {
+            if (inputNodeIds.has(n.id)) {
+                return { ...n, style: { ...(n.style ?? {}), background: GRAPH_COLORS.inputNode } };
+            }
+            if (outputNodeIds.has(n.id)) {
+                return { ...n, style: { ...(n.style ?? {}), background: GRAPH_COLORS.outputNode } };
+            }
+            return n;
+        });
+    }, [nodes, focusedConnections, selectedNodeId]);
+
+    // Colorize incoming edges green, outgoing edges yellow.
+    const styledEdges = useMemo<Edge[]>(() => {
+        if (!selectedNodeId) {
+            return displayedEdges;
+        }
+        const { inputEdgeIds, outputEdgeIds } = focusedConnections;
+        if (inputEdgeIds.size === 0 && outputEdgeIds.size === 0) {
+            return displayedEdges;
+        }
+        return displayedEdges.map((e) => {
+            if (inputEdgeIds.has(e.id)) {
+                return {
+                    ...e,
+                    style: { ...(e.style ?? {}), stroke: GRAPH_COLORS.inputEdge, strokeWidth: 2 },
+                    markerEnd:
+                        typeof e.markerEnd === 'object' && e.markerEnd
+                            ? { ...e.markerEnd, color: GRAPH_COLORS.inputEdge }
+                            : e.markerEnd,
+                };
+            }
+            if (outputEdgeIds.has(e.id)) {
+                return {
+                    ...e,
+                    style: { ...(e.style ?? {}), stroke: GRAPH_COLORS.outputEdge, strokeWidth: 2 },
+                    markerEnd:
+                        typeof e.markerEnd === 'object' && e.markerEnd
+                            ? { ...e.markerEnd, color: GRAPH_COLORS.outputEdge }
+                            : e.markerEnd,
+                };
+            }
+            return e;
+        });
+    }, [displayedEdges, focusedConnections, selectedNodeId]);
+
     return (
         <div style={{ width: '100%', height: 'calc(100vh - 92px - 30px - 56px - 40px)' }}>
             <ReactFlow
-                nodes={nodes}
-                edges={displayedEdges}
+                nodes={styledNodes}
+                edges={styledEdges}
                 onNodeClick={onSubgraphNodeClick}
                 onPaneClick={onPaneClick}
                 onNodesChange={onNodesChange}
@@ -360,6 +440,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 fitView
                 onlyRenderVisibleElements
                 connectionLineType={ConnectionLineType.SmoothStep}
+                selectNodesOnDrag={false}
             >
                 <MiniMap />
                 <Controls />
