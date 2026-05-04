@@ -185,10 +185,34 @@ function makeOpNode(
 }
 
 export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: string[]): BuiltGraph {
-    const expandedNamespaces = new Set(expandedNamespacesList);
-    const nodeById = new Map(index.nodes.map((n) => [n.id, n]));
     const subgraphNamespaceSet = new Set(index.subgraphNamespaces);
     const sectionNsSet = new Set(index.sectionNamespaces ?? []);
+
+    // A namespace's "expanded" state is only honoured when every subgraph
+    // ancestor in its chain is ALSO expanded. Otherwise the user has
+    // collapsed an ancestor, so the deeper namespace can't visibly exist —
+    // honouring it would leave its group rendered as a top-level orphan
+    // (e.g. an `Inputs` subgroup floating where its parent reduce used to be).
+    // Filtering here, once, keeps every downstream `expandedNamespaces.has(...)`
+    // check honest without each callsite having to re-validate the chain.
+    const requestedExpansion = new Set(expandedNamespacesList);
+    const expandedNamespaces = new Set<string>();
+    for (const ns of requestedExpansion) {
+        const segments = ns.split('/');
+        let chainOk = true;
+        for (let i = 1; i < segments.length; i++) {
+            const ancestor = segments.slice(0, i).join('/');
+            if (subgraphNamespaceSet.has(ancestor) && !requestedExpansion.has(ancestor)) {
+                chainOk = false;
+                break;
+            }
+        }
+        if (chainOk) {
+            expandedNamespaces.add(ns);
+        }
+    }
+
+    const nodeById = new Map(index.nodes.map((n) => [n.id, n]));
 
     const resolveRenderedNodeId = (nodeId: string): string => {
         const chain = index.containingNamespacesByNodeId[nodeId] ?? [];
