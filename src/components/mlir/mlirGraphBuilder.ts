@@ -413,8 +413,17 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         groupNodeByNamespace.set(namespace, {
             id: groupId,
             type: 'mlirGroup',
-            draggable: true,
-            dragHandle: '.mlir-group-handle',
+            // Intentionally non-draggable: React Flow injects a `nopan` class on
+            // every draggable node, and at runtime its pan filter checks
+            // `event.target.closest('.nopan')` — that lookup ALWAYS finds our
+            // wrapper from any descendant (or even via pointer-events: none
+            // cascading), suppressing canvas pan inside the group. By keeping
+            // the group non-draggable we drop the `nopan` from the wrapper, so
+            // dragging the group's empty background pans the entire canvas
+            // exactly as it does outside the group. The header itself opts back
+            // into `nopan` (see `MlirGroupNode`) so clicks/drags on it never
+            // trigger a stray canvas pan.
+            draggable: false,
             data: {
                 label: displayName,
                 kind: 'group',

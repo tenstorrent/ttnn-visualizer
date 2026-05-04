@@ -2,7 +2,17 @@
 /* eslint-disable react/prop-types */
 /* eslint-disable no-continue */
 
-import React, { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+    type MouseEvent,
+    createContext,
+    memo,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import 'styles/components/MLIRViewReactFlow.scss';
 import type { Edge, Node, NodeProps } from '@xyflow/react';
 import {
@@ -72,17 +82,121 @@ const MlirOpNode = memo<NodeProps<MLNode>>(({ id, data }) => (
     </>
 ));
 
-// Custom group node with a sticky header that doubles as the drag handle and
-// collapse control. The body is otherwise transparent so children render at
-// their assigned positions inside the group rectangle.
-const MlirGroupNode = memo<NodeProps<MLNode>>(({ data }) => {
+// Group nodes communicate with the parent component via this context. We can't
+// re-enable React Flow's `draggable: true` (it would re-add the `nopan` class
+// on the wrapper and break canvas panning inside the group — see worker
+// comment), so the header implements drag-to-move manually and uses these
+// callbacks to update the parent's node state and to dispatch the collapse.
+type MlirGroupContextValue = {
+    toggleNamespace: (namespace: string) => void;
+    moveGroup: (groupId: string, dx: number, dy: number) => void;
+    getZoom: () => number;
+};
+
+const MlirGroupContext = createContext<MlirGroupContextValue | null>(null);
+
+const DRAG_THRESHOLD_PX = 4;
+
+const MlirGroupNode = memo<NodeProps<MLNode>>(({ id, data }) => {
+    const ctx = useContext(MlirGroupContext);
     const isSection = data.groupKind === 'section';
     const countText = typeof data.nodeCount === 'number' && data.nodeCount > 0 ? ` · ${data.nodeCount} nodes` : '';
+
+    // `dragRef` survives the gesture: started on mousedown, mutated through
+    // mousemove (incremental dx/dy applied each frame so React Flow's children
+    // — which use `parentId` + `extent: 'parent'` — follow), and read by the
+    // immediately-following click handler to suppress the collapse toggle if
+    // the gesture moved past the threshold.
+    const dragRef = useRef<{
+        startX: number;
+        startY: number;
+        lastX: number;
+        lastY: number;
+        moved: boolean;
+    } | null>(null);
+
+    const onHandleMouseDown = useCallback(
+        (event: MouseEvent) => {
+            // Stop the gesture before React Flow's pane sees it; otherwise a
+            // drag from the header would also pan the canvas.
+            event.stopPropagation();
+            if (event.button !== 0 || !ctx) {
+                return;
+            }
+            dragRef.current = {
+                startX: event.clientX,
+                startY: event.clientY,
+                lastX: event.clientX,
+                lastY: event.clientY,
+                moved: false,
+            };
+
+            // The window event is the DOM `MouseEvent`, not React's synthetic
+            // type that's imported above; we only need clientX/clientY.
+            const onWindowMouseMove = (ev: { clientX: number; clientY: number }) => {
+                const drag = dragRef.current;
+                if (!drag) {
+                    return;
+                }
+                const totalDx = ev.clientX - drag.startX;
+                const totalDy = ev.clientY - drag.startY;
+                if (!drag.moved) {
+                    if (Math.hypot(totalDx, totalDy) < DRAG_THRESHOLD_PX) {
+                        return;
+                    }
+                    drag.moved = true;
+                }
+                const incDx = ev.clientX - drag.lastX;
+                const incDy = ev.clientY - drag.lastY;
+                drag.lastX = ev.clientX;
+                drag.lastY = ev.clientY;
+                const zoom = ctx.getZoom() || 1;
+                ctx.moveGroup(id, incDx / zoom, incDy / zoom);
+            };
+
+            const onWindowMouseUp = () => {
+                window.removeEventListener('mousemove', onWindowMouseMove);
+                window.removeEventListener('mouseup', onWindowMouseUp);
+                // Don't clear dragRef here — the click event fires next and
+                // needs to read `moved` to decide whether to suppress the
+                // collapse. The click handler clears it.
+            };
+
+            window.addEventListener('mousemove', onWindowMouseMove);
+            window.addEventListener('mouseup', onWindowMouseUp);
+        },
+        [ctx, id],
+    );
+
+    const onHandleClick = useCallback(
+        (event: MouseEvent) => {
+            // Always swallow the click so React Flow's wrapper-level onClick
+            // doesn't double-fire onSubgraphNodeClick — we drive the toggle
+            // ourselves with full information about whether the gesture was a
+            // drag or a click.
+            event.stopPropagation();
+            const drag = dragRef.current;
+            dragRef.current = null;
+            if (drag?.moved) {
+                return;
+            }
+            ctx?.toggleNamespace(data.namespace);
+        },
+        [ctx, data.namespace],
+    );
+
     return (
         <div className={`mlir-group-body${isSection ? ' is-section' : ''}`}>
+            {/* Header doubles as the collapse button and the drag handle. The
+                `nopan`/`nodrag` classes (matched by RF's runtime filters) plus
+                onMouseDown stopPropagation prevent the gesture from leaking to
+                the pane. Click + drag are disambiguated locally via dragRef. */}
+            {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
             <div
-                className='mlir-group-handle'
-                title='Click header to collapse · drag header to move group'
+                className='mlir-group-handle nopan nodrag'
+                title='Click to collapse · drag to move'
+                onMouseDown={onHandleMouseDown}
+                onClick={onHandleClick}
             >
                 <span
                     className='mlir-group-handle-icon'
@@ -357,6 +471,53 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         setSelectedNodeId(null);
     }, []);
 
+    // Group header invokes this on click (drag suppresses it). Mirrors the
+    // collapse path of `onSubgraphNodeClick` for `mlirGroup` nodes: the
+    // namespace is currently expanded, so we anchor from the group's own
+    // position to its anchor op (which becomes visible after collapse) and
+    // remove the namespace from `expandedNamespaces`.
+    const toggleNamespaceFromGroup = useCallback(
+        (namespace: string) => {
+            const groupNode = nodes.find((n) => n.type === 'mlirGroup' && n.data?.namespace === namespace);
+            const anchorNodeId = interactionIndex?.anchorByNamespace[namespace];
+            const fromPosition = groupNode ? { x: groupNode.position.x, y: groupNode.position.y } : { x: 0, y: 0 };
+            if (anchorNodeId) {
+                viewportAnchorRef.current = { toNodeId: anchorNodeId, fromPosition };
+            }
+            setExpandedNamespaces((prev) => {
+                if (!prev.has(namespace)) {
+                    return prev;
+                }
+                const next = new Set(prev);
+                next.delete(namespace);
+                return next;
+            });
+        },
+        [interactionIndex, nodes],
+    );
+
+    // Header drag updates only the group's own position; React Flow auto-
+    // moves children because they declare `parentId` + `extent: 'parent'`.
+    const moveGroup = useCallback(
+        (groupId: string, dx: number, dy: number) => {
+            setNodes((current) =>
+                current.map((n) =>
+                    n.id === groupId ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n,
+                ),
+            );
+        },
+        [setNodes],
+    );
+
+    const groupContextValue = useMemo<MlirGroupContextValue>(
+        () => ({
+            toggleNamespace: toggleNamespaceFromGroup,
+            moveGroup,
+            getZoom: () => getViewport().zoom,
+        }),
+        [toggleNamespaceFromGroup, moveGroup, getViewport],
+    );
+
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode, mlirGroup: MlirGroupNode }) as const, []);
 
     // Edge filter:
@@ -473,25 +634,27 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     return (
         <div style={{ width: '100%', height: 'calc(100vh - 92px - 30px - 56px - 40px)' }}>
-            <ReactFlow
-                nodes={styledNodes}
-                edges={styledEdges}
-                onNodeClick={onSubgraphNodeClick}
-                onPaneClick={onPaneClick}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                nodeTypes={nodeTypes}
-                minZoom={0.003}
-                maxZoom={1.5}
-                fitView
-                onlyRenderVisibleElements
-                connectionLineType={ConnectionLineType.SmoothStep}
-                selectNodesOnDrag={false}
-            >
-                <MiniMap />
-                <Controls />
-                <Background />
-            </ReactFlow>
+            <MlirGroupContext.Provider value={groupContextValue}>
+                <ReactFlow
+                    nodes={styledNodes}
+                    edges={styledEdges}
+                    onNodeClick={onSubgraphNodeClick}
+                    onPaneClick={onPaneClick}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    nodeTypes={nodeTypes}
+                    minZoom={0.003}
+                    maxZoom={1.5}
+                    fitView
+                    onlyRenderVisibleElements
+                    connectionLineType={ConnectionLineType.SmoothStep}
+                    selectNodesOnDrag={false}
+                >
+                    <MiniMap />
+                    <Controls />
+                    <Background />
+                </ReactFlow>
+            </MlirGroupContext.Provider>
 
             <Button
                 onClick={() => runBuild(expandedNamespaces)}

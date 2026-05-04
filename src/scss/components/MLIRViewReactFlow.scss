@@ -47,24 +47,25 @@
     outline: none;
 }
 
-/* Custom group node: transparent body, visible dashed border, sticky header bar.
+/* Custom group node: transparent wrapper, visible dashed body, sticky header
+ * bar that handles collapse.
  *
- * The wrapper and body are `pointer-events: none` so clicks on empty areas
- * inside the group fall through to the `.react-flow__nodes` container (which
- * is also pointer-events: none) and onward to the pane behind, letting the
- * user pan the entire canvas by dragging the group's background. Only the
- * header (`.mlir-group-handle`) re-enables pointer events to receive collapse
- * clicks and drag-to-move gestures (events from descendants still bubble up to
- * React Flow's wrapper-level click/drag listeners).
+ * The group is intentionally non-draggable (see worker), so React Flow does
+ * NOT add the `nopan` class to the wrapper. That means RF's pan filter
+ * (`event.target.closest('.nopan')`) returns null for mousedowns on the
+ * group's body, and the gesture is handled by RF's pane just like a drag in
+ * empty canvas space. The body therefore advertises `cursor: grab` to
+ * telegraph the pan affordance, matching what the user sees outside any
+ * group.
  *
- * The double `.react-flow__node.react-flow__node-mlirGroup` selector matches
- * the specificity of React Flow's own `.react-flow__node.draggable { pointer-
- * events: all }` rule so our pass-through wins by source order. */
+ * The header bar opts back into `nopan` (added inline on the element) so its
+ * own clicks/drags never trigger a stray canvas pan; that combined with
+ * `onMouseDown stopPropagation()` in the React component keeps the collapse
+ * click clean. */
 .react-flow__node.react-flow__node-mlirGroup {
     background: transparent;
     padding: 0;
     border: none;
-    pointer-events: none;
 }
 
 .mlir-group-body {
@@ -76,7 +77,11 @@
     background: rgb(90 90 90 / 14%);
     color: #ddd;
     position: relative;
-    pointer-events: none;
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
 
     &.is-section {
         border-color: #9b59b6;
@@ -84,6 +89,13 @@
     }
 }
 
+/* Header doubles as the collapse button AND the drag handle. The component
+ * implements drag manually (mousedown → window mousemove/mouseup) so the
+ * group can stay non-draggable from React Flow's POV — keeping pan-through
+ * on the body — while still letting the user move the group from the header.
+ * `grab` cursor advertises that affordance; `grabbing` shows the active
+ * gesture. Children carry `pointer-events: none` so the drag/click target
+ * is the header div itself. */
 .mlir-group-handle {
     position: absolute;
     top: 8px;
@@ -103,7 +115,6 @@
     color: #eee;
     cursor: grab;
     user-select: none;
-    pointer-events: auto;
 
     /* Establish own stacking context so it sits above the group body / children. */
     z-index: 2;
@@ -149,10 +160,15 @@
 }
 
 .mlir-group-handle-grip {
-    margin-left: auto;
-    opacity: 0.55;
-    letter-spacing: -2px;
+    margin-left: 4px;
+    padding-left: 8px;
+    border-left: 1px solid rgb(255 255 255 / 18%);
+    font-size: 10px;
+    letter-spacing: -1px;
+    line-height: 1;
+    opacity: 0.65;
     pointer-events: none;
+    font-family: monospace;
 }
 
 .mlir-op-node-collapse-hint {
