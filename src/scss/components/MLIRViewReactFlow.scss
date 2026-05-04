@@ -34,6 +34,16 @@
     justify-content: center;
     color: #222;
     overflow: hidden;
+
+    &.selected {
+        box-shadow: 0 0 0 2px $tt-purple-tint-1;
+        outline: none;
+    }
+}
+
+.react-flow__node-group.selected {
+    box-shadow: 0 0 0 2px $tt-purple-tint-1;
+    outline: none;
 }
 
 .mlir-op-node-collapse-hint {

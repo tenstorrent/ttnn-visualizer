@@ -88,6 +88,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
     const [indexReadyGraphId, setIndexReadyGraphId] = useState<string | null>(null);
     const [interactionIndex, setInteractionIndex] = useState<WorkerInteractionIndex | null>(null);
+    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    const selectedNodeIdRef = useRef<string | null>(null);
     const viewportAnchorRef = useRef<{
         toNodeId: string;
         fromPosition: { x: number; y: number };
@@ -103,12 +105,36 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         setExpandedNamespaces(new Set());
         viewportAnchorRef.current = null;
         setInteractionIndex(null);
+        setSelectedNodeId(null);
     }, [graph.id]);
+
+    useEffect(() => {
+        selectedNodeIdRef.current = selectedNodeId;
+    }, [selectedNodeId]);
+
+    // Reflect selectedNodeId onto each node's `selected` flag so React Flow
+    // applies its built-in selected styling.
+    useEffect(() => {
+        setNodes((current) => {
+            let changed = false;
+            const next = current.map((n) => {
+                const shouldSelect = n.id === selectedNodeId;
+                if (!!n.selected === shouldSelect) {
+                    return n;
+                }
+                changed = true;
+                return { ...n, selected: shouldSelect };
+            });
+            return changed ? next : current;
+        });
+    }, [selectedNodeId, setNodes]);
 
     const applyBuiltGraph = useCallback(
         (built: BuiltGraph) => {
             const rf = builtGraphToReactFlow(built);
-            setNodes(rf.nodes);
+            const selId = selectedNodeIdRef.current;
+            const styledNodes = selId ? rf.nodes.map((n) => (n.id === selId ? { ...n, selected: true } : n)) : rf.nodes;
+            setNodes(styledNodes);
             setEdges(rf.edges);
 
             const anchor = viewportAnchorRef.current;
@@ -231,6 +257,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
     const onSubgraphNodeClick = useCallback(
         (_event: MouseEvent, node: MLNode) => {
+            setSelectedNodeId(node.id);
             if (node.type === 'group') {
                 return;
             }
@@ -278,6 +305,10 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         ],
     );
 
+    const onPaneClick = useCallback(() => {
+        setSelectedNodeId(null);
+    }, []);
+
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode }) as const, []);
 
     return (
@@ -286,6 +317,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 nodes={nodes}
                 edges={edges}
                 onNodeClick={onSubgraphNodeClick}
+                onPaneClick={onPaneClick}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
