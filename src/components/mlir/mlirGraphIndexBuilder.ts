@@ -138,6 +138,15 @@ function splitByTopology(nodes: SourceNode[], threshold: number): SourceNode[][]
  * (not just namespace-less ones) so even fully-namespaced graphs get grouped
  * into target-sized communities. A node's existing namespace, if any, is
  * preserved as a child path under its section: `section_K_of_N/<original>`.
+ *
+ * IMPORTANT: partitioning is done at the *cluster* level, where every top-level
+ * namespace segment (e.g. `stablehlo.reduce_88` and all of its inner ops like
+ * `stablehlo.reduce_88/Inputs`) is one indivisible cluster. Without this,
+ * Louvain would happily separate a region's outer op from its inner body if
+ * they have different connectivity, leaving the user with an "expanded group
+ * that has no connections" because the connection-bearing outer op ended up in
+ * a sibling section. Rootless ops (no source namespace) act as singleton
+ * clusters and partition individually as before.
  */
 function applyTopologySectioning(nodes: SourceNode[]): {
     effectiveNodes: SourceNode[];
@@ -149,20 +158,77 @@ function applyTopologySectioning(nodes: SourceNode[]): {
         return { effectiveNodes: nodes, sectionNamespaces };
     }
 
-    // Target ~1000 nodes per section. Both ends are bounded so densely-connected
-    // graphs (which Louvain leaves as one mega-community) and sparsely-connected
-    // graphs (where Louvain finds many tiny communities, like one per MLIR
-    // region) both converge to the same target count.
+    const clusterKeyOf = (node: SourceNode): string => {
+        if (!node.namespace) {
+            return `node:${node.id}`;
+        }
+        return `ns:${node.namespace.split('/')[0]}`;
+    };
+
+    const clusterMembers = new Map<string, SourceNode[]>();
+    const clusterKeyByNodeId = new Map<string, string>();
+    for (const node of nodes) {
+        const key = clusterKeyOf(node);
+        clusterKeyByNodeId.set(node.id, key);
+        const arr = clusterMembers.get(key);
+        if (arr) {
+            arr.push(node);
+        } else {
+            clusterMembers.set(key, [node]);
+        }
+    }
+
+    // Build supernode SourceNodes for the partitioner. One supernode per
+    // cluster; intra-cluster edges are dropped (irrelevant for partitioning),
+    // inter-cluster edges accumulate as weighted multi-edges that Louvain
+    // collapses internally.
+    const supernodeIdForKey = (key: string): string => `super:${key}`;
+    const supernodes: SourceNode[] = [];
+    for (const key of clusterMembers.keys()) {
+        supernodes.push({
+            id: supernodeIdForKey(key),
+            label: key,
+            namespace: '',
+            attrs: [],
+            incomingEdges: [],
+            outputsMetadata: [],
+            config: null,
+        });
+    }
+    const supernodeById = new Map(supernodes.map((sn) => [sn.id, sn]));
+
+    for (const node of nodes) {
+        const tgtKey = clusterKeyByNodeId.get(node.id);
+        if (!tgtKey) {
+            continue;
+        }
+        const tgtSn = supernodeById.get(supernodeIdForKey(tgtKey));
+        if (!tgtSn) {
+            continue;
+        }
+        for (const edge of node.incomingEdges ?? []) {
+            const srcKey = clusterKeyByNodeId.get(edge.sourceNodeId);
+            if (!srcKey || srcKey === tgtKey) {
+                continue;
+            }
+            tgtSn.incomingEdges.push({
+                sourceNodeId: supernodeIdForKey(srcKey),
+                sourceNodeOutputId: '0',
+                targetNodeInputId: '0',
+            });
+        }
+    }
+
+    // Target K is computed on UNDERLYING node count (what the user actually
+    // sees), not supernode count. Bucket size limits below are also expressed
+    // in underlying nodes for the same reason.
     const targetK = Math.max(2, Math.ceil(nodes.length / SECTION_THRESHOLD));
 
-    // Primary: community detection (Louvain) — produces super-groups that
-    // correspond to densely-connected sub-regions with sparse links between them.
-    // mergeUntilTargetK collapses small communities into their best-connected
-    // neighbours until we hit targetK. Internal recursion is disabled
-    // (maxDepth: 1) because it shatters merged-down communities at depth=1
-    // (no targetK enforcement at that level), undoing our size targeting.
-    // Oversized buckets are split by the DFS safety net below instead.
-    let buckets = partitionByCommunity(nodes, SECTION_THRESHOLD, {
+    // Partitioner operates on supernodes. Pass threshold=0 because the
+    // supernode count can legitimately be smaller than SECTION_THRESHOLD even
+    // when underlying-node count exceeds it (e.g. graph composed entirely of
+    // many small regions). We still want to section.
+    let supernodeBuckets = partitionByCommunity(supernodes, 0, {
         maxSize: COMMUNITY_MAX_SIZE,
         minSize: COMMUNITY_MIN_SIZE,
         targetK,
@@ -170,32 +236,52 @@ function applyTopologySectioning(nodes: SourceNode[]): {
         maxDepth: 1,
     });
 
-    // Fallback: fixed-size DFS bucketer. Triggers when Louvain couldn't find
-    // ANY meaningful split (e.g. fully disconnected singletons, or one
-    // dominant community).
-    if (!buckets || buckets.length <= 1) {
-        buckets = splitByTopology(nodes, SECTION_THRESHOLD);
+    if (!supernodeBuckets || supernodeBuckets.length <= 1) {
+        supernodeBuckets = splitByTopology(supernodes, SECTION_THRESHOLD);
     }
-    if (!buckets || buckets.length <= 1) {
+    if (!supernodeBuckets || supernodeBuckets.length <= 1) {
         return { effectiveNodes: nodes, sectionNamespaces };
     }
 
-    // Safety net: even after Louvain + recursion, individual buckets can still
-    // exceed the target size when the graph is densely connected. Force-split
-    // any oversized bucket with DFS bucketing so no single section dwarfs the
-    // others. Keeps community semantics for well-sized buckets, falls back to
-    // topology slicing only where Louvain failed to do so.
+    // Expand each supernode bucket back into its underlying SourceNodes.
+    const expandSupernodeBucket = (snBucket: SourceNode[]): SourceNode[] => {
+        const out: SourceNode[] = [];
+        for (const sn of snBucket) {
+            const key = sn.id.replace(/^super:/, '');
+            const members = clusterMembers.get(key);
+            if (members) {
+                out.push(...members);
+            }
+        }
+        return out;
+    };
+
+    // Compute underlying-node bucket sizes from the supernode partition.
+    let buckets: SourceNode[][] = supernodeBuckets.map(expandSupernodeBucket);
+
+    // Safety net: split oversized buckets by topology. Operates on the
+    // supernode bucket so cluster integrity is preserved (a region cannot be
+    // split across resulting sub-buckets). Re-runs the per-bucket
+    // splitByTopology at the supernode level then re-expands.
     const enforcedBuckets: SourceNode[][] = [];
-    for (const bucket of buckets) {
-        if (bucket.length <= COMMUNITY_MAX_SIZE) {
-            enforcedBuckets.push(bucket);
+    for (let i = 0; i < buckets.length; i++) {
+        if (buckets[i].length <= COMMUNITY_MAX_SIZE) {
+            enforcedBuckets.push(buckets[i]);
             continue;
         }
-        const split = splitByTopology(bucket, SECTION_THRESHOLD);
-        if (split && split.length > 1) {
-            enforcedBuckets.push(...split);
+        const snBucket = supernodeBuckets[i];
+        // Threshold = supernode count that yields ≤ COMMUNITY_MAX_SIZE
+        // underlying nodes per sub-bucket. Density = underlying / supernode
+        // for this oversized bucket.
+        const density = buckets[i].length / snBucket.length;
+        const snThreshold = Math.max(1, Math.floor(SECTION_THRESHOLD / Math.max(density, 1)));
+        const snSplit = splitByTopology(snBucket, snThreshold);
+        if (snSplit && snSplit.length > 1) {
+            for (const subSn of snSplit) {
+                enforcedBuckets.push(expandSupernodeBucket(subSn));
+            }
         } else {
-            enforcedBuckets.push(bucket);
+            enforcedBuckets.push(buckets[i]);
         }
     }
     buckets = enforcedBuckets;
