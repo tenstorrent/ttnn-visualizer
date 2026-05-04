@@ -602,7 +602,21 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
             if (!subgraphNsSet.has(ancestor)) {
                 continue;
             }
-            if (isArg || node.namespace.startsWith(`${ancestor}/Inputs`)) {
+            // A node is an "input" of `ancestor` only if it structurally
+            // belongs to that ancestor's input boundary:
+            //   - it lives directly in the ancestor's namespace AND is a `%argN`
+            //     block argument, OR
+            //   - it lives under the ancestor's `/Inputs` subnamespace.
+            // Earlier the rule was the much looser `isArg || startsWith /Inputs`
+            // which credited every `%argN` to every ancestor in its chain,
+            // including synthetic topology sections that have no inputs of
+            // their own. The downstream edge-rerouting then redirected
+            // cross-section edges to those phantom "section inputs" and the
+            // real edge to the inner op disappeared.
+            const inputsPrefix = `${ancestor}/Inputs`;
+            const inInputsSubgraph = node.namespace === inputsPrefix || node.namespace.startsWith(`${inputsPrefix}/`);
+            const isDirectArgChild = isArg && node.namespace === ancestor;
+            if (isDirectArgChild || inInputsSubgraph) {
                 const inAncestor = inputNodesByNamespace.get(ancestor);
                 if (inAncestor) {
                     inAncestor.push(node);

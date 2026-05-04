@@ -535,7 +535,19 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         const targetNamespace = targetNamespaces[targetNamespaces.length - 1];
         const sourceNamespace = sourceNamespaces[sourceNamespaces.length - 1];
 
-        if (targetNamespace && expandedNamespaces.has(targetNamespace) && sourceNamespace !== targetNamespace) {
+        // The "edge crossing into a region terminates at its block arg by
+        // input-port index" remapping only applies to real MLIR regions, never
+        // to synthetic topology sections. Sections are flat groupings of
+        // unrelated ops and have no input boundary — a cross-section edge
+        // must go directly to the inner op, otherwise the target gets
+        // silently swapped for a phantom "section input" (typically a top-
+        // level function `%argN`) and the real edge to the inner op vanishes.
+        if (
+            targetNamespace &&
+            !sectionNsSet.has(targetNamespace) &&
+            expandedNamespaces.has(targetNamespace) &&
+            sourceNamespace !== targetNamespace
+        ) {
             const sourceIsInsideTarget = sourceNamespaces.includes(targetNamespace);
             if (!sourceIsInsideTarget) {
                 const inputIdx = Number(targetInputId);
@@ -548,7 +560,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
             }
         }
         const collapsedNamespace = toggleNamespaceForNode(index, targetNodeId);
-        if (collapsedNamespace && expandedNamespaces.has(collapsedNamespace)) {
+        if (collapsedNamespace && !sectionNsSet.has(collapsedNamespace) && expandedNamespaces.has(collapsedNamespace)) {
             const sourceIsInsideCollapsed = sourceNamespaces.includes(collapsedNamespace);
             if (!sourceIsInsideCollapsed) {
                 const inputIdx = Number(targetInputId);
