@@ -31,6 +31,7 @@ import { BuffersByOperation, MarkerTypeLabel } from '../../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
+import { getBufferAddressZoomRange, memoryZoomPaddingForRange } from '../../functions/bufferSummary';
 import BufferSummaryVirtualizedList from './BufferSummaryVirtualizedList';
 
 const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
@@ -62,23 +63,10 @@ function BufferSummaryPlotRenderer({
         [devices, isLoadingDevices],
     );
 
-    const zoomedMemorySize = useMemo(() => {
-        let minAddress = Number.POSITIVE_INFINITY;
-        let maxAddress = Number.NEGATIVE_INFINITY;
-
-        uniqueBuffersByOperationList.forEach((operation) => {
-            operation.buffers.forEach((buffer) => {
-                minAddress = Math.min(minAddress, buffer.address);
-                maxAddress = Math.max(maxAddress, buffer.address + buffer.size);
-            });
-        });
-
-        if (!Number.isFinite(minAddress) || !Number.isFinite(maxAddress)) {
-            return [0, memorySize];
-        }
-
-        return [minAddress, maxAddress];
-    }, [uniqueBuffersByOperationList, memorySize]);
+    const [zoomedMemorySizeStart, zoomedMemorySizeEnd] = useMemo(
+        () => getBufferAddressZoomRange(uniqueBuffersByOperationList, memorySize),
+        [uniqueBuffersByOperationList, memorySize],
+    );
 
     const operationFileIdentifierById = useMemo(
         () => new Map(operations?.map((operation) => [operation.id, operation.operationFileIdentifier]) ?? []),
@@ -94,9 +82,11 @@ function BufferSummaryPlotRenderer({
                 : [],
         [showMemoryRegions, l1SmallMarker, l1StartMarker],
     );
-    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
-    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
-    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
+    const memoryPadding = useMemo(
+        () => memoryZoomPaddingForRange(zoomedMemorySizeStart, zoomedMemorySizeEnd, MEMORY_ZOOM_PADDING_RATIO),
+        [zoomedMemorySizeStart, zoomedMemorySizeEnd],
+    );
+
     const getTensorDeallocationReport = useCallback(
         (operationId: number) =>
             showDeallocationReport
@@ -104,11 +94,13 @@ function BufferSummaryPlotRenderer({
                 : EMPTY_TENSOR_DEALLOCATION_REPORT,
         [showDeallocationReport, nonDeallocatedTensorsByOperationId],
     );
+
     const getOperationTooltipContent = useCallback(
         (operation: BuffersByOperation) =>
             `${operation.id} ${operation.name} (${operationFileIdentifierById.get(operation.id)})`,
         [operationFileIdentifierById],
     );
+
     const renderOperationLink = useCallback(
         (operation: BuffersByOperation) => (
             <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>

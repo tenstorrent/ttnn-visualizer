@@ -11,6 +11,7 @@ import { MEMORY_ZOOM_PADDING_RATIO } from '../src/definitions/BufferSummary';
 import { DRAM_MEMORY_SIZE } from '../src/definitions/DRAMMemorySize';
 import BufferSummaryPlotRendererDRAM from '../src/components/buffer-summary/BufferSummaryPlotRendererDRAM';
 import { TestProviders } from './helpers/TestProviders';
+import { getBufferAddressBounds } from '../src/functions/bufferSummary';
 
 const bufferSummaryVirtualizedListMock = vi.fn();
 
@@ -62,6 +63,23 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+describe('getBufferAddressBounds', () => {
+    it('uses min/max address over all buffers, not operation list order', () => {
+        const opHighFirst = {
+            id: 1,
+            name: 'op-high-first',
+            buffers: [{ address: 7000, size: 100, device_id: 0, buffer_type: BufferType.DRAM }],
+        };
+        const opLowSecond = {
+            id: 2,
+            name: 'op-low-second',
+            buffers: [{ address: 100, size: 50, device_id: 0, buffer_type: BufferType.DRAM }],
+        };
+
+        expect(getBufferAddressBounds([opHighFirst, opLowSecond])).toEqual({ start: 100, end: 7100 });
+    });
+});
 
 describe('BufferSummaryPlotRendererDRAM', () => {
     it('uses the first multi-operation segment for zoom bounds', () => {

@@ -12,6 +12,7 @@ import { activeProfilerReportAtom, selectedBufferSummaryTabAtom } from '../../st
 import { BufferType } from '../../model/BufferType';
 import { useBuffers, useCreateTensorsByOperationByIdList } from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
+import BufferSummaryTable from './BufferSummaryTable';
 
 interface BufferSummaryTabProps {
     plotRef: RefObject<HTMLHeadingElement>;
@@ -68,11 +69,11 @@ function BufferSummaryTab({ plotRef, tableRef }: BufferSummaryTabProps) {
                 ref={tableRef}
                 id={SECTION_IDS.TABLE}
             >
-                {/* <BufferSummaryTable
+                <BufferSummaryTable
                     buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)}
                     tensorListByOperation={tensorListByOperation}
                     uniqueBuffersByOperationList={uniqueBuffersByOperationList}
-                /> */}
+                />
             </div>
         </>
     ) : (
