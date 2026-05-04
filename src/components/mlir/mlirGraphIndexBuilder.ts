@@ -133,68 +133,6 @@ function splitByTopology(nodes: SourceNode[], threshold: number): SourceNode[][]
     return buckets.length > 1 ? buckets : null;
 }
 
-const OP_GROUP_MIN_SIZE = 3;
-
-/**
- * Groups root-level sibling namespaces that share the same base operation type
- * (e.g. stablehlo.reduce_1, stablehlo.reduce_2 → parent "stablehlo.reduce").
- * This inserts a virtual parent namespace so the index builder can collapse
- * all instances under one group node.
- */
-function applyOpTypeGrouping(nodes: SourceNode[]): {
-    effectiveNodes: SourceNode[];
-    opGroupNamespaces: Set<string>;
-} {
-    const opGroupNamespaces = new Set<string>();
-
-    const seenRootNs = new Set<string>();
-    for (const node of nodes) {
-        if (node.namespace && !node.namespace.includes('/')) {
-            seenRootNs.add(node.namespace);
-        }
-    }
-
-    const rootNsByBase = new Map<string, string[]>();
-    for (const ns of seenRootNs) {
-        const base = ns.replace(/_\d+$/, '');
-        if (base === ns) {
-            continue;
-        }
-        const arr = rootNsByBase.get(base) ?? [];
-        arr.push(ns);
-        rootNsByBase.set(base, arr);
-    }
-
-    const nsRemap = new Map<string, string>();
-    for (const [base, namespaces] of rootNsByBase) {
-        if (namespaces.length < OP_GROUP_MIN_SIZE) {
-            continue;
-        }
-        opGroupNamespaces.add(base);
-        for (const ns of namespaces) {
-            nsRemap.set(ns, `${base}/${ns}`);
-        }
-    }
-
-    if (nsRemap.size === 0) {
-        return { effectiveNodes: nodes, opGroupNamespaces };
-    }
-
-    const effectiveNodes = nodes.map((node) => {
-        if (!node.namespace) {
-            return node;
-        }
-        const rootSegment = node.namespace.split('/')[0];
-        const remapped = nsRemap.get(rootSegment);
-        if (!remapped) {
-            return node;
-        }
-        return { ...node, namespace: `${remapped}${node.namespace.slice(rootSegment.length)}` };
-    });
-
-    return { effectiveNodes, opGroupNamespaces };
-}
-
 /**
  * Section the full node set into ~1000-node communities. Operates on ALL nodes
  * (not just namespace-less ones) so even fully-namespaced graphs get grouped
@@ -286,30 +224,14 @@ function applyTopologySectioning(nodes: SourceNode[]): {
 }
 
 export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphIndex {
-    const { effectiveNodes: groupedNodes, opGroupNamespaces } = applyOpTypeGrouping(nodes);
-    const { effectiveNodes, sectionNamespaces } = applyTopologySectioning(groupedNodes);
-
-    // Sectioning prefixes namespaces with `section_K/...`, so op-type group
-    // names like `stablehlo.reduce` need rewriting into the section paths they
-    // actually live under. A single op-type group can split across multiple
-    // sections — register each occurrence as its own synthetic namespace.
-    const sectionedOpGroupNamespaces = new Set<string>();
-    if (sectionNamespaces.size > 0 && opGroupNamespaces.size > 0) {
-        for (const node of effectiveNodes) {
-            if (!node.namespace) {
-                continue;
-            }
-            for (const opGroupNs of opGroupNamespaces) {
-                const marker = `/${opGroupNs}/`;
-                const idx = node.namespace.indexOf(marker);
-                if (idx > 0) {
-                    sectionedOpGroupNamespaces.add(node.namespace.slice(0, idx + marker.length - 1));
-                }
-            }
-        }
-    }
-    const effectiveOpGroupNamespaces = sectionNamespaces.size > 0 ? sectionedOpGroupNamespaces : opGroupNamespaces;
-    const allSyntheticNamespaces = new Set([...sectionNamespaces, ...effectiveOpGroupNamespaces]);
+    // Note: we intentionally do NOT synthesize op-type wrappers (e.g. folding
+    // `stablehlo.reduce_0..N` under a virtual `stablehlo.reduce` parent).
+    // Source-MLIR namespaces are honoured as-is — each `_K` instance stays a
+    // sibling at its real path. Only topology sectioning is applied below to
+    // keep large flat graphs renderable; sections wrap at the root level and
+    // never disturb the inner namespace structure.
+    const { effectiveNodes, sectionNamespaces } = applyTopologySectioning(nodes);
+    const allSyntheticNamespaces = new Set(sectionNamespaces);
 
     const nodeIndexById = new Map(effectiveNodes.map((n, idx) => [n.id, idx]));
     const nodesByNamespace = new Map<string, SourceNode[]>();

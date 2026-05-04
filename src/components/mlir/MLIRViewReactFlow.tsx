@@ -44,7 +44,7 @@ type MLNodeData = {
     subgraphToggleState?: 'collapsed' | 'expanded';
     displayName?: string;
     nodeCount?: number;
-    groupKind?: 'section' | 'opType' | 'region' | 'plain';
+    groupKind?: 'section' | 'plain';
 };
 
 interface ViewProps {

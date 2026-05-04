@@ -70,7 +70,7 @@ export type WorkerNode = {
         /** Group headers: total count of nodes inside this group (descendants included). */
         nodeCount?: number;
         /** Group headers: classification used for header iconography/tooltips. */
-        groupKind?: 'section' | 'opType' | 'region' | 'plain';
+        groupKind?: 'section' | 'plain';
     };
     style?: Record<string, unknown>;
 };
