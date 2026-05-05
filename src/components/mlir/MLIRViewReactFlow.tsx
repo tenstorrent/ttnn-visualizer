@@ -210,6 +210,22 @@ const MlirGroupNode = memo<NodeProps<MLNode>>(({ id, data }) => {
             className={`mlir-group-body${isSection ? ' is-section' : ''}`}
             style={bodyStyle}
         >
+            {/* Group nodes need explicit handles so React Flow has somewhere
+                to attach edges that aggregate to the group boundary (e.g. a
+                top-level op connecting to an op buried inside this expanded
+                group). Without handles the edges silently render as no-ops. */}
+            <Handle
+                type='target'
+                position={Position.Top}
+                isConnectable={false}
+                className='mlir-group-handle-port'
+            />
+            <Handle
+                type='source'
+                position={Position.Bottom}
+                isConnectable={false}
+                className='mlir-group-handle-port'
+            />
             {/* Header doubles as the collapse button and the drag handle. The
                 `nopan`/`nodrag` classes (matched by RF's runtime filters) plus
                 onMouseDown stopPropagation prevent the gesture from leaking to
@@ -562,18 +578,38 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     // 2. Selection edges: when a node is selected, every edge that touches it
     //    (including specific cross-boundary edges) is shown end-to-end so the
     //    user can trace exact connections.
-    // 3. Cross-boundary edges (otherwise): rerouted to the expanded-group
-    //    boundary instead of being hidden. The endpoint that lies inside the
-    //    expanded group is replaced with the group node itself, and identical
-    //    aggregate edges are de-duplicated. This gives the user "section A
-    //    connects to section B" affordance even when A is expanded — without
-    //    drawing 50 fan-out lines from each inner op (the original clutter
-    //    issue) — while still letting selection reveal the specific edge.
+    // 3. Cross-boundary edges (otherwise): each endpoint is "lifted" to the
+    //    level just below the lowest common ancestor of the two endpoints'
+    //    parent chains. So an edge from a top-level node to an op buried
+    //    deep inside an expanded group renders as `top-level node → group
+    //    boundary` (one hop, end visible at the actual node), and an edge
+    //    between two nodes living in different expanded subgroups under a
+    //    shared parent renders as `subgroup → subgroup` inside the parent.
+    //    Identical aggregate pairs are de-duplicated. This gives the user
+    //    "X connects to subgraph Y" affordance even when Y is expanded —
+    //    without drawing 50 fan-out lines from each inner op — while still
+    //    letting selection reveal the specific edge.
     const displayedEdges = useMemo<Edge[]>(() => {
         if (edges.length === 0) {
             return edges;
         }
         const nodeById = new Map<string, MLNode>(nodes.map((n) => [n.id, n]));
+        const chainCache = new Map<string, string[]>();
+        const parentChain = (nodeId: string): string[] => {
+            const cached = chainCache.get(nodeId);
+            if (cached) {
+                return cached;
+            }
+            const chain: string[] = [];
+            let pid = nodeById.get(nodeId)?.parentId;
+            while (pid) {
+                chain.push(pid);
+                pid = nodeById.get(pid)?.parentId;
+            }
+            chain.reverse();
+            chainCache.set(nodeId, chain);
+            return chain;
+        };
         const result: Edge[] = [];
         const seenAggregatePairs = new Set<string>();
         for (const e of edges) {
@@ -587,8 +623,23 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 result.push(e);
                 continue;
             }
-            const aggSrc = srcParent ?? e.source;
-            const aggTgt = tgtParent ?? e.target;
+            // Walk both parent chains from outermost group inward and find
+            // the depth at which they diverge — that's the level where the
+            // edge should surface. Either side may be shorter than the LCA
+            // depth (i.e. the endpoint itself sits at that level), in which
+            // case the endpoint is used as-is rather than lifted to a group.
+            const srcChain = parentChain(e.source);
+            const tgtChain = parentChain(e.target);
+            let lcaDepth = 0;
+            while (
+                lcaDepth < srcChain.length &&
+                lcaDepth < tgtChain.length &&
+                srcChain[lcaDepth] === tgtChain[lcaDepth]
+            ) {
+                lcaDepth++;
+            }
+            const aggSrc = srcChain.length > lcaDepth ? srcChain[lcaDepth] : e.source;
+            const aggTgt = tgtChain.length > lcaDepth ? tgtChain[lcaDepth] : e.target;
             if (aggSrc === aggTgt) {
                 continue;
             }
