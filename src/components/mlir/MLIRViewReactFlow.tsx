@@ -1,6 +1,7 @@
 /* eslint-disable no-void */
 /* eslint-disable react/prop-types */
 /* eslint-disable no-continue */
+/* eslint-disable no-nested-ternary */
 
 import React, {
     type MouseEvent,
@@ -45,6 +46,11 @@ type MLNodeData = {
     displayName?: string;
     nodeCount?: number;
     groupKind?: 'section' | 'plain';
+    // Set when this group is a producer/consumer of the currently selected
+    // node. Op nodes get a colored fill (set on `style.background`) but groups
+    // need the highlight on their body border instead — painting the wrapper
+    // background bleeds behind the dashed body and hides the children.
+    highlight?: 'input' | 'output';
 };
 
 interface ViewProps {
@@ -185,8 +191,25 @@ const MlirGroupNode = memo<NodeProps<MLNode>>(({ id, data }) => {
         [ctx, data.namespace],
     );
 
+    // When this group is a producer/consumer of the selected node, swap the
+    // body's neutral border colour for the highlight colour (and bump the
+    // weight slightly so it's visible against the existing dashed pattern).
+    // We deliberately don't touch the wrapper's background — the dashed body
+    // sits on top of a transparent wrapper, so wrapper-level fills bleed into
+    // the canvas behind the body and obscure the group's children.
+    const highlightColor =
+        data.highlight === 'input'
+            ? GRAPH_COLORS.inputNode
+            : data.highlight === 'output'
+              ? GRAPH_COLORS.outputNode
+              : undefined;
+    const bodyStyle = highlightColor ? { borderColor: highlightColor, borderStyle: 'solid' as const } : undefined;
+
     return (
-        <div className={`mlir-group-body${isSection ? ' is-section' : ''}`}>
+        <div
+            className={`mlir-group-body${isSection ? ' is-section' : ''}`}
+            style={bodyStyle}
+        >
             {/* Header doubles as the collapse button and the drag handle. The
                 `nopan`/`nodrag` classes (matched by RF's runtime filters) plus
                 onMouseDown stopPropagation prevent the gesture from leaking to
@@ -609,8 +632,12 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         return { inputNodeIds, outputNodeIds, inputEdgeIds, outputEdgeIds };
     }, [displayedEdges, selectedNodeId]);
 
-    // Highlight input neighbours green and output neighbours yellow. The
-    // selected node itself gets its blue ring from CSS (`.selected`).
+    // Highlight input neighbours green and output neighbours yellow. Op nodes
+    // get a colored fill via `style.background`; group nodes route the
+    // highlight through `data.highlight` so their body border is colorized
+    // instead — painting the wrapper background on a group bleeds behind the
+    // dashed body and hides the children inside. The selected node itself
+    // still gets its blue ring from CSS (`.selected`).
     const styledNodes = useMemo<MLNode[]>(() => {
         if (!selectedNodeId) {
             return nodes;
@@ -620,13 +647,19 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             return nodes;
         }
         return nodes.map((n) => {
-            if (inputNodeIds.has(n.id)) {
-                return { ...n, style: { ...(n.style ?? {}), background: GRAPH_COLORS.inputNode } };
+            const role: 'input' | 'output' | undefined = inputNodeIds.has(n.id)
+                ? 'input'
+                : outputNodeIds.has(n.id)
+                  ? 'output'
+                  : undefined;
+            if (!role) {
+                return n;
             }
-            if (outputNodeIds.has(n.id)) {
-                return { ...n, style: { ...(n.style ?? {}), background: GRAPH_COLORS.outputNode } };
+            const color = role === 'input' ? GRAPH_COLORS.inputNode : GRAPH_COLORS.outputNode;
+            if (n.type === 'mlirGroup') {
+                return { ...n, data: { ...n.data, highlight: role } };
             }
-            return n;
+            return { ...n, style: { ...(n.style ?? {}), background: color } };
         });
     }, [nodes, focusedConnections, selectedNodeId]);
 
