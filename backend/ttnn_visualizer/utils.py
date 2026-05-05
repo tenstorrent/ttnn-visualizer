@@ -101,50 +101,66 @@ def read_profiler_report_name(report_dir: Path) -> Optional[str]:
     return data.get("report_name") if isinstance(data, dict) else None
 
 
-def build_profiler_config_api_payload(report_dir: Path) -> Optional[Dict[str, Any]]:
+def read_profiler_config_api_payload(
+    report_dir: Path, logical_rank: int = 0
+) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
-    Payload for /api/config: same shape as legacy single config.json when only that
-    file exists; otherwise a multi-host wrapper with per-rank objects.
+    Read one profiler config file for /api/config.
+
+    Same JSON shape as a standalone ``config.json``: the parsed object from that
+    file only.
+
+    If ``config.json`` exists, it is always used (``logical_rank`` is ignored).
+
+    Otherwise ranked ``config_<n>_of_<world>.json`` files are used: logical rank R
+    reads ``config_{R+1}_of_<world>.json``. Default ``logical_rank`` is 0 (first
+    host).
+
+    Returns ``(payload, None)`` on success. On failure returns ``(None, error)``
+    where ``error`` is ``None`` only when there is no config at all (caller may
+    respond with an empty object); otherwise ``rank_out_of_range``,
+    ``missing_rank_file``, or ``parse_error``.
     """
-    paths = pick_profiler_config_paths(report_dir)
-    if not paths:
-        return None
-    if len(paths) == 1 and paths[0].name == PROFILER_CONFIG_BASENAME:
+    single = report_dir / PROFILER_CONFIG_BASENAME
+    if single.is_file():
         try:
-            with open(paths[0], encoding="utf-8") as f:
+            with open(single, encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning("Failed to read profiler config %s: %s", paths[0], e)
-            return None
-        return data if isinstance(data, dict) else None
+            logger.warning("Failed to read profiler config %s: %s", single, e)
+            return None, "parse_error"
+        if not isinstance(data, dict):
+            return None, "parse_error"
+        return data, None
 
-    ranks: Dict[str, Any] = {}
-    world_size: Optional[int] = None
-    for path in paths:
-        parsed = parse_ranked_profiler_config_basename(path.name)
-        if not parsed:
-            continue
-        index_one_based, world = parsed
-        if not is_valid_profiler_ranked_entry(index_one_based, world):
-            logger.warning("Skipping malformed profiler config filename %s", path.name)
-            continue
-        world_size = world
-        logical_rank = index_one_based - 1
-        try:
-            with open(path, encoding="utf-8") as f:
-                ranks[str(logical_rank)] = json.load(f)
-        except (OSError, json.JSONDecodeError) as e:
-            logger.warning("Failed to read profiler config %s: %s", path, e)
-            return None
+    ranked_names = ranked_profiler_config_basenames(
+        p.name for p in report_dir.iterdir() if p.is_file()
+    )
+    if not ranked_names:
+        return None, None
 
-    if world_size is None:
-        return None
+    parsed0 = parse_ranked_profiler_config_basename(ranked_names[0])
+    if not parsed0:
+        return None, None
+    _, world_size = parsed0
 
-    return {
-        "multi_host": True,
-        "world_size": world_size,
-        "ranks": ranks,
-    }
+    if logical_rank < 0 or logical_rank >= world_size:
+        return None, "rank_out_of_range"
+
+    basename = f"config_{logical_rank + 1}_of_{world_size}.json"
+    path = report_dir / basename
+    if not path.is_file():
+        return None, "missing_rank_file"
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning("Failed to read profiler config %s: %s", path, e)
+        return None, "parse_error"
+    if not isinstance(data, dict):
+        return None, "parse_error"
+    return data, None
 
 
 def get_app_data_directory(tt_metal_home: Optional[str], application_dir: str) -> str:

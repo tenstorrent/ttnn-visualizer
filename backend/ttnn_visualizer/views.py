@@ -82,11 +82,11 @@ from ttnn_visualizer.stack_trace_source import (
     stack_source_response,
 )
 from ttnn_visualizer.utils import (
-    build_profiler_config_api_payload,
     create_path_resolver,
     get_mesh_descriptor_paths,
     pick_profiler_config_paths,
     read_last_synced_file,
+    read_profiler_config_api_payload,
     read_profiler_report_name,
     str_to_bool,
     timer,
@@ -461,8 +461,28 @@ def report_metadata(instance: Instance):
 @with_instance
 @timer
 def get_config(instance: Instance):
+    """
+    Return the profiler ``config.json`` object for this report.
+
+    For multi-host ranked configs (``config_<n>_of_<world>.json``), the response
+    is the same shape as a single config file: one JSON object. Default is
+    logical rank 0 (``config_1_of_<world>.json``). Pass ``?rank=<logical_rank>``
+    to read another host's file (debugging).
+    """
     report_dir = Path(str(instance.profiler_path)).parent
-    payload = build_profiler_config_api_payload(report_dir)
+    rank_param = _optional_rank_query_param()
+    logical_rank = 0 if rank_param is None else rank_param
+
+    payload, err = read_profiler_config_api_payload(report_dir, logical_rank)
+    if err == "rank_out_of_range":
+        return response_bad_request(
+            f"Invalid rank for this report: {logical_rank}. "
+            "Rank must be within the world size for this report's config files."
+        )
+    if err == "missing_rank_file":
+        return response_not_found(f"No profiler config file for rank {logical_rank}.")
+    if err == "parse_error":
+        return {}
     if payload is None:
         return {}
     return Response(

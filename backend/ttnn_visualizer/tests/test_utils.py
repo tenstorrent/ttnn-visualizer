@@ -6,13 +6,13 @@ from pathlib import Path
 from unittest.mock import mock_open, patch
 
 from ttnn_visualizer.utils import (
-    build_profiler_config_api_payload,
     find_gunicorn_path,
     get_app_data_directory,
     get_report_data_directory,
     is_running_in_container,
     pick_profiler_config_paths,
     ranked_profiler_config_basenames,
+    read_profiler_config_api_payload,
     read_profiler_report_name,
 )
 
@@ -502,18 +502,39 @@ def test_read_profiler_report_name_from_ranked(tmp_path):
     assert read_profiler_report_name(tmp_path) == "my run"
 
 
-def test_build_profiler_config_api_payload_multi_host(tmp_path):
+def test_read_profiler_config_api_payload_multi_host_default_rank(tmp_path):
     (tmp_path / "config_1_of_2.json").write_text('{"k": 1}', encoding="utf-8")
     (tmp_path / "config_2_of_2.json").write_text('{"k": 2}', encoding="utf-8")
-    payload = build_profiler_config_api_payload(tmp_path)
-    assert payload is not None
-    assert payload["multi_host"] is True
-    assert payload["world_size"] == 2
-    assert payload["ranks"]["0"] == {"k": 1}
-    assert payload["ranks"]["1"] == {"k": 2}
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=0)
+    assert err is None
+    assert payload == {"k": 1}
 
 
-def test_build_profiler_config_api_payload_single_file(tmp_path):
+def test_read_profiler_config_api_payload_multi_host_explicit_rank(tmp_path):
+    (tmp_path / "config_1_of_2.json").write_text('{"k": 1}', encoding="utf-8")
+    (tmp_path / "config_2_of_2.json").write_text('{"k": 2}', encoding="utf-8")
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=1)
+    assert err is None
+    assert payload == {"k": 2}
+
+
+def test_read_profiler_config_api_payload_rank_out_of_range(tmp_path):
+    (tmp_path / "config_1_of_2.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "config_2_of_2.json").write_text("{}", encoding="utf-8")
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=2)
+    assert payload is None
+    assert err == "rank_out_of_range"
+
+
+def test_read_profiler_config_api_payload_missing_rank_file(tmp_path):
+    (tmp_path / "config_2_of_2.json").write_text("{}", encoding="utf-8")
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=0)
+    assert payload is None
+    assert err == "missing_rank_file"
+
+
+def test_read_profiler_config_api_payload_single_file(tmp_path):
     (tmp_path / "config.json").write_text('{"report_name": "x"}', encoding="utf-8")
-    payload = build_profiler_config_api_payload(tmp_path)
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=99)
+    assert err is None
     assert payload == {"report_name": "x"}
