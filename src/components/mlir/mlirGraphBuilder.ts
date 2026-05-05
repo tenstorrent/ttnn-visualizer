@@ -508,18 +508,23 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
 
     const mapToRenderedSourceEndpointId = (sourceNodeId: string): string => {
         const renderedId = resolveRenderedNodeId(sourceNodeId);
+        // Return-node remapping mirrors the input-port remapping on the target
+        // side: the chosen return node may itself live inside a nested
+        // collapsed sub-namespace, so we resolve through resolveRenderedNodeId
+        // to land on the deepest visible anchor and avoid edges that point at
+        // unrendered ids (silently dropped by React Flow).
         const outerNs = index.outerNamespaceByNodeId[renderedId];
         if (outerNs && expandedNamespaces.has(outerNs)) {
             const returnNodeId = index.namespaceReturnNodeByNamespace[outerNs];
             if (returnNodeId) {
-                return returnNodeId;
+                return resolveRenderedNodeId(returnNodeId);
             }
         }
         const anchorNs = index.anchorNamespaceByNodeId[renderedId];
         if (anchorNs && expandedNamespaces.has(anchorNs)) {
             const returnNodeId = index.namespaceReturnNodeByNamespace[anchorNs];
             if (returnNodeId) {
-                return returnNodeId;
+                return resolveRenderedNodeId(returnNodeId);
             }
         }
         return renderedId;
@@ -542,6 +547,15 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         // must go directly to the inner op, otherwise the target gets
         // silently swapped for a phantom "section input" (typically a top-
         // level function `%argN`) and the real edge to the inner op vanishes.
+        // The block-arg returned by namespaceInputByNamespace may itself live
+        // inside a NESTED collapsed sub-namespace (typically `<region>/Inputs`).
+        // In that case the block-arg node isn't actually rendered, so we must
+        // resolve it through mapToRenderedEndpointId — that walks the
+        // containing-namespace chain and lands on the nearest visible anchor
+        // (e.g. the collapsed `/Inputs` group's representative). Without this
+        // fallback the edge points at a non-existent React Flow node and
+        // silently disappears, leaving expanded regions looking like they
+        // have no incoming connections.
         if (
             targetNamespace &&
             !sectionNsSet.has(targetNamespace) &&
@@ -554,7 +568,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 if (Number.isInteger(inputIdx) && inputIdx >= 0) {
                     const inputNodeId = index.namespaceInputByNamespace[targetNamespace]?.[inputIdx];
                     if (inputNodeId) {
-                        return inputNodeId;
+                        return mapToRenderedEndpointId(inputNodeId);
                     }
                 }
             }
@@ -567,7 +581,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 if (Number.isInteger(inputIdx) && inputIdx >= 0) {
                     const inputNodeId = index.namespaceInputByNamespace[collapsedNamespace]?.[inputIdx];
                     if (inputNodeId) {
-                        return inputNodeId;
+                        return mapToRenderedEndpointId(inputNodeId);
                     }
                 }
             }

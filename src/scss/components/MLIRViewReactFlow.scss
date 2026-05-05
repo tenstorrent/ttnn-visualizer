@@ -10,7 +10,12 @@
     --xy-edge-label-background-color: transparent;
     --xy-controls-button-color: #{$tt-grey-2};
     --xy-minimap-node-stroke-color: #{$tt-grey-2};
+    --xy-minimap-node-background-color: #{$tt-grey-2};
     --xy-minimap-node-stroke-width: 1px;
+
+    .react-flow__minimap {
+        background: transparent;
+    }
 }
 
 .react-flow__edge-text {
