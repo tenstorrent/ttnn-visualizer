@@ -40,11 +40,13 @@ pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py
 
 The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/reports/` which should include at least a `db.sqlite` file (config.json is optional for the visualizer). The report will be created automatically when running TT-Metal model demos and tests with `pytest`, when `enable_logging` and `enable_graph_report` are `true`.
 
-The cluster layout view also expects `cluster_descriptor.yaml` in that same folder. If it is missing, see {ref}`Missing cluster descriptor <cluster-descriptor-missing>`.
-
 <img width="909" alt="Memory report files" src="https://github.com/user-attachments/assets/ab31892a-2779-4fe1-9ad5-0f35f8329f9a" />
 
-For more information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/get_started/get_started.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/get_started.html) documentation.
+The topology view expects `cluster_descriptor.yaml` in that same folder. If it is missing, see {ref}`Missing cluster descriptor <cluster-descriptor-missing>`.
+
+Topology also uses `physical_chip_mesh_coordinate_mapping_x_of_y.yaml` for multi-host runs. In `tt-metal`, these files are created in `${TT_METAL_HOME}/generated/fabric/` after fabric topology mapping is initialized, then copied into the memory report folder during graph report import. If it is missing, check `enable_graph_report` in `TTNN_CONFIG_OVERRIDES` is enabled.
+
+For further information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/get_started/get_started.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/get_started.html) documentation.
 
 To generate reports with other codebases using TT-NN, see the [TT-NN Graph Tracing](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/ttnn/graph-tracing.md) documentation.
 
