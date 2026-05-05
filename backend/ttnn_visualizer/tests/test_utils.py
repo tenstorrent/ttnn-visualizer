@@ -6,10 +6,14 @@ from pathlib import Path
 from unittest.mock import mock_open, patch
 
 from ttnn_visualizer.utils import (
+    build_profiler_config_api_payload,
     find_gunicorn_path,
     get_app_data_directory,
     get_report_data_directory,
     is_running_in_container,
+    pick_profiler_config_paths,
+    ranked_profiler_config_basenames,
+    read_profiler_report_name,
 )
 
 
@@ -452,3 +456,64 @@ def test_get_report_data_directory_with_env_var(mock_getenv):
     result = get_report_data_directory(tt_metal_home, application_dir)
 
     assert result == "/custom/reports"
+
+
+# Profiler report config.json vs config_<rank>_of_<world>.json
+
+
+def test_pick_profiler_config_prefers_config_json(tmp_path):
+    (tmp_path / "config.json").write_text('{"report_name": "a"}', encoding="utf-8")
+    (tmp_path / "config_1_of_2.json").write_text("{}", encoding="utf-8")
+    paths = pick_profiler_config_paths(tmp_path)
+    assert len(paths) == 1
+    assert paths[0].name == "config.json"
+
+
+def test_pick_profiler_config_ranked_files(tmp_path):
+    (tmp_path / "config_2_of_2.json").write_text(
+        '{"report_name": "b"}', encoding="utf-8"
+    )
+    (tmp_path / "config_1_of_2.json").write_text(
+        '{"report_name": "a"}', encoding="utf-8"
+    )
+    paths = pick_profiler_config_paths(tmp_path)
+    assert [p.name for p in paths] == [
+        "config_1_of_2.json",
+        "config_2_of_2.json",
+    ]
+
+
+def test_ranked_profiler_config_basenames_picks_common_world_size():
+    names = [
+        "config_1_of_4.json",
+        "config_2_of_4.json",
+        "config_1_of_2.json",
+    ]
+    out = ranked_profiler_config_basenames(names)
+    # world_size 4 is the majority
+    assert out == ["config_1_of_4.json", "config_2_of_4.json"]
+
+
+def test_read_profiler_report_name_from_ranked(tmp_path):
+    (tmp_path / "config_1_of_2.json").write_text(
+        '{"report_name": "my run"}', encoding="utf-8"
+    )
+    (tmp_path / "config_2_of_2.json").write_text("{}", encoding="utf-8")
+    assert read_profiler_report_name(tmp_path) == "my run"
+
+
+def test_build_profiler_config_api_payload_multi_host(tmp_path):
+    (tmp_path / "config_1_of_2.json").write_text('{"k": 1}', encoding="utf-8")
+    (tmp_path / "config_2_of_2.json").write_text('{"k": 2}', encoding="utf-8")
+    payload = build_profiler_config_api_payload(tmp_path)
+    assert payload is not None
+    assert payload["multi_host"] is True
+    assert payload["world_size"] == 2
+    assert payload["ranks"]["0"] == {"k": 1}
+    assert payload["ranks"]["1"] == {"k": 2}
+
+
+def test_build_profiler_config_api_payload_single_file(tmp_path):
+    (tmp_path / "config.json").write_text('{"report_name": "x"}', encoding="utf-8")
+    payload = build_profiler_config_api_payload(tmp_path)
+    assert payload == {"report_name": "x"}

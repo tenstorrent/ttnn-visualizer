@@ -82,9 +82,12 @@ from ttnn_visualizer.stack_trace_source import (
     stack_source_response,
 )
 from ttnn_visualizer.utils import (
+    build_profiler_config_api_payload,
     create_path_resolver,
     get_mesh_descriptor_paths,
+    pick_profiler_config_paths,
     read_last_synced_file,
+    read_profiler_report_name,
     str_to_bool,
     timer,
 )
@@ -458,14 +461,14 @@ def report_metadata(instance: Instance):
 @with_instance
 @timer
 def get_config(instance: Instance):
-    config_file = Path(str(instance.profiler_path)).parent.joinpath("config.json")
-    if not config_file.exists():
+    report_dir = Path(str(instance.profiler_path)).parent
+    payload = build_profiler_config_api_payload(report_dir)
+    if payload is None:
         return {}
-    with open(config_file, "r") as file:
-        return Response(
-            orjson.dumps(json.load(file)),
-            mimetype="application/json",
-        )
+    return Response(
+        orjson.dumps(payload),
+        mimetype="application/json",
+    )
 
 
 @api.route("/tensors", methods=["GET"])
@@ -772,15 +775,8 @@ def get_profiler_data_list(instance: Instance):
         dir_path = Path(path) / dir_name
         files = list(dir_path.glob("**/*"))
         report_name = None
-        config_file = dir_path / "config.json"
-
-        if config_file.exists():
-            try:
-                with open(config_file, "r") as f:
-                    config_data = json.load(f)
-                    report_name = config_data.get("report_name")
-            except Exception as e:
-                logger.warning(f"Failed to read config.json in {dir_path}: {e}")
+        if pick_profiler_config_paths(dir_path):
+            report_name = read_profiler_report_name(dir_path)
         else:
             report_name = dir_path.name
 
@@ -1208,16 +1204,10 @@ def create_profiler_files():
         profiler_path=str(profiler_path) if profiler_path else None,
     )
 
-    config_file = profiler_directory / parent_folder_name / "config.json"
+    report_dir = profiler_directory / parent_folder_name
     report_name = None
-
-    if config_file.exists():
-        try:
-            with open(config_file, "r") as f:
-                config_data = json.load(f)
-                report_name = config_data.get("report_name")
-        except Exception as e:
-            logger.warning(f"Failed to read config.json in {config_file}: {e}")
+    if pick_profiler_config_paths(report_dir):
+        report_name = read_profiler_report_name(report_dir)
     else:
         report_name = parent_folder_name
 

@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -25,11 +26,15 @@ from ttnn_visualizer.exceptions import (
 from ttnn_visualizer.models import Instance, RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE, SSHClient
-from ttnn_visualizer.utils import update_last_synced
+from ttnn_visualizer.utils import (
+    PROFILER_CONFIG_BASENAME,
+    ranked_profiler_config_basenames,
+    update_last_synced,
+)
 
 logger = logging.getLogger(__name__)
 
-TEST_CONFIG_FILE = "config.json"
+TEST_CONFIG_FILE = PROFILER_CONFIG_BASENAME
 TEST_DB_FILE = "db.sqlite"
 TEST_PROFILER_FILE = "profile_log_device.csv"
 
@@ -410,30 +415,71 @@ def get_remote_profiler_folder_from_config_path(
     """Read a remote config file and return RemoteFolder object."""
     folder_path = Path(config_path).parent
     parent_folder_name = folder_path.name
+    folder_str = str(folder_path).rstrip("/")
+
+    def ssh_run_checked(cmd: List[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+    def ssh_stat_mtime(path: str) -> int:
+        stat_cmd = _ssh_cmd_prefix(remote_connection) + [
+            "stat",
+            "-c",
+            "%Y",
+            path,
+        ]
+        stat_result = ssh_run_checked(stat_cmd)
+        return int(float(stat_result.stdout.strip()))
+
+    def ssh_cat(path: str) -> str:
+        cat_cmd = _ssh_cmd_prefix(remote_connection) + ["cat", path]
+        cat_result = ssh_run_checked(cat_cmd)
+        return cat_result.stdout
+
+    def ssh_test_file(path: str) -> bool:
+        test_cmd = _ssh_cmd_prefix(remote_connection) + ["test", "-f", path]
+        result = subprocess.run(test_cmd, capture_output=True, text=True)
+        return result.returncode == 0
+
+    def ssh_list_ranked_config_paths() -> List[str]:
+        script = (
+            f"for f in {shlex.quote(folder_str)}/config_*_of_*.json; do "
+            '[ -f "$f" ] && printf "%s\\n" "$f"; done'
+        )
+        list_cmd = _ssh_cmd_prefix(remote_connection) + ["bash", "-lc", script]
+        result = subprocess.run(list_cmd, capture_output=True, text=True, check=True)
+        lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        by_base = {Path(l).name: l for l in lines}
+        ordered = ranked_profiler_config_basenames(by_base.keys())
+        return [by_base[n] for n in ordered]
 
     try:
-        # Build SSH command to get file modification time (never prompts for password)
-        stat_cmd = _ssh_cmd_prefix(remote_connection) + [
-            f"stat -c %Y '{config_path}' 2>/dev/null",
-        ]
+        single_config = str(Path(config_path))  # .../config.json from caller
+        read_path: Optional[str] = None
+        mtime_paths: List[str] = []
 
-        stat_result = subprocess.run(
-            stat_cmd, capture_output=True, text=True, check=True
-        )
+        if ssh_test_file(single_config):
+            read_path = single_config
+            mtime_paths = [single_config]
+        else:
+            ranked_paths = ssh_list_ranked_config_paths()
+            if ranked_paths:
+                read_path = ranked_paths[0]
+                mtime_paths = ranked_paths
 
-        last_modified = int(float(stat_result.stdout.strip()))
+        if read_path is None:
+            return RemoteReportFolder(
+                remotePath=folder_str,
+                reportName=parent_folder_name,
+                lastModified=int(time.time()),
+            )
 
-        # Build SSH command to read file content (never prompts for password)
-        cat_cmd = _ssh_cmd_prefix(remote_connection) + [f"cat '{config_path}'"]
-
-        cat_result = subprocess.run(cat_cmd, capture_output=True, text=True, check=True)
-
-        # Parse JSON data
-        data = json.loads(cat_result.stdout)
-        report_name = data.get("report_name")
+        last_modified = max(ssh_stat_mtime(p) for p in mtime_paths)
+        raw_json = ssh_cat(read_path)
+        data = json.loads(raw_json)
+        report_name = data.get("report_name") if isinstance(data, dict) else None
 
         return RemoteReportFolder(
-            remotePath=str(folder_path),
+            remotePath=folder_str,
             reportName=report_name,
             lastModified=last_modified,
         )
@@ -447,14 +493,14 @@ def get_remote_profiler_folder_from_config_path(
             handle_ssh_subprocess_error(e, remote_connection)
             # This line never executes as handle_ssh_subprocess_error raises an exception
             return RemoteReportFolder(
-                remotePath=str(folder_path),
+                remotePath=folder_str,
                 reportName=parent_folder_name,
                 lastModified=int(time.time()),
             )
         else:
             # Fall back to current time if we can't get modification time
             return RemoteReportFolder(
-                remotePath=str(folder_path),
+                remotePath=folder_str,
                 reportName=parent_folder_name,
                 lastModified=int(time.time()),
             )
@@ -462,7 +508,7 @@ def get_remote_profiler_folder_from_config_path(
         logger.error(f"Error parsing config file {config_path}: {e}")
         # Fall back to current time and no report name
         return RemoteReportFolder(
-            remotePath=str(folder_path),
+            remotePath=folder_str,
             reportName=parent_folder_name,
             lastModified=int(time.time()),
         )
