@@ -91,8 +91,10 @@ it('does not reset memory list state during initial instance hydration', async (
     );
 
     await waitFor(() => {
-        expect(mockResetMemoryListStates).not.toHaveBeenCalled();
+        expect(screen.getByText('restored')).toBeTruthy();
     });
+
+    expect(mockResetMemoryListStates).toHaveBeenCalledTimes(0);
 });
 
 it('resets memory list state on first report change after null baseline', async () => {
