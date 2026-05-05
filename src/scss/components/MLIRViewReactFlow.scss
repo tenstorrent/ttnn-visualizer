@@ -14,7 +14,12 @@
     --xy-minimap-node-stroke-width: 1px;
 
     .react-flow__minimap {
-        background: transparent;
+        background: $tt-grey-2;
+    }
+
+    .react-flow__panel.bottom {
+        bottom: 12px;
+        right: -15px;
     }
 }
 
