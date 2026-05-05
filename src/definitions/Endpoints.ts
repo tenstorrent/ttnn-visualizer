@@ -20,6 +20,7 @@ enum Endpoints {
     PROFILER = '/api/profiler',
     REMOTE = '/api/remote',
     TENSOR_LIST = '/api/tensors',
+    LATEST_VERSION = '/api/latest-version',
 }
 
 export default Endpoints;

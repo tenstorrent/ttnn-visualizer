@@ -2,7 +2,7 @@
 
 ## No SSH keys found
 
-<img width="492" alt="Screenshot 2025-01-30 at 1 55 10 PM" src="https://github.com/user-attachments/assets/3f7f9983-f92d-4900-9321-9d46c6355c36" />
+<img width="492" alt="SSH key error" src="https://github.com/user-attachments/assets/3f7f9983-f92d-4900-9321-9d46c6355c36" />
 
 Check your local ssh agent has your ssh key by running:
 

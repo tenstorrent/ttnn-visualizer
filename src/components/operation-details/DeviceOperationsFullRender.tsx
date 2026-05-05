@@ -69,7 +69,7 @@ const renderBufferDetails = ({ bufferOrTensorNode, optionalOutput, details }: Bu
 
     const { allocation } = bufferOrTensorNode;
 
-    let tensorSquare = null;
+    let tensorSquare: JSX.Element | null;
     let address = allocation?.params.address !== undefined ? parseInt(allocation.params.address, 10) : undefined;
     const size: number | undefined = parseInt(bufferOrTensorNode.params.size, 10);
     let layout = '';

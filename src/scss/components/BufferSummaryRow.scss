@@ -2,15 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .buffer-summary-row {
     height: 20px;
     position: relative;
     overflow: hidden; // Prevents the buffer data from overflowing the row when a buffer is questionably large
-
-    &.is-active {
-        background-color: rgb(0 0 0 / 10%);
-    }
 
     .buffer-data {
         height: 100%;
@@ -39,5 +36,5 @@
     top: 0;
     width: 0;
     height: 0;
-    z-index: 100;
+    z-index: variables.$z-index-2-interactive;
 }

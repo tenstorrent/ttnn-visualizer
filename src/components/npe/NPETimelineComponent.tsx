@@ -67,6 +67,8 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                         start: zone.start / cyclesPerTimestep,
                         end: zone.end / cyclesPerTimestep,
                     } as ZoneDrawingInfo,
+                    // TODO: @aidemsined to look at this
+                    // eslint-disable-next-line react-hooks/immutability
                     ...getZoneDrawingModel(zone.zones, depth + 1),
                 ];
             });
@@ -364,15 +366,9 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
                     }}
                 >
                     <div
+                        className='timeline-tooltip-anchor'
                         style={{
-                            //
-                            position: 'absolute',
-                            top: 0,
                             left: `${tooltip.x}px`,
-                            width: '0',
-                            height: '0',
-                            backgroundColor: '#fff',
-                            zIndex: 100,
                         }}
                     />
                 </Tooltip>

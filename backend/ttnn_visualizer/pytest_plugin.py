@@ -3,7 +3,8 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 import json
 import os
-import urllib
+import urllib.error
+import urllib.request
 
 try:
     import ttnn
@@ -38,11 +39,11 @@ def _notify_visualizer_webhook(status_str: str, webhook_url: str) -> None:
     data = json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     try:
-        request = urllib.request.Request(
+        req = urllib.request.Request(
             webhook_url, data=data, headers=headers, method="POST"
         )
         logger.info(f"Posting report to TTNN-Visualizer: {payload}")
-        urllib.request.urlopen(request, timeout=2)
+        urllib.request.urlopen(req, timeout=2)
     except urllib.error.HTTPError as error:
         logger.error(
             f"Error posting report to TTNN-Visualizer: {error.status} {error.reason}"
@@ -71,7 +72,7 @@ def _get_profiler_path() -> str:
     return f"{tt_metal_home}/{ttnn.CONFIG.report_path}"
 
 
-def _get_performance_path() -> str:
+def _get_performance_path() -> str | None:
     output_dir = PROFILER_OUTPUT_DIR
 
     if os.getenv("TT_METAL_DEVICE_PROFILER", None) != "1":
@@ -89,5 +90,3 @@ def _get_performance_path() -> str:
 
     except (OSError, ValueError):
         return None
-
-    return str(output_dir)

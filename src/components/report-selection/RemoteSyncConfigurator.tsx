@@ -6,11 +6,11 @@ import { FC, useEffect, useMemo, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
+import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
@@ -28,8 +28,6 @@ import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
-
-const GENERIC_ERROR_MESSAGE = 'An unknown error occurred.';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
@@ -203,9 +201,7 @@ const RemoteSyncConfigurator: FC = () => {
                 }
             }
         } catch (err: unknown) {
-            const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
-
-            createToastNotification('Folder sync error', message, ToastType.ERROR);
+            createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
         } finally {
             setIsSyncingReportFolder(false);
         }
@@ -252,9 +248,7 @@ const RemoteSyncConfigurator: FC = () => {
                 }
             }
         } catch (err: unknown) {
-            const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
-
-            createToastNotification('Folder sync error', message, ToastType.ERROR);
+            createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
         } finally {
             setIsSyncingPerformanceFolder(false);
         }
@@ -359,29 +353,45 @@ const RemoteSyncConfigurator: FC = () => {
                             setIsFetching(true);
 
                             if (remote.persistentState.selectedConnection) {
-                                const [fetchedReportFolders, fetchedPerformanceFolders] = await Promise.all([
+                                const [reportFolders, performanceFolders] = await Promise.allSettled([
                                     remote.persistentState.selectedConnection.profilerPath
                                         ? remote.listReportFolders(remote.persistentState.selectedConnection)
-                                        : [],
+                                        : Promise.resolve([]),
                                     remote.persistentState.selectedConnection.performancePath
                                         ? remote.listPerformanceFolders(remote.persistentState.selectedConnection)
-                                        : [],
+                                        : Promise.resolve([]),
                                 ]);
 
-                                updateSavedReportFolders(
-                                    remote.persistentState.selectedConnection,
-                                    fetchedReportFolders,
-                                );
+                                const fetchErrors: string[] = [];
 
-                                updateSavedPerformanceFolders(
-                                    remote.persistentState.selectedConnection,
-                                    fetchedPerformanceFolders,
-                                );
+                                if (reportFolders.status === 'fulfilled') {
+                                    updateSavedReportFolders(
+                                        remote.persistentState.selectedConnection,
+                                        reportFolders.value,
+                                    );
+                                } else {
+                                    fetchErrors.push(getResponseError(reportFolders.reason));
+                                }
+
+                                if (performanceFolders.status === 'fulfilled') {
+                                    updateSavedPerformanceFolders(
+                                        remote.persistentState.selectedConnection,
+                                        performanceFolders.value,
+                                    );
+                                } else {
+                                    fetchErrors.push(getResponseError(performanceFolders.reason));
+                                }
+
+                                if (fetchErrors.length > 0) {
+                                    createToastNotification(
+                                        'Folder list sync error',
+                                        fetchErrors.join('; '),
+                                        ToastType.ERROR,
+                                    );
+                                }
                             }
                         } catch (err: unknown) {
-                            const message = axios.isAxiosError(err) ? err.response?.data : GENERIC_ERROR_MESSAGE;
-
-                            createToastNotification('Folder list sync error', message, ToastType.ERROR);
+                            createToastNotification('Folder list sync error', getResponseError(err), ToastType.ERROR);
                         } finally {
                             setIsFetching(false);
                         }

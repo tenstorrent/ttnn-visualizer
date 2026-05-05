@@ -183,6 +183,7 @@ The following separate and independent dependencies are utilized by this project
 - sphinx_sitemap - MIT - https://github.com/jdillard/sphinx-sitemap
 - sphinxcontrib.email - BSD-3-Clause - https://github.com/sphinx-contrib/email
 - tt-perf-report - MIT - https://opensource.org/license/mit
+- types-PyYAML - Apache-2.0 - https://github.com/python/typeshed
 - uvicorn - BSD‑3‑Clause - https://github.com/encode/uvicorn/blob/master/LICENSE.md
 - wheel - MIT - https://opensource.org/license/mit
 - zstd - (python-zstandard) - BSD‑3‑Clause - https://github.com/indygreg/python-zstandard/blob/main/LICENSE

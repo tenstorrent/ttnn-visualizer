@@ -10,3 +10,4 @@ class ConnectionTestStates(enum.Enum):
     PROGRESS = 1
     FAILED = 2
     OK = 3
+    WARNING = 4

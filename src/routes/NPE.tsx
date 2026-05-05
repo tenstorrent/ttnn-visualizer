@@ -59,6 +59,8 @@ const NPE: FC = () => {
 
     useEffect(() => {
         if (loadedData || loadedTimeline) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedDemo(null);
             setDemoData(null);
         }

@@ -4,7 +4,7 @@
 
 /* eslint-disable no-continue */
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Network } from 'vis-network/standalone';
 import { DataSet } from 'vis-data';
 import { Edge, IdType } from 'vis-network';
@@ -13,7 +13,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { DeviceOperationNode, Node, TensorNode } from '../../model/APIData';
 import 'styles/components/DeviceOperationsGraphComponent.scss';
 import { isExtendedDeviceOperation } from '../../functions/filterOperations';
-import { toReadableShape } from '../../functions/formatting';
+import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
 
 export interface GraphComponentProps {
@@ -31,6 +31,137 @@ type ConnectedDeviceOperation = DeviceOperationNode & {
 
 const formatOperationName = (item: DeviceOperationNode) => {
     return item.params.name ? `${item.params.name}()` : '';
+};
+
+const getTensorMetadata = (tensor: TensorNode) => {
+    const addresses = new Set<string>();
+    const deviceIds = new Set<string>();
+    const bufferTypes = new Set<string>();
+
+    if (tensor.params.address) {
+        addresses.add(String(tensor.params.address));
+    }
+    if (tensor.params.device_id !== undefined) {
+        deviceIds.add(String(tensor.params.device_id));
+    }
+    if (tensor.params.type) {
+        bufferTypes.add(toReadableLayout(tensor.params.type));
+    }
+
+    for (const buffer of tensor.buffer ?? []) {
+        if (buffer.params.address) {
+            addresses.add(String(buffer.params.address));
+        }
+        if (buffer.params.device_id !== undefined) {
+            deviceIds.add(String(buffer.params.device_id));
+        }
+        if (buffer.params.type) {
+            bufferTypes.add(toReadableLayout(buffer.params.type));
+        }
+    }
+
+    return {
+        addresses: [...addresses],
+        deviceIds: [...deviceIds],
+        bufferTypes: [...bufferTypes],
+    };
+};
+
+const DeviceOperationTensorList: React.FC<{
+    title: string;
+    tensors: TensorNode[];
+    variant: 'inputs' | 'outputs';
+}> = ({ title, tensors, variant }) => {
+    return (
+        <section className={`graph-details-section ${variant}`}>
+            <h4>{title}</h4>
+            {tensors.length === 0 ? (
+                <p className='graph-details-empty'>No {title.toLowerCase()}.</p>
+            ) : (
+                <div className='graph-tensor-list'>
+                    {tensors.map((tensor, index) => {
+                        const { addresses, deviceIds, bufferTypes } = getTensorMetadata(tensor);
+
+                        return (
+                            <article
+                                key={`${title}-${tensor.id}-${tensor.params.tensor_id}-${index}`}
+                                className='graph-tensor-card'
+                            >
+                                <h5>Tensor {tensor.params.tensor_id}</h5>
+                                <div className='graph-tensor-meta'>
+                                    <span>
+                                        Shape: <strong>{toReadableShape(tensor.params.shape)}</strong>
+                                    </span>
+                                    <span>
+                                        Type: <strong>{toReadableType(tensor.params.dtype)}</strong>
+                                    </span>
+                                    <span>
+                                        Layout: <strong>{toReadableLayout(tensor.params.layout)}</strong>
+                                    </span>
+                                    {bufferTypes.length > 0 && (
+                                        <span>
+                                            Buffer: <strong>{bufferTypes.join(', ')}</strong>
+                                        </span>
+                                    )}
+                                    {deviceIds.length > 0 && (
+                                        <span>
+                                            Device: <strong>{deviceIds.join(', ')}</strong>
+                                        </span>
+                                    )}
+                                    {addresses.length > 0 && (
+                                        <span>
+                                            Address: <strong>{addresses.join(', ')}</strong>
+                                        </span>
+                                    )}
+                                </div>
+                            </article>
+                        );
+                    })}
+                </div>
+            )}
+        </section>
+    );
+};
+
+const DeviceOperationGraphInfoComponent: React.FC<{
+    operation: ConnectedDeviceOperation | null;
+}> = ({ operation }) => {
+    if (!operation) {
+        return (
+            <aside className='graph-side-panel empty'>
+                <h3>Node Details</h3>
+                <p>Select a device operation node to inspect its inputs and outputs.</p>
+            </aside>
+        );
+    }
+
+    return (
+        <aside className='graph-side-panel'>
+            <h3>
+                {operation.id} {formatOperationName(operation)}
+            </h3>
+            <div className='graph-operation-meta'>
+                {operation.params.device_id !== undefined && (
+                    <span>
+                        Device: <strong>{operation.params.device_id}</strong>
+                    </span>
+                )}
+                <span>
+                    Arguments: <strong>{operation.arguments.length}</strong>
+                </span>
+            </div>
+            <DeviceOperationTensorList
+                title='Inputs'
+                tensors={operation.graphInputs}
+                variant='inputs'
+            />
+            <DeviceOperationTensorList
+                title='Outputs'
+                tensors={operation.graphOutputs}
+                variant='outputs'
+            />
+        </aside>
+    );
 };
 
 function removeRedundantEdgesViaIntermediateNodes(edges: Edge[]): Edge[] {
@@ -96,7 +227,7 @@ function removeRedundantEdgesViaIntermediateNodes(edges: Edge[]): Edge[] {
 
 const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) => {
     const networkRef = useRef<Network | null>(null);
-    const tooltipRef = useRef<HTMLDivElement>(null);
+    const [currentOperationId, setCurrentOperationId] = useState<number | null>(null);
 
     const ops: ConnectedDeviceOperation[] = useMemo(() => {
         return (data ?? [])
@@ -110,6 +241,10 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
 
     const displayedOps = useMemo(() => ops.filter((op) => isExtendedDeviceOperation(op.params.name)), [ops]);
     const displayedIds = useMemo(() => new Set(displayedOps.map((o) => o.id)), [displayedOps]);
+    const currentOperation = useMemo(
+        () => displayedOps.find((operation) => operation.id === currentOperationId) ?? null,
+        [currentOperationId, displayedOps],
+    );
 
     const { edgesByProducer, tensorShapeById } = useMemo(() => {
         const tensorShapeByIdLocal = new Map<number, string>();
@@ -272,28 +407,21 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
         [nodes, edges],
     );
 
-    const focusOnNode = useCallback(
-        (nodeId: number | null, center: boolean = false) => {
-            if (nodeId === null) {
-                return;
-            }
+    const focusOnNode = useCallback((nodeId: number | null, center: boolean = false) => {
+        if (nodeId === null) {
+            return;
+        }
 
-            if (networkRef.current) {
-                if (center) {
-                    networkRef.current.focus(nodeId, {
-                        animation: { duration: 500, easingFunction: 'easeInOutCubic' },
-                    });
-                }
-                networkRef.current.selectNodes([nodeId], true);
-
-                const nodeData = data.find((node) => node.id === nodeId);
-                if (nodeData && tooltipRef.current) {
-                    // tooltipRef.current.classList.add('visible');
-                }
+        if (networkRef.current) {
+            if (center) {
+                networkRef.current.focus(nodeId, {
+                    animation: { duration: 500, easingFunction: 'easeInOutCubic' },
+                });
             }
-        },
-        [data],
-    );
+            networkRef.current.selectNodes([nodeId], true);
+            setCurrentOperationId(nodeId);
+        }
+    }, []);
 
     const initializeGraph = useCallback(
         (container: HTMLDivElement | null) => {
@@ -358,14 +486,6 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
 
             networkRef.current = new Network(container, networkData, options);
 
-            networkRef.current.on('blurNode', () => {
-                tooltipRef.current?.classList.remove('visible');
-            });
-
-            networkRef.current.on('dragStart', () => {
-                tooltipRef.current?.classList.remove('visible');
-            });
-
             networkRef.current.on('click', (params) => {
                 if (params.nodes.length > 0) {
                     const nodeId = params.nodes[0];
@@ -373,11 +493,17 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     colorHighlightIO(nodeId);
                 } else {
                     networkRef.current?.selectNodes([], true);
+                    setCurrentOperationId(null);
                 }
             });
         },
         [colorHighlightIO, edges, focusOnNode, nodes],
     );
+
+    const handleClose = useCallback(() => {
+        setCurrentOperationId(null);
+        onClose();
+    }, [onClose]);
 
     useEffect(() => {
         return () => {
@@ -393,7 +519,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
             usePortal
             canEscapeKeyClose
             transitionDuration={0}
-            onClose={onClose}
+            onClose={handleClose}
             canOutsideClickClose
             portalClassName='tensor-visualisation-overlay'
         >
@@ -404,7 +530,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                             icon={IconNames.CROSS}
                             variant={ButtonVariant.MINIMAL}
                             size={Size.SMALL}
-                            onClick={onClose}
+                            onClick={handleClose}
                         />
                     </h3>
                 </div>
@@ -414,10 +540,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                         className='graph'
                         ref={initializeGraph}
                     />
-                    <div
-                        className='graph-tooltip'
-                        ref={tooltipRef}
-                    />
+                    <DeviceOperationGraphInfoComponent operation={currentOperation} />
                 </div>
 
                 <div>

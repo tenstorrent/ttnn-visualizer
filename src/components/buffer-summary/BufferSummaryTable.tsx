@@ -186,6 +186,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         );
     };
 
+    // TODO: React Compiler optimization warning, look into this
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const tableRows = useMemo<SummaryTableBuffer[]>(() => {
         let filteredRows = listOfBuffers;
 
@@ -211,6 +213,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         return [...sortTableFields(filteredRows as [])];
     }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensorId, showOnlySelected]);
 
+    // TODO: React Compiler optimization warning, look into this
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const selectedRows = useMemo(() => {
         if (userSelectedRows.length) {
             return userSelectedRows;
@@ -228,20 +232,26 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             return arr;
         }, []);
 
-        if (tableRef?.current?.scrollToRegion && matchingBuffers.length) {
-            tableRef.current.scrollToRegion({ rows: [matchingBuffers[0], matchingBuffers[0]] });
-        }
-
         return matchingBuffers;
+        // TODO: React Compiler optimization warning, look into this
+        // eslint-disable-next-line react-hooks/preserve-manual-memoization
     }, [tableRows, selectedTensorId, userSelectedRows]);
 
     useEffect(() => {
         if (selectedTensorId) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setUserSelectedRows([]);
         } else {
             setShowOnlySelected(false);
         }
     }, [selectedTensorId]);
+
+    useEffect(() => {
+        if (tableRef?.current?.scrollToRegion && selectedRows.length) {
+            tableRef.current.scrollToRegion({ rows: [selectedRows[0], selectedRows[0]] });
+        }
+    }, [selectedRows]);
 
     return tableRows ? (
         <HotkeysProvider>
@@ -293,20 +303,20 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 const getCellText = (buffer: SummaryTableBuffer, key: ColumnKeys) => {
     let textValue = buffer[key]?.toString() || '';
 
-    if (key === ColumnKeys.tensor_id) {
+    if (key === ColumnKeys.TensorId) {
         // Using a space character to ensure the table cell height remains consistent
         textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '\u00A0';
     }
 
-    if (key === ColumnKeys.operation_id) {
+    if (key === ColumnKeys.OperationId) {
         textValue = `${buffer.operation_id} ${buffer.operation_name}`;
     }
 
-    if (key === ColumnKeys.buffer_type) {
+    if (key === ColumnKeys.BufferType) {
         textValue = BufferTypeLabel[buffer.buffer_type];
     }
 
-    if (key === ColumnKeys.buffer_layout) {
+    if (key === ColumnKeys.BufferLayout) {
         textValue = isValidNumber(buffer.buffer_layout) ? BufferMemoryLayout[buffer.buffer_layout] : '';
     }
 
@@ -326,11 +336,11 @@ const getCellContent = (key: ColumnKeys, rowIndex: number, rows: SummaryTableBuf
     const textValue = getCellText(buffer, key);
 
     // Redo columns - https://github.com/tenstorrent/ttnn-visualizer/issues/1270
-    if (key === ColumnKeys.size) {
+    if (key === ColumnKeys.Size) {
         return formatMemorySize(buffer.size, 2);
     }
 
-    if (key === ColumnKeys.tensor_id) {
+    if (key === ColumnKeys.TensorId) {
         return (
             <div className='operation-cell'>
                 <div

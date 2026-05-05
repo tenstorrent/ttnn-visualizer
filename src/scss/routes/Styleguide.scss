@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .container {
     margin-bottom: 20px;
@@ -96,5 +97,5 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: 9999;
+    z-index: variables.$z-index-3-overlay;
 }

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import axios, { AxiosError } from 'axios';
+import { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -24,10 +24,10 @@ import {
     Tensor,
     defaultBuffer,
     defaultOperation,
-    defaultTensorData,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
+import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
@@ -62,6 +62,32 @@ import { processInputsOutputs } from '../functions/processMemoryAllocations';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
+/**
+ * Normalises device_operations nodes coming from the backend.
+ *
+ * Older report databases stored the node identifier under `counter` while
+ * the frontend (and newer backends) expect `id`. Rather than transforming
+ * the JSON on the server, we intercept the response here and rewrite any
+ * `counter` field to `id`. Nodes that already expose `id` are left alone.
+ *
+ * Mutates the passed array in place for performance — these arrays can be
+ * very large and are consumed immediately by the hooks below.
+ */
+const updateDeviceOperationId = (nodes: unknown): void => {
+    if (!Array.isArray(nodes)) {
+        return;
+    }
+    for (const node of nodes) {
+        if (node && typeof node === 'object' && 'counter' in node) {
+            const typedNode = node as Record<string, unknown>;
+            if (!('id' in typedNode) || typedNode.id === undefined) {
+                typedNode.id = typedNode.counter;
+            }
+            delete typedNode.counter;
+        }
+    }
+};
+
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     if (!stackTrace) {
         return '';
@@ -77,15 +103,13 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
 };
 
 export const fetchInstance = async (): Promise<Instance | null> => {
-    // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.get<Instance>(Endpoints.INSTANCE).catch();
-    return response?.data;
+    const response = await axiosInstance.get<Instance>(Endpoints.INSTANCE);
+    return response?.data ?? null;
 };
 
 export const updateInstance = async (payload: Partial<Instance>): Promise<Instance | null> => {
-    // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.put<Instance>(Endpoints.INSTANCE, payload).catch();
-    return response?.data;
+    const response = await axiosInstance.put<Instance>(Endpoints.INSTANCE, payload);
+    return response?.data ?? null;
 };
 
 export const fetchBufferPages = async (
@@ -109,31 +133,19 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         return defaultOperation;
     }
 
-    try {
-        const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(
-            `${Endpoints.OPERATIONS_LIST}/${id}`,
-            {
-                maxRedirects: 1,
-            },
-        );
+    const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(
+        `${Endpoints.OPERATIONS_LIST}/${id}`,
+        {
+            maxRedirects: 1,
+        },
+    );
 
-        return {
-            ...operationDetails,
-            operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
-        };
-    } catch (error: unknown) {
-        if (axios.isAxiosError(error)) {
-            if (error.response && error.response.status >= 400 && error.response.status < 500) {
-                // we may want to handle this differently
-                throw error;
-            }
-            if (error.response && error.response.status >= 500) {
-                throw error;
-            }
-        }
-    }
+    updateDeviceOperationId(operationDetails.device_operations);
 
-    return defaultOperation;
+    return {
+        ...operationDetails,
+        operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
+    };
 };
 
 const fetchOperations = async (): Promise<OperationDescription[]> => {
@@ -153,6 +165,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     };
 
     return operationList.map((operation: OperationDescription) => {
+        updateDeviceOperationId(operation.device_operations);
         operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
 
         const outputs = operation.outputs.map((tensor) => {
@@ -257,11 +270,11 @@ export const useGetUniqueDeviceOperationsList = (): string[] => {
  */
 export const useGetL1SmallMarker = (): number => {
     const { data: buffers } = useGetAllBuffers(BufferType.L1_SMALL);
-
+    const l1Size = useGetL1Size();
     return useMemo(() => {
         const addresses = buffers?.map((buffer) => {
             return buffer.address;
-        }) || [L1_DEFAULT_MEMORY_SIZE];
+        }) || [l1Size ?? L1_DEFAULT_MEMORY_SIZE];
 
         let min = Infinity;
         for (let i = 0; i < addresses.length; i++) {
@@ -269,8 +282,8 @@ export const useGetL1SmallMarker = (): number => {
                 min = addresses[i];
             }
         }
-        return min === Infinity ? L1_DEFAULT_MEMORY_SIZE : min;
-    }, [buffers]);
+        return min === Infinity ? (l1Size ?? L1_DEFAULT_MEMORY_SIZE) : min;
+    }, [buffers, l1Size]);
 };
 
 /**
@@ -282,6 +295,17 @@ export const useGetL1StartMarker = (): number => {
     return useMemo(() => {
         if (devices && devices.length > 0) {
             return devices[0].address_at_first_l1_cb_buffer;
+        }
+        return 0;
+    }, [devices]);
+};
+
+export const useGetL1Size = (): number => {
+    const { data: devices } = useDevices();
+
+    return useMemo(() => {
+        if (devices && devices.length > 0) {
+            return devices[0].worker_l1_size;
         }
         return 0;
     }, [devices]);
@@ -517,13 +541,23 @@ export const useOperationDetails = (operationId: number | null) => {
         return Array.from(uniqueBuffers.values());
     }, [operationDetails.data]);
 
-    if (operationDetails.data) {
-        operationDetails.data.buffersSummary = buffersSummary;
-    }
+    const augmentedOperationDetails = useMemo(() => {
+        if (!operationDetails.data) {
+            return operationDetails;
+        }
+
+        return {
+            ...operationDetails,
+            data: {
+                ...operationDetails.data,
+                buffersSummary,
+            },
+        };
+    }, [operationDetails, buffersSummary]);
 
     return {
         operation,
-        operationDetails,
+        operationDetails: augmentedOperationDetails,
     };
 };
 
@@ -717,39 +751,25 @@ export const useBufferPages = (operationId: number, address?: number | string, b
 };
 
 export const fetchTensors = async (): Promise<Tensor[]> => {
-    try {
-        const { data: tensorList } = await axiosInstance.get<Tensor[]>(Endpoints.TENSOR_LIST, {
-            maxRedirects: 1,
-        });
+    const { data: tensorList } = await axiosInstance.get<Tensor[]>(Endpoints.TENSOR_LIST, {
+        maxRedirects: 1,
+    });
 
-        const operationsList = await fetchOperations();
+    const operationsList = await fetchOperations();
 
-        for (const tensor of tensorList) {
-            if (tensor.producers.length > 0) {
-                const producerId = tensor.producers[0];
-                const operationDetails = operationsList.find((operation) => operation.id === producerId);
-                const outputTensor = operationDetails?.outputs.find((output) => output.id === tensor.id);
+    for (const tensor of tensorList) {
+        if (tensor.producers.length > 0) {
+            const producerId = tensor.producers[0];
+            const operationDetails = operationsList.find((operation) => operation.id === producerId);
+            const outputTensor = operationDetails?.outputs.find((output) => output.id === tensor.id);
 
-                if (outputTensor) {
-                    tensor.operationIdentifier = outputTensor.operationIdentifier;
-                }
-            }
-        }
-
-        return tensorList;
-    } catch (error: unknown) {
-        if (axios.isAxiosError(error)) {
-            if (error.response && error.response.status >= 400 && error.response.status < 500) {
-                // we may want to handle this differently
-                throw error;
-            }
-            if (error.response && error.response.status >= 500) {
-                throw error;
+            if (outputTensor) {
+                tensor.operationIdentifier = outputTensor.operationIdentifier;
             }
         }
     }
 
-    return [defaultTensorData];
+    return tensorList;
 };
 
 export const useTensors = () => {
@@ -825,7 +845,14 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
 
     return useMemo(() => {
         if (response.data && range && useRange) {
-            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
+            const filteredData = response.data.filter(
+                (operation) => operation.id >= range[0] && operation.id <= range[1],
+            );
+
+            return {
+                ...response,
+                data: filteredData,
+            };
         }
 
         return response;
@@ -1198,4 +1225,28 @@ export const useGetTensorDeallocationReportByOperation = () => {
 
         return { lateDeallocationsByOperation, nonDeallocatedTensorList: nonDeallocatedTensorListById };
     }, [operationsById, tensorListByOperation]);
+};
+
+const fetchLatestAppVersion = async (): Promise<string | null> => {
+    try {
+        const response = await axiosInstance.get<string>(Endpoints.LATEST_VERSION);
+
+        return response.data;
+    } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch latest app version:', error);
+        throw error;
+    }
+};
+
+export const useGetLatestAppVersion = () => {
+    const isServerMode = !!getServerConfig().SERVER_MODE;
+
+    return useQuery<string | null, AxiosError>({
+        queryFn: () => fetchLatestAppVersion(),
+        queryKey: ['get-latest-app-version'],
+        retry: false,
+        staleTime: Infinity,
+        enabled: !isServerMode,
+    });
 };

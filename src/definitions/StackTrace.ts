@@ -6,3 +6,9 @@ export enum StackTraceLanguage {
     PYTHON = 'python',
     CPP = 'cpp',
 }
+
+export enum SourceFileStatus {
+    Unavailable = 'unavailable',
+    Pending = 'pending',
+    Available = 'available',
+}

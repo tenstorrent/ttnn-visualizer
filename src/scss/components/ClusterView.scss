@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use '../definitions/variables' as variables;
+
 .cluster-view-renderer {
     position: absolute;
     top: 80px;
@@ -10,7 +12,7 @@
     width: 100%;
     height: calc(100% - 80px);
     bottom: 0;
-    z-index: 10;
+    z-index: variables.$z-index-3-overlay;
     padding: 10px;
 
     .cluster-view-header {

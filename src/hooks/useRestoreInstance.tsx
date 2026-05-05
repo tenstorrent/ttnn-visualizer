@@ -13,7 +13,7 @@ import {
 } from '../store/app';
 import { useInstance, useReportFolderList } from './useAPI';
 import useRemoteConnection from './useRemote';
-import { ReportFolder, ReportLocation } from '../definitions/Reports';
+import { ReportLocation } from '../definitions/Reports';
 import type { RemoteFolder } from '../definitions/RemoteConnection';
 
 const useRestoreInstance = () => {
@@ -28,42 +28,45 @@ const useRestoreInstance = () => {
     const [hasRestoredInstance, setHasRestoredInstance] = useState<boolean>(false);
 
     useEffect(() => {
-        if (instance && reports?.length && !hasRestoredInstance) {
-            const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
-            const remoteFolders = remote.persistentState.getSavedReportFolders(
-                remote.persistentState.selectedConnection,
-            );
+        if (!instance || reports === null || hasRestoredInstance) {
+            return;
+        }
 
-            const profilerReportPath = instance?.active_report?.profiler_name || null;
-            const profilerReportName =
-                (isProfilerRemote && profilerReportPath) || instance?.remote_profiler_folder
-                    ? getRemoteReportName(remoteFolders, profilerReportPath) || ''
-                    : getLocalReportName(reports, profilerReportPath) || '';
-            const perfReportPath = instance?.active_report?.performance_name || null;
+        const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
+        const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
 
-            const activeProfilerReport = profilerReportPath
-                ? {
-                      path: profilerReportPath,
-                      reportName: profilerReportName,
-                  }
-                : null;
-            const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
-            const activePerfReport = perfReportPath
-                ? {
-                      path: perfReportPath,
-                      reportName: perfReportPath,
-                  }
-                : null;
-            const activePerfLocation = instance?.active_report?.performance_location ?? null;
+        const profilerReportPath = instance?.active_report?.profiler_name || null;
+        const shouldResolveRemoteProfilerReportName = isProfilerRemote || !!instance?.remote_profiler_folder;
+        const profilerReportName = shouldResolveRemoteProfilerReportName
+            ? getRemoteReportName(remoteFolders, profilerReportPath)
+            : profilerReportPath;
+        const perfReportPath = instance?.active_report?.performance_name || null;
 
-            const activeReports = {
-                profiler: activeProfilerReport,
-                profilerLocation: activeProfilerLocation,
-                performance: activePerfReport,
-                performanceLocation: activePerfLocation,
-                npe: instance?.active_report?.npe_name ?? null,
-            };
+        const activeProfilerReport = profilerReportPath
+            ? {
+                  path: profilerReportPath,
+                  reportName: profilerReportName ?? profilerReportPath,
+              }
+            : null;
+        const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
+        const activePerfReport = perfReportPath
+            ? {
+                  path: perfReportPath,
+                  reportName: perfReportPath,
+              }
+            : null;
+        const activePerfLocation = instance?.active_report?.performance_location ?? null;
 
+        const activeReports = {
+            profiler: activeProfilerReport,
+            profilerLocation: activeProfilerLocation,
+            performance: activePerfReport,
+            performanceLocation: activePerfLocation,
+            npe: instance?.active_report?.npe_name ?? null,
+        };
+
+        // Executed at a safe time prior to control returning to the browser's event loop
+        queueMicrotask(() => {
             setHasRestoredInstance(true);
 
             setActiveProfilerReport(activeReports.profiler);
@@ -73,7 +76,7 @@ const useRestoreInstance = () => {
             setPerformanceReportLocation(activeReports.performanceLocation);
 
             setActiveNpe(activeReports.npe);
-        }
+        });
     }, [
         setActiveProfilerReport,
         setProfilerReportLocation,
@@ -92,9 +95,6 @@ const useRestoreInstance = () => {
         hasRestoredInstance,
     };
 };
-
-const getLocalReportName = (reports: ReportFolder[], path: string | null): string | undefined =>
-    reports?.find((report) => report.path === path)?.reportName;
 
 const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null): string | undefined =>
     folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : undefined;

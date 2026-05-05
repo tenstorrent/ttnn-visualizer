@@ -9,14 +9,16 @@ import platform
 import re
 import shutil
 import time
+import urllib
+import urllib.request
 from http import HTTPStatus
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import orjson
 import yaml
 import zstd
-from flask import Blueprint, Response, current_app, jsonify, request, session
+from flask import Blueprint, Response, abort, current_app, jsonify, request, session
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     NPEQueries,
@@ -30,6 +32,12 @@ from ttnn_visualizer.exceptions import (
     DataFormatError,
     RemoteConnectionException,
     RemoteFileReadException,
+    error_response,
+    response_bad_request,
+    response_forbidden,
+    response_internal_server_error,
+    response_not_found,
+    response_unprocessable_entity,
 )
 from ttnn_visualizer.file_uploads import (
     extract_folder_name_from_files,
@@ -62,14 +70,19 @@ from ttnn_visualizer.sftp_operations import (
     get_cluster_desc,
     get_remote_performance_folders,
     get_remote_profiler_folders,
-    read_remote_file,
     sync_remote_performance_folders,
     sync_remote_profiler_folders,
 )
 from ttnn_visualizer.ssh_client import SSHClient
+from ttnn_visualizer.stack_trace_source import (
+    check_stack_source_local,
+    check_stack_source_remote,
+    read_stack_source_local,
+    read_stack_source_remote,
+    stack_source_response,
+)
 from ttnn_visualizer.utils import (
     create_path_resolver,
-    get_cluster_descriptor_path,
     get_mesh_descriptor_paths,
     read_last_synced_file,
     str_to_bool,
@@ -86,6 +99,45 @@ def test_ssh_connection(connection) -> bool:
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__)
+
+
+def _optional_rank_query_param() -> Optional[int]:
+    """
+    Parse optional ``?rank=`` for multi-host report DBs.
+    Returns None if the parameter is absent or empty.
+    """
+    if "rank" not in request.args:
+        return None
+    raw = request.args.get("rank")
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        abort(
+            400,
+            description="Invalid query parameter 'rank': expected an integer.",
+        )
+        return None
+
+
+_NONZERO_RANK_UNSUPPORTED_MSG = (
+    "This report database does not store per-rank data. "
+    "Omit the rank query parameter or use rank=0 only."
+)
+
+
+def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
+    """
+    Legacy reports only represent rank 0. If the client asks for a different rank
+    but the schema has no ``rank`` column, return 422 instead of returning all rows
+    (which would misleadingly appear as rank 0 in the API).
+    """
+    if rank is None or rank == 0:
+        return None
+    if db.report_has_rank_column():
+        return None
+    return response_unprocessable_entity(_NONZERO_RANK_UNSUPPORTED_MSG)
 
 
 @api.before_request
@@ -122,21 +174,43 @@ def get_system_capabilities():
 @with_instance
 @timer
 def operation_list(instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        operations = list(db.query_operations())
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        operations = list(
+            db.query_operations(db.merge_rank_filter("operations", None, rank))
+        )
         operations.sort(key=lambda o: o.operation_id)
-        operation_arguments = list(db.query_operation_arguments())
-        device_operations = list(db.query_device_operations())
-        stack_traces = list(db.query_stack_traces())
-        outputs = list(db.query_output_tensors())
-        tensors = list(db.query_tensors())
-        inputs = list(db.query_input_tensors())
-        devices = list(db.query_devices())
-        producers_consumers = list(db.query_producers_consumers())
+        operation_arguments = list(
+            db.query_operation_arguments(
+                db.merge_rank_filter("operation_arguments", None, rank)
+            )
+        )
+        device_operations = list(
+            db.query_device_operations(
+                db.merge_rank_filter("captured_graph", None, rank)
+            )
+        )
+        stack_traces = list(
+            db.query_stack_traces(db.merge_rank_filter("stack_traces", None, rank))
+        )
+        outputs = list(
+            db.query_output_tensors(db.merge_rank_filter("output_tensors", None, rank))
+        )
+        tensors = list(db.query_tensors(db.merge_rank_filter("tensors", None, rank)))
+        inputs = list(
+            db.query_input_tensors(db.merge_rank_filter("input_tensors", None, rank))
+        )
+        devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
+        producers_consumers = list(db.query_producers_consumers(rank=rank))
 
         error_records = None
         if db._check_table_exists("errors"):
-            error_records = list(db.query_error_records())
+            error_records = list(
+                db.query_error_records(db.merge_rank_filter("errors", None, rank))
+            )
 
         serialized_operations = serialize_operations(
             inputs,
@@ -160,65 +234,143 @@ def operation_list(instance: Instance):
 @with_instance
 @timer
 def operation_detail(operation_id, instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
 
         device_id = request.args.get("device_id", None)
-        operations = list(db.query_operations(filters={"operation_id": operation_id}))
+        operations = list(
+            db.query_operations(
+                db.merge_rank_filter(
+                    "operations",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
+        )
 
         if not operations:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return response_not_found()
 
         operation = operations[0]
 
         buffers = list(
             db.query_buffers(
-                filters={"operation_id": operation_id, "device_id": device_id}
+                db.merge_rank_filter(
+                    "buffers",
+                    {"operation_id": operation_id, "device_id": device_id},
+                    rank,
+                )
             )
         )
         operation_arguments = list(
-            db.query_operation_arguments(filters={"operation_id": operation_id})
+            db.query_operation_arguments(
+                db.merge_rank_filter(
+                    "operation_arguments",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
         )
-        stack_trace = list(
-            db.query_stack_traces(filters={"operation_id": operation_id})
+        stack_traces = list(
+            db.query_stack_traces(
+                db.merge_rank_filter(
+                    "stack_traces",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
         )
 
-        if stack_trace:
-            stack_trace = stack_trace[0]
-        else:
-            stack_trace = None
+        stack_trace = None
+        for st in stack_traces:
+            if st.rank == operation.rank:
+                stack_trace = st
+                break
+        if stack_trace is None and stack_traces:
+            stack_trace = stack_traces[0]
 
-        inputs = list(db.query_input_tensors(filters={"operation_id": operation_id}))
-        outputs = list(db.query_output_tensors({"operation_id": operation_id}))
+        inputs = list(
+            db.query_input_tensors(
+                db.merge_rank_filter(
+                    "input_tensors",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
+        )
+        outputs = list(
+            db.query_output_tensors(
+                db.merge_rank_filter(
+                    "output_tensors",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
+        )
 
         input_tensor_ids = [i.tensor_id for i in inputs]
         output_tensor_ids = [o.tensor_id for o in outputs]
         tensor_ids = input_tensor_ids + output_tensor_ids
-        tensors = list(db.query_tensors(filters={"tensor_id": tensor_ids}))
-        local_comparisons = list(
-            db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
-        )
-        global_comparisons = list(
-            db.query_tensor_comparisons(local=False, filters={"tensor_id": tensor_ids})
-        )
+        # Empty tensor_ids: query_tensors skips empty IN lists and would return all tensors.
+        if not tensor_ids:
+            tensors = []
+            local_comparisons = []
+            global_comparisons = []
+        else:
+            tensors = list(
+                db.query_tensors(
+                    db.merge_rank_filter(
+                        "tensors",
+                        {"tensor_id": tensor_ids},
+                        rank,
+                    )
+                )
+            )
+            local_comparisons = list(
+                db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
+            )
+            global_comparisons = list(
+                db.query_tensor_comparisons(
+                    local=False, filters={"tensor_id": tensor_ids}
+                )
+            )
 
         device_operations = db.query_device_operations(
-            filters={"operation_id": operation_id}
+            db.merge_rank_filter(
+                "captured_graph",
+                {"operation_id": operation_id},
+                rank,
+            )
         )
 
         producers_consumers = list(
             filter(
-                lambda pc: pc.tensor_id in tensor_ids, db.query_producers_consumers()
+                lambda pc: pc.tensor_id in tensor_ids,
+                db.query_producers_consumers(rank=rank),
             )
         )
 
-        devices = list(db.query_devices())
+        devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
 
         error_record = None
         if db._check_table_exists("errors"):
             error_records = list(
-                db.query_error_records(filters={"operation_id": operation_id})
+                db.query_error_records(
+                    db.merge_rank_filter(
+                        "errors",
+                        {"operation_id": operation_id},
+                        rank,
+                    )
+                )
             )
-            if error_records:
+            for e in error_records:
+                if e.rank == operation.rank:
+                    error_record = e
+                    break
+            if error_record is None and error_records:
                 error_record = error_records[0]
 
         serialized_operation = serialize_operation(
@@ -264,18 +416,19 @@ def operation_history(instance: Instance):
 @with_instance
 @timer
 def errors_list(instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         if not db._check_table_exists("errors"):
-            return (
-                jsonify(
-                    {
-                        "error": "Error records table does not exist in this report database."
-                    }
-                ),
-                HTTPStatus.UNPROCESSABLE_ENTITY,
+            return response_unprocessable_entity(
+                message="Error records table does not exist in this report database."
             )
 
-        error_records = list(db.query_error_records())
+        error_records = list(
+            db.query_error_records(db.merge_rank_filter("errors", None, rank))
+        )
         serialized_errors = [dataclasses.asdict(error) for error in error_records]
 
         return Response(
@@ -290,13 +443,8 @@ def errors_list(instance: Instance):
 def report_metadata(instance: Instance):
     with DatabaseQueries(instance) as db:
         if not db._check_table_exists("report_metadata"):
-            return (
-                jsonify(
-                    {
-                        "error": "Report metadata table does not exist in this report database."
-                    }
-                ),
-                HTTPStatus.UNPROCESSABLE_ENTITY,
+            return response_unprocessable_entity(
+                message="Report metadata table does not exist in this report database."
             )
         rows = db.query_report_metadata()
         payload = {row[0]: row[1] for row in rows}
@@ -324,12 +472,36 @@ def get_config(instance: Instance):
 @with_instance
 @timer
 def tensors_list(instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         device_id = request.args.get("device_id", None)
-        tensors = list(db.query_tensors(filters={"device_id": device_id}))
-        local_comparisons = list(db.query_tensor_comparisons())
-        global_comparisons = list(db.query_tensor_comparisons(local=False))
-        producers_consumers = list(db.query_producers_consumers())
+        tensor_filters: dict = {}
+        if device_id is not None:
+            tensor_filters["device_id"] = device_id
+        tensors = list(
+            db.query_tensors(db.merge_rank_filter("tensors", tensor_filters, rank))
+        )
+        if rank is not None and "rank" in db._get_table_columns("tensors"):
+            tensor_ids = [t.tensor_id for t in tensors]
+            if tensor_ids:
+                local_comparisons = list(
+                    db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
+                )
+                global_comparisons = list(
+                    db.query_tensor_comparisons(
+                        local=False, filters={"tensor_id": tensor_ids}
+                    )
+                )
+            else:
+                local_comparisons = []
+                global_comparisons = []
+        else:
+            local_comparisons = list(db.query_tensor_comparisons())
+            global_comparisons = list(db.query_tensor_comparisons(local=False))
+        producers_consumers = list(db.query_producers_consumers(rank=rank))
         serialized_tensors = serialize_tensors(
             tensors, producers_consumers, local_comparisons, global_comparisons
         )
@@ -347,17 +519,21 @@ def buffer_detail(instance: Instance):
     operation_id = request.args.get("operation_id")
 
     if not address or not operation_id:
-        return Response(status=HTTPStatus.BAD_REQUEST)
+        return response_bad_request()
 
     if operation_id and str.isdigit(operation_id):
         operation_id = int(operation_id)
     else:
-        return Response(status=HTTPStatus.BAD_REQUEST)
+        return response_bad_request()
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        buffer = db.query_next_buffer(operation_id, address)
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        buffer = db.query_next_buffer(operation_id, address, rank=rank)
         if not buffer:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return response_not_found()
         return Response(
             orjson.dumps(dataclasses.asdict(buffer)),
             mimetype="application/json",
@@ -383,16 +559,21 @@ def buffer_pages(instance: Instance):
     else:
         buffer_type = None
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        page_filters = {
+            "operation_id": operation_id,
+            "device_id": device_id,
+            "address": addresses,
+            "buffer_type": buffer_type,
+        }
         buffers = list(
             list(
                 db.query_buffer_pages(
-                    filters={
-                        "operation_id": operation_id,
-                        "device_id": device_id,
-                        "address": addresses,
-                        "buffer_type": buffer_type,
-                    }
+                    db.merge_rank_filter("buffer_pages", page_filters, rank)
                 )
             )
         )
@@ -406,10 +587,18 @@ def buffer_pages(instance: Instance):
 @with_instance
 @timer
 def tensor_detail(tensor_id, instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        tensors = list(db.query_tensors(filters={"tensor_id": tensor_id}))
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        tensors = list(
+            db.query_tensors(
+                db.merge_rank_filter("tensors", {"tensor_id": tensor_id}, rank)
+            )
+        )
         if not tensors:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return response_not_found()
 
         return Response(
             orjson.dumps(dataclasses.asdict(tensors[0])),
@@ -427,10 +616,18 @@ def get_all_buffers(instance: Instance):
     else:
         buffer_type = None
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         buffers = list(
             db.query_buffers(
-                filters={"buffer_type": buffer_type, "device_id": device_id}
+                db.merge_rank_filter(
+                    "buffers",
+                    {"buffer_type": buffer_type, "device_id": device_id},
+                    rank,
+                )
             )
         )
         serialized = [serialize_buffer(b) for b in buffers]
@@ -448,13 +645,23 @@ def get_operations_buffers(instance: Instance):
     else:
         buffer_type = None
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
         buffers = list(
             db.query_buffers(
-                filters={"buffer_type": buffer_type, "device_id": device_id}
+                db.merge_rank_filter(
+                    "buffers",
+                    {"buffer_type": buffer_type, "device_id": device_id},
+                    rank,
+                )
             )
         )
-        operations = list(db.query_operations())
+        operations = list(
+            db.query_operations(db.merge_rank_filter("operations", None, rank))
+        )
         return Response(
             orjson.dumps(serialize_operations_buffers(operations, buffers)),
             mimetype="application/json",
@@ -471,22 +678,38 @@ def get_operation_buffers(operation_id, instance: Instance):
     else:
         buffer_type = None
 
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        operations = list(db.query_operations(filters={"operation_id": operation_id}))
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        operations = list(
+            db.query_operations(
+                db.merge_rank_filter(
+                    "operations",
+                    {"operation_id": operation_id},
+                    rank,
+                )
+            )
+        )
         if not operations:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return response_not_found()
         operation = operations[0]
         buffers = list(
             db.query_buffers(
-                filters={
-                    "operation_id": operation_id,
-                    "buffer_type": buffer_type,
-                    "device_id": device_id,
-                }
+                db.merge_rank_filter(
+                    "buffers",
+                    {
+                        "operation_id": operation_id,
+                        "buffer_type": buffer_type,
+                        "device_id": device_id,
+                    },
+                    rank,
+                )
             )
         )
         if not operation:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return response_not_found()
 
         return Response(
             orjson.dumps(serialize_operation_buffers(operation, buffers)),
@@ -574,14 +797,15 @@ def get_profiler_data_list(instance: Instance):
 @with_instance
 @local_only
 def delete_profiler_report(profiler_name, instance: Instance):
-    is_remote = bool(instance.remote_connection)
+    is_remote = (
+        instance.active_report
+        and instance.active_report.profiler_location == ReportLocation.REMOTE.value
+    )
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
 
     if not profiler_name:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Report name is required."
-        )
+        return response_bad_request("Report name is required.")
 
     if is_remote:
         connection = RemoteConnection.model_validate(
@@ -606,9 +830,7 @@ def delete_profiler_report(profiler_name, instance: Instance):
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
     else:
-        return Response(
-            status=HTTPStatus.NOT_FOUND, response=f"Report does not exist: {path}"
-        )
+        return response_not_found(f"Report does not exist: {path}")
 
     return Response(
         status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}"
@@ -695,7 +917,7 @@ def get_performance_data_list(instance: Instance):
 @with_instance
 def get_performance_data(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
 
     with DeviceLogProfilerQueries(instance) as csv:
         result = csv.get_all_entries(as_dict=True, limit=100)
@@ -706,7 +928,7 @@ def get_performance_data(instance: Instance):
 @with_instance
 def get_profiler_performance_data(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
     with OpsPerformanceQueries(instance) as csv:
         # result = csv.query_by_op_code(op_code="(torch) contiguous", as_dict=True)
         result = csv.get_all_entries(as_dict=True, limit=100)
@@ -717,14 +939,15 @@ def get_profiler_performance_data(instance: Instance):
 @with_instance
 @local_only
 def delete_performance_report(performance_name, instance: Instance):
-    is_remote = bool(instance.remote_connection)
+    is_remote = (
+        instance.active_report
+        and instance.active_report.performance_location == ReportLocation.REMOTE.value
+    )
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
 
     if not performance_name:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Report name is required."
-        )
+        return response_bad_request("Report name is required.")
 
     if is_remote:
         connection = RemoteConnection.model_validate(
@@ -752,9 +975,7 @@ def delete_performance_report(performance_name, instance: Instance):
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
     else:
-        return Response(
-            status=HTTPStatus.NOT_FOUND, response=f"Report does not exist: {path}"
-        )
+        return response_not_found(f"Report does not exist: {path}")
 
     return Response(
         status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}"
@@ -765,7 +986,7 @@ def delete_performance_report(performance_name, instance: Instance):
 @with_instance
 def get_performance_results_data_raw(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
     content = OpsPerformanceQueries.get_raw_csv(instance)
     return Response(
         content,
@@ -778,10 +999,7 @@ def get_performance_results_data_raw(instance: Instance):
 @with_instance
 def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST,
-            response="No performance data found for instance.",
-        )
+        return response_bad_request("No performance data found for instance.")
 
     name = request.args.get("name", None)
     start_signpost = request.args.get("start_signpost", None)
@@ -809,10 +1027,7 @@ def get_performance_results_report(instance: Instance):
             group_by=group_by,
         )
     except DataFormatError as error:
-        return (
-            jsonify(str(error)),
-            HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
+        return response_unprocessable_entity(str(error))
 
     return Response(orjson.dumps(report), mimetype="application/json")
 
@@ -822,7 +1037,7 @@ def get_performance_results_report(instance: Instance):
 @with_instance
 def get_performance_data_raw(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
 
     name = request.args.get("name", None)
 
@@ -865,7 +1080,7 @@ def get_performance_device_meta(instance: Instance):
     name = request.args.get("name", None)
 
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -878,7 +1093,7 @@ def get_performance_device_meta(instance: Instance):
     )
 
     if not file_path.exists():
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
 
     try:
         first_line = get_first_line(file_path)
@@ -887,14 +1102,14 @@ def get_performance_device_meta(instance: Instance):
 
     except Exception as e:
         logger.exception("Failed to parse device meta")
-        return Response(str(e), status=HTTPStatus.INTERNAL_SERVER_ERROR)
+        return response_internal_server_error(str(e))
 
 
 @api.route("/performance/npe/manifest", methods=["GET"])
 @with_instance
 def get_npe_manifest(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
     try:
         content = NPEQueries.get_npe_manifest(instance)
     except FileNotFoundError:
@@ -907,7 +1122,7 @@ def get_npe_manifest(instance: Instance):
 @with_instance
 def get_npe_timeline(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
 
     filename = request.args.get("filename", default=None)
 
@@ -928,7 +1143,7 @@ def get_npe_timeline(instance: Instance):
 @with_instance
 def get_zone_statistics(zone, instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
     with DeviceLogProfilerQueries(instance) as csv:
         result = csv.query_zone_statistics(zone_name=zone, as_dict=True)
         return Response(orjson.dumps(result), mimetype="application/json")
@@ -937,8 +1152,12 @@ def get_zone_statistics(zone, instance: Instance):
 @api.route("/devices", methods=["GET"])
 @with_instance
 def get_devices(instance: Instance):
+    rank = _optional_rank_query_param()
     with DatabaseQueries(instance) as db:
-        devices = list(db.query_devices())
+        rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
+        if rejected is not None:
+            return rejected
+        devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
         return Response(
             orjson.dumps(serialize_devices(devices)),
             mimetype="application/json",
@@ -975,7 +1194,7 @@ def create_profiler_files():
     try:
         paths = save_uploaded_files(files, profiler_directory, folder_name)
     except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        return response_unprocessable_entity()
 
     profiler_path = next((p for p in paths if Path(p).name == "db.sqlite"), None)
 
@@ -1052,7 +1271,7 @@ def create_performance_files():
             folder_name,
         )
     except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        return response_unprocessable_entity()
 
     performance_path = str(paths[0].parent)
 
@@ -1100,7 +1319,7 @@ def create_npe_files():
     try:
         paths = save_uploaded_files(files, target_directory)
     except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        return response_unprocessable_entity()
 
     instance_id = request.args.get("instanceId")
     npe_path = str(paths[0])
@@ -1164,9 +1383,7 @@ def get_remote_folders_profiler():
     connection_data = request.get_json()
 
     if not connection_data:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
-        )
+        return response_bad_request("Missing connection data")
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
 
@@ -1174,6 +1391,8 @@ def get_remote_folders_profiler():
         remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
             connection
         )
+        if not remote_folders:
+            return Response(status=HTTPStatus.NO_CONTENT)
 
         for rf in remote_folders:
             directory_name = Path(rf.remotePath).name
@@ -1194,7 +1413,7 @@ def get_remote_folders_profiler():
             mimetype="application/json",
         )
     except RemoteConnectionException as e:
-        return Response(status=e.http_status, response=e.message)
+        return error_response(e.http_status, e.message)
 
 
 @api.route("/remote/performance", methods=["POST"])
@@ -1202,9 +1421,7 @@ def get_remote_folders_performance():
     connection_data = request.get_json()
 
     if not connection_data:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
-        )
+        return response_bad_request("Missing connection data")
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
 
@@ -1212,6 +1429,8 @@ def get_remote_folders_performance():
         remote_performance_folders: List[RemoteReportFolder] = (
             get_remote_performance_folders(connection)
         )
+        if not remote_performance_folders:
+            return Response(status=HTTPStatus.NO_CONTENT)
 
         for rf in remote_performance_folders:
             performance_name = Path(rf.remotePath).name
@@ -1232,7 +1451,7 @@ def get_remote_folders_performance():
             mimetype="application/json",
         )
     except RemoteConnectionException as e:
-        return Response(status=e.http_status, response=e.message)
+        return error_response(e.http_status, e.message)
 
 
 @api.route("/cluster-descriptor", methods=["GET"])
@@ -1242,24 +1461,15 @@ def get_cluster_descriptor(instance: Instance):
         cluster_desc = get_cluster_desc(instance)
 
         if not cluster_desc:
-            return (
-                jsonify({"error": "cluster_descriptor.yaml not found"}),
-                HTTPStatus.NOT_FOUND,
-            )
+            return response_not_found("cluster_descriptor.yaml not found")
 
         return jsonify(cluster_desc), HTTPStatus.OK
 
     except yaml.YAMLError as e:
-        return (
-            jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
-            HTTPStatus.BAD_REQUEST,
-        )
+        return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
     except Exception as e:
-        return (
-            jsonify({"error": f"An unexpected error occurred: {str(e)}"}),
-            HTTPStatus.INTERNAL_SERVER_ERROR,
-        )
+        return response_internal_server_error(f"An unexpected error occurred: {str(e)}")
 
 
 @api.route("/mesh-descriptor", methods=["GET"])
@@ -1268,11 +1478,8 @@ def get_mesh_descriptor(instance: Instance):
     paths = get_mesh_descriptor_paths(instance)
 
     if not paths:
-        return (
-            jsonify(
-                {"error": "physical_chip_mesh_coordinate_mapping_1_of_1.yaml not found"}
-            ),
-            HTTPStatus.NOT_FOUND,
+        return response_not_found(
+            "physical_chip_mesh_coordinate_mapping_1_of_1.yaml not found"
         )
 
     try:
@@ -1280,10 +1487,7 @@ def get_mesh_descriptor(instance: Instance):
             yaml_data = yaml.safe_load(mesh_descriptor_path)
             return jsonify(yaml_data)  # yaml_data is not compatible with orjson
     except yaml.YAMLError as e:
-        return (
-            jsonify({"error": f"Failed to parse YAML: {str(e)}"}),
-            HTTPStatus.BAD_REQUEST,
-        )
+        return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
 
 @api.route("/remote/test", methods=["POST"])
@@ -1291,9 +1495,7 @@ def test_remote_folder():
     connection_data = request.json
 
     if not connection_data:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Missing connection data"
-        )
+        return response_bad_request("Missing connection data")
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
     logger.debug(
@@ -1308,7 +1510,7 @@ def test_remote_folder():
 
     def has_failures():
         return any(
-            status.status != ConnectionTestStates.OK.value for status in statuses
+            status.status == ConnectionTestStates.FAILED.value for status in statuses
         )
 
     # Test SSH Connection
@@ -1316,15 +1518,12 @@ def test_remote_folder():
         test_ssh_connection(connection)
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except AuthenticationFailedException as e:
-        # Return 422 for authentication failures
         add_status(
             ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
         )
         return jsonify([status.model_dump() for status in statuses]), e.http_status
     except RemoteConnectionException as e:
-        add_status(
-            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-        )
+        add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     # Test Directory Configuration
     if not has_failures() and connection.profilerPath:
@@ -1337,9 +1536,7 @@ def test_remote_folder():
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
+            add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     # Test Directory Configuration (perf)
     if not has_failures() and connection.performancePath:
@@ -1352,9 +1549,7 @@ def test_remote_folder():
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
+            add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     # Check for Project Configurations
     if not has_failures():
@@ -1366,9 +1561,7 @@ def test_remote_folder():
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
+            add_status(e.status.value, e.message, getattr(e, "detail", None))
 
     return Response(
         orjson.dumps([status.model_dump() for status in statuses]),
@@ -1379,23 +1572,60 @@ def test_remote_folder():
 @api.route("/remote/read", methods=["POST"])
 @with_instance
 def read_remote_folder(instance: Instance):
-    file_path = request.json.get("filePath")
+    body = request.get_json(silent=True) or {}
+    file_path = body.get("filePath", None)
+    # TODO: @smountenay-tt: Personally instead of a check_path_only query var, I would have made another API for checking if a remote path exists, like /api/remote/check_path?path=/path-to-check instead of having it in /remote/read.
+    check_path_only = body.get("check_path_only", False)
+
+    if not file_path or not isinstance(file_path, str):
+        return response_bad_request("Missing or invalid filePath")
 
     remote_connection = instance.remote_connection
-    if not remote_connection:
-        return Response(
-            status=HTTPStatus.BAD_REQUEST,
-            response="No remote connection found in instance.",
+
+    if check_path_only:
+        is_available = False
+
+        if remote_connection:
+            try:
+                ssh_client = SSHClient(remote_connection)
+                is_available = check_stack_source_remote(ssh_client, file_path)
+            except RemoteConnectionException:
+                return jsonify({"available": False})
+        else:
+            if not current_app.config.get("SERVER_MODE"):
+                is_available = check_stack_source_local(file_path)
+
+        return jsonify({"available": is_available})
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            content, resolved, remapped = read_stack_source_remote(
+                ssh_client, file_path
+            )
+            return stack_source_response(content, resolved, remapped)
+        except RemoteConnectionException as e:
+            return error_response(e.http_status, e.message)
+        except RemoteFileReadException as e:
+            error_payload = {"error": str(e)}
+            if e.detail:
+                error_payload["detail"] = e.detail
+            return jsonify(error_payload), e.http_status
+
+    if current_app.config.get("SERVER_MODE"):
+        return response_forbidden(
+            "Local stack source reads are not available in server mode.",
         )
 
     try:
-        content = read_remote_file(remote_connection, remote_path=file_path)
-    except RemoteConnectionException as e:
-        return Response(status=e.http_status, response=e.message)
-    except RemoteFileReadException as e:
-        return jsonify({"error": str(e)}), e.http_status
-
-    return Response(status=200, response=content)
+        content, resolved, remapped = read_stack_source_local(file_path)
+        return stack_source_response(content, resolved, remapped)
+    except ValueError as e:
+        return response_bad_request(str(e))
+    except FileNotFoundError as e:
+        return response_not_found(str(e) or "File not found.")
+    except PermissionError as e:
+        return response_forbidden(str(e))
 
 
 @api.route("/remote/sync", methods=["POST"])
@@ -1405,7 +1635,7 @@ def sync_remote_folder():
 
     # Check if request_body is None or not a dictionary
     if not request_body or not isinstance(request_body, dict):
-        return jsonify({"error": "Invalid or missing JSON data"}), 400
+        return response_bad_request("Invalid or missing JSON data")
 
     profiler = request_body.get("profiler")
     performance = request_body.get("performance", None)
@@ -1432,7 +1662,7 @@ def sync_remote_folder():
             return performance_folder.model_dump()
 
         except RemoteConnectionException as e:
-            return Response(status=e.http_status, response=e.message)
+            return error_response(e.http_status, e.message)
 
     try:
         remote_profiler_folder = RemoteReportFolder.model_validate(
@@ -1455,7 +1685,7 @@ def sync_remote_folder():
         )
 
     except RemoteConnectionException as e:
-        return Response(status=e.http_status, response=e.message)
+        return error_response(e.http_status, e.message)
 
 
 @api.route("/remote/use", methods=["POST"])
@@ -1466,9 +1696,7 @@ def use_remote_folder():
     performance = data.get("performance")
 
     if not connection_data or not (profiler or performance):
-        return Response(
-            status=HTTPStatus.BAD_REQUEST, response="Missing connection or report data"
-        )
+        return response_bad_request("Missing connection or report data")
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
 
@@ -1522,7 +1750,7 @@ def update_current_instance(instance: Instance):
         update_data = request.get_json()
 
         if not update_data:
-            return Response(status=HTTPStatus.BAD_REQUEST, response="No data provided.")
+            return response_bad_request("No data provided.")
 
         # Use current instance unless a different one is specified
         instance_id = update_data.get("instance_id") or instance.instance_id
@@ -1548,9 +1776,8 @@ def update_current_instance(instance: Instance):
     except Exception as e:
         logger.error(f"Error updating instance: {str(e)}")
 
-        return Response(
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
-            response="An error occurred while updating the instance.",
+        return response_internal_server_error(
+            "An error occurred while updating the instance.",
         )
 
 
@@ -1560,7 +1787,7 @@ def update_current_instance(instance: Instance):
 def get_npe_data(instance: Instance):
     if not instance.npe_path:
         logger.error("NPE path is not set in the instance.")
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
 
     if instance.npe_path.endswith(".zst"):
         compressed_path = Path(instance.npe_path)
@@ -1578,7 +1805,7 @@ def get_npe_data(instance: Instance):
         logger.error(
             f"NPE file does not exist: {compressed_path} / {uncompressed_path}"
         )
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return response_not_found()
 
     try:
         if compressed_path and compressed_path.exists():
@@ -1586,11 +1813,13 @@ def get_npe_data(instance: Instance):
                 compressed_data = file.read()
                 npe_data = zstd.uncompress(compressed_data)
         else:
+            if uncompressed_path is None:
+                return response_not_found()
             with open(uncompressed_path, "r") as file:
                 npe_data = file.read()
     except Exception as e:
         logger.error(f"Error reading NPE file: {e}")
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        return response_unprocessable_entity()
 
     return Response(npe_data, mimetype="application/json")
 
@@ -1609,13 +1838,13 @@ def notify_report_update():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
+            return response_bad_request("No JSON data provided")
 
         report_name = data.get("report_name")
         exit_status_str = data.get("exit_status")
 
         if not report_name:
-            return jsonify({"error": "report_name is required"}), 400
+            return response_bad_request("report_name is required")
 
         # Validate status
         try:
@@ -1623,10 +1852,7 @@ def notify_report_update():
                 ExitStatus(exit_status_str.upper()) if exit_status_str else None
             )
         except ValueError:
-            return (
-                jsonify({"error": "Invalid exit_status."}),
-                400,
-            )
+            return response_bad_request("Invalid exit_status.")
 
         # Create and emit the report update
         report_generated = ReportGenerated(
@@ -1654,8 +1880,29 @@ def notify_report_update():
 
     except Exception as e:
         logger.error(f"Error processing report update notification: {str(e)}")
-        return Response(
-            orjson.dumps({"error": "Internal server error"}),
-            mimetype="application/json",
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+        return response_internal_server_error("Internal server error")
+
+
+@api.route("/latest-version", methods=["GET"])
+def get_latest_version():
+    try:
+        headers = {"Content-Type": "application/xml"}
+        releases_request = urllib.request.Request(
+            "https://pypi.org/rss/project/ttnn-visualizer/releases.xml",
+            headers=headers,
+            method="GET",
         )
+
+        with urllib.request.urlopen(releases_request, timeout=2) as url_response:
+            response = url_response.read().decode("utf-8")
+
+        match = re.search(r"<title>(\d+\.\d+\.\d+)</title>", response)
+        latest_version = match.group(1) if match else None
+
+        return Response(
+            orjson.dumps(latest_version),
+            mimetype="application/json",
+        )
+    except Exception as e:
+        logger.error(f"Error fetching releases XML: {str(e)}")
+        return response_internal_server_error("Failed to fetch releases")

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, Label, RangeSlider, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
@@ -43,9 +43,15 @@ import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { getMemoryAddress } from '../../functions/math';
+import useMemoryZoomRange from '../../hooks/useMemoryZoomRange';
 
 interface OperationDetailsProps {
     operationId: number;
+}
+
+interface ZoomMemoryChunk {
+    address: number;
+    size: number;
 }
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
@@ -65,14 +71,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [isL1Active, setIsL1Active] = useState(true);
     const [isDramActive, setIsDramActive] = useState(false);
 
-    const [zoomRangeStart, setZoomRangeStart] = useState(0);
-    const [zoomRangeEnd, setZoomRangeEnd] = useState(0);
-
     const { data: operations } = useOperationsList();
     const l1start = useGetL1StartMarker();
     const l1end = useGetL1SmallMarker();
-
-    const didInitZoomRange = useRef(false);
 
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -87,25 +88,49 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const operation = operations?.find((op) => op.id === operationId);
     const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
+    const hasOperationDetails =
+        !isLoading && !isPrevLoading && !!operationDetails && !!previousOperationDetails && !!operations;
+
     let details: OperationDetails | null = null;
+    let previousDetails: OperationDetails | null = null;
+    let l1MemoryData: ReturnType<OperationDetails['memoryData']> | null = null;
+    let memorySizeL1 = L1_DEFAULT_MEMORY_SIZE;
+    let memory: ZoomMemoryChunk[] = [];
 
-    useEffect(() => {
-        if (didInitZoomRange.current) {
-            return;
-        }
-        if (!isLoading && !isPrevLoading && operationDetails && previousOperationDetails && details !== null) {
-            const { plotZoomRangeStart, plotZoomRangeEnd } = calculatePlotZoomRange();
-            setZoomRangeStart(plotZoomRangeStart);
-            setZoomRangeEnd(plotZoomRangeEnd);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [details, isLoading, isPrevLoading, operationDetails, previousOperationDetails]);
+    if (hasOperationDetails) {
+        const deallocationReport = lateDeallocationsByOperation.get(operation?.id || -1) || [];
 
-    useEffect(() => {
-        didInitZoomRange.current = false;
-    }, [operationId]);
+        details = new OperationDetails(
+            operationDetails,
+            operations,
+            deallocationReport,
+            { l1start, l1end },
+            {
+                renderPattern: renderMemoryLayoutPattern,
+                lateDeallocation: showDeallocationReport,
+                showHex,
+            },
+        );
 
-    if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails || !operations) {
+        previousDetails = new OperationDetails(previousOperationDetails, operations, [], {
+            l1start,
+            l1end,
+        });
+
+        l1MemoryData = details.memoryData();
+        memorySizeL1 = details.memorySizeL1;
+        memory = l1MemoryData.memory;
+    }
+
+    const { plotZoomRangeMin, plotZoomRangeMax, zoomRangeStart, zoomRangeEnd, handleSetZoomRange } = useMemoryZoomRange(
+        {
+            operationId,
+            memorySizeL1,
+            memory,
+        },
+    );
+
+    if (!hasOperationDetails || !details || !previousDetails || !l1MemoryData) {
         return (
             <>
                 <OperationDetailsNavigation
@@ -116,51 +141,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             </>
         );
     }
-    const deallocationReport = lateDeallocationsByOperation.get(operation?.id || -1) || [];
-    details = new OperationDetails(
-        operationDetails,
-        operations,
-        deallocationReport,
-        { l1start, l1end },
-        {
-            renderPattern: renderMemoryLayoutPattern,
-            lateDeallocation: showDeallocationReport,
-            showHex,
-        },
-    );
-
-    const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations, [], {
-        l1start,
-        l1end,
-    });
-
     const l1Small = details.memoryData(BufferType.L1_SMALL);
-
-    const { memory, cbChartDataByOperation } = details.memoryData();
-    const { memory: previousMemory } = previousDetails.memoryData();
-
-    const { memorySizeL1 } = details;
-
-    const calculatePlotZoomRange = () => {
-        let plotZoomRangeStart = Math.min(
-            memory[0]?.address || memorySizeL1,
-            previousMemory[0]?.address || memorySizeL1,
-        );
-        let plotZoomRangeEnd = Math.max(
-            memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0,
-            previousMemory.length > 0
-                ? previousMemory[previousMemory.length - 1].address + previousMemory[previousMemory.length - 1].size
-                : 0,
-        );
-
-        if (plotZoomRangeEnd < plotZoomRangeStart) {
-            plotZoomRangeStart = 0;
-            plotZoomRangeEnd = memorySizeL1;
-        }
-        return { plotZoomRangeStart, plotZoomRangeEnd };
-    };
-
-    const { plotZoomRangeStart, plotZoomRangeEnd } = calculatePlotZoomRange();
+    const { cbChartDataByOperation, chartData } = l1MemoryData;
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
@@ -193,8 +175,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const inputOutputList = details.inputs.concat(details.outputs);
     const inputOutputAddressList: string = inputOutputList.map((tensor) => tensor.address).join(',');
-    const { chartData } = details.memoryData();
-
     return (
         <>
             <OperationDetailsNavigation
@@ -378,16 +358,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             className='memory-zoom-range-reset'
                                             disabled={
                                                 !zoomedInViewMainMemory ||
-                                                (plotZoomRangeStart === zoomRangeStart &&
-                                                    plotZoomRangeEnd === zoomRangeEnd)
+                                                (plotZoomRangeMin === zoomRangeStart &&
+                                                    plotZoomRangeMax === zoomRangeEnd)
                                             }
                                             size={Size.SMALL}
                                             variant={ButtonVariant.MINIMAL}
                                             icon={IconNames.RESET}
                                             intent={Intent.WARNING}
                                             onClick={() => {
-                                                setZoomRangeStart(plotZoomRangeStart);
-                                                setZoomRangeEnd(plotZoomRangeEnd);
+                                                handleSetZoomRange(plotZoomRangeMin, plotZoomRangeMax);
                                             }}
                                         />
                                         {!zoomedInViewMainMemory && '(Requires buffer zoom to be enabled)'}
@@ -397,7 +376,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         className={classNames('l1-memory-renderer zoom-reference', {
                                             disabled: !zoomedInViewMainMemory,
                                         })}
-                                        plotZoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                                        plotZoomRange={[plotZoomRangeMin, plotZoomRangeMax]}
                                         chartDataList={[chartData]}
                                         isZoomedIn={zoomedInViewMainMemory}
                                         memorySize={memorySizeL1}
@@ -405,18 +384,17 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     />
                                     <div className='zoom-range-wrap'>
                                         <RangeSlider
-                                            min={plotZoomRangeStart}
-                                            max={plotZoomRangeEnd}
+                                            min={plotZoomRangeMin}
+                                            max={plotZoomRangeMax}
                                             disabled={!zoomedInViewMainMemory}
                                             intent={Intent.WARNING}
                                             labelStepSize={
-                                                (plotZoomRangeEnd - plotZoomRangeStart) / 3 || L1_DEFAULT_MEMORY_SIZE
+                                                (plotZoomRangeMax - plotZoomRangeMin) / 3 || L1_DEFAULT_MEMORY_SIZE
                                             }
                                             labelRenderer={(value) => getMemoryAddress(value, showHex)}
                                             value={[zoomRangeStart, zoomRangeEnd]}
                                             onChange={(value: number[]) => {
-                                                setZoomRangeStart(value[0]);
-                                                setZoomRangeEnd(value[1]);
+                                                handleSetZoomRange(value[0], value[1]);
                                             }}
                                             className='memory-zoom-range'
                                         />

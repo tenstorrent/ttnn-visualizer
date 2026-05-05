@@ -17,7 +17,7 @@ from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
-    NoProjectsException,
+    NoReportsException,
     NoValidConnectionsError,
     RemoteConnectionException,
     SSHException,
@@ -546,18 +546,14 @@ def check_remote_path_for_reports(remote_connection):
 
     errors = []
     if not remote_profiler_paths and remote_connection.profilerPath:
-        errors.append(
-            f"No matching profiler projects found: {remote_connection.profilerPath}"
-        )
+        errors.append(f"Profiler folder path: {remote_connection.profilerPath}")
     if not remote_performance_paths and remote_connection.performancePath:
-        errors.append(
-            f"No matching performance projects found: {remote_connection.performancePath}"
-        )
+        errors.append(f"Performance folder path: {remote_connection.performancePath}")
 
     if errors:
-        raise NoProjectsException(
+        raise NoReportsException(
             message="; ".join(errors),
-            status=ConnectionTestStates.FAILED,
+            status=ConnectionTestStates.WARNING,
         )
 
     return True
@@ -684,14 +680,15 @@ def get_remote_performance_folders(
             remote_connection, remote_connection.performancePath, [TEST_PROFILER_FILE]
         )
     else:
-        error = "Performance path is not configured for this connection"
-        logger.error(error)
-        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+        logger.info("No performance path configured for this connection")
+        return []
 
     if not performance_paths:
-        error = f"Performance path: {remote_connection.performancePath}"
-        logger.info(error)
-        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+        logger.info(
+            "No performance reports found under path: %s",
+            remote_connection.performancePath,
+        )
+        return []
 
     remote_folder_data = []
     for path in performance_paths:
@@ -714,14 +711,15 @@ def get_remote_profiler_folders(
             remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
         )
     else:
-        error = f"No profiler reports found at {remote_connection.profilerPath}"
-        logger.info(error)
-        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+        logger.info("No profiler path configured for this connection")
+        return []
 
     if not profiler_paths:
-        error = f"Profiler path: {remote_connection.profilerPath}"
-        logger.info(error)
-        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+        logger.info(
+            "No profiler reports found under path: %s",
+            remote_connection.profilerPath,
+        )
+        return []
 
     remote_folder_data = []
     for path in profiler_paths:

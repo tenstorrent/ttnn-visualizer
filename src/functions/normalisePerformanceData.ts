@@ -37,6 +37,8 @@ const PLACEHOLDER: TypedPerfTableRow = {
     device: null,
     buffer_type: null,
     layout: null,
+    hash: null,
+    cache_hit: null,
 };
 
 export interface NormalisedPerfData {

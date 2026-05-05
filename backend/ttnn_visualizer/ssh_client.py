@@ -4,10 +4,11 @@
 
 import logging
 import os
+import shlex
 import subprocess
 from http import HTTPStatus
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, NoReturn, Optional, Union
 
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
@@ -77,7 +78,7 @@ class SSHClient:
         cmd.append(f"{self.connection.username}@{self.connection.host}")
         return cmd
 
-    def _handle_subprocess_error(self, e: subprocess.CalledProcessError):
+    def _handle_subprocess_error(self, e: subprocess.CalledProcessError) -> NoReturn:
         """
         Convert subprocess SSH errors to appropriate SSH exceptions.
 
@@ -242,7 +243,9 @@ class SSHClient:
         logger.info(f"Reading remote file {path}")
 
         try:
-            result = self.execute_command(f"cat '{path}'", timeout=timeout)
+            result = self.execute_command(
+                f"cat {shlex.quote(str(remote_path))}", timeout=timeout
+            )
             return result.encode("utf-8")
         except SSHException as e:
             msg = str(e).lower()
@@ -279,7 +282,9 @@ class SSHClient:
         logger.debug(f"Checking if remote path exists: {path}")
 
         try:
-            self.execute_command(f"test -e '{path}'", timeout=timeout)
+            self.execute_command(
+                f"test -e {shlex.quote(str(remote_path))}", timeout=timeout
+            )
             return True
         except SSHException:
             return False

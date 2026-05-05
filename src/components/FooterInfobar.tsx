@@ -3,9 +3,20 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, Classes, Collapse, Icon, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    Classes,
+    Collapse,
+    Icon,
+    Intent,
+    NumberRange,
+    PopoverPosition,
+    Size,
+    Tag,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
@@ -13,15 +24,21 @@ import {
     activeProfilerReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
+    performanceReportLocationAtom,
+    profilerReportLocationAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
-import SyncStatus from './SyncStatus';
+import { ReportLocation } from '../definitions/Reports';
+import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
-import { useInstance } from '../hooks/useAPI';
+import { useGetLatestAppVersion, useInstance } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
 import { Instance } from '../model/APIData';
+import LoadingSpinner from './LoadingSpinner';
+import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
+import AppVersionStatus from './AppVersionStatus';
 
 const RANGE_DISALLOWED_ROUTES: string[] = [ROUTES.NPE];
 
@@ -32,17 +49,26 @@ function FooterInfobar() {
     const performanceRange = useAtomValue(performanceRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const profilerReportLocation = useAtomValue(profilerReportLocationAtom);
+    const performanceReportLocation = useAtomValue(performanceReportLocationAtom);
 
     const { data: instance } = useInstance();
     const location = useLocation();
+    const {
+        data: latestAppVersion,
+        isPending: isLatestAppPending,
+        isError: isLatestAppVersionError,
+    } = useGetLatestAppVersion();
+    const serverConfig = getServerConfig();
+
+    const isServerMode = serverConfig.SERVER_MODE || false;
+    const appVersion = import.meta.env.APP_VERSION;
 
     const activeProfilerReportName = activeProfilerReport?.reportName;
     const activeProfilerReportPath = activeProfilerReport?.path;
     const hasLoadedRemoteReport =
         instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
     const activePerformanceReportPath = activePerformanceReport?.path;
-    const serverConfig = getServerConfig();
-    const isServerMode = serverConfig.SERVER_MODE;
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
 
     const isAllowedRoute = useCallback(() => {
@@ -67,15 +93,27 @@ function FooterInfobar() {
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
+    const versionStatus = getAppVersionStatus(
+        appVersion,
+        isLatestAppPending,
+        isServerMode,
+        latestAppVersion,
+        isLatestAppVersionError,
+    );
+
     useEffect(() => {
         if (!isAllowedRoute()) {
+            // Synchronize slider state with route availability
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSliderIsOpen(false);
         }
-    }, [isAllowedRoute]);
+    }, [location.pathname, isAllowedRoute]);
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
+                <div className='version-container'>{versionStatus}</div>
+
                 <div className='active-reports'>
                     {!isServerMode && (
                         <Tooltip
@@ -95,11 +133,12 @@ function FooterInfobar() {
                             <Icon
                                 icon={IconNames.FOLDER_OPEN}
                                 aria-label='Base folder paths'
+                                size={16}
                             />
                         </Tooltip>
                     )}
 
-                    {activeProfilerReportName && (
+                    {activeProfilerReportPath && (
                         <Tooltip
                             disabled={!activeProfilerReportPath}
                             content={formatPath(activeProfilerReportPath)}
@@ -108,13 +147,16 @@ function FooterInfobar() {
                             <div className='title'>
                                 <strong>Memory:</strong>
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
-                                    {activeProfilerReportName}
+                                    {activeProfilerReportName || formatName(activeProfilerReportPath)}
                                 </span>
+                                {profilerReportLocation !== null && (
+                                    <ReportLocationTag location={profilerReportLocation} />
+                                )}
                             </div>
                         </Tooltip>
                     )}
 
-                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
+                    {activeProfilerReportPath && activePerformanceReportPath && <ReportLinkStatus />}
 
                     {activePerformanceReportPath && (
                         <Tooltip
@@ -125,8 +167,11 @@ function FooterInfobar() {
                             <div className='title'>
                                 <strong>Performance:</strong>
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
-                                    {activePerformanceReportPath}
+                                    {formatName(activePerformanceReportPath)}
                                 </span>
+                                {performanceReportLocation !== null && (
+                                    <ReportLocationTag location={performanceReportLocation} />
+                                )}
                             </div>
                         </Tooltip>
                     )}
@@ -150,7 +195,7 @@ function FooterInfobar() {
                 )}
             </div>
 
-            {(activeProfilerReport || activePerformanceReport) && (
+            {(activeProfilerReportPath || activePerformanceReportPath) && (
                 <Collapse
                     isOpen={sliderIsOpen}
                     keepChildrenMounted
@@ -161,6 +206,22 @@ function FooterInfobar() {
         </footer>
     );
 }
+
+const ReportLocationTag = ({ location }: { location: ReportLocation }) => {
+    const isRemote = location === ReportLocation.REMOTE;
+    const label = isRemote ? 'Remote' : 'Local';
+
+    return (
+        <Tag
+            minimal
+            className='report-source-tag'
+            aria-label={`Report source: ${label}`}
+            intent={Intent.PRIMARY}
+        >
+            {label}
+        </Tag>
+    );
+};
 
 const hasRangeSelected = (selectedRange: NumberRange | null, operationRange: NumberRange | null): boolean =>
     !!(
@@ -184,7 +245,57 @@ const formatPath = (str?: string): string => {
         return '';
     }
 
-    return str.startsWith('/') ? str : `/${str}`;
+    const endPath = str.includes('/') ? str.split('/').at(-1) : str;
+
+    return endPath?.startsWith('/') ? endPath : `/${endPath}`;
+};
+
+// If the name is a path, return the parent folder name otherwise return the name (name is optional)
+const formatName = (str: string): string => {
+    const isPath = str.includes('/');
+
+    if (isPath) {
+        return str.split('/').at(-1) || str;
+    }
+
+    return str;
+};
+
+const getAppVersionStatus = (
+    appVersion: string,
+    isLatestAppPending: boolean,
+    isServerMode: boolean,
+    latestAppVersion: string | null | undefined,
+    isLatestAppVersionError: boolean,
+): ReactNode => {
+    if (isServerMode) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                isServerMode
+            />
+        );
+    }
+
+    if (isLatestAppPending) {
+        return <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />;
+    }
+
+    if (isLatestAppVersionError && latestAppVersion == null) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                latestVersionCheckFailed
+            />
+        );
+    }
+
+    return (
+        <AppVersionStatus
+            appVersion={appVersion}
+            latestAppVersion={latestAppVersion ?? undefined}
+        />
+    );
 };
 
 export default FooterInfobar;

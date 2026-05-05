@@ -655,7 +655,7 @@ def get_available_reports(current_app):
     return reports
 
 
-def get_npe_path(npe_name, current_app):
+def get_npe_path(npe_name, current_app, remote_connection=None):
     local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
 
     npe_path = local_dir / current_app.config["NPE_DIRECTORY_NAME"]
@@ -736,6 +736,7 @@ def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]
     memory_layout = memory_layout_match.group(1) if memory_layout_match else None
 
     shard_spec_match = SHARD_SPEC_PATTERN.search(captured_string)
+    shard_spec: str | dict[str, Any]
     if shard_spec_match:
         shard_spec = {
             "grid": shard_spec_match.group(1),

@@ -4,8 +4,6 @@
 
 import dataclasses
 import enum
-import json
-from json import JSONDecodeError
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -34,6 +32,7 @@ class Operation(SerializeableDataclass):
     operation_id: int
     name: str
     duration: float
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -55,24 +54,21 @@ class Device(SerializeableDataclass):
     total_l1_for_interleaved_buffers: int
     total_l1_for_sharded_buffers: int
     cb_limit: int
+    rank: int = 0
 
 
 @dataclasses.dataclass
 class DeviceOperation(SerializeableDataclass):
     operation_id: int
     captured_graph: str
+    rank: int = 0
 
     def __post_init__(self):
-        try:
-            captured_graph = json.loads(self.captured_graph)
-            for graph in captured_graph:
-                id = graph.pop("counter")
-                graph.update({"id": id})
-
-            self.captured_graph = captured_graph
-
-        except JSONDecodeError:
-            self.captured_graph = json.dumps({})
+        # captured_graph is already valid JSON from the report DB; we keep it
+        # as a raw string and splice it directly into API responses via
+        # orjson.Fragment, avoiding an unnecessary parse/re-dump round trip.
+        if not self.captured_graph:
+            self.captured_graph = "[]"
 
 
 @dataclasses.dataclass
@@ -83,6 +79,7 @@ class Buffer(SerializeableDataclass):
     max_size_per_bank: int
     buffer_type: BufferType
     buffer_layout: Optional[int] = None
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -97,6 +94,7 @@ class BufferPage(SerializeableDataclass):
     page_address: int
     page_size: int
     buffer_type: BufferType
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -104,6 +102,18 @@ class ProducersConsumers(SerializeableDataclass):
     tensor_id: int
     producers: list[int]
     consumers: list[int]
+    rank: int = 0
+
+
+@dataclasses.dataclass
+class TensorLifetime(SerializeableDataclass):
+    producer_operation_id: Optional[int] = None
+    last_use_operation_id: Optional[int] = None
+    deallocate_operation_id: Optional[int] = None
+    producer_source_file: Optional[str] = None
+    producer_source_line: Optional[int] = None
+    last_use_source_file: Optional[str] = None
+    last_use_source_line: Optional[int] = None
 
 
 @dataclasses.dataclass
@@ -118,6 +128,8 @@ class Tensor(SerializeableDataclass):
     buffer_type: BufferType
     device_addresses: list[int]
     size: Optional[int] = None
+    lifetime: Optional[TensorLifetime] = None
+    rank: int = 0
 
     def __post_init__(self):
         self.memory_config = parse_memory_config(self.memory_config)
@@ -128,6 +140,7 @@ class InputTensor(SerializeableDataclass):
     operation_id: int
     input_index: int
     tensor_id: int
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -135,6 +148,7 @@ class OutputTensor(SerializeableDataclass):
     operation_id: int
     output_index: int
     tensor_id: int
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -151,12 +165,14 @@ class OperationArgument(SerializeableDataclass):
     operation_id: int
     name: str
     value: str
+    rank: int = 0
 
 
 @dataclasses.dataclass
 class StackTrace(SerializeableDataclass):
     operation_id: int
     stack_trace: str
+    rank: int = 0
 
 
 @dataclasses.dataclass
@@ -167,6 +183,7 @@ class ErrorRecord(SerializeableDataclass):
     error_message: str
     stack_trace: str
     timestamp: str
+    rank: int = 0
 
     def to_nested_dict(self) -> dict:
         """

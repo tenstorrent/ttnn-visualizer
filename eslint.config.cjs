@@ -5,7 +5,8 @@ const globals = require('globals');
 const { fixupConfigRules, fixupPluginRules } = require('@eslint/compat');
 
 const tsParser = require('@typescript-eslint/parser');
-const reactRefresh = require('eslint-plugin-react-refresh');
+const reactRefreshModule = require('eslint-plugin-react-refresh');
+const reactRefresh = reactRefreshModule.default || reactRefreshModule;
 const unusedImports = require('eslint-plugin-unused-imports');
 const jsxA11Y = require('eslint-plugin-jsx-a11y');
 const _import = require('eslint-plugin-import');
@@ -91,15 +92,6 @@ module.exports = defineConfig([
         },
 
         rules: {
-            'react-refresh/only-export-components': [
-                'warn',
-                {
-                    allowConstantExport: true,
-                },
-            ],
-
-            'import/no-unresolved': 'error',
-            'import/no-extraneous-dependencies': 'off',
             '@typescript-eslint/await-thenable': 'error',
 
             '@typescript-eslint/no-floating-promises': [
@@ -120,8 +112,6 @@ module.exports = defineConfig([
             ],
 
             '@typescript-eslint/no-shadow': 'error',
-            'require-await': 'off',
-            '@typescript-eslint/require-await': ['error'],
 
             '@typescript-eslint/no-unused-vars': [
                 'warn',
@@ -131,6 +121,7 @@ module.exports = defineConfig([
                 },
             ],
 
+            '@typescript-eslint/require-await': ['error'],
             'comma-dangle': ['error', 'always-multiline'],
             curly: ['error', 'all'],
 
@@ -144,13 +135,30 @@ module.exports = defineConfig([
                 },
             ],
 
+            'import/first': 'error',
+            'import/no-duplicates': 'error',
+            'import/no-extraneous-dependencies': 'off',
             'import/no-import-module-exports': 'off',
+            'import/no-unresolved': 'error',
+            'import/prefer-default-export': 'off',
             'max-classes-per-file': 'off',
+            'no-plusplus': 'off',
+            'no-restricted-syntax': 'off',
             'no-shadow': 'off',
+            'no-underscore-dangle': 'off',
             'no-unused-vars': 'off',
             'no-use-before-define': 'off',
             'prefer-const': 'warn',
             'prettier/prettier': 'warn',
+
+            'react-refresh/only-export-components': [
+                'warn',
+                {
+                    allowConstantExport: true,
+                },
+            ],
+
+            'react/function-component-definition': 0,
 
             'react/jsx-filename-extension': [
                 'warn',
@@ -159,11 +167,11 @@ module.exports = defineConfig([
                 },
             ],
 
+            'react/jsx-props-no-spreading': 'off',
             'react/no-array-index-key': 'off',
             'react/react-in-jsx-scope': 'off',
-            'no-plusplus': 'off',
-            'no-underscore-dangle': 'off',
-            'react/function-component-definition': 0,
+            'react/require-default-props': 'off',
+            'require-await': 'off',
 
             'sort-imports': [
                 'error',
@@ -172,9 +180,6 @@ module.exports = defineConfig([
                 },
             ],
 
-            'import/first': 'error',
-            'import/no-duplicates': 'error',
-            'import/prefer-default-export': 'off',
             'unused-imports/no-unused-imports': 'error',
 
             'unused-imports/no-unused-vars': [
@@ -186,9 +191,6 @@ module.exports = defineConfig([
                     argsIgnorePattern: '^_',
                 },
             ],
-
-            'react/require-default-props': 'off',
-            'no-restricted-syntax': 'off',
         },
     },
     globalIgnores([
