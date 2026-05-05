@@ -251,13 +251,11 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const nextRequestIdRef = useRef(0);
     const activeRequestIdRef = useRef(0);
 
-    useEffect(() => {
-        hasFitInitiallyRef.current = false;
-        setExpandedNamespaces(new Set());
-        viewportAnchorRef.current = null;
-        setInteractionIndex(null);
-        setSelectedNodeId(null);
-    }, [graph.id]);
+    // No graph-id reset effect: `MlGraphInner` is keyed by `graph.id` in
+    // `MlGraphWithProvider`, so React fully remounts the subtree when the
+    // graph changes. That gives us a fresh worker, fresh refs, and fresh
+    // state for free without an in-effect setState (which would trip
+    // react-hooks/set-state-in-effect).
 
     useEffect(() => {
         selectedNodeIdRef.current = selectedNodeId;
@@ -389,7 +387,11 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             return;
         }
         postedGraphIdRef.current = graph.id;
-        setIndexReadyGraphId(null);
+        // No need to reset `indexReadyGraphId` here — every consumer guards on
+        // `indexReadyGraphId !== graph.id`, so a stale value from the previous
+        // graph already blocks builds until the worker confirms `indexed` for
+        // the new graph.id. Setting state directly inside an effect also trips
+        // react-hooks/set-state-in-effect.
         const sourceNodes: SourceNode[] = graph.nodes.map((node) => ({
             id: node.id,
             label: node.label,
@@ -409,13 +411,16 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const onSubgraphNodeClick = useCallback(
         (event: MouseEvent, node: MLNode) => {
             // For group nodes, only the header (`.mlir-group-handle`) is a click
-            // target; clicks on the empty group body should be ignored. The
-            // header doubles as the React Flow drag handle, so an actual drag
-            // never fires `onNodeClick`.
+            // target; clicks on the empty group body behave like a pane click —
+            // they clear any current selection. Without this, React Flow's
+            // built-in selection logic deselects the previously-selected leaf
+            // (the blue ring vanishes) while our `selectedNodeId` state stays
+            // set, leaving the producer/consumer highlights stuck on.
             if (node.type === 'mlirGroup') {
                 const target = event.target as Element | null;
                 const headerHit = target?.closest?.('.mlir-group-handle');
                 if (!headerHit) {
+                    setSelectedNodeId(null);
                     return;
                 }
             }
@@ -694,8 +699,15 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
 
 const MlGraphWithProvider: React.FC<ViewProps> = (props) => (
     <ReactFlowProvider>
-        {/* eslint-disable-next-line react/jsx-props-no-spreading */}
-        <MlGraphInner {...props} />
+        {/* Keying on graph.id remounts the inner subtree when the user
+            switches graphs — cleaner than imperatively resetting half a
+            dozen state slots in an effect, and lints cleanly under
+            react-hooks/set-state-in-effect. */}
+        <MlGraphInner
+            // eslint-disable-next-line react/destructuring-assignment
+            key={props.data.graphs[0]?.id}
+            {...props}
+        />
     </ReactFlowProvider>
 );
 
