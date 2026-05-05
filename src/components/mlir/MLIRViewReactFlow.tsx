@@ -573,22 +573,27 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode, mlirGroup: MlirGroupNode }) as const, []);
 
     // Edge display rules:
-    // 1. Same-parent edges (both endpoints share a parent — internal to an
-    //    expanded group, or both at top level): shown end-to-end.
-    // 2. Selection edges: when a node is selected, every edge that touches it
-    //    (including specific cross-boundary edges) is shown end-to-end so the
-    //    user can trace exact connections.
-    // 3. Cross-boundary edges (otherwise): each endpoint is "lifted" to the
-    //    level just below the lowest common ancestor of the two endpoints'
-    //    parent chains. So an edge from a top-level node to an op buried
-    //    deep inside an expanded group renders as `top-level node → group
-    //    boundary` (one hop, end visible at the actual node), and an edge
-    //    between two nodes living in different expanded subgroups under a
-    //    shared parent renders as `subgroup → subgroup` inside the parent.
-    //    Identical aggregate pairs are de-duplicated. This gives the user
-    //    "X connects to subgraph Y" affordance even when Y is expanded —
-    //    without drawing 50 fan-out lines from each inner op — while still
-    //    letting selection reveal the specific edge.
+    // 1. Drop edges where either endpoint is a real-namespace group node.
+    //    The worker's internal-edges loop emits these for nested expanded
+    //    regions, but the top-level loop ALWAYS also emits the direct
+    //    node-to-node alternative (e.g. `gather → arg42` is the direct twin
+    //    of `gather → group:all_reduce_0`). Keeping both causes duplicate
+    //    edges with disagreeing labels.
+    // 2. Selection edges: when a node is selected, every edge touching it is
+    //    shown end-to-end so the user can trace exact connections.
+    // 3. Collapsed-to-collapsed edges: when both endpoints are collapsed
+    //    namespace anchors, the edge represents an aggregated bundle of
+    //    many inner connections. Drop the per-edge label and dedup by pair
+    //    so we don't paint a stack of tensor shapes between two anchors.
+    // 4. Same-parent edges (otherwise): shown end-to-end with their label.
+    // 5. Cross-boundary edges: lift each endpoint to the level just below
+    //    the lowest common ancestor of the two parent chains, then on each
+    //    side independently if the lifted endpoint is a *real* MLIR
+    //    namespace group (not a synthetic topology section), drop the lift
+    //    and use the actual node. This gives direct node-to-node edges for
+    //    region boundaries while preserving the aggregate "section A →
+    //    section B" rendering for high-fan-out synthetic sections. Aggregate
+    //    pairs are de-duplicated.
     const displayedEdges = useMemo<Edge[]>(() => {
         if (edges.length === 0) {
             return edges;
@@ -610,24 +615,47 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             chainCache.set(nodeId, chain);
             return chain;
         };
+        const isRealNamespaceGroup = (id: string): boolean => {
+            const n = nodeById.get(id);
+            return n?.type === 'mlirGroup' && n.data?.groupKind !== 'section';
+        };
+        const isCollapsedAnchor = (id: string): boolean => {
+            const n = nodeById.get(id);
+            return !!n?.data?.collapsedSubgraphNamespace && n.data?.subgraphToggleState === 'collapsed';
+        };
         const result: Edge[] = [];
         const seenAggregatePairs = new Set<string>();
+        const seenCollapsedPairs = new Set<string>();
         for (const e of edges) {
-            const srcParent = nodeById.get(e.source)?.parentId;
-            const tgtParent = nodeById.get(e.target)?.parentId;
-            if (srcParent === tgtParent) {
-                result.push(e);
+            // (1) Suppress redundant container-level edges for real
+            // namespaces. We already emit the direct twin from the top-level
+            // edge loop, so the group-boundary version is pure visual noise.
+            if (isRealNamespaceGroup(e.source) || isRealNamespaceGroup(e.target)) {
                 continue;
             }
+            // (2) Selection wins over everything below — labels included.
             if (e.source === selectedNodeId || e.target === selectedNodeId) {
                 result.push(e);
                 continue;
             }
-            // Walk both parent chains from outermost group inward and find
-            // the depth at which they diverge — that's the level where the
-            // edge should surface. Either side may be shorter than the LCA
-            // depth (i.e. the endpoint itself sits at that level), in which
-            // case the endpoint is used as-is rather than lifted to a group.
+            // (3) Collapsed-to-collapsed: aggregated bundle, no label, dedup.
+            if (isCollapsedAnchor(e.source) && isCollapsedAnchor(e.target)) {
+                const pairKey = `${e.source}|${e.target}`;
+                if (seenCollapsedPairs.has(pairKey)) {
+                    continue;
+                }
+                seenCollapsedPairs.add(pairKey);
+                result.push({ ...e, label: undefined });
+                continue;
+            }
+            const srcParent = nodeById.get(e.source)?.parentId;
+            const tgtParent = nodeById.get(e.target)?.parentId;
+            // (4) Same-parent — push as-is.
+            if (srcParent === tgtParent) {
+                result.push(e);
+                continue;
+            }
+            // (5) Cross-boundary — LCA lift with real-namespace fallback.
             const srcChain = parentChain(e.source);
             const tgtChain = parentChain(e.target);
             let lcaDepth = 0;
@@ -638,12 +666,18 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             ) {
                 lcaDepth++;
             }
-            const aggSrc = srcChain.length > lcaDepth ? srcChain[lcaDepth] : e.source;
-            const aggTgt = tgtChain.length > lcaDepth ? tgtChain[lcaDepth] : e.target;
-            if (aggSrc === aggTgt) {
+            const liftedSrc = srcChain.length > lcaDepth ? srcChain[lcaDepth] : e.source;
+            const liftedTgt = tgtChain.length > lcaDepth ? tgtChain[lcaDepth] : e.target;
+            const finalSrc = isRealNamespaceGroup(liftedSrc) ? e.source : liftedSrc;
+            const finalTgt = isRealNamespaceGroup(liftedTgt) ? e.target : liftedTgt;
+            if (finalSrc === finalTgt) {
                 continue;
             }
-            const pairKey = `${aggSrc}|${aggTgt}`;
+            if (finalSrc === e.source && finalTgt === e.target) {
+                result.push(e);
+                continue;
+            }
+            const pairKey = `${finalSrc}|${finalTgt}`;
             if (seenAggregatePairs.has(pairKey)) {
                 continue;
             }
@@ -651,8 +685,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             result.push({
                 ...e,
                 id: `agg:${pairKey}`,
-                source: aggSrc,
-                target: aggTgt,
+                source: finalSrc,
+                target: finalTgt,
                 label: undefined,
             });
         }
