@@ -214,6 +214,11 @@ export interface FragmentationEntry extends Chunk {
 //     profiler_name: string;
 // }
 
+export interface ReportMetadataResponse {
+    schema_version?: string;
+    capture_timestamp_ns?: string;
+    total_duration_ns?: string;
+}
 export interface OperationDescription extends Operation {
     duration: number;
     arguments: {

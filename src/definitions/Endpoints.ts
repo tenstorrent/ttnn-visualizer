@@ -18,6 +18,7 @@ enum Endpoints {
     PERFORMANCE = '/api/performance',
     PROFILER = '/api/profiler',
     REMOTE = '/api/remote',
+    REPORT_METADATA = '/api/report_metadata',
     TENSOR_LIST = '/api/tensors',
     LATEST_VERSION = '/api/latest-version',
 }
