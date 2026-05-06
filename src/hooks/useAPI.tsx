@@ -21,6 +21,7 @@ import {
     Operation,
     OperationDescription,
     OperationDetailsData,
+    ReportMetadata,
     Tensor,
     defaultBuffer,
     defaultOperation,
@@ -732,15 +733,24 @@ export const usePerformanceRange = (): NumberRange | null => {
     );
 };
 
-// Not currently used
-// export const useReportMeta = () => {
-//     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+const fetchReportMetadata = async (): Promise<ReportMetadata> => {
+    const { data } = await axiosInstance.get<ReportMetadata>(Endpoints.REPORT_METADATA);
+    return data;
+};
 
-//     return useQuery<ReportMetaData, AxiosError>({
-//         queryKey: ['get-report-config', activeProfilerReport?.path],
-//         queryFn: () => fetchReportMeta(),
-//     });
-// };
+// The endpoint returns 422 on legacy reports that lack the table; surface
+// that as an AxiosError to the caller rather than retrying.
+export const useReportMetadata = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ReportMetadata, AxiosError>({
+        queryKey: ['get-report-metadata', activeProfilerReport?.path],
+        queryFn: fetchReportMetadata,
+        enabled: activeProfilerReport !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
     return useQuery<BufferPage[], AxiosError>({
