@@ -388,6 +388,24 @@ it('maintains state consistency after localStorage changes', () => {
     expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
 });
 
+it('shows an "Incompatible report version" toast when the active report uses an unsupported DB schema', async () => {
+    mockUseReportMetadata.mockReturnValue({
+        data: { version: { major: 999, minor: 0, patch: 0 } },
+        error: undefined,
+    });
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain('v999.0.0'),
+        WAIT_FOR_OPTIONS,
+    );
+});
+
 it('displays appropriate connection count information', () => {
     const multipleConnections: RemoteConnection[] = [
         remoteConnection[0],
