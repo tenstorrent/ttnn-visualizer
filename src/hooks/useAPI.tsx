@@ -752,8 +752,7 @@ const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     } as ReportMetadata;
 };
 
-// The endpoint returns 422 on legacy reports that lack the table; surface
-// that as an AxiosError to the caller rather than retrying.
+// The endpoint returns 422 on legacy reports that lack the table
 export const useReportMetadata = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 

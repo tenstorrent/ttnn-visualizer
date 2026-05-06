@@ -17,13 +17,13 @@ export const evaluateDbVersion = (version: SemVer) => {
     if (version.major > TARGET_DB_VERSION_MAX) {
         return {
             statusCode: DBVersionValidation.DB_NEW,
-            message: `The uploaded report was generated with a newer version of the tt-metal reporting (v${semverToString(version)}) and may not display correctly. Please update the visualizer to the latest version to ensure full compatibility.`,
+            message: `The uploaded report was generated with a newer version of the tt-metal  (report v${semverToString(version)}) and may not display correctly. Please update the visualizer to the latest version to ensure full compatibility.`,
         };
     }
     if (version.major < TARGET_DB_VERSION_MIN) {
         return {
             statusCode: DBVersionValidation.DB_OLD,
-            message: `The uploaded report was generated with an older version of the tt-metal reporting (v${semverToString(version)}) and may not display correctly. Please update the tt-metal to the latest to ensure full compatibility.`,
+            message: `The uploaded report was generated with an older version of the tt-metal (report v${semverToString(version)}) and may not display correctly. Please update the tt-metal to the latest to ensure full compatibility.`,
         };
     }
     return {
