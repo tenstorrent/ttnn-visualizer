@@ -59,7 +59,7 @@ class DefaultConfig(object):
 
     LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
 
-    # Remote SSH subprocess timeouts (seconds). Increase on slow VPN links.
+    # Remote SSH subprocess timeouts (seconds).
     SSH_SUBPROCESS_TIMEOUT = int(os.getenv("SSH_SUBPROCESS_TIMEOUT", "120"))
     SSH_REMOTE_CHECK_TIMEOUT = int(os.getenv("SSH_REMOTE_CHECK_TIMEOUT", "45"))
 
