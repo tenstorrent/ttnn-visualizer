@@ -231,7 +231,7 @@ const OperationGraph: React.FC<{
                     currentOpIdRef.current = nodeId;
                 } catch (e) {
                     // eslint-disable-next-line no-console
-                    console.error('Error selecting node', e);
+                    console.warn('Error selecting node', e);
                 }
             }
         },
