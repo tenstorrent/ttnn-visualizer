@@ -17,7 +17,12 @@
         background: $tt-grey-2;
     }
 
-    .react-flow__panel.bottom {
+    /* Nudge only the bottom-right panel (minimap / attribution). The previous
+     * selector targeted every `.bottom` panel — including `.bottom.left`
+     * (the Controls panel) — and combined with React Flow's `left: 0` it
+     * stretched the controls bounding box across the entire bottom of the
+     * graph, intercepting pan/click events on everything underneath. */
+    .react-flow__panel.bottom.right {
         bottom: 0;
         right: -15px;
     }
