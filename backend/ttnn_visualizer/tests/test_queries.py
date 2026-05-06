@@ -270,8 +270,33 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].name, "op1")
 
+    def test_query_operations_ignores_unknown_extra_columns(self):
+        """Forward-compatible with TTNN adding columns to report tables."""
+        self.connection.execute(
+            "ALTER TABLE operations ADD COLUMN future_meta TEXT DEFAULT NULL"
+        )
+        self.connection.execute(
+            "INSERT INTO operations (operation_id, name, duration, future_meta) "
+            "VALUES (1, 'op1', 2.0, 'ignored')"
+        )
+        results = list(self.db_queries.query_operations(filters={"operation_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].name, "op1")
+
     def test_query_buffers(self):
         self.connection.execute("INSERT INTO buffers VALUES (1, 1, 100, 1024, 0)")
+        results = list(self.db_queries.query_buffers(filters={"operation_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].address, 100)
+
+    def test_query_buffers_ignores_unknown_extra_columns(self):
+        self.connection.execute(
+            "ALTER TABLE buffers ADD COLUMN extra_note TEXT DEFAULT NULL"
+        )
+        self.connection.execute(
+            "INSERT INTO buffers (operation_id, device_id, address, max_size_per_bank, "
+            "buffer_type, extra_note) VALUES (1, 1, 100, 1024, 0, 'note')"
+        )
         results = list(self.db_queries.query_buffers(filters={"operation_id": 1}))
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].address, 100)

@@ -3,9 +3,22 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import dataclasses
+import enum
 import sqlite3
+import types
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import (
+    AbstractSet,
+    Any,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Type,
+    Union,
+    get_args,
+    get_origin,
+)
 
 from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
 from ttnn_visualizer.models import (
@@ -27,75 +40,53 @@ from ttnn_visualizer.models import (
 )
 
 
-def _buffer_from_row(row: tuple) -> Buffer:
-    n = len(row)
-    if n == 5:
-        return Buffer(row[0], row[1], row[2], row[3], row[4], None, 0)
-    if n == 6:
-        return Buffer(row[0], row[1], row[2], row[3], row[4], row[5], 0)
-    if n == 7:
-        return Buffer(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
-    raise ValueError(f"Unexpected buffers row width: {n}")
+def _python_scalar_to_sql_literal(value: Any) -> str:
+    """Serialize a Python default suitable for SQLite SELECT clause literals."""
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    if isinstance(value, enum.Enum):
+        return _python_scalar_to_sql_literal(value.value)
+    raise TypeError(f"Unsupported default type for SQL literal: {type(value)!r}")
 
 
-def _stack_trace_from_row(row: tuple) -> StackTrace:
-    if len(row) == 2:
-        return StackTrace(row[0], stack_trace=row[1], rank=0)
-    return StackTrace(row[0], stack_trace=row[1], rank=row[2])
+def _fallback_sql_literal_for_annotation(tp: Any) -> str:
+    if tp is int:
+        return "0"
+    if tp is float:
+        return "0.0"
+    if tp is bool:
+        return "0"
+    if tp is str:
+        return "''"
+    if isinstance(tp, type) and issubclass(tp, enum.Enum):
+        return "0"
+    origin = get_origin(tp)
+    args = get_args(tp)
+    if (origin is Union or origin is types.UnionType) and args:
+        non_none = [a for a in args if a is not type(None)]
+        if len(non_none) == 1:
+            return _fallback_sql_literal_for_annotation(non_none[0])
+        return "NULL"
+    return "NULL"
 
 
-def _error_record_from_row(row: tuple) -> ErrorRecord:
-    if len(row) == 6:
-        return ErrorRecord(row[0], row[1], row[2], row[3], row[4], row[5], rank=0)
-    return ErrorRecord(*row)
-
-
-def _buffer_page_from_row(row: tuple) -> BufferPage:
-    if len(row) == 10:
-        return BufferPage(
-            row[0],
-            row[1],
-            row[2],
-            row[3],
-            row[4],
-            row[5],
-            row[6],
-            row[7],
-            row[8],
-            row[9],
-            rank=0,
-        )
-    return BufferPage(*row)
-
-
-def _operation_argument_from_row(row: tuple) -> OperationArgument:
-    if len(row) == 3:
-        return OperationArgument(row[0], row[1], row[2], 0)
-    return OperationArgument(*row)
-
-
-def _operation_from_row(row: tuple) -> Operation:
-    if len(row) == 3:
-        return Operation(row[0], row[1], row[2], 0)
-    return Operation(*row)
-
-
-def _device_operation_from_row(row: tuple) -> DeviceOperation:
-    if len(row) == 2:
-        return DeviceOperation(row[0], row[1], 0)
-    return DeviceOperation(*row)
-
-
-def _input_tensor_from_row(row: tuple) -> InputTensor:
-    if len(row) == 3:
-        return InputTensor(row[0], row[1], row[2], 0)
-    return InputTensor(*row)
-
-
-def _output_tensor_from_row(row: tuple) -> OutputTensor:
-    if len(row) == 3:
-        return OutputTensor(row[0], row[1], row[2], 0)
-    return OutputTensor(*row)
+def _sql_literal_for_missing_field(field: dataclasses.Field[Any]) -> str:
+    """
+    SQL expression when the report table omits a dataclass field (older schema).
+    """
+    if field.default is not dataclasses.MISSING:
+        return _python_scalar_to_sql_literal(field.default)
+    if field.default_factory is not dataclasses.MISSING:
+        return _python_scalar_to_sql_literal(field.default_factory())  # type: ignore[misc]
+    return _fallback_sql_literal_for_annotation(field.type)
 
 
 class LocalQueryRunner:
@@ -169,6 +160,33 @@ class DatabaseQueries:
         rows = self.query_runner.execute_query(query)
         return [row[1] for row in rows]  # row[1] is the column name
 
+    def _dataclass_select_clause(
+        self,
+        table_name: str,
+        model_cls: Type[Any],
+        *,
+        table_alias: Optional[str] = None,
+        ignore_table_columns: Optional[AbstractSet[str]] = None,
+    ) -> str:
+        """
+        Build ``SELECT`` expressions for ``model_cls`` fields in field order.
+
+        Reads only columns that exist on the table (plus SQL literals for fields
+        missing on older schemas). Unknown extra columns on the table are ignored,
+        so TTNN can add columns without breaking the visualizer.
+        """
+        alias = table_alias or table_name
+        raw_cols = set(self._get_table_columns(table_name))
+        if ignore_table_columns:
+            raw_cols -= ignore_table_columns
+        parts: List[str] = []
+        for field in dataclasses.fields(model_cls):
+            if field.name in raw_cols:
+                parts.append(f"{alias}.{field.name}")
+            else:
+                parts.append(_sql_literal_for_missing_field(field))
+        return ", ".join(parts)
+
     def _query_table(
         self,
         table_name: str,
@@ -176,8 +194,14 @@ class DatabaseQueries:
         additional_conditions: Optional[str] = None,
         additional_params: Optional[List[Any]] = None,
         columns: Optional[List[str]] = None,
+        select_clause: Optional[str] = None,
     ) -> List[Any]:
-        columns_str = ", ".join(columns) if columns else "*"
+        if select_clause is not None:
+            columns_str = select_clause
+        elif columns:
+            columns_str = ", ".join(columns)
+        else:
+            columns_str = "*"
         query = f"SELECT {columns_str} FROM {table_name} WHERE 1=1"
         params = []
 
@@ -237,43 +261,53 @@ class DatabaseQueries:
     ) -> List[DeviceOperation]:
         if not self._check_table_exists("captured_graph"):
             return []
-        rows = self._query_table("captured_graph", filters)
-        return [_device_operation_from_row(row) for row in rows]
+        select_clause = self._dataclass_select_clause("captured_graph", DeviceOperation)
+        rows = self._query_table("captured_graph", filters, select_clause=select_clause)
+        return [DeviceOperation(*row) for row in rows]
 
     def query_operation_arguments(
         self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
     ) -> Generator[OperationArgument, None, None]:
-        rows = self._query_table("operation_arguments", filters)
+        select_clause = self._dataclass_select_clause(
+            "operation_arguments", OperationArgument
+        )
+        rows = self._query_table(
+            "operation_arguments", filters, select_clause=select_clause
+        )
         for row in rows:
-            yield _operation_argument_from_row(row)
+            yield OperationArgument(*row)
 
     def query_operations(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Operation, None, None]:
-        rows = self._query_table("operations", filters)
+        select_clause = self._dataclass_select_clause("operations", Operation)
+        rows = self._query_table("operations", filters, select_clause=select_clause)
         for row in rows:
-            yield _operation_from_row(row)
+            yield Operation(*row)
 
     def query_buffers(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Buffer, None, None]:
-        rows = self._query_table("buffers", filters)
+        select_clause = self._dataclass_select_clause("buffers", Buffer)
+        rows = self._query_table("buffers", filters, select_clause=select_clause)
         for row in rows:
-            yield _buffer_from_row(row)
+            yield Buffer(*row)
 
     def query_stack_traces(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[StackTrace, None, None]:
-        rows = self._query_table("stack_traces", filters)
+        select_clause = self._dataclass_select_clause("stack_traces", StackTrace)
+        rows = self._query_table("stack_traces", filters, select_clause=select_clause)
         for row in rows:
-            yield _stack_trace_from_row(row)
+            yield StackTrace(*row)
 
     def query_error_records(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[ErrorRecord, None, None]:
-        rows = self._query_table("errors", filters)
+        select_clause = self._dataclass_select_clause("errors", ErrorRecord)
+        rows = self._query_table("errors", filters, select_clause=select_clause)
         for row in rows:
-            yield _error_record_from_row(row)
+            yield ErrorRecord(*row)
 
     def query_tensor_comparisons(
         self, local: bool = True, filters: Optional[Dict[str, Any]] = None
@@ -282,16 +316,20 @@ class DatabaseQueries:
             table_name = "local_tensor_comparison_records"
         else:
             table_name = "global_tensor_comparison_records"
-        rows = self._query_table(table_name, filters)
+        select_clause = self._dataclass_select_clause(
+            table_name, TensorComparisonRecord
+        )
+        rows = self._query_table(table_name, filters, select_clause=select_clause)
         for row in rows:
             yield TensorComparisonRecord(*row)
 
     def query_buffer_pages(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[BufferPage, None, None]:
-        rows = self._query_table("buffer_pages", filters)
+        select_clause = self._dataclass_select_clause("buffer_pages", BufferPage)
+        rows = self._query_table("buffer_pages", filters, select_clause=select_clause)
         for row in rows:
-            yield _buffer_page_from_row(row)
+            yield BufferPage(*row)
 
     def query_tensors(
         self, filters: Optional[Dict[str, Any]] = None
@@ -521,33 +559,28 @@ class DatabaseQueries:
     def query_input_tensors(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[InputTensor, None, None]:
-        rows = self._query_table("input_tensors", filters)
+        select_clause = self._dataclass_select_clause("input_tensors", InputTensor)
+        rows = self._query_table("input_tensors", filters, select_clause=select_clause)
         for row in rows:
-            yield _input_tensor_from_row(row)
+            yield InputTensor(*row)
 
     def query_output_tensors(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[OutputTensor, None, None]:
-        rows = self._query_table("output_tensors", filters)
+        select_clause = self._dataclass_select_clause("output_tensors", OutputTensor)
+        rows = self._query_table("output_tensors", filters, select_clause=select_clause)
         for row in rows:
-            yield _output_tensor_from_row(row)
+            yield OutputTensor(*row)
 
     def query_devices(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Device, None, None]:
-        # Get the expected Device model field names in order
-        device_fields = [field.name for field in dataclasses.fields(Device)]
-
-        # Get all columns from the devices table
-        all_columns = self._get_table_columns("devices")
-
-        # Filter out num_storage_cores if it exists (for backwards compatibility)
-        # and ensure columns are in the order expected by the Device model
-        available_columns = set(all_columns) - {"num_storage_cores"}
-        columns = [col for col in device_fields if col in available_columns]
-
-        rows = self._query_table("devices", filters, columns=columns)
-
+        select_clause = self._dataclass_select_clause(
+            "devices",
+            Device,
+            ignore_table_columns=frozenset({"num_storage_cores"}),
+        )
+        rows = self._query_table("devices", filters, select_clause=select_clause)
         for row in rows:
             yield Device(*row)
 
@@ -623,20 +656,9 @@ class DatabaseQueries:
         self, operation_id: int, address: str, rank: Optional[int] = None
     ) -> Optional[Buffer]:
         buf_cols = self._get_table_columns("buffers")
-        ordered = [
-            c
-            for c in (
-                "operation_id",
-                "device_id",
-                "address",
-                "max_size_per_bank",
-                "buffer_type",
-                "buffer_layout",
-                "rank",
-            )
-            if c in buf_cols
-        ]
-        col_sql = ", ".join(f"buffers.{c}" for c in ordered)
+        col_sql = self._dataclass_select_clause(
+            "buffers", Buffer, table_alias="buffers"
+        )
         where_extra = ""
         params: List[Any] = [address, operation_id]
         if rank is not None and "rank" in buf_cols:
@@ -653,7 +675,7 @@ class DatabaseQueries:
             ORDER BY buffers.operation_id
         """
         rows = self.query_runner.execute_query(query, params)
-        return _buffer_from_row(rows[0]) if rows else None
+        return Buffer(*rows[0]) if rows else None
 
     def __enter__(self):
         return self
