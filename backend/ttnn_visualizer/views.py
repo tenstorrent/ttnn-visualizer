@@ -84,7 +84,10 @@ from ttnn_visualizer.stack_trace_source import (
 from ttnn_visualizer.utils import (
     create_path_resolver,
     get_mesh_descriptor_paths,
+    pick_profiler_config_paths,
     read_last_synced_file,
+    read_profiler_config_api_payload,
+    read_profiler_report_name,
     str_to_bool,
     timer,
 )
@@ -458,14 +461,34 @@ def report_metadata(instance: Instance):
 @with_instance
 @timer
 def get_config(instance: Instance):
-    config_file = Path(str(instance.profiler_path)).parent.joinpath("config.json")
-    if not config_file.exists():
-        return {}
-    with open(config_file, "r") as file:
-        return Response(
-            orjson.dumps(json.load(file)),
-            mimetype="application/json",
+    """
+    Return the profiler ``config.json`` object for this report.
+
+    For multi-host ranked configs (``config_<n>_of_<world>.json``), the response
+    is the same shape as a single config file: one JSON object. Default is
+    logical rank 0 (``config_1_of_<world>.json``). Pass ``?rank=<logical_rank>``
+    to read another host's file (debugging).
+    """
+    report_dir = Path(str(instance.profiler_path)).parent
+    rank_param = _optional_rank_query_param()
+    logical_rank = 0 if rank_param is None else rank_param
+
+    payload, err = read_profiler_config_api_payload(report_dir, logical_rank)
+    if err == "rank_out_of_range":
+        return response_bad_request(
+            f"Invalid rank for this report: {logical_rank}. "
+            "Rank must be within the world size for this report's config files."
         )
+    if err == "missing_rank_file":
+        return response_not_found(f"No profiler config file for rank {logical_rank}.")
+    if err == "parse_error":
+        return {}
+    if payload is None:
+        return {}
+    return Response(
+        orjson.dumps(payload),
+        mimetype="application/json",
+    )
 
 
 @api.route("/tensors", methods=["GET"])
@@ -772,15 +795,8 @@ def get_profiler_data_list(instance: Instance):
         dir_path = Path(path) / dir_name
         files = list(dir_path.glob("**/*"))
         report_name = None
-        config_file = dir_path / "config.json"
-
-        if config_file.exists():
-            try:
-                with open(config_file, "r") as f:
-                    config_data = json.load(f)
-                    report_name = config_data.get("report_name")
-            except Exception as e:
-                logger.warning(f"Failed to read config.json in {dir_path}: {e}")
+        if pick_profiler_config_paths(dir_path):
+            report_name = read_profiler_report_name(dir_path)
         else:
             report_name = dir_path.name
 
@@ -1208,16 +1224,10 @@ def create_profiler_files():
         profiler_path=str(profiler_path) if profiler_path else None,
     )
 
-    config_file = profiler_directory / parent_folder_name / "config.json"
+    report_dir = profiler_directory / parent_folder_name
     report_name = None
-
-    if config_file.exists():
-        try:
-            with open(config_file, "r") as f:
-                config_data = json.load(f)
-                report_name = config_data.get("report_name")
-        except Exception as e:
-            logger.warning(f"Failed to read config.json in {config_file}: {e}")
+    if pick_profiler_config_paths(report_dir):
+        report_name = read_profiler_report_name(report_dir)
     else:
         report_name = parent_folder_name
 

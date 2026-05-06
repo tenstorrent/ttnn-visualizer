@@ -38,7 +38,6 @@ import {
     normaliseReportFolder,
 } from '../../functions/validateReportFolder';
 import { TEST_IDS } from '../../definitions/TestIds';
-import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -93,7 +92,6 @@ const LocalFolderOptions: FC = () => {
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
     const { data: reportFolderList } = useReportFolderList();
-    const { resetListStates } = useRestoreScrollPosition();
 
     const { data: reportMetadata, error: reportMetadataError } = useReportMetadata();
     useEffect(() => {
@@ -236,7 +234,6 @@ const LocalFolderOptions: FC = () => {
         createToastNotification('Active memory report', folder.reportName ?? '', ToastType.SUCCESS);
         setActiveProfilerReport(folder);
         setProfilerReportLocation(ReportLocation.LOCAL);
-        resetListStates();
     };
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {

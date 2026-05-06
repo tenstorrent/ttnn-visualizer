@@ -27,14 +27,12 @@ import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
-import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
     const queryClient = useQueryClient();
     const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
-    const { resetListStates } = useRestoreScrollPosition();
 
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
     const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
@@ -100,8 +98,6 @@ const RemoteSyncConfigurator: FC = () => {
             await updateInstance({
                 active_report: activeReport,
             });
-
-            resetListStates();
         }
     };
 
