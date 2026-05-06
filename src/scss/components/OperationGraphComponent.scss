@@ -101,10 +101,22 @@
                 flex-direction: column;
                 gap: 10px;
 
+                .connected-op-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                }
+
                 .connected-op-name {
                     margin: 0;
                     font-size: 14px;
                     font-weight: 600;
+                }
+
+                .connected-op-select {
+                    padding: 2px;
+                    min-height: 0;
+                    min-width: 0;
                 }
             }
 
