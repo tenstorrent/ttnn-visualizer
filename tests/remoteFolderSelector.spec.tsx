@@ -38,11 +38,12 @@ const NO_SELECTION = '(No selection)';
 const HTML_DISABLED = 'disabled';
 const INTENT_SUCCESS_CLASS = 'bp6-intent-success';
 
-const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance } = vi.hoisted(() => {
+const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance, mockUseReportMetadata } = vi.hoisted(() => {
     return {
         mockUseReportFolderList: vi.fn(),
         mockUsePerfFolderList: vi.fn(),
         mockUseInstance: vi.fn(),
+        mockUseReportMetadata: vi.fn(),
     };
 });
 
@@ -50,6 +51,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useReportFolderList: () => mockUseReportFolderList(),
     usePerfFolderList: () => mockUsePerfFolderList(),
     useInstance: () => mockUseInstance(),
+    useReportMetadata: () => mockUseReportMetadata(),
 }));
 
 vi.mock('../src/libs/axiosInstance', () => ({
@@ -63,6 +65,8 @@ beforeEach(() => {
     mockUseReportFolderList.mockReturnValue({ data: mockProfilerFolderList });
     mockUsePerfFolderList.mockReturnValue({ data: mockPerformanceReportFolders });
     mockUseInstance.mockReturnValue({ data: mockInstance });
+    // No active report metadata by default; effect short-circuits.
+    mockUseReportMetadata.mockReturnValue({ data: undefined, error: undefined });
     // Clean up localStorage between tests
     window.localStorage.clear();
 });
