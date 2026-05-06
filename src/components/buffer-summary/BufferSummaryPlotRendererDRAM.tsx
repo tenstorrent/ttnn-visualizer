@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
@@ -13,7 +13,13 @@ import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import { ScrollLocations } from '../../definitions/VirtualLists';
 import { BuffersByOperation } from '../../model/APIData';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
+import { MAX_DRAM_BUFFERS_FOR_GAP_SPLIT, MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
+import {
+    countBuffersAcrossOperations,
+    getBufferAddressBounds,
+    getSplitBuffers,
+    memoryZoomPaddingForRange,
+} from '../../functions/bufferSummary';
 import BufferSummaryVirtualizedList from './BufferSummaryVirtualizedList';
 
 const MEMORY_SIZE = DRAM_MEMORY_SIZE;
@@ -30,101 +36,95 @@ function BufferSummaryPlotRendererDRAM({
     const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
     const showMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
 
-    const segmentedChartData: BuffersByOperation[][] = useMemo(() => {
-        if (isZoomedIn) {
-            return getSplitBuffers(uniqueBuffersByOperationList);
+    const segmentedChartData = useMemo(() => {
+        if (!isZoomedIn) {
+            return [uniqueBuffersByOperationList];
         }
 
-        return [uniqueBuffersByOperationList];
-    }, [uniqueBuffersByOperationList, isZoomedIn]);
+        const totalBuffers = countBuffersAcrossOperations(uniqueBuffersByOperationList);
 
-    const zoomedMemoryOptions = useMemo(
-        () =>
-            segmentedChartData
-                .map((segment) => {
-                    if (segment.length > 1) {
-                        const buffers = segment.flatMap((op) => op.buffers);
-                        const zoomStart = buffers[0].address;
-                        const zoomEnd = buffers[buffers.length - 1].address + buffers[buffers.length - 1].size;
+        if (totalBuffers > MAX_DRAM_BUFFERS_FOR_GAP_SPLIT) {
+            // eslint-disable-next-line no-console
+            console.warn(`Total buffers (${totalBuffers}) exceed the maximum threshold, rendering without splitting.`);
+            return [uniqueBuffersByOperationList];
+        }
 
-                        return {
-                            start: zoomStart,
-                            end: zoomEnd,
-                            padding: (zoomEnd - zoomStart) * MEMORY_ZOOM_PADDING_RATIO,
-                        };
-                    }
-                    return null;
-                })
-                .filter((elt) => elt !== null),
-        [segmentedChartData],
+        const splitSegments = getSplitBuffers(uniqueBuffersByOperationList);
+
+        return splitSegments;
+    }, [isZoomedIn, uniqueBuffersByOperationList]);
+
+    const multiOpZoomSegment = useMemo(() => {
+        if (!isZoomedIn) {
+            return null;
+        }
+
+        return segmentedChartData.find((segmentedOperations) => segmentedOperations.length > 1) ?? null;
+    }, [isZoomedIn, segmentedChartData]);
+
+    const shouldApplyZoom = Boolean(multiOpZoomSegment);
+
+    const operationsForList = useMemo(() => {
+        if (!isZoomedIn) {
+            return segmentedChartData[0] ?? [];
+        }
+
+        if (multiOpZoomSegment) {
+            return multiOpZoomSegment;
+        }
+
+        return uniqueBuffersByOperationList;
+    }, [isZoomedIn, segmentedChartData, multiOpZoomSegment, uniqueBuffersByOperationList]);
+
+    const zoomedMemoryOption = useMemo(() => {
+        if (!shouldApplyZoom || !operationsForList.length) {
+            return null;
+        }
+
+        const bounds = getBufferAddressBounds(operationsForList);
+        if (!bounds) {
+            return null;
+        }
+
+        return {
+            start: bounds.start,
+            end: bounds.end,
+            padding: memoryZoomPaddingForRange(bounds.start, bounds.end, MEMORY_ZOOM_PADDING_RATIO),
+        };
+    }, [operationsForList, shouldApplyZoom]);
+
+    const getOperationTooltipContent = useCallback(
+        (operation: BuffersByOperation) => `${operation.id} ${operation.name}`,
+        [],
+    );
+
+    const renderOperationLink = useCallback(
+        (operation: BuffersByOperation) => (
+            <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
+                {operation.id}&nbsp;{operation.name}
+            </Link>
+        ),
+        [],
     );
 
     return uniqueBuffersByOperationList && tensorListByOperation ? (
         <BufferSummaryVirtualizedList
-            operations={segmentedChartData[0] || []}
+            operations={operationsForList}
             tensorListByOperation={tensorListByOperation}
-            isZoomedIn={isZoomedIn}
+            isZoomedIn={shouldApplyZoom}
             showMemoryLayout={showMemoryLayout}
             scrollLocation={ScrollLocations.BUFFER_SUMMARY_DRAM}
             memorySize={MEMORY_SIZE}
-            zoomStart={zoomedMemoryOptions[0]?.start ?? 0}
-            zoomEnd={zoomedMemoryOptions[0]?.end ?? MEMORY_SIZE}
-            memoryPadding={zoomedMemoryOptions[0]?.padding ?? 0}
+            zoomStart={zoomedMemoryOption?.start ?? 0}
+            zoomEnd={zoomedMemoryOption?.end ?? MEMORY_SIZE}
+            memoryPadding={zoomedMemoryOption?.padding ?? 0}
             axisConfiguration={BufferSummaryAxisConfiguration}
-            getOperationTooltipContent={(operation) => `${operation.id} ${operation.name}`}
-            renderOperationLink={(operation) => (
-                <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
-                    {operation.id}&nbsp;{operation.name}
-                </Link>
-            )}
+            getOperationTooltipContent={getOperationTooltipContent}
+            renderOperationLink={renderOperationLink}
         />
     ) : (
         <LoadingSpinner />
     );
-}
-
-const SPLIT_THRESHOLD_RATIO = 2;
-
-function getSplitBuffers(data: BuffersByOperation[]): BuffersByOperation[][] {
-    const buffers = data
-        .flatMap((op) => op.buffers.map((buffer) => ({ ...buffer, opName: op.name, opId: op.id })))
-        .sort((a, b) => a.address - b.address);
-
-    const lastDataPoint = buffers.at(-1);
-    const splitThreshold = lastDataPoint ? (lastDataPoint.address + lastDataPoint.size) / SPLIT_THRESHOLD_RATIO : 0;
-
-    const result = [];
-    let currentArray = [];
-
-    for (let i = 0; i < buffers.length; i++) {
-        const thisPosition = buffers[i].address;
-        const lastPosition = buffers[i - 1]?.address ?? 0;
-
-        if (thisPosition - lastPosition > splitThreshold) {
-            result.push(currentArray);
-            currentArray = [];
-        }
-
-        currentArray.push(buffers[i]);
-    }
-
-    if (currentArray.length > 0) {
-        result.push(currentArray);
-    }
-
-    return result.map((buffersGroup) => {
-        const operationsMap = new Map<number, BuffersByOperation>();
-
-        buffersGroup.forEach((buffer) => {
-            const { opId, opName, ...originalBuffer } = buffer;
-            if (!operationsMap.has(opId)) {
-                operationsMap.set(opId, { id: opId, name: opName, buffers: [] });
-            }
-            operationsMap.get(opId)!.buffers.push(originalBuffer);
-        });
-
-        return Array.from(operationsMap.values());
-    });
 }
 
 export default BufferSummaryPlotRendererDRAM;
