@@ -77,6 +77,8 @@ def pick_profiler_config_paths(report_dir: Path) -> List[Path]:
     """
     Prefer config.json when present; otherwise use consistent config_*_of_*.json files.
     """
+    if not report_dir.is_dir():
+        return []
     single = report_dir / PROFILER_CONFIG_BASENAME
     if single.is_file():
         return [single]
@@ -121,6 +123,8 @@ def read_profiler_config_api_payload(
     respond with an empty object); otherwise ``rank_out_of_range``,
     ``missing_rank_file``, or ``parse_error``.
     """
+    if not report_dir.is_dir():
+        return None, None
     single = report_dir / PROFILER_CONFIG_BASENAME
     if single.is_file():
         try:

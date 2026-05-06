@@ -793,6 +793,8 @@ def get_profiler_data_list(instance: Instance):
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
+        if not dir_path.is_dir():
+            continue
         files = list(dir_path.glob("**/*"))
         report_name = None
         if pick_profiler_config_paths(dir_path):
