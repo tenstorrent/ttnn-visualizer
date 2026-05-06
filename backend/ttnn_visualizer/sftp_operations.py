@@ -34,6 +34,23 @@ from ttnn_visualizer.utils import (
 
 logger = logging.getLogger(__name__)
 
+
+def _ssh_subprocess_timeout_seconds() -> int:
+    """Timeout for SSH subprocess ops (find, stat, cat, list). Configurable via SSH_SUBPROCESS_TIMEOUT."""
+    try:
+        return int(current_app.config["SSH_SUBPROCESS_TIMEOUT"])
+    except RuntimeError:
+        return int(os.getenv("SSH_SUBPROCESS_TIMEOUT", "120"))
+
+
+def _ssh_remote_check_timeout_seconds() -> int:
+    """Timeout per quick SSH check (e.g. test -f per folder). Configurable via SSH_REMOTE_CHECK_TIMEOUT."""
+    try:
+        return int(current_app.config["SSH_REMOTE_CHECK_TIMEOUT"])
+    except RuntimeError:
+        return int(os.getenv("SSH_REMOTE_CHECK_TIMEOUT", "45"))
+
+
 TEST_CONFIG_FILE = PROFILER_CONFIG_BASENAME
 TEST_DB_FILE = "db.sqlite"
 TEST_PROFILER_FILE = "profile_log_device.csv"
@@ -138,7 +155,13 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
         ssh_cmd = _ssh_cmd_prefix(remote_connection) + [f"ls -1 '{file_path}'"]
 
         try:
-            result = subprocess.run(ssh_cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                ssh_cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=_ssh_subprocess_timeout_seconds(),
+            )
 
             files = result.stdout.strip().splitlines()
 
@@ -301,7 +324,11 @@ def get_remote_file_list(
 
     try:
         result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=60
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
         )
 
         all_files = result.stdout.strip().splitlines()
@@ -342,7 +369,11 @@ def get_remote_directory_list(
 
     try:
         result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=60
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
         )
 
         all_dirs = result.stdout.strip().splitlines()
@@ -416,9 +447,17 @@ def get_remote_profiler_folder_from_config_path(
     folder_path = Path(config_path).parent
     parent_folder_name = folder_path.name
     folder_str = str(folder_path).rstrip("/")
+    ssh_timeout = _ssh_subprocess_timeout_seconds()
+    check_timeout = _ssh_remote_check_timeout_seconds()
 
     def ssh_run_checked(cmd: List[str]) -> subprocess.CompletedProcess:
-        return subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=ssh_timeout,
+        )
 
     def ssh_stat_mtime(path: str) -> int:
         stat_cmd = _ssh_cmd_prefix(remote_connection) + [
@@ -437,16 +476,32 @@ def get_remote_profiler_folder_from_config_path(
 
     def ssh_test_file(path: str) -> bool:
         test_cmd = _ssh_cmd_prefix(remote_connection) + ["test", "-f", path]
-        result = subprocess.run(test_cmd, capture_output=True, text=True)
+        result = subprocess.run(
+            test_cmd,
+            capture_output=True,
+            text=True,
+            timeout=check_timeout,
+        )
         return result.returncode == 0
 
     def ssh_list_ranked_config_paths() -> List[str]:
-        script = (
-            f"for f in {shlex.quote(folder_str)}/config_*_of_*.json; do "
-            '[ -f "$f" ] && printf "%s\\n" "$f"; done'
+        # One argv after user@host: OpenSSH may wrap multi-arg remote commands in
+        # `sh -c` on the server and break `for ...; do ...; done`. Pass a single
+        # `bash -lc '<script>'` string instead. Use find so the script has no
+        # shell loop syntax.
+        inner = (
+            f"find {shlex.quote(folder_str)} -maxdepth 1 "
+            "-name 'config_*_of_*.json' -print"
         )
-        list_cmd = _ssh_cmd_prefix(remote_connection) + ["bash", "-lc", script]
-        result = subprocess.run(list_cmd, capture_output=True, text=True, check=True)
+        remote_cmd = "bash -lc " + shlex.quote(inner)
+        list_cmd = _ssh_cmd_prefix(remote_connection) + [remote_cmd]
+        result = subprocess.run(
+            list_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=ssh_timeout,
+        )
         lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
         by_base = {Path(l).name: l for l in lines}
         ordered = ranked_profiler_config_basenames(by_base.keys())
@@ -527,7 +582,12 @@ def get_remote_performance_folder(
             f"stat -c %Y '{profile_folder}'",
         ]
 
-        result = subprocess.run(ssh_command, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            ssh_command,
+            capture_output=True,
+            text=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
+        )
 
         if result.returncode == 0:
             last_modified = int(result.stdout.strip())
@@ -652,7 +712,11 @@ def find_folders_by_files(
 
     try:
         result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=30
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
         )
 
         directories = result.stdout.strip().splitlines()
@@ -673,7 +737,10 @@ def find_folders_by_files(
 
             try:
                 check_result = subprocess.run(
-                    check_cmd, capture_output=True, check=True, timeout=10
+                    check_cmd,
+                    capture_output=True,
+                    check=True,
+                    timeout=_ssh_remote_check_timeout_seconds(),
                 )
                 # If command succeeds, at least one file exists
                 matched_folders.append(directory)
