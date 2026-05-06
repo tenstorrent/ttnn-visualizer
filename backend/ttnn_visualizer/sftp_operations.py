@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -25,11 +26,32 @@ from ttnn_visualizer.exceptions import (
 from ttnn_visualizer.models import Instance, RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE, SSHClient
-from ttnn_visualizer.utils import update_last_synced
+from ttnn_visualizer.utils import (
+    PROFILER_CONFIG_BASENAME,
+    ranked_profiler_config_basenames,
+    update_last_synced,
+)
 
 logger = logging.getLogger(__name__)
 
-TEST_CONFIG_FILE = "config.json"
+
+def _ssh_subprocess_timeout_seconds() -> int:
+    """Timeout for SSH subprocess ops (find, stat, cat, list). Configurable via SSH_SUBPROCESS_TIMEOUT."""
+    try:
+        return int(current_app.config["SSH_SUBPROCESS_TIMEOUT"])
+    except RuntimeError:
+        return int(os.getenv("SSH_SUBPROCESS_TIMEOUT", "120"))
+
+
+def _ssh_remote_check_timeout_seconds() -> int:
+    """Timeout per quick SSH check (e.g. test -f per folder). Configurable via SSH_REMOTE_CHECK_TIMEOUT."""
+    try:
+        return int(current_app.config["SSH_REMOTE_CHECK_TIMEOUT"])
+    except RuntimeError:
+        return int(os.getenv("SSH_REMOTE_CHECK_TIMEOUT", "45"))
+
+
+TEST_CONFIG_FILE = PROFILER_CONFIG_BASENAME
 TEST_DB_FILE = "db.sqlite"
 TEST_PROFILER_FILE = "profile_log_device.csv"
 
@@ -133,7 +155,13 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
         ssh_cmd = _ssh_cmd_prefix(remote_connection) + [f"ls -1 '{file_path}'"]
 
         try:
-            result = subprocess.run(ssh_cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                ssh_cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=_ssh_subprocess_timeout_seconds(),
+            )
 
             files = result.stdout.strip().splitlines()
 
@@ -296,7 +324,11 @@ def get_remote_file_list(
 
     try:
         result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=60
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
         )
 
         all_files = result.stdout.strip().splitlines()
@@ -337,7 +369,11 @@ def get_remote_directory_list(
 
     try:
         result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=60
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
         )
 
         all_dirs = result.stdout.strip().splitlines()
@@ -410,30 +446,95 @@ def get_remote_profiler_folder_from_config_path(
     """Read a remote config file and return RemoteFolder object."""
     folder_path = Path(config_path).parent
     parent_folder_name = folder_path.name
+    folder_str = str(folder_path).rstrip("/")
+    ssh_timeout = _ssh_subprocess_timeout_seconds()
+    check_timeout = _ssh_remote_check_timeout_seconds()
 
-    try:
-        # Build SSH command to get file modification time (never prompts for password)
-        stat_cmd = _ssh_cmd_prefix(remote_connection) + [
-            f"stat -c %Y '{config_path}' 2>/dev/null",
-        ]
-
-        stat_result = subprocess.run(
-            stat_cmd, capture_output=True, text=True, check=True
+    def ssh_run_checked(cmd: List[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=ssh_timeout,
         )
 
-        last_modified = int(float(stat_result.stdout.strip()))
+    def ssh_stat_mtime(path: str) -> int:
+        stat_cmd = _ssh_cmd_prefix(remote_connection) + [
+            "stat",
+            "-c",
+            "%Y",
+            path,
+        ]
+        stat_result = ssh_run_checked(stat_cmd)
+        return int(float(stat_result.stdout.strip()))
 
-        # Build SSH command to read file content (never prompts for password)
-        cat_cmd = _ssh_cmd_prefix(remote_connection) + [f"cat '{config_path}'"]
+    def ssh_cat(path: str) -> str:
+        cat_cmd = _ssh_cmd_prefix(remote_connection) + ["cat", path]
+        cat_result = ssh_run_checked(cat_cmd)
+        return cat_result.stdout
 
-        cat_result = subprocess.run(cat_cmd, capture_output=True, text=True, check=True)
+    def ssh_test_file(path: str) -> bool:
+        test_cmd = _ssh_cmd_prefix(remote_connection) + ["test", "-f", path]
+        result = subprocess.run(
+            test_cmd,
+            capture_output=True,
+            text=True,
+            timeout=check_timeout,
+        )
+        return result.returncode == 0
 
-        # Parse JSON data
-        data = json.loads(cat_result.stdout)
-        report_name = data.get("report_name")
+    def ssh_list_ranked_config_paths() -> List[str]:
+        # One argv after user@host: OpenSSH may wrap multi-arg remote commands in
+        # `sh -c` on the server and break `for ...; do ...; done`. Pass a single
+        # `bash -lc '<script>'` string instead. Use find so the script has no
+        # shell loop syntax.
+        inner = (
+            f"find {shlex.quote(folder_str)} -maxdepth 1 "
+            "-name 'config_*_of_*.json' -print"
+        )
+        remote_cmd = "bash -lc " + shlex.quote(inner)
+        list_cmd = _ssh_cmd_prefix(remote_connection) + [remote_cmd]
+        result = subprocess.run(
+            list_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=ssh_timeout,
+        )
+        lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        by_base = {Path(l).name: l for l in lines}
+        ordered = ranked_profiler_config_basenames(by_base.keys())
+        return [by_base[n] for n in ordered]
+
+    try:
+        single_config = str(Path(config_path))  # .../config.json from caller
+        read_path: Optional[str] = None
+        mtime_paths: List[str] = []
+
+        if ssh_test_file(single_config):
+            read_path = single_config
+            mtime_paths = [single_config]
+        else:
+            ranked_paths = ssh_list_ranked_config_paths()
+            if ranked_paths:
+                read_path = ranked_paths[0]
+                mtime_paths = ranked_paths
+
+        if read_path is None:
+            return RemoteReportFolder(
+                remotePath=folder_str,
+                reportName=parent_folder_name,
+                lastModified=int(time.time()),
+            )
+
+        last_modified = max(ssh_stat_mtime(p) for p in mtime_paths)
+        raw_json = ssh_cat(read_path)
+        data = json.loads(raw_json)
+        report_name = data.get("report_name") if isinstance(data, dict) else None
 
         return RemoteReportFolder(
-            remotePath=str(folder_path),
+            remotePath=folder_str,
             reportName=report_name,
             lastModified=last_modified,
         )
@@ -447,14 +548,14 @@ def get_remote_profiler_folder_from_config_path(
             handle_ssh_subprocess_error(e, remote_connection)
             # This line never executes as handle_ssh_subprocess_error raises an exception
             return RemoteReportFolder(
-                remotePath=str(folder_path),
+                remotePath=folder_str,
                 reportName=parent_folder_name,
                 lastModified=int(time.time()),
             )
         else:
             # Fall back to current time if we can't get modification time
             return RemoteReportFolder(
-                remotePath=str(folder_path),
+                remotePath=folder_str,
                 reportName=parent_folder_name,
                 lastModified=int(time.time()),
             )
@@ -462,7 +563,7 @@ def get_remote_profiler_folder_from_config_path(
         logger.error(f"Error parsing config file {config_path}: {e}")
         # Fall back to current time and no report name
         return RemoteReportFolder(
-            remotePath=str(folder_path),
+            remotePath=folder_str,
             reportName=parent_folder_name,
             lastModified=int(time.time()),
         )
@@ -481,7 +582,12 @@ def get_remote_performance_folder(
             f"stat -c %Y '{profile_folder}'",
         ]
 
-        result = subprocess.run(ssh_command, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            ssh_command,
+            capture_output=True,
+            text=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
+        )
 
         if result.returncode == 0:
             last_modified = int(result.stdout.strip())
@@ -606,7 +712,11 @@ def find_folders_by_files(
 
     try:
         result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=30
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
         )
 
         directories = result.stdout.strip().splitlines()
@@ -627,7 +737,10 @@ def find_folders_by_files(
 
             try:
                 check_result = subprocess.run(
-                    check_cmd, capture_output=True, check=True, timeout=10
+                    check_cmd,
+                    capture_output=True,
+                    check=True,
+                    timeout=_ssh_remote_check_timeout_seconds(),
                 )
                 # If command succeeds, at least one file exists
                 matched_folders.append(directory)
