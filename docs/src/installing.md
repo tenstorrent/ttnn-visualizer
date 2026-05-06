@@ -44,7 +44,7 @@ The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/repo
 
 The topology view expects `cluster_descriptor.yaml` in that same folder. If it is missing, see {ref}`Missing cluster descriptor <cluster-descriptor-missing>`.
 
-Topology also uses `physical_chip_mesh_coordinate_mapping_x_of_y.yaml` for multi-host runs. In `tt-metal`, these files are created in `${TT_METAL_HOME}/generated/fabric/` after fabric topology mapping is initialized, then copied into the memory report folder during graph report import. If it is missing, check `enable_graph_report` in `TTNN_CONFIG_OVERRIDES` is enabled.
+Topology also uses `physical_chip_mesh_coordinate_mapping_x_of_y.yaml` for some multidevice and  multi-host runs. In `tt-metal`, these files are created in `${TT_METAL_HOME}/generated/fabric/` after fabric topology mapping is initialized, then copied into the memory report folder during graph report import. If it is missing, check `enable_graph_report` in `TTNN_CONFIG_OVERRIDES` is enabled.
 
 For further information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/get_started/get_started.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/get_started.html) documentation.
 
