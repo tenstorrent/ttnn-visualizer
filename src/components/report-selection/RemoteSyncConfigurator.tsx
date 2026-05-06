@@ -47,7 +47,7 @@ const RemoteSyncConfigurator: FC = () => {
         if (reportMetadata) {
             const dbValidationResult = evaluateDbVersion(reportMetadata.version);
             if (dbValidationResult.statusCode !== DBVersionValidation.OK) {
-                // @ts-expect-error this is good
+                // @ts-expect-error its only empty when status is OK, and we dont do a toast here
                 createToastNotification('Incompatible report version', dbValidationResult.message, ToastType.WARNING);
             }
         }
