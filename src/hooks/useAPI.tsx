@@ -21,7 +21,7 @@ import {
     Operation,
     OperationDescription,
     OperationDetailsData,
-    ReportMetadata,
+    ReportMetadataResponse,
     Tensor,
     defaultBuffer,
     defaultOperation,
@@ -60,6 +60,7 @@ import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification, { ToastType } from '../functions/createToastNotification';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
+import { SemVer, semverParse } from '../functions/semverParse';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -733,9 +734,22 @@ export const usePerformanceRange = (): NumberRange | null => {
     );
 };
 
+interface ReportMetadata {
+    version: SemVer;
+    timestamp: string;
+    duration: number;
+}
+
 const fetchReportMetadata = async (): Promise<ReportMetadata> => {
-    const { data } = await axiosInstance.get<ReportMetadata>(Endpoints.REPORT_METADATA);
-    return data;
+    const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
+    const parsedSchemaVersion = semverParse(data?.schema_version);
+    const parsedDuration = Number(data?.total_duration_ns);
+
+    return {
+        timestamp: data?.capture_timestamp_ns,
+        duration: Number.isFinite(parsedDuration) ? parsedDuration : 0,
+        version: parsedSchemaVersion,
+    } as ReportMetadata;
 };
 
 // The endpoint returns 422 on legacy reports that lack the table; surface

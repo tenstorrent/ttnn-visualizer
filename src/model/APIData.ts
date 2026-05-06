@@ -214,18 +214,11 @@ export interface FragmentationEntry extends Chunk {
 //     profiler_name: string;
 // }
 
-// Returned by GET /api/report_metadata as a flat key/value object whose
-// values are stored as strings in the underlying SQLite report database.
-// Known keys are listed for typing convenience; unknown keys are still
-// allowed via the index signature for forward compatibility with new
-// metadata fields added by the report producer.
-export interface ReportMetadata {
+export interface ReportMetadataResponse {
     schema_version?: string;
     capture_timestamp_ns?: string;
     total_duration_ns?: string;
-    [key: string]: string | undefined;
 }
-
 export interface OperationDescription extends Operation {
     duration: number;
     arguments: {
