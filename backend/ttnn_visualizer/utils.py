@@ -12,14 +12,159 @@ import shutil
 import sqlite3
 import sys
 import time
+from collections import Counter
 from functools import wraps
 from pathlib import Path
 from timeit import default_timer
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 LAST_SYNCED_FILE_NAME = ".last-synced"
+
+# TTNN profiler report directory may contain a single config.json or per-rank
+# config_<n>_of_<world_size>.json files from multi-host runs. The first number is
+# 1-based (1..world_size), not MPI rank; logical rank == that number minus one.
+PROFILER_CONFIG_BASENAME = "config.json"
+PROFILER_CONFIG_RANKED_RE = re.compile(r"^config_(\d+)_of_(\d+)\.json$")
+
+
+def parse_ranked_profiler_config_basename(
+    filename: str,
+) -> Optional[Tuple[int, int]]:
+    """If filename matches config_<n>_of_<world>.json, return (n, world)."""
+    match = PROFILER_CONFIG_RANKED_RE.match(filename)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def is_valid_profiler_ranked_entry(index_one_based: int, world: int) -> bool:
+    """True when the filename indices match TTNN output (1..world inclusive)."""
+    return 1 <= index_one_based <= world
+
+
+def ranked_profiler_config_basenames(file_names: Iterable[str]) -> List[str]:
+    """
+    Select per-rank config files that share the same world_size (majority wins).
+
+    Only filenames whose first number is in 1..world (inclusive) are considered.
+    Returns basenames sorted by ascending 1-based index (config_1_of_*, then
+    config_2_of_*, ...).
+    """
+    meta: List[Tuple[int, int, str]] = []
+    for name in file_names:
+        parsed = parse_ranked_profiler_config_basename(name)
+        if parsed:
+            index_one_based, world = parsed
+            if not is_valid_profiler_ranked_entry(index_one_based, world):
+                logger.warning(
+                    "Skipping malformed profiler config filename %s "
+                    "(expected config_<n>_of_<world>.json with 1 <= n <= world)",
+                    name,
+                )
+                continue
+            meta.append((world, index_one_based, name))
+    if not meta:
+        return []
+    common_world = Counter(w for w, _, _ in meta).most_common(1)[0][0]
+    filtered = [(idx, n) for w, idx, n in meta if w == common_world]
+    filtered.sort(key=lambda x: x[0])
+    return [n for _, n in filtered]
+
+
+def pick_profiler_config_paths(report_dir: Path) -> List[Path]:
+    """
+    Prefer config.json when present; otherwise use consistent config_*_of_*.json files.
+    """
+    if not report_dir.is_dir():
+        return []
+    single = report_dir / PROFILER_CONFIG_BASENAME
+    if single.is_file():
+        return [single]
+    ranked_names = ranked_profiler_config_basenames(
+        p.name for p in report_dir.iterdir() if p.is_file()
+    )
+    return [report_dir / name for name in ranked_names]
+
+
+def read_profiler_report_name(report_dir: Path) -> Optional[str]:
+    """Read report_name from profiler config(s), or None if absent / unreadable."""
+    paths = pick_profiler_config_paths(report_dir)
+    if not paths:
+        return None
+    primary = paths[0]
+    try:
+        with open(primary, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning("Failed to read profiler config %s: %s", primary, e)
+        return None
+    return data.get("report_name") if isinstance(data, dict) else None
+
+
+def read_profiler_config_api_payload(
+    report_dir: Path, logical_rank: int = 0
+) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """
+    Read one profiler config file for /api/config.
+
+    Same JSON shape as a standalone ``config.json``: the parsed object from that
+    file only.
+
+    If ``config.json`` exists, it is always used (``logical_rank`` is ignored).
+
+    Otherwise ranked ``config_<n>_of_<world>.json`` files are used: logical rank R
+    reads ``config_{R+1}_of_<world>.json``. Default ``logical_rank`` is 0 (first
+    host).
+
+    Returns ``(payload, None)`` on success. On failure returns ``(None, error)``
+    where ``error`` is ``None`` only when there is no config at all (caller may
+    respond with an empty object); otherwise ``rank_out_of_range``,
+    ``missing_rank_file``, or ``parse_error``.
+    """
+    if not report_dir.is_dir():
+        return None, None
+    single = report_dir / PROFILER_CONFIG_BASENAME
+    if single.is_file():
+        try:
+            with open(single, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("Failed to read profiler config %s: %s", single, e)
+            return None, "parse_error"
+        if not isinstance(data, dict):
+            return None, "parse_error"
+        return data, None
+
+    ranked_names = ranked_profiler_config_basenames(
+        p.name for p in report_dir.iterdir() if p.is_file()
+    )
+    if not ranked_names:
+        return None, None
+
+    parsed0 = parse_ranked_profiler_config_basename(ranked_names[0])
+    if not parsed0:
+        return None, None
+    _, world_size = parsed0
+
+    if logical_rank < 0 or logical_rank >= world_size:
+        return None, "rank_out_of_range"
+
+    basename = f"config_{logical_rank + 1}_of_{world_size}.json"
+    path = report_dir / basename
+    if not path.is_file():
+        return None, "missing_rank_file"
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning("Failed to read profiler config %s: %s", path, e)
+        return None, "parse_error"
+    if not isinstance(data, dict):
+        return None, "parse_error"
+    return data, None
 
 
 def get_app_data_directory(tt_metal_home: Optional[str], application_dir: str) -> str:

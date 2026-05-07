@@ -2,8 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect, useState } from 'react';
-import { useSetAtom } from 'jotai';
+import { useEffect, useRef, useState } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import {
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
@@ -15,17 +15,23 @@ import { useInstance, useReportFolderList } from './useAPI';
 import useRemoteConnection from './useRemote';
 import { ReportLocation } from '../definitions/Reports';
 import type { RemoteFolder } from '../definitions/RemoteConnection';
+import { useResetMemoryListStates } from './useRestoreScrollPosition';
 
 const useRestoreInstance = () => {
     const { data: instance, isLoading } = useInstance();
     const remote = useRemoteConnection();
     const { data: reports } = useReportFolderList();
+    const { resetMemoryListStates } = useResetMemoryListStates();
+
+    const [hasRestoredInstance, setHasRestoredInstance] = useState<boolean>(false);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
     const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
     const setProfilerReportLocation = useSetAtom(profilerReportLocationAtom);
     const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
-    const [hasRestoredInstance, setHasRestoredInstance] = useState<boolean>(false);
+
+    const previousProfilerPathRef = useRef<string | null | undefined>(undefined);
 
     useEffect(() => {
         if (!instance || reports === null || hasRestoredInstance) {
@@ -42,7 +48,7 @@ const useRestoreInstance = () => {
             : profilerReportPath;
         const perfReportPath = instance?.active_report?.performance_name || null;
 
-        const activeProfilerReport = profilerReportPath
+        const restoredProfilerReport = profilerReportPath
             ? {
                   path: profilerReportPath,
                   reportName: profilerReportName ?? profilerReportPath,
@@ -58,7 +64,7 @@ const useRestoreInstance = () => {
         const activePerfLocation = instance?.active_report?.performance_location ?? null;
 
         const activeReports = {
-            profiler: activeProfilerReport,
+            profiler: restoredProfilerReport,
             profilerLocation: activeProfilerLocation,
             performance: activePerfReport,
             performanceLocation: activePerfLocation,
@@ -88,6 +94,25 @@ const useRestoreInstance = () => {
         reports,
         remote.persistentState,
     ]);
+
+    useEffect(() => {
+        if (!hasRestoredInstance) {
+            return;
+        }
+
+        const nextProfilerPath = activeProfilerReport?.path ?? null;
+
+        // Baseline the first observed value after restore to avoid false resets during hydration.
+        if (previousProfilerPathRef.current === undefined) {
+            previousProfilerPathRef.current = nextProfilerPath;
+            return;
+        }
+
+        if (previousProfilerPathRef.current !== nextProfilerPath) {
+            resetMemoryListStates();
+            previousProfilerPathRef.current = nextProfilerPath;
+        }
+    }, [activeProfilerReport?.path, hasRestoredInstance, resetMemoryListStates]);
 
     return {
         instance,

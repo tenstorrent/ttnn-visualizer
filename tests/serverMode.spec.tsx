@@ -32,6 +32,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useOperationsList: () => ({ data: [] }),
     useReportFolderList: () => ({ data: mockProfilerFolderList }),
     useGetNPEManifest: () => ({ data: null }),
+    useReportMetadata: () => ({ data: undefined, error: undefined }),
 }));
 
 vi.mock('../src/functions/getServerConfig.ts', () => ({

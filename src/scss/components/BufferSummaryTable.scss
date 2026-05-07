@@ -16,6 +16,11 @@
     max-width: 1200px;
     overflow-y: auto;
 
+    // Allows scrollbar to be visible from the top and not hidden by the table header
+    .bp6-table-quadrant.bp6-table-quadrant-top {
+        background-color: transparent;
+    }
+
     .aside-container {
         display: flex;
         justify-content: space-between;

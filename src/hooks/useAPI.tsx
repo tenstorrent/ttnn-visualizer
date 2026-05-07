@@ -21,6 +21,7 @@ import {
     Operation,
     OperationDescription,
     OperationDetailsData,
+    ReportMetadataResponse,
     Tensor,
     defaultBuffer,
     defaultOperation,
@@ -59,6 +60,7 @@ import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification, { ToastType } from '../functions/createToastNotification';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
+import { SemVer, semverParse } from '../functions/semverParse';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -732,15 +734,36 @@ export const usePerformanceRange = (): NumberRange | null => {
     );
 };
 
-// Not currently used
-// export const useReportMeta = () => {
-//     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+interface ReportMetadata {
+    version: SemVer;
+    timestamp: string;
+    duration: number;
+}
 
-//     return useQuery<ReportMetaData, AxiosError>({
-//         queryKey: ['get-report-config', activeProfilerReport?.path],
-//         queryFn: () => fetchReportMeta(),
-//     });
-// };
+const fetchReportMetadata = async (): Promise<ReportMetadata> => {
+    const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
+    const parsedSchemaVersion = semverParse(data?.schema_version);
+    const parsedDuration = Number(data?.total_duration_ns);
+
+    return {
+        timestamp: data?.capture_timestamp_ns,
+        duration: Number.isFinite(parsedDuration) ? parsedDuration : 0,
+        version: parsedSchemaVersion,
+    } as ReportMetadata;
+};
+
+// The endpoint returns 422 on legacy reports that lack the table
+export const useReportMetadata = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ReportMetadata, AxiosError>({
+        queryKey: ['get-report-metadata', activeProfilerReport?.path],
+        queryFn: fetchReportMetadata,
+        enabled: activeProfilerReport !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
     return useQuery<BufferPage[], AxiosError>({
@@ -1084,7 +1107,7 @@ export const usePerfFolderList = () => {
 };
 
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
-    const { data: buffersByOperation } = useBuffers(bufferType);
+    const { data: buffersByOperation } = useBuffers(bufferType, true);
     const { data: operations } = useOperationsList();
 
     const uniqueBuffersByOperationList = useMemo(() => {
@@ -1169,11 +1192,14 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         return result;
     }, [buffersByOperation, operations, uniqueBuffersByOperationList]);
 
-    return tensorsByOperationByAddress;
+    return {
+        tensorListByOperation: tensorsByOperationByAddress,
+        uniqueBuffersByOperationList,
+    };
 };
 
 export const useGetTensorDeallocationReportByOperation = () => {
-    const tensorListByOperation = useCreateTensorsByOperationByIdList();
+    const { tensorListByOperation } = useCreateTensorsByOperationByIdList();
     const { data: operations } = useOperationsList();
 
     const operationsById = useMemo(() => {

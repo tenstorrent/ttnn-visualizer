@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
 import {
     listStatesAtom,
@@ -21,9 +21,8 @@ import {
 import { ListStates, ScrollLocations, VirtualListState } from '../definitions/VirtualLists';
 import { SortingOptions } from '../definitions/SortingOptions';
 
-const useRestoreScrollPosition = (key?: ScrollLocations) => {
-    const [listStates, setListStates] = useAtom(listStatesAtom);
-
+export const useResetMemoryListStates = () => {
+    const setListStates = useSetAtom(listStatesAtom);
     // Operation List
     const setOperationListFilter = useSetAtom(operationListFilterAtom);
     const setSelectedDeviceOperations = useSetAtom(selectedDeviceOperationsAtom);
@@ -38,6 +37,53 @@ const useRestoreScrollPosition = (key?: ScrollLocations) => {
     const setShowLateDeallocatedTensors = useSetAtom(showLateDeallocatedTensorsAtom);
     const setShouldSortBySize = useSetAtom(shouldSortBySizeAtom);
     const setShouldCollapseAllTensors = useSetAtom(shouldCollapseAllTensorsAtom);
+
+    const resetOperationList = useCallback(() => {
+        setOperationListFilter('');
+        setSelectedDeviceOperations(new Set());
+        setShouldSortByID(SortingOptions.ASCENDING);
+        setShouldSortDuration(SortingOptions.OFF);
+        setShouldCollapseAllOperations(false);
+    }, [
+        setOperationListFilter,
+        setSelectedDeviceOperations,
+        setShouldSortByID,
+        setShouldSortDuration,
+        setShouldCollapseAllOperations,
+    ]);
+
+    const resetTensorList = useCallback(() => {
+        setTensorListFilter('');
+        setTensorBufferTypeFilters([]);
+        setShowHighConsumerTensors(false);
+        setShowLateDeallocatedTensors(false);
+        setShouldSortBySize(SortingOptions.OFF);
+        setShouldCollapseAllTensors(false);
+    }, [
+        setTensorListFilter,
+        setTensorBufferTypeFilters,
+        setShowHighConsumerTensors,
+        setShowLateDeallocatedTensors,
+        setShouldSortBySize,
+        setShouldCollapseAllTensors,
+    ]);
+
+    const resetMemoryListStates = useCallback(() => {
+        setListStates(null);
+
+        resetOperationList();
+        resetTensorList();
+    }, [setListStates, resetOperationList, resetTensorList]);
+
+    return {
+        resetMemoryListStates,
+    };
+};
+
+const useRestoreScrollPosition = (key?: ScrollLocations) => {
+    const listStates = useAtomValue(listStatesAtom);
+    const setListStates = useSetAtom(listStatesAtom);
+    const { resetMemoryListStates } = useResetMemoryListStates();
 
     const updateListState = useCallback(
         (state: Partial<VirtualListState>) => {
@@ -72,47 +118,10 @@ const useRestoreScrollPosition = (key?: ScrollLocations) => {
         return listStates?.[key] || null;
     }, [key, listStates]);
 
-    const resetOperationList = useCallback(() => {
-        setOperationListFilter('');
-        setSelectedDeviceOperations(new Set());
-        setShouldSortByID(SortingOptions.ASCENDING);
-        setShouldSortDuration(SortingOptions.OFF);
-        setShouldCollapseAllOperations(false);
-    }, [
-        setOperationListFilter,
-        setSelectedDeviceOperations,
-        setShouldSortByID,
-        setShouldSortDuration,
-        setShouldCollapseAllOperations,
-    ]);
-
-    const resetTensorList = useCallback(() => {
-        setTensorListFilter('');
-        setTensorBufferTypeFilters([]);
-        setShowHighConsumerTensors(false);
-        setShowLateDeallocatedTensors(false);
-        setShouldSortBySize(SortingOptions.OFF);
-        setShouldCollapseAllTensors(false);
-    }, [
-        setTensorListFilter,
-        setTensorBufferTypeFilters,
-        setShowHighConsumerTensors,
-        setShowLateDeallocatedTensors,
-        setShouldSortBySize,
-        setShouldCollapseAllTensors,
-    ]);
-
-    const resetListStates = useCallback(() => {
-        setListStates(null);
-
-        resetOperationList();
-        resetTensorList();
-    }, [setListStates, resetOperationList, resetTensorList]);
-
     return {
         getListState,
         updateListState,
-        resetListStates,
+        resetMemoryListStates,
     };
 };
 

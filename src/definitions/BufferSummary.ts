@@ -104,6 +104,9 @@ export const OPERATION_EL_HEIGHT = 28; // Height in px of each list item (includ
 export const TOTAL_SHADE_HEIGHT = 20; // Combined height in px of 'scroll-shade' pseudo elements
 export const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
+/** Above this total buffer count, DRAM zoom "gap split" is skipped to avoid flattening and sorting all buffers. */
+export const MAX_DRAM_BUFFERS_FOR_GAP_SPLIT = 200_000;
+
 export const CHART_DATA: Partial<PlotData>[][] = [
     [
         {

@@ -231,12 +231,20 @@ const OperationGraph: React.FC<{
                     currentOpIdRef.current = nodeId;
                 } catch (e) {
                     // eslint-disable-next-line no-console
-                    console.error('Error selecting node', e);
+                    console.warn('Error selecting node', e);
                 }
             }
         },
 
         [scale],
+    );
+
+    const selectConnectedNode = useCallback(
+        (nodeId: number) => {
+            focusOnNode(nodeId);
+            colorHighlightIO(nodeId);
+        },
+        [focusOnNode, colorHighlightIO],
     );
 
     const updateScale = useCallback(
@@ -555,6 +563,7 @@ const OperationGraph: React.FC<{
                     operationNamesById={operationNamesById}
                     currentOperationId={currentOperationId}
                     onNavigate={navigate}
+                    onSelectConnectedNode={selectConnectedNode}
                 />
             )}
             {isLoading && (
@@ -605,6 +614,7 @@ const TensorDetailsComponent: React.FC<{ tensor: Tensor }> = ({ tensor }) => {
 type ConnectedOpGroup = {
     key: string;
     label: string;
+    opId: number | null;
     tensors: Tensor[];
 };
 
@@ -626,7 +636,7 @@ const groupTensorsByConnectedOp = (
         if (!ids.length) {
             const key = direction === 'input' ? 'external-input' : 'external-output';
             const label = direction === 'input' ? 'External input' : 'Unconsumed output';
-            const group = groups.get(key) ?? { key, label, tensors: [] };
+            const group = groups.get(key) ?? { key, label, opId: null, tensors: [] };
             group.tensors.push(tensor);
             groups.set(key, group);
             return;
@@ -636,7 +646,7 @@ const groupTensorsByConnectedOp = (
             const key = String(opId);
             const name = operationNamesById.get(opId) ?? names[index] ?? '';
             const label = `${opId} ${name}`.trim();
-            const group = groups.get(key) ?? { key, label, tensors: [] };
+            const group = groups.get(key) ?? { key, label, opId, tensors: [] };
             group.tensors.push(tensor);
             groups.set(key, group);
         });
@@ -645,12 +655,38 @@ const groupTensorsByConnectedOp = (
     return Array.from(groups.values());
 };
 
+const ConnectedOpHeader: React.FC<{
+    group: ConnectedOpGroup;
+    onSelect: (opId: number) => void;
+}> = ({ group, onSelect }) => {
+    return (
+        <div className='connected-op-header'>
+            <h2 className='connected-op-name'>{group.label}</h2>
+            {group.opId !== null && (
+                <Tooltip
+                    placement={PopoverPosition.RIGHT}
+                    content={`Select operation ${group.opId}`}
+                >
+                    <Button
+                        className='connected-op-select'
+                        icon={IconNames.LOCATE}
+                        variant={ButtonVariant.MINIMAL}
+                        onClick={() => onSelect(group.opId as number)}
+                        aria-label={`Select operation ${group.opId}`}
+                    />
+                </Tooltip>
+            )}
+        </div>
+    );
+};
+
 const OperationGraphInfoComponent: React.FC<{
     currentOperationId: number;
     operationList: OperationList;
     operationNamesById: Map<number, string>;
     onNavigate: NavigateFunction;
-}> = ({ currentOperationId, operationList, operationNamesById, onNavigate }) => {
+    onSelectConnectedNode: (opId: number) => void;
+}> = ({ currentOperationId, operationList, operationNamesById, onNavigate, onSelectConnectedNode }) => {
     const operation = operationList.find((op) => op.id === currentOperationId);
 
     const inputGroups = useMemo(
@@ -688,7 +724,10 @@ const OperationGraphInfoComponent: React.FC<{
                         className='connected-op'
                         key={`input-op-${currentOperationId}-${group.key}`}
                     >
-                        <h2 className='connected-op-name'>{group.label}</h2>
+                        <ConnectedOpHeader
+                            group={group}
+                            onSelect={onSelectConnectedNode}
+                        />
                         {group.tensors.map((tensor, index) => (
                             <TensorDetailsComponent
                                 tensor={tensor}
@@ -705,7 +744,10 @@ const OperationGraphInfoComponent: React.FC<{
                         className='connected-op'
                         key={`output-op-${currentOperationId}-${group.key}`}
                     >
-                        <h2 className='connected-op-name'>{group.label}</h2>
+                        <ConnectedOpHeader
+                            group={group}
+                            onSelect={onSelectConnectedNode}
+                        />
                         {group.tensors.map((tensor, index) => (
                             <TensorDetailsComponent
                                 tensor={tensor}
