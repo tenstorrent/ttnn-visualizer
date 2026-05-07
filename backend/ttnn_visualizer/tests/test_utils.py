@@ -538,3 +538,15 @@ def test_read_profiler_config_api_payload_single_file(tmp_path):
     payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=99)
     assert err is None
     assert payload == {"report_name": "x"}
+
+
+def test_pick_profiler_config_paths_missing_directory(tmp_path):
+    missing = tmp_path / "deleted_report"
+    assert pick_profiler_config_paths(missing) == []
+
+
+def test_read_profiler_config_api_payload_missing_directory(tmp_path):
+    missing = tmp_path / "deleted_report"
+    payload, err = read_profiler_config_api_payload(missing)
+    assert payload is None
+    assert err is None
