@@ -143,6 +143,59 @@ def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
     return response_unprocessable_entity(_NONZERO_RANK_UNSUPPORTED_MSG)
 
 
+def _remote_stack_source_path_availability(instance: Instance, file_path: str):
+    """Whether stack source ``file_path`` is readable for this instance (local or SSH)."""
+    remote_connection = instance.remote_connection
+    is_available = False
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            is_available = check_stack_source_remote(ssh_client, file_path)
+        except RemoteConnectionException:
+            return jsonify({"available": False})
+    else:
+        if not current_app.config.get("SERVER_MODE"):
+            is_available = check_stack_source_local(file_path)
+
+    return jsonify({"available": is_available})
+
+
+def _remote_stack_source_read(instance: Instance, file_path: str):
+    """Return plain-text stack source (or error response)."""
+    remote_connection = instance.remote_connection
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            content, resolved, remapped = read_stack_source_remote(
+                ssh_client, file_path
+            )
+            return stack_source_response(content, resolved, remapped)
+        except RemoteConnectionException as e:
+            return error_response(e.http_status, e.message)
+        except RemoteFileReadException as e:
+            error_payload = {"error": str(e)}
+            if e.detail:
+                error_payload["detail"] = e.detail
+            return jsonify(error_payload), e.http_status
+
+    if current_app.config.get("SERVER_MODE"):
+        return response_forbidden(
+            "Local stack source reads are not available in server mode.",
+        )
+
+    try:
+        content, resolved, remapped = read_stack_source_local(file_path)
+        return stack_source_response(content, resolved, remapped)
+    except ValueError as e:
+        return response_bad_request(str(e))
+    except FileNotFoundError as e:
+        return response_not_found(str(e) or "File not found.")
+    except PermissionError as e:
+        return response_forbidden(str(e))
+
+
 @api.before_request
 def _trim_session_report_lists():
     """Keep session cookie under size limits by capping report lists (FIFO)."""
@@ -155,7 +208,7 @@ def _trim_session_report_lists():
             session[key] = lst[-max_reports:]
 
 
-@api.route("/system_capabilities", methods=["GET"])
+@api.route("/system-capabilities", methods=["GET"])
 def get_system_capabilities():
     """Return host/backend capabilities so the frontend can adapt (e.g. disable remote sync in hosted mode)."""
     capabilities = {
@@ -440,7 +493,7 @@ def errors_list(instance: Instance):
         )
 
 
-@api.route("/report_metadata", methods=["GET"])
+@api.route("/report-metadata", methods=["GET"])
 @with_instance
 @timer
 def report_metadata(instance: Instance):
@@ -457,7 +510,7 @@ def report_metadata(instance: Instance):
         )
 
 
-@api.route("/config")
+@api.route("/config", methods=["GET"])
 @with_instance
 @timer
 def get_config(instance: Instance):
@@ -1544,63 +1597,39 @@ def test_remote_folder():
     )
 
 
+@api.route("/remote/test-source-path", methods=["POST"])
+@with_instance
+def remote_path_availability(instance: Instance):
+    body = request.get_json(silent=True) or {}
+    file_path = body.get("filePath", None)
+    if not file_path or not isinstance(file_path, str):
+        return response_bad_request("Missing or invalid filePath")
+    return _remote_stack_source_path_availability(instance, file_path)
+
+
+@api.route("/remote/read-source", methods=["POST"])
+@with_instance
+def remote_stack_source(instance: Instance):
+    body = request.get_json(silent=True) or {}
+    file_path = body.get("filePath", None)
+    if not file_path or not isinstance(file_path, str):
+        return response_bad_request("Missing or invalid filePath")
+    return _remote_stack_source_read(instance, file_path)
+
+
 @api.route("/remote/read", methods=["POST"])
 @with_instance
 def read_remote_folder(instance: Instance):
     body = request.get_json(silent=True) or {}
     file_path = body.get("filePath", None)
-    # TODO: @smountenay-tt: Personally instead of a check_path_only query var, I would have made another API for checking if a remote path exists, like /api/remote/check_path?path=/path-to-check instead of having it in /remote/read.
     check_path_only = body.get("check_path_only", False)
 
     if not file_path or not isinstance(file_path, str):
         return response_bad_request("Missing or invalid filePath")
 
-    remote_connection = instance.remote_connection
-
     if check_path_only:
-        is_available = False
-
-        if remote_connection:
-            try:
-                ssh_client = SSHClient(remote_connection)
-                is_available = check_stack_source_remote(ssh_client, file_path)
-            except RemoteConnectionException:
-                return jsonify({"available": False})
-        else:
-            if not current_app.config.get("SERVER_MODE"):
-                is_available = check_stack_source_local(file_path)
-
-        return jsonify({"available": is_available})
-
-    if remote_connection:
-        try:
-            ssh_client = SSHClient(remote_connection)
-            content, resolved, remapped = read_stack_source_remote(
-                ssh_client, file_path
-            )
-            return stack_source_response(content, resolved, remapped)
-        except RemoteConnectionException as e:
-            return error_response(e.http_status, e.message)
-        except RemoteFileReadException as e:
-            error_payload = {"error": str(e)}
-            if e.detail:
-                error_payload["detail"] = e.detail
-            return jsonify(error_payload), e.http_status
-
-    if current_app.config.get("SERVER_MODE"):
-        return response_forbidden(
-            "Local stack source reads are not available in server mode.",
-        )
-
-    try:
-        content, resolved, remapped = read_stack_source_local(file_path)
-        return stack_source_response(content, resolved, remapped)
-    except ValueError as e:
-        return response_bad_request(str(e))
-    except FileNotFoundError as e:
-        return response_not_found(str(e) or "File not found.")
-    except PermissionError as e:
-        return response_forbidden(str(e))
+        return _remote_stack_source_path_availability(instance, file_path)
+    return _remote_stack_source_read(instance, file_path)
 
 
 @api.route("/remote/sync", methods=["POST"])
@@ -1703,7 +1732,7 @@ def use_remote_folder():
     return Response(status=HTTPStatus.OK)
 
 
-@api.route("/up", methods=["GET", "POST"])
+@api.route("/health", methods=["GET", "HEAD"])
 def health_check():
     return Response(status=HTTPStatus.OK)
 

@@ -178,8 +178,8 @@ const useRemoteConnection = () => {
     const isSourceFileAvailable = useCallback(async (filePath: string, signal?: AbortSignal): Promise<boolean> => {
         try {
             const { data } = await axiosInstance.post<{ available?: boolean }>(
-                `${Endpoints.REMOTE}/read`,
-                { filePath, check_path_only: true },
+                `${Endpoints.REMOTE}/test-source-path`,
+                { filePath },
                 {
                     signal,
                     headers: {
@@ -197,7 +197,7 @@ const useRemoteConnection = () => {
     const readRemoteFile = async (filePath: string) => {
         try {
             const response = await axiosInstance.post<string>(
-                `${Endpoints.REMOTE}/read`,
+                `${Endpoints.REMOTE}/read-source`,
                 { filePath },
                 {
                     headers: {
