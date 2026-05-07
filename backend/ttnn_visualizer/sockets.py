@@ -61,8 +61,8 @@ class ReportGenerated(SerializeableDataclass):
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
-# For tracking connected clients subscriber ID
-tab_clients = {}
+# For tracking connected clients subscriber ID (instance_id -> socket sid)
+tab_clients: dict[str, str] = {}
 
 # Global variables for debouncing
 debounce_timer = None
