@@ -442,6 +442,12 @@ def stack_source_response(text: str, resolved: str, remapped: bool) -> Response:
         mimetype="text/plain; charset=utf-8",
     )
     resp.headers["X-TTNN-Resolved-Source-Path"] = resolved
+
     if remapped:
         resp.headers["X-TTNN-Source-Remapped"] = "true"
+
+    # Source files can change underneath a stable filePath (e.g. after
+    # re-syncing a remote folder), so disable caching for the GET endpoint.
+    resp.headers["Cache-Control"] = "no-store"
+
     return resp

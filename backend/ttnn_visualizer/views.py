@@ -104,6 +104,17 @@ logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__)
 
 
+def _file_path_from_stack_source_request():
+    """
+    Parse ``?filePath=`` for stack-trace availability/content GET requests.
+    Returns ``(path, None)`` or ``(None, error_response)``.
+    """
+    file_path = request.args.get("filePath")
+    if not file_path or not isinstance(file_path, str):
+        return None, response_bad_request("Missing or invalid filePath")
+    return file_path, None
+
+
 def _optional_rank_query_param() -> Optional[int]:
     """
     Parse optional ``?rank=`` for multi-host report DBs.
@@ -143,6 +154,65 @@ def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
     return response_unprocessable_entity(_NONZERO_RANK_UNSUPPORTED_MSG)
 
 
+def _stack_source_availability_response(is_available: bool) -> Response:
+    # Match stack_source_response: same filePath can resolve differently after
+    # re-syncing remote reports, so don't let caches serve a stale answer.
+    resp = jsonify({"available": is_available})
+    resp.headers["Cache-Control"] = "no-store"
+
+    return resp
+
+
+def _remote_stack_source_path_availability(instance: Instance, file_path: str):
+    """Whether stack source ``file_path`` is readable for this instance (local or SSH)."""
+    remote_connection = instance.remote_connection
+    is_available = False
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            is_available = check_stack_source_remote(ssh_client, file_path)
+        except RemoteConnectionException:
+            return _stack_source_availability_response(False)
+    else:
+        if not current_app.config.get("SERVER_MODE"):
+            is_available = check_stack_source_local(file_path)
+
+    return _stack_source_availability_response(is_available)
+
+
+def _remote_stack_source_read(instance: Instance, file_path: str):
+    """Return plain-text stack source (or error response)."""
+    remote_connection = instance.remote_connection
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            content, resolved, remapped = read_stack_source_remote(
+                ssh_client, file_path
+            )
+            return stack_source_response(content, resolved, remapped)
+        except RemoteConnectionException as e:
+            return error_response(e.http_status, e.message)
+        except RemoteFileReadException as e:
+            return error_response(e.http_status, str(e), e.detail)
+
+    if current_app.config.get("SERVER_MODE"):
+        return response_forbidden(
+            "Local stack source reads are not available in server mode.",
+        )
+
+    try:
+        content, resolved, remapped = read_stack_source_local(file_path)
+        return stack_source_response(content, resolved, remapped)
+    except ValueError as e:
+        return response_bad_request(str(e))
+    except FileNotFoundError as e:
+        return response_not_found(str(e) or "File not found.")
+    except PermissionError as e:
+        return response_forbidden(str(e))
+
+
 @api.before_request
 def _trim_session_report_lists():
     """Keep session cookie under size limits by capping report lists (FIFO)."""
@@ -155,7 +225,7 @@ def _trim_session_report_lists():
             session[key] = lst[-max_reports:]
 
 
-@api.route("/system_capabilities", methods=["GET"])
+@api.route("/system-capabilities", methods=["GET"])
 def get_system_capabilities():
     """Return host/backend capabilities so the frontend can adapt (e.g. disable remote sync in hosted mode)."""
     capabilities = {
@@ -440,7 +510,7 @@ def errors_list(instance: Instance):
         )
 
 
-@api.route("/report_metadata", methods=["GET"])
+@api.route("/report-metadata", methods=["GET"])
 @with_instance
 @timer
 def report_metadata(instance: Instance):
@@ -457,7 +527,7 @@ def report_metadata(instance: Instance):
         )
 
 
-@api.route("/config")
+@api.route("/config", methods=["GET"])
 @with_instance
 @timer
 def get_config(instance: Instance):
@@ -1353,8 +1423,8 @@ def create_npe_files():
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
 
-@api.route("/remote/profiler", methods=["POST"])
-def get_remote_folders_profiler():
+@api.route("/remote/profiler-reports", methods=["POST"])
+def list_remote_reports_profiler():
     connection_data = request.get_json()
 
     if not connection_data:
@@ -1391,8 +1461,8 @@ def get_remote_folders_profiler():
         return error_response(e.http_status, e.message)
 
 
-@api.route("/remote/performance", methods=["POST"])
-def get_remote_folders_performance():
+@api.route("/remote/performance-reports", methods=["POST"])
+def list_remote_reports_performance():
     connection_data = request.get_json()
 
     if not connection_data:
@@ -1544,63 +1614,22 @@ def test_remote_folder():
     )
 
 
-@api.route("/remote/read", methods=["POST"])
+@api.route("/remote/stack-trace/test", methods=["GET"])
 @with_instance
-def read_remote_folder(instance: Instance):
-    body = request.get_json(silent=True) or {}
-    file_path = body.get("filePath", None)
-    # TODO: @smountenay-tt: Personally instead of a check_path_only query var, I would have made another API for checking if a remote path exists, like /api/remote/check_path?path=/path-to-check instead of having it in /remote/read.
-    check_path_only = body.get("check_path_only", False)
+def remote_stack_trace_test(instance: Instance):
+    file_path, err = _file_path_from_stack_source_request()
+    if err is not None:
+        return err
+    return _remote_stack_source_path_availability(instance, file_path)
 
-    if not file_path or not isinstance(file_path, str):
-        return response_bad_request("Missing or invalid filePath")
 
-    remote_connection = instance.remote_connection
-
-    if check_path_only:
-        is_available = False
-
-        if remote_connection:
-            try:
-                ssh_client = SSHClient(remote_connection)
-                is_available = check_stack_source_remote(ssh_client, file_path)
-            except RemoteConnectionException:
-                return jsonify({"available": False})
-        else:
-            if not current_app.config.get("SERVER_MODE"):
-                is_available = check_stack_source_local(file_path)
-
-        return jsonify({"available": is_available})
-
-    if remote_connection:
-        try:
-            ssh_client = SSHClient(remote_connection)
-            content, resolved, remapped = read_stack_source_remote(
-                ssh_client, file_path
-            )
-            return stack_source_response(content, resolved, remapped)
-        except RemoteConnectionException as e:
-            return error_response(e.http_status, e.message)
-        except RemoteFileReadException as e:
-            error_payload = {"error": str(e)}
-            if e.detail:
-                error_payload["detail"] = e.detail
-            return jsonify(error_payload), e.http_status
-
-    if current_app.config.get("SERVER_MODE"):
-        return response_forbidden(
-            "Local stack source reads are not available in server mode.",
-        )
-
-    try:
-        content, resolved, remapped = read_stack_source_local(file_path)
-        return stack_source_response(content, resolved, remapped)
-    except ValueError as e:
-        return response_bad_request(str(e))
-    except FileNotFoundError as e:
-        return response_not_found(str(e) or "File not found.")
-    except PermissionError as e:
-        return response_forbidden(str(e))
+@api.route("/remote/stack-trace/read", methods=["GET"])
+@with_instance
+def remote_stack_trace_read(instance: Instance):
+    file_path, err = _file_path_from_stack_source_request()
+    if err is not None:
+        return err
+    return _remote_stack_source_read(instance, file_path)
 
 
 @api.route("/remote/sync", methods=["POST"])
@@ -1703,7 +1732,7 @@ def use_remote_folder():
     return Response(status=HTTPStatus.OK)
 
 
-@api.route("/up", methods=["GET", "POST"])
+@api.route("/up", methods=["GET", "HEAD"])
 def health_check():
     return Response(status=HTTPStatus.OK)
 
