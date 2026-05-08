@@ -1422,7 +1422,6 @@ def create_npe_files():
 
 
 @api.route("/remote/folders/profiler", methods=["POST"])
-@api.route("/remote/profiler", methods=["POST"])
 def get_remote_folders_profiler():
     connection_data = request.get_json()
 
@@ -1461,7 +1460,6 @@ def get_remote_folders_profiler():
 
 
 @api.route("/remote/folders/performance", methods=["POST"])
-@api.route("/remote/performance", methods=["POST"])
 def get_remote_folders_performance():
     connection_data = request.get_json()
 
