@@ -83,16 +83,19 @@ The following separate and independent dependencies are utilized by this project
 - @blueprintjs/node-build-scripts - Apache-2.0 - https://github.com/palantir/blueprint/blob/develop/packages/node-build-scripts/LICENSE
 - @blueprintjs/select - Apache-2.0 - https://github.com/palantir/blueprint/blob/develop/packages/select/LICENSE
 - @blueprintjs/table - Apache-2.0 - https://github.com/palantir/blueprint/blob/develop/packages/table/LICENSE
+- @dagrejs/dagre - MIT - https://github.com/dagrejs/dagre/blob/master/LICENSE
 - @eslint/compat - Apache-2.0 - https://github.com/eslint/rewrite/blob/main/packages/compat/LICENSE
 - @eslint/eslintrc - MIT - https://github.com/eslint/eslintrc/blob/main/LICENSE
 - @eslint/js - MIT - https://github.com/eslint/eslint/blob/main/LICENSE
 - @eslint/rewrite - Apache-2.0 - https://github.com/eslint/rewrite/blob/main/LICENSE
+- @hpcc-js/wasm-graphviz - Apache-2.0 - https://github.com/hpcc-systems/hpcc-js-wasm/blob/master/LICENSE
 - @tanstack/react-query - MIT - https://github.com/TanStack/query/blob/main/LICENSE
 - @tanstack/react-query-devtools - MIT - https://github.com/TanStack/query/blob/main/LICENSE
 - @tanstack/react-virtual - MIT - https://github.com/TanStack/virtual/blob/main/LICENSE
 - @testing-library/dom - MIT - https://github.com/testing-library/dom-testing-library/blob/main/LICENSE
 - @testing-library/jest-dom - MIT - https://github.com/testing-library/jest-dom/blob/main/LICENSE
 - @testing-library/react - MIT - https://github.com/testing-library/react-testing-library/blob/main/LICENSE
+- @types/dagre - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react-dom - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react-plotly.js - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
@@ -100,6 +103,7 @@ The following separate and independent dependencies are utilized by this project
 - @typescript-eslint/eslint-plugin - MIT - https://github.com/typescript-eslint/typescript-eslint/blob/main/LICENSE
 - @typescript-eslint/parser - MIT - https://github.com/typescript-eslint/typescript-eslint/blob/main/LICENSE
 - @vitejs/plugin-react - MIT - https://github.com/vitejs/vite-plugin-react/blob/main/LICENSE
+- @xyflow/react - MIT - https://github.com/xyflow/xyflow/blob/main/LICENSE
 - ajv - MIT - https://github.com/ajv-validator/ajv/blob/master/LICENSE
 - axios - MIT - https://github.com/axios/axios/blob/v1.x/LICENSE
 - classnames - MIT - https://github.com/JedWatson/classnames/blob/main/LICENSE
@@ -154,6 +158,7 @@ The following separate and independent dependencies are utilized by this project
 - vite - MIT - https://github.com/vitejs/vite/blob/main/LICENSE
 - vitest - MIT - https://github.com/vitest-dev/vitest/blob/main/LICENSE
 - vitest-canvas-mock - MIT - https://github.com/wobsoriano/vitest-canvas-mock/blob/main/LICENSE
+- zustand - MIT - https://github.com/pmndrs/zustand/blob/main/LICENSE
 
 - black - MIT - https://github.com/psf/black/blob/main/LICENSE
 - build - MIT - https://opensource.org/license/mit
