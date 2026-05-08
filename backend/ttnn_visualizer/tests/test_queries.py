@@ -283,13 +283,11 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(results[0].stack_trace, "trace_data")
 
     def test_query_tensor_comparisons(self):
-        self.connection.execute(
-            """
+        self.connection.execute("""
             INSERT INTO local_tensor_comparison_records
             (tensor_id, golden_tensor_id, matches, desired_pcc, actual_pcc)
             VALUES (1, 10, 1, 0.9, 0.8)
-            """
-        )
+            """)
         results = list(
             self.db_queries.query_tensor_comparisons(local=True, filters={"matches": 1})
         )
