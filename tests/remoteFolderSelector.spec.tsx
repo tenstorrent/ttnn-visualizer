@@ -250,10 +250,10 @@ it('sets active performance report and syncs it on selection', async () => {
 
     // Mock the actual API endpoints
     mockPost.mockImplementation((url: string) => {
-        if (url.includes('/api/remote/profiler')) {
+        if (url.includes('/api/remote/folders/profiler')) {
             return Promise.resolve({ data: mockRemoteProfilerFolderList } as AxiosResponse);
         }
-        if (url.includes('/api/remote/performance')) {
+        if (url.includes('/api/remote/folders/performance')) {
             return Promise.resolve({ data: [selectedReport] } as AxiosResponse);
         }
         if (url.includes('/api/remote/use')) {

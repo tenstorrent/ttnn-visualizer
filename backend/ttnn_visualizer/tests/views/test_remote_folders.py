@@ -23,7 +23,7 @@ def _remote_connection_payload():
 def test_remote_profiler_returns_204_when_no_reports(client):
     with patch("ttnn_visualizer.views.get_remote_profiler_folders", return_value=[]):
         response = client.post(
-            "/api/remote/profiler", json=_remote_connection_payload()
+            "/api/remote/folders/profiler", json=_remote_connection_payload()
         )
 
     assert response.status_code == HTTPStatus.NO_CONTENT
@@ -48,7 +48,7 @@ def test_remote_profiler_returns_json_when_reports_exist(app, client):
         patch("ttnn_visualizer.views.read_last_synced_file", return_value=123),
     ):
         response = client.post(
-            "/api/remote/profiler", json=_remote_connection_payload()
+            "/api/remote/folders/profiler", json=_remote_connection_payload()
         )
 
     assert response.status_code == HTTPStatus.OK
@@ -64,7 +64,7 @@ def test_remote_profiler_returns_json_when_reports_exist(app, client):
 def test_remote_performance_returns_204_when_no_reports(client):
     with patch("ttnn_visualizer.views.get_remote_performance_folders", return_value=[]):
         response = client.post(
-            "/api/remote/performance", json=_remote_connection_payload()
+            "/api/remote/folders/performance", json=_remote_connection_payload()
         )
 
     assert response.status_code == HTTPStatus.NO_CONTENT
@@ -89,7 +89,7 @@ def test_remote_performance_returns_json_when_reports_exist(app, client):
         patch("ttnn_visualizer.views.read_last_synced_file", return_value=456),
     ):
         response = client.post(
-            "/api/remote/performance", json=_remote_connection_payload()
+            "/api/remote/folders/performance", json=_remote_connection_payload()
         )
 
     assert response.status_code == HTTPStatus.OK

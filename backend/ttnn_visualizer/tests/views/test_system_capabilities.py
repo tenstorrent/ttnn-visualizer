@@ -65,5 +65,5 @@ def test_system_capabilities_response_shape(client):
 
 
 def test_health_endpoint(client):
-    assert client.get("/api/health").status_code == 200
-    assert client.head("/api/health").status_code == 200
+    assert client.get("/api/up").status_code == 200
+    assert client.head("/api/up").status_code == 200

@@ -48,7 +48,7 @@ const useRemoteConnection = () => {
             return [];
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/profiler`, connection);
+        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/folders/profiler`, connection);
 
         if (response.status === HttpStatusCode.NoContent) {
             return [];
@@ -68,7 +68,10 @@ const useRemoteConnection = () => {
             return [];
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/performance`, connection);
+        const response = await axiosInstance.post<RemoteFolder[]>(
+            `${Endpoints.REMOTE}/folders/performance`,
+            connection,
+        );
 
         if (response.status === HttpStatusCode.NoContent) {
             return [];
@@ -177,16 +180,10 @@ const useRemoteConnection = () => {
 
     const isSourceFileAvailable = useCallback(async (filePath: string, signal?: AbortSignal): Promise<boolean> => {
         try {
-            const { data } = await axiosInstance.post<{ available?: boolean }>(
-                `${Endpoints.REMOTE}/test-source-path`,
-                { filePath },
-                {
-                    signal,
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                },
-            );
+            const { data } = await axiosInstance.get<{ available?: boolean }>(`${Endpoints.REMOTE}/stack-trace/test`, {
+                signal,
+                params: { filePath },
+            });
 
             return data?.available === true;
         } catch {
@@ -196,15 +193,10 @@ const useRemoteConnection = () => {
 
     const readRemoteFile = async (filePath: string) => {
         try {
-            const response = await axiosInstance.post<string>(
-                `${Endpoints.REMOTE}/read-source`,
-                { filePath },
-                {
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                },
-            );
+            const response = await axiosInstance.get<string>(`${Endpoints.REMOTE}/stack-trace/read`, {
+                params: { filePath },
+                responseType: 'text',
+            });
 
             const isRemapped = response.headers['x-ttnn-source-remapped'] === 'true';
             const resolvedPath = response.headers['x-ttnn-resolved-source-path'] || null;

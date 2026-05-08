@@ -104,6 +104,21 @@ logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__)
 
 
+def _file_path_from_stack_source_request():
+    """
+    stack-trace availability/content accept GET (``?filePath=``) or POST JSON body.
+    Returns ``(path, None)`` or ``(None, error_response)``.
+    """
+    if request.method == "GET":
+        file_path = request.args.get("filePath")
+    else:
+        body = request.get_json(silent=True) or {}
+        file_path = body.get("filePath")
+    if not file_path or not isinstance(file_path, str):
+        return None, response_bad_request("Missing or invalid filePath")
+    return file_path, None
+
+
 def _optional_rank_query_param() -> Optional[int]:
     """
     Parse optional ``?rank=`` for multi-host report DBs.
@@ -1406,6 +1421,7 @@ def create_npe_files():
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
 
+@api.route("/remote/folders/profiler", methods=["POST"])
 @api.route("/remote/profiler", methods=["POST"])
 def get_remote_folders_profiler():
     connection_data = request.get_json()
@@ -1444,6 +1460,7 @@ def get_remote_folders_profiler():
         return error_response(e.http_status, e.message)
 
 
+@api.route("/remote/folders/performance", methods=["POST"])
 @api.route("/remote/performance", methods=["POST"])
 def get_remote_folders_performance():
     connection_data = request.get_json()
@@ -1597,23 +1614,21 @@ def test_remote_folder():
     )
 
 
-@api.route("/remote/test-source-path", methods=["POST"])
+@api.route("/remote/stack-trace/test", methods=["GET"])
 @with_instance
 def remote_path_availability(instance: Instance):
-    body = request.get_json(silent=True) or {}
-    file_path = body.get("filePath", None)
-    if not file_path or not isinstance(file_path, str):
-        return response_bad_request("Missing or invalid filePath")
+    file_path, err = _file_path_from_stack_source_request()
+    if err is not None:
+        return err
     return _remote_stack_source_path_availability(instance, file_path)
 
 
-@api.route("/remote/read-source", methods=["POST"])
+@api.route("/remote/stack-trace/read", methods=["GET"])
 @with_instance
 def remote_stack_source(instance: Instance):
-    body = request.get_json(silent=True) or {}
-    file_path = body.get("filePath", None)
-    if not file_path or not isinstance(file_path, str):
-        return response_bad_request("Missing or invalid filePath")
+    file_path, err = _file_path_from_stack_source_request()
+    if err is not None:
+        return err
     return _remote_stack_source_read(instance, file_path)
 
 
@@ -1732,7 +1747,7 @@ def use_remote_folder():
     return Response(status=HTTPStatus.OK)
 
 
-@api.route("/health", methods=["GET", "HEAD"])
+@api.route("/up", methods=["GET", "HEAD"])
 def health_check():
     return Response(status=HTTPStatus.OK)
 
