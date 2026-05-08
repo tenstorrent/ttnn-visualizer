@@ -48,7 +48,7 @@ const useRemoteConnection = () => {
             return [];
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/folders/profiler`, connection);
+        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/profiler-reports`, connection);
 
         if (response.status === HttpStatusCode.NoContent) {
             return [];
@@ -69,7 +69,7 @@ const useRemoteConnection = () => {
         }
 
         const response = await axiosInstance.post<RemoteFolder[]>(
-            `${Endpoints.REMOTE}/folders/performance`,
+            `${Endpoints.REMOTE}/performance-reports`,
             connection,
         );
 

@@ -1426,7 +1426,7 @@ def create_npe_files():
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
 
-@api.route("/remote/folders/profiler", methods=["POST"])
+@api.route("/remote/profiler-reports", methods=["POST"])
 def get_remote_folders_profiler():
     connection_data = request.get_json()
 
@@ -1464,7 +1464,7 @@ def get_remote_folders_profiler():
         return error_response(e.http_status, e.message)
 
 
-@api.route("/remote/folders/performance", methods=["POST"])
+@api.route("/remote/performance-reports", methods=["POST"])
 def get_remote_folders_performance():
     connection_data = request.get_json()
 

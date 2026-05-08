@@ -39,7 +39,7 @@ If you mainly work in Python, you still benefit from knowing that many behaviors
 ## HTTP API conventions
 
 - **Instance scoping:** Report-backed routes (operations, tensors, buffers, metadata, stack-trace, etc.) expect **`instanceId` as a query parameter**. The React app’s `axiosInstance` injects it on every request from session storage / URL; paths do not embed instance IDs.
-- **`/api/remote` subtree:** Remote SSH flows are grouped under **`/remote/...`**. Canonical names include `POST /remote/folders/profiler`, `POST /remote/folders/performance`, `POST /remote/test`, `POST /remote/sync`, `POST /remote/use`.
+- **`/api/remote` subtree:** Remote SSH flows are grouped under **`/remote/...`**. Canonical names include `POST /remote/profiler-reports`, `POST /remote/performance-reports`, `POST /remote/test`, `POST /remote/sync`, `POST /remote/use`.
 - **GET vs POST:** Read-only stack trace file checks use **`GET /remote/stack-trace/test`** and **`GET /remote/stack-trace/read`** with `?filePath=...`. **POST** is used where the body carries SSH connection material (folder listing, sync, use, test).
 
 ## Running the app from a development checkout
