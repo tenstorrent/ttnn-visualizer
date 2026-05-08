@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
 /* eslint-disable no-continue */
 import dagre from '@dagrejs/dagre';
 import type { BuiltGraph, GraphIndex, IndexedAttr, IndexedNode, WorkerEdge, WorkerNode } from './mlirGraphTypes';

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
 /* eslint-disable no-continue */
 import React, { useCallback, useRef } from 'react';
 import { Edge, Network, Node } from 'vis-network';
