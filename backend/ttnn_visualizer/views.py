@@ -106,14 +106,10 @@ api = Blueprint("api", __name__)
 
 def _file_path_from_stack_source_request():
     """
-    stack-trace availability/content accept GET (``?filePath=``) or POST JSON body.
+    Parse ``?filePath=`` for stack-trace availability/content GET requests.
     Returns ``(path, None)`` or ``(None, error_response)``.
     """
-    if request.method == "GET":
-        file_path = request.args.get("filePath")
-    else:
-        body = request.get_json(silent=True) or {}
-        file_path = body.get("filePath")
+    file_path = request.args.get("filePath")
     if not file_path or not isinstance(file_path, str):
         return None, response_bad_request("Missing or invalid filePath")
     return file_path, None
@@ -158,6 +154,15 @@ def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
     return response_unprocessable_entity(_NONZERO_RANK_UNSUPPORTED_MSG)
 
 
+def _stack_source_availability_response(is_available: bool) -> Response:
+    # Match stack_source_response: same filePath can resolve differently after
+    # re-syncing remote reports, so don't let caches serve a stale answer.
+    resp = jsonify({"available": is_available})
+    resp.headers["Cache-Control"] = "no-store"
+
+    return resp
+
+
 def _remote_stack_source_path_availability(instance: Instance, file_path: str):
     """Whether stack source ``file_path`` is readable for this instance (local or SSH)."""
     remote_connection = instance.remote_connection
@@ -168,12 +173,12 @@ def _remote_stack_source_path_availability(instance: Instance, file_path: str):
             ssh_client = SSHClient(remote_connection)
             is_available = check_stack_source_remote(ssh_client, file_path)
         except RemoteConnectionException:
-            return jsonify({"available": False})
+            return _stack_source_availability_response(False)
     else:
         if not current_app.config.get("SERVER_MODE"):
             is_available = check_stack_source_local(file_path)
 
-    return jsonify({"available": is_available})
+    return _stack_source_availability_response(is_available)
 
 
 def _remote_stack_source_read(instance: Instance, file_path: str):
@@ -1614,7 +1619,7 @@ def test_remote_folder():
 
 @api.route("/remote/stack-trace/test", methods=["GET"])
 @with_instance
-def remote_path_availability(instance: Instance):
+def remote_stack_trace_test(instance: Instance):
     file_path, err = _file_path_from_stack_source_request()
     if err is not None:
         return err
@@ -1623,25 +1628,10 @@ def remote_path_availability(instance: Instance):
 
 @api.route("/remote/stack-trace/read", methods=["GET"])
 @with_instance
-def remote_stack_source(instance: Instance):
+def remote_stack_trace_read(instance: Instance):
     file_path, err = _file_path_from_stack_source_request()
     if err is not None:
         return err
-    return _remote_stack_source_read(instance, file_path)
-
-
-@api.route("/remote/read", methods=["POST"])
-@with_instance
-def read_remote_folder(instance: Instance):
-    body = request.get_json(silent=True) or {}
-    file_path = body.get("filePath", None)
-    check_path_only = body.get("check_path_only", False)
-
-    if not file_path or not isinstance(file_path, str):
-        return response_bad_request("Missing or invalid filePath")
-
-    if check_path_only:
-        return _remote_stack_source_path_availability(instance, file_path)
     return _remote_stack_source_read(instance, file_path)
 
 
