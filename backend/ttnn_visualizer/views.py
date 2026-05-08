@@ -195,10 +195,7 @@ def _remote_stack_source_read(instance: Instance, file_path: str):
         except RemoteConnectionException as e:
             return error_response(e.http_status, e.message)
         except RemoteFileReadException as e:
-            error_payload = {"error": str(e)}
-            if e.detail:
-                error_payload["detail"] = e.detail
-            return jsonify(error_payload), e.http_status
+            return error_response(e.http_status, str(e), e.detail)
 
     if current_app.config.get("SERVER_MODE"):
         return response_forbidden(
