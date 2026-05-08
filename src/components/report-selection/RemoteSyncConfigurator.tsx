@@ -366,10 +366,10 @@ const RemoteSyncConfigurator: FC = () => {
                             if (remote.persistentState.selectedConnection) {
                                 const [reportFolders, performanceFolders] = await Promise.allSettled([
                                     remote.persistentState.selectedConnection.profilerPath
-                                        ? remote.listReportFolders(remote.persistentState.selectedConnection)
+                                        ? remote.listProfilerReports(remote.persistentState.selectedConnection)
                                         : Promise.resolve([]),
                                     remote.persistentState.selectedConnection.performancePath
-                                        ? remote.listPerformanceFolders(remote.persistentState.selectedConnection)
+                                        ? remote.listPerformanceReports(remote.persistentState.selectedConnection)
                                         : Promise.resolve([]),
                                 ]);
 

@@ -39,7 +39,7 @@ const useRemoteConnection = () => {
         return connectionTestStates;
     };
 
-    const listReportFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
+    const listProfilerReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
@@ -59,7 +59,7 @@ const useRemoteConnection = () => {
         return reportFolders.map(normaliseReportFolder) as RemoteFolder[];
     };
 
-    const listPerformanceFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
+    const listPerformanceReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
@@ -229,8 +229,8 @@ const useRemoteConnection = () => {
     return {
         testConnection,
         syncRemoteFolder,
-        listReportFolders,
-        listPerformanceFolders,
+        listProfilerReports,
+        listPerformanceReports,
         mountRemoteFolder,
         persistentState,
         readRemoteFile,
