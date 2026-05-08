@@ -809,7 +809,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 onClick={() => runBuild(expandedNamespaces)}
                 style={{ position: 'absolute', top: 80, left: 12, zIndex: 10, padding: '8px 10px' }}
             >
-                Re-layout (ELK)
+                Re-layout
             </Button>
         </div>
     );

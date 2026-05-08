@@ -95,7 +95,7 @@ function processLatestBuild(graphId: string): void {
 }
 
 // Use addEventListener instead of self.onmessage for robustness — some third-party
-// libraries (e.g. ELK) overwrite self.onmessage when loaded inside a worker.
+// libraries overwrite self.onmessage when loaded inside a worker.
 self.addEventListener('message', (event: MessageEvent<WorkerInboundMessage>) => {
     const message = event.data;
 

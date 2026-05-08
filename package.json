@@ -62,7 +62,6 @@
     "@tanstack/react-virtual": "^3.13.23",
     "@xyflow/react": "^12.10.2",
     "ajv": "^8.18.0",
-    "elkjs": "^0.11.0",
     "axios": "^1.15.0",
     "jotai": "^2.19.1",
     "normalize.css": "^8.0.1",

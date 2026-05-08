@@ -615,10 +615,10 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
     }
 
     const topLevelNodeIdSet = new Set(topLevelNodes.map((n) => n.id));
-    const topLevelEdgesForElk = topLevelEdgesForLayout.filter(
+    const filteredTopLevelEdges = topLevelEdgesForLayout.filter(
         (e) => topLevelNodeIdSet.has(e.source) && topLevelNodeIdSet.has(e.target),
     );
-    const laidOutTopLevelNodes = dagreLayout(topLevelNodes, topLevelEdgesForElk);
+    const laidOutTopLevelNodes = dagreLayout(topLevelNodes, filteredTopLevelEdges);
     const topLevelNodeById = new Map(laidOutTopLevelNodes.map((n) => [n.id, n]));
 
     const finalNodes: WorkerNode[] = [];
