@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError } from 'axios';
+import { AxiosError, HttpStatusCode } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -501,9 +501,28 @@ export const useNpe = (fileName: string | null) => {
     });
 };
 
-const fetchMLIRJson = async () => {
-    const response = await axiosInstance.get<GraphBundle>(Endpoints.MLIR);
-    return response?.data;
+const fetchMLIRJson = async (): Promise<GraphBundle> => {
+    // Fetch as raw text and parse client-side. The backend deliberately
+    // streams the uploaded file bytes without parsing them — large MLIR
+    // payloads avoid the double-parse / double-stream cost on the server.
+    // If the file contents are malformed JSON, surface a synthetic 422 so
+    // the existing UI mapping in `routes/MLIR.tsx`
+    // (422 → MLIRValidationError.INVALID_JSON) handles it without changes.
+    const response = await axiosInstance.get<string>(Endpoints.MLIR, {
+        responseType: 'text',
+        transformResponse: [(data) => data],
+    });
+    try {
+        return JSON.parse(response.data) as GraphBundle;
+    } catch {
+        throw new AxiosError(
+            'MLIR file is not valid JSON',
+            AxiosError.ERR_BAD_RESPONSE,
+            response.config,
+            response.request,
+            { ...response, status: HttpStatusCode.UnprocessableEntity },
+        );
+    }
 };
 
 // The `/mlir` endpoint resolves the file path server-side from
