@@ -26,9 +26,6 @@ importers:
       '@dagrejs/dagre':
         specifier: ^3.0.0
         version: 3.0.0
-      '@hpcc-js/wasm-graphviz':
-        specifier: ^1.21.2
-        version: 1.21.5
       '@tanstack/react-query':
         specifier: ^5.96.2
         version: 5.99.0(react@18.3.1)
@@ -83,9 +80,6 @@ importers:
       vis-network:
         specifier: ^10.0.2
         version: 10.0.2(@egjs/hammerjs@2.0.17)(component-emitter@2.0.0)(keycharm@0.4.0)(uuid@13.0.0)(vis-data@8.0.3(uuid@13.0.0)(vis-util@6.0.0(@egjs/hammerjs@2.0.17)(component-emitter@2.0.0)))(vis-util@6.0.0(@egjs/hammerjs@2.0.17)(component-emitter@2.0.0))
-      zustand:
-        specifier: ^5.0.11
-        version: 5.0.13(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
     devDependencies:
       '@blueprintjs/node-build-scripts':
         specifier: ^9.3.3
@@ -668,9 +662,6 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
-
-  '@hpcc-js/wasm-graphviz@1.21.5':
-    resolution: {integrity: sha512-rgFx1A5gd1BdMrLkrKg44cdOjTvEQVWODf1PDTwgiKDfmJioD+tyoMBvmEJdH6OC7rh1JaeqFJ2+r92F1Ip/sA==}
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -5577,24 +5568,6 @@ packages:
       react:
         optional: true
 
-  zustand@5.0.13:
-    resolution: {integrity: sha512-efI2tVaVQPqtOh114loML/Z80Y4NP3yc+Ff0fYiZJPauNeWZeIp/bRFD7I9bfmCOYBh/PHxlglQ9+wvlwnPikQ==}
-    engines: {node: '>=12.20.0'}
-    peerDependencies:
-      '@types/react': '>=18.0.0'
-      immer: '>=9.0.6'
-      react: '>=18.0.0'
-      use-sync-external-store: '>=1.2.0'
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-      immer:
-        optional: true
-      react:
-        optional: true
-      use-sync-external-store:
-        optional: true
-
 snapshots:
 
   '@adobe/css-tools@4.4.4': {}
@@ -6110,8 +6083,6 @@ snapshots:
       tabbable: 6.4.0
 
   '@floating-ui/utils@0.2.11': {}
-
-  '@hpcc-js/wasm-graphviz@1.21.5': {}
 
   '@humanfs/core@0.19.1': {}
 
@@ -11923,9 +11894,3 @@ snapshots:
     optionalDependencies:
       '@types/react': 18.3.28
       react: 18.3.1
-
-  zustand@5.0.13(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1)):
-    optionalDependencies:
-      '@types/react': 18.3.28
-      react: 18.3.1
-      use-sync-external-store: 1.6.0(react@18.3.1)

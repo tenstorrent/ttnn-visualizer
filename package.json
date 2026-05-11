@@ -57,7 +57,6 @@
     "@blueprintjs/select": "^6.0.13",
     "@blueprintjs/table": "^6.0.13",
     "@dagrejs/dagre": "^3.0.0",
-    "@hpcc-js/wasm-graphviz": "^1.21.2",
     "@tanstack/react-query": "^5.96.2",
     "@tanstack/react-virtual": "^3.13.23",
     "@xyflow/react": "^12.10.2",
@@ -75,8 +74,7 @@
     "socket.io-client": "^4.8.3",
     "tinycolor2": "^1.6.0",
     "vis-data": "^8.0.3",
-    "vis-network": "^10.0.2",
-    "zustand": "^5.0.11"
+    "vis-network": "^10.0.2"
   },
   "devDependencies": {
     "@blueprintjs/node-build-scripts": "^9.3.3",

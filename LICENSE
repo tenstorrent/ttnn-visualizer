@@ -88,7 +88,6 @@ The following separate and independent dependencies are utilized by this project
 - @eslint/eslintrc - MIT - https://github.com/eslint/eslintrc/blob/main/LICENSE
 - @eslint/js - MIT - https://github.com/eslint/eslint/blob/main/LICENSE
 - @eslint/rewrite - Apache-2.0 - https://github.com/eslint/rewrite/blob/main/LICENSE
-- @hpcc-js/wasm-graphviz - Apache-2.0 - https://github.com/hpcc-systems/hpcc-js-wasm/blob/master/LICENSE
 - @tanstack/react-query - MIT - https://github.com/TanStack/query/blob/main/LICENSE
 - @tanstack/react-query-devtools - MIT - https://github.com/TanStack/query/blob/main/LICENSE
 - @tanstack/react-virtual - MIT - https://github.com/TanStack/virtual/blob/main/LICENSE
@@ -158,7 +157,6 @@ The following separate and independent dependencies are utilized by this project
 - vite - MIT - https://github.com/vitejs/vite/blob/main/LICENSE
 - vitest - MIT - https://github.com/vitest-dev/vitest/blob/main/LICENSE
 - vitest-canvas-mock - MIT - https://github.com/wobsoriano/vitest-canvas-mock/blob/main/LICENSE
-- zustand - MIT - https://github.com/pmndrs/zustand/blob/main/LICENSE
 
 - black - MIT - https://github.com/psf/black/blob/main/LICENSE
 - build - MIT - https://opensource.org/license/mit

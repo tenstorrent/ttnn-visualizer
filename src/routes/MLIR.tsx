@@ -23,8 +23,6 @@ const MLIR: FC = () => {
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
     const { data: mlirData, isLoading, error: httpError } = useMLIR(filepath ? null : mlirJsonFilename);
 
-    // const hasUploadedFile = !!mlirJsonFilename;
-
     const errorCode = useMemo(() => {
         if (isLoading) {
             return ValidationError.OK;
