@@ -752,6 +752,23 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         });
     }, [nodes, focusedConnections, selectedNodeId]);
 
+    // MiniMap reads `node.style.background` to colour each mini-node. The
+    // unhighlighted op-node fill now lives in SCSS (`.react-flow__node-mlirOp`),
+    // so without this callback the minimap would fall back to its CSS var —
+    // which is the same `$tt-grey-2` as the minimap pane background, making
+    // nodes invisible. Group wrappers stay transparent in the minimap because
+    // their visible chrome is the inner `.mlir-group-body`, not the wrapper.
+    const minimapNodeColor = useCallback((node: Node): string => {
+        const inlineBg = (node.style as { background?: string } | undefined)?.background;
+        if (typeof inlineBg === 'string' && inlineBg !== 'transparent') {
+            return inlineBg;
+        }
+        if (node.type === 'mlirGroup') {
+            return 'rgba(125, 125, 125, 0.35)';
+        }
+        return '#f5f5f5';
+    }, []);
+
     // Colorize incoming edges green, outgoing edges yellow.
     const styledEdges = useMemo<Edge[]>(() => {
         if (!selectedNodeId) {
@@ -803,7 +820,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                     connectionLineType={ConnectionLineType.SmoothStep}
                     selectNodesOnDrag={false}
                 >
-                    <MiniMap />
+                    <MiniMap nodeColor={minimapNodeColor} />
                     <Controls />
                     <Background />
                 </ReactFlow>
