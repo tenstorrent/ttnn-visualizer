@@ -28,7 +28,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 
 const MLIRJSONFileLoader: React.FC = () => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const { uploadNpeFile } = useLocalConnection();
+    const { uploadMlirFile } = useLocalConnection();
     const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
@@ -41,7 +41,7 @@ const MLIRJSONFileLoader: React.FC = () => {
         }
 
         const file = event.target.files?.[0];
-        const response = await uploadNpeFile(event.target.files);
+        const response = await uploadMlirFile(event.target.files);
 
         if (response.status !== 200) {
             setUploadStatus(ConnectionTestStates.FAILED);

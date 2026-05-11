@@ -498,6 +498,21 @@ export const useNpe = (fileName: string | null) => {
     });
 };
 
+const fetchMLIRJson = async () => {
+    const response = await axiosInstance.get<never>(Endpoints.MLIR);
+    return response?.data;
+};
+
+export const useMLIR = (fileName: string | null) => {
+    return useQuery<never, AxiosError>({
+        queryFn: () => fetchMLIRJson(),
+        queryKey: ['fetch-mlir-json', fileName],
+        retry: false,
+        staleTime: 30000,
+        enabled: fileName !== null,
+    });
+};
+
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
 

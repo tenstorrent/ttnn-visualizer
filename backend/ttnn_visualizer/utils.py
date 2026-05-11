@@ -663,6 +663,14 @@ def get_npe_path(npe_name, current_app, remote_connection=None):
     return str(npe_path)
 
 
+def get_mlir_path(mlir_name, current_app, remote_connection=None):
+    local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+
+    mlir_path = local_dir / current_app.config["MLIR_DIRECTORY_NAME"]
+
+    return str(mlir_path)
+
+
 def get_cluster_descriptor_path(instance):
     if not instance.profiler_path:
         return None

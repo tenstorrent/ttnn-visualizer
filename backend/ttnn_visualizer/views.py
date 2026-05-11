@@ -1341,8 +1341,8 @@ def create_npe_files():
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
 
-@api.route("/local/upload/mlir-json", methods=["POST"])
-def create_mlir_json_file():
+@api.route("/local/upload/mlir", methods=["POST"])
+def create_mlir_file():
     files = request.files.getlist("files")
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
@@ -1350,30 +1350,34 @@ def create_mlir_json_file():
         if not file.filename.endswith(".json"):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
-                message="Must me a .json file",
+                message="MLIR requires a valid .json file",
             ).model_dump()
 
-    npe_name = extract_npe_name(files)
+    mlir_name = extract_npe_name(files)
     target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
     try:
         paths = save_uploaded_files(files, target_directory)
     except DataFormatError:
-        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        return response_unprocessable_entity()
 
     instance_id = request.args.get("instanceId")
-    npe_path = str(paths[0])
+    mlir_path = str(paths[0])
     update_instance(
         instance_id=instance_id,
-        npe_name=npe_name,
-        npe_location=ReportLocation.LOCAL.value,
+        mlir_name=mlir_name,
+        mlir_location=ReportLocation.LOCAL.value,
         clear_remote=True,
-        npe_path=npe_path,
+        mlir_path=mlir_path,
     )
 
-    session["mlir_paths"] = session.get("mlir_paths", []) + [str(npe_path)]
-    session.permanent = True
+    if current_app.config["SERVER_MODE"]:
+        max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
+        session["mlir_paths"] = (session.get("mlir_paths", []) + [mlir_path])[
+            -max_reports:
+        ]
+        session.permanent = True
 
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
@@ -1766,6 +1770,9 @@ def update_current_instance(instance: Instance):
             npe_name=update_data["active_report"].get("npe_name"),
             # NPE is always local right now
             npe_location=ReportLocation.LOCAL.value,
+            mlir_name=update_data["active_report"].get("mlir_name"),
+            # MLIR is always local right now
+            mlir_location=ReportLocation.LOCAL.value,
             # Doesn't handle remote at the moment
             remote_connection=None,
             remote_profiler_folder=None,
@@ -1822,6 +1829,29 @@ def get_npe_data(instance: Instance):
         return response_unprocessable_entity()
 
     return Response(npe_data, mimetype="application/json")
+
+
+@api.route("/mlir", methods=["GET"])
+@with_instance
+@timer
+def get_mlir_json(instance: Instance):
+    if not instance.mlir_path:
+        logger.error("MLIR path is not set in the instance.")
+        return response_not_found()
+
+    mlir_path = Path(instance.mlir_path)
+    if not mlir_path.exists():
+        logger.error(f"MLIR file does not exist: {mlir_path}")
+        return response_not_found()
+
+    try:
+        with open(mlir_path, "r") as file:
+            mlir_data = file.read()
+    except Exception as e:
+        logger.error(f"Error reading MLIR file: {e}")
+        return response_unprocessable_entity()
+
+    return Response(mlir_data, mimetype="application/json")
 
 
 @api.route("/notify", methods=["POST"])

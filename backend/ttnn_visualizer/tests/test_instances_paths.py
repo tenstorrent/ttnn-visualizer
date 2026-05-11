@@ -61,6 +61,8 @@ def test_local_performance_path_when_mounting_remote_profiler(app):
             performance_location=None,
             npe_name=None,
             npe_location=None,
+            mlir_name=None,
+            mlir_location=None,
             remote_connection=connection,
             remote_profiler_folder=remote_profiler,
             remote_performance_folder=None,
