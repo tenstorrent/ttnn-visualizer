@@ -2,8 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
 import {
     BufferSummaryAxisConfiguration,
@@ -31,6 +31,7 @@ import { BuffersByOperation, MarkerTypeLabel } from '../../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
+import { getBufferAddressZoomRange, memoryZoomPaddingForRange } from '../../functions/bufferSummary';
 import BufferSummaryVirtualizedList from './BufferSummaryVirtualizedList';
 
 const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
@@ -45,13 +46,12 @@ function BufferSummaryPlotRenderer({
     tensorListByOperation,
 }: BufferSummaryPlotRendererProps) {
     const showDeallocationReport = useAtomValue(showDeallocationReportAtom);
-    const renderMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
+    const showMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
     const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
     const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
 
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const { data: operations } = useOperationsList();
-    const navigate = useNavigate();
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
 
@@ -63,45 +63,59 @@ function BufferSummaryPlotRenderer({
         [devices, isLoadingDevices],
     );
 
-    const zoomedMemorySize = useMemo(() => {
-        let minAddress = Number.POSITIVE_INFINITY;
-        let maxAddress = Number.NEGATIVE_INFINITY;
+    const [zoomedMemorySizeStart, zoomedMemorySizeEnd] = useMemo(
+        () => getBufferAddressZoomRange(uniqueBuffersByOperationList, memorySize),
+        [uniqueBuffersByOperationList, memorySize],
+    );
 
-        uniqueBuffersByOperationList.forEach((operation) => {
-            operation.buffers.forEach((buffer) => {
-                minAddress = Math.min(minAddress, buffer.address);
-                maxAddress = Math.max(maxAddress, buffer.address + buffer.size);
-            });
-        });
+    const operationFileIdentifierById = useMemo(
+        () => new Map(operations?.map((operation) => [operation.id, operation.operationFileIdentifier]) ?? []),
+        [operations],
+    );
+    const memoryRegionsMarkers = useMemo(
+        () =>
+            showMemoryRegions
+                ? [
+                      { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: MarkerTypeLabel.L1_SMALL },
+                      { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: MarkerTypeLabel.L1_START },
+                  ]
+                : [],
+        [showMemoryRegions, l1SmallMarker, l1StartMarker],
+    );
+    const memoryPadding = useMemo(
+        () => memoryZoomPaddingForRange(zoomedMemorySizeStart, zoomedMemorySizeEnd, MEMORY_ZOOM_PADDING_RATIO),
+        [zoomedMemorySizeStart, zoomedMemorySizeEnd],
+    );
 
-        if (!Number.isFinite(minAddress) || !Number.isFinite(maxAddress)) {
-            return [0, memorySize];
-        }
+    const getTensorDeallocationReport = useCallback(
+        (operationId: number) =>
+            showDeallocationReport
+                ? nonDeallocatedTensorsByOperationId.get(operationId) || EMPTY_TENSOR_DEALLOCATION_REPORT
+                : EMPTY_TENSOR_DEALLOCATION_REPORT,
+        [showDeallocationReport, nonDeallocatedTensorsByOperationId],
+    );
 
-        return [minAddress, maxAddress];
-    }, [uniqueBuffersByOperationList, memorySize]);
+    const getOperationTooltipContent = useCallback(
+        (operation: BuffersByOperation) =>
+            `${operation.id} ${operation.name} (${operationFileIdentifierById.get(operation.id)})`,
+        [operationFileIdentifierById],
+    );
 
-    const memoryRegionsMarkers = showMemoryRegions
-        ? [
-              { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: MarkerTypeLabel.L1_SMALL },
-              { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: MarkerTypeLabel.L1_START },
-          ]
-        : [];
-    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
-    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
-    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
-
-    const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string) => {
-        event.preventDefault();
-        navigate(path);
-    };
+    const renderOperationLink = useCallback(
+        (operation: BuffersByOperation) => (
+            <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
+                {operation.id}&nbsp;{operation.name}
+            </Link>
+        ),
+        [],
+    );
 
     return uniqueBuffersByOperationList && !isLoadingDevices && tensorListByOperation ? (
         <BufferSummaryVirtualizedList
             operations={uniqueBuffersByOperationList}
             tensorListByOperation={tensorListByOperation}
             isZoomedIn={isZoomedIn}
-            showMemoryLayout={renderMemoryLayout}
+            showMemoryLayout={showMemoryLayout}
             scrollLocation={ScrollLocations.BUFFER_SUMMARY}
             memorySize={memorySize}
             zoomStart={zoomedMemorySizeStart}
@@ -109,22 +123,9 @@ function BufferSummaryPlotRenderer({
             memoryPadding={memoryPadding}
             axisConfiguration={BufferSummaryAxisConfiguration}
             markers={memoryRegionsMarkers}
-            getTensorDeallocationReport={(operationId) =>
-                showDeallocationReport
-                    ? nonDeallocatedTensorsByOperationId.get(operationId) || EMPTY_TENSOR_DEALLOCATION_REPORT
-                    : EMPTY_TENSOR_DEALLOCATION_REPORT
-            }
-            getOperationTooltipContent={(operation) =>
-                `${operation.id} ${operation.name} (${operations?.find((op) => op.id === operation.id)?.operationFileIdentifier})`
-            }
-            renderOperationLink={(operation) => (
-                <a
-                    href={`${ROUTES.OPERATIONS}/${operation.id}`}
-                    onClick={(event) => handleNavigateToOperation(event, `${ROUTES.OPERATIONS}/${operation.id}`)}
-                >
-                    {operation.id}&nbsp;{operation.name}
-                </a>
-            )}
+            getTensorDeallocationReport={getTensorDeallocationReport}
+            getOperationTooltipContent={getOperationTooltipContent}
+            renderOperationLink={renderOperationLink}
         />
     ) : (
         <LoadingSpinner />

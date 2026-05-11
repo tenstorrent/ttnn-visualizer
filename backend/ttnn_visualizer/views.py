@@ -84,7 +84,10 @@ from ttnn_visualizer.stack_trace_source import (
 from ttnn_visualizer.utils import (
     create_path_resolver,
     get_mesh_descriptor_paths,
+    pick_profiler_config_paths,
     read_last_synced_file,
+    read_profiler_config_api_payload,
+    read_profiler_report_name,
     str_to_bool,
     timer,
 )
@@ -99,6 +102,17 @@ def test_ssh_connection(connection) -> bool:
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__)
+
+
+def _file_path_from_stack_source_request():
+    """
+    Parse ``?filePath=`` for stack-trace availability/content GET requests.
+    Returns ``(path, None)`` or ``(None, error_response)``.
+    """
+    file_path = request.args.get("filePath")
+    if not file_path or not isinstance(file_path, str):
+        return None, response_bad_request("Missing or invalid filePath")
+    return file_path, None
 
 
 def _optional_rank_query_param() -> Optional[int]:
@@ -140,6 +154,65 @@ def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
     return response_unprocessable_entity(_NONZERO_RANK_UNSUPPORTED_MSG)
 
 
+def _stack_source_availability_response(is_available: bool) -> Response:
+    # Match stack_source_response: same filePath can resolve differently after
+    # re-syncing remote reports, so don't let caches serve a stale answer.
+    resp = jsonify({"available": is_available})
+    resp.headers["Cache-Control"] = "no-store"
+
+    return resp
+
+
+def _remote_stack_source_path_availability(instance: Instance, file_path: str):
+    """Whether stack source ``file_path`` is readable for this instance (local or SSH)."""
+    remote_connection = instance.remote_connection
+    is_available = False
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            is_available = check_stack_source_remote(ssh_client, file_path)
+        except RemoteConnectionException:
+            return _stack_source_availability_response(False)
+    else:
+        if not current_app.config.get("SERVER_MODE"):
+            is_available = check_stack_source_local(file_path)
+
+    return _stack_source_availability_response(is_available)
+
+
+def _remote_stack_source_read(instance: Instance, file_path: str):
+    """Return plain-text stack source (or error response)."""
+    remote_connection = instance.remote_connection
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            content, resolved, remapped = read_stack_source_remote(
+                ssh_client, file_path
+            )
+            return stack_source_response(content, resolved, remapped)
+        except RemoteConnectionException as e:
+            return error_response(e.http_status, e.message)
+        except RemoteFileReadException as e:
+            return error_response(e.http_status, str(e), e.detail)
+
+    if current_app.config.get("SERVER_MODE"):
+        return response_forbidden(
+            "Local stack source reads are not available in server mode.",
+        )
+
+    try:
+        content, resolved, remapped = read_stack_source_local(file_path)
+        return stack_source_response(content, resolved, remapped)
+    except ValueError as e:
+        return response_bad_request(str(e))
+    except FileNotFoundError as e:
+        return response_not_found(str(e) or "File not found.")
+    except PermissionError as e:
+        return response_forbidden(str(e))
+
+
 @api.before_request
 def _trim_session_report_lists():
     """Keep session cookie under size limits by capping report lists (FIFO)."""
@@ -152,7 +225,7 @@ def _trim_session_report_lists():
             session[key] = lst[-max_reports:]
 
 
-@api.route("/system_capabilities", methods=["GET"])
+@api.route("/system-capabilities", methods=["GET"])
 def get_system_capabilities():
     """Return host/backend capabilities so the frontend can adapt (e.g. disable remote sync in hosted mode)."""
     capabilities = {
@@ -437,7 +510,7 @@ def errors_list(instance: Instance):
         )
 
 
-@api.route("/report_metadata", methods=["GET"])
+@api.route("/report-metadata", methods=["GET"])
 @with_instance
 @timer
 def report_metadata(instance: Instance):
@@ -454,18 +527,38 @@ def report_metadata(instance: Instance):
         )
 
 
-@api.route("/config")
+@api.route("/config", methods=["GET"])
 @with_instance
 @timer
 def get_config(instance: Instance):
-    config_file = Path(str(instance.profiler_path)).parent.joinpath("config.json")
-    if not config_file.exists():
-        return {}
-    with open(config_file, "r") as file:
-        return Response(
-            orjson.dumps(json.load(file)),
-            mimetype="application/json",
+    """
+    Return the profiler ``config.json`` object for this report.
+
+    For multi-host ranked configs (``config_<n>_of_<world>.json``), the response
+    is the same shape as a single config file: one JSON object. Default is
+    logical rank 0 (``config_1_of_<world>.json``). Pass ``?rank=<logical_rank>``
+    to read another host's file (debugging).
+    """
+    report_dir = Path(str(instance.profiler_path)).parent
+    rank_param = _optional_rank_query_param()
+    logical_rank = 0 if rank_param is None else rank_param
+
+    payload, err = read_profiler_config_api_payload(report_dir, logical_rank)
+    if err == "rank_out_of_range":
+        return response_bad_request(
+            f"Invalid rank for this report: {logical_rank}. "
+            "Rank must be within the world size for this report's config files."
         )
+    if err == "missing_rank_file":
+        return response_not_found(f"No profiler config file for rank {logical_rank}.")
+    if err == "parse_error":
+        return {}
+    if payload is None:
+        return {}
+    return Response(
+        orjson.dumps(payload),
+        mimetype="application/json",
+    )
 
 
 @api.route("/tensors", methods=["GET"])
@@ -770,17 +863,12 @@ def get_profiler_data_list(instance: Instance):
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
+        if not dir_path.is_dir():
+            continue
         files = list(dir_path.glob("**/*"))
         report_name = None
-        config_file = dir_path / "config.json"
-
-        if config_file.exists():
-            try:
-                with open(config_file, "r") as f:
-                    config_data = json.load(f)
-                    report_name = config_data.get("report_name")
-            except Exception as e:
-                logger.warning(f"Failed to read config.json in {dir_path}: {e}")
+        if pick_profiler_config_paths(dir_path):
+            report_name = read_profiler_report_name(dir_path)
         else:
             report_name = dir_path.name
 
@@ -1208,16 +1296,10 @@ def create_profiler_files():
         profiler_path=str(profiler_path) if profiler_path else None,
     )
 
-    config_file = profiler_directory / parent_folder_name / "config.json"
+    report_dir = profiler_directory / parent_folder_name
     report_name = None
-
-    if config_file.exists():
-        try:
-            with open(config_file, "r") as f:
-                config_data = json.load(f)
-                report_name = config_data.get("report_name")
-        except Exception as e:
-            logger.warning(f"Failed to read config.json in {config_file}: {e}")
+    if pick_profiler_config_paths(report_dir):
+        report_name = read_profiler_report_name(report_dir)
     else:
         report_name = parent_folder_name
 
@@ -1382,8 +1464,8 @@ def create_mlir_file():
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
 
-@api.route("/remote/profiler", methods=["POST"])
-def get_remote_folders_profiler():
+@api.route("/remote/profiler-reports", methods=["POST"])
+def list_remote_reports_profiler():
     connection_data = request.get_json()
 
     if not connection_data:
@@ -1420,8 +1502,8 @@ def get_remote_folders_profiler():
         return error_response(e.http_status, e.message)
 
 
-@api.route("/remote/performance", methods=["POST"])
-def get_remote_folders_performance():
+@api.route("/remote/performance-reports", methods=["POST"])
+def list_remote_reports_performance():
     connection_data = request.get_json()
 
     if not connection_data:
@@ -1573,63 +1655,22 @@ def test_remote_folder():
     )
 
 
-@api.route("/remote/read", methods=["POST"])
+@api.route("/remote/stack-trace/test", methods=["GET"])
 @with_instance
-def read_remote_folder(instance: Instance):
-    body = request.get_json(silent=True) or {}
-    file_path = body.get("filePath", None)
-    # TODO: @smountenay-tt: Personally instead of a check_path_only query var, I would have made another API for checking if a remote path exists, like /api/remote/check_path?path=/path-to-check instead of having it in /remote/read.
-    check_path_only = body.get("check_path_only", False)
+def remote_stack_trace_test(instance: Instance):
+    file_path, err = _file_path_from_stack_source_request()
+    if err is not None:
+        return err
+    return _remote_stack_source_path_availability(instance, file_path)
 
-    if not file_path or not isinstance(file_path, str):
-        return response_bad_request("Missing or invalid filePath")
 
-    remote_connection = instance.remote_connection
-
-    if check_path_only:
-        is_available = False
-
-        if remote_connection:
-            try:
-                ssh_client = SSHClient(remote_connection)
-                is_available = check_stack_source_remote(ssh_client, file_path)
-            except RemoteConnectionException:
-                return jsonify({"available": False})
-        else:
-            if not current_app.config.get("SERVER_MODE"):
-                is_available = check_stack_source_local(file_path)
-
-        return jsonify({"available": is_available})
-
-    if remote_connection:
-        try:
-            ssh_client = SSHClient(remote_connection)
-            content, resolved, remapped = read_stack_source_remote(
-                ssh_client, file_path
-            )
-            return stack_source_response(content, resolved, remapped)
-        except RemoteConnectionException as e:
-            return error_response(e.http_status, e.message)
-        except RemoteFileReadException as e:
-            error_payload = {"error": str(e)}
-            if e.detail:
-                error_payload["detail"] = e.detail
-            return jsonify(error_payload), e.http_status
-
-    if current_app.config.get("SERVER_MODE"):
-        return response_forbidden(
-            "Local stack source reads are not available in server mode.",
-        )
-
-    try:
-        content, resolved, remapped = read_stack_source_local(file_path)
-        return stack_source_response(content, resolved, remapped)
-    except ValueError as e:
-        return response_bad_request(str(e))
-    except FileNotFoundError as e:
-        return response_not_found(str(e) or "File not found.")
-    except PermissionError as e:
-        return response_forbidden(str(e))
+@api.route("/remote/stack-trace/read", methods=["GET"])
+@with_instance
+def remote_stack_trace_read(instance: Instance):
+    file_path, err = _file_path_from_stack_source_request()
+    if err is not None:
+        return err
+    return _remote_stack_source_read(instance, file_path)
 
 
 @api.route("/remote/sync", methods=["POST"])
@@ -1732,7 +1773,7 @@ def use_remote_folder():
     return Response(status=HTTPStatus.OK)
 
 
-@api.route("/up", methods=["GET", "POST"])
+@api.route("/up", methods=["GET", "HEAD"])
 def health_check():
     return Response(status=HTTPStatus.OK)
 

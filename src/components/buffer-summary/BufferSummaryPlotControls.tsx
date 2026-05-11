@@ -29,9 +29,7 @@ const BufferSummaryPlotControls = () => {
             <Switch
                 label='Buffer zoom'
                 checked={isZoomedIn}
-                onChange={() => {
-                    setIsZoomedIn(!isZoomedIn);
-                }}
+                onChange={() => setIsZoomedIn(!isZoomedIn)}
             />
 
             {selectedTabId === TAB_IDS.L1 ? (
