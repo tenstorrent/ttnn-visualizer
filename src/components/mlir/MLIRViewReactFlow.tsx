@@ -787,7 +787,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     }, [displayedEdges, focusedConnections, selectedNodeId]);
 
     return (
-        <div style={{ width: '100%', height: 'calc(100vh - 92px - 30px - 56px - 40px)' }}>
+        <div className='mlir-view-pane'>
             <MlirGroupContext.Provider value={groupContextValue}>
                 <ReactFlow
                     nodes={styledNodes}
@@ -810,8 +810,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             </MlirGroupContext.Provider>
 
             <Button
+                className='mlir-relayout-button'
                 onClick={() => runBuild(expandedNamespaces)}
-                style={{ position: 'absolute', top: 80, left: 12, zIndex: 10, padding: '8px 10px' }}
             >
                 Re-layout
             </Button>

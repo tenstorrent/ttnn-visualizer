@@ -5,9 +5,6 @@
 @use 'styles/definitions/colours' as *;
 @use 'styles/definitions/variables' as variables;
 
-$bp-nav-large: 1370px;
-$bp-nav-medium: 1180px;
-
 @mixin button-styles($color, $colorActive, $icon) {
     color: $color;
 
@@ -123,7 +120,7 @@ $bp-nav-medium: 1180px;
         gap: 7px;
     }
 
-    @media screen and (width <= #{$bp-nav-large}) {
+    @media screen and (width <= #{variables.$bp-nav-large}) {
         .bp6-button-text {
             font-size: 13px;
         }
@@ -138,7 +135,7 @@ $bp-nav-medium: 1180px;
         }
     }
 
-    @media screen and (width <= #{$bp-nav-medium}) {
+    @media screen and (width <= #{variables.$bp-nav-medium}) {
         .bp6-button-text {
             display: none;
         }

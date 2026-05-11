@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 /* eslint-disable no-continue */
+import { pushTo } from './mlirGraphHelpers';
 import type { SourceNode } from './mlirGraphTypes';
 
 /**
@@ -122,13 +123,7 @@ function partitionRecursively(nodes: SourceNode[], opts: Required<PartitionOptio
 function groupNodesByCommunity(nodes: SourceNode[], communityByIndex: Int32Array): Map<number, SourceNode[]> {
     const groups = new Map<number, SourceNode[]>();
     for (let i = 0; i < nodes.length; i++) {
-        const c = communityByIndex[i];
-        const arr = groups.get(c);
-        if (arr) {
-            arr.push(nodes[i]);
-        } else {
-            groups.set(c, [nodes[i]]);
-        }
+        pushTo(groups, communityByIndex[i], nodes[i]);
     }
     return groups;
 }
@@ -370,13 +365,7 @@ function mergeTinyCommunities(
     // position i has community communityByIndex[i].
     const nodesByCommunity = new Map<number, number[]>();
     for (let i = 0; i < adj.n; i++) {
-        const c = communityByIndex[i];
-        const arr = nodesByCommunity.get(c);
-        if (arr) {
-            arr.push(i);
-        } else {
-            nodesByCommunity.set(c, [i]);
-        }
+        pushTo(nodesByCommunity, communityByIndex[i], i);
     }
 
     const remap = new Map<number, number>();

@@ -4,7 +4,16 @@
 
 /* eslint-disable no-continue */
 import dagre from '@dagrejs/dagre';
-import type { BuiltGraph, GraphIndex, IndexedAttr, IndexedNode, WorkerEdge, WorkerNode } from './mlirGraphTypes';
+import { getNamespaceSegments, getShortName, pushTo } from './mlirGraphHelpers';
+import type {
+    BuiltGraph,
+    GraphIndex,
+    IndexedAttr,
+    IndexedEdge,
+    IndexedNode,
+    WorkerEdge,
+    WorkerNode,
+} from './mlirGraphTypes';
 
 const GROUP_MIN_WIDTH = 260;
 const GROUP_MIN_HEIGHT = 140;
@@ -13,6 +22,20 @@ const GROUP_PADDING_TOP = 36;
 const GROUP_PADDING_BOTTOM = 20;
 
 const DAGRE_NODE_LIMIT = 2000;
+
+const ARROW_MARKER = { type: 'arrowclosed', height: 20, width: 20 } as const;
+
+/**
+ * Edges carry the producer's output tensor info as a label (e.g. `1×3×224×224 f32`).
+ * Falls back to `outputId→inputId` so collapsed edges that lose tensor metadata
+ * still show a hint of which port wired up to which.
+ */
+function getEdgeLabelFor(incoming: IndexedEdge, nodeById: Map<string, IndexedNode>): string {
+    const sourceNode = nodeById.get(incoming.sourceNodeId);
+    const outputMeta = sourceNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
+    const tensorLabel = outputMeta ? getTensorInfoFromAttrs(outputMeta.attrs).label : undefined;
+    return tensorLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`;
+}
 
 type DagreOptions = {
     nodesep?: number;
@@ -82,8 +105,7 @@ function toggleNamespaceForNode(index: GraphIndex, nodeId: string): string | und
 }
 
 function formatSectionLabel(namespace: string): string {
-    const leaf = namespace.split('/').pop() ?? namespace;
-    return leaf.replace(/_/g, ' ');
+    return getShortName(namespace).replace(/_/g, ' ');
 }
 
 function estimateOpNodeDimensions(label: string): { width: number; height: number } {
@@ -163,6 +185,10 @@ function makeOpNode(
 ): WorkerNode {
     const label = displayLabelOverride ?? node.label;
     const { width, height } = estimateOpNodeDimensions(label);
+    // Visual chrome (background / border / text styling) lives in SCSS under
+    // `.react-flow__node-mlirOp`. Only the dagre-computed dimensions are set
+    // inline so React Flow's container matches the laid-out size and `dagre`'s
+    // layout assumptions don't drift from the rendered DOM.
     return {
         id: node.id,
         data: {
@@ -175,16 +201,7 @@ function makeOpNode(
         position: { x: 0, y: 0 },
         width,
         height,
-        style: {
-            color: '#222',
-            background: '#f5f5f5',
-            border: '1px solid #999',
-            borderRadius: 6,
-            fontSize: 12,
-            width,
-            height,
-            boxSizing: 'border-box',
-        },
+        style: { width, height, boxSizing: 'border-box' },
     };
 }
 
@@ -202,7 +219,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
     const requestedExpansion = new Set(expandedNamespacesList);
     const expandedNamespaces = new Set<string>();
     for (const ns of requestedExpansion) {
-        const segments = ns.split('/');
+        const segments = getNamespaceSegments(ns);
         let chainOk = true;
         for (let i = 1; i < segments.length; i++) {
             const ancestor = segments.slice(0, i).join('/');
@@ -252,12 +269,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         const parentNamespace = getExpandedParentNamespaceForVisibleNode(n.id);
         if (parentNamespace) {
             parentNamespaceByVisibleNodeId.set(n.id, parentNamespace);
-            const arr = visibleNodesByParentNs.get(parentNamespace);
-            if (arr) {
-                arr.push(n);
-            } else {
-                visibleNodesByParentNs.set(parentNamespace, [n]);
-            }
+            pushTo(visibleNodesByParentNs, parentNamespace, n);
         }
     }
 
@@ -265,17 +277,12 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
     for (const n of index.nodes) {
         const chain = index.containingNamespacesByNodeId[n.id] ?? [];
         for (const ns of chain) {
-            const arr = nodesByContainingNs.get(ns);
-            if (arr) {
-                arr.push(n);
-            } else {
-                nodesByContainingNs.set(ns, [n]);
-            }
+            pushTo(nodesByContainingNs, ns, n);
         }
     }
 
     const getExpandedParentOfNamespace = (namespace: string): string | undefined => {
-        const segments = namespace.split('/');
+        const segments = getNamespaceSegments(namespace);
         let result: string | undefined;
         for (let i = 1; i < segments.length; i++) {
             const ancestor = segments.slice(0, i).join('/');
@@ -393,17 +400,12 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 }
                 internalEdgesSeen.add(edgeId);
                 internalPairSeen.add(pairKey);
-                const sourceRawNode = nodeById.get(incoming.sourceNodeId);
-                const outputMeta = sourceRawNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
-                const edgeLabel = outputMeta ? getTensorInfoFromAttrs(outputMeta.attrs).label : undefined;
                 internalEdges.push({
                     id: edgeId,
                     source: sourceChildId,
                     target: targetChildId,
-                    label: eitherCollapsed
-                        ? undefined
-                        : edgeLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`,
-                    markerEnd: { type: 'arrowclosed', height: 20, width: 20 },
+                    label: eitherCollapsed ? undefined : getEdgeLabelFor(incoming, nodeById),
+                    markerEnd: { ...ARROW_MARKER },
                 });
             }
         }
@@ -434,7 +436,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         internalEdgesByNamespace.set(namespace, internalEdges);
 
         const isSection = sectionNsSet.has(namespace);
-        const leafName = namespace.split('/').pop() ?? namespace;
+        const leafName = getShortName(namespace);
         const displayName = isSection ? formatSectionLabel(namespace) : leafName;
         const nodeCount = nodesByContainingNs.get(namespace)?.length ?? 0;
 
@@ -463,12 +465,11 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
             position: { x: 0, y: 0 },
             width: groupWidth,
             height: groupHeight,
-            style: {
-                width: groupWidth,
-                height: groupHeight,
-                background: 'transparent',
-                padding: 0,
-            },
+            // Visual chrome (transparent wrapper, dashed body via descendant
+            // .mlir-group-body) lives in SCSS under `.react-flow__node-mlirGroup`.
+            // Inline dimensions remain so React Flow sizes the container to
+            // match the laid-out bounds.
+            style: { width: groupWidth, height: groupHeight },
         });
     }
 
@@ -507,8 +508,6 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         }
         return ns ? `group:${ns}` : renderedId;
     };
-
-    const mapToRenderedEndpointId = (nodeId: string): string => resolveRenderedNodeId(nodeId);
 
     const mapToRenderedSourceEndpointId = (sourceNodeId: string): string => {
         const renderedId = resolveRenderedNodeId(sourceNodeId);
@@ -554,7 +553,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
         // The block-arg returned by namespaceInputByNamespace may itself live
         // inside a NESTED collapsed sub-namespace (typically `<region>/Inputs`).
         // In that case the block-arg node isn't actually rendered, so we must
-        // resolve it through mapToRenderedEndpointId — that walks the
+        // resolve it through resolveRenderedNodeId — that walks the
         // containing-namespace chain and lands on the nearest visible anchor
         // (e.g. the collapsed `/Inputs` group's representative). Without this
         // fallback the edge points at a non-existent React Flow node and
@@ -572,7 +571,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 if (Number.isInteger(inputIdx) && inputIdx >= 0) {
                     const inputNodeId = index.namespaceInputByNamespace[targetNamespace]?.[inputIdx];
                     if (inputNodeId) {
-                        return mapToRenderedEndpointId(inputNodeId);
+                        return resolveRenderedNodeId(inputNodeId);
                     }
                 }
             }
@@ -585,12 +584,12 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 if (Number.isInteger(inputIdx) && inputIdx >= 0) {
                     const inputNodeId = index.namespaceInputByNamespace[collapsedNamespace]?.[inputIdx];
                     if (inputNodeId) {
-                        return mapToRenderedEndpointId(inputNodeId);
+                        return resolveRenderedNodeId(inputNodeId);
                     }
                 }
             }
         }
-        return mapToRenderedEndpointId(targetNodeId);
+        return resolveRenderedNodeId(targetNodeId);
     };
     const mapTopLevelEndpointToRenderedEndpoint = (endpointId: string): string => {
         if (endpointId.startsWith('group:')) {
@@ -699,17 +698,12 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 !!index.anchorNamespaceByNodeId[targetId] &&
                 !expandedNamespaces.has(index.anchorNamespaceByNodeId[targetId]);
             const isAggregatedAtTopLevel = bothTopLevel && (srcIsCollapsedAnchor || tgtIsCollapsedAnchor);
-            const sourceNode = nodeById.get(incoming.sourceNodeId);
-            const outputMeta = sourceNode?.outputsMetadata?.find((m) => m.id === incoming.sourceNodeOutputId);
-            const edgeLabel = outputMeta ? getTensorInfoFromAttrs(outputMeta.attrs).label : undefined;
             addEdgeSafe({
                 id: bothTopLevel ? `top:${pairKey}` : `top:${pairKey}:${incoming.targetNodeInputId}`,
                 source: sourceId,
                 target: targetId,
-                label: isAggregatedAtTopLevel
-                    ? undefined
-                    : edgeLabel || `${incoming.sourceNodeOutputId}→${incoming.targetNodeInputId}`,
-                markerEnd: { type: 'arrowclosed', height: 20, width: 20 },
+                label: isAggregatedAtTopLevel ? undefined : getEdgeLabelFor(incoming, nodeById),
+                markerEnd: { ...ARROW_MARKER },
             });
         }
     }
@@ -725,17 +719,14 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
             id: `bridge:${pair}`,
             source: renderedSource,
             target: renderedTarget,
-            markerEnd: { type: 'arrowclosed', height: 20, width: 20 },
+            markerEnd: { ...ARROW_MARKER },
             style: { strokeDasharray: '6 4', opacity: 0.7 },
         });
     }
 
     const edgesByPair = new Map<string, WorkerEdge[]>();
     for (const edge of finalEdges) {
-        const pair = `${edge.source}->${edge.target}`;
-        const arr = edgesByPair.get(pair) ?? [];
-        arr.push(edge);
-        edgesByPair.set(pair, arr);
+        pushTo(edgesByPair, `${edge.source}->${edge.target}`, edge);
     }
     const BASE_CURVATURE = 0.25;
     const CURVATURE_STEP = 0.2;

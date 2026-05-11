@@ -3,23 +3,9 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 /* eslint-disable no-continue */
+import { getParentNamespace, getShortName, pushTo } from './mlirGraphHelpers';
 import { partitionByCommunity } from './mlirGraphPartitioner';
 import type { GraphIndex, SourceNode } from './mlirGraphTypes';
-
-const getNamespaceSegments = (namespace?: string): string[] => (namespace ? namespace.split('/').filter(Boolean) : []);
-
-const getShortName = (namespace: string): string => {
-    const parts = getNamespaceSegments(namespace);
-    return parts[parts.length - 1] ?? namespace;
-};
-
-const getParentNamespace = (namespace: string): string | undefined => {
-    const parts = getNamespaceSegments(namespace);
-    if (parts.length <= 1) {
-        return undefined;
-    }
-    return parts.slice(0, -1).join('/');
-};
 
 const getRegionBaseOpLabel = (namespace: string): string => getShortName(namespace).replace(/_\d+$/, '');
 
@@ -31,6 +17,27 @@ const getNamespaceOrdinal = (namespace: string): number => {
     const match = leaf.match(/_(\d+)$/);
     return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 };
+
+/** Sort namespaces by their `_K` suffix (ascending), tiebreak alphabetically. */
+const byNamespaceOrdinal = (a: string, b: string): number => {
+    const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
+    return ord !== 0 ? ord : a.localeCompare(b);
+};
+
+/**
+ * Sort `pinToGroupTop` candidates first, then by their original index in the
+ * source-node array. Used to pick a stable anchor for each namespace.
+ */
+const byPinnedThenIndex =
+    (nodeIndexById: Map<string, number>) =>
+    (a: SourceNode, b: SourceNode): number => {
+        const aPinned = a.config?.pinToGroupTop ? 1 : 0;
+        const bPinned = b.config?.pinToGroupTop ? 1 : 0;
+        if (aPinned !== bPinned) {
+            return bPinned - aPinned;
+        }
+        return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
+    };
 
 const SECTION_THRESHOLD = 1000;
 const MAX_INITIAL_VISIBLE = 500;
@@ -76,9 +83,7 @@ function splitByTopology(nodes: SourceNode[], threshold: number): SourceNode[][]
             if (!nodeIdSet.has(edge.sourceNodeId) || edge.sourceNodeId === node.id) {
                 continue;
             }
-            const arr = outgoing.get(edge.sourceNodeId) ?? [];
-            arr.push(node.id);
-            outgoing.set(edge.sourceNodeId, arr);
+            pushTo(outgoing, edge.sourceNodeId, node.id);
             hasIncoming.add(node.id);
         }
     }
@@ -174,12 +179,7 @@ function applyTopologySectioning(nodes: SourceNode[]): {
     for (const node of nodes) {
         const key = clusterKeyOf(node);
         clusterKeyByNodeId.set(node.id, key);
-        const arr = clusterMembers.get(key);
-        if (arr) {
-            arr.push(node);
-        } else {
-            clusterMembers.set(key, [node]);
-        }
+        pushTo(clusterMembers, key, node);
     }
 
     // Build supernode SourceNodes for the partitioner. One supernode per
@@ -314,12 +314,9 @@ function applyTopologySectioning(nodes: SourceNode[]): {
 }
 
 export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphIndex {
-    // Note: we intentionally do NOT synthesize op-type wrappers (e.g. folding
-    // `stablehlo.reduce_0..N` under a virtual `stablehlo.reduce` parent).
-    // Source-MLIR namespaces are honoured as-is — each `_K` instance stays a
-    // sibling at its real path. Only topology sectioning is applied below to
-    // keep large flat graphs renderable; sections wrap at the root level and
-    // never disturb the inner namespace structure.
+    // Source-MLIR namespaces are honoured as-is. Only topology sectioning is
+    // applied below to keep large flat graphs renderable; sections wrap at the
+    // root level and never disturb the inner namespace structure.
     const { effectiveNodes, sectionNamespaces } = applyTopologySectioning(nodes);
     const allSyntheticNamespaces = new Set(sectionNamespaces);
 
@@ -332,14 +329,13 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         if (!node.namespace) {
             continue;
         }
-        const inNamespace = nodesByNamespace.get(node.namespace);
-        if (inNamespace) {
-            inNamespace.push(node);
-            labelsByNamespace.get(node.namespace)?.add(node.label);
+        const existingLabels = labelsByNamespace.get(node.namespace);
+        if (existingLabels) {
+            existingLabels.add(node.label);
         } else {
-            nodesByNamespace.set(node.namespace, [node]);
             labelsByNamespace.set(node.namespace, new Set([node.label]));
         }
+        pushTo(nodesByNamespace, node.namespace, node);
 
         const segments = node.namespace.split('/');
         for (let i = 1; i < segments.length; i++) {
@@ -364,24 +360,15 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         }
     }
 
-    const subgraphNamespaces = [...collapsibleNamespaces].sort((a, b) => {
-        const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
-        return ord !== 0 ? ord : a.localeCompare(b);
-    });
+    const subgraphNamespaces = [...collapsibleNamespaces].sort(byNamespaceOrdinal);
 
+    const anchorComparator = byPinnedThenIndex(nodeIndexById);
     const anchorByNamespace = new Map<string, string>();
     const anchorNamespaceByNodeId = new Map<string, string>();
     for (const namespace of subgraphNamespaces) {
         const expectedLabel = getRegionBaseOpLabel(namespace);
         const candidates = (nodesByNamespace.get(namespace) ?? []).filter((node) => node.label === expectedLabel);
-        candidates.sort((a, b) => {
-            const aPinned = a.config?.pinToGroupTop ? 1 : 0;
-            const bPinned = b.config?.pinToGroupTop ? 1 : 0;
-            if (aPinned !== bPinned) {
-                return bPinned - aPinned;
-            }
-            return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
-        });
+        candidates.sort(anchorComparator);
         let anchor = candidates.find((n) => !anchorNamespaceByNodeId.has(n.id));
         if (!anchor) {
             // Fallback for non-region namespaces (e.g. "Inputs", "func.func_main"):
@@ -389,14 +376,7 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
             // deeper namespace. If the namespace has no direct nodes (path-only
             // ancestor), Phase 3 below will assign an anchor by descending into
             // descendants.
-            const directNodes = (nodesByNamespace.get(namespace) ?? []).slice().sort((a, b) => {
-                const aPinned = a.config?.pinToGroupTop ? 1 : 0;
-                const bPinned = b.config?.pinToGroupTop ? 1 : 0;
-                if (aPinned !== bPinned) {
-                    return bPinned - aPinned;
-                }
-                return (nodeIndexById.get(a.id) ?? 0) - (nodeIndexById.get(b.id) ?? 0);
-            });
+            const directNodes = (nodesByNamespace.get(namespace) ?? []).slice().sort(anchorComparator);
             anchor = directNodes.find((n) => !anchorNamespaceByNodeId.has(n.id));
         }
         if (!anchor) {
@@ -406,11 +386,11 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         anchorNamespaceByNodeId.set(anchor.id, namespace);
     }
 
-    // Phase 3: force-register synthetic namespaces (topology sections + op-type
-    // groups), and assign anchors to any path-only ancestor namespaces that have
-    // children but no direct nodes (e.g. "func.func_main" in graphs where every
-    // op also lives in a deeper region). Descend into descendants to find an
-    // anchor in those cases.
+    // Phase 3: force-register synthetic topology-section namespaces, and assign
+    // anchors to any path-only ancestor namespaces that have children but no
+    // direct nodes (e.g. "func.func_main" in graphs where every op also lives
+    // in a deeper region). Descend into descendants to find an anchor in those
+    // cases.
     const preSyntheticNsSet = new Set(subgraphNamespaces);
     for (const syntheticNs of allSyntheticNamespaces) {
         if (!preSyntheticNsSet.has(syntheticNs)) {
@@ -433,10 +413,7 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         }
     }
     if (allSyntheticNamespaces.size > 0) {
-        subgraphNamespaces.sort((a, b) => {
-            const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
-            return ord !== 0 ? ord : a.localeCompare(b);
-        });
+        subgraphNamespaces.sort(byNamespaceOrdinal);
     }
 
     const outerNamespaceByNodeId = new Map<string, string>();
@@ -492,9 +469,7 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
         }
         if (!collapsed) {
             uncollapsedCount++;
-            const arr = uncollapsedByNamespace.get(node.namespace) ?? [];
-            arr.push(node);
-            uncollapsedByNamespace.set(node.namespace, arr);
+            pushTo(uncollapsedByNamespace, node.namespace, node);
         }
     }
 
@@ -531,9 +506,12 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
                 if (!parentNs || updatedNsSet.has(parentNs)) {
                     continue;
                 }
-                const arr = uncollapsedByParent.get(parentNs) ?? [];
-                arr.push(...group);
-                uncollapsedByParent.set(parentNs, arr);
+                const arr = uncollapsedByParent.get(parentNs);
+                if (arr) {
+                    arr.push(...group);
+                } else {
+                    uncollapsedByParent.set(parentNs, [...group]);
+                }
             }
 
             const parentCandidates = [...uncollapsedByParent.entries()]
@@ -556,10 +534,7 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
             }
         }
 
-        subgraphNamespaces.sort((a, b) => {
-            const ord = getNamespaceOrdinal(a) - getNamespaceOrdinal(b);
-            return ord !== 0 ? ord : a.localeCompare(b);
-        });
+        subgraphNamespaces.sort(byNamespaceOrdinal);
     }
 
     const subgraphNsSet = new Set(subgraphNamespaces);
@@ -589,12 +564,7 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
             continue;
         }
         if (subgraphNsSet.has(node.namespace) && returnPattern.test(node.label)) {
-            const inNamespace = returnCandidatesByNamespace.get(node.namespace);
-            if (inNamespace) {
-                inNamespace.push(node);
-            } else {
-                returnCandidatesByNamespace.set(node.namespace, [node]);
-            }
+            pushTo(returnCandidatesByNamespace, node.namespace, node);
         }
         if ((node.incomingEdges ?? []).length !== 0) {
             continue;
@@ -621,12 +591,7 @@ export function buildGraphIndex(graphId: string, nodes: SourceNode[]): GraphInde
             const inInputsSubgraph = node.namespace === inputsPrefix || node.namespace.startsWith(`${inputsPrefix}/`);
             const isDirectArgChild = isArg && node.namespace === ancestor;
             if (isDirectArgChild || inInputsSubgraph) {
-                const inAncestor = inputNodesByNamespace.get(ancestor);
-                if (inAncestor) {
-                    inAncestor.push(node);
-                } else {
-                    inputNodesByNamespace.set(ancestor, [node]);
-                }
+                pushTo(inputNodesByNamespace, ancestor, node);
             }
         }
     }
