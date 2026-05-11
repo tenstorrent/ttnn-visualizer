@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { FC, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
@@ -9,34 +9,32 @@ import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router';
 import { useMLIR } from '../hooks/useAPI';
 import { activeMlirJsonAtom } from '../store/app';
-import MLIRJSONFileLoader from '../components/mlir/MlirJsonFileLoader';
+import { MLIRValidationError } from '../definitions/MLIRData';
+import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
 import MlGraph from '../components/mlir/MLIRViewReactFlow';
-
-enum ValidationError {
-    OK,
-    DEFAULT,
-    INVALID_JSON,
-}
+import MlirProcessingStatus from '../components/MlirProcessingStatus';
 
 const MLIR: FC = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
     const { data: mlirData, isLoading, error: httpError } = useMLIR(filepath ? null : mlirJsonFilename);
 
+    const hasUploadedFile = !!mlirJsonFilename || !!filepath;
+
     const errorCode = useMemo(() => {
         if (isLoading) {
-            return ValidationError.OK;
+            return MLIRValidationError.OK;
         }
 
         if (httpError?.status === HttpStatusCode.UnprocessableEntity) {
-            return ValidationError.INVALID_JSON;
+            return MLIRValidationError.INVALID_JSON;
         }
 
         if (httpError?.status !== undefined && httpError?.status >= HttpStatusCode.BadRequest) {
-            return ValidationError.DEFAULT;
+            return MLIRValidationError.DEFAULT;
         }
 
-        return ValidationError.OK;
+        return MLIRValidationError.OK;
     }, [isLoading, httpError?.status]);
 
     return (
@@ -50,9 +48,17 @@ const MLIR: FC = () => {
             </Helmet>
 
             <h1 className='page-title'>MLIR model viewer</h1>
-            <div className='npe-inline-loaders'>{!filepath && <MLIRJSONFileLoader />}</div>
+            <div className='inline-loaders'>{!filepath && <MlirJsonFileLoader />}</div>
 
-            {errorCode !== ValidationError.OK ? <div>{errorCode}</div> : mlirData && <MlGraph data={mlirData} />}
+            {errorCode !== MLIRValidationError.OK ? (
+                <MlirProcessingStatus
+                    errorCode={errorCode}
+                    isLoading={isLoading}
+                    hasUploadedFile={hasUploadedFile}
+                />
+            ) : (
+                mlirData && <MlGraph data={mlirData} />
+            )}
         </>
     );
 };

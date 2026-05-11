@@ -77,7 +77,7 @@ const NPE: FC = () => {
             </Helmet>
 
             <h1 className='page-title'>NOC performance estimator</h1>
-            <div className='npe-inline-loaders'>
+            <div className='inline-loaders'>
                 {!filepath && <NPEFileLoader />}
 
                 {isDemoEnabled && (

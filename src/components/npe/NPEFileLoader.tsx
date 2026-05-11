@@ -11,7 +11,8 @@ import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { activeNpeOpTraceAtom } from '../../store/app';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
-import 'styles/components/NPEFileLoader.scss';
+import sanitiseFileName from '../../functions/sanitiseFileName';
+import 'styles/components/FileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -65,14 +66,13 @@ const NPEFileLoader: React.FC = () => {
     };
 
     return (
-        <FormGroup className='npe-file-loader'>
+        <FormGroup className='file-loader'>
             <div className='form-container'>
                 <FileInput
                     text={npeFileName ?? 'Upload an NPE report file for analysis...'}
                     onInputChange={handleFileChange}
                 />
 
-                {/* Move these classes to a more generic definition as they are shared with the local/remote upload interface */}
                 <div className='folder-upload-status'>
                     {uploadStatus ? (
                         <>
@@ -90,8 +90,5 @@ const NPEFileLoader: React.FC = () => {
         </FormGroup>
     );
 };
-
-// Remove file extension from the file name
-const sanitiseFileName = (fileName: string) => fileName.replace(/\.[^/.]+$/, '');
 
 export default NPEFileLoader;

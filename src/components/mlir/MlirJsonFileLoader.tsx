@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
@@ -10,7 +10,8 @@ import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { activeMlirJsonAtom } from '../../store/app';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
-import 'styles/components/NPEFileLoader.scss';
+import sanitiseFileName from '../../functions/sanitiseFileName';
+import 'styles/components/FileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -26,7 +27,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.OK]: Intent.SUCCESS,
 };
 
-const MLIRJSONFileLoader: React.FC = () => {
+const MlirJsonFileLoader: React.FC = () => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { uploadMlirFile } = useLocalConnection();
     const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);
@@ -36,11 +37,11 @@ const MLIRJSONFileLoader: React.FC = () => {
         setErrorMessage('Uploading...');
         setUploadStatus(ConnectionTestStates.PROGRESS);
 
-        if (!event.target.files) {
+        if (!event.target.files?.length) {
             return;
         }
 
-        const file = event.target.files?.[0];
+        const file = event.target.files[0];
         const response = await uploadMlirFile(event.target.files);
 
         if (response.status !== 200) {
@@ -59,13 +60,12 @@ const MLIRJSONFileLoader: React.FC = () => {
     };
 
     return (
-        <div className='npe-file-loader'>
+        <div className='file-loader'>
             <FileInput
                 text={mlirJsonFileName ?? 'Upload an MLIR JSON'}
                 onInputChange={handleFileChange}
             />
 
-            {/* Move these classes to a more generic definition as they are shared with the local/remote upload interface */}
             <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>
                 {uploadStatus ? (
                     <>
@@ -84,7 +84,4 @@ const MLIRJSONFileLoader: React.FC = () => {
     );
 };
 
-// Remove file extension from the file name
-const sanitiseFileName = (fileName: string) => fileName.replace(/\.[^/.]+$/, '');
-
-export default MLIRJSONFileLoader;
+export default MlirJsonFileLoader;
