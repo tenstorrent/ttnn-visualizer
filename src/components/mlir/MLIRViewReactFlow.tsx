@@ -38,24 +38,17 @@ import '@xyflow/react/dist/style.css';
 
 import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
-import type { BuiltGraph, SourceNode, WorkerInteractionIndex, WorkerOutboundMessage } from './mlirGraphTypes';
+import type { BuiltGraph, SourceNode, WorkerNode } from './mlirGraphTypes';
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
+import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 
-type MLNodeData = {
-    label: string;
-    kind?: 'op' | 'group';
-    namespace: string;
-    collapsedSubgraphNamespace?: string;
-    subgraphToggleState?: 'collapsed' | 'expanded';
-    displayName?: string;
-    nodeCount?: number;
-    groupKind?: 'section' | 'plain';
-    // Set when this group is a producer/consumer of the currently selected
-    // node. Op nodes get a colored fill (set on `style.background`) but groups
-    // need the highlight on their body border instead — painting the wrapper
-    // background bleeds behind the dashed body and hides the children.
-    highlight?: 'input' | 'output';
-};
+// Re-uses `WorkerNode['data']` (the canonical shape produced by the layout
+// worker) and tacks on `highlight` — a view-layer-only flag. Set when this
+// node is a producer/consumer of the currently selected node. Op nodes get a
+// coloured fill via `style.background`; groups route the highlight through
+// `data.highlight` so the dashed body border is colourised instead, because
+// painting the wrapper background bleeds behind the body and hides children.
+type MLNodeData = WorkerNode['data'] & { highlight?: 'input' | 'output' };
 
 interface ViewProps {
     data: GraphBundle;
@@ -280,8 +273,6 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     const [nodes, setNodes, onNodesChange] = useNodesState<MLNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
-    const [indexReadyGraphId, setIndexReadyGraphId] = useState<string | null>(null);
-    const [interactionIndex, setInteractionIndex] = useState<WorkerInteractionIndex | null>(null);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const selectedNodeIdRef = useRef<string | null>(null);
     const viewportAnchorRef = useRef<{
@@ -289,10 +280,6 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         fromPosition: { x: number; y: number };
     } | null>(null);
     const hasFitInitiallyRef = useRef(false);
-    const postedGraphIdRef = useRef<string | null>(null);
-    const workerRef = useRef<Worker | null>(null);
-    const nextRequestIdRef = useRef(0);
-    const activeRequestIdRef = useRef(0);
 
     // No graph-id reset effect: `MlGraphInner` is keyed by `graph.id` in
     // `MlGraphWithProvider`, so React fully remounts the subtree when the
@@ -354,102 +341,68 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         [fitView, getViewport, setEdges, setNodes, setViewport],
     );
 
-    useEffect(() => {
-        const worker = new Worker(new URL('./mlirLayoutWorker.ts', import.meta.url), { type: 'module' });
-        workerRef.current = worker;
-        return () => {
-            worker.terminate();
-            workerRef.current = null;
-            postedGraphIdRef.current = null;
-        };
-    }, []);
-
-    useEffect(() => {
-        const worker = workerRef.current;
-        if (!worker) {
-            return;
-        }
-        worker.onmessage = (event: MessageEvent<WorkerOutboundMessage>) => {
-            const message = event.data;
-            if (message.type === 'indexed') {
-                if (message.graphId === graph.id) {
-                    setInteractionIndex(message.interactionIndex);
-                    setIndexReadyGraphId(message.graphId);
-                }
-                return;
-            }
-            if (message.type === 'error') {
-                if (message.requestId !== 0 && message.requestId !== activeRequestIdRef.current) {
-                    return;
-                }
-                // eslint-disable-next-line no-console
-                console.error('mlir layout worker:', message.error);
-                return;
-            }
-            if (message.requestId !== activeRequestIdRef.current) {
-                return;
-            }
-            if (message.graphId !== graph.id) {
-                return;
-            }
-            applyBuiltGraph(message.graph);
-        };
-    }, [applyBuiltGraph, graph.id]);
-
-    const runBuild = useCallback(
-        (expanded: Set<string>) => {
-            const worker = workerRef.current;
-            if (!worker || indexReadyGraphId !== graph.id) {
-                return;
-            }
-            const requestId = nextRequestIdRef.current + 1;
-            nextRequestIdRef.current = requestId;
-            activeRequestIdRef.current = requestId;
-            const expandedSorted = Array.from(expanded).sort((a, b) => a.localeCompare(b));
-            worker.postMessage({
-                type: 'build' as const,
-                requestId,
-                graphId: graph.id,
-                expandedNamespaces: expandedSorted,
-                cacheKey: `${graph.id}:${expandedSorted.join('|')}`,
-            });
-        },
-        [graph.id, indexReadyGraphId],
+    // The view component owns React Flow / viewport / selection state; the
+    // worker hook owns the wire protocol. We hand `applyBuiltGraph` to the
+    // hook so freshly-built graphs land back here for styling + fitView.
+    const sourceNodes = useMemo<SourceNode[]>(
+        () =>
+            graph.nodes.map((node) => ({
+                id: node.id,
+                label: node.label,
+                namespace: node.namespace,
+                attrs: node.attrs,
+                incomingEdges: node.incomingEdges,
+                outputsMetadata: node.outputsMetadata,
+                config: node.config,
+            })),
+        [graph.nodes],
     );
+    const { interactionIndex, runBuild } = useMlirLayoutWorker(graph.id, sourceNodes, applyBuiltGraph);
 
     useEffect(() => {
         runBuild(expandedNamespaces);
     }, [expandedNamespaces, runBuild]);
 
-    useEffect(() => {
-        const worker = workerRef.current;
-        if (!worker) {
-            return;
-        }
-        if (postedGraphIdRef.current === graph.id) {
-            return;
-        }
-        postedGraphIdRef.current = graph.id;
-        // No need to reset `indexReadyGraphId` here — every consumer guards on
-        // `indexReadyGraphId !== graph.id`, so a stale value from the previous
-        // graph already blocks builds until the worker confirms `indexed` for
-        // the new graph.id. Setting state directly inside an effect also trips
-        // react-hooks/set-state-in-effect.
-        const sourceNodes: SourceNode[] = graph.nodes.map((node) => ({
-            id: node.id,
-            label: node.label,
-            namespace: node.namespace,
-            attrs: node.attrs,
-            incomingEdges: node.incomingEdges,
-            outputsMetadata: node.outputsMetadata,
-            config: node.config,
-        }));
-        worker.postMessage({
-            type: 'set-graph',
-            graphId: graph.id,
-            nodes: sourceNodes,
+    // Anchor the viewport so the namespace's representative op (post-collapse)
+    // visually stays put, then drop the namespace from `expandedNamespaces`.
+    // `fromPosition` is the screen-space position of the gesture origin (the
+    // clicked group header, or the parent group of a click on a nested op).
+    const collapseNamespace = useCallback(
+        (namespace: string, fromPosition: { x: number; y: number }) => {
+            const anchorNodeId = interactionIndex?.anchorByNamespace[namespace];
+            if (anchorNodeId) {
+                viewportAnchorRef.current = { toNodeId: anchorNodeId, fromPosition };
+            }
+            setExpandedNamespaces((prev) => {
+                if (!prev.has(namespace)) {
+                    return prev;
+                }
+                const next = new Set(prev);
+                next.delete(namespace);
+                return next;
+            });
+        },
+        [interactionIndex],
+    );
+
+    // Anchor the viewport so the group wrapper appears where the user clicked,
+    // then add the namespace to `expandedNamespaces`. Group nodes are always
+    // synthesised at id `group:<namespace>`, so we anchor directly to that id —
+    // there's no need to consult `interactionIndex.anchorByNamespace` here.
+    const expandNamespace = useCallback((namespace: string, fromPosition: { x: number; y: number }) => {
+        viewportAnchorRef.current = {
+            toNodeId: `group:${namespace}`,
+            fromPosition,
+        };
+        setExpandedNamespaces((prev) => {
+            if (prev.has(namespace)) {
+                return prev;
+            }
+            const next = new Set(prev);
+            next.add(namespace);
+            return next;
         });
-    }, [graph.id, graph.nodes]);
+    }, []);
 
     const onSubgraphNodeClick = useCallback(
         (event: MouseEvent, node: MLNode) => {
@@ -483,42 +436,30 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             if (!toggleNamespace && node.type !== 'mlirGroup') {
                 setSelectedNodeId(node.id);
             }
-            if (toggleNamespace) {
-                const isExpanded = expandedNamespaces.has(toggleNamespace);
-                if (isExpanded) {
-                    const anchorNodeId = interactionIndex?.anchorByNamespace[toggleNamespace];
-                    let fromPosition = { x: node.position.x, y: node.position.y };
-                    if (node.parentId) {
-                        const parentNode = nodes.find((n) => n.id === node.parentId);
-                        if (parentNode) {
-                            fromPosition = { x: parentNode.position.x, y: parentNode.position.y };
-                        }
+            if (!toggleNamespace) {
+                return;
+            }
+            if (expandedNamespaces.has(toggleNamespace)) {
+                // Collapsing a nested op: anchor from the surrounding parent
+                // group (its position is what's visible after collapse), not
+                // from the inner op which is about to disappear.
+                let fromPosition = { x: node.position.x, y: node.position.y };
+                if (node.parentId) {
+                    const parentNode = nodes.find((n) => n.id === node.parentId);
+                    if (parentNode) {
+                        fromPosition = { x: parentNode.position.x, y: parentNode.position.y };
                     }
-                    if (anchorNodeId) {
-                        viewportAnchorRef.current = { toNodeId: anchorNodeId, fromPosition };
-                    }
-                    setExpandedNamespaces((prev) => {
-                        const next = new Set(prev);
-                        next.delete(toggleNamespace);
-                        return next;
-                    });
-                } else {
-                    viewportAnchorRef.current = {
-                        toNodeId: `group:${toggleNamespace}`,
-                        fromPosition: { x: node.position.x, y: node.position.y },
-                    };
-                    setExpandedNamespaces((prev) => {
-                        const next = new Set(prev);
-                        next.add(toggleNamespace);
-                        return next;
-                    });
                 }
+                collapseNamespace(toggleNamespace, fromPosition);
+            } else {
+                expandNamespace(toggleNamespace, { x: node.position.x, y: node.position.y });
             }
         },
         [
             //
+            collapseNamespace,
+            expandNamespace,
             expandedNamespaces,
-            interactionIndex,
             nodes,
         ],
     );
@@ -527,29 +468,15 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         setSelectedNodeId(null);
     }, []);
 
-    // Group header invokes this on click (drag suppresses it). Mirrors the
-    // collapse path of `onSubgraphNodeClick` for `mlirGroup` nodes: the
-    // namespace is currently expanded, so we anchor from the group's own
-    // position to its anchor op (which becomes visible after collapse) and
-    // remove the namespace from `expandedNamespaces`.
+    // Group header invokes this on click (drag suppresses it). Always a
+    // collapse — the header only exists for an expanded group.
     const toggleNamespaceFromGroup = useCallback(
         (namespace: string) => {
             const groupNode = nodes.find((n) => n.type === 'mlirGroup' && n.data?.namespace === namespace);
-            const anchorNodeId = interactionIndex?.anchorByNamespace[namespace];
             const fromPosition = groupNode ? { x: groupNode.position.x, y: groupNode.position.y } : { x: 0, y: 0 };
-            if (anchorNodeId) {
-                viewportAnchorRef.current = { toNodeId: anchorNodeId, fromPosition };
-            }
-            setExpandedNamespaces((prev) => {
-                if (!prev.has(namespace)) {
-                    return prev;
-                }
-                const next = new Set(prev);
-                next.delete(namespace);
-                return next;
-            });
+            collapseNamespace(namespace, fromPosition);
         },
-        [interactionIndex, nodes],
+        [collapseNamespace, nodes],
     );
 
     // Header drag updates only the group's own position; React Flow auto-
@@ -603,6 +530,8 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
             return edges;
         }
         const nodeById = new Map<string, MLNode>(nodes.map((n) => [n.id, n]));
+        // Memoise parent-id chains so a heavily-nested edge endpoint doesn't
+        // re-walk the same ancestors O(edges) times.
         const chainCache = new Map<string, string[]>();
         const parentChain = (nodeId: string): string[] => {
             const cached = chainCache.get(nodeId);
@@ -626,6 +555,28 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
         const isCollapsedAnchor = (id: string): boolean => {
             const n = nodeById.get(id);
             return !!n?.data?.collapsedSubgraphNamespace && n.data?.subgraphToggleState === 'collapsed';
+        };
+        // LCA lift: for an edge whose endpoints live in different parent
+        // chains, walk each chain down to the point just below their lowest
+        // common ancestor. The lifted ids represent the edge's projection onto
+        // that LCA boundary. Returns the *raw* lifted ids (no real-namespace
+        // fallback yet — that happens at the call site, where rule 5 also
+        // decides whether to keep the original endpoint).
+        const liftToLCA = (srcId: string, tgtId: string): { liftedSrc: string; liftedTgt: string } => {
+            const srcChain = parentChain(srcId);
+            const tgtChain = parentChain(tgtId);
+            let lcaDepth = 0;
+            while (
+                lcaDepth < srcChain.length &&
+                lcaDepth < tgtChain.length &&
+                srcChain[lcaDepth] === tgtChain[lcaDepth]
+            ) {
+                lcaDepth++;
+            }
+            return {
+                liftedSrc: srcChain.length > lcaDepth ? srcChain[lcaDepth] : srcId,
+                liftedTgt: tgtChain.length > lcaDepth ? tgtChain[lcaDepth] : tgtId,
+            };
         };
         const result: Edge[] = [];
         const seenAggregatePairs = new Set<string>();
@@ -660,18 +611,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
                 continue;
             }
             // (5) Cross-boundary — LCA lift with real-namespace fallback.
-            const srcChain = parentChain(e.source);
-            const tgtChain = parentChain(e.target);
-            let lcaDepth = 0;
-            while (
-                lcaDepth < srcChain.length &&
-                lcaDepth < tgtChain.length &&
-                srcChain[lcaDepth] === tgtChain[lcaDepth]
-            ) {
-                lcaDepth++;
-            }
-            const liftedSrc = srcChain.length > lcaDepth ? srcChain[lcaDepth] : e.source;
-            const liftedTgt = tgtChain.length > lcaDepth ? tgtChain[lcaDepth] : e.target;
+            const { liftedSrc, liftedTgt } = liftToLCA(e.source, e.target);
             const finalSrc = isRealNamespaceGroup(liftedSrc) ? e.source : liftedSrc;
             const finalTgt = isRealNamespaceGroup(liftedTgt) ? e.target : liftedTgt;
             if (finalSrc === finalTgt) {
