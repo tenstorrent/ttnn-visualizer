@@ -47,6 +47,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
+import { GraphBundle } from '../model/MLIRJsonModel';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
@@ -501,12 +502,17 @@ export const useNpe = (fileName: string | null) => {
 };
 
 const fetchMLIRJson = async () => {
-    const response = await axiosInstance.get<never>(Endpoints.MLIR);
+    const response = await axiosInstance.get<GraphBundle>(Endpoints.MLIR);
     return response?.data;
 };
 
+// The `/mlir` endpoint resolves the file path server-side from
+// `instance.mlir_path` (set when the user uploaded the JSON), so the request
+// itself is parameter-less. `fileName` is kept on the hook to gate `enabled`
+// (no fetch until an active file is selected) and to discriminate the
+// queryKey so cache state doesn't bleed across files. This mirrors `useNpe`.
 export const useMLIR = (fileName: string | null) => {
-    return useQuery<never, AxiosError>({
+    return useQuery<GraphBundle, AxiosError>({
         queryFn: () => fetchMLIRJson(),
         queryKey: ['fetch-mlir-json', fileName],
         retry: false,
