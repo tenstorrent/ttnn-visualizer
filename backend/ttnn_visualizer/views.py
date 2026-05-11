@@ -1800,25 +1800,35 @@ def update_current_instance(instance: Instance):
         # Use current instance unless a different one is specified
         instance_id = update_data.get("instance_id") or instance.instance_id
 
-        update_instance(
-            instance_id=instance_id,
-            profiler_name=update_data["active_report"].get("profiler_name"),
-            profiler_location=update_data["active_report"].get("profiler_location"),
-            performance_name=update_data["active_report"].get("performance_name"),
-            performance_location=update_data["active_report"].get(
-                "performance_location"
-            ),
-            npe_name=update_data["active_report"].get("npe_name"),
+        active_report = update_data["active_report"]
+        update_kwargs = {
+            "instance_id": instance_id,
+            "profiler_name": active_report.get("profiler_name"),
+            "profiler_location": active_report.get("profiler_location"),
+            "performance_name": active_report.get("performance_name"),
+            "performance_location": active_report.get("performance_location"),
+            "npe_name": active_report.get("npe_name"),
             # NPE is always local right now
-            npe_location=ReportLocation.LOCAL.value,
-            mlir_name=update_data["active_report"].get("mlir_name"),
+            "npe_location": ReportLocation.LOCAL.value,
+            "mlir_name": active_report.get("mlir_name"),
             # MLIR is always local right now
-            mlir_location=ReportLocation.LOCAL.value,
+            "mlir_location": ReportLocation.LOCAL.value,
             # Doesn't handle remote at the moment
-            remote_connection=None,
-            remote_profiler_folder=None,
-            remote_performance_folder=None,
-        )
+            "remote_connection": None,
+            "remote_profiler_folder": None,
+            "remote_performance_folder": None,
+        }
+
+        # Pass explicit `*_path` values through only when the payload supplies
+        # them, so `update_instance`'s sentinel default ("recompute from name")
+        # stays in effect for callers that omit them. This lets API consumers
+        # pin an exact path while preserving the current frontend behaviour
+        # (which sends names but not paths).
+        for path_key in ("profiler_path", "performance_path", "npe_path", "mlir_path"):
+            if path_key in active_report:
+                update_kwargs[path_key] = active_report[path_key]
+
+        update_instance(**update_kwargs)
 
         return Response(status=HTTPStatus.OK)
     except Exception as e:

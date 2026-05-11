@@ -8,6 +8,8 @@ from pathlib import Path
 
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.instances import (
+    KEY_MLIR_LOCATION,
+    KEY_MLIR_NAME,
     KEY_PERFORMANCE_LOCATION,
     KEY_PERFORMANCE_NAME,
     update_existing_instance,
@@ -79,3 +81,56 @@ def test_local_performance_path_when_mounting_remote_profiler(app):
         assert not str(instance.performance_path or "").startswith(
             str(remote_root / connection.host)
         )
+
+
+def test_mlir_path_remains_a_file_when_switching_unrelated_report(app):
+    """
+    Regression for PR #1467 review (Copilot comments B+C): uploading an MLIR
+    file then switching an unrelated active report (e.g. profiler) must NOT
+    overwrite `instance.mlir_path` with the MLIR *directory*. Pre-fix,
+    `get_mlir_path()` ignored `mlir_name` and returned the directory, so
+    `_resolve_report_path` recomputed mlir_path to a directory after any
+    `PUT /instance` that didn't carry MLIR fields. `get_mlir_json()` then
+    failed to `open()` it.
+    """
+    with app.app_context():
+        mlir_name = "sample-model"
+        instance = InstanceTable(
+            instance_id="test-instance-mlir-preserve",
+            active_report={
+                KEY_MLIR_NAME: mlir_name,
+                KEY_MLIR_LOCATION: ReportLocation.LOCAL.value,
+            },
+            remote_connection=None,
+            remote_profiler_folder=None,
+            remote_performance_folder=None,
+        )
+        db.session.add(instance)
+        db.session.commit()
+
+        # Caller updates the profiler but doesn't touch MLIR — exactly the
+        # scenario the bug surfaced in.
+        update_existing_instance(
+            instance,
+            profiler_name="some-profiler",
+            profiler_location=ReportLocation.LOCAL.value,
+            performance_name=None,
+            performance_location=None,
+            npe_name=None,
+            npe_location=None,
+            mlir_name=None,
+            mlir_location=None,
+            remote_connection=None,
+            remote_profiler_folder=None,
+            remote_performance_folder=None,
+            clear_remote=False,
+        )
+
+        local_root = Path(app.config["LOCAL_DATA_DIRECTORY"])
+        mlir_subdir = app.config["MLIR_DIRECTORY_NAME"]
+        expected_file = str(local_root / mlir_subdir / f"{mlir_name}.json")
+        expected_dir = str(local_root / mlir_subdir)
+
+        # The path must point at a file, not the directory (the pre-fix value).
+        assert instance.mlir_path == expected_file
+        assert instance.mlir_path != expected_dir
