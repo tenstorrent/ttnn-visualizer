@@ -10,6 +10,7 @@ import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { activeMlirJsonAtom } from '../../store/app';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
+import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
 import 'styles/components/FileLoader.scss';
 
@@ -34,28 +35,34 @@ const MlirJsonFileLoader: React.FC = () => {
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        setErrorMessage('Uploading...');
-        setUploadStatus(ConnectionTestStates.PROGRESS);
-
+        // Guard *before* mutating state so cancelling the OS file dialog
+        // (which fires `change` with an empty `files` list) leaves the
+        // component in its previous state instead of stuck at PROGRESS.
         if (!event.target.files?.length) {
             return;
         }
 
-        const file = event.target.files[0];
-        const response = await uploadMlirFile(event.target.files);
+        setErrorMessage('Uploading...');
+        setUploadStatus(ConnectionTestStates.PROGRESS);
 
-        if (response.status !== 200) {
+        const file = event.target.files[0];
+
+        try {
+            const response = await uploadMlirFile(event.target.files);
+
+            if (response?.data?.status !== ConnectionTestStates.OK) {
+                setUploadStatus(ConnectionTestStates.FAILED);
+                setErrorMessage(response?.data?.message ?? 'Upload failed');
+            } else {
+                const fileName = file.name;
+                setMlirJsonFileName(sanitiseFileName(fileName));
+                createToastNotification('MLIR', fileName, ToastType.SUCCESS);
+                setUploadStatus(ConnectionTestStates.OK);
+                setErrorMessage(`${fileName} uploaded successfully`);
+            }
+        } catch (err: unknown) {
             setUploadStatus(ConnectionTestStates.FAILED);
-            setErrorMessage(response?.data?.message);
-        } else if (response?.data?.status !== ConnectionTestStates.OK) {
-            setUploadStatus(ConnectionTestStates.FAILED);
-            setErrorMessage(response?.data?.message);
-        } else {
-            const fileName = file.name;
-            setMlirJsonFileName(sanitiseFileName(fileName));
-            createToastNotification('MLIR', fileName, ToastType.SUCCESS);
-            setUploadStatus(ConnectionTestStates.OK);
-            setErrorMessage(`${fileName} uploaded successfully`);
+            setErrorMessage(getResponseError(err, 'Unable to upload MLIR file'));
         }
     };
 
