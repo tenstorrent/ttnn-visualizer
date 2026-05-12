@@ -26,6 +26,7 @@
     "flask:format": "isort backend/ttnn_visualizer && black backend/ttnn_visualizer",
     "flask:lint": "isort --check-only backend/ttnn_visualizer && black --check backend/ttnn_visualizer",
     "flask:mypy": "PYTHONPATH=backend mypy backend/ttnn_visualizer",
+    "flask:migrate": "PYTHONPATH=backend python -m ttnn_visualizer.database_migrations",
     "flask:start-debug": "DEBUG=true PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:start": "PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:test": "PYTHONPATH=backend pytest backend/ttnn_visualizer/tests",

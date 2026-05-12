@@ -22,6 +22,7 @@ import flask
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify
 from flask_cors import CORS
+from ttnn_visualizer.database_migrations import run_alembic_migrations
 from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
@@ -157,44 +158,9 @@ def extensions(app: flask.Flask):
         register_handlers(socketio)
 
     with app.app_context():
-        db.create_all()
-        _add_missing_nullable_columns(db)
+        run_alembic_migrations(app.config["SQLALCHEMY_DATABASE_URI"])
 
     return None
-
-
-def _add_missing_nullable_columns(db):
-    """
-    Lightweight migration shim: for each SQLAlchemy model, add any nullable
-    column declared on the model that isn't yet present on the corresponding
-    table. Idempotent and safe on SQLite (which supports `ALTER TABLE ADD
-    COLUMN` for nullable columns). Lets us evolve the `instances` schema
-    without forcing every developer to wipe their local DB or pulling in a
-    full migrations framework.
-    """
-    from sqlalchemy import inspect, text
-
-    inspector = inspect(db.engine)
-    existing_tables = set(inspector.get_table_names())
-
-    for table in db.metadata.sorted_tables:
-        if table.name not in existing_tables:
-            continue
-        existing_columns = {col["name"] for col in inspector.get_columns(table.name)}
-        for column in table.columns:
-            if column.name in existing_columns or not column.nullable:
-                continue
-            column_type = column.type.compile(dialect=db.engine.dialect)
-            logger.info(
-                f"Adding missing column `{column.name}` ({column_type}) to `{table.name}`."
-            )
-            with db.engine.begin() as connection:
-                connection.execute(
-                    text(
-                        f"ALTER TABLE {table.name} "
-                        f"ADD COLUMN {column.name} {column_type}"
-                    )
-                )
 
 
 def middleware(app: flask.Flask):
@@ -538,6 +504,11 @@ def main():
         port = config.PORT if flask_env == "production" else config.DEV_SERVER_PORT
         host = config.HOST if flask_env == "production" else config.DEV_SERVER_HOST
         threading.Thread(target=open_browser, args=[host, port, instance_id]).start()
+
+    # Upgrade the app database before binding workers (idempotent; workers also
+    # upgrade via create_app when using multi-worker mode).
+    run_alembic_migrations(config.SQLALCHEMY_DATABASE_URI)
+
     try:
         subprocess.run(gunicorn_args)
     except KeyboardInterrupt:
