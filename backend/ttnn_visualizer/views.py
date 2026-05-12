@@ -1425,6 +1425,11 @@ def create_npe_files():
 
 @api.route("/local/upload/mlir", methods=["POST"])
 def create_mlir_file():
+    if current_app.config["SERVER_MODE"]:
+        return response_forbidden(
+            "MLIR file upload is not available in the hosted application.",
+        )
+
     files = request.files.getlist("files")
 
     # Empty list means the caller didn't attach a `files` part (or attached
@@ -1464,13 +1469,6 @@ def create_mlir_file():
         clear_remote=True,
         mlir_path=mlir_path,
     )
-
-    if current_app.config["SERVER_MODE"]:
-        max_reports = current_app.config["SESSION_MAX_UPLOADED_REPORTS"]
-        session["mlir_paths"] = (session.get("mlir_paths", []) + [mlir_path])[
-            -max_reports:
-        ]
-        session.permanent = True
 
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 

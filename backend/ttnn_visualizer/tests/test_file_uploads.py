@@ -148,6 +148,7 @@ def test_mlir_upload_traversal_does_not_escape_target_directory(
     # operation). Cast it here so the test exercises the same operand types
     # that the deployed app uses, without forking the shared fixture.
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
 
     payload = {
         "files": (BytesIO(b"{}"), "../escape.json"),
@@ -185,15 +186,34 @@ def test_mlir_upload_traversal_does_not_escape_target_directory(
     ), f"Expected `escape.json` under {mlir_root}, found: {list(mlir_root.iterdir())}"
 
 
+def test_mlir_upload_forbidden_when_server_mode(app, client, make_report):
+    """Hosted deployments (SERVER_MODE) must not accept MLIR uploads."""
+    instance_id = make_report()
+    assert app.config["SERVER_MODE"] is True
+
+    response = client.post(
+        f"/api/local/upload/mlir?instanceId={instance_id}",
+        data={"files": (BytesIO(b"{}"), "model.json")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    body = response.get_json()
+    assert body is not None
+    assert "hosted" in body["error"].lower()
+
+
 def test_mlir_upload_invokes_configured_malware_scanner(app, client, make_report):
     """`/local/upload/mlir` must run the same `save_uploaded_files` scan path as other uploads.
 
     Deployments set `MALWARE_SCANNER` to whatever external scanner they use.
     This test uses a fake command name and asserts `subprocess.run` is
-    invoked with that argv plus the temp copy of the upload.
+    invoked with that argv plus the temp copy of the upload. `SERVER_MODE` is
+    turned off so the request reaches the save path (hosted mode rejects first).
     """
     instance_id = make_report()
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
     app.config["MALWARE_SCANNER"] = "mock-malware-scanner --check-only"
 
     mock_result = MagicMock(returncode=0, stdout="", stderr="")
@@ -215,9 +235,13 @@ def test_mlir_upload_invokes_configured_malware_scanner(app, client, make_report
 
 
 def test_mlir_upload_malware_scanner_positive_blocks_save(app, client, make_report):
-    """Non-zero scanner exit must surface as 422 and must not leave the file under MLIR dir."""
+    """Non-zero scanner exit must surface as 422 and must not leave the file under MLIR dir.
+
+    `SERVER_MODE` is off so the handler runs the scan path instead of returning 403.
+    """
     instance_id = make_report()
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
     app.config["MALWARE_SCANNER"] = "mock-malware-scanner"
 
     mock_result = MagicMock(returncode=1, stdout="", stderr="infected")
