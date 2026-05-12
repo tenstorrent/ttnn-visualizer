@@ -158,6 +158,7 @@ The following separate and independent dependencies are utilized by this project
 - vitest - MIT - https://github.com/vitest-dev/vitest/blob/main/LICENSE
 - vitest-canvas-mock - MIT - https://github.com/wobsoriano/vitest-canvas-mock/blob/main/LICENSE
 
+- alembic - MIT - https://github.com/sqlalchemy/alembic/blob/main/LICENSE
 - black - MIT - https://github.com/psf/black/blob/main/LICENSE
 - build - MIT - https://opensource.org/license/mit
 - Flask - BSD‑3‑Clause - https://github.com/pallets/flask/blob/main/LICENSE.txt
