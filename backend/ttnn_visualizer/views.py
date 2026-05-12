@@ -1425,6 +1425,7 @@ def create_npe_files():
 
 @api.route("/local/upload/mlir", methods=["POST"])
 def create_mlir_file():
+    # Disable MLIR uploads in server mode for security reasons - it's a local-only feature.
     if current_app.config["SERVER_MODE"]:
         return response_forbidden(
             "MLIR file upload is not available in the hosted application.",
