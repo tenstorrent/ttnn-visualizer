@@ -12,9 +12,11 @@ in `construct_dest_path` and `extract_npe_name`) so a future refactor can't
 silently undo it.
 """
 
+from http import HTTPStatus
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from ttnn_visualizer.file_uploads import construct_dest_path, extract_npe_name
 
@@ -181,3 +183,54 @@ def test_mlir_upload_traversal_does_not_escape_target_directory(
     assert (
         landed_files
     ), f"Expected `escape.json` under {mlir_root}, found: {list(mlir_root.iterdir())}"
+
+
+def test_mlir_upload_invokes_configured_malware_scanner(app, client, make_report):
+    """`/local/upload/mlir` must run the same `save_uploaded_files` scan path as other uploads.
+
+    Deployments set `MALWARE_SCANNER` to whatever external scanner they use.
+    This test uses a fake command name and asserts `subprocess.run` is
+    invoked with that argv plus the temp copy of the upload.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["MALWARE_SCANNER"] = "mock-malware-scanner --check-only"
+
+    mock_result = MagicMock(returncode=0, stdout="", stderr="")
+    with patch(
+        "ttnn_visualizer.file_uploads.subprocess.run", return_value=mock_result
+    ) as mock_run:
+        response = client.post(
+            f"/api/local/upload/mlir?instanceId={instance_id}",
+            data={"files": (BytesIO(b'{"x": 1}'), "model.json")},
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert mock_run.call_count == 1
+    cmd = mock_run.call_args[0][0]
+    assert cmd[:2] == ["mock-malware-scanner", "--check-only"]
+    assert len(cmd) == 3
+    assert Path(cmd[2]).is_file() is False  # temp file removed after clean scan + move
+
+
+def test_mlir_upload_malware_scanner_positive_blocks_save(app, client, make_report):
+    """Non-zero scanner exit must surface as 422 and must not leave the file under MLIR dir."""
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["MALWARE_SCANNER"] = "mock-malware-scanner"
+
+    mock_result = MagicMock(returncode=1, stdout="", stderr="infected")
+    mlir_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
+    ).resolve()
+
+    with patch("ttnn_visualizer.file_uploads.subprocess.run", return_value=mock_result):
+        response = client.post(
+            f"/api/local/upload/mlir?instanceId={instance_id}",
+            data={"files": (BytesIO(b"{}"), "bad.json")},
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert not any(p.name.endswith("bad.json") for p in mlir_root.glob("*.json"))
