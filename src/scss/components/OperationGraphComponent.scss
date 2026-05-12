@@ -60,8 +60,12 @@
         overflow: auto;
         padding-left: 20px;
 
-        .return-to-original {
-            margin-top: 10px;
+        .operation-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-top: 5px;
             margin-bottom: 5px;
         }
 

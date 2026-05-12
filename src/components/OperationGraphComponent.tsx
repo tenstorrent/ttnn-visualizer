@@ -820,20 +820,6 @@ const OperationGraphInfoComponent: React.FC<{
 
     return (
         <div className='operation-graph-props'>
-            <Tooltip
-                placement={PopoverPosition.BOTTOM}
-                content={`Recenter on operation ${currentOperationId}`}
-            >
-                <Button
-                    className='return-to-original'
-                    icon={IconNames.UNDO}
-                    variant={ButtonVariant.OUTLINED}
-                    onClick={onRecenterOnCurrent}
-                    aria-label={`Recenter on operation ${currentOperationId}`}
-                >
-                    Back to {currentOperationId}
-                </Button>
-            </Tooltip>
             <h2 className='operation-name'>
                 {currentOperationId} {operation?.name} ({operation?.operationFileIdentifier})
             </h2>
@@ -842,14 +828,30 @@ const OperationGraphInfoComponent: React.FC<{
                     <li key={`device-op-${index}`}>{deviceOp}()</li>
                 ))}
             </ul>
-            <Button
-                className='navigate-button'
-                endIcon={IconNames.SEGMENTED_CONTROL}
-                intent={Intent.PRIMARY}
-                onClick={() => onNavigate(`/operations/${currentOperationId}`)}
-            >
-                Memory Details
-            </Button>
+            <div className='operation-actions'>
+                <Button
+                    className='navigate-button'
+                    endIcon={IconNames.SEGMENTED_CONTROL}
+                    intent={Intent.PRIMARY}
+                    onClick={() => onNavigate(`/operations/${currentOperationId}`)}
+                >
+                    Memory Details
+                </Button>
+                <Tooltip
+                    placement={PopoverPosition.BOTTOM}
+                    content={`Recenter on operation ${currentOperationId}`}
+                >
+                    <Button
+                        className='recenter-button'
+                        icon={IconNames.UNDO}
+                        intent={Intent.PRIMARY}
+                        onClick={onRecenterOnCurrent}
+                        aria-label={`Recenter on operation ${currentOperationId}`}
+                    >
+                        Back to {currentOperationId}
+                    </Button>
+                </Tooltip>
+            </div>
 
             <h3 className='inputs'>Inputs:</h3>
             <div className='inputs tensors'>
