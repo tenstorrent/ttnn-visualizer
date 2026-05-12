@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 from alembic import command
-from alembic.config import Config
+from alembic.config import Config as AlembicConfig
 from sqlalchemy.engine.url import make_url
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ def run_alembic_migrations(database_uri: str) -> None:
             "If running from a source checkout, ensure package data is intact."
         )
 
-    cfg = Config(str(alembic_ini))
+    cfg = AlembicConfig(str(alembic_ini))
     cfg.set_main_option("sqlalchemy.url", database_uri)
     logger.debug("Running Alembic migrations against configured database.")
     command.upgrade(cfg, "head")
@@ -69,9 +70,9 @@ def _cli_main() -> None:
 
     logging.basicConfig(level=logging.INFO)
 
-    from ttnn_visualizer.settings import Config
+    from ttnn_visualizer.settings import Config, DefaultConfig
 
-    uri = Config().SQLALCHEMY_DATABASE_URI
+    uri = cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI
     logger.info("Applying Alembic migrations (target: head).")
     run_alembic_migrations(uri)
     logger.info("Migrations finished.")
