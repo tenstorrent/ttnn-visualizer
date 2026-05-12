@@ -1426,10 +1426,21 @@ def create_npe_files():
 @api.route("/local/upload/mlir", methods=["POST"])
 def create_mlir_file():
     files = request.files.getlist("files")
+
+    # Empty list means the caller didn't attach a `files` part (or attached
+    # an empty one). Without this guard, the for-loop is a no-op and
+    # `paths[0]` later raises `IndexError`, surfacing as a 500.
+    if not files:
+        return response_bad_request("No files provided")
+
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if not file.filename.endswith(".json"):
+        # `FileStorage.filename` is typed `str | None`; calling `.endswith`
+        # on `None` raises `AttributeError` → 500. Treat missing/empty
+        # filenames the same as the wrong-extension case so the user gets
+        # the friendly StatusMessage instead.
+        if not file.filename or not file.filename.endswith(".json"):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
                 message="MLIR requires a valid .json file",
