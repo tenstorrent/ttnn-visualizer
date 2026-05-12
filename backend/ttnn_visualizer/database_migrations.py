@@ -16,8 +16,23 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from sqlalchemy.engine.url import make_url
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_sqlite_parent_dir_exists(database_uri: str) -> None:
+    """SQLite does not create missing parent directories; Alembic opens the DB first."""
+    url = make_url(database_uri)
+    if url.drivername != "sqlite":
+        return
+    database = url.database
+    if not database or database == ":memory:":
+        return
+    path = Path(database)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    path.parent.mkdir(parents=True, exist_ok=True)
 
 
 def run_alembic_migrations(database_uri: str) -> None:
@@ -27,6 +42,7 @@ def run_alembic_migrations(database_uri: str) -> None:
     Idempotent: safe to call on every process start (including multiple gunicorn
     workers).
     """
+    _ensure_sqlite_parent_dir_exists(database_uri)
     package_dir = Path(__file__).resolve().parent
     alembic_ini = package_dir / "alembic.ini"
     if not alembic_ini.is_file():
