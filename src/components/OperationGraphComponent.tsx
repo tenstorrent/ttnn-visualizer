@@ -41,7 +41,11 @@ const OperationGraph: React.FC<{
     const [filterOutDeallocate, setFilterOutDeallocate] = useState<boolean>(true);
     const networkRef = useRef<Network | null>(null);
     const currentOpIdRef = useRef<number>(currentOperationId);
+    const blinkIntervalRef = useRef<number | null>(null);
+    const blinkTimeoutRef = useRef<number | null>(null);
     const [compactView, setCompactView] = useState<boolean>(false);
+
+    const originalOperationId: number | null = operationId ?? operationList[0]?.id ?? null;
 
     const edges = useMemo((): Edge[] => {
         const edgeMap = new Map<string, Edge>();
@@ -247,6 +251,115 @@ const OperationGraph: React.FC<{
         [focusOnNode, colorHighlightIO],
     );
 
+    const getNodeRelationToFocused = useCallback((nodeId: IdType): 'input' | 'output' | null => {
+        const selectedNodeId = currentOpIdRef.current;
+        if (selectedNodeId === null || selectedNodeId === undefined || nodeId === selectedNodeId) {
+            return null;
+        }
+        const allEdges = edgesDataSetRef.current.get();
+        for (const edge of allEdges) {
+            if (edge.to === selectedNodeId && edge.from === nodeId) {
+                return 'input';
+            }
+            if (edge.from === selectedNodeId && edge.to === nodeId) {
+                return 'output';
+            }
+        }
+        return null;
+    }, []);
+
+    const getRestoreColorForNode = useCallback(
+        (nodeId: IdType): { background: string } => {
+            const relation = getNodeRelationToFocused(nodeId);
+            if (relation === 'input') {
+                return { background: GRAPH_COLORS.inputNode };
+            }
+            if (relation === 'output') {
+                return { background: GRAPH_COLORS.outputNode };
+            }
+            return { background: GRAPH_COLORS.normal };
+        },
+        [getNodeRelationToFocused],
+    );
+
+    const getBlinkOnColorForNode = useCallback(
+        (nodeId: IdType): { background: string; border: string } => {
+            const relation = getNodeRelationToFocused(nodeId);
+            if (relation === 'input') {
+                return { background: GRAPH_COLORS.inputNode, border: GRAPH_COLORS.inputEdge };
+            }
+            if (relation === 'output') {
+                return { background: GRAPH_COLORS.outputNode, border: GRAPH_COLORS.outputEdge };
+            }
+            return { background: '#f6bc42', border: '#ffe39c' };
+        },
+        [getNodeRelationToFocused],
+    );
+
+    const blinkNode = useCallback(
+        (nodeId: IdType) => {
+            if (blinkIntervalRef.current !== null) {
+                window.clearInterval(blinkIntervalRef.current);
+                blinkIntervalRef.current = null;
+            }
+            if (blinkTimeoutRef.current !== null) {
+                window.clearTimeout(blinkTimeoutRef.current);
+                blinkTimeoutRef.current = null;
+            }
+
+            if (!nodes.get(nodeId)) {
+                return;
+            }
+
+            const onColor = getBlinkOnColorForNode(nodeId);
+            const offColor = { background: GRAPH_COLORS.normal, border: GRAPH_COLORS.normal };
+            let isOn = true;
+            nodes.update({ id: nodeId, color: onColor });
+
+            blinkIntervalRef.current = window.setInterval(() => {
+                isOn = !isOn;
+                nodes.update({ id: nodeId, color: isOn ? onColor : offColor });
+            }, 300);
+
+            blinkTimeoutRef.current = window.setTimeout(() => {
+                if (blinkIntervalRef.current !== null) {
+                    window.clearInterval(blinkIntervalRef.current);
+                    blinkIntervalRef.current = null;
+                }
+                blinkTimeoutRef.current = null;
+                nodes.update({ id: nodeId, color: getRestoreColorForNode(nodeId) });
+            }, 3000);
+        },
+        [nodes, getRestoreColorForNode, getBlinkOnColorForNode],
+    );
+
+    const locateConnectedNode = useCallback(
+        (nodeId: number) => {
+            if (!networkRef.current) {
+                return;
+            }
+            try {
+                networkRef.current.focus(nodeId, {
+                    scale,
+                    animation: { duration: 500, easingFunction: 'easeInOutCubic' },
+                });
+            } catch (e) {
+                // eslint-disable-next-line no-console
+                console.warn('Error focusing viewport on node', e);
+                return;
+            }
+            blinkNode(nodeId);
+        },
+        [scale, blinkNode],
+    );
+
+    const returnToOriginalOperation = useCallback(() => {
+        if (originalOperationId === null) {
+            return;
+        }
+        selectConnectedNode(originalOperationId);
+    }, [originalOperationId, selectConnectedNode]);
+
     const updateScale = useCallback(
         (newScale: number) => {
             const limitedScale = Math.min(newScale, 3);
@@ -411,6 +524,14 @@ const OperationGraph: React.FC<{
         });
 
         return () => {
+            if (blinkIntervalRef.current !== null) {
+                window.clearInterval(blinkIntervalRef.current);
+                blinkIntervalRef.current = null;
+            }
+            if (blinkTimeoutRef.current !== null) {
+                window.clearTimeout(blinkTimeoutRef.current);
+                blinkTimeoutRef.current = null;
+            }
             networkRef.current?.off('zoom');
             networkRef.current?.off('click');
             networkRef.current?.off('dragEnd');
@@ -562,8 +683,10 @@ const OperationGraph: React.FC<{
                     operationList={operationList}
                     operationNamesById={operationNamesById}
                     currentOperationId={currentOperationId}
+                    originalOperationId={originalOperationId}
                     onNavigate={navigate}
-                    onSelectConnectedNode={selectConnectedNode}
+                    onLocateConnectedNode={locateConnectedNode}
+                    onReturnToOriginal={returnToOriginalOperation}
                 />
             )}
             {isLoading && (
@@ -657,22 +780,22 @@ const groupTensorsByConnectedOp = (
 
 const ConnectedOpHeader: React.FC<{
     group: ConnectedOpGroup;
-    onSelect: (opId: number) => void;
-}> = ({ group, onSelect }) => {
+    onLocate: (opId: number) => void;
+}> = ({ group, onLocate }) => {
     return (
         <div className='connected-op-header'>
             <h2 className='connected-op-name'>{group.label}</h2>
             {group.opId !== null && (
                 <Tooltip
                     placement={PopoverPosition.RIGHT}
-                    content={`Select operation ${group.opId}`}
+                    content={`Locate operation ${group.opId} in graph`}
                 >
                     <Button
                         className='connected-op-select'
                         icon={IconNames.LOCATE}
                         variant={ButtonVariant.MINIMAL}
-                        onClick={() => onSelect(group.opId as number)}
-                        aria-label={`Select operation ${group.opId}`}
+                        onClick={() => onLocate(group.opId as number)}
+                        aria-label={`Locate operation ${group.opId} in graph`}
                     />
                 </Tooltip>
             )}
@@ -682,11 +805,21 @@ const ConnectedOpHeader: React.FC<{
 
 const OperationGraphInfoComponent: React.FC<{
     currentOperationId: number;
+    originalOperationId: number | null;
     operationList: OperationList;
     operationNamesById: Map<number, string>;
     onNavigate: NavigateFunction;
-    onSelectConnectedNode: (opId: number) => void;
-}> = ({ currentOperationId, operationList, operationNamesById, onNavigate, onSelectConnectedNode }) => {
+    onLocateConnectedNode: (opId: number) => void;
+    onReturnToOriginal: () => void;
+}> = ({
+    currentOperationId,
+    originalOperationId,
+    operationList,
+    operationNamesById,
+    onNavigate,
+    onLocateConnectedNode,
+    onReturnToOriginal,
+}) => {
     const operation = operationList.find((op) => op.id === currentOperationId);
 
     const inputGroups = useMemo(
@@ -698,8 +831,26 @@ const OperationGraphInfoComponent: React.FC<{
         [operation, operationNamesById],
     );
 
+    const showReturnToOriginal = originalOperationId !== null;
+
     return (
         <div className='operation-graph-props'>
+            {showReturnToOriginal && (
+                <Tooltip
+                    placement={PopoverPosition.BOTTOM}
+                    content={`Return to original operation ${originalOperationId}`}
+                >
+                    <Button
+                        className='return-to-original'
+                        icon={IconNames.UNDO}
+                        variant={ButtonVariant.OUTLINED}
+                        onClick={onReturnToOriginal}
+                        aria-label={`Return to original operation ${originalOperationId}`}
+                    >
+                        Back to {originalOperationId}
+                    </Button>
+                </Tooltip>
+            )}
             <h2 className='operation-name'>
                 {currentOperationId} {operation?.name} ({operation?.operationFileIdentifier})
             </h2>
@@ -726,7 +877,7 @@ const OperationGraphInfoComponent: React.FC<{
                     >
                         <ConnectedOpHeader
                             group={group}
-                            onSelect={onSelectConnectedNode}
+                            onLocate={onLocateConnectedNode}
                         />
                         {group.tensors.map((tensor, index) => (
                             <TensorDetailsComponent
@@ -746,7 +897,7 @@ const OperationGraphInfoComponent: React.FC<{
                     >
                         <ConnectedOpHeader
                             group={group}
-                            onSelect={onSelectConnectedNode}
+                            onLocate={onLocateConnectedNode}
                         />
                         {group.tensors.map((tensor, index) => (
                             <TensorDetailsComponent
