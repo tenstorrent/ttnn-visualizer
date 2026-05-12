@@ -45,8 +45,6 @@ const OperationGraph: React.FC<{
     const blinkTimeoutRef = useRef<number | null>(null);
     const [compactView, setCompactView] = useState<boolean>(false);
 
-    const originalOperationId: number | null = operationId ?? operationList[0]?.id ?? null;
-
     const edges = useMemo((): Edge[] => {
         const edgeMap = new Map<string, Edge>();
         return operationList.flatMap((op) =>
@@ -243,14 +241,6 @@ const OperationGraph: React.FC<{
         [scale],
     );
 
-    const selectConnectedNode = useCallback(
-        (nodeId: number) => {
-            focusOnNode(nodeId);
-            colorHighlightIO(nodeId);
-        },
-        [focusOnNode, colorHighlightIO],
-    );
-
     const getNodeRelationToFocused = useCallback((nodeId: IdType): 'input' | 'output' | null => {
         const selectedNodeId = currentOpIdRef.current;
         if (selectedNodeId === null || selectedNodeId === undefined || nodeId === selectedNodeId) {
@@ -353,12 +343,12 @@ const OperationGraph: React.FC<{
         [scale, blinkNode],
     );
 
-    const returnToOriginalOperation = useCallback(() => {
-        if (originalOperationId === null) {
+    const recenterOnCurrentOperation = useCallback(() => {
+        if (currentOperationId === null) {
             return;
         }
-        selectConnectedNode(originalOperationId);
-    }, [originalOperationId, selectConnectedNode]);
+        focusOnNode(currentOperationId);
+    }, [currentOperationId, focusOnNode]);
 
     const updateScale = useCallback(
         (newScale: number) => {
@@ -683,10 +673,9 @@ const OperationGraph: React.FC<{
                     operationList={operationList}
                     operationNamesById={operationNamesById}
                     currentOperationId={currentOperationId}
-                    originalOperationId={originalOperationId}
                     onNavigate={navigate}
                     onLocateConnectedNode={locateConnectedNode}
-                    onReturnToOriginal={returnToOriginalOperation}
+                    onRecenterOnCurrent={recenterOnCurrentOperation}
                 />
             )}
             {isLoading && (
@@ -805,20 +794,18 @@ const ConnectedOpHeader: React.FC<{
 
 const OperationGraphInfoComponent: React.FC<{
     currentOperationId: number;
-    originalOperationId: number | null;
     operationList: OperationList;
     operationNamesById: Map<number, string>;
     onNavigate: NavigateFunction;
     onLocateConnectedNode: (opId: number) => void;
-    onReturnToOriginal: () => void;
+    onRecenterOnCurrent: () => void;
 }> = ({
     currentOperationId,
-    originalOperationId,
     operationList,
     operationNamesById,
     onNavigate,
     onLocateConnectedNode,
-    onReturnToOriginal,
+    onRecenterOnCurrent,
 }) => {
     const operation = operationList.find((op) => op.id === currentOperationId);
 
@@ -831,26 +818,22 @@ const OperationGraphInfoComponent: React.FC<{
         [operation, operationNamesById],
     );
 
-    const showReturnToOriginal = originalOperationId !== null;
-
     return (
         <div className='operation-graph-props'>
-            {showReturnToOriginal && (
-                <Tooltip
-                    placement={PopoverPosition.BOTTOM}
-                    content={`Return to original operation ${originalOperationId}`}
+            <Tooltip
+                placement={PopoverPosition.BOTTOM}
+                content={`Recenter on operation ${currentOperationId}`}
+            >
+                <Button
+                    className='return-to-original'
+                    icon={IconNames.UNDO}
+                    variant={ButtonVariant.OUTLINED}
+                    onClick={onRecenterOnCurrent}
+                    aria-label={`Recenter on operation ${currentOperationId}`}
                 >
-                    <Button
-                        className='return-to-original'
-                        icon={IconNames.UNDO}
-                        variant={ButtonVariant.OUTLINED}
-                        onClick={onReturnToOriginal}
-                        aria-label={`Return to original operation ${originalOperationId}`}
-                    >
-                        Back to {originalOperationId}
-                    </Button>
-                </Tooltip>
-            )}
+                    Back to {currentOperationId}
+                </Button>
+            </Tooltip>
             <h2 className='operation-name'>
                 {currentOperationId} {operation?.name} ({operation?.operationFileIdentifier})
             </h2>
