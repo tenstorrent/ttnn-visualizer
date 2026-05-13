@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Edge, IdType, Network } from 'vis-network';
+import { Edge, IdType, Network, Node } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
 import { Button, ButtonVariant, Intent, Label, PopoverPosition, Slider, Switch, Tooltip } from '@blueprintjs/core';
@@ -23,6 +23,12 @@ import { GRAPH_COLORS } from '../definitions/GraphColors';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 
 type OperationList = OperationDescription[];
+
+type OperationNode = Node & {
+    id: number;
+    filterString: string;
+    deviceOpFilter: string;
+};
 
 enum NodeRelation {
     Input = 'input',
@@ -112,7 +118,7 @@ const OperationGraph: React.FC<{
 
     const nodes = useMemo(
         () =>
-            new DataSet(
+            new DataSet<OperationNode>(
                 operationList
                     .filter((op) => connectedNodeIds.has(op.id))
                     .filter((op) => !filterOutDeallocate || !DEALLOCATE_OP_NAME_LIST.includes(op.name.toLowerCase()))
@@ -293,7 +299,7 @@ const OperationGraph: React.FC<{
     );
 
     const blinkNode = useCallback(
-        (nodeId: IdType) => {
+        (nodeId: number) => {
             if (blinkIntervalRef.current !== null) {
                 window.clearInterval(blinkIntervalRef.current);
                 blinkIntervalRef.current = null;
