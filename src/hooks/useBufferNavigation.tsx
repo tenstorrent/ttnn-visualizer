@@ -34,13 +34,14 @@ function parseBufferDetailsState(state: unknown): BufferDetailsLocationState | n
     }
 
     const rawAddress = 'tensorAddress' in state ? state.tensorAddress : undefined;
-    if (rawAddress != null && !isValidNumber(rawAddress)) {
+    const tensorAddress = rawAddress != null && isValidNumber(rawAddress) ? rawAddress : undefined;
+    if (rawAddress != null && tensorAddress === undefined) {
         return null;
     }
 
     return {
         tensorId: state.tensorId,
-        tensorAddress: rawAddress != null && isValidNumber(rawAddress) ? rawAddress : undefined,
+        tensorAddress,
         bufferType: state.bufferType,
     };
 }
@@ -139,7 +140,11 @@ const useBufferNavigation = ({ buffersByOperation, tensorListByOperation, virtua
         };
     }, [
         buffersByOperation,
-        location,
+        location.hash,
+        location.key,
+        location.pathname,
+        location.search,
+        location.state,
         navigate,
         setSelectedTabId,
         tensorListByOperation,

@@ -6,6 +6,7 @@ import { Id, toast } from 'react-toastify';
 import { useCallback } from 'react';
 import { useAtom } from 'jotai';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
+import isValidNumber from '../functions/isValidNumber';
 import ToastTensorMessage from '../components/operation-details/ToastTensorMessage';
 import { activeToastAtom, selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../store/app';
 
@@ -32,7 +33,7 @@ const useBufferFocus = () => {
                 toast.dismiss(previousToast);
             }
 
-            if (address && !colour) {
+            if (isValidNumber(address) && !colour) {
                 colour = getBufferColor(address + (colorVariance || 0));
             }
 
