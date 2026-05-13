@@ -18,10 +18,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.file_uploads import (
     construct_dest_path,
     extract_npe_name,
     resolve_parent_folder_name,
+    validate_files,
 )
 
 
@@ -246,6 +248,53 @@ def test_resolve_parent_folder_name_handles_empty_files():
     assert resolve_parent_folder_name([], folder_name=None) is None
 
 
+# ---- validate_files: cross-file leading-segment consistency ---------------
+
+
+def test_validate_files_rejects_inferred_uploads_spanning_multiple_folders():
+    """Mixed-folder Chromium upload must fail validation, not nest silently.
+
+    When the destination folder is inferred from the files themselves,
+    `resolve_parent_folder_name` reads `files[0]` only and the dedup in
+    `construct_dest_path` keys on that single name. Without this guard, an
+    upload like `reportA/db.sqlite` + `reportB/config.json` would silently
+    land as `reportA/db.sqlite` + `reportA/reportB/config.json`. Reject it
+    instead so the client can re-pick a single folder.
+    """
+    files = [
+        _faux_file("reportA/db.sqlite"),
+        _faux_file("reportB/config.json"),
+    ]
+    assert validate_files(files, {"db.sqlite"}, folder_name=None) is False
+
+
+def test_validate_files_accepts_inferred_upload_with_consistent_folder():
+    """Single-folder Chromium upload (the normal case) must still validate."""
+    files = [
+        _faux_file("my-report/db.sqlite"),
+        _faux_file("my-report/config.json"),
+        _faux_file("my-report/cluster_descriptor.yaml"),
+    ]
+    assert validate_files(files, {"db.sqlite"}, folder_name=None) is True
+
+
+def test_validate_files_skips_consistency_check_when_folder_name_is_explicit():
+    """Safari sends bare basenames + an explicit `folderName`; nothing to compare.
+
+    The new cross-file check only fires when the destination folder is being
+    inferred from the relative paths. With an explicit `folderName` the
+    inference path is bypassed, so this guard must not interfere even with
+    files carrying disagreeing sub-paths (those are sub-directories *inside*
+    the report, not separate reports).
+    """
+    files = [
+        _faux_file("db.sqlite"),
+        _faux_file("subdir-a/file.csv"),
+        _faux_file("subdir-b/other.csv"),
+    ]
+    assert validate_files(files, {"db.sqlite"}, folder_name="my-report") is True
+
+
 # ---- End-to-end regression: the MLIR upload endpoint ----------------------
 
 
@@ -465,6 +514,51 @@ def test_profiler_upload_safari_style_lands_under_report_folder(
     assert (report_dir / "db.sqlite").is_file()
     assert (report_dir / "config.json").is_file()
     assert not (profiler_root / "db.sqlite").exists()
+
+
+def test_profiler_upload_rejects_files_from_multiple_folders(app, client, make_report):
+    """Mixed-folder Chromium uploads must be rejected, not silently nested.
+
+    Pre-fix, an upload combining files from two different report folders
+    inferred the destination from `files[0]` and the disagreeing file ended
+    up nested as `<inferred>/<other-folder>/<file>`. The handler now returns
+    the standard `FAILED` status and writes nothing.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    profiler_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["PROFILER_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        f"/api/local/upload/profiler?instanceId={instance_id}",
+        data={
+            "files": [
+                (BytesIO(b"sqlite-bytes"), "reportA/db.sqlite"),
+                (BytesIO(b"{}"), "reportB/config.json"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    body = response.get_json()
+    # The handler returns a `StatusMessage` with the int-valued
+    # `ConnectionTestStates` enum; FAILED is `2` after JSON serialisation.
+    assert body["status"] == ConnectionTestStates.FAILED.value
+
+    # Nothing should have been written under either folder.
+    assert not (profiler_root / "reportA").exists()
+    assert not (profiler_root / "reportB").exists()
+    # And especially: no surprise nesting like `reportA/reportB/config.json`.
+    if profiler_root.exists():
+        for path in profiler_root.rglob("*"):
+            if path.is_file():
+                raise AssertionError(
+                    f"Mixed-folder upload should have been rejected, found: {path}"
+                )
 
 
 def test_performance_upload_chromium_style_lands_under_report_folder(

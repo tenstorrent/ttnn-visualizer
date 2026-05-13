@@ -21,9 +21,18 @@ logger = logging.getLogger(__name__)
 def validate_files(files, required_files, pattern=None, folder_name=None):
     """Validate uploaded files against required file names and an optional pattern."""
     found_files = set()
+    leading_segments = set()
 
     for file in files:
         file_path = Path(file.filename)
+        raw_name = str(file.filename)
+
+        # Track the per-file leading folder segment for the cross-file
+        # consistency check below. Bare basenames (no `/`) carry no segment
+        # to compare and are skipped — `parents != 2` already rejects bare
+        # *required* files in the inferred-folder branch.
+        if "/" in raw_name:
+            leading_segments.add(raw_name.split("/", 1)[0])
 
         if file_path.name in required_files or (
             pattern and file_path.name.startswith(pattern)
@@ -34,6 +43,21 @@ def validate_files(files, required_files, pattern=None, folder_name=None):
                     f"File {file.filename} is not under a single parent folder."
                 )
                 return False
+
+    # When the destination folder is inferred from the files themselves
+    # (Chromium / Firefox preserve `webkitRelativePath` in the multipart
+    # filename), every file with a leading segment must agree on what that
+    # segment is. Otherwise `resolve_parent_folder_name` infers from
+    # `files[0]` and the dedup in `construct_dest_path` keys on that single
+    # name, silently nesting any disagreeing files under the inferred folder
+    # (e.g. `reportA/db.sqlite` + `reportB/config.json` would land as
+    # `reportA/db.sqlite` + `reportA/reportB/config.json`).
+    if not folder_name and len(leading_segments) > 1:
+        logger.warning(
+            "Uploaded files span multiple parent folders: %s",
+            sorted(leading_segments),
+        )
+        return False
 
     missing_files = required_files - found_files
     if pattern and not any(name.startswith(pattern) for name in found_files):
