@@ -20,12 +20,17 @@ from ttnn_visualizer.tests.report_schemas import SCHEMA_V2
 
 @pytest.fixture
 def app():
-    """Create a Flask app with test config and in-memory instance store."""
+    """Create a Flask app with test config and an isolated app SQLite file.
+
+    Uses a file-backed database (not ``:memory:``) so Alembic's migration
+    connection and the app's pool see the same on-disk database.
+    """
     tmpdir = tempfile.mkdtemp()
     try:
+        app_db_path = Path(tmpdir) / "app.db"
         settings = {
             "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{app_db_path}",
             "SERVER_MODE": True,
             "USE_WEBSOCKETS": True,
             "APP_DATA_DIRECTORY": tmpdir,
@@ -34,8 +39,6 @@ def app():
             "REMOTE_DATA_DIRECTORY": str(Path(tmpdir) / "remote"),
         }
         app = create_app(settings_override=settings)
-        with app.app_context():
-            db.create_all()
         yield app
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

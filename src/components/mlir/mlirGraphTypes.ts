@@ -1,0 +1,140 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+/** Shared between MLIR React Flow view and mlirLayoutWorker (minimal graph index + build payloads). */
+
+export type IndexedEdge = {
+    sourceNodeId: string;
+    sourceNodeOutputId: string;
+    targetNodeInputId: string;
+};
+
+export type IndexedAttr = { key: string; value: string };
+export type IndexedPortMetadata = { id: string; attrs: IndexedAttr[] };
+
+export type IndexedNode = {
+    id: string;
+    label: string;
+    namespace: string;
+    incomingEdges: IndexedEdge[];
+    outputsMetadata: IndexedPortMetadata[];
+    config: { pinToGroupTop?: boolean } | null;
+};
+
+export type SourceNode = {
+    id: string;
+    label: string;
+    namespace: string;
+    attrs: IndexedAttr[];
+    incomingEdges: IndexedEdge[];
+    outputsMetadata: IndexedPortMetadata[];
+    config: { pinToGroupTop?: boolean } | null;
+};
+
+export type GraphIndex = {
+    graphId: string;
+    nodes: IndexedNode[];
+    subgraphNamespaces: string[];
+    anchorByNamespace: Record<string, string>;
+    anchorNamespaceByNodeId: Record<string, string>;
+    namespaceInputByNamespace: Record<string, string[]>;
+    /** Return/output node id per namespace (e.g. stablehlo.return). */
+    namespaceReturnNodeByNamespace: Record<string, string>;
+    containingNamespacesByNodeId: Record<string, string[]>;
+    /** Outer region op node id → collapsible inner namespace (parent-level toggle). */
+    outerNamespaceByNodeId: Record<string, string>;
+    /** Namespaces created by topology-aware sectioning (artificial groups). */
+    sectionNamespaces: string[];
+};
+
+export type WorkerNode = {
+    id: string;
+    type?: string;
+    parentId?: string;
+    extent?: 'parent';
+    draggable?: boolean;
+    /** CSS selector that constrains where the node can be dragged from (e.g. group header). */
+    dragHandle?: string;
+    position: { x: number; y: number };
+    width?: number;
+    height?: number;
+    data: {
+        label: string;
+        kind?: 'op' | 'group';
+        namespace: string;
+        collapsedSubgraphNamespace?: string;
+        subgraphToggleState?: 'collapsed' | 'expanded';
+        /** Group headers: human-readable group name (e.g. "section 1 of 7", "Inputs"). */
+        displayName?: string;
+        /** Group headers: total count of nodes inside this group (descendants included). */
+        nodeCount?: number;
+        /** Group headers: classification used for header iconography/tooltips. */
+        groupKind?: 'section' | 'plain';
+    };
+    style?: Record<string, unknown>;
+};
+
+export type WorkerEdge = {
+    id: string;
+    source: string;
+    target: string;
+    sourceHandle?: string;
+    targetHandle?: string;
+    label?: string;
+    type?: string;
+    pathOptions?: { offset?: number; curvature?: number };
+    labelShowBg?: boolean;
+    labelBgStyle?: Record<string, unknown>;
+    labelBgPadding?: [number, number];
+    labelBgBorderRadius?: number;
+    labelStyle?: Record<string, unknown>;
+    markerEnd?: { type: string; height: number; width: number };
+    style?: Record<string, unknown>;
+};
+
+export type BuiltGraph = { nodes: WorkerNode[]; edges: WorkerEdge[] };
+
+export type SetGraphMessage = {
+    type: 'set-graph';
+    graphId: string;
+    nodes: SourceNode[];
+};
+
+export type BuildMessage = {
+    type: 'build';
+    requestId: number;
+    graphId: string;
+    expandedNamespaces: string[];
+    cacheKey: string;
+};
+
+export type WorkerInboundMessage = SetGraphMessage | BuildMessage;
+
+export type WorkerBuiltMessage = {
+    type: 'built';
+    requestId: number;
+    graphId: string;
+    cacheKey: string;
+    graph: BuiltGraph;
+};
+
+export type WorkerErrorMessage = {
+    type: 'error';
+    requestId: number;
+    error: string;
+};
+
+export type WorkerInteractionIndex = {
+    anchorByNamespace: Record<string, string>;
+    anchorNamespaceByNodeId: Record<string, string>;
+    outerNamespaceByNodeId: Record<string, string>;
+};
+
+export type WorkerIndexedMessage = {
+    type: 'indexed';
+    graphId: string;
+    interactionIndex: WorkerInteractionIndex;
+};
+
+export type WorkerOutboundMessage = WorkerBuiltMessage | WorkerErrorMessage | WorkerIndexedMessage;

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
-import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
+import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { activeNpeOpTraceAtom } from '../../store/app';
+import { activeMlirJsonAtom } from '../../store/app';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
@@ -19,7 +19,6 @@ const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.PROGRESS]: IconNames.DOT,
     [ConnectionTestStates.FAILED]: IconNames.CROSS,
     [ConnectionTestStates.OK]: IconNames.TICK,
-    [ConnectionTestStates.WARNING]: IconNames.WARNING_SIGN,
 };
 
 const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
@@ -27,68 +26,69 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.PROGRESS]: Intent.WARNING,
     [ConnectionTestStates.FAILED]: Intent.DANGER,
     [ConnectionTestStates.OK]: Intent.SUCCESS,
-    [ConnectionTestStates.WARNING]: Intent.WARNING,
 };
 
-const NPEFileLoader: React.FC = () => {
+const MlirJsonFileLoader: React.FC = () => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const { uploadNpeFile } = useLocalConnection();
-    const [npeFileName, setActiveNpe] = useAtom(activeNpeOpTraceAtom);
+    const { uploadMlirFile } = useLocalConnection();
+    const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        setErrorMessage('Uploading...');
-        setUploadStatus(ConnectionTestStates.PROGRESS);
-
-        if (!event.target.files) {
+        // Guard *before* mutating state so cancelling the OS file dialog
+        // (which fires `change` with an empty `files` list) leaves the
+        // component in its previous state instead of stuck at PROGRESS.
+        if (!event.target.files?.length) {
             return;
         }
 
-        const file = event.target.files?.[0];
+        setErrorMessage('Uploading...');
+        setUploadStatus(ConnectionTestStates.PROGRESS);
+
+        const file = event.target.files[0];
 
         try {
-            const response = await uploadNpeFile(event.target.files);
+            const response = await uploadMlirFile(event.target.files);
 
             if (response?.data?.status !== ConnectionTestStates.OK) {
                 setUploadStatus(ConnectionTestStates.FAILED);
                 setErrorMessage(response?.data?.message ?? 'Upload failed');
             } else {
                 const fileName = file.name;
-                setActiveNpe(sanitiseFileName(fileName));
-                createToastNotification('Active NPE', fileName, ToastType.SUCCESS);
+                setMlirJsonFileName(sanitiseFileName(fileName));
+                createToastNotification('MLIR', fileName, ToastType.SUCCESS);
                 setUploadStatus(ConnectionTestStates.OK);
                 setErrorMessage(`${fileName} uploaded successfully`);
             }
         } catch (err: unknown) {
             setUploadStatus(ConnectionTestStates.FAILED);
-            setErrorMessage(getResponseError(err, 'Unable to upload file'));
+            setErrorMessage(getResponseError(err, 'Unable to upload MLIR file'));
         }
     };
 
     return (
-        <FormGroup className='file-loader'>
-            <div className='form-container'>
-                <FileInput
-                    text={npeFileName ?? 'Upload an NPE report file for analysis...'}
-                    onInputChange={handleFileChange}
-                />
+        <div className='file-loader'>
+            <FileInput
+                text={mlirJsonFileName ?? 'Upload an MLIR JSON'}
+                onInputChange={handleFileChange}
+            />
 
-                <div className='folder-upload-status'>
-                    {uploadStatus ? (
-                        <>
-                            <Icon
-                                icon={ICON_MAP[uploadStatus]}
-                                size={20}
-                                intent={INTENT_MAP[uploadStatus]}
-                            />
+            <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>
+                {uploadStatus ? (
+                    <>
+                        <Icon
+                            className='connection-status-icon'
+                            icon={ICON_MAP[uploadStatus]}
+                            size={20}
+                            intent={INTENT_MAP[uploadStatus]}
+                        />
 
-                            <span className='message'>{errorMessage}</span>
-                        </>
-                    ) : null}
-                </div>
+                        <span className='connection-status-text'>{errorMessage}</span>
+                    </>
+                ) : null}
             </div>
-        </FormGroup>
+        </div>
     );
 };
 
-export default NPEFileLoader;
+export default MlirJsonFileLoader;

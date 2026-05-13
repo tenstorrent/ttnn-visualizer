@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
 
-.npe-file-loader {
+.inline-loaders {
+    display: flex;
+    flex-direction: row;
+    gap: 5px;
+}
+
+.file-loader {
     display: flex;
     flex-direction: column;
     gap: 5px;

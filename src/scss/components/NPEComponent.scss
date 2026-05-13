@@ -6,12 +6,6 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
-.npe-inline-loaders {
-    display: flex;
-    flex-direction: row;
-    gap: 5px;
-}
-
 .npe {
     position: relative;
 
