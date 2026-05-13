@@ -39,14 +39,14 @@ const OperationGraph: React.FC<{
     operationList: OperationList;
     operationId?: number;
 }> = ({ operationList, operationId }) => {
-    let focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
-
     const containerRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
 
     const [isLoading, setIsLoading] = useState(true);
     const [scale, setScale] = useState(1);
-    const [currentOperationId, setCurrentOperationId] = useState<number | null>(focusNodeId ?? null);
+    const [currentOperationId, setCurrentOperationId] = useState<number | null>(
+        () => operationId ?? operationList[0]?.id ?? null,
+    );
     const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
     const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
     const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
@@ -100,8 +100,13 @@ const OperationGraph: React.FC<{
         return map;
     }, [operationList]);
 
-    if (currentOperationId !== null && connectedNodeIds.size > 0 && !connectedNodeIds.has(currentOperationId)) {
-        focusNodeId = connectedNodeIds.values().next().value ?? focusNodeId;
+    let focusNodeId: number;
+    if (currentOperationId !== null && connectedNodeIds.has(currentOperationId)) {
+        focusNodeId = currentOperationId;
+    } else if (connectedNodeIds.size > 0) {
+        focusNodeId = connectedNodeIds.values().next().value!;
+    } else {
+        focusNodeId = operationId ?? operationList[0]?.id ?? 0;
     }
 
     useEffect(() => {
@@ -483,7 +488,7 @@ const OperationGraph: React.FC<{
 
                     networkRef.current.once('afterDrawing', () => {
                         networkRef.current?.moveTo({ scale });
-                        focusOnNode(currentOperationId);
+                        focusOnNode(focusNodeId);
                         setIsLoading(false);
                         // @ts-expect-error this is normal
                         currentOpIdRef.current = focusNodeId;
