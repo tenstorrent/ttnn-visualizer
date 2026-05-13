@@ -483,7 +483,7 @@ const OperationGraph: React.FC<{
 
                     networkRef.current.once('afterDrawing', () => {
                         networkRef.current?.moveTo({ scale });
-                        focusOnNode(currentOperationId);
+                        focusOnNode(focusNodeId);
                         setIsLoading(false);
                         // @ts-expect-error this is normal
                         currentOpIdRef.current = focusNodeId;
