@@ -16,7 +16,7 @@ import isValidNumber from '../functions/isValidNumber';
 
 interface BufferDetailsLocationState {
     tensorId: number;
-    tensorAddress: number;
+    tensorAddress?: number;
     bufferType: BufferType;
 }
 
