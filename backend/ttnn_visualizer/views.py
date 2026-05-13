@@ -40,8 +40,8 @@ from ttnn_visualizer.exceptions import (
     response_unprocessable_entity,
 )
 from ttnn_visualizer.file_uploads import (
-    extract_folder_name_from_files,
     extract_npe_name,
+    resolve_parent_folder_name,
     save_uploaded_files,
     validate_files,
 )
@@ -1272,15 +1272,12 @@ def create_profiler_files():
     if not profiler_directory.exists():
         profiler_directory.mkdir(parents=True, exist_ok=True)
 
-    if folder_name:
-        parent_folder_name = folder_name
-    else:
-        parent_folder_name = extract_folder_name_from_files(files)
+    parent_folder_name = resolve_parent_folder_name(files, folder_name)
 
     logger.info(f"Writing report files to {profiler_directory}/{parent_folder_name}")
 
     try:
-        paths = save_uploaded_files(files, profiler_directory, folder_name)
+        paths = save_uploaded_files(files, profiler_directory, parent_folder_name)
     except DataFormatError:
         return response_unprocessable_entity()
 
@@ -1339,10 +1336,7 @@ def create_performance_files():
     if not target_directory.exists():
         target_directory.mkdir(parents=True, exist_ok=True)
 
-    if folder_name:
-        parent_folder_name = folder_name
-    else:
-        parent_folder_name = extract_folder_name_from_files(files)
+    parent_folder_name = resolve_parent_folder_name(files, folder_name)
 
     logger.info(f"Saving performance report files {parent_folder_name}")
 
@@ -1350,7 +1344,7 @@ def create_performance_files():
         paths = save_uploaded_files(
             files,
             target_directory,
-            folder_name,
+            parent_folder_name,
         )
     except DataFormatError:
         return response_unprocessable_entity()

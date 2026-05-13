@@ -18,7 +18,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from ttnn_visualizer.file_uploads import construct_dest_path, extract_npe_name
+from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.file_uploads import (
+    construct_dest_path,
+    extract_npe_name,
+    resolve_parent_folder_name,
+    validate_files,
+)
 
 
 def _faux_file(filename):
@@ -96,6 +102,82 @@ def test_construct_dest_path_folder_branch_unchanged_for_subpaths(app, tmp_path)
         assert dest.parts[-2:] == ("subdir", "file.csv")
 
 
+def test_construct_dest_path_folder_branch_dedupes_leading_segment(app, tmp_path):
+    """Chromium sends `<report>/db.sqlite`; we must not double-prefix the folder.
+
+    Chromium-based browsers send each file's `webkitRelativePath` as the
+    multipart filename, so the report folder name is already the first segment
+    of `file.filename`. Without dedup, a `folder_name="my-report"` upload of
+    `my-report/db.sqlite` would land at `my-report/my-report/db.sqlite`,
+    creating a stray directory beside the real report.
+    """
+    with app.app_context():
+        dest = construct_dest_path(
+            _faux_file("my-report/db.sqlite"),
+            tmp_path,
+            folder_name="my-report",
+        )
+        # The basename is the final part. The folder segment may carry a
+        # `<timestamp>_` prefix in SERVER_MODE so we match the suffix only.
+        assert dest.name == "db.sqlite"
+        assert dest.parent.name.endswith("my-report")
+        assert dest.parent.parent == tmp_path
+        # And critically: no double-prefix anywhere in the resolved path.
+        assert "my-report/my-report" not in str(dest)
+
+
+def test_construct_dest_path_folder_branch_safari_basename_only(app, tmp_path):
+    """Safari sends just the basename plus a separate `folderName` form field.
+
+    The dedup logic added for Chromium must not regress the Safari case where
+    `file.filename` is already a bare basename.
+    """
+    with app.app_context():
+        dest = construct_dest_path(
+            _faux_file("db.sqlite"),
+            tmp_path,
+            folder_name="my-report",
+        )
+        assert dest.name == "db.sqlite"
+        assert dest.parent.name.endswith("my-report")
+        assert dest.parent.parent == tmp_path
+
+
+def test_construct_dest_path_folder_branch_traversal_posture_pinned(app, tmp_path):
+    """Pin the documented posture: dedup may shorten an escape but never widens it.
+
+    The folder-upload branch is intentionally permissive about sub-paths — it
+    has to be, because Chromium and Safari alike legitimately carry
+    `subdir/file.csv` patterns. A full path-traversal sweep across this
+    branch is the explicit follow-up tracked at `PR_REVIEW_TRIAGE_2.md §1.J`.
+
+    Until that lands, the contract this test pins is:
+
+    * A `..` segment after the leading folder name CAN escape the per-report
+      directory (this is the known gap), but
+    * It MUST NOT escape `target_directory` itself (any future change that
+      breaks this is a real regression).
+
+    A future hardening commit should flip the first assertion (escape becomes
+    blocked) without touching the second.
+    """
+    with app.app_context():
+        dest = construct_dest_path(
+            _faux_file("my-report/../escape"),
+            tmp_path,
+            folder_name="my-report",
+        )
+        resolved = dest.resolve()
+        target = tmp_path.resolve()
+        # Hard invariant: still inside `target_directory`.
+        assert target in resolved.parents or resolved == target
+        # Documented gap: lands beside the report folder, not under it.
+        # When this stops being true (i.e. the file lands under
+        # `<target>/my-report/`), the §1.J follow-up has shipped and this
+        # test should be tightened to assert the new, stricter posture.
+        assert resolved.parent == target
+
+
 # ---- extract_npe_name: feeds the DB; rebuilt into a read path later --------
 
 
@@ -121,6 +203,96 @@ def test_extract_npe_name_preserves_legitimate_basename():
 
 def test_extract_npe_name_handles_empty_input():
     assert extract_npe_name([]) is None
+
+
+# ---- resolve_parent_folder_name: keeps both upload handlers aligned --------
+
+
+def test_resolve_parent_folder_name_prefers_explicit_safari_form_field():
+    """An explicit `folderName` form field always wins over filename inference.
+
+    Safari sends the destination folder name as a separate form field because
+    its multipart filename is just the basename. The helper must take the
+    explicit value verbatim rather than fall back to the (basename-only)
+    filename, which would otherwise produce nonsense like `db.sqlite`.
+    """
+    result = resolve_parent_folder_name(
+        [_faux_file("db.sqlite")], folder_name="my-report"
+    )
+    assert result == "my-report"
+
+
+def test_resolve_parent_folder_name_falls_back_to_filename_for_chromium():
+    """Chromium sends `folderName=None`; infer from the relative filename."""
+    result = resolve_parent_folder_name(
+        [_faux_file("my-report/db.sqlite")], folder_name=None
+    )
+    assert result == "my-report"
+
+
+def test_resolve_parent_folder_name_treats_empty_form_field_as_missing():
+    """An empty `folderName` (vs missing) must still trigger the fallback.
+
+    `request.form.get("folderName")` returns ``None`` when the field is
+    missing, but a client that sends an empty string would otherwise short-
+    circuit the inference and silently land files at the target root.
+    """
+    result = resolve_parent_folder_name(
+        [_faux_file("my-report/db.sqlite")], folder_name=""
+    )
+    assert result == "my-report"
+
+
+def test_resolve_parent_folder_name_handles_empty_files():
+    """No files and no explicit folder → nothing to resolve."""
+    assert resolve_parent_folder_name([], folder_name=None) is None
+
+
+# ---- validate_files: cross-file leading-segment consistency ---------------
+
+
+def test_validate_files_rejects_inferred_uploads_spanning_multiple_folders():
+    """Mixed-folder Chromium upload must fail validation, not nest silently.
+
+    When the destination folder is inferred from the files themselves,
+    `resolve_parent_folder_name` reads `files[0]` only and the dedup in
+    `construct_dest_path` keys on that single name. Without this guard, an
+    upload like `reportA/db.sqlite` + `reportB/config.json` would silently
+    land as `reportA/db.sqlite` + `reportA/reportB/config.json`. Reject it
+    instead so the client can re-pick a single folder.
+    """
+    files = [
+        _faux_file("reportA/db.sqlite"),
+        _faux_file("reportB/config.json"),
+    ]
+    assert validate_files(files, {"db.sqlite"}, folder_name=None) is False
+
+
+def test_validate_files_accepts_inferred_upload_with_consistent_folder():
+    """Single-folder Chromium upload (the normal case) must still validate."""
+    files = [
+        _faux_file("my-report/db.sqlite"),
+        _faux_file("my-report/config.json"),
+        _faux_file("my-report/cluster_descriptor.yaml"),
+    ]
+    assert validate_files(files, {"db.sqlite"}, folder_name=None) is True
+
+
+def test_validate_files_skips_consistency_check_when_folder_name_is_explicit():
+    """Safari sends bare basenames + an explicit `folderName`; nothing to compare.
+
+    The new cross-file check only fires when the destination folder is being
+    inferred from the relative paths. With an explicit `folderName` the
+    inference path is bypassed, so this guard must not interfere even with
+    files carrying disagreeing sub-paths (those are sub-directories *inside*
+    the report, not separate reports).
+    """
+    files = [
+        _faux_file("db.sqlite"),
+        _faux_file("subdir-a/file.csv"),
+        _faux_file("subdir-b/other.csv"),
+    ]
+    assert validate_files(files, {"db.sqlite"}, folder_name="my-report") is True
 
 
 # ---- End-to-end regression: the MLIR upload endpoint ----------------------
@@ -258,3 +430,167 @@ def test_mlir_upload_malware_scanner_positive_blocks_save(app, client, make_repo
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert not any(p.name.endswith("bad.json") for p in mlir_root.glob("*.json"))
+
+
+# ---- End-to-end regression: profiler/performance uploads keep folder layout ---
+
+
+def test_profiler_upload_chromium_style_lands_under_report_folder(
+    app, client, make_report
+):
+    """Chromium sends `<report>/db.sqlite`; uploads must land under that folder.
+
+    Regression for the bug where `create_profiler_files` passed the raw
+    `folderName` form field (None for non-Safari browsers) to
+    `save_uploaded_files` instead of the resolved report name, causing every
+    file to be written directly into `profiler-reports/` and clobbering / mixing
+    with sibling reports.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    profiler_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["PROFILER_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        f"/api/local/upload/profiler?instanceId={instance_id}",
+        data={
+            "files": [
+                (BytesIO(b"sqlite-bytes"), "unique_name2/db.sqlite"),
+                (BytesIO(b"{}"), "unique_name2/config.json"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    body = response.get_json()
+    assert body["path"] == "unique_name2"
+
+    report_dir = profiler_root / "unique_name2"
+    assert (report_dir / "db.sqlite").is_file()
+    assert (report_dir / "config.json").is_file()
+    # Critical: nothing was written at the root of `profiler-reports/`.
+    assert not (profiler_root / "db.sqlite").exists()
+    assert not (profiler_root / "config.json").exists()
+    # Critical: no double-prefix directory like `unique_name2/unique_name2/`.
+    assert not (report_dir / "unique_name2").exists()
+
+
+def test_profiler_upload_safari_style_lands_under_report_folder(
+    app, client, make_report
+):
+    """Safari sends bare basenames plus a separate `folderName` form field.
+
+    Both Safari and Chromium uploads must land at the same destination layout.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    profiler_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["PROFILER_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        f"/api/local/upload/profiler?instanceId={instance_id}",
+        data={
+            "files": [
+                (BytesIO(b"sqlite-bytes"), "db.sqlite"),
+                (BytesIO(b"{}"), "config.json"),
+            ],
+            "folderName": "safari_report",
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    body = response.get_json()
+    assert body["path"] == "safari_report"
+
+    report_dir = profiler_root / "safari_report"
+    assert (report_dir / "db.sqlite").is_file()
+    assert (report_dir / "config.json").is_file()
+    assert not (profiler_root / "db.sqlite").exists()
+
+
+def test_profiler_upload_rejects_files_from_multiple_folders(app, client, make_report):
+    """Mixed-folder Chromium uploads must be rejected, not silently nested.
+
+    Pre-fix, an upload combining files from two different report folders
+    inferred the destination from `files[0]` and the disagreeing file ended
+    up nested as `<inferred>/<other-folder>/<file>`. The handler now returns
+    the standard `FAILED` status and writes nothing.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    profiler_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["PROFILER_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        f"/api/local/upload/profiler?instanceId={instance_id}",
+        data={
+            "files": [
+                (BytesIO(b"sqlite-bytes"), "reportA/db.sqlite"),
+                (BytesIO(b"{}"), "reportB/config.json"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    body = response.get_json()
+    # The handler returns a `StatusMessage` with the int-valued
+    # `ConnectionTestStates` enum; FAILED is `2` after JSON serialisation.
+    assert body["status"] == ConnectionTestStates.FAILED.value
+
+    # Nothing should have been written under either folder.
+    assert not (profiler_root / "reportA").exists()
+    assert not (profiler_root / "reportB").exists()
+    # And especially: no surprise nesting like `reportA/reportB/config.json`.
+    if profiler_root.exists():
+        for path in profiler_root.rglob("*"):
+            if path.is_file():
+                raise AssertionError(
+                    f"Mixed-folder upload should have been rejected, found: {path}"
+                )
+
+
+def test_performance_upload_chromium_style_lands_under_report_folder(
+    app, client, make_report
+):
+    """Same Chromium regression for `/api/local/upload/performance`."""
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    perf_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"])
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        f"/api/local/upload/performance?instanceId={instance_id}",
+        data={
+            "files": [
+                (BytesIO(b"csv,bytes\n"), "perf_run/profile_log_device.csv"),
+                (BytesIO(b"tracy"), "perf_run/tracy_profile_log_host.tracy"),
+                (BytesIO(b"op,perf\n"), "perf_run/ops_perf_results_2026.csv"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+
+    report_dir = perf_root / "perf_run"
+    assert (report_dir / "profile_log_device.csv").is_file()
+    assert (report_dir / "tracy_profile_log_host.tracy").is_file()
+    assert any(p.name.startswith("ops_perf_results") for p in report_dir.iterdir())
+    assert not (perf_root / "profile_log_device.csv").exists()
+    assert not (report_dir / "perf_run").exists()
