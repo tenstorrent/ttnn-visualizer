@@ -141,6 +141,41 @@ def test_construct_dest_path_folder_branch_safari_basename_only(app, tmp_path):
         assert dest.parent.parent == tmp_path
 
 
+def test_construct_dest_path_folder_branch_traversal_posture_pinned(app, tmp_path):
+    """Pin the documented posture: dedup may shorten an escape but never widens it.
+
+    The folder-upload branch is intentionally permissive about sub-paths — it
+    has to be, because Chromium and Safari alike legitimately carry
+    `subdir/file.csv` patterns. A full path-traversal sweep across this
+    branch is the explicit follow-up tracked at `PR_REVIEW_TRIAGE_2.md §1.J`.
+
+    Until that lands, the contract this test pins is:
+
+    * A `..` segment after the leading folder name CAN escape the per-report
+      directory (this is the known gap), but
+    * It MUST NOT escape `target_directory` itself (any future change that
+      breaks this is a real regression).
+
+    A future hardening commit should flip the first assertion (escape becomes
+    blocked) without touching the second.
+    """
+    with app.app_context():
+        dest = construct_dest_path(
+            _faux_file("my-report/../escape"),
+            tmp_path,
+            folder_name="my-report",
+        )
+        resolved = dest.resolve()
+        target = tmp_path.resolve()
+        # Hard invariant: still inside `target_directory`.
+        assert target in resolved.parents or resolved == target
+        # Documented gap: lands beside the report folder, not under it.
+        # When this stops being true (i.e. the file lands under
+        # `<target>/my-report/`), the §1.J follow-up has shipped and this
+        # test should be tightened to assert the new, stricter posture.
+        assert resolved.parent == target
+
+
 # ---- extract_npe_name: feeds the DB; rebuilt into a read path later --------
 
 

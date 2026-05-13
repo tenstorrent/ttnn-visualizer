@@ -46,8 +46,14 @@ def validate_files(files, required_files, pattern=None, folder_name=None):
     return True
 
 
-def extract_folder_name_from_files(files):
-    """Extract the report name from the first file."""
+def _extract_folder_name_from_files(files):
+    """Extract the report name from the first file's relative path.
+
+    Module-private: the only call site is `resolve_parent_folder_name`, which
+    is the public entry point for views to use. Folder-style upload handlers
+    should always go through `resolve_parent_folder_name` so that the
+    explicit-vs-inferred precedence stays consistent across endpoints.
+    """
     if not files:
         return None
     unsplit_name = str(files[0].filename)
@@ -73,7 +79,7 @@ def resolve_parent_folder_name(files, folder_name):
     """
     if folder_name:
         return folder_name
-    return extract_folder_name_from_files(files)
+    return _extract_folder_name_from_files(files)
 
 
 def extract_npe_name(files):
