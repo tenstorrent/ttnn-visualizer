@@ -25,8 +25,9 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
-import { updateInstance } from '../../hooks/useAPI';
+import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
+import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
@@ -37,6 +38,20 @@ const RemoteSyncConfigurator: FC = () => {
     const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
+
+    const { data: reportMetadata, error: reportMetadataError } = useReportMetadata();
+    useEffect(() => {
+        if (reportMetadataError) {
+            return;
+        }
+        if (reportMetadata) {
+            const dbValidationResult = evaluateDbVersion(reportMetadata.version);
+            if (dbValidationResult.statusCode !== DBVersionValidation.OK) {
+                // @ts-expect-error its only empty when status is OK, and we dont do a toast here
+                createToastNotification('Incompatible report version', dbValidationResult.message, ToastType.WARNING);
+            }
+        }
+    }, [reportMetadata, reportMetadataError]);
 
     const [isFetching, setIsFetching] = useState(false);
     const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(
@@ -351,10 +366,10 @@ const RemoteSyncConfigurator: FC = () => {
                             if (remote.persistentState.selectedConnection) {
                                 const [reportFolders, performanceFolders] = await Promise.allSettled([
                                     remote.persistentState.selectedConnection.profilerPath
-                                        ? remote.listReportFolders(remote.persistentState.selectedConnection)
+                                        ? remote.listProfilerReports(remote.persistentState.selectedConnection)
                                         : Promise.resolve([]),
                                     remote.persistentState.selectedConnection.performancePath
-                                        ? remote.listPerformanceFolders(remote.persistentState.selectedConnection)
+                                        ? remote.listPerformanceReports(remote.persistentState.selectedConnection)
                                         : Promise.resolve([]),
                                 ]);
 

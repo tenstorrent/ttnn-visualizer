@@ -4,11 +4,21 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 const findMissingDepLicenses = async (missingDeps, depLicenses) => {
-    const result = missingDeps.map((name) => ({
-        name,
-        licenseType: depLicenses[name].license || '',
-        licenseFileGuess: getLicenseURL(name, depLicenses),
-    }));
+    const result = missingDeps.map((name) => {
+        const entry = depLicenses?.[name];
+
+        if (!entry) {
+            console.warn(
+                `No license metadata found for "${name}". This usually means the package is declared in package.json but missing from pnpm-lock.yaml; run \`pnpm install\` and try again.`,
+            );
+        }
+
+        return {
+            name,
+            licenseType: entry?.license || '',
+            licenseFileGuess: getLicenseURL(name, depLicenses),
+        };
+    });
 
     for (const obj of result) {
         if (obj.licenseFileGuess) {
@@ -53,15 +63,21 @@ const findMissingDepLicenses = async (missingDeps, depLicenses) => {
 };
 
 const getLicenseURL = (name, depLicenses) => {
-    const isGithub = depLicenses[name].homepage?.includes('github.com');
+    const homepage = depLicenses?.[name]?.homepage;
 
-    if (isGithub) {
-        const url = new URL(depLicenses[name].homepage);
-
-        return `${url.origin}${url.pathname.replace(/\/$/, '')}/blob/main/LICENSE`;
+    if (!homepage?.includes('github.com')) {
+        return '';
     }
 
-    return '';
+    try {
+        const url = new URL(homepage);
+
+        return `${url.origin}${url.pathname.replace(/\/$/, '')}/blob/main/LICENSE`;
+    } catch (err) {
+        console.error(`Invalid homepage URL for "${name}": ${homepage}`, err);
+
+        return '';
+    }
 };
 
 export default findMissingDepLicenses;

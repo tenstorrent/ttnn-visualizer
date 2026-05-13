@@ -13,6 +13,12 @@ $monospace-font: monospace;
 $bp-large: 1300px;
 $bp-medium: 1100px;
 
+// Nav-specific breakpoints — kick in earlier than the page-level ones because
+// the navbar has many siblings that need to start shrinking before the rest
+// of the layout reflows.
+$bp-nav-large: 1370px;
+$bp-nav-medium: 1180px;
+
 // Colours
 // TODO: Temporary placing of these here - reconcile with usage in _blueprintjs.scss
 $dark-button-background-base: $tt-grey-2;

@@ -104,6 +104,17 @@ logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__)
 
 
+def _file_path_from_stack_source_request():
+    """
+    Parse ``?filePath=`` for stack-trace availability/content GET requests.
+    Returns ``(path, None)`` or ``(None, error_response)``.
+    """
+    file_path = request.args.get("filePath")
+    if not file_path or not isinstance(file_path, str):
+        return None, response_bad_request("Missing or invalid filePath")
+    return file_path, None
+
+
 def _optional_rank_query_param() -> Optional[int]:
     """
     Parse optional ``?rank=`` for multi-host report DBs.
@@ -143,6 +154,65 @@ def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
     return response_unprocessable_entity(_NONZERO_RANK_UNSUPPORTED_MSG)
 
 
+def _stack_source_availability_response(is_available: bool) -> Response:
+    # Match stack_source_response: same filePath can resolve differently after
+    # re-syncing remote reports, so don't let caches serve a stale answer.
+    resp = jsonify({"available": is_available})
+    resp.headers["Cache-Control"] = "no-store"
+
+    return resp
+
+
+def _remote_stack_source_path_availability(instance: Instance, file_path: str):
+    """Whether stack source ``file_path`` is readable for this instance (local or SSH)."""
+    remote_connection = instance.remote_connection
+    is_available = False
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            is_available = check_stack_source_remote(ssh_client, file_path)
+        except RemoteConnectionException:
+            return _stack_source_availability_response(False)
+    else:
+        if not current_app.config.get("SERVER_MODE"):
+            is_available = check_stack_source_local(file_path)
+
+    return _stack_source_availability_response(is_available)
+
+
+def _remote_stack_source_read(instance: Instance, file_path: str):
+    """Return plain-text stack source (or error response)."""
+    remote_connection = instance.remote_connection
+
+    if remote_connection:
+        try:
+            ssh_client = SSHClient(remote_connection)
+            content, resolved, remapped = read_stack_source_remote(
+                ssh_client, file_path
+            )
+            return stack_source_response(content, resolved, remapped)
+        except RemoteConnectionException as e:
+            return error_response(e.http_status, e.message)
+        except RemoteFileReadException as e:
+            return error_response(e.http_status, str(e), e.detail)
+
+    if current_app.config.get("SERVER_MODE"):
+        return response_forbidden(
+            "Local stack source reads are not available in server mode.",
+        )
+
+    try:
+        content, resolved, remapped = read_stack_source_local(file_path)
+        return stack_source_response(content, resolved, remapped)
+    except ValueError as e:
+        return response_bad_request(str(e))
+    except FileNotFoundError as e:
+        return response_not_found(str(e) or "File not found.")
+    except PermissionError as e:
+        return response_forbidden(str(e))
+
+
 @api.before_request
 def _trim_session_report_lists():
     """Keep session cookie under size limits by capping report lists (FIFO)."""
@@ -155,7 +225,7 @@ def _trim_session_report_lists():
             session[key] = lst[-max_reports:]
 
 
-@api.route("/system_capabilities", methods=["GET"])
+@api.route("/system-capabilities", methods=["GET"])
 def get_system_capabilities():
     """Return host/backend capabilities so the frontend can adapt (e.g. disable remote sync in hosted mode)."""
     capabilities = {
@@ -440,7 +510,7 @@ def errors_list(instance: Instance):
         )
 
 
-@api.route("/report_metadata", methods=["GET"])
+@api.route("/report-metadata", methods=["GET"])
 @with_instance
 @timer
 def report_metadata(instance: Instance):
@@ -457,7 +527,7 @@ def report_metadata(instance: Instance):
         )
 
 
-@api.route("/config")
+@api.route("/config", methods=["GET"])
 @with_instance
 @timer
 def get_config(instance: Instance):
@@ -793,6 +863,8 @@ def get_profiler_data_list(instance: Instance):
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
+        if not dir_path.is_dir():
+            continue
         files = list(dir_path.glob("**/*"))
         report_name = None
         if pick_profiler_config_paths(dir_path):
@@ -1351,8 +1423,59 @@ def create_npe_files():
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
 
-@api.route("/remote/profiler", methods=["POST"])
-def get_remote_folders_profiler():
+@api.route("/local/upload/mlir", methods=["POST"])
+def create_mlir_file():
+    # Disable MLIR uploads in server mode for security reasons - it's a local-only feature.
+    if current_app.config["SERVER_MODE"]:
+        return response_forbidden(
+            "MLIR file upload is not available in the hosted application.",
+        )
+
+    files = request.files.getlist("files")
+
+    # Empty list means the caller didn't attach a `files` part (or attached
+    # an empty one). Without this guard, the for-loop is a no-op and
+    # `paths[0]` later raises `IndexError`, surfacing as a 500.
+    if not files:
+        return response_bad_request("No files provided")
+
+    data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+
+    for file in files:
+        # `FileStorage.filename` is typed `str | None`; calling `.endswith`
+        # on `None` raises `AttributeError` → 500. Treat missing/empty
+        # filenames the same as the wrong-extension case so the user gets
+        # the friendly StatusMessage instead.
+        if not file.filename or not file.filename.endswith(".json"):
+            return StatusMessage(
+                status=ConnectionTestStates.FAILED,
+                message="MLIR requires a valid .json file",
+            ).model_dump()
+
+    mlir_name = extract_npe_name(files)
+    target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
+    target_directory.mkdir(parents=True, exist_ok=True)
+
+    try:
+        paths = save_uploaded_files(files, target_directory)
+    except DataFormatError:
+        return response_unprocessable_entity()
+
+    instance_id = request.args.get("instanceId")
+    mlir_path = str(paths[0])
+    update_instance(
+        instance_id=instance_id,
+        mlir_name=mlir_name,
+        mlir_location=ReportLocation.LOCAL.value,
+        clear_remote=True,
+        mlir_path=mlir_path,
+    )
+
+    return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
+
+
+@api.route("/remote/profiler-reports", methods=["POST"])
+def list_remote_reports_profiler():
     connection_data = request.get_json()
 
     if not connection_data:
@@ -1389,8 +1512,8 @@ def get_remote_folders_profiler():
         return error_response(e.http_status, e.message)
 
 
-@api.route("/remote/performance", methods=["POST"])
-def get_remote_folders_performance():
+@api.route("/remote/performance-reports", methods=["POST"])
+def list_remote_reports_performance():
     connection_data = request.get_json()
 
     if not connection_data:
@@ -1542,63 +1665,22 @@ def test_remote_folder():
     )
 
 
-@api.route("/remote/read", methods=["POST"])
+@api.route("/remote/stack-trace/test", methods=["GET"])
 @with_instance
-def read_remote_folder(instance: Instance):
-    body = request.get_json(silent=True) or {}
-    file_path = body.get("filePath", None)
-    # TODO: @smountenay-tt: Personally instead of a check_path_only query var, I would have made another API for checking if a remote path exists, like /api/remote/check_path?path=/path-to-check instead of having it in /remote/read.
-    check_path_only = body.get("check_path_only", False)
+def remote_stack_trace_test(instance: Instance):
+    file_path, err = _file_path_from_stack_source_request()
+    if err is not None:
+        return err
+    return _remote_stack_source_path_availability(instance, file_path)
 
-    if not file_path or not isinstance(file_path, str):
-        return response_bad_request("Missing or invalid filePath")
 
-    remote_connection = instance.remote_connection
-
-    if check_path_only:
-        is_available = False
-
-        if remote_connection:
-            try:
-                ssh_client = SSHClient(remote_connection)
-                is_available = check_stack_source_remote(ssh_client, file_path)
-            except RemoteConnectionException:
-                return jsonify({"available": False})
-        else:
-            if not current_app.config.get("SERVER_MODE"):
-                is_available = check_stack_source_local(file_path)
-
-        return jsonify({"available": is_available})
-
-    if remote_connection:
-        try:
-            ssh_client = SSHClient(remote_connection)
-            content, resolved, remapped = read_stack_source_remote(
-                ssh_client, file_path
-            )
-            return stack_source_response(content, resolved, remapped)
-        except RemoteConnectionException as e:
-            return error_response(e.http_status, e.message)
-        except RemoteFileReadException as e:
-            error_payload = {"error": str(e)}
-            if e.detail:
-                error_payload["detail"] = e.detail
-            return jsonify(error_payload), e.http_status
-
-    if current_app.config.get("SERVER_MODE"):
-        return response_forbidden(
-            "Local stack source reads are not available in server mode.",
-        )
-
-    try:
-        content, resolved, remapped = read_stack_source_local(file_path)
-        return stack_source_response(content, resolved, remapped)
-    except ValueError as e:
-        return response_bad_request(str(e))
-    except FileNotFoundError as e:
-        return response_not_found(str(e) or "File not found.")
-    except PermissionError as e:
-        return response_forbidden(str(e))
+@api.route("/remote/stack-trace/read", methods=["GET"])
+@with_instance
+def remote_stack_trace_read(instance: Instance):
+    file_path, err = _file_path_from_stack_source_request()
+    if err is not None:
+        return err
+    return _remote_stack_source_read(instance, file_path)
 
 
 @api.route("/remote/sync", methods=["POST"])
@@ -1701,7 +1783,7 @@ def use_remote_folder():
     return Response(status=HTTPStatus.OK)
 
 
-@api.route("/up", methods=["GET", "POST"])
+@api.route("/up", methods=["GET", "HEAD"])
 def health_check():
     return Response(status=HTTPStatus.OK)
 
@@ -1728,22 +1810,35 @@ def update_current_instance(instance: Instance):
         # Use current instance unless a different one is specified
         instance_id = update_data.get("instance_id") or instance.instance_id
 
-        update_instance(
-            instance_id=instance_id,
-            profiler_name=update_data["active_report"].get("profiler_name"),
-            profiler_location=update_data["active_report"].get("profiler_location"),
-            performance_name=update_data["active_report"].get("performance_name"),
-            performance_location=update_data["active_report"].get(
-                "performance_location"
-            ),
-            npe_name=update_data["active_report"].get("npe_name"),
+        active_report = update_data["active_report"]
+        update_kwargs = {
+            "instance_id": instance_id,
+            "profiler_name": active_report.get("profiler_name"),
+            "profiler_location": active_report.get("profiler_location"),
+            "performance_name": active_report.get("performance_name"),
+            "performance_location": active_report.get("performance_location"),
+            "npe_name": active_report.get("npe_name"),
             # NPE is always local right now
-            npe_location=ReportLocation.LOCAL.value,
+            "npe_location": ReportLocation.LOCAL.value,
+            "mlir_name": active_report.get("mlir_name"),
+            # MLIR is always local right now
+            "mlir_location": ReportLocation.LOCAL.value,
             # Doesn't handle remote at the moment
-            remote_connection=None,
-            remote_profiler_folder=None,
-            remote_performance_folder=None,
-        )
+            "remote_connection": None,
+            "remote_profiler_folder": None,
+            "remote_performance_folder": None,
+        }
+
+        # Pass explicit `*_path` values through only when the payload supplies
+        # them, so `update_instance`'s sentinel default ("recompute from name")
+        # stays in effect for callers that omit them. This lets API consumers
+        # pin an exact path while preserving the current frontend behaviour
+        # (which sends names but not paths).
+        for path_key in ("profiler_path", "performance_path", "npe_path", "mlir_path"):
+            if path_key in active_report:
+                update_kwargs[path_key] = active_report[path_key]
+
+        update_instance(**update_kwargs)
 
         return Response(status=HTTPStatus.OK)
     except Exception as e:
@@ -1795,6 +1890,29 @@ def get_npe_data(instance: Instance):
         return response_unprocessable_entity()
 
     return Response(npe_data, mimetype="application/json")
+
+
+@api.route("/mlir", methods=["GET"])
+@with_instance
+@timer
+def get_mlir_json(instance: Instance):
+    if not instance.mlir_path:
+        logger.error("MLIR path is not set in the instance.")
+        return response_not_found()
+
+    mlir_path = Path(instance.mlir_path)
+    if not mlir_path.exists():
+        logger.error(f"MLIR file does not exist: {mlir_path}")
+        return response_not_found()
+
+    try:
+        with open(mlir_path, "r") as file:
+            mlir_data = file.read()
+    except Exception as e:
+        logger.error(f"Error reading MLIR file: {e}")
+        return response_unprocessable_entity()
+
+    return Response(mlir_data, mimetype="application/json")
 
 
 @api.route("/notify", methods=["POST"])

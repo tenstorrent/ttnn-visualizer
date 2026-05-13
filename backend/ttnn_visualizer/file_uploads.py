@@ -58,7 +58,12 @@ def extract_npe_name(files):
     if not files:
         return None
 
-    return re.sub(r"\.(json|npeviz\.zst)$", "", files[0].filename)
+    # Strip directory components before stripping the extension so a crafted
+    # multipart filename like `"../etc/passwd.json"` becomes `"passwd"`, not
+    # `"../etc/passwd"`. The resulting name is written to the DB and later
+    # rebuilt into a read path by `get_mlir_path` / `get_npe_path`; without
+    # `.name` here, write-side hardening alone wouldn't fix the read path.
+    return re.sub(r"\.(json|npeviz\.zst)$", "", Path(files[0].filename).name)
 
 
 def save_uploaded_files(
@@ -158,10 +163,19 @@ def construct_dest_path(file, target_directory, folder_name):
     prefix = f"{int(time.time())}_" if current_app.config["SERVER_MODE"] else ""
 
     if folder_name:
+        # Folder uploads legitimately carry sub-paths in `file.filename`
+        # (e.g. `subdir/file.csv`) and `validate_files` / `os.utime` accounting
+        # depend on that. Path-traversal hardening for the folder branch is a
+        # separate, broader follow-up — see PR_REVIEW_TRIAGE_2.md §1.J.
         prefixed_folder_name = f"{prefix}{folder_name}"
         dest_path = Path(target_directory) / prefixed_folder_name / str(file.filename)
     else:
-        prefixed_filename = f"{prefix}{file.filename}"
+        # Single-file branch (NPE, MLIR): collapse the client-supplied
+        # filename to its basename so `"../etc/passwd.json"` / `"/etc/x.json"`
+        # can't escape `target_directory`. `Path(...).name` returns just the
+        # last path component, mirroring what `werkzeug.utils.secure_filename`
+        # does *without* mangling Unicode / spaces in legitimate filenames.
+        prefixed_filename = f"{prefix}{Path(file.filename).name}"
         dest_path = Path(target_directory) / prefixed_filename
 
     return dest_path

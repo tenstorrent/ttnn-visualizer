@@ -12,7 +12,12 @@ from flask import request
 from ttnn_visualizer.exceptions import InvalidProfilerPath, InvalidReportPath
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable, RemoteConnection, ReportLocation
-from ttnn_visualizer.utils import get_npe_path, get_performance_path, get_profiler_path
+from ttnn_visualizer.utils import (
+    get_mlir_path,
+    get_npe_path,
+    get_performance_path,
+    get_profiler_path,
+)
 
 logger = getLogger(__name__)
 
@@ -26,6 +31,8 @@ KEY_PERFORMANCE_NAME = "performance_name"
 KEY_PERFORMANCE_LOCATION = "performance_location"
 KEY_NPE_NAME = "npe_name"
 KEY_NPE_LOCATION = "npe_location"
+KEY_MLIR_NAME = "mlir_name"
+KEY_MLIR_LOCATION = "mlir_location"
 
 _sentinel = object()
 
@@ -86,6 +93,8 @@ def _gather_active_reports(
     performance_location,
     npe_name: str | None,
     npe_location,
+    mlir_name: str | None,
+    mlir_location,
 ) -> dict:
     report = {}
     if profiler_name and profiler_location is not None:
@@ -97,6 +106,9 @@ def _gather_active_reports(
     if npe_name and npe_location is not None:
         report[KEY_NPE_NAME] = npe_name
         report[KEY_NPE_LOCATION] = npe_location
+    if mlir_name and mlir_location is not None:
+        report[KEY_MLIR_NAME] = mlir_name
+        report[KEY_MLIR_LOCATION] = mlir_location
     return report
 
 
@@ -108,6 +120,8 @@ def update_existing_instance(
     performance_location,
     npe_name,
     npe_location,
+    mlir_name,
+    mlir_location,
     remote_connection,
     remote_profiler_folder,
     remote_performance_folder,
@@ -115,6 +129,7 @@ def update_existing_instance(
     profiler_path=_sentinel,
     performance_path=_sentinel,
     npe_path=_sentinel,
+    mlir_path=_sentinel,
 ):
     active_report = instance_data.active_report or {}
 
@@ -137,6 +152,10 @@ def update_existing_instance(
     # NPE
     _update_active_report(
         active_report, npe_name, npe_location, KEY_NPE_NAME, KEY_NPE_LOCATION
+    )
+    # MLIR
+    _update_active_report(
+        active_report, mlir_name, mlir_location, KEY_MLIR_NAME, KEY_MLIR_LOCATION
     )
 
     instance_data.active_report = active_report
@@ -187,6 +206,18 @@ def update_existing_instance(
             remote_connection,
         )
 
+    if mlir_path is not _sentinel:
+        instance_data.mlir_path = mlir_path
+    else:
+        instance_data.mlir_path = _resolve_report_path(
+            mlir_name,
+            get_mlir_path,
+            KEY_MLIR_NAME,
+            KEY_MLIR_LOCATION,
+            active_report,
+            remote_connection,
+        )
+
 
 def clear_remote_data(instance_data):
     instance_data.remote_connection = None
@@ -216,6 +247,8 @@ def create_new_instance(
     performance_location,
     npe_name,
     npe_location,
+    mlir_name,
+    mlir_location,
     remote_connection,
     remote_profiler_folder,
     remote_performance_folder,
@@ -223,6 +256,7 @@ def create_new_instance(
     profiler_path=_sentinel,
     performance_path=_sentinel,
     npe_path=_sentinel,
+    mlir_path=_sentinel,
 ):
     active_report = _gather_active_reports(
         profiler_name,
@@ -231,6 +265,8 @@ def create_new_instance(
         performance_location,
         npe_name,
         npe_location,
+        mlir_name,
+        mlir_location,
     )
 
     if clear_remote:
@@ -292,6 +328,18 @@ def create_new_instance(
             remote_connection,
         )
 
+    if mlir_path is not _sentinel:
+        instance_data.mlir_path = mlir_path
+    else:
+        instance_data.mlir_path = _resolve_report_path(
+            mlir_name,
+            get_mlir_path,
+            KEY_MLIR_NAME,
+            KEY_MLIR_LOCATION,
+            active_report,
+            remote_connection,
+        )
+
     db.session.add(instance_data)
     return instance_data
 
@@ -304,6 +352,8 @@ def update_instance(
     performance_location=None,
     npe_name=None,
     npe_location=None,
+    mlir_name=None,
+    mlir_location=None,
     remote_connection=None,
     remote_profiler_folder=None,
     remote_performance_folder=None,
@@ -311,6 +361,7 @@ def update_instance(
     profiler_path=_sentinel,
     performance_path=_sentinel,
     npe_path=_sentinel,
+    mlir_path=_sentinel,
 ):
     try:
         instance_data = get_or_create_instance(instance_id)
@@ -324,6 +375,8 @@ def update_instance(
                 performance_location,
                 npe_name,
                 npe_location,
+                mlir_name,
+                mlir_location,
                 remote_connection,
                 remote_profiler_folder,
                 remote_performance_folder,
@@ -331,6 +384,7 @@ def update_instance(
                 profiler_path,
                 performance_path,
                 npe_path,
+                mlir_path,
             )
         else:
             instance_data = create_new_instance(
@@ -341,6 +395,8 @@ def update_instance(
                 performance_location,
                 npe_name,
                 npe_location,
+                mlir_name,
+                mlir_location,
                 remote_connection,
                 remote_profiler_folder,
                 remote_performance_folder,
@@ -348,6 +404,7 @@ def update_instance(
                 profiler_path,
                 performance_path,
                 npe_path,
+                mlir_path,
             )
 
         commit_and_log_session(instance_data, instance_id)
@@ -366,6 +423,8 @@ def get_or_create_instance(
     performance_location=None,
     npe_name=None,
     npe_location=None,
+    mlir_name=None,
+    mlir_location=None,
     remote_connection=None,
     remote_profiler_folder=None,
 ):
@@ -403,6 +462,8 @@ def get_or_create_instance(
             or performance_location is not None
             or npe_name
             or npe_location is not None
+            or mlir_name
+            or mlir_location is not None
             or remote_connection
             or remote_profiler_folder
         ):
@@ -414,6 +475,8 @@ def get_or_create_instance(
                 performance_location=performance_location,
                 npe_name=npe_name,
                 npe_location=npe_location,
+                mlir_name=mlir_name,
+                mlir_location=mlir_location,
                 remote_connection=remote_connection,
                 remote_profiler_folder=remote_profiler_folder,
             )
@@ -501,6 +564,7 @@ def create_instance_from_local_paths(profiler_path, performance_path):
             KEY_PROFILER_NAME: profiler_name,
             KEY_PERFORMANCE_NAME: performance_name,
             KEY_NPE_NAME: None,
+            KEY_MLIR_NAME: None,
         },
         profiler_path=f"{_profiler_path}/db.sqlite" if profiler_path else None,
         performance_path=performance_path if performance_path else None,

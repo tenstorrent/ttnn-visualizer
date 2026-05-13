@@ -13,11 +13,14 @@ enum Endpoints {
     LOCAL = '/api/local',
     MESH_DESCRIPTOR = '/api/mesh-descriptor',
     NPE = '/api/npe',
+    MLIR = '/api/mlir',
     OPERATION_BUFFERS = '/api/operation-buffers',
     OPERATIONS_LIST = '/api/operations',
     PERFORMANCE = '/api/performance',
     PROFILER = '/api/profiler',
     REMOTE = '/api/remote',
+    REPORT_METADATA = '/api/report-metadata',
+    SYSTEM_CAPABILITIES = '/api/system-capabilities', // Currently unused
     TENSOR_LIST = '/api/tensors',
     LATEST_VERSION = '/api/latest-version',
 }

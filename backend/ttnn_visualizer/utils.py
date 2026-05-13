@@ -77,6 +77,8 @@ def pick_profiler_config_paths(report_dir: Path) -> List[Path]:
     """
     Prefer config.json when present; otherwise use consistent config_*_of_*.json files.
     """
+    if not report_dir.is_dir():
+        return []
     single = report_dir / PROFILER_CONFIG_BASENAME
     if single.is_file():
         return [single]
@@ -121,6 +123,8 @@ def read_profiler_config_api_payload(
     respond with an empty object); otherwise ``rank_out_of_range``,
     ``missing_rank_file``, or ``parse_error``.
     """
+    if not report_dir.is_dir():
+        return None, None
     single = report_dir / PROFILER_CONFIG_BASENAME
     if single.is_file():
         try:
@@ -802,6 +806,27 @@ def get_npe_path(npe_name, current_app, remote_connection=None):
     npe_path = local_dir / current_app.config["NPE_DIRECTORY_NAME"]
 
     return str(npe_path)
+
+
+def get_mlir_path(mlir_name, current_app, **_kwargs):
+    # MLIR uploads are saved as `<MLIR_DIRECTORY_NAME>/<mlir_name>.json`
+    # (the upload endpoint enforces `.json` suffix; `extract_npe_name` strips
+    # it back off when deriving `mlir_name`). Reconstruct the file path the
+    # same way so callers like `_resolve_report_path` get an openable file —
+    # returning just the directory previously caused `get_mlir_json()` to try
+    # `open()` on a directory after any unrelated instance update.
+    #
+    # `**_kwargs` accepts (and intentionally discards) the `remote_connection`
+    # kwarg that `_resolve_report_path` passes uniformly to every path getter.
+    # MLIR is local-only today; profiler/performance getters use the value, we
+    # don't. If/when remote MLIR is supported, replace with an explicit param.
+    if not mlir_name:
+        return None
+    local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+    mlir_path = (
+        local_dir / current_app.config["MLIR_DIRECTORY_NAME"] / f"{mlir_name}.json"
+    )
+    return str(mlir_path)
 
 
 def get_cluster_descriptor_path(instance):

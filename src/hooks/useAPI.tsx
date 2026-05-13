@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError } from 'axios';
+import { AxiosError, HttpStatusCode } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -21,6 +21,7 @@ import {
     Operation,
     OperationDescription,
     OperationDetailsData,
+    ReportMetadataResponse,
     Tensor,
     defaultBuffer,
     defaultOperation,
@@ -46,6 +47,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
+import { GraphBundle } from '../model/MLIRJsonModel';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
@@ -59,6 +61,7 @@ import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification, { ToastType } from '../functions/createToastNotification';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
+import { SemVer, semverParse } from '../functions/semverParse';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -498,6 +501,45 @@ export const useNpe = (fileName: string | null) => {
     });
 };
 
+const fetchMLIRJson = async (): Promise<GraphBundle> => {
+    // Fetch as raw text and parse client-side. The backend deliberately
+    // streams the uploaded file bytes without parsing them — large MLIR
+    // payloads avoid the double-parse / double-stream cost on the server.
+    // If the file contents are malformed JSON, surface a synthetic 422 so
+    // the existing UI mapping in `routes/MLIR.tsx`
+    // (422 → MLIRValidationError.INVALID_JSON) handles it without changes.
+    const response = await axiosInstance.get<string>(Endpoints.MLIR, {
+        responseType: 'text',
+        transformResponse: [(data) => data],
+    });
+    try {
+        return JSON.parse(response.data) as GraphBundle;
+    } catch {
+        throw new AxiosError(
+            'MLIR file is not valid JSON',
+            AxiosError.ERR_BAD_RESPONSE,
+            response.config,
+            response.request,
+            { ...response, status: HttpStatusCode.UnprocessableEntity },
+        );
+    }
+};
+
+// The `/mlir` endpoint resolves the file path server-side from
+// `instance.mlir_path` (set when the user uploaded the JSON), so the request
+// itself is parameter-less. `fileName` is kept on the hook to gate `enabled`
+// (no fetch until an active file is selected) and to discriminate the
+// queryKey so cache state doesn't bleed across files. This mirrors `useNpe`.
+export const useMLIR = (fileName: string | null) => {
+    return useQuery<GraphBundle, AxiosError>({
+        queryFn: () => fetchMLIRJson(),
+        queryKey: ['fetch-mlir-json', fileName],
+        retry: false,
+        staleTime: 30000,
+        enabled: fileName !== null,
+    });
+};
+
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
 
@@ -732,15 +774,36 @@ export const usePerformanceRange = (): NumberRange | null => {
     );
 };
 
-// Not currently used
-// export const useReportMeta = () => {
-//     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+interface ReportMetadata {
+    version: SemVer;
+    timestamp: string;
+    duration: number;
+}
 
-//     return useQuery<ReportMetaData, AxiosError>({
-//         queryKey: ['get-report-config', activeProfilerReport?.path],
-//         queryFn: () => fetchReportMeta(),
-//     });
-// };
+const fetchReportMetadata = async (): Promise<ReportMetadata> => {
+    const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
+    const parsedSchemaVersion = semverParse(data?.schema_version);
+    const parsedDuration = Number(data?.total_duration_ns);
+
+    return {
+        timestamp: data?.capture_timestamp_ns,
+        duration: Number.isFinite(parsedDuration) ? parsedDuration : 0,
+        version: parsedSchemaVersion,
+    } as ReportMetadata;
+};
+
+// The endpoint returns 422 on legacy reports that lack the table
+export const useReportMetadata = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ReportMetadata, AxiosError>({
+        queryKey: ['get-report-metadata', activeProfilerReport?.path],
+        queryFn: fetchReportMetadata,
+        enabled: activeProfilerReport !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
     return useQuery<BufferPage[], AxiosError>({
@@ -1084,7 +1147,7 @@ export const usePerfFolderList = () => {
 };
 
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
-    const { data: buffersByOperation } = useBuffers(bufferType);
+    const { data: buffersByOperation } = useBuffers(bufferType, true);
     const { data: operations } = useOperationsList();
 
     const uniqueBuffersByOperationList = useMemo(() => {
@@ -1169,11 +1232,14 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         return result;
     }, [buffersByOperation, operations, uniqueBuffersByOperationList]);
 
-    return tensorsByOperationByAddress;
+    return {
+        tensorListByOperation: tensorsByOperationByAddress,
+        uniqueBuffersByOperationList,
+    };
 };
 
 export const useGetTensorDeallocationReportByOperation = () => {
-    const tensorListByOperation = useCreateTensorsByOperationByIdList();
+    const { tensorListByOperation } = useCreateTensorsByOperationByIdList();
     const { data: operations } = useOperationsList();
 
     const operationsById = useMemo(() => {

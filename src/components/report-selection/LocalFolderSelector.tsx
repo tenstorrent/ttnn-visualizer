@@ -4,7 +4,7 @@
 
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, type FC, useMemo, useState } from 'react';
+import { ChangeEvent, type FC, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom } from 'jotai';
@@ -28,6 +28,7 @@ import {
     updateInstance,
     usePerfFolderList,
     useReportFolderList,
+    useReportMetadata,
 } from '../../hooks/useAPI';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder, ReportLocation } from '../../definitions/Reports';
@@ -37,6 +38,7 @@ import {
     normaliseReportFolder,
 } from '../../functions/validateReportFolder';
 import { TEST_IDS } from '../../definitions/TestIds';
+import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -90,6 +92,20 @@ const LocalFolderOptions: FC = () => {
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
     const { data: reportFolderList } = useReportFolderList();
+
+    const { data: reportMetadata, error: reportMetadataError } = useReportMetadata();
+    useEffect(() => {
+        if (reportMetadataError) {
+            return;
+        }
+        if (reportMetadata) {
+            const dbValidationResult = evaluateDbVersion(reportMetadata.version);
+            if (dbValidationResult.statusCode !== DBVersionValidation.OK) {
+                // @ts-expect-error this is good
+                createToastNotification('Incompatible report version', dbValidationResult.message, ToastType.WARNING);
+            }
+        }
+    }, [reportMetadata, reportMetadataError]);
 
     const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
