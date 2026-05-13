@@ -10,4 +10,5 @@ export const GRAPH_COLORS = {
     inputEdge: cssVar(`--graph-input-edge`),
     outputEdge: cssVar(`--graph-output-edge`),
     normal: cssVar(`--graph-normal`),
+    focusedNode: cssVar(`--graph-focused-node`),
 };

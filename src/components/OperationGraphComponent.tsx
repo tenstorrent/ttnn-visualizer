@@ -24,6 +24,11 @@ import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 
 type OperationList = OperationDescription[];
 
+enum NodeRelation {
+    Input = 'input',
+    Output = 'output',
+}
+
 const OperationGraph: React.FC<{
     operationList: OperationList;
     operationId?: number;
@@ -242,7 +247,7 @@ const OperationGraph: React.FC<{
         [scale],
     );
 
-    const getNodeRelationToFocused = useCallback((nodeId: IdType): 'input' | 'output' | null => {
+    const getNodeRelationToFocused = useCallback((nodeId: IdType): NodeRelation | null => {
         const selectedNodeId = currentOpIdRef.current;
         if (selectedNodeId === null || selectedNodeId === undefined || nodeId === selectedNodeId) {
             return null;
@@ -250,10 +255,10 @@ const OperationGraph: React.FC<{
         const allEdges = edgesDataSetRef.current.get();
         for (const edge of allEdges) {
             if (edge.to === selectedNodeId && edge.from === nodeId) {
-                return 'input';
+                return NodeRelation.Input;
             }
             if (edge.from === selectedNodeId && edge.to === nodeId) {
-                return 'output';
+                return NodeRelation.Output;
             }
         }
         return null;
@@ -262,10 +267,10 @@ const OperationGraph: React.FC<{
     const getRestoreColorForNode = useCallback(
         (nodeId: IdType): { background: string } => {
             const relation = getNodeRelationToFocused(nodeId);
-            if (relation === 'input') {
+            if (relation === NodeRelation.Input) {
                 return { background: GRAPH_COLORS.inputNode };
             }
-            if (relation === 'output') {
+            if (relation === NodeRelation.Output) {
                 return { background: GRAPH_COLORS.outputNode };
             }
             return { background: GRAPH_COLORS.normal };
@@ -276,13 +281,13 @@ const OperationGraph: React.FC<{
     const getBlinkOnColorForNode = useCallback(
         (nodeId: IdType): { background: string } => {
             const relation = getNodeRelationToFocused(nodeId);
-            if (relation === 'input') {
+            if (relation === NodeRelation.Input) {
                 return { background: tinycolor(GRAPH_COLORS.inputNode).lighten(20).toString() };
             }
-            if (relation === 'output') {
+            if (relation === NodeRelation.Output) {
                 return { background: tinycolor(GRAPH_COLORS.outputNode).lighten(20).toString() };
             }
-            return { background: '#f6bc42' };
+            return { background: GRAPH_COLORS.focusedNode };
         },
         [getNodeRelationToFocused],
     );
@@ -733,7 +738,7 @@ type ConnectedOpGroup = {
 
 const groupTensorsByConnectedOp = (
     tensors: Tensor[] | undefined,
-    direction: 'input' | 'output',
+    direction: NodeRelation,
     operationNamesById: Map<number, string>,
 ): ConnectedOpGroup[] => {
     if (!tensors?.length) {
@@ -743,12 +748,12 @@ const groupTensorsByConnectedOp = (
     const groups = new Map<string, ConnectedOpGroup>();
 
     tensors.forEach((tensor) => {
-        const ids = direction === 'input' ? tensor.producers : tensor.consumers;
-        const names = direction === 'input' ? tensor.producerNames : tensor.consumerNames;
+        const ids = direction === NodeRelation.Input ? tensor.producers : tensor.consumers;
+        const names = direction === NodeRelation.Input ? tensor.producerNames : tensor.consumerNames;
 
         if (!ids.length) {
-            const key = direction === 'input' ? 'external-input' : 'external-output';
-            const label = direction === 'input' ? 'External input' : 'Unconsumed output';
+            const key = direction === NodeRelation.Input ? 'external-input' : 'external-output';
+            const label = direction === NodeRelation.Input ? 'External input' : 'Unconsumed output';
             const group = groups.get(key) ?? { key, label, opId: null, tensors: [] };
             group.tensors.push(tensor);
             groups.set(key, group);
@@ -811,11 +816,11 @@ const OperationGraphInfoComponent: React.FC<{
     const operation = operationList.find((op) => op.id === currentOperationId);
 
     const inputGroups = useMemo(
-        () => groupTensorsByConnectedOp(operation?.inputs, 'input', operationNamesById),
+        () => groupTensorsByConnectedOp(operation?.inputs, NodeRelation.Input, operationNamesById),
         [operation, operationNamesById],
     );
     const outputGroups = useMemo(
-        () => groupTensorsByConnectedOp(operation?.outputs, 'output', operationNamesById),
+        () => groupTensorsByConnectedOp(operation?.outputs, NodeRelation.Output, operationNamesById),
         [operation, operationNamesById],
     );
 
