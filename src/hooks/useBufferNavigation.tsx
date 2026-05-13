@@ -20,20 +20,20 @@ interface BufferDetailsLocationState {
     bufferType: BufferType;
 }
 
-function isBufferDetailsLocationState(value: unknown): boolean {
+function isBufferDetailsLocationState(state: unknown): boolean {
     if (
-        typeof value !== 'object' ||
-        value === null ||
-        !('tensorId' in value) ||
-        !('bufferType' in value) ||
-        !('tensorAddress' in value)
+        typeof state !== 'object' ||
+        state === null ||
+        !('tensorId' in state) ||
+        !('bufferType' in state) ||
+        !('tensorAddress' in state)
     ) {
         return false;
     }
 
-    const isValidTensorId = isValidNumber(value.tensorId);
-    const isValidBufferType = !!BufferType[value.bufferType as keyof typeof BufferType];
-    const isValidTensorAddress = isValidNumber(value.tensorAddress);
+    const isValidTensorId = isValidNumber(state.tensorId);
+    const isValidBufferType = state.bufferType === BufferType.DRAM || state.bufferType === BufferType.L1;
+    const isValidTensorAddress = isValidNumber(state.tensorAddress);
 
     return isValidTensorId && isValidBufferType && isValidTensorAddress;
 }
