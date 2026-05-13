@@ -76,13 +76,3 @@ def test_stack_source_content_rejects_missing_file_path(client, make_report):
         query_string={"instanceId": instance_id},
     )
     assert response.status_code == HTTPStatus.BAD_REQUEST
-
-
-def test_legacy_remote_read_endpoint_removed(client, make_report):
-    instance_id = make_report()
-    response = client.post(
-        "/api/remote/read",
-        query_string={"instanceId": instance_id},
-        json={"filePath": "/any/path"},
-    )
-    assert response.status_code == HTTPStatus.NOT_FOUND

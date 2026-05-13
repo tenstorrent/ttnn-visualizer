@@ -1,0 +1,258 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+/* stylelint-disable selector-class-pattern */
+.react-flow {
+    --xy-edge-label-color: #{$tt-grey-7};
+    --xy-edge-label-background-color: transparent;
+    --xy-controls-button-color: #{$tt-grey-2};
+    --xy-minimap-node-stroke-color: #{$tt-grey-2};
+    --xy-minimap-node-background-color: #{$tt-grey-2};
+    --xy-minimap-node-stroke-width: 1px;
+
+    .react-flow__minimap {
+        background: $tt-grey-2;
+    }
+
+    /* Nudge only the bottom-right panel (minimap / attribution). The previous
+     * selector targeted every `.bottom` panel — including `.bottom.left`
+     * (the Controls panel) — and combined with React Flow's `left: 0` it
+     * stretched the controls bounding box across the entire bottom of the
+     * graph, intercepting pan/click events on everything underneath. */
+    .react-flow__panel.bottom.right {
+        bottom: 0;
+        right: -15px;
+    }
+}
+
+.react-flow__edge-text {
+    font-size: 10px;
+    font-family: monospace;
+}
+
+.react-flow__node-default {
+    color: #222;
+
+    /* DefaultNode renders label as a raw text node; clip when width is capped by layout. */
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.react-flow__node-mlirOp {
+    /* Visual chrome formerly inline-set by `makeOpNode` in mlirGraphBuilder.ts. */
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #f5f5f5;
+    color: #222;
+    border: 1px solid #999;
+    border-radius: 6px;
+    font-size: 12px;
+
+    &.selected {
+        box-shadow: 0 0 0 3px $tt-blue-accent;
+        outline: none;
+    }
+}
+
+.react-flow__node-group.selected,
+.react-flow__node-mlirGroup.selected {
+    box-shadow: 0 0 0 3px $tt-blue-accent;
+    outline: none;
+}
+
+/* Custom group node: transparent wrapper, visible dashed body, sticky header
+ * bar that handles collapse.
+ *
+ * The group is intentionally non-draggable (see worker), so React Flow does
+ * NOT add the `nopan` class to the wrapper. That means RF's pan filter
+ * (`event.target.closest('.nopan')`) returns null for mousedowns on the
+ * group's body, and the gesture is handled by RF's pane just like a drag in
+ * empty canvas space. The body therefore advertises `cursor: grab` to
+ * telegraph the pan affordance, matching what the user sees outside any
+ * group.
+ *
+ * The header bar opts back into `nopan` (added inline on the element) so its
+ * own clicks/drags never trigger a stray canvas pan; that combined with
+ * `onMouseDown stopPropagation()` in the React component keeps the collapse
+ * click clean. */
+.react-flow__node.react-flow__node-mlirGroup {
+    background: transparent;
+    padding: 0;
+    border: none;
+}
+
+/* Group ports are functional only — they exist so React Flow has anchor
+ * points for edges aggregated to the group boundary, but should not render
+ * a visible dot like the regular op handles do. */
+.mlir-group-handle-port.react-flow__handle {
+    width: 1px;
+    height: 1px;
+    min-width: 0;
+    min-height: 0;
+    background: transparent;
+    border: none;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.mlir-group-body {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border: 2px dashed rgb(125 125 125 / 80%);
+    border-radius: 16px;
+    background: rgb(90 90 90 / 14%);
+    color: #ddd;
+    position: relative;
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
+
+    &.is-section {
+        border-color: #9b59b6;
+        background: rgb(155 89 182 / 8%);
+    }
+}
+
+/* Header doubles as the collapse button AND the drag handle. The component
+ * implements drag manually (mousedown → window mousemove/mouseup) so the
+ * group can stay non-draggable from React Flow's POV — keeping pan-through
+ * on the body — while still letting the user move the group from the header.
+ * `grab` cursor advertises that affordance; `grabbing` shows the active
+ * gesture. Children carry `pointer-events: none` so the drag/click target
+ * is the header div itself. */
+.mlir-group-handle {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    height: 24px;
+    max-width: min(280px, calc(100% - 24px));
+    width: max-content;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    background: rgb(30 30 30 / 88%);
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1;
+    color: #eee;
+    cursor: grab;
+    user-select: none;
+
+    /* Establish own stacking context so it sits above the group body / children. */
+    z-index: 2;
+
+    &:active {
+        cursor: grabbing;
+    }
+
+    &:hover {
+        background: rgb(45 45 45 / 95%);
+        border-color: rgb(255 255 255 / 24%);
+    }
+
+    .is-section & {
+        background: rgb(80 35 110 / 92%);
+        border-color: rgb(155 89 182 / 60%);
+
+        &:hover {
+            background: rgb(110 55 145 / 95%);
+        }
+    }
+}
+
+.mlir-group-handle-icon {
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+.mlir-group-handle-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.mlir-group-handle-count {
+    opacity: 0.7;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.mlir-group-handle-grip {
+    margin-left: 4px;
+    padding-left: 8px;
+    border-left: 1px solid rgb(255 255 255 / 18%);
+    font-size: 10px;
+    letter-spacing: -1px;
+    line-height: 1;
+    opacity: 0.65;
+    pointer-events: none;
+    font-family: monospace;
+}
+
+.mlir-op-node-collapse-hint {
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    line-height: 1;
+    color: rgb(85 85 85 / 95%);
+    pointer-events: none;
+    user-select: none;
+}
+
+.mlir-op-node-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.mlir-op-node-id {
+    margin-top: 1px;
+    font-family: monospace;
+    font-size: 9px;
+    line-height: 1.05;
+    color: rgb(34 34 34 / 80%);
+    user-select: text;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* MLIR viewport pane: fills the available width and reserves vertical room for
+ * the surrounding app chrome — navbar (~92px), page heading (~30px), the inline
+ * loaders row (~56px), and the page's bottom padding (~40px). Tweak these
+ * offsets together if any of those chrome bands change height. */
+.mlir-view-pane {
+    width: 100%;
+    height: calc(100vh - 92px - 30px - 56px - 40px);
+}
+
+/* Re-layout button overlays the React Flow canvas at the top-left, above the
+ * minimap/controls panels. */
+.mlir-relayout-button {
+    position: absolute;
+    top: 80px;
+    left: 12px;
+    z-index: 10;
+    padding: 8px 10px;
+}
+
+/* stylelint-enable selector-class-pattern */
