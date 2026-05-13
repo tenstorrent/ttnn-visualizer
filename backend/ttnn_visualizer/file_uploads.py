@@ -168,7 +168,16 @@ def construct_dest_path(file, target_directory, folder_name):
         # depend on that. Path-traversal hardening for the folder branch is a
         # separate, broader follow-up — see PR_REVIEW_TRIAGE_2.md §1.J.
         prefixed_folder_name = f"{prefix}{folder_name}"
-        dest_path = Path(target_directory) / prefixed_folder_name / str(file.filename)
+        # Chromium-based browsers send each file's relative path as the
+        # multipart filename (e.g. `report/db.sqlite`), while Safari sends just
+        # the basename and the destination folder name as a separate form
+        # field. Strip a duplicate leading segment so we land at
+        # `target/report/db.sqlite` rather than `target/report/report/db.sqlite`.
+        relative_filename = str(file.filename)
+        head, sep, tail = relative_filename.partition("/")
+        if sep and head == folder_name:
+            relative_filename = tail
+        dest_path = Path(target_directory) / prefixed_folder_name / relative_filename
     else:
         # Single-file branch (NPE, MLIR): collapse the client-supplied
         # filename to its basename so `"../etc/passwd.json"` / `"/etc/x.json"`

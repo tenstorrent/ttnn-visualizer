@@ -1280,7 +1280,7 @@ def create_profiler_files():
     logger.info(f"Writing report files to {profiler_directory}/{parent_folder_name}")
 
     try:
-        paths = save_uploaded_files(files, profiler_directory, folder_name)
+        paths = save_uploaded_files(files, profiler_directory, parent_folder_name)
     except DataFormatError:
         return response_unprocessable_entity()
 
@@ -1350,7 +1350,7 @@ def create_performance_files():
         paths = save_uploaded_files(
             files,
             target_directory,
-            folder_name,
+            parent_folder_name,
         )
     except DataFormatError:
         return response_unprocessable_entity()

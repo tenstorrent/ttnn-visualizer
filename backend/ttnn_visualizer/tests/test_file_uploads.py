@@ -96,6 +96,47 @@ def test_construct_dest_path_folder_branch_unchanged_for_subpaths(app, tmp_path)
         assert dest.parts[-2:] == ("subdir", "file.csv")
 
 
+def test_construct_dest_path_folder_branch_dedupes_leading_segment(app, tmp_path):
+    """Chromium sends `<report>/db.sqlite`; we must not double-prefix the folder.
+
+    Chromium-based browsers send each file's `webkitRelativePath` as the
+    multipart filename, so the report folder name is already the first segment
+    of `file.filename`. Without dedup, a `folder_name="my-report"` upload of
+    `my-report/db.sqlite` would land at `my-report/my-report/db.sqlite`,
+    creating a stray directory beside the real report.
+    """
+    with app.app_context():
+        dest = construct_dest_path(
+            _faux_file("my-report/db.sqlite"),
+            tmp_path,
+            folder_name="my-report",
+        )
+        # The basename is the final part. The folder segment may carry a
+        # `<timestamp>_` prefix in SERVER_MODE so we match the suffix only.
+        assert dest.name == "db.sqlite"
+        assert dest.parent.name.endswith("my-report")
+        assert dest.parent.parent == tmp_path
+        # And critically: no double-prefix anywhere in the resolved path.
+        assert "my-report/my-report" not in str(dest)
+
+
+def test_construct_dest_path_folder_branch_safari_basename_only(app, tmp_path):
+    """Safari sends just the basename plus a separate `folderName` form field.
+
+    The dedup logic added for Chromium must not regress the Safari case where
+    `file.filename` is already a bare basename.
+    """
+    with app.app_context():
+        dest = construct_dest_path(
+            _faux_file("db.sqlite"),
+            tmp_path,
+            folder_name="my-report",
+        )
+        assert dest.name == "db.sqlite"
+        assert dest.parent.name.endswith("my-report")
+        assert dest.parent.parent == tmp_path
+
+
 # ---- extract_npe_name: feeds the DB; rebuilt into a read path later --------
 
 
@@ -258,3 +299,122 @@ def test_mlir_upload_malware_scanner_positive_blocks_save(app, client, make_repo
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert not any(p.name.endswith("bad.json") for p in mlir_root.glob("*.json"))
+
+
+# ---- End-to-end regression: profiler/performance uploads keep folder layout ---
+
+
+def test_profiler_upload_chromium_style_lands_under_report_folder(
+    app, client, make_report
+):
+    """Chromium sends `<report>/db.sqlite`; uploads must land under that folder.
+
+    Regression for the bug where `create_profiler_files` passed the raw
+    `folderName` form field (None for non-Safari browsers) to
+    `save_uploaded_files` instead of the resolved report name, causing every
+    file to be written directly into `profiler-reports/` and clobbering / mixing
+    with sibling reports.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    profiler_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["PROFILER_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        f"/api/local/upload/profiler?instanceId={instance_id}",
+        data={
+            "files": [
+                (BytesIO(b"sqlite-bytes"), "unique_name2/db.sqlite"),
+                (BytesIO(b"{}"), "unique_name2/config.json"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    body = response.get_json()
+    assert body["path"] == "unique_name2"
+
+    report_dir = profiler_root / "unique_name2"
+    assert (report_dir / "db.sqlite").is_file()
+    assert (report_dir / "config.json").is_file()
+    # Critical: nothing was written at the root of `profiler-reports/`.
+    assert not (profiler_root / "db.sqlite").exists()
+    assert not (profiler_root / "config.json").exists()
+    # Critical: no double-prefix directory like `unique_name2/unique_name2/`.
+    assert not (report_dir / "unique_name2").exists()
+
+
+def test_profiler_upload_safari_style_lands_under_report_folder(
+    app, client, make_report
+):
+    """Safari sends bare basenames plus a separate `folderName` form field.
+
+    Both Safari and Chromium uploads must land at the same destination layout.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    profiler_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["PROFILER_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        f"/api/local/upload/profiler?instanceId={instance_id}",
+        data={
+            "files": [
+                (BytesIO(b"sqlite-bytes"), "db.sqlite"),
+                (BytesIO(b"{}"), "config.json"),
+            ],
+            "folderName": "safari_report",
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    body = response.get_json()
+    assert body["path"] == "safari_report"
+
+    report_dir = profiler_root / "safari_report"
+    assert (report_dir / "db.sqlite").is_file()
+    assert (report_dir / "config.json").is_file()
+    assert not (profiler_root / "db.sqlite").exists()
+
+
+def test_performance_upload_chromium_style_lands_under_report_folder(
+    app, client, make_report
+):
+    """Same Chromium regression for `/api/local/upload/performance`."""
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    perf_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"])
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        f"/api/local/upload/performance?instanceId={instance_id}",
+        data={
+            "files": [
+                (BytesIO(b"csv,bytes\n"), "perf_run/profile_log_device.csv"),
+                (BytesIO(b"tracy"), "perf_run/tracy_profile_log_host.tracy"),
+                (BytesIO(b"op,perf\n"), "perf_run/ops_perf_results_2026.csv"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+
+    report_dir = perf_root / "perf_run"
+    assert (report_dir / "profile_log_device.csv").is_file()
+    assert (report_dir / "tracy_profile_log_host.tracy").is_file()
+    assert any(p.name.startswith("ops_perf_results") for p in report_dir.iterdir())
+    assert not (perf_root / "profile_log_device.csv").exists()
+    assert not (report_dir / "perf_run").exists()
