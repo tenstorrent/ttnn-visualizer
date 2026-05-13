@@ -18,7 +18,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from ttnn_visualizer.file_uploads import construct_dest_path, extract_npe_name
+from ttnn_visualizer.file_uploads import (
+    construct_dest_path,
+    extract_npe_name,
+    resolve_parent_folder_name,
+)
 
 
 def _faux_file(filename):
@@ -162,6 +166,49 @@ def test_extract_npe_name_preserves_legitimate_basename():
 
 def test_extract_npe_name_handles_empty_input():
     assert extract_npe_name([]) is None
+
+
+# ---- resolve_parent_folder_name: keeps both upload handlers aligned --------
+
+
+def test_resolve_parent_folder_name_prefers_explicit_safari_form_field():
+    """An explicit `folderName` form field always wins over filename inference.
+
+    Safari sends the destination folder name as a separate form field because
+    its multipart filename is just the basename. The helper must take the
+    explicit value verbatim rather than fall back to the (basename-only)
+    filename, which would otherwise produce nonsense like `db.sqlite`.
+    """
+    result = resolve_parent_folder_name(
+        [_faux_file("db.sqlite")], folder_name="my-report"
+    )
+    assert result == "my-report"
+
+
+def test_resolve_parent_folder_name_falls_back_to_filename_for_chromium():
+    """Chromium sends `folderName=None`; infer from the relative filename."""
+    result = resolve_parent_folder_name(
+        [_faux_file("my-report/db.sqlite")], folder_name=None
+    )
+    assert result == "my-report"
+
+
+def test_resolve_parent_folder_name_treats_empty_form_field_as_missing():
+    """An empty `folderName` (vs missing) must still trigger the fallback.
+
+    `request.form.get("folderName")` returns ``None`` when the field is
+    missing, but a client that sends an empty string would otherwise short-
+    circuit the inference and silently land files at the target root.
+    """
+    result = resolve_parent_folder_name(
+        [_faux_file("my-report/db.sqlite")], folder_name=""
+    )
+    assert result == "my-report"
+
+
+def test_resolve_parent_folder_name_handles_empty_files():
+    """No files and no explicit folder → nothing to resolve."""
+    assert resolve_parent_folder_name([], folder_name=None) is None
 
 
 # ---- End-to-end regression: the MLIR upload endpoint ----------------------

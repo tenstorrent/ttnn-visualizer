@@ -54,6 +54,28 @@ def extract_folder_name_from_files(files):
     return unsplit_name.split("/")[0]
 
 
+def resolve_parent_folder_name(files, folder_name):
+    """Pick the destination folder name for a folder-style upload.
+
+    The frontend sends the report folder name in one of two ways:
+
+    * As an explicit ``folderName`` form field (Safari, where the multipart
+      filename is just the basename and the relative path is lost), or
+    * Implicitly, as the leading segment of each file's relative path
+      (Chromium / Firefox preserve `webkitRelativePath` in the multipart
+      filename).
+
+    Centralising this resolution keeps the two upload handlers aligned and
+    avoids the easy mistake of passing the raw ``folder_name`` form field
+    (which is ``None`` for non-Safari clients) straight through to
+    `save_uploaded_files`, leaving files to land at the root of the target
+    directory instead of under their report folder.
+    """
+    if folder_name:
+        return folder_name
+    return extract_folder_name_from_files(files)
+
+
 def extract_npe_name(files):
     if not files:
         return None
