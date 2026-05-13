@@ -12,6 +12,7 @@ import { BuffersByOperation } from '../model/APIData';
 import useBufferFocus from './useBufferFocus';
 import { BufferType } from '../model/BufferType';
 import { TAB_IDS } from '../definitions/BufferSummary';
+import isValidNumber from '../functions/isValidNumber';
 
 interface BufferDetailsLocationState {
     tensorId: number;
@@ -30,9 +31,9 @@ function isBufferDetailsLocationState(value: unknown): boolean {
         return false;
     }
 
-    const isValidTensorId = typeof (value as { tensorId: unknown }).tensorId === 'number';
-    const isValidBufferType = value.bufferType === BufferType.DRAM || value.bufferType === BufferType.L1; // Only care about these two types
-    const isValidTensorAddress = typeof (value as { tensorAddress: unknown }).tensorAddress === 'number';
+    const isValidTensorId = isValidNumber(value.tensorId);
+    const isValidBufferType = !!BufferType[value.bufferType as keyof typeof BufferType];
+    const isValidTensorAddress = isValidNumber(value.tensorAddress);
 
     return isValidTensorId && isValidBufferType && isValidTensorAddress;
 }
