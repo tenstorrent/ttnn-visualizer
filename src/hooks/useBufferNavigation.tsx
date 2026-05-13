@@ -20,35 +20,28 @@ interface BufferDetailsLocationState {
     bufferType: BufferType;
 }
 
-function isBufferDetailsLocationState(state: unknown): boolean {
-    if (
-        typeof state !== 'object' ||
-        state === null ||
-        !('tensorId' in state) ||
-        !('bufferType' in state) ||
-        !('tensorAddress' in state)
-    ) {
-        return false;
-    }
-
-    const isValidTensorId = isValidNumber(state.tensorId);
-    const isValidBufferType = state.bufferType === BufferType.DRAM || state.bufferType === BufferType.L1;
-    const isValidTensorAddress = isValidNumber(state.tensorAddress);
-
-    return isValidTensorId && isValidBufferType && isValidTensorAddress;
-}
-
 function parseBufferDetailsState(state: unknown): BufferDetailsLocationState | null {
-    if (!isBufferDetailsLocationState(state)) {
+    if (typeof state !== 'object' || state === null || !('tensorId' in state) || !('bufferType' in state)) {
         return null;
     }
 
-    const { tensorId, tensorAddress, bufferType } = state as BufferDetailsLocationState;
+    if (!isValidNumber(state.tensorId)) {
+        return null;
+    }
+
+    if (state.bufferType !== BufferType.DRAM && state.bufferType !== BufferType.L1) {
+        return null;
+    }
+
+    const rawAddress = 'tensorAddress' in state ? state.tensorAddress : undefined;
+    if (rawAddress != null && !isValidNumber(rawAddress)) {
+        return null;
+    }
 
     return {
-        tensorId,
-        tensorAddress,
-        bufferType,
+        tensorId: state.tensorId,
+        tensorAddress: rawAddress != null && isValidNumber(rawAddress) ? rawAddress : undefined,
+        bufferType: state.bufferType,
     };
 }
 

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Id, toast } from 'react-toastify';
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { useAtom } from 'jotai';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import ToastTensorMessage from '../components/operation-details/ToastTensorMessage';
@@ -14,20 +14,18 @@ const useBufferFocus = () => {
     const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorIdAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const [selectedBufferColour, setSelectedBufferColour] = useAtom(selectedBufferColourAtom);
-    const activeToastRef = useRef(activeToast);
 
     const resetToasts = useCallback(() => {
         setSelectedTensorId(null);
         setSelectedAddress(null);
         setSelectedBufferColour(null);
-        activeToastRef.current = null;
         setActiveToast(null);
         toast.dismiss();
     }, [setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId]);
 
     const updateBufferFocus = useCallback(
         (address?: number, tensorId?: number, colorVariance?: number): void => {
-            const previousToast = activeToastRef.current;
+            const previousToast = activeToast;
             let colour = getTensorColor(tensorId);
 
             if (previousToast) {
@@ -53,12 +51,11 @@ const useBufferFocus = () => {
                 },
             );
 
-            activeToastRef.current = toastInstance;
             setActiveToast(toastInstance);
             setSelectedAddress(address ?? null);
             setSelectedTensorId(tensorId ?? null);
         },
-        [resetToasts, setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId],
+        [activeToast, resetToasts, setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId],
     );
 
     return {
