@@ -9,6 +9,7 @@ import 'vis-network/styles/vis-network.css';
 import { Button, ButtonVariant, Intent, Label, PopoverPosition, Slider, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { NavigateFunction, useNavigate } from 'react-router';
+import tinycolor from 'tinycolor2';
 import { OperationDescription, Tensor } from '../model/APIData';
 import '../scss/components/OperationGraphComponent.scss';
 import LoadingSpinner from './LoadingSpinner';
@@ -273,15 +274,15 @@ const OperationGraph: React.FC<{
     );
 
     const getBlinkOnColorForNode = useCallback(
-        (nodeId: IdType): { background: string; border: string } => {
+        (nodeId: IdType): { background: string } => {
             const relation = getNodeRelationToFocused(nodeId);
             if (relation === 'input') {
-                return { background: GRAPH_COLORS.inputNode, border: GRAPH_COLORS.inputEdge };
+                return { background: tinycolor(GRAPH_COLORS.inputNode).lighten(20).toString() };
             }
             if (relation === 'output') {
-                return { background: GRAPH_COLORS.outputNode, border: GRAPH_COLORS.outputEdge };
+                return { background: tinycolor(GRAPH_COLORS.outputNode).lighten(20).toString() };
             }
-            return { background: '#f6bc42', border: '#ffe39c' };
+            return { background: '#f6bc42' };
         },
         [getNodeRelationToFocused],
     );
@@ -302,7 +303,7 @@ const OperationGraph: React.FC<{
             }
 
             const onColor = getBlinkOnColorForNode(nodeId);
-            const offColor = { background: GRAPH_COLORS.normal, border: GRAPH_COLORS.normal };
+            const offColor = getRestoreColorForNode(nodeId);
             let isOn = true;
             nodes.update({ id: nodeId, color: onColor });
 
