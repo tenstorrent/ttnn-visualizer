@@ -849,20 +849,16 @@ const OperationGraphInfoComponent: React.FC<{
                 >
                     Memory Details
                 </Button>
-                <Tooltip
-                    placement={PopoverPosition.BOTTOM}
-                    content={`Recenter on operation ${currentOperationId}`}
+
+                <Button
+                    className='recenter-button'
+                    icon={IconNames.LOCATE}
+                    intent={Intent.PRIMARY}
+                    onClick={onRecenterOnCurrent}
+                    aria-label={`Recenter on operation ${currentOperationId}`}
                 >
-                    <Button
-                        className='recenter-button'
-                        icon={IconNames.UNDO}
-                        intent={Intent.PRIMARY}
-                        onClick={onRecenterOnCurrent}
-                        aria-label={`Recenter on operation ${currentOperationId}`}
-                    >
-                        Back to {currentOperationId}
-                    </Button>
-                </Tooltip>
+                    Locate {currentOperationId}
+                </Button>
             </div>
 
             <h3 className='inputs'>Inputs:</h3>
