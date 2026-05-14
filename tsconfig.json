@@ -43,10 +43,5 @@
         "vitest.setup.ts",
         "src/**/*",
         "tests/**/*"
-    ],
-    "references": [
-        {
-            "path": "./tsconfig.node.json"
-        }
     ]
 }

@@ -38,7 +38,7 @@
     "lint:scss:fix": "stylelint --fix \"src/**/*.scss\"",
     "lint:scss": "stylelint \"src/**/*.scss\"",
     "lint:spdx": "node scripts/check-spdx.mjs",
-    "lint:ts": "pnpx tsc --noEmit",
+    "lint:ts": "pnpm exec tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
@@ -125,7 +125,7 @@
     "stylelint-config-standard-scss": "^13.1.0",
     "stylelint-prettier": "^5.0.3",
     "svgo": "^3.3.3",
-    "typescript": "~5.2.2",
+    "typescript": "~5.8.3",
     "vite": "^8.0.12",
     "vitest": "^4.1.6",
     "vitest-canvas-mock": "^1.1.4"
