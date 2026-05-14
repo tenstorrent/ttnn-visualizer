@@ -17,6 +17,12 @@ jobs:
             - run: git config --global user.email "support@tenstorrent.com"
             - run: git config --global user.name "CI Job"
 
+            - uses: pnpm/action-setup@v4
+              name: Install pnpm
+              with:
+                  version: 11
+                  run_install: false
+
             - name: Read .nvmrc
               id: nvm
               run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
