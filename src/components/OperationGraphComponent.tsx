@@ -116,7 +116,6 @@ const OperationGraph: React.FC<{
         if (currentOperationId !== null && !connectedNodeIds.has(currentOperationId)) {
             const fallbackId = connectedNodeIds.values().next().value;
             if (fallbackId !== undefined && fallbackId !== currentOperationId) {
-                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setCurrentOperationId(fallbackId);
             }
         }
@@ -152,7 +151,6 @@ const OperationGraph: React.FC<{
     const data = useMemo(
         () => ({
             nodes,
-            // eslint-disable-next-line react-hooks/refs
             edges: edgesDataSetRef.current,
         }),
         [nodes],
@@ -435,7 +433,6 @@ const OperationGraph: React.FC<{
     };
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsLoading(true);
 
         // allow the ui to render loading state before initializing the graph
