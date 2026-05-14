@@ -116,7 +116,9 @@ function Range() {
                     : selectedPerformanceRange[1]);
 
             setSelectedPerformanceRange([updatedMin, updatedMax]);
-            setIsUserOpChange(false);
+            queueMicrotask(() => {
+                setIsUserOpChange(false);
+            });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isInSync, selectedOperationRange]);
@@ -151,7 +153,9 @@ function Range() {
                     : selectedOperationRange[1]);
 
             setSelectedOperationRange([updatedMin, updatedMax]);
-            setIsUserPerfChange(false);
+            queueMicrotask(() => {
+                setIsUserPerfChange(false);
+            });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isInSync, selectedPerformanceRange]);
