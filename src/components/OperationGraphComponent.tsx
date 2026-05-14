@@ -109,17 +109,17 @@ const OperationGraph: React.FC<{
         focusNodeId = operationId ?? operationList[0]?.id ?? 0;
     }
 
-    useEffect(() => {
-        if (connectedNodeIds.size === 0) {
-            return;
-        }
-        if (currentOperationId !== null && !connectedNodeIds.has(currentOperationId)) {
+    const connectedIdsKey = useMemo(() => [...connectedNodeIds].sort((a, b) => a - b).join(','), [connectedNodeIds]);
+    const [prevConnectedIdsKey, setPrevConnectedIdsKey] = useState('');
+    if (connectedIdsKey !== prevConnectedIdsKey) {
+        setPrevConnectedIdsKey(connectedIdsKey);
+        if (connectedNodeIds.size > 0 && currentOperationId !== null && !connectedNodeIds.has(currentOperationId)) {
             const fallbackId = connectedNodeIds.values().next().value;
-            if (fallbackId !== undefined && fallbackId !== currentOperationId) {
-                setCurrentOperationId(fallbackId);
+            if (fallbackId !== undefined) {
+                setCurrentOperationId(fallbackId as number);
             }
         }
-    }, [connectedNodeIds, currentOperationId]);
+    }
 
     const nodes = useMemo(
         () =>
@@ -147,14 +147,6 @@ const OperationGraph: React.FC<{
         ds.clear();
         ds.add(edges);
     }, [edges]);
-
-    const data = useMemo(
-        () => ({
-            nodes,
-            edges: edgesDataSetRef.current,
-        }),
-        [nodes],
-    );
 
     const colorHighlightIO = useCallback(
         (selectedNodeId: IdType) => {
@@ -433,13 +425,15 @@ const OperationGraph: React.FC<{
     };
 
     useEffect(() => {
-        setIsLoading(true);
+        queueMicrotask(() => {
+            setIsLoading(true);
+        });
 
-        // allow the ui to render loading state before initializing the graph
-        setTimeout(() => {
+        const loadTimeoutId = window.setTimeout(() => {
             if (containerRef.current) {
                 requestAnimationFrame(() => {
-                    networkRef.current = new Network(containerRef.current!, data, {
+                    const graphData = { nodes, edges: edgesDataSetRef.current };
+                    networkRef.current = new Network(containerRef.current!, graphData, {
                         nodes: {
                             font: { color: '#202020' },
                             color: {
@@ -531,6 +525,7 @@ const OperationGraph: React.FC<{
         });
 
         return () => {
+            window.clearTimeout(loadTimeoutId);
             if (blinkIntervalRef.current !== null) {
                 window.clearInterval(blinkIntervalRef.current);
                 blinkIntervalRef.current = null;
@@ -547,7 +542,7 @@ const OperationGraph: React.FC<{
             networkRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [edges, nodes, data, compactView]);
+    }, [edges, nodes, compactView]);
 
     const getNextOperationId = (currentId: number | null) => {
         if (nodes === null || currentId === null) {

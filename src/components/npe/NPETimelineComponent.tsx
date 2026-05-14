@@ -77,23 +77,25 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
     );
 
     const zoneRanges = useMemo(() => {
-        let maxZoneDepth = 0;
-        let groupIndex = -1;
+        const range = selectedZoneList.flatMap((rootZone, groupIndex) => {
+            const childZones = rootZone.expandedState ? getZoneDrawingModel(rootZone.zones, 1) : [];
+            const maxDepth = childZones.length ? Math.max(...childZones.map((z) => z.depth)) : 0;
+            return rootZone.zones.map((zone) => ({
+                groupIndex,
+                maxDepth,
+                proc: rootZone.proc,
+                start: zone.start / cyclesPerTimestep,
+                end: zone.end / cyclesPerTimestep,
+                zones: childZones,
+            }));
+        });
+        const maxZoneDepth = selectedZoneList.reduce((sum, rootZone) => {
+            const childZones = rootZone.expandedState ? getZoneDrawingModel(rootZone.zones, 1) : [];
+            const maxDepth = childZones.length ? Math.max(...childZones.map((z) => z.depth)) : 0;
+            return sum + 1 + maxDepth;
+        }, 0);
         return {
-            range: selectedZoneList.flatMap((rootZone) => {
-                groupIndex += 1;
-                const childZones = rootZone.expandedState ? getZoneDrawingModel(rootZone.zones, 1) : [];
-                const maxDepth = childZones.length ? Math.max(...childZones.map((z) => z.depth)) : 0;
-                maxZoneDepth += 1 + maxDepth;
-                return rootZone.zones.map((zone) => ({
-                    groupIndex,
-                    maxDepth,
-                    proc: rootZone.proc,
-                    start: zone.start / cyclesPerTimestep,
-                    end: zone.end / cyclesPerTimestep,
-                    zones: childZones,
-                }));
-            }),
+            range,
             maxZoneDepth,
         };
     }, [selectedZoneList, cyclesPerTimestep, getZoneDrawingModel]);

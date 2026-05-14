@@ -39,6 +39,7 @@ const PLACEHOLDER: TypedPerfTableRow = {
     layout: null,
     hash: null,
     cache_hit: null,
+    isFirstHashOccurrence: false,
 };
 
 export interface NormalisedPerfData {
