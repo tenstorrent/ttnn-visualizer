@@ -114,9 +114,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
     }, [npeData]);
 
-    if (!isFabricTransfersFilteringEnabled && fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS) {
-        setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
-    }
+    useEffect(() => {
+        if (!isFabricTransfersFilteringEnabled && fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
+        }
+    }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
 
     const selectedZoneList: NPERootZoneUXInfo[] = useMemo(() => {
         if (selectedZoneAddress === null) {
@@ -139,7 +142,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     }, [expandedZoneMap, selectedZoneAddress, zones]);
 
     const links = useMemo(() => {
-        const timestepData = structuredClone(npeData.timestep_data[selectedTimestep]);
+        const timestepData = npeData.timestep_data[selectedTimestep];
         timestepData.active_transfers.forEach((id) => {
             const transfer = npeData.noc_transfers.find((tr) => tr.id === id);
             // TODO: this functionality should MAYBE move to BE. https://github.com/orgs/tenstorrent/projects/178/views/1?pane=issue&itemId=124188622&issue=tenstorrent%7Cttnn-visualizer%7C745
@@ -192,38 +195,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             });
     }, [npeData.noc_transfers, links?.active_transfers, fabricEventsFilter]);
 
-    function stopAnimation() {
-        setPlaybackSpeed(0);
-        return clearInterval(animationInterval as number);
-    }
-
-    function startAnimation(speed: number = PLAYBACK_SPEED) {
-        setPlaybackSpeed(speed);
-        clearInterval(animationInterval as number);
-        const range = npeData.timestep_data.length;
-
-        const interval = setInterval(() => {
-            setSelectedTimestep((prev) => {
-                return prev < range - 1 ? prev + 1 : 0;
-            });
-        }, 100 / speed);
-        setAnimationInterval(Number(interval));
-    }
-
-    function hideAllTransfers() {
-        setIsShowingAllTransfers(false);
-        setSelectedTransferList([]);
-    }
-
-    function showAllTransfers() {
-        setIsShowingAllTransfers(true);
-        setSelectedNode(null);
-        const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
-            .map((transferId) => npeData.noc_transfers.find((tr) => tr.id === transferId))
-            .filter((transfer): transfer is NoCTransfer => transfer !== undefined);
-        setSelectedTransferList(activeTransfers as NoCTransfer[]);
-    }
-
     const showNOCType = (value: NoCType) => {
         if (nocFilter === null) {
             setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
@@ -251,24 +222,23 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     }, [architecture.arch_name, npeData.common_info.arch]);
 
     useEffect(() => {
-        queueMicrotask(() => {
-            resetRouteColors();
-            if (isShowingAllTransfers) {
-                showAllTransfers();
-            }
-        });
+        resetRouteColors();
+        if (isShowingAllTransfers) {
+            // eslint-disable-next-line react-hooks/immutability
+            showAllTransfers();
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedTimestep, isShowingAllTransfers]);
 
     useEffect(() => {
-        queueMicrotask(() => {
-            stopAnimation();
-            setSelectedTimestep(0);
-            setSelectedNode(null);
-            setSelectedTransferList([]);
-            setHighlightedTransfer(null);
-            setHighlightedRoute(null);
-        });
+        // eslint-disable-next-line react-hooks/immutability
+        stopAnimation();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelectedTimestep(0);
+        setSelectedNode(null);
+        setSelectedTransferList([]);
+        setHighlightedTransfer(null);
+        setHighlightedRoute(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
 
@@ -276,6 +246,24 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         selectedTransferList,
         selectedNode,
     );
+
+    const startAnimation = (speed: number = PLAYBACK_SPEED) => {
+        setPlaybackSpeed(speed);
+        clearInterval(animationInterval as number);
+        const range = npeData.timestep_data.length;
+
+        const interval = setInterval(() => {
+            setSelectedTimestep((prev) => {
+                return prev < range - 1 ? prev + 1 : 0;
+            });
+        }, 100 / speed);
+        setAnimationInterval(Number(interval));
+    };
+
+    const stopAnimation = () => {
+        setPlaybackSpeed(0);
+        return clearInterval(animationInterval as number);
+    };
 
     const onPlay = () => {
         startAnimation();
@@ -317,6 +305,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTransferList([]);
     };
 
+    const hideAllTransfers = () => {
+        setIsShowingAllTransfers(false);
+        setSelectedTransferList([]);
+    };
+
     const showActiveTransfers = useShowActiveTransfers({
         npeData,
         selectedNode,
@@ -327,6 +320,15 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedNode,
         setSelectedTransferList,
     });
+
+    const showAllTransfers = () => {
+        setIsShowingAllTransfers(true);
+        setSelectedNode(null);
+        const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
+            .map((transferId) => npeData.noc_transfers.find((tr) => tr.id === transferId))
+            .filter((transfer): transfer is NoCTransfer => transfer !== undefined);
+        setSelectedTransferList(activeTransfers as NoCTransfer[]);
+    };
 
     const getOriginOpacity = (transfer: NoCFlowBase): number => {
         if (transfer.id === null || transfer.id === undefined) {
