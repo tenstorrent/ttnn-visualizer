@@ -60,6 +60,15 @@
         overflow: auto;
         padding-left: 20px;
 
+        .operation-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-top: 5px;
+            margin-bottom: 5px;
+        }
+
         .operation-name {
             font-size: 17px;
         }

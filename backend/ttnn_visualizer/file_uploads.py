@@ -21,9 +21,18 @@ logger = logging.getLogger(__name__)
 def validate_files(files, required_files, pattern=None, folder_name=None):
     """Validate uploaded files against required file names and an optional pattern."""
     found_files = set()
+    leading_segments = set()
 
     for file in files:
         file_path = Path(file.filename)
+        raw_name = str(file.filename)
+
+        # Track the per-file leading folder segment for the cross-file
+        # consistency check below. Bare basenames (no `/`) carry no segment
+        # to compare and are skipped — `parents != 2` already rejects bare
+        # *required* files in the inferred-folder branch.
+        if "/" in raw_name:
+            leading_segments.add(raw_name.split("/", 1)[0])
 
         if file_path.name in required_files or (
             pattern and file_path.name.startswith(pattern)
@@ -34,6 +43,21 @@ def validate_files(files, required_files, pattern=None, folder_name=None):
                     f"File {file.filename} is not under a single parent folder."
                 )
                 return False
+
+    # When the destination folder is inferred from the files themselves
+    # (Chromium / Firefox preserve `webkitRelativePath` in the multipart
+    # filename), every file with a leading segment must agree on what that
+    # segment is. Otherwise `resolve_parent_folder_name` infers from
+    # `files[0]` and the dedup in `construct_dest_path` keys on that single
+    # name, silently nesting any disagreeing files under the inferred folder
+    # (e.g. `reportA/db.sqlite` + `reportB/config.json` would land as
+    # `reportA/db.sqlite` + `reportA/reportB/config.json`).
+    if not folder_name and len(leading_segments) > 1:
+        logger.warning(
+            "Uploaded files span multiple parent folders: %s",
+            sorted(leading_segments),
+        )
+        return False
 
     missing_files = required_files - found_files
     if pattern and not any(name.startswith(pattern) for name in found_files):
@@ -46,19 +70,52 @@ def validate_files(files, required_files, pattern=None, folder_name=None):
     return True
 
 
-def extract_folder_name_from_files(files):
-    """Extract the report name from the first file."""
+def _extract_folder_name_from_files(files):
+    """Extract the report name from the first file's relative path.
+
+    Module-private: the only call site is `resolve_parent_folder_name`, which
+    is the public entry point for views to use. Folder-style upload handlers
+    should always go through `resolve_parent_folder_name` so that the
+    explicit-vs-inferred precedence stays consistent across endpoints.
+    """
     if not files:
         return None
     unsplit_name = str(files[0].filename)
     return unsplit_name.split("/")[0]
 
 
+def resolve_parent_folder_name(files, folder_name):
+    """Pick the destination folder name for a folder-style upload.
+
+    The frontend sends the report folder name in one of two ways:
+
+    * As an explicit ``folderName`` form field (Safari, where the multipart
+      filename is just the basename and the relative path is lost), or
+    * Implicitly, as the leading segment of each file's relative path
+      (Chromium / Firefox preserve `webkitRelativePath` in the multipart
+      filename).
+
+    Centralising this resolution keeps the two upload handlers aligned and
+    avoids the easy mistake of passing the raw ``folder_name`` form field
+    (which is ``None`` for non-Safari clients) straight through to
+    `save_uploaded_files`, leaving files to land at the root of the target
+    directory instead of under their report folder.
+    """
+    if folder_name:
+        return folder_name
+    return _extract_folder_name_from_files(files)
+
+
 def extract_npe_name(files):
     if not files:
         return None
 
-    return re.sub(r"\.(json|npeviz\.zst)$", "", files[0].filename)
+    # Strip directory components before stripping the extension so a crafted
+    # multipart filename like `"../etc/passwd.json"` becomes `"passwd"`, not
+    # `"../etc/passwd"`. The resulting name is written to the DB and later
+    # rebuilt into a read path by `get_mlir_path` / `get_npe_path`; without
+    # `.name` here, write-side hardening alone wouldn't fix the read path.
+    return re.sub(r"\.(json|npeviz\.zst)$", "", Path(files[0].filename).name)
 
 
 def save_uploaded_files(
@@ -158,10 +215,28 @@ def construct_dest_path(file, target_directory, folder_name):
     prefix = f"{int(time.time())}_" if current_app.config["SERVER_MODE"] else ""
 
     if folder_name:
+        # Folder uploads legitimately carry sub-paths in `file.filename`
+        # (e.g. `subdir/file.csv`) and `validate_files` / `os.utime` accounting
+        # depend on that. Path-traversal hardening for the folder branch is a
+        # separate, broader follow-up — see PR_REVIEW_TRIAGE_2.md §1.J.
         prefixed_folder_name = f"{prefix}{folder_name}"
-        dest_path = Path(target_directory) / prefixed_folder_name / str(file.filename)
+        # Chromium-based browsers send each file's relative path as the
+        # multipart filename (e.g. `report/db.sqlite`), while Safari sends just
+        # the basename and the destination folder name as a separate form
+        # field. Strip a duplicate leading segment so we land at
+        # `target/report/db.sqlite` rather than `target/report/report/db.sqlite`.
+        relative_filename = str(file.filename)
+        head, sep, tail = relative_filename.partition("/")
+        if sep and head == folder_name:
+            relative_filename = tail
+        dest_path = Path(target_directory) / prefixed_folder_name / relative_filename
     else:
-        prefixed_filename = f"{prefix}{file.filename}"
+        # Single-file branch (NPE, MLIR): collapse the client-supplied
+        # filename to its basename so `"../etc/passwd.json"` / `"/etc/x.json"`
+        # can't escape `target_directory`. `Path(...).name` returns just the
+        # last path component, mirroring what `werkzeug.utils.secure_filename`
+        # does *without* mangling Unicode / spaces in legitimate filenames.
+        prefixed_filename = f"{prefix}{Path(file.filename).name}"
         dest_path = Path(target_directory) / prefixed_filename
 
     return dest_path

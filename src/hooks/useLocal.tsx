@@ -180,7 +180,7 @@ const useLocalConnection = () => {
         }
     };
 
-    const uploadNpeFile = async (files: FileList) => {
+    const uploadFileList = async (files: FileList, uploadPath: string) => {
         const store = getDefaultStore();
         const formData = new FormData();
 
@@ -189,7 +189,7 @@ const useLocalConnection = () => {
         });
 
         try {
-            return await axiosInstance.post(`${Endpoints.LOCAL}/upload/npe`, formData, {
+            return await axiosInstance.post(`${Endpoints.LOCAL}${uploadPath}`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
@@ -217,6 +217,9 @@ const useLocalConnection = () => {
         }
     };
 
+    const uploadNpeFile = (files: FileList) => uploadFileList(files, '/upload/npe');
+    const uploadMlirFile = (files: FileList) => uploadFileList(files, '/upload/mlir');
+
     return {
         getUploadedFolderName,
         checkRequiredReportFiles,
@@ -224,6 +227,7 @@ const useLocalConnection = () => {
         uploadLocalFolder,
         uploadLocalPerformanceFolder,
         uploadNpeFile,
+        uploadMlirFile,
         filterReportFiles,
     };
 };

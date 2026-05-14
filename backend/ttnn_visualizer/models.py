@@ -227,6 +227,8 @@ class ActiveReports(SerializeableModel):
     performance_location: Optional[ReportLocation] = None
     npe_name: Optional[str] = None
     npe_location: Optional[ReportLocation] = None
+    mlir_name: Optional[str] = None
+    mlir_location: Optional[ReportLocation] = None
 
 
 class RemoteReportFolder(SerializeableModel):
@@ -241,6 +243,7 @@ class Instance(BaseModel):
     profiler_path: Optional[str] = None
     performance_path: Optional[str] = None
     npe_path: Optional[str] = None
+    mlir_path: Optional[str] = None
     active_report: Optional[ActiveReports] = None
     remote_connection: Optional[RemoteConnection] = None
     remote_profiler_folder: Optional[RemoteReportFolder] = None
@@ -255,6 +258,7 @@ class InstanceTable(db.Model):
     profiler_path = Column(String)
     performance_path = Column(String, nullable=True)
     npe_path = Column(String, nullable=True)
+    mlir_path = Column(String, nullable=True)
     active_report = db.Column(MutableDict.as_mutable(JSON), nullable=False, default={})
     remote_connection = Column(JSON, nullable=True)
     remote_profiler_folder = Column(JSON, nullable=True)
@@ -270,11 +274,13 @@ class InstanceTable(db.Model):
         profiler_path=None,
         performance_path=None,
         npe_path=None,
+        mlir_path=None,
     ):
         self.instance_id = instance_id
         self.active_report = active_report
         self.profiler_path = profiler_path
         self.npe_path = npe_path
+        self.mlir_path = mlir_path
         self.remote_connection = remote_connection
         self.remote_profiler_folder = remote_profiler_folder
         self.performance_path = performance_path
@@ -291,6 +297,7 @@ class InstanceTable(db.Model):
             "profiler_path": self.profiler_path,
             "performance_path": self.performance_path,
             "npe_path": self.npe_path,
+            "mlir_path": self.mlir_path,
         }
 
     def to_pydantic(self) -> Instance:
@@ -305,6 +312,7 @@ class InstanceTable(db.Model):
                 else None
             ),
             npe_path=(str(self.npe_path) if self.npe_path is not None else None),
+            mlir_path=(str(self.mlir_path) if self.mlir_path is not None else None),
             active_report=(
                 (ActiveReports(**self.active_report) if self.active_report else None)
                 if isinstance(self.active_report, dict)

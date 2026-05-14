@@ -39,7 +39,7 @@ const useRemoteConnection = () => {
         return connectionTestStates;
     };
 
-    const listReportFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
+    const listProfilerReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
@@ -48,7 +48,7 @@ const useRemoteConnection = () => {
             return [];
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/profiler`, connection);
+        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/profiler-reports`, connection);
 
         if (response.status === HttpStatusCode.NoContent) {
             return [];
@@ -59,7 +59,7 @@ const useRemoteConnection = () => {
         return reportFolders.map(normaliseReportFolder) as RemoteFolder[];
     };
 
-    const listPerformanceFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
+    const listPerformanceReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
@@ -68,7 +68,10 @@ const useRemoteConnection = () => {
             return [];
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/performance`, connection);
+        const response = await axiosInstance.post<RemoteFolder[]>(
+            `${Endpoints.REMOTE}/performance-reports`,
+            connection,
+        );
 
         if (response.status === HttpStatusCode.NoContent) {
             return [];
@@ -177,16 +180,10 @@ const useRemoteConnection = () => {
 
     const isSourceFileAvailable = useCallback(async (filePath: string, signal?: AbortSignal): Promise<boolean> => {
         try {
-            const { data } = await axiosInstance.post<{ available?: boolean }>(
-                `${Endpoints.REMOTE}/read`,
-                { filePath, check_path_only: true },
-                {
-                    signal,
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                },
-            );
+            const { data } = await axiosInstance.get<{ available?: boolean }>(`${Endpoints.REMOTE}/stack-trace/test`, {
+                signal,
+                params: { filePath },
+            });
 
             return data?.available === true;
         } catch {
@@ -196,15 +193,10 @@ const useRemoteConnection = () => {
 
     const readRemoteFile = async (filePath: string) => {
         try {
-            const response = await axiosInstance.post<string>(
-                `${Endpoints.REMOTE}/read`,
-                { filePath },
-                {
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                },
-            );
+            const response = await axiosInstance.get<string>(`${Endpoints.REMOTE}/stack-trace/read`, {
+                params: { filePath },
+                responseType: 'text',
+            });
 
             const isRemapped = response.headers['x-ttnn-source-remapped'] === 'true';
             const resolvedPath = response.headers['x-ttnn-resolved-source-path'] || null;
@@ -237,8 +229,8 @@ const useRemoteConnection = () => {
     return {
         testConnection,
         syncRemoteFolder,
-        listReportFolders,
-        listPerformanceFolders,
+        listProfilerReports,
+        listPerformanceReports,
         mountRemoteFolder,
         persistentState,
         readRemoteFile,

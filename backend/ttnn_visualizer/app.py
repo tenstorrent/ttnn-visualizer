@@ -22,6 +22,7 @@ import flask
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify
 from flask_cors import CORS
+from ttnn_visualizer.database_migrations import run_alembic_migrations
 from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
@@ -157,7 +158,7 @@ def extensions(app: flask.Flask):
         register_handlers(socketio)
 
     with app.app_context():
-        db.create_all()
+        run_alembic_migrations(app.config["SQLALCHEMY_DATABASE_URI"])
 
     return None
 
@@ -503,6 +504,11 @@ def main():
         port = config.PORT if flask_env == "production" else config.DEV_SERVER_PORT
         host = config.HOST if flask_env == "production" else config.DEV_SERVER_HOST
         threading.Thread(target=open_browser, args=[host, port, instance_id]).start()
+
+    # Upgrade the app database before binding workers (idempotent; workers also
+    # upgrade via create_app when using multi-worker mode).
+    run_alembic_migrations(config.SQLALCHEMY_DATABASE_URI)
+
     try:
         subprocess.run(gunicorn_args)
     except KeyboardInterrupt:

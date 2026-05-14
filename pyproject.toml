@@ -1,11 +1,12 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.84.0"
+version = "0.85.0"
 description = "TT-NN Visualizer"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "alembic~=1.18.0",
     "build",
     "Flask-Cors==6.0.0",
     "flask-socketio==5.6.1",
@@ -54,6 +55,9 @@ package-dir = { "" = "backend" }
 
 [tool.setuptools.packages.find]
 where = ["backend"]
+
+[tool.setuptools.package-data]
+ttnn_visualizer = ["alembic.ini", "alembic/**/*.py"]
 
 [build-system]
 requires = ["setuptools==78.1.1", "wheel"]

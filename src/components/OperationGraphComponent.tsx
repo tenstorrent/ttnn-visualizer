@@ -3,12 +3,13 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Edge, IdType, Network } from 'vis-network';
+import { Edge, IdType, Network, Node } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
 import { Button, ButtonVariant, Intent, Label, PopoverPosition, Slider, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { NavigateFunction, useNavigate } from 'react-router';
+import tinycolor from 'tinycolor2';
 import { OperationDescription, Tensor } from '../model/APIData';
 import '../scss/components/OperationGraphComponent.scss';
 import LoadingSpinner from './LoadingSpinner';
@@ -23,24 +24,37 @@ import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 
 type OperationList = OperationDescription[];
 
+type OperationNode = Node & {
+    id: number;
+    filterString: string;
+    deviceOpFilter: string;
+};
+
+enum NodeRelation {
+    Input = 'input',
+    Output = 'output',
+}
+
 const OperationGraph: React.FC<{
     operationList: OperationList;
     operationId?: number;
 }> = ({ operationList, operationId }) => {
-    let focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
-
     const containerRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
 
     const [isLoading, setIsLoading] = useState(true);
     const [scale, setScale] = useState(1);
-    const [currentOperationId, setCurrentOperationId] = useState<number | null>(focusNodeId ?? null);
+    const [currentOperationId, setCurrentOperationId] = useState<number | null>(
+        () => operationId ?? operationList[0]?.id ?? null,
+    );
     const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
     const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
     const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
     const [filterOutDeallocate, setFilterOutDeallocate] = useState<boolean>(true);
     const networkRef = useRef<Network | null>(null);
     const currentOpIdRef = useRef<number>(currentOperationId);
+    const blinkIntervalRef = useRef<number | null>(null);
+    const blinkTimeoutRef = useRef<number | null>(null);
     const [compactView, setCompactView] = useState<boolean>(false);
 
     const edges = useMemo((): Edge[] => {
@@ -86,8 +100,13 @@ const OperationGraph: React.FC<{
         return map;
     }, [operationList]);
 
-    if (currentOperationId !== null && connectedNodeIds.size > 0 && !connectedNodeIds.has(currentOperationId)) {
-        focusNodeId = connectedNodeIds.values().next().value ?? focusNodeId;
+    let focusNodeId: number;
+    if (currentOperationId !== null && connectedNodeIds.has(currentOperationId)) {
+        focusNodeId = currentOperationId;
+    } else if (connectedNodeIds.size > 0) {
+        focusNodeId = connectedNodeIds.values().next().value!;
+    } else {
+        focusNodeId = operationId ?? operationList[0]?.id ?? 0;
     }
 
     useEffect(() => {
@@ -104,7 +123,7 @@ const OperationGraph: React.FC<{
 
     const nodes = useMemo(
         () =>
-            new DataSet(
+            new DataSet<OperationNode>(
                 operationList
                     .filter((op) => connectedNodeIds.has(op.id))
                     .filter((op) => !filterOutDeallocate || !DEALLOCATE_OP_NAME_LIST.includes(op.name.toLowerCase()))
@@ -239,13 +258,114 @@ const OperationGraph: React.FC<{
         [scale],
     );
 
-    const selectConnectedNode = useCallback(
-        (nodeId: number) => {
-            focusOnNode(nodeId);
-            colorHighlightIO(nodeId);
+    const getNodeRelationToFocused = useCallback((nodeId: IdType): NodeRelation | null => {
+        const selectedNodeId = currentOpIdRef.current;
+        if (selectedNodeId === null || selectedNodeId === undefined || nodeId === selectedNodeId) {
+            return null;
+        }
+        const allEdges = edgesDataSetRef.current.get();
+        for (const edge of allEdges) {
+            if (edge.to === selectedNodeId && edge.from === nodeId) {
+                return NodeRelation.Input;
+            }
+            if (edge.from === selectedNodeId && edge.to === nodeId) {
+                return NodeRelation.Output;
+            }
+        }
+        return null;
+    }, []);
+
+    const getRestoreColorForNode = useCallback(
+        (nodeId: IdType): { background: string } => {
+            const relation = getNodeRelationToFocused(nodeId);
+            if (relation === NodeRelation.Input) {
+                return { background: GRAPH_COLORS.inputNode };
+            }
+            if (relation === NodeRelation.Output) {
+                return { background: GRAPH_COLORS.outputNode };
+            }
+            return { background: GRAPH_COLORS.normal };
         },
-        [focusOnNode, colorHighlightIO],
+        [getNodeRelationToFocused],
     );
+
+    const getBlinkOnColorForNode = useCallback(
+        (nodeId: IdType): { background: string } => {
+            const relation = getNodeRelationToFocused(nodeId);
+            if (relation === NodeRelation.Input) {
+                return { background: tinycolor(GRAPH_COLORS.inputNode).lighten(20).toString() };
+            }
+            if (relation === NodeRelation.Output) {
+                return { background: tinycolor(GRAPH_COLORS.outputNode).lighten(20).toString() };
+            }
+            return { background: GRAPH_COLORS.focusedNode };
+        },
+        [getNodeRelationToFocused],
+    );
+
+    const blinkNode = useCallback(
+        (nodeId: number) => {
+            if (blinkIntervalRef.current !== null) {
+                window.clearInterval(blinkIntervalRef.current);
+                blinkIntervalRef.current = null;
+            }
+            if (blinkTimeoutRef.current !== null) {
+                window.clearTimeout(blinkTimeoutRef.current);
+                blinkTimeoutRef.current = null;
+            }
+
+            if (!nodes.get(nodeId)) {
+                return;
+            }
+
+            const onColor = getBlinkOnColorForNode(nodeId);
+            const offColor = getRestoreColorForNode(nodeId);
+            let isOn = true;
+            nodes.update({ id: nodeId, color: onColor });
+
+            blinkIntervalRef.current = window.setInterval(() => {
+                isOn = !isOn;
+                nodes.update({ id: nodeId, color: isOn ? onColor : offColor });
+            }, 300);
+
+            blinkTimeoutRef.current = window.setTimeout(() => {
+                if (blinkIntervalRef.current !== null) {
+                    window.clearInterval(blinkIntervalRef.current);
+                    blinkIntervalRef.current = null;
+                }
+                blinkTimeoutRef.current = null;
+                nodes.update({ id: nodeId, color: getRestoreColorForNode(nodeId) });
+            }, 3000);
+        },
+        [nodes, getRestoreColorForNode, getBlinkOnColorForNode],
+    );
+
+    const locateConnectedNode = useCallback(
+        (nodeId: number) => {
+            if (!networkRef.current) {
+                return;
+            }
+            try {
+                networkRef.current.focus(nodeId, {
+                    scale,
+                    animation: { duration: 500, easingFunction: 'easeInOutCubic' },
+                });
+            } catch (e) {
+                // eslint-disable-next-line no-console
+                console.warn('Error focusing viewport on node', e);
+                return;
+            }
+            blinkNode(nodeId);
+        },
+        [scale, blinkNode],
+    );
+
+    const recenterOnCurrentOperation = useCallback(() => {
+        if (currentOperationId === null) {
+            return;
+        }
+        focusOnNode(currentOperationId);
+    }, [currentOperationId, focusOnNode]);
 
     const updateScale = useCallback(
         (newScale: number) => {
@@ -368,7 +488,7 @@ const OperationGraph: React.FC<{
 
                     networkRef.current.once('afterDrawing', () => {
                         networkRef.current?.moveTo({ scale });
-                        focusOnNode(currentOperationId);
+                        focusOnNode(focusNodeId);
                         setIsLoading(false);
                         // @ts-expect-error this is normal
                         currentOpIdRef.current = focusNodeId;
@@ -411,6 +531,14 @@ const OperationGraph: React.FC<{
         });
 
         return () => {
+            if (blinkIntervalRef.current !== null) {
+                window.clearInterval(blinkIntervalRef.current);
+                blinkIntervalRef.current = null;
+            }
+            if (blinkTimeoutRef.current !== null) {
+                window.clearTimeout(blinkTimeoutRef.current);
+                blinkTimeoutRef.current = null;
+            }
             networkRef.current?.off('zoom');
             networkRef.current?.off('click');
             networkRef.current?.off('dragEnd');
@@ -563,7 +691,8 @@ const OperationGraph: React.FC<{
                     operationNamesById={operationNamesById}
                     currentOperationId={currentOperationId}
                     onNavigate={navigate}
-                    onSelectConnectedNode={selectConnectedNode}
+                    onLocateConnectedNode={locateConnectedNode}
+                    onRecenterOnCurrent={recenterOnCurrentOperation}
                 />
             )}
             {isLoading && (
@@ -620,7 +749,7 @@ type ConnectedOpGroup = {
 
 const groupTensorsByConnectedOp = (
     tensors: Tensor[] | undefined,
-    direction: 'input' | 'output',
+    direction: NodeRelation,
     operationNamesById: Map<number, string>,
 ): ConnectedOpGroup[] => {
     if (!tensors?.length) {
@@ -630,12 +759,12 @@ const groupTensorsByConnectedOp = (
     const groups = new Map<string, ConnectedOpGroup>();
 
     tensors.forEach((tensor) => {
-        const ids = direction === 'input' ? tensor.producers : tensor.consumers;
-        const names = direction === 'input' ? tensor.producerNames : tensor.consumerNames;
+        const ids = direction === NodeRelation.Input ? tensor.producers : tensor.consumers;
+        const names = direction === NodeRelation.Input ? tensor.producerNames : tensor.consumerNames;
 
         if (!ids.length) {
-            const key = direction === 'input' ? 'external-input' : 'external-output';
-            const label = direction === 'input' ? 'External input' : 'Unconsumed output';
+            const key = direction === NodeRelation.Input ? 'external-input' : 'external-output';
+            const label = direction === NodeRelation.Input ? 'External input' : 'Unconsumed output';
             const group = groups.get(key) ?? { key, label, opId: null, tensors: [] };
             group.tensors.push(tensor);
             groups.set(key, group);
@@ -657,22 +786,22 @@ const groupTensorsByConnectedOp = (
 
 const ConnectedOpHeader: React.FC<{
     group: ConnectedOpGroup;
-    onSelect: (opId: number) => void;
-}> = ({ group, onSelect }) => {
+    onLocate: (opId: number) => void;
+}> = ({ group, onLocate }) => {
     return (
         <div className='connected-op-header'>
             <h2 className='connected-op-name'>{group.label}</h2>
             {group.opId !== null && (
                 <Tooltip
                     placement={PopoverPosition.RIGHT}
-                    content={`Select operation ${group.opId}`}
+                    content={`Locate operation ${group.opId} in graph`}
                 >
                     <Button
                         className='connected-op-select'
                         icon={IconNames.LOCATE}
                         variant={ButtonVariant.MINIMAL}
-                        onClick={() => onSelect(group.opId as number)}
-                        aria-label={`Select operation ${group.opId}`}
+                        onClick={() => onLocate(group.opId as number)}
+                        aria-label={`Locate operation ${group.opId} in graph`}
                     />
                 </Tooltip>
             )}
@@ -685,16 +814,24 @@ const OperationGraphInfoComponent: React.FC<{
     operationList: OperationList;
     operationNamesById: Map<number, string>;
     onNavigate: NavigateFunction;
-    onSelectConnectedNode: (opId: number) => void;
-}> = ({ currentOperationId, operationList, operationNamesById, onNavigate, onSelectConnectedNode }) => {
+    onLocateConnectedNode: (opId: number) => void;
+    onRecenterOnCurrent: () => void;
+}> = ({
+    currentOperationId,
+    operationList,
+    operationNamesById,
+    onNavigate,
+    onLocateConnectedNode,
+    onRecenterOnCurrent,
+}) => {
     const operation = operationList.find((op) => op.id === currentOperationId);
 
     const inputGroups = useMemo(
-        () => groupTensorsByConnectedOp(operation?.inputs, 'input', operationNamesById),
+        () => groupTensorsByConnectedOp(operation?.inputs, NodeRelation.Input, operationNamesById),
         [operation, operationNamesById],
     );
     const outputGroups = useMemo(
-        () => groupTensorsByConnectedOp(operation?.outputs, 'output', operationNamesById),
+        () => groupTensorsByConnectedOp(operation?.outputs, NodeRelation.Output, operationNamesById),
         [operation, operationNamesById],
     );
 
@@ -708,14 +845,26 @@ const OperationGraphInfoComponent: React.FC<{
                     <li key={`device-op-${index}`}>{deviceOp}()</li>
                 ))}
             </ul>
-            <Button
-                className='navigate-button'
-                endIcon={IconNames.SEGMENTED_CONTROL}
-                intent={Intent.PRIMARY}
-                onClick={() => onNavigate(`/operations/${currentOperationId}`)}
-            >
-                Memory Details
-            </Button>
+            <div className='operation-actions'>
+                <Button
+                    className='navigate-button'
+                    endIcon={IconNames.SEGMENTED_CONTROL}
+                    intent={Intent.PRIMARY}
+                    onClick={() => onNavigate(`/operations/${currentOperationId}`)}
+                >
+                    Memory Details
+                </Button>
+
+                <Button
+                    className='recenter-button'
+                    icon={IconNames.LOCATE}
+                    intent={Intent.PRIMARY}
+                    onClick={onRecenterOnCurrent}
+                    aria-label={`Recenter on operation ${currentOperationId}`}
+                >
+                    Locate {currentOperationId}
+                </Button>
+            </div>
 
             <h3 className='inputs'>Inputs:</h3>
             <div className='inputs tensors'>
@@ -726,7 +875,7 @@ const OperationGraphInfoComponent: React.FC<{
                     >
                         <ConnectedOpHeader
                             group={group}
-                            onSelect={onSelectConnectedNode}
+                            onLocate={onLocateConnectedNode}
                         />
                         {group.tensors.map((tensor, index) => (
                             <TensorDetailsComponent
@@ -746,7 +895,7 @@ const OperationGraphInfoComponent: React.FC<{
                     >
                         <ConnectedOpHeader
                             group={group}
-                            onSelect={onSelectConnectedNode}
+                            onLocate={onLocateConnectedNode}
                         />
                         {group.tensors.map((tensor, index) => (
                             <TensorDetailsComponent
