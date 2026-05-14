@@ -4,12 +4,17 @@
 
 import { defineConfig } from 'vite';
 import path, { join } from 'path';
-import react from '@vitejs/plugin-react';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
 // @ts-expect-error don't have types declaration for node-build-scripts
 import { sassNodeModulesLoadPaths } from '@blueprintjs/node-build-scripts';
 // @ts-expect-error don't have types declaration for legacySassSvgInlinerFactory
 import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSvgInlinerFactory';
 import { version } from './package.json';
+
+// React Compiler (#1387): auto-memoization for components that follow the Rules of React.
+// To compare render cost: React DevTools Profiler while repeating one interaction on a heavy route
+// (e.g. performance report or operation graph). https://react.dev/learn/react-compiler
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
@@ -23,7 +28,12 @@ export default defineConfig(({ command }) => {
         define: {
             'import.meta.env.APP_VERSION': JSON.stringify(version),
         },
-        plugins: [react()],
+        plugins: [
+            react(),
+            babel({
+                presets: [reactCompilerPreset({ target: '18' })],
+            }),
+        ],
         server: {
             proxy: {
                 '/api': 'http://localhost:8000',

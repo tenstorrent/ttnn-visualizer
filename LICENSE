@@ -88,6 +88,7 @@ The following separate and independent dependencies are utilized by this project
 - @eslint/eslintrc - MIT - https://github.com/eslint/eslintrc/blob/main/LICENSE
 - @eslint/js - MIT - https://github.com/eslint/eslint/blob/main/LICENSE
 - @eslint/rewrite - Apache-2.0 - https://github.com/eslint/rewrite/blob/main/LICENSE
+- @rolldown/plugin-babel - MIT - https://github.com/rolldown/plugins/blob/main/LICENSE
 - @tanstack/react-query - MIT - https://github.com/TanStack/query/blob/main/LICENSE
 - @tanstack/react-query-devtools - MIT - https://github.com/TanStack/query/blob/main/LICENSE
 - @tanstack/react-virtual - MIT - https://github.com/TanStack/virtual/blob/main/LICENSE
@@ -105,6 +106,7 @@ The following separate and independent dependencies are utilized by this project
 - @xyflow/react - MIT - https://github.com/xyflow/xyflow/blob/main/LICENSE
 - ajv - MIT - https://github.com/ajv-validator/ajv/blob/master/LICENSE
 - axios - MIT - https://github.com/axios/axios/blob/v1.x/LICENSE
+- babel-plugin-react-compiler - MIT - https://github.com/facebook/react/blob/main/LICENSE
 - classnames - MIT - https://github.com/JedWatson/classnames/blob/main/LICENSE
 - css-select - BSD‑2-Clause - https://github.com/fb55/css-select/blob/master/LICENSE
 - dom-serializer - MIT - https://github.com/cheeriojs/dom-serializer/blob/master/LICENSE
@@ -137,6 +139,7 @@ The following separate and independent dependencies are utilized by this project
 - plotly.js - MIT - https://github.com/plotly/plotly.js/blob/master/LICENSE
 - prettier - MIT - https://github.com/prettier/eslint-config-prettier/blob/main/LICENSE
 - react - MIT - https://github.com/facebook/react/blob/main/LICENSE
+- react-compiler-runtime - MIT - https://github.com/facebook/react/blob/main/LICENSE
 - react-dom - MIT - https://github.com/facebook/react/blob/main/LICENSE
 - react-helmet-async - MIT - https://github.com/staylor/react-helmet-async/blob/main/LICENSE
 - react-plotly.js - MIT - https://github.com/plotly/react-plotly.js/blob/master/LICENSE
