@@ -178,6 +178,14 @@ const useRemoteConnection = () => {
         },
     };
 
+    const setPersistentSelectedConnection = (connection: RemoteConnection | undefined) => {
+        setAppConfig(LOCAL_STORAGE_KEY_SELECTED, safeJsonStringify(connection ?? null));
+    };
+
+    const setPersistentSavedConnectionList = (connectionList: RemoteConnection[]) => {
+        setAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS, safeJsonStringify(connectionList, '[]'));
+    };
+
     const isSourceFileAvailable = useCallback(async (filePath: string, signal?: AbortSignal): Promise<boolean> => {
         try {
             const { data } = await axiosInstance.get<{ available?: boolean }>(`${Endpoints.REMOTE}/stack-trace/test`, {
@@ -233,6 +241,8 @@ const useRemoteConnection = () => {
         listPerformanceReports,
         mountRemoteFolder,
         persistentState,
+        setPersistentSelectedConnection,
+        setPersistentSavedConnectionList,
         readRemoteFile,
         isSourceFileAvailable,
     };

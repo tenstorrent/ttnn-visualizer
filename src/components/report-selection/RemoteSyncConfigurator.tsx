@@ -31,6 +31,7 @@ import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareD
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
+    const { setPersistentSelectedConnection, setPersistentSavedConnectionList } = remote;
     const queryClient = useQueryClient();
     const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
@@ -76,7 +77,7 @@ const RemoteSyncConfigurator: FC = () => {
     );
 
     const updateSelectedConnection = async (connection: RemoteConnection) => {
-        remote.persistentState.selectedConnection = connection;
+        setPersistentSelectedConnection(connection);
         setReportFolders(remote.persistentState.getSavedReportFolders(connection));
         setRemotePerformanceFolders(remote.persistentState.getSavedPerformanceFolders(connection));
 
@@ -272,21 +273,23 @@ const RemoteSyncConfigurator: FC = () => {
 
     // Populates the selectedReportFolder if there is a stored activeProfilerReport
     useEffect(() => {
-        if (activeProfilerReport && isProfilerRemote) {
-            const matchedFolder = reportFolderList.find((folder) =>
-                folder.remotePath?.includes(activeProfilerReport.path),
-            );
+        queueMicrotask(() => {
+            if (activeProfilerReport && isProfilerRemote) {
+                const matchedFolder = reportFolderList.find((folder) =>
+                    folder.remotePath?.includes(activeProfilerReport.path),
+                );
 
-            setSelectedReportFolder(matchedFolder);
-        }
+                setSelectedReportFolder(matchedFolder);
+            }
 
-        if (activePerformanceReport && isPerformanceRemote) {
-            const matchedFolder = remotePerformanceFolderList.find((folder) =>
-                folder.reportName?.includes(activePerformanceReport.reportName),
-            );
+            if (activePerformanceReport && isPerformanceRemote) {
+                const matchedFolder = remotePerformanceFolderList.find((folder) =>
+                    folder.reportName?.includes(activePerformanceReport.reportName),
+                );
 
-            setSelectedPerformanceFolder(matchedFolder);
-        }
+                setSelectedPerformanceFolder(matchedFolder);
+            }
+        });
     }, [
         activeProfilerReport,
         profilerReportLocation,
@@ -317,10 +320,10 @@ const RemoteSyncConfigurator: FC = () => {
                 <AddRemoteConnection
                     disabled={isDisabled}
                     onAddConnection={async (newConnection) => {
-                        remote.persistentState.savedConnectionList = [
+                        setPersistentSavedConnectionList([
                             ...remote.persistentState.savedConnectionList,
                             newConnection,
-                        ];
+                        ]);
 
                         await updateSelectedConnection(newConnection);
                     }}
@@ -341,7 +344,7 @@ const RemoteSyncConfigurator: FC = () => {
                         const updatedConnections = [...remote.persistentState.savedConnectionList];
 
                         updatedConnections[findConnectionIndex(oldConnection)] = updatedConnection;
-                        remote.persistentState.savedConnectionList = updatedConnections;
+                        setPersistentSavedConnectionList(updatedConnections);
                         remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
 
                         await updateSelectedConnection(updatedConnection);
@@ -350,7 +353,7 @@ const RemoteSyncConfigurator: FC = () => {
                         const updatedConnections = [...remote.persistentState.savedConnectionList];
 
                         updatedConnections.splice(findConnectionIndex(connection), 1);
-                        remote.persistentState.savedConnectionList = updatedConnections;
+                        setPersistentSavedConnectionList(updatedConnections);
                         remote.persistentState.deleteSavedReportFolders(connection);
                         remote.persistentState.deleteSavedPerformanceFolders(connection);
 
