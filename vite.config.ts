@@ -15,9 +15,39 @@ import { version } from './package.json';
 export default defineConfig(({ command }) => {
     return {
         build: {
+            // One CSS bundle for production; avoid per-async-chunk CSS splits alongside lazy routes.
+            cssCodeSplit: false,
             outDir: './backend/ttnn_visualizer/static/',
             emptyOutDir: true,
             target: 'es2022',
+            sourcemap: false,
+            reportCompressedSize: false,
+            rollupOptions: {
+                output: {
+                    manualChunks(id) {
+                        if (!id.includes('node_modules')) {
+                            return undefined;
+                        }
+                        if (id.includes('plotly.js') || id.includes('react-plotly.js')) {
+                            return 'plotly';
+                        }
+                        if (
+                            id.includes('vis-network') ||
+                            id.includes('node_modules/vis-data') ||
+                            id.includes('node_modules\\vis-data')
+                        ) {
+                            return 'vis';
+                        }
+                        if (id.includes('@xyflow')) {
+                            return 'xyflow';
+                        }
+                        if (id.includes('@blueprintjs')) {
+                            return 'blueprint';
+                        }
+                        return undefined;
+                    },
+                },
+            },
         },
         base: command === 'serve' ? '/' : '/static/',
         define: {
