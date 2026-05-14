@@ -52,7 +52,7 @@ function StackTrace({
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
 
     const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded || false);
-    const [filePath, setFilePath] = useState('');
+    const filePath = useMemo(() => FILE_PATH_REGEX.exec(stackTrace)?.[1] ?? '', [stackTrace]);
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
     const [errorDetails, setErrorDetails] = useState('');
@@ -68,12 +68,7 @@ function StackTrace({
     const sourceControlsRef = useRef<null | HTMLDivElement>(null);
 
     const stackTraceWithHighlights = useMemo(() => {
-        const filePathMatches = FILE_PATH_REGEX.exec(stackTrace);
         let highlightedFileContents = hljs.highlight(stackTrace, { language }).value;
-
-        if (filePathMatches) {
-            setFilePath(filePathMatches[1]);
-        }
 
         let line = 1;
         highlightedFileContents = highlightedFileContents.replace(
@@ -226,23 +221,29 @@ function StackTrace({
     }, [scrollContainerEl, overlayTopOffset, isViewingSourceFile]);
 
     useEffect(() => {
-        setFileContents('');
-        setErrorDetails('');
-        setSourceFileStatus(SourceFileStatus.Unavailable);
-        setSourceMatchedViaRemap(false);
-        setResolvedSourcePath(null);
+        queueMicrotask(() => {
+            setFileContents('');
+            setErrorDetails('');
+            setSourceFileStatus(SourceFileStatus.Unavailable);
+            setSourceMatchedViaRemap(false);
+            setResolvedSourcePath(null);
+        });
     }, [filePath, canReadSource]);
 
     // Check stack trace file is available
     useEffect(() => {
         if (!shouldShowSourceControls || !filePath || !canReadSource) {
-            setSourceFileStatus(SourceFileStatus.Unavailable);
+            queueMicrotask(() => {
+                setSourceFileStatus(SourceFileStatus.Unavailable);
+            });
             return undefined;
         }
 
         const controller = new AbortController();
         let fetchCancelled = false;
-        setSourceFileStatus(SourceFileStatus.Pending);
+        queueMicrotask(() => {
+            setSourceFileStatus(SourceFileStatus.Pending);
+        });
 
         (async () => {
             try {

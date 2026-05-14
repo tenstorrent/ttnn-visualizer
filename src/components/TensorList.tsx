@@ -45,6 +45,8 @@ const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo e
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
 const TensorList = () => {
+    'use no memo';
+
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllTensorsAtom);
     const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useAtom(showHighConsumerTensorsAtom);
@@ -149,6 +151,7 @@ const TensorList = () => {
         expandedItems: restoredExpandedItems,
     } = useMemo(() => getListState(), [getListState]) ?? {};
 
+    // eslint-disable-next-line react-hooks/incompatible-library
     const virtualizer = useVirtualizer({
         estimateSize: () => OPERATION_EL_HEIGHT,
         getScrollElement: () => scrollElementRef.current,

@@ -81,6 +81,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
         let groupIndex = -1;
         return {
             range: selectedZoneList.flatMap((rootZone) => {
+                // eslint-disable-next-line react-hooks/immutability
                 groupIndex += 1;
                 const childZones = rootZone.expandedState ? getZoneDrawingModel(rootZone.zones, 1) : [];
                 const maxDepth = childZones.length ? Math.max(...childZones.map((z) => z.depth)) : 0;

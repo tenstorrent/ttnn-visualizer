@@ -41,6 +41,8 @@ const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 
 const OperationList = () => {
+    'use no memo';
+
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
 
@@ -123,6 +125,7 @@ const OperationList = () => {
         expandedItems: restoredExpandedItems,
     } = useMemo(() => getListState(), [getListState]) ?? {};
 
+    // eslint-disable-next-line react-hooks/incompatible-library
     const virtualizer = useVirtualizer({
         estimateSize: () => OPERATION_EL_HEIGHT,
         getScrollElement: () => scrollElementRef.current,
