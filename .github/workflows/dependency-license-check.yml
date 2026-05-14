@@ -24,7 +24,7 @@ jobs:
 
             -   name: Install dependencies
                 run: |
-                    npm install -g pnpm@latest-10
+                    npm install -g pnpm@latest-11
                     pnpm install
 
             -   name: Run license check

@@ -23,7 +23,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
             node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
-      - run: npm install -g pnpm@latest-10
+      - run: npm install -g pnpm@latest-11
       - run: pnpm install
       - run: pnpm build
 
