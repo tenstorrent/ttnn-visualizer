@@ -38,7 +38,7 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 
 ### Every source file carries an SPDX header in the project format
 
-**Rationale.** `pnpm lint:spdx` (`scripts/check-spdx.mjs`) walks the whole repo and validates every source file's header against a regex. Missing or malformed headers fail CI, and the format is invariant enough to pin here so contributors don't reinvent it.
+**Rationale.** `pnpm lint:spdx` (`scripts/check-spdx.mjs`) walks the whole repo and validates the SPDX header on each file whose extension is in the script's allowlist — currently `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.scss`, `.xml`, `.py`, and `.json` (see `scripts/check-spdx.mjs:29:31`). Files outside that set (markdown, YAML, TOML, etc.) are skipped. Missing or malformed headers on covered files fail CI, and the format is invariant enough to pin here so contributors don't reinvent it.
 
 The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`** (`scripts/check-spdx.mjs:12:19`). Two comment styles are accepted, keyed on file extension:
 
@@ -617,12 +617,13 @@ Run with `pnpm test`. Tests live in `tests/` at the repo root — see [the dedic
 
 ### Backend: pytest + the shared `client` fixture
 
-The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py:50`. Use it directly:
+The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py:50`. Routes are mounted under the `/api` prefix (the `api = Blueprint("api", __name__)` is registered with `url_prefix="/api"`), and endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. The canonical pattern, mirroring `backend/ttnn_visualizer/tests/test_file_uploads.py:328`:
 
 ```python
-def test_local_upload_rejects_non_json(client, tmp_path):
+def test_local_upload_rejects_non_json(app, client, make_report):
+    instance_id = make_report()
     response = client.post(
-        "/local/upload/mlir",
+        f"/api/local/upload/mlir?instanceId={instance_id}",
         data={"files": (BytesIO(b"hello"), "evil.exe")},
         content_type="multipart/form-data",
     )
@@ -883,7 +884,7 @@ def response_unprocessable_entity(message: Optional[str] = None, detail: Optiona
 def response_internal_server_error(message: Optional[str] = None, detail: Optional[str] = None): …
 ```
 
-All five funnel through `error_response(...)` which produces a consistent `{"error": "...", "detail": "..."}` shape. Don't hand-roll `return jsonify({"error": "..."}), 400` — `getResponseError` on the frontend will fall back to a generic message because the shape diverges.
+All five funnel through `error_response(...)` which produces a consistent `{"error": "...", "detail": "..."}` shape and the matching HTTP status code. Don't hand-roll `return jsonify({"error": "..."}), 400` — the frontend's `getResponseError` happens to recognise that minimal shape, but going through the helper buys you (a) the right `HTTPStatus.*` constant so the status code matches the semantic, (b) the optional `detail` field for additional context that the bare `jsonify` form drops, and (c) a single place to evolve the response shape if it ever needs to change. Duplicating the response-building inline diverges over time.
 
 ### `StatusMessage` for operational responses
 
