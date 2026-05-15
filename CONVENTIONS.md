@@ -872,7 +872,7 @@ class Instance(db.Model):
 api = Blueprint("api", __name__)
 ```
 
-Every route in the file decorates with `@api.route("/path", methods=[...])` and is registered onto `api` at module load. `app.py` mounts the blueprint at `url_prefix="/api"`, which is why route definitions in `views.py` use bare paths like `/operations`, not `/api/operations`.
+Every route in the file decorates with `@api.route("/path", methods=[...])` and is registered onto `api` at module load. `app.py:86` mounts the blueprint at `url_prefix=f"{app.config['BASE_PATH']}api"` — `/api` when `BASE_PATH=/` (single-tenant deployments, including tests), `/<prefix>/api` under a prefixed mount. Either way, route definitions in `views.py` use bare paths like `/operations`, not `/api/operations`.
 
 **Don't.** Create a second blueprint for a new endpoint group unless you genuinely need a separate `url_prefix` and lifecycle (e.g. an unauthenticated `/health` namespace). Two blueprints with the same prefix create silent registration-order bugs.
 

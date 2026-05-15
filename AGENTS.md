@@ -115,7 +115,7 @@ Open pull requests with **`dev`** as the base branch by default.
 
 ### TypeScript
 
-- Prefer **named enums** over inline string-literal unions when the union has semantic meaning (e.g. `enum NodeRelation { Input, Output }` rather than `'input' | 'output'`). One-off booleans/flags don't need enum promotion.
+- Prefer **named enums** over inline string-literal unions when the union has semantic meaning (e.g. `enum NodeRelation { Input = 'input', Output = 'output' }` rather than `'input' | 'output'`). Use string-valued enums so the runtime values match the previous union — bare `enum NodeRelation { Input, Output }` is a numeric enum (`Input = 0`, `Output = 1`) and silently breaks string comparisons. One-off booleans/flags don't need enum promotion.
 - When using third-party generic containers (`DataSet<T>`, `Map<K, V>`), spell out the type parameter rather than relying on inference that obscures intent.
 - Respect `react-hooks/exhaustive-deps`. If you suppress it, add a one-line comment explaining the trade-off and why the missing dep is intentionally stable.
 - Default to **`interface ComponentNameProps`** for component props (the `Props` suffix is required), declared immediately above the component. Reserve `type` for unions, generic-constrained mappings, and `Omit`/`Pick` derivations.
