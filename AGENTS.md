@@ -132,7 +132,7 @@ Open pull requests with **`dev`** as the base branch by default.
 ### Testing
 
 - Frontend: **Vitest** + `@testing-library/react` (`pnpm test`).
-- Backend: **pytest** with `caplog`, `tmp_path`, and `werkzeug.test.Client` for endpoint tests.
+- Backend: **pytest** with `caplog`, `tmp_path`, and the shared **`client`** fixture (Flask's `app.test_client()`, defined in `backend/ttnn_visualizer/tests/conftest.py`) for endpoint tests.
 - For larger test suites — characterisation tests, refactor regressions — build **shared fixture helpers** (see `tests/mlirFixtures/builders.ts`) and **cross-cutting invariant checks** (see `tests/mlirFixtures/invariants.ts`) instead of repeating ad-hoc setup.
 
 ### Frontend data integrity
@@ -145,7 +145,7 @@ Open pull requests with **`dev`** as the base branch by default.
 
 ### Toolchain and package management
 
-- **pnpm** is the only supported frontend package manager (`engines.pnpm >= 10`). Don't `npm install` or `yarn add`.
+- **pnpm** is the only supported frontend package manager (`engines.pnpm >= 11`). Don't `npm install` or `yarn add`.
 - The Node version is pinned via **`.nvmrc`**. Use `nvm use` from the repo root; `corepack` handles pnpm shimming automatically on Node 16+.
 
 ### Database schema changes
