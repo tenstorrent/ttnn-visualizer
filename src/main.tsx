@@ -10,7 +10,7 @@ import { FocusStyleManager, OverlaysProvider } from '@blueprintjs/core';
 import './index.scss';
 import { HelmetProvider } from 'react-helmet-async';
 import { RouterProvider } from 'react-router';
-import ErrorPage from './error-page';
+import ErrorPage from './ErrorPage';
 import Layout from './components/Layout';
 import getServerConfig from './functions/getServerConfig';
 import { SocketProvider } from './libs/SocketProvider';

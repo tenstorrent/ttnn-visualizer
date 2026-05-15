@@ -310,7 +310,7 @@ def test_mlir_upload_traversal_does_not_escape_target_directory(
     """
     # The handler calls `update_instance(instance_id=...)` and requires a row
     # to update, so provision one via the standard `make_report` fixture and
-    # thread its id through the `?instanceId=` query param.
+    # thread its id through the `instanceId` query param.
     instance_id = make_report()
 
     # The shared `conftest.app` fixture sets `LOCAL_DATA_DIRECTORY` as a
@@ -326,7 +326,8 @@ def test_mlir_upload_traversal_does_not_escape_target_directory(
         "files": (BytesIO(b"{}"), "../escape.json"),
     }
     response = client.post(
-        f"/api/local/upload/mlir?instanceId={instance_id}",
+        "/api/local/upload/mlir",
+        query_string={"instanceId": instance_id},
         data=payload,
         content_type="multipart/form-data",
     )
@@ -364,7 +365,8 @@ def test_mlir_upload_forbidden_when_server_mode(app, client, make_report):
     assert app.config["SERVER_MODE"] is True
 
     response = client.post(
-        f"/api/local/upload/mlir?instanceId={instance_id}",
+        "/api/local/upload/mlir",
+        query_string={"instanceId": instance_id},
         data={"files": (BytesIO(b"{}"), "model.json")},
         content_type="multipart/form-data",
     )
@@ -393,7 +395,8 @@ def test_mlir_upload_invokes_configured_malware_scanner(app, client, make_report
         "ttnn_visualizer.file_uploads.subprocess.run", return_value=mock_result
     ) as mock_run:
         response = client.post(
-            f"/api/local/upload/mlir?instanceId={instance_id}",
+            "/api/local/upload/mlir",
+            query_string={"instanceId": instance_id},
             data={"files": (BytesIO(b'{"x": 1}'), "model.json")},
             content_type="multipart/form-data",
         )
@@ -423,7 +426,8 @@ def test_mlir_upload_malware_scanner_positive_blocks_save(app, client, make_repo
 
     with patch("ttnn_visualizer.file_uploads.subprocess.run", return_value=mock_result):
         response = client.post(
-            f"/api/local/upload/mlir?instanceId={instance_id}",
+            "/api/local/upload/mlir",
+            query_string={"instanceId": instance_id},
             data={"files": (BytesIO(b"{}"), "bad.json")},
             content_type="multipart/form-data",
         )
@@ -455,7 +459,8 @@ def test_profiler_upload_chromium_style_lands_under_report_folder(
     ).resolve()
 
     response = client.post(
-        f"/api/local/upload/profiler?instanceId={instance_id}",
+        "/api/local/upload/profiler",
+        query_string={"instanceId": instance_id},
         data={
             "files": [
                 (BytesIO(b"sqlite-bytes"), "unique_name2/db.sqlite"),
@@ -495,7 +500,8 @@ def test_profiler_upload_safari_style_lands_under_report_folder(
     ).resolve()
 
     response = client.post(
-        f"/api/local/upload/profiler?instanceId={instance_id}",
+        "/api/local/upload/profiler",
+        query_string={"instanceId": instance_id},
         data={
             "files": [
                 (BytesIO(b"sqlite-bytes"), "db.sqlite"),
@@ -533,7 +539,8 @@ def test_profiler_upload_rejects_files_from_multiple_folders(app, client, make_r
     ).resolve()
 
     response = client.post(
-        f"/api/local/upload/profiler?instanceId={instance_id}",
+        "/api/local/upload/profiler",
+        query_string={"instanceId": instance_id},
         data={
             "files": [
                 (BytesIO(b"sqlite-bytes"), "reportA/db.sqlite"),
@@ -575,7 +582,8 @@ def test_performance_upload_chromium_style_lands_under_report_folder(
     ).resolve()
 
     response = client.post(
-        f"/api/local/upload/performance?instanceId={instance_id}",
+        "/api/local/upload/performance",
+        query_string={"instanceId": instance_id},
         data={
             "files": [
                 (BytesIO(b"csv,bytes\n"), "perf_run/profile_log_device.csv"),
