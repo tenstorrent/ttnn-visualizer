@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router';
 import { useArchitecture, useGetClusterDescription } from '../../hooks/useAPI';
 import { stringToArchitecture } from '../../definitions/DeviceArchitecture';
 
-import '../../scss/components/ClusterView.scss';
+import 'styles/components/ClusterView.scss';
 import {
     CLUSTER_COORDS,
     CLUSTER_ETH_POSITION,
