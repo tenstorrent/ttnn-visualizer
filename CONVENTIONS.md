@@ -12,13 +12,16 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 
 ## Table of contents
 
+- [SPDX headers](#spdx-headers)
 - [Comments](#comments)
 - [TypeScript](#typescript)
 - [CSS / SCSS](#css--scss)
 - [State management (Jotai)](#state-management-jotai)
+- [Network layer](#network-layer)
 - [Data fetching (React Query)](#data-fetching-react-query)
 - [Errors and toasts](#errors-and-toasts)
 - [File organization and modules](#file-organization-and-modules)
+- [Routing and page metadata](#routing-and-page-metadata)
 - [Naming](#naming)
 - [Lint discipline](#lint-discipline)
 - [Testing](#testing)
@@ -28,6 +31,34 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 - [Database schema changes](#database-schema-changes)
 - [Backend conventions](#backend-conventions)
 - [Known inconsistencies](#known-inconsistencies)
+
+---
+
+## SPDX headers
+
+### Every source file carries an SPDX header in the project format
+
+**Rationale.** `pnpm lint:spdx` (`scripts/check-spdx.mjs`) validates headers on every staged file. Missing or malformed headers fail CI, and the format is invariant enough to pin here so contributors don't reinvent it.
+
+The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`** (`scripts/check-spdx.mjs:12:19`). Two comment styles are accepted, keyed on file extension:
+
+```ts
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+```
+
+```python
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+```
+
+JSON files (currently just `package.json`) carry the brand metadata as `license` and `author` fields rather than as a header comment (`scripts/check-spdx.mjs:20:26`).
+
+### The year is the file's creation year, not the edit year
+
+Don't bump the year on edits — that's a hot path for noisy diffs reviewers have to wade through. New files take the current year.
 
 ---
 
@@ -158,6 +189,36 @@ type PartialBuffer = Omit<Buffer, 'pages'> & { pageCount: number };
 
 If a pixel value, threshold, or duration is used in more than one place, promote it to an SCSS variable or CSS custom property. One-off literals at a single call site are fine.
 
+### `@use`, not `@import`; namespace what needs disambiguation
+
+**Rationale.** Sass deprecated `@import` and the codebase has already migrated. `@use` requires explicit handling of name collisions; the convention is `as *` for tokens we want ergonomic at call sites (colour variables, `$tt-grey-2`) and a short namespace for everything else (`variables.$base-font`).
+
+```5:7:src/scss/_base.scss
+@use 'definitions/colours' as *;
+@use 'definitions/variables' as variables;
+```
+
+### SCSS file naming mirrors Sass partial conventions; component sheets are PascalCase
+
+- **Partials** (intended to be `@use`d, never compiled standalone) carry a leading underscore: `_base.scss`, `_common.scss`, `_layout.scss`, `_blueprintjs.scss`. All live in `src/scss/`.
+- **Component stylesheets** in `src/scss/components/` are **PascalCase** matching their owning React component: `LoadingSpinner.scss`, `MainNavigation.scss`, `OperationDetailsComponent.scss`. No leading underscore — these are compiled top-level when their component imports them.
+- **Definition partials** (`src/scss/definitions/_colours.scss`, `_variables.scss`) carry the leading underscore.
+- **Mixin partials** (`src/scss/mixins/_perfReportColours.scss`, `_scrollShade.scss`) carry the leading underscore.
+
+Don't mix the two: a new component stylesheet doesn't need an underscore, and a new shared partial does.
+
+### Stylesheet imports go through the `styles/` alias
+
+The `styles/` alias is wired up in three places that must stay in sync — `tsconfig.json:23:30`, `vite.config.ts:66:71`, and `vitest.config.ts:28:30`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.
+
+```7:9:src/components/SearchField.tsx
+import { IconNames } from '@blueprintjs/icons';
+import 'styles/components/SearchField.scss';
+import classNames from 'classnames';
+```
+
+The alias resolves `styles/` to `src/scss/` so the path inside the import maps 1:1 to the path under `src/scss/`. New stylesheets go under `src/scss/components/MyComponent.scss` and are imported as `'styles/components/MyComponent.scss'`. A handful of pre-existing components (`Collapsible.tsx:9`, `ListItem.tsx:9`) still use relative paths — don't replicate.
+
 ---
 
 ## State management (Jotai)
@@ -207,6 +268,77 @@ export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', fals
 ```
 
 The first argument is the storage key — pick something stable; renaming it later orphans existing users' settings.
+
+---
+
+## Network layer
+
+### Use `axiosInstance` from `src/libs/axiosInstance.ts`; never `import axios from 'axios'` at a call site
+
+**Rationale.** The shared instance carries two interceptors every consumer depends on: a request interceptor that injects `instanceId` into query params, and a response interceptor that auto-retries the operations endpoint when a large payload comes back as a string instead of an array. Bypassing the instance means losing both.
+
+```12:16:src/libs/axiosInstance.ts
+const axiosInstance = axios.create({
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+    baseURL,
+});
+```
+
+```40:57:src/libs/axiosInstance.ts
+axiosInstance.interceptors.request.use(
+    (config) => {
+        const instanceId = getOrCreateInstanceId();
+
+        if (instanceId) {
+            // Add the instanceId to the query params
+            config.params = {
+                ...config.params,
+                instanceId,
+            };
+        }
+
+        return config;
+    },
+    …
+);
+```
+
+### `instanceId` travels as a query parameter, never in the URL path
+
+The frontend never embeds the instance ID in the URL — it's set once by the request interceptor and read on the backend by `@with_instance` (`backend/ttnn_visualizer/decorators.py:33:35`) via `request.args.get("instanceId")`. Endpoints that take an `:id` path parameter mean something else (e.g. `/api/operations/<operation_id>` is an operation ID, not an instance ID).
+
+**Don't.** Building a URL like `${Endpoints.OPERATIONS_LIST}/${instanceId}` collides with the operation-detail route shape and loses session scoping for every other call sharing the axios config.
+
+### Cross-cutting retries belong in the interceptor, not in individual hooks
+
+The operations endpoint occasionally returns a string instead of an array under heavy load. The response interceptor handles this with `MAX_RETRIES = 3` and exponential backoff (`src/libs/axiosInstance.ts:63, 66:108`). Don't replicate retry logic inside a `queryFn` — extend the interceptor instead so every consumer of the endpoint benefits.
+
+### The `socket` instance is module-scope in `SocketProvider`
+
+**Rationale.** React StrictMode mounts then re-mounts components in development. A `socket = io(...)` call inside the provider's body (or even inside a `useState` initialiser) would re-open the connection on every mount, double the listeners, and surface as duplicate `fileTransferProgress` updates in dev. Module scope guarantees one connection per page load.
+
+```16:20:src/libs/SocketProvider.tsx
+const { BASE_PATH } = getServerConfig();
+
+const socket = io(`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}`);
+
+const SocketContext = createContext<SocketContextType>(null);
+```
+
+Listeners live inside `useEffect`, but every `socket.on(name)` must be paired with `socket.off(name)` in the cleanup:
+
+```66:73:src/libs/SocketProvider.tsx
+return () => {
+    // socket.offAny();
+    socket.off('connect');
+    socket.off('disconnect');
+    socket.off('connect_error');
+    socket.off('reconnect');
+};
+```
+
+Adding a new event handler? Add the matching `off()` in the same change. Don't introduce a second `io(...)` call elsewhere in the codebase — the connection is shared.
 
 ---
 
@@ -322,6 +454,62 @@ Frontend route paths live in `src/definitions/Routes.ts` (a `Object.freeze`'d co
 
 ---
 
+## Routing and page metadata
+
+### Frontend route definitions go through `routeObjectList`
+
+**Rationale.** `ROUTES` (`src/definitions/Routes.ts`) holds absolute paths so that `<Link to={ROUTES.OPERATIONS} />` reads naturally. React Router's nested-route children, however, take **relative** paths. `stripFirstSlash` bridges the two and keeps `ROUTES` the single source of truth:
+
+```17:28:src/definitions/RouteObjectList.tsx
+// Allows us to keep absolute paths in ROUTES while using relative paths in route objects
+const stripFirstSlash = (path: string) => {
+    return path.startsWith('/') ? path.slice(1) : path;
+};
+
+export const routeObjectList = [
+    { index: true, element: <Home /> },
+    { path: stripFirstSlash(ROUTES.OPERATIONS), element: <Operations /> },
+    { path: stripFirstSlash(`${ROUTES.OPERATIONS}/:operationId`), element: <OperationDetails /> },
+    …
+];
+```
+
+New routes add an entry to `routeObjectList` and (if they require an active report) a matching entry to `RouteRequirements` in the same file. Don't reach into `createBrowserRouter([...])` in `main.tsx` and hardcode another route — `main.tsx` consumes `routeObjectList` and nothing else.
+
+### Page titles via `react-helmet-async`; layout sets the template, routes set the title
+
+`Layout.tsx` declares the base template once, and each route file mounts its own short `<Helmet title='...' />`:
+
+```32:41:src/components/Layout.tsx
+<Helmet
+    defaultTitle='TT-NN Visualizer'
+    titleTemplate='%s | TT-NN Visualizer'
+>
+    <meta charSet='utf-8' />
+    <meta
+        name='description'
+        content='A comprehensive tool for visualizing and analyzing model execution, …'
+    />
+</Helmet>
+```
+
+```9:18:src/routes/Operations.tsx
+export default function Operations() {
+    useClearSelectedBuffer();
+
+    return (
+        <>
+            <Helmet title='Operations' />
+            <OperationList />
+        </>
+    );
+}
+```
+
+`HelmetProvider` is mounted once at the top of the tree in `src/main.tsx:50:58`. Don't add a second provider or override `titleTemplate` at the page level — the layout owns the suffix.
+
+---
+
 ## Naming
 
 ### Function-name prefixes carry meaning
@@ -391,6 +579,32 @@ If you can't articulate why the suppression is correct, you don't yet understand
 
 ESLint warnings often point at a real latent issue. Example: a `react-hooks/refs-in-render` warning on a `useMemo` that reads `someRef.current` looked spurious — turns out the cleanest fix was promoting the ref to a `useMemo` that holds the value directly, which also removed a `useEffect` and made the intent explicit. The lint was right; the suppression would have hidden it.
 
+### Floating promises require an explicit `void` (or IIFE)
+
+`@typescript-eslint/no-floating-promises` is configured as **error** with `ignoreVoid: true` and `ignoreIIFE: true`:
+
+```97:103:eslint.config.cjs
+'@typescript-eslint/no-floating-promises': [
+    'error',
+    {
+        ignoreVoid: true,
+        ignoreIIFE: true,
+    },
+],
+```
+
+Practically:
+
+```ts
+// ❌ Flagged — silent unhandled-rejection risk
+queryClient.invalidateQueries({ queryKey: ['fetch-tensors'] });
+
+// ✅ Acknowledged fire-and-forget
+void queryClient.invalidateQueries({ queryKey: ['fetch-tensors'] });
+```
+
+The lint exists to surface "did you forget to `await`?" — when the answer is genuinely "no, this is intentionally background", the explicit `void` documents the intent so reviewers don't have to re-derive it.
+
 ---
 
 ## Testing
@@ -426,30 +640,95 @@ When a suite (characterisation tests, refactor regressions) needs more than a co
 
 Tests then look like `expect(graphInvariantHolds(result, NODE_HAS_UNIQUE_ID)).toBe(true)` instead of repeating the same loop in every spec.
 
+### Frontend tests live in `tests/` at the repo root, not co-located with source
+
+**Rationale.** Vitest picks up both layouts, but the codebase has settled on a single location. Co-located `*.spec.ts` files would mean test scaffolding leaks into the source tree even when `noEmit` keeps it out of the build; centralising in `tests/` keeps the source tree focused on shipping code and makes fixtures shareable.
+
+Layout:
+
+- `tests/<name>.spec.ts(x)` — unit / integration tests, one per source unit.
+- `tests/helpers/` — shared providers and harnesses (`TestProviders.tsx`, `atomProvider.tsx`, `queryClientProvider.tsx`, `getButtonWithText.tsx`).
+- `tests/data/` — JSON fixtures.
+- `tests/<feature>Fixtures/` — large characterisation-suite fixture modules.
+
+Use `.spec.ts` for non-React tests, `.spec.tsx` for tests that render JSX. Don't use `.test.ts(x)` — wrong extension for this repo.
+
+### Backend tests: use `client.get(url, query_string={...})` — don't string-concatenate URLs
+
+`query_string=` is the Flask test-client idiom and survives encoding (commas, spaces, unicode) correctly. Manual concatenation drifts: `?foo=&bar=` produces empty-string params that the backend then has to disambiguate from `None`.
+
+```9:13:backend/ttnn_visualizer/tests/views/test_remote_stack_source_routes.py
+def test_stack_source_availability_requires_instance(client):
+    response = client.get(
+        "/api/remote/stack-trace/test", query_string={"filePath": "/some/path"}
+    )
+    assert response.status_code == HTTPStatus.NOT_FOUND
+```
+
+### When mocking, patch where the symbol is *bound*, not where it's defined
+
+**Rationale.** `views.py` does `from ttnn_visualizer.stack_trace_source import read_stack_source_local` at module load. Patching `ttnn_visualizer.stack_trace_source.read_stack_source_local` after that import has happened replaces the *defining* module's binding — but `views.py` already captured its own reference, so the view code calls the real function. Always patch the consumer's namespace.
+
+```49:60:backend/ttnn_visualizer/tests/views/test_remote_stack_source_routes.py
+def test_stack_source_content_local_read_sets_no_store(app, client, make_report):
+    instance_id = make_report()
+    app.config["SERVER_MODE"] = False
+    with patch(
+        "ttnn_visualizer.views.read_stack_source_local",
+        return_value=("print('hi')\n", "/abs/resolved.py", False),
+    ):
+        response = client.get(
+            "/api/remote/stack-trace/read",
+            query_string={"instanceId": instance_id, "filePath": "/any/path"},
+        )
+    assert response.status_code == HTTPStatus.OK
+```
+
+If a patch "isn't taking", the path is almost always pointing at the source module instead of the consumer.
+
 ---
 
 ## Frontend data integrity
 
 ### Validate user-uploaded JSON on the client
 
-If the user uploads a file the app parses as JSON, validate it on the frontend before letting the backend round-trip a 5xx. Cheaper, faster, and the error UI can be friendlier.
+If the user uploads a file the app parses as JSON, validate it on the frontend before letting the backend round-trip a 5xx. Cheaper, faster, and the error UI can be friendlier. Pair `try { JSON.parse(...) } catch (e) { ... }` with shape-check predicates (`if (!Array.isArray(data.nodes)) ...`) when the data has known structure. Surface a friendly toast or callout rather than a stack trace.
 
-```ts
+### Convert client-side validation failures into a synthetic `AxiosError` with a real `HttpStatusCode`
+
+**Rationale.** Route components downstream key off `error?.status === HttpStatusCode.UnprocessableEntity` to drive validation-error UI. When the failure is a client-side `JSON.parse` (the backend streams the bytes without parsing), throwing a plain `Error` would force every consumer to grow a parallel branch. Throwing a synthetic `AxiosError` with the right status keeps the existing UI mapping working without changes.
+
+```504:526:src/hooks/useAPI.tsx
 const fetchMLIRJson = async (): Promise<GraphBundle> => {
-    const response = await axiosInstance.get<GraphBundle>(Endpoints.MLIR);
+    // Fetch as raw text and parse client-side. The backend deliberately
+    // streams the uploaded file bytes without parsing them — large MLIR
+    // payloads avoid the double-parse / double-stream cost on the server.
+    // If the file contents are malformed JSON, surface a synthetic 422 so
+    // the existing UI mapping in `routes/MLIR.tsx`
+    // (422 → MLIRValidationError.INVALID_JSON) handles it without changes.
+    const response = await axiosInstance.get<string>(Endpoints.MLIR, {
+        responseType: 'text',
+        transformResponse: [(data) => data],
+    });
     try {
-        JSON.stringify(response.data); // shape-check sentinel
-    } catch (e) {
+        return JSON.parse(response.data) as GraphBundle;
+    } catch {
         throw new AxiosError(
-            'MLIR JSON is malformed',
-            HttpStatusCode.UnprocessableEntity.toString(),
+            'MLIR file is not valid JSON',
+            AxiosError.ERR_BAD_RESPONSE,
+            response.config,
+            response.request,
+            { ...response, status: HttpStatusCode.UnprocessableEntity },
         );
     }
-    return response.data;
 };
 ```
 
-Pair `try { JSON.parse(...) } catch (e) { ... }` with shape-check predicates (`if (!Array.isArray(data.nodes)) ...`) when the data has known structure. Surface a friendly toast or callout rather than a stack trace.
+Three things to copy when you reuse this pattern:
+
+1. Pass the original `response.config` and `response.request` so callbacks that inspect them don't NPE.
+2. Spread the response (`{ ...response, status: ... }`) so type guards on the error shape still work — don't pass a fresh object.
+3. Use a numeric `HttpStatusCode` constant from `axios`, not a string literal — call sites compare with `===`.
 
 ---
 
@@ -535,6 +814,35 @@ class Instance(db.Model):
 
 ## Backend conventions
 
+### One module-scope `api = Blueprint("api", __name__)`
+
+`backend/ttnn_visualizer/views.py:104` declares the single blueprint:
+
+```104:104:backend/ttnn_visualizer/views.py
+api = Blueprint("api", __name__)
+```
+
+Every route in the file decorates with `@api.route("/path", methods=[...])` and is registered onto `api` at module load. `app.py` mounts the blueprint at `url_prefix="/api"`, which is why route definitions in `views.py` use bare paths like `/operations`, not `/api/operations`.
+
+**Don't.** Create a second blueprint for a new endpoint group unless you genuinely need a separate `url_prefix` and lifecycle (e.g. an unauthenticated `/health` namespace). Two blueprints with the same prefix create silent registration-order bugs.
+
+Module-private helpers inside `views.py` (cross-route utilities like rank-parameter parsing) carry a leading underscore — covered under [Naming](#naming). Examples currently in `views.py`: `_file_path_from_stack_source_request:107`, `_optional_rank_query_param:118`, `_reject_nonzero_rank_on_legacy_db:144`, `_stack_source_availability_response:157`. New cross-endpoint helpers go in the same file with the same prefix; only reach for a separate module if the helper is needed outside `views.py`.
+
+### Prefer `Response(orjson.dumps(payload), mimetype="application/json")` for read-mostly endpoints
+
+**Rationale.** `orjson` is ~2× faster than the standard-library `json` that `jsonify` uses, handles `bytes`/`datetime`/`enum.Enum` out of the box, and — critically — supports `orjson.Fragment(...)` for splicing already-serialised JSON blobs into the response without re-parsing. The serializers in `backend/ttnn_visualizer/serializers.py:12:21` rely on `orjson.Fragment` to stream `captured_graph` strings straight from the report DB into the response, avoiding a parse/re-dump round trip.
+
+Standard pattern:
+
+```300:303:backend/ttnn_visualizer/views.py
+return Response(
+    orjson.dumps(serialized_operations),
+    mimetype="application/json",
+)
+```
+
+`jsonify` is still fine for tiny payloads where the performance delta doesn't matter and Flask's request-context coercion adds value — e.g. health checks. **Don't** mix the two patterns inside one endpoint, and don't reach for `orjson.dumps` if the response is `[]` and you'd be returning a `jsonify([])` one line later (`views.py:480`).
+
 ### Module-level logger at the top of every backend module
 
 ```python
@@ -609,3 +917,15 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **Upload size cap.** No `MAX_CONTENT_LENGTH` is set on the Flask app; large uploads succeed until they exhaust memory. Tracked as a separate hardening task.
 - **Default-export vs named-export of components.** The codebase mixes `export default function Foo()` and `export function Foo()`. Components are predominantly default-exported; hooks and utility functions are predominantly named-exported. Mirror the file you're editing.
 - **`React.FC` is not used.** Components are typed via the props parameter (`function Foo({ x }: FooProps)`) rather than `React.FC<FooProps>`. Continue this style — `React.FC` has known foot-guns (implicit `children`, etc.) and the codebase has actively moved away from it.
+- **`atomWithStorage` key naming.** Most persisted atoms use stable, short camelCase keys (`'showHex'`, `'showMemoryRegions'`, `'renderMemoryLayout'`, `'showBufferSummary'`) decoupled from the atom variable name. `altCongestionColorsAtom` (`src/store/app.ts:88`) leaks its variable name into localStorage (`'altCongestionColorsAtom'`). Don't replicate — renaming an atom later would orphan persisted settings.
+- **Raw `toast()` in `useBufferFocus`.** `src/hooks/useBufferFocus.tsx:42:53` calls `toast()` from `react-toastify` directly because it needs `autoClose: false` and persists the returned `Id` into `activeToastAtom` — capabilities `createToastNotification` doesn't expose. Intentional exception, not a precedent. New code still goes through `createToastNotification`; if you need richer options, extend the wrapper.
+- **`useAtom` vs `useSetAtom` in `SocketProvider`.** `src/libs/SocketProvider.tsx:27` destructures `[_, setFileTransferProgress] = useAtom(fileTransferProgressAtom)` for a write-only consumer; `useSetAtom` is canonical. Pre-existing; mirror existing files when you touch this area, but new write-only sites use `useSetAtom`.
+- **`print()` calls in `sockets.py`.** `backend/ttnn_visualizer/sockets.py:126, 135, 137, 155` use `print()` instead of `logger.info / debug`. Pre-existing tech debt; do not introduce new `print()` calls anywhere else in the backend.
+- **Kebab-case `src/error-page.tsx`.** Every other file under `src/` is PascalCase (components) or camelCase (hooks/utilities). `error-page.tsx` is the lone kebab-case outlier. Don't create new kebab-case files; rename is a tracked follow-up.
+- **`.tsx` extension on `GraphColors`.** `src/definitions/GraphColors.tsx` contains zero JSX — the extension is historical. New definition files with no JSX use `.ts`.
+- **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8:10` and `pyproject.toml:69:71` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.
+- **`@with_instance` returns 404 on missing `instanceId`.** `backend/ttnn_visualizer/decorators.py:33:35` aborts with 404 when the query param is absent; 400 ("Bad Request") would be more semantically accurate. Pre-existing; flag if you're rewriting the decorator, otherwise leave it.
+- **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py:143:148` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
+- **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription:457`, `usePerfMeta:925`, `useReportFolderList:1119`, `useInstance:1023`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
+- **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py:505, 631, 697`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.
+- **Relative `../scss/...` imports.** A handful of components (`Collapsible.tsx:9`, `ListItem.tsx:9`) still import stylesheets relatively rather than via the `styles/` alias. Pre-existing; do not replicate.
