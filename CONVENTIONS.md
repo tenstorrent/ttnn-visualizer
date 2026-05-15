@@ -129,7 +129,7 @@ const dataset = new DataSet<OperationNode>(initial);
 const cache = new Map<string, Buffer>();
 ```
 
-When using `DataSet<T>` from `vis-network`, `Map<K, V>`, or a similar container, write the type parameter. Letting inference quietly widen to `any`/`unknown` is the single most common source of latent typing bugs we hit.
+When using `DataSet<T>` from `vis-data` (paired with `Edge`/`Node`/`Network` from `vis-network` — see `src/components/OperationGraphComponent.tsx:8:9`), `Map<K, V>`, or a similar container, write the type parameter. Letting inference quietly widen to `any`/`unknown` is the single most common source of latent typing bugs we hit.
 
 ### Respect `react-hooks/exhaustive-deps`
 
