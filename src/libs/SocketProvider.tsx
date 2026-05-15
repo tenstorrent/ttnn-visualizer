@@ -5,7 +5,7 @@
 /* eslint-disable no-console */
 import React, { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
-import { useAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 import { getOrCreateInstanceId } from './axiosInstance';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
@@ -24,7 +24,7 @@ interface SocketProviderProps {
 }
 
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
-    const [_, setFileTransferProgress] = useAtom(fileTransferProgressAtom);
+    const setFileTransferProgress = useSetAtom(fileTransferProgressAtom);
     const instanceId = getOrCreateInstanceId();
 
     useEffect(() => {
