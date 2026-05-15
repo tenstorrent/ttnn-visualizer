@@ -163,6 +163,12 @@ type ToastVariant = 'info' | 'success' | 'warning' | 'error';
 type PartialBuffer = Omit<Buffer, 'pages'> & { pageCount: number };
 ```
 
+### Prefer `null` over `undefined` for intentional absence
+
+Use **`null`** when you mean “no value yet” or “cleared” in values you own: React state, refs you initialise, return types from helpers, and fields that round-trip through JSON (JSON has `null`, not `undefined`). Prefer `T | null` and default to `null` rather than mixing `| null | undefined` without reason.
+
+**Don't fight the platform.** Optional properties (`prop?: string`), rest/spread omissions, and many library types still use `undefined` — that is fine. Do not coerce every `undefined` from `axios` or the DOM into `null` at boundaries unless it removes real confusion.
+
 ---
 
 ## CSS / SCSS
@@ -179,7 +185,7 @@ type PartialBuffer = Omit<Buffer, 'pages'> & { pageCount: number };
    --graph-focused-node: #f6bc42;
    ```
 
-2. Expose it via `GRAPH_COLORS` in `src/definitions/GraphColors.tsx` using the `cssVar()` helper:
+2. Expose it via `GRAPH_COLORS` in `src/definitions/GraphColors.ts` using the `cssVar()` helper:
 
    ```ts
    export const GRAPH_COLORS = {
@@ -222,7 +228,7 @@ import 'styles/components/SearchField.scss';
 import classNames from 'classnames';
 ```
 
-The alias resolves `styles/` to `src/scss/` so the path inside the import maps 1:1 to the path under `src/scss/`. New stylesheets go under `src/scss/components/MyComponent.scss` and are imported as `'styles/components/MyComponent.scss'`. Several pre-existing components still use relative `../scss/...` paths (see [Known inconsistencies](#known-inconsistencies)) — don't replicate.
+The alias resolves `styles/` to `src/scss/` so the path inside the import maps 1:1 to the path under `src/scss/`. New stylesheets go under `src/scss/components/MyComponent.scss` and are imported as `'styles/components/MyComponent.scss'`. Prefer this form over relative `../scss/...` imports so paths stay stable when files move.
 
 ---
 
@@ -439,7 +445,7 @@ createToastNotification('MLIR', file.name, ToastType.SUCCESS);
 
 ### `src/definitions/` vs `src/model/`
 
-- **`src/definitions/`** holds *primitives* — enums, route/endpoint maps, plot/colour configs, plain interfaces with no behaviour. Examples: `Endpoints.ts`, `Routes.ts`, `TestIds.ts`, `GraphColors.tsx`, `BufferSummary.ts`.
+- **`src/definitions/`** holds *primitives* — enums, route/endpoint maps, plot/colour configs, plain interfaces with no behaviour. Examples: `Endpoints.ts`, `Routes.ts`, `TestIds.ts`, `GraphColors.ts`, `BufferSummary.ts`.
 - **`src/model/`** holds *domain types* — API response shapes (often interfaces that mirror a backend model), sometimes classes with methods. Examples: `APIData.ts`, `BufferType.ts`, `MLIRJsonModel.ts`, `NPEModel.ts`, `ClusterModel.ts`.
 
 Rule of thumb: **if it mirrors a backend response, it's a model.** If it's a constant, mapping, or enum used purely on the frontend, it's a definition.
@@ -973,17 +979,11 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **Upload size cap.** No `MAX_CONTENT_LENGTH` is set on the Flask app; large uploads succeed until they exhaust memory. Tracked as a separate hardening task.
 - **Default-export vs named-export of components.** The codebase mixes `export default function Foo()` and `export function Foo()`. Components are predominantly default-exported; hooks and utility functions are predominantly named-exported. Mirror the file you're editing.
 - **Two component-typing styles coexist: plain props parameter vs `React.FC<...>`.** Plenty of components are written as `function Foo({ x }: FooProps)`, but `React.FC<FooProps>` (and the bare `: FC<FooProps>` variant) is also in active use across ~30+ files (`src/libs/SocketProvider.tsx`, `src/routes/GraphView.tsx`, `src/components/OperationGraphComponent.tsx`, `src/components/npe/NPEViewComponent.tsx`, `src/components/operation-details/OperationDetailsComponent.tsx`, and many more). The codebase has no single canonical answer. Mirror the file you're editing. The community-wide foot-gun of `React.FC` (implicit `children` in older `@types/react`) is a real consideration, but it's not a project-wide migration in this repo.
-- **`atomWithStorage` key naming.** Most persisted atoms use stable, short camelCase keys (`'showHex'`, `'showMemoryRegions'`, `'renderMemoryLayout'`, `'showBufferSummary'`) decoupled from the atom variable name. `altCongestionColorsAtom` (`src/store/app.ts:88`) leaks its variable name into localStorage (`'altCongestionColorsAtom'`). Don't replicate — renaming an atom later would orphan persisted settings.
 - **Raw `toast()` in `useBufferFocus`.** `src/hooks/useBufferFocus.tsx:42:53` calls `toast()` from `react-toastify` directly because it needs `autoClose: false` and persists the returned `Id` into `activeToastAtom` — capabilities `createToastNotification` doesn't expose. Intentional exception, not a precedent. New code still goes through `createToastNotification`; if you need richer options, extend the wrapper.
-- **`useAtom` vs `useSetAtom` in `SocketProvider`.** `src/libs/SocketProvider.tsx:27` destructures `[_, setFileTransferProgress] = useAtom(fileTransferProgressAtom)` for a write-only consumer; `useSetAtom` is canonical. Pre-existing; mirror existing files when you touch this area, but new write-only sites use `useSetAtom`.
 - **`print()` calls in `sockets.py`.** `backend/ttnn_visualizer/sockets.py:126, 135, 137, 155` use `print()` instead of `logger.info / debug`. Pre-existing tech debt; do not introduce new `print()` calls anywhere else in the backend.
-- **Kebab-case `src/error-page.tsx`.** Every other file under `src/` is PascalCase (components) or camelCase (hooks/utilities). `error-page.tsx` is the lone kebab-case outlier. Don't create new kebab-case files; rename is a tracked follow-up.
-- **`.tsx` extension on `GraphColors`.** `src/definitions/GraphColors.tsx` contains zero JSX — the extension is historical. New definition files with no JSX use `.ts`.
 - **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8:10` and `pyproject.toml:69:71` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.
 - **`@with_instance` returns 404 on missing `instanceId`.** `backend/ttnn_visualizer/decorators.py:33:35` aborts with 404 when the query param is absent; 400 ("Bad Request") would be more semantically accurate. Pre-existing; flag if you're rewriting the decorator, otherwise leave it.
 - **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py:143:148` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
 - **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription:457`, `usePerfMeta:925`, `useReportFolderList:1119`, `useInstance:1023`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
 - **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py:505, 631, 697`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.
-- **Relative `../scss/...` imports.** Several components still import stylesheets relatively rather than via the `styles/` alias — `Collapsible.tsx:9`, `ListItem.tsx:9`, `OperationGraphComponent.tsx:16`, `cluster/ClusterRenderer.tsx:11`, `tensor-sharding-visualization/TensorVisualisationComponent.tsx:13`. Pre-existing; do not replicate.
 - **`SocketProvider` cleanup is incomplete.** `src/libs/SocketProvider.tsx:66:73` `off()`s `connect`/`disconnect`/`connect_error`/`reconnect` but not the `fileTransferProgress` handler registered at `49:59`. Pre-existing; the listener list will grow on every remount of the provider (rare in production, common under StrictMode in dev). New listeners follow the pairing rule; the existing miss is tracked tech debt.
-- **Upload tests use f-string query-param concatenation.** Most upload tests in `backend/ttnn_visualizer/tests/test_file_uploads.py` (e.g. `:328`, `:366`, `:395`, `:425`, `:457`, `:497`, `:535`, `:577`) build the URL as `f"/api/local/upload/...?instanceId={instance_id}"` rather than the `query_string={...}` form. The `instanceId` value is UUID-like so this happens to be encoding-safe, but the form drifts from the Testing-section rule. Pre-existing; new tests should use `query_string={...}`.

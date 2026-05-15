@@ -119,10 +119,11 @@ Open pull requests with **`dev`** as the base branch by default.
 - When using third-party generic containers (`DataSet<T>`, `Map<K, V>`), spell out the type parameter rather than relying on inference that obscures intent.
 - Respect `react-hooks/exhaustive-deps`. If you suppress it, add a one-line comment explaining the trade-off and why the missing dep is intentionally stable.
 - Default to **`interface ComponentNameProps`** for component props (the `Props` suffix is required), declared immediately above the component. Reserve `type` for unions, generic-constrained mappings, and `Omit`/`Pick` derivations.
+- Prefer **`null`** over **`undefined`** for intentional “no value” in your own state, return types, and API-shaped data (`T | null`, default `null`). Keep **`undefined`** for optional properties, omitted keys, and third-party signatures you cannot change.
 
 ### CSS / SCSS
 
-- Don't hardcode colour values in TS/TSX. Promote to a CSS custom property in `src/scss/_base.scss` (e.g. `--graph-focused-node: #f6bc42;`), then expose it through `GRAPH_COLORS` in `src/definitions/GraphColors.tsx` via the `cssVar()` helper. Components import from `GRAPH_COLORS`, never from a literal.
+- Don't hardcode colour values in TS/TSX. Promote to a CSS custom property in `src/scss/_base.scss` (e.g. `--graph-focused-node: #f6bc42;`), then expose it through `GRAPH_COLORS` in `src/definitions/GraphColors.ts` via the `cssVar()` helper. Components import from `GRAPH_COLORS`, never from a literal.
 - The same rule applies to magic layout numbers used in more than one place — promote to a SCSS variable or CSS custom property.
 
 ### Lint discipline
