@@ -38,7 +38,12 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 
 ### Every source file carries an SPDX header in the project format
 
-**Rationale.** `pnpm lint:spdx` (`scripts/check-spdx.mjs`) walks the whole repo and validates the SPDX header on each file whose extension is in the script's allowlist — currently `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.scss`, `.xml`, `.py`, and `.json` (see `scripts/check-spdx.mjs:29:31`). Files outside that set (markdown, YAML, TOML, etc.) are skipped. Missing or malformed headers on covered files fail CI, and the format is invariant enough to pin here so contributors don't reinvent it.
+**Rationale.** `pnpm lint:spdx` (`scripts/check-spdx.mjs`) walks the whole repo and validates two distinct things, each keyed on the file:
+
+- **SPDX comment header** on files whose extension is `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.scss`, `.xml`, or `.py` (`scripts/check-spdx.mjs:29:31, 92:95`). The accepted format is invariant enough to pin here so contributors don't reinvent it.
+- **`license` + `author` object check on `package.json` specifically** (`scripts/check-spdx.mjs:96:98`). The script matches `.json` extension *and* a path that includes `'package.json'` — so this is a single-file special case, not a rule that applies to every JSON file in the repo. All other JSON files are skipped.
+
+Files outside both buckets (markdown, YAML, TOML, plus most JSON) are skipped. Missing or malformed headers on covered files fail CI.
 
 The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`** (`scripts/check-spdx.mjs:12:19`). Two comment styles are accepted, keyed on file extension:
 
@@ -54,7 +59,7 @@ The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`**
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 ```
 
-JSON files (currently just `package.json`) carry the brand metadata as `license` and `author` fields rather than as a header comment (`scripts/check-spdx.mjs:20:26`).
+For `package.json` the brand metadata lives in the JSON `license` and `author` fields rather than as a header comment (`scripts/check-spdx.mjs:20:26`).
 
 ### The year is the file's creation year, not the edit year
 
@@ -617,19 +622,43 @@ Run with `pnpm test`. Tests live in `tests/` at the repo root — see [the dedic
 
 ### Backend: pytest + the shared `client` fixture
 
-The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py:50`. Routes are mounted under the `/api` prefix (the `api = Blueprint("api", __name__)` is registered with `url_prefix="/api"`), and endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. Pass it through `query_string={...}` (see the dedicated subsection below):
+The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py:50`. Routes are mounted under the `/api` prefix (the `api = Blueprint("api", __name__)` is registered with `url_prefix="/api"`), and endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. Pass it through `query_string={...}` (see the dedicated subsection below).
+
+Two `conftest.app` defaults that bite local-upload tests in particular:
+
+- **`SERVER_MODE=True`** (`conftest.py:34`) — local-only handlers like `/api/local/upload/mlir` return `403 Forbidden` until you override it.
+- **`LOCAL_DATA_DIRECTORY` is a `str`** (`conftest.py:38`) but production `settings.py` initialises it as a `Path` and handlers do `data_directory / config["MLIR_DIRECTORY_NAME"]`. Cast it to `Path` in the test so you exercise the same operand types as the deployed app.
+
+Both overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py:322:323`. A runnable example:
 
 ```python
+from http import HTTPStatus
+from io import BytesIO
+from pathlib import Path
+
+from ttnn_visualizer.enums import ConnectionTestStates
+
+
 def test_local_upload_rejects_non_json(app, client, make_report):
     instance_id = make_report()
+    # Two conftest.app defaults that bite local-upload tests:
+    # SERVER_MODE=True would block the route with 403, and
+    # LOCAL_DATA_DIRECTORY ships as a str.
+    app.config["SERVER_MODE"] = False
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+
     response = client.post(
         "/api/local/upload/mlir",
         query_string={"instanceId": instance_id},
         data={"files": (BytesIO(b"hello"), "evil.exe")},
         content_type="multipart/form-data",
     )
-    assert response.status_code == 200
-    assert response.get_json()["status"] == "FAILED"
+
+    assert response.status_code == HTTPStatus.OK
+    body = response.get_json()
+    # `StatusMessage.status` is a `ConnectionTestStates` enum; FAILED is `2`
+    # after JSON serialisation (see `test_file_uploads.py:549:550`).
+    assert body["status"] == ConnectionTestStates.FAILED.value
 ```
 
 Use `caplog` for log assertions, `tmp_path` for filesystem-touching tests. Don't construct a raw `werkzeug.test.Client` — go through the Flask wrapper so the app context and request hooks fire correctly.
