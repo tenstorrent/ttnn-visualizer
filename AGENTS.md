@@ -102,3 +102,52 @@ When looking up **issues, pull requests, or releases**, use **github.com/tenstor
 ### Pull request base branch
 
 Open pull requests with **`dev`** as the base branch by default.
+
+## Code style and conventions
+
+### Comments
+
+- Comments must explain **why**, not what. Avoid restating what the code obviously does (`// increment counter`, `// import module`). Don't narrate the change you're making in a comment (`// Fixed the bug by adding a guard`).
+- Preserve `//` placeholder lines inside multi-line array/object literals where they already exist — they intentionally prevent auto-formatters from collapsing the line.
+- Stale comments are bugs. If you change behaviour, update or delete the comment.
+
+### TypeScript
+
+- Prefer **named enums** over inline string-literal unions when the union has semantic meaning (e.g. `enum NodeRelation { Input, Output }` rather than `'input' | 'output'`). One-off booleans/flags don't need enum promotion.
+- When using third-party generic containers (`DataSet<T>`, `Map<K, V>`), spell out the type parameter rather than relying on inference that obscures intent.
+- Respect `react-hooks/exhaustive-deps`. If you suppress it, add a one-line comment explaining the trade-off and why the missing dep is intentionally stable.
+
+### CSS / SCSS
+
+- Don't hardcode colour values in TS/TSX. Promote to a CSS custom property in `src/scss/_base.scss` (e.g. `--graph-focused-node: #f6bc42;`), then expose it through `GRAPH_COLORS` in `src/definitions/GraphColors.tsx` via the `cssVar()` helper. Components import from `GRAPH_COLORS`, never from a literal.
+- The same rule applies to magic layout numbers used in more than one place — promote to a SCSS variable or CSS custom property.
+
+### Lint discipline
+
+- Pre-existing lints in code you didn't touch are not yours to fix in unrelated PRs. Surface them if they matter; don't sprawl scope.
+- Lint suppressions (`// eslint-disable-next-line ...`, `# type: ignore`, etc.) require an explanatory comment on the same or preceding line.
+- When a lint warning looks wrong, assess its **validity** before reaching for a suppression. Many warnings point at a real latent issue worth fixing properly (e.g. ref-read-in-render warnings often signal a stable-singleton pattern that could be expressed more cleanly).
+
+### Testing
+
+- Frontend: **Vitest** + `@testing-library/react` (`pnpm test`).
+- Backend: **pytest** with `caplog`, `tmp_path`, and `werkzeug.test.Client` for endpoint tests.
+- For larger test suites — characterisation tests, refactor regressions — build **shared fixture helpers** (see `tests/mlirFixtures/builders.ts`) and **cross-cutting invariant checks** (see `tests/mlirFixtures/invariants.ts`) instead of repeating ad-hoc setup.
+
+### Frontend data integrity
+
+- Prefer **client-side JSON validation** for user-uploaded JSON before the backend parses it. Surface validation errors with a friendly UI message rather than a 5xx round-trip. Use `try { JSON.parse(...) } catch (e) { ... }` and shape-check predicates.
+
+### Upload security
+
+- All file-upload handlers must apply `Path(filename).name` to user-supplied filenames before composing destination paths. This strips traversal components (`../`, absolute prefixes, backslashes) at the boundary. Add a regression test that submits a crafted traversal filename and asserts the file lands inside the intended directory.
+
+### Toolchain and package management
+
+- **pnpm** is the only supported frontend package manager (`engines.pnpm >= 10`). Don't `npm install` or `yarn add`.
+- The Node version is pinned via **`.nvmrc`**. Use `nvm use` from the repo root; `corepack` handles pnpm shimming automatically on Node 16+.
+
+### Database schema changes
+
+- New columns on existing tables go via **Alembic migrations**, not ad-hoc `ALTER TABLE`. The app declares `alembic` in `pyproject.toml` and runs migrations on startup.
+- When adding a column referenced by ORM models, declare it `nullable=True` (or with a default) so existing databases don't break before migrations apply.
