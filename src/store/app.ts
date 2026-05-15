@@ -84,5 +84,5 @@ export const mergeDevicesAtom = atom<boolean>(true);
 export const tracingModeAtom = atom<boolean>(false);
 export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
 
-// NPE — persisted toggle; storage key is decoupled from the atom name (issue #1491).
+// NPE
 export const altCongestionColorsAtom = atomWithStorage('altCongestionColors', false);
