@@ -190,7 +190,8 @@ Open pull requests with **`dev`** as the base branch by default.
   | `is*`, `has*` | Boolean predicate |
   | `fetch*` | Async axios wrapper returning `Promise<T>` |
 
-- Top-level constants are `SCREAMING_SNAKE_CASE` (`MAX_RETRIES`, `LOCAL_STORAGE_KEY_*`). Backend module-private helpers prefix with a single underscore (e.g. `_file_path_from_stack_source_request`).
+- **Module-level constants** use `SCREAMING_SNAKE_CASE` (`MAX_RETRIES`, `LOCAL_STORAGE_KEY_*`). **Module-level** means the outer scope of a file, not “only used in this file” — use `const` without `export` for values private to that module; export shared constants from a central module such as **`src/definitions/`** (see File organization above), not ad hoc from leaf components.
+- Backend module-private helpers prefix with a single underscore (e.g. `_file_path_from_stack_source_request`).
 
 ### Backend conventions
 
