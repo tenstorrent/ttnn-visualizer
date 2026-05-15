@@ -158,7 +158,7 @@ Open pull requests with **`dev`** as the base branch by default.
 ### State management (Jotai)
 
 - All shared atoms live in **`src/store/app.ts`** and end with the `Atom` suffix (e.g. `activeProfilerReportAtom`). Components and hooks consume atoms — they do not declare new ones inline. Add new atoms in the section comment block matching their feature area.
-- Prefer **`useAtomValue`** for read-only consumers; use `useAtom`/`useSetAtom` only when you actually set. Don't pull a setter you don't use.
+- Prefer **`useAtomValue`** for read-only consumers and **`useSetAtom`** for write-only consumers; use **`useAtom`** when a component both reads and writes the same atom. Don't subscribe via `useAtom` if you only need one half of the tuple.
 - Use **`atomWithStorage`** from `jotai/utils` for user-preference flags that need to survive reloads — never reach for `localStorage` directly.
 
 ### Data fetching (React Query)

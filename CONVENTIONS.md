@@ -254,8 +254,12 @@ The suffix makes atoms grep-friendly and visually distinct from plain values at 
 
 If a component reads an atom but never sets it, use `useAtomValue` — don't destructure off `useAtom` and ignore the setter. It documents intent and avoids over-subscription in larger trees.
 
+### Prefer `useSetAtom` for write-only consumers
+
+If a component only dispatches updates to an atom and never reads its value, use **`useSetAtom`** — don't write `const [, setX] = useAtom(xAtom)` or destructure a tuple you only use for the setter. Same benefits as `useAtomValue`: intent is obvious and you avoid subscribing the component to value changes it never reads.
+
 ```ts
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom, useAtom } from 'jotai';
 
 const activeReport = useAtomValue(activeProfilerReportAtom);  // read-only
 const setActive = useSetAtom(activeProfilerReportAtom);        // write-only
@@ -547,12 +551,15 @@ export const updateInstance = async (payload: Partial<Instance>): Promise<Instan
 
 If you find yourself mixing prefixes (e.g. `getUserData` doing an `await fetch(...)`), the prefix is wrong — rename to `fetchUserData`.
 
-### Top-level constants are `SCREAMING_SNAKE_CASE`
+### Module-level constants are `SCREAMING_SNAKE_CASE`
+
+**Module-level** means declared at the outer scope of a module (the file), not inside a function or block — it does not mean “only used in this file.” Use **`const`** (no `export`) for values private to that module. If a constant is **shared across modules**, define and export it from a sensible central place (for example `src/definitions/` next to related types or endpoint maps — see [File organization](#file-organization-and-modules)) instead of exporting ad hoc from a leaf component just because the name is `SCREAMING_SNAKE_CASE`.
 
 ```ts
 const DEFAULT_ERROR_MESSAGE = 'An unexpected error occurred';
 const MAX_RETRIES = 3;
-export const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
+// Private to this module — same pattern as `EMPTY_PERF_RETURN` in `src/hooks/useAPI.tsx`:
+const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 ```
 
 ### Backend module-private helpers prefix with a single underscore
@@ -763,7 +770,7 @@ const fetchMLIRJson = async (): Promise<GraphBundle> => {
 
 Three things to copy when you reuse this pattern:
 
-1. Pass the original `response.config` and `response.request` so callbacks that inspect them don't NPE.
+1. Pass the original `response.config` and `response.request` so any code that reads those fields on the thrown `AxiosError` still sees the same objects (they can be `undefined` if omitted, which breaks callers that assume they exist).
 2. Spread the response (`{ ...response, status: ... }`) so type guards on the error shape still work — don't pass a fresh object.
 3. Use a numeric `HttpStatusCode` constant from `axios`, not a string literal — call sites compare with `===`.
 
@@ -880,7 +887,7 @@ Module-private helpers inside `views.py` (cross-route utilities like rank-parame
 
 ### Prefer `Response(orjson.dumps(payload), mimetype="application/json")` for read-mostly endpoints
 
-**Rationale.** `orjson` is ~2× faster than the standard-library `json` that `jsonify` uses, handles `bytes`/`datetime`/`enum.Enum` out of the box, and — critically — supports `orjson.Fragment(...)` for splicing already-serialised JSON blobs into the response without re-parsing. The serializers in `backend/ttnn_visualizer/serializers.py:12:21` rely on `orjson.Fragment` to stream `captured_graph` strings straight from the report DB into the response, avoiding a parse/re-dump round trip.
+**Rationale.** `orjson` is typically **much faster** than the standard-library `json` that `jsonify` uses for encoding, handles `bytes`/`datetime`/`enum.Enum` out of the box, and — critically — supports `orjson.Fragment(...)` for splicing already-serialised JSON blobs into the response without re-parsing. The serializers in `backend/ttnn_visualizer/serializers.py` rely on `orjson.Fragment` to stream `captured_graph` strings straight from the report DB into the response, avoiding a parse/re-dump round trip.
 
 Standard pattern:
 
