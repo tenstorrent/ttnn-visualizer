@@ -278,9 +278,11 @@ The first argument is the storage key — pick something stable; renaming it lat
 
 ## Network layer
 
-### Use `axiosInstance` from `src/libs/axiosInstance.ts`; never `import axios from 'axios'` at a call site
+### Use `axiosInstance` for HTTP requests; never call raw `axios.get/post/put/delete` at a call site
 
-**Rationale.** The shared instance carries two interceptors every consumer depends on: a request interceptor that injects `instanceId` into query params, and a response interceptor that auto-retries the operations endpoint when a large payload comes back as a string instead of an array. Bypassing the instance means losing both.
+**Rationale.** The shared instance in `src/libs/axiosInstance.ts` carries two interceptors every consumer depends on: a request interceptor that injects `instanceId` into query params, and a response interceptor that auto-retries the operations endpoint when a large payload comes back as a string instead of an array. Bypassing the instance means losing both.
+
+**Scope.** This rule applies to **HTTP request methods** (`.get/.post/.put/.delete/.patch/.head`). Importing types and helpers from the `axios` package — `AxiosError`, `AxiosProgressEvent`, `AxiosRequestConfig`, `HttpStatusCode`, `axios.isAxiosError` — at a call site is fine and idiomatic; you'll see this pattern in `src/functions/getResponseError.ts:5`, `src/hooks/useRemote.tsx:5`, `src/hooks/useAPI.tsx:5`, and elsewhere. The thing to never do is `axios.get(url, ...)` at a call site — that bypasses the interceptors.
 
 ```12:16:src/libs/axiosInstance.ts
 const axiosInstance = axios.create({
@@ -311,9 +313,11 @@ axiosInstance.interceptors.request.use(
 
 ### `instanceId` travels as a query parameter, never in the URL path
 
-The frontend never embeds the instance ID in the URL — it's set once by the request interceptor and read on the backend by `@with_instance` (`backend/ttnn_visualizer/decorators.py:33:35`) via `request.args.get("instanceId")`. Endpoints that take an `:id` path parameter mean something else (e.g. `/api/operations/<operation_id>` is an operation ID, not an instance ID).
+For HTTP API calls going through `axiosInstance`, the frontend never embeds the instance ID in the URL — it's set once by the request interceptor and read on the backend by `@with_instance` (`backend/ttnn_visualizer/decorators.py:33:35`) via `request.args.get("instanceId")`. Endpoints that take an `:id` path parameter mean something else (e.g. `/api/operations/<operation_id>` is an operation ID, not an instance ID).
 
 **Don't.** Building a URL like `${Endpoints.OPERATIONS_LIST}/${instanceId}` collides with the operation-detail route shape and loses session scoping for every other call sharing the axios config.
+
+**Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx:18` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
 ### Cross-cutting retries belong in the interceptor, not in individual hooks
 
@@ -622,7 +626,7 @@ Run with `pnpm test`. Tests live in `tests/` at the repo root — see [the dedic
 
 ### Backend: pytest + the shared `client` fixture
 
-The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py:50`. Routes are mounted under the `/api` prefix (the `api = Blueprint("api", __name__)` is registered with `url_prefix="/api"`), and endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. Pass it through `query_string={...}` (see the dedicated subsection below).
+The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py:50`. Routes are mounted under the **`{BASE_PATH}api`** prefix — `backend/ttnn_visualizer/app.py:86` registers the `api = Blueprint("api", __name__)` blueprint with `url_prefix=f"{app.config['BASE_PATH']}api"`. When `BASE_PATH` is `/` (the default in `conftest.app` and in single-tenant deployments) the effective prefix is `/api`; when `BASE_PATH` is something like `/visualizer/` the prefix becomes `/visualizer/api`. Tests run against `conftest.app` so `/api/...` is the right path in test URLs — just don't hard-code that assumption into production-facing docs or curl examples. Endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. Pass it through `query_string={...}` (see the dedicated subsection below).
 
 Two `conftest.app` defaults that bite local-upload tests in particular:
 
