@@ -13,7 +13,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { NavigateFunction, useNavigate } from 'react-router';
 import tinycolor from 'tinycolor2';
 import { OperationDescription, Tensor } from '../model/APIData';
-import '../scss/components/OperationGraphComponent.scss';
+import 'styles/components/OperationGraphComponent.scss';
 import LoadingSpinner from './LoadingSpinner';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';

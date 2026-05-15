@@ -10,7 +10,7 @@ import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
 import { BufferType } from '../../model/BufferType';
 import { useBufferPages, useDevices } from '../../hooks/useAPI';
-import '../../scss/components/TensorVisualizationComponent.scss';
+import 'styles/components/TensorVisualizationComponent.scss';
 import { BufferPage, Tensor } from '../../model/APIData';
 import SVGBufferRenderer from './SVGBufferRenderer';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';

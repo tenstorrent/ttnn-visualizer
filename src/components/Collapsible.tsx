@@ -6,7 +6,7 @@ import { Button, ButtonVariant, Collapse, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import React from 'react';
 import { JSX } from 'react/jsx-runtime';
-import '../scss/components/Collapsible.scss';
+import 'styles/components/Collapsible.scss';
 import classNames from 'classnames';
 
 interface CollapsibleProps {

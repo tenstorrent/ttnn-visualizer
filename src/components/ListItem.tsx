@@ -6,7 +6,7 @@ import React from 'react';
 import classNames from 'classnames';
 import { Icon, IconName, Intent, TagProps } from '@blueprintjs/core';
 import HighlightedText from './HighlightedText';
-import '../scss/components/ListItem.scss';
+import 'styles/components/ListItem.scss';
 import MemoryTag from './MemoryTag';
 
 interface ListItemProps {
