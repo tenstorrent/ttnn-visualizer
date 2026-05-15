@@ -617,13 +617,14 @@ Run with `pnpm test`. Tests live in `tests/` at the repo root — see [the dedic
 
 ### Backend: pytest + the shared `client` fixture
 
-The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py:50`. Routes are mounted under the `/api` prefix (the `api = Blueprint("api", __name__)` is registered with `url_prefix="/api"`), and endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. The canonical pattern, mirroring `backend/ttnn_visualizer/tests/test_file_uploads.py:328`:
+The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py:50`. Routes are mounted under the `/api` prefix (the `api = Blueprint("api", __name__)` is registered with `url_prefix="/api"`), and endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. Pass it through `query_string={...}` (see the dedicated subsection below):
 
 ```python
 def test_local_upload_rejects_non_json(app, client, make_report):
     instance_id = make_report()
     response = client.post(
-        f"/api/local/upload/mlir?instanceId={instance_id}",
+        "/api/local/upload/mlir",
+        query_string={"instanceId": instance_id},
         data={"files": (BytesIO(b"hello"), "evil.exe")},
         content_type="multipart/form-data",
     )
@@ -748,7 +749,20 @@ prefixed_filename = f"{prefix}{Path(file.filename).name}"
 dest_path = Path(target_directory) / prefixed_filename
 ```
 
-`Path(...).name` collapses `'../../etc/passwd'` to `'passwd'` and strips drive letters / absolute prefixes — surgical, cheap, no dependencies. Add a regression test that submits a crafted traversal filename and asserts the file lands inside the intended directory.
+`Path(...).name` on POSIX (which is what our Linux/macOS deployments use) collapses `/`-separated traversal: `'../../etc/passwd'` becomes `'passwd'`, and `'/absolute/path'` becomes `'path'`.
+
+**Caveat.** `\` is not a path separator under `PurePosixPath`, so backslash-separated paths and Windows drive-letter prefixes survive `.name` unchanged:
+
+```python
+>>> Path('..\\..\\etc\\passwd').name
+'..\\..\\etc\\passwd'
+>>> Path('C:\\evil\\file').name
+'C:\\evil\\file'
+```
+
+This still doesn't *escape* the target directory on POSIX — backslashes become literal filename characters rather than separators — so containment holds. But don't read the helper as a full cross-platform sanitiser. If a future deployment ever needs to handle filenames coming from a Windows-aware client more strictly, layer on `werkzeug.utils.secure_filename` or an equivalent normalization step.
+
+Add a regression test that submits a crafted traversal filename and asserts the file lands inside the intended directory.
 
 ### Guard `file.filename` is non-empty before validating extension
 
@@ -933,3 +947,4 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py:505, 631, 697`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.
 - **Relative `../scss/...` imports.** A handful of components (`Collapsible.tsx:9`, `ListItem.tsx:9`) still import stylesheets relatively rather than via the `styles/` alias. Pre-existing; do not replicate.
 - **`SocketProvider` cleanup is incomplete.** `src/libs/SocketProvider.tsx:66:73` `off()`s `connect`/`disconnect`/`connect_error`/`reconnect` but not the `fileTransferProgress` handler registered at `49:59`. Pre-existing; the listener list will grow on every remount of the provider (rare in production, common under StrictMode in dev). New listeners follow the pairing rule; the existing miss is tracked tech debt.
+- **Upload tests use f-string query-param concatenation.** Most upload tests in `backend/ttnn_visualizer/tests/test_file_uploads.py` (e.g. `:328`, `:366`, `:395`, `:425`, `:457`, `:497`, `:535`, `:577`) build the URL as `f"/api/local/upload/...?instanceId={instance_id}"` rather than the `query_string={...}` form. The `instanceId` value is UUID-like so this happens to be encoding-safe, but the form drifts from the Testing-section rule. Pre-existing; new tests should use `query_string={...}`.

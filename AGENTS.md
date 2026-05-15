@@ -143,7 +143,7 @@ Open pull requests with **`dev`** as the base branch by default.
 
 ### Upload security
 
-- All file-upload handlers must apply `Path(filename).name` to user-supplied filenames before composing destination paths. This strips traversal components (`../`, absolute prefixes, backslashes) at the boundary. Add a regression test that submits a crafted traversal filename and asserts the file lands inside the intended directory.
+- All file-upload handlers must apply `Path(filename).name` to user-supplied filenames before composing destination paths. On our Linux/macOS servers this collapses POSIX-style traversal components (`../`, absolute prefixes). **Caveat:** `\` isn't a path separator under POSIX, so backslash-separated paths and Windows drive-letter prefixes survive `.name` unchanged — they become literal filename characters inside the target directory rather than traversal vectors, so containment still holds, but don't read the helper as a full cross-platform sanitiser. Add a regression test that submits a crafted traversal filename and asserts the file lands inside the intended directory.
 
 ### Toolchain and package management
 
