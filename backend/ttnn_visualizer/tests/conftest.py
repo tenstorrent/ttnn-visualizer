@@ -65,8 +65,9 @@ def make_report(app):
     ``make_report()`` call produces an empty database with the default schema.
 
     The inner function registers the database as a profiler instance and
-    returns the ``instance_id`` string to pass as ``?instanceId=`` in API
-    requests.  All temporary files are removed automatically after the test.
+    returns the ``instance_id`` string to pass as the ``instanceId`` query parameter
+    in API requests (e.g. ``query_string={"instanceId": instance_id}``).  All
+    temporary files are removed automatically after the test.
     """
     paths = []
     counter = [0]
