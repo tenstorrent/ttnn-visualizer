@@ -38,7 +38,7 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 
 ### Every source file carries an SPDX header in the project format
 
-**Rationale.** `pnpm lint:spdx` (`scripts/check-spdx.mjs`) validates headers on every staged file. Missing or malformed headers fail CI, and the format is invariant enough to pin here so contributors don't reinvent it.
+**Rationale.** `pnpm lint:spdx` (`scripts/check-spdx.mjs`) walks the whole repo and validates every source file's header against a regex. Missing or malformed headers fail CI, and the format is invariant enough to pin here so contributors don't reinvent it.
 
 The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`** (`scripts/check-spdx.mjs:12:19`). Two comment styles are accepted, keyed on file extension:
 
@@ -326,7 +326,7 @@ const socket = io(`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}`);
 const SocketContext = createContext<SocketContextType>(null);
 ```
 
-Listeners live inside `useEffect`, but every `socket.on(name)` must be paired with `socket.off(name)` in the cleanup:
+Listeners live inside `useEffect`. The convention is to pair every `socket.on(name)` with a matching `socket.off(name)` in the cleanup so the singleton's listener list doesn't leak across mounts:
 
 ```66:73:src/libs/SocketProvider.tsx
 return () => {
@@ -337,6 +337,8 @@ return () => {
     socket.off('reconnect');
 };
 ```
+
+> The current cleanup `off()`s connect/disconnect/connect_error/reconnect but **does not** unregister the `fileTransferProgress` handler registered at `src/libs/SocketProvider.tsx:49:59`. That's tracked as a pre-existing gap (see [Known inconsistencies](#known-inconsistencies)). New listeners should follow the pairing rule.
 
 Adding a new event handler? Add the matching `off()` in the same change. Don't introduce a second `io(...)` call elsewhere in the codebase — the connection is shared.
 
@@ -611,7 +613,7 @@ The lint exists to surface "did you forget to `await`?" — when the answer is g
 
 ### Frontend: Vitest + `@testing-library/react`
 
-Run with `pnpm test`. Test files live next to the source as `*.spec.ts` / `*.spec.tsx`, or in `tests/` for cross-cutting fixtures and characterisation suites.
+Run with `pnpm test`. Tests live in `tests/` at the repo root — see [the dedicated subsection below](#frontend-tests-live-in-tests-at-the-repo-root-not-co-located-with-source) for the layout breakdown.
 
 ### Backend: pytest + the shared `client` fixture
 
@@ -855,19 +857,19 @@ Use `logger.info / warning / error / exception` — never `print`. `logger.excep
 
 ### View decorator stack order
 
-```python
-@api.route("/local/upload/mlir", methods=["POST"])
-@local_only
+Most read endpoints use the two-decorator stack `@api.route → @with_instance → @timer` (e.g. `views.py:1846:1848` for the NPE GET endpoint). Endpoints that must refuse `SERVER_MODE` insert `@local_only` between `@with_instance` and the function:
+
+```884:887:backend/ttnn_visualizer/views.py
+@api.route("/profiler/<profiler_name>", methods=["DELETE"])
 @with_instance
-@timer
-def create_mlir_file(instance):
-    ...
+@local_only
+def delete_profiler_report(profiler_name, instance: Instance):
 ```
 
 - `@api.route` outermost (Flask registers the URL).
-- `@local_only` (from `decorators.py:147`) gates endpoints that must refuse `SERVER_MODE` — aborts with 403 automatically.
-- `@with_instance` (from `decorators.py:26`) resolves the `instanceId` query param into an `instance` kwarg and updates the session's report list.
-- `@timer` innermost — wraps just the view body for timing.
+- `@with_instance` (from `decorators.py:26`) resolves the `instanceId` query param into an `instance` kwarg and updates the session's report list. Always present on `/api/*` endpoints.
+- `@local_only` (from `decorators.py:147`), when needed, aborts with 403 in `SERVER_MODE`. Sits **below** `@with_instance` so the 403 fires after instance resolution.
+- `@timer` innermost — wraps just the view body for timing. Used selectively on hot-path read endpoints; not present on every route.
 
 ### Error responses go through helpers, not hand-rolled `jsonify`
 
@@ -929,3 +931,4 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription:457`, `usePerfMeta:925`, `useReportFolderList:1119`, `useInstance:1023`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
 - **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py:505, 631, 697`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.
 - **Relative `../scss/...` imports.** A handful of components (`Collapsible.tsx:9`, `ListItem.tsx:9`) still import stylesheets relatively rather than via the `styles/` alias. Pre-existing; do not replicate.
+- **`SocketProvider` cleanup is incomplete.** `src/libs/SocketProvider.tsx:66:73` `off()`s `connect`/`disconnect`/`connect_error`/`reconnect` but not the `fileTransferProgress` handler registered at `49:59`. Pre-existing; the listener list will grow on every remount of the provider (rare in production, common under StrictMode in dev). New listeners follow the pairing rule; the existing miss is tracked tech debt.
