@@ -558,7 +558,6 @@ If you find yourself mixing prefixes (e.g. `getUserData` doing an `await fetch(.
 ```ts
 const DEFAULT_ERROR_MESSAGE = 'An unexpected error occurred';
 const MAX_RETRIES = 3;
-// Private to this module — same pattern as `EMPTY_PERF_RETURN` in `src/hooks/useAPI.tsx`:
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 ```
 
