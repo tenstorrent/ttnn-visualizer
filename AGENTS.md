@@ -105,6 +105,8 @@ Open pull requests with **`dev`** as the base branch by default.
 
 ## Code style and conventions
 
+> See [`CONVENTIONS.md`](./CONVENTIONS.md) for the expanded reference — same rules as below, with examples, file/line references, and rationale.
+
 ### Comments
 
 - Comments must explain **why**, not what. Avoid restating what the code obviously does (`// increment counter`, `// import module`). Don't narrate the change you're making in a comment (`// Fixed the bug by adding a guard`).
