@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { atomWithStorage } from 'jotai/utils';
+import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import { atom } from 'jotai';
 import { NumberRange, TabId } from '@blueprintjs/core';
 import { Id } from 'react-toastify';
@@ -85,4 +85,52 @@ export const tracingModeAtom = atom<boolean>(false);
 export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
 
 // NPE
-export const altCongestionColorsAtom = atomWithStorage('altCongestionColorsAtom', false);
+// NPE — persisted toggle; storage key is decoupled from the atom name (issue #1491).
+const ALT_CONGESTION_COLORS_STORAGE_KEY = 'altCongestionColors';
+const LEGACY_ALT_CONGESTION_COLORS_STORAGE_KEY = 'altCongestionColorsAtom';
+
+const altCongestionColorsJSONStorage = createJSONStorage<boolean>(() => localStorage);
+
+const altCongestionColorsStorage: ReturnType<typeof createJSONStorage<boolean>> = {
+    getItem: (key, initialValue) => {
+        if (typeof window === 'undefined') {
+            return initialValue;
+        }
+        try {
+            if (localStorage.getItem(key) !== null) {
+                return altCongestionColorsJSONStorage.getItem(key, initialValue);
+            }
+            if (localStorage.getItem(LEGACY_ALT_CONGESTION_COLORS_STORAGE_KEY) !== null) {
+                const value = altCongestionColorsJSONStorage.getItem(
+                    LEGACY_ALT_CONGESTION_COLORS_STORAGE_KEY,
+                    initialValue,
+                );
+                altCongestionColorsJSONStorage.setItem(key, value);
+                altCongestionColorsJSONStorage.removeItem(LEGACY_ALT_CONGESTION_COLORS_STORAGE_KEY);
+                return value;
+            }
+        } catch {
+            return initialValue;
+        }
+        return initialValue;
+    },
+    setItem: (key, value) => {
+        altCongestionColorsJSONStorage.setItem(key, value);
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem(LEGACY_ALT_CONGESTION_COLORS_STORAGE_KEY);
+        }
+    },
+    removeItem: (key) => {
+        altCongestionColorsJSONStorage.removeItem(key);
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem(LEGACY_ALT_CONGESTION_COLORS_STORAGE_KEY);
+        }
+    },
+    subscribe: altCongestionColorsJSONStorage.subscribe,
+};
+
+export const altCongestionColorsAtom = atomWithStorage(
+    ALT_CONGESTION_COLORS_STORAGE_KEY,
+    false,
+    altCongestionColorsStorage,
+);
