@@ -52,7 +52,7 @@ function Layout() {
                                 alt='tenstorrent'
                                 src='https://docs.tenstorrent.com/tt-tm-assets/Logo/Standard%20Lockup/svg/tt_logo_color-orange-whitetext.svg'
                             />
-                            <span className='visualizer-title'>TT-NN Visualizer</span>
+                            <span className='visualizer-title'>TT-NN&trade; Visualizer</span>
                         </h1>
                     </Link>
 
