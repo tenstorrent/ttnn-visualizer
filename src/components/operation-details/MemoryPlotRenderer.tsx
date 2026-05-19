@@ -14,7 +14,7 @@ import { getMemoryAddress } from '../../functions/math';
 export interface MemoryPlotRendererProps {
     chartDataList: Partial<PlotData>[][];
     isZoomedIn: boolean;
-    memorySize: number;
+    memoryZoomEnd: number;
     title?: string;
     onBufferClick?: (event: Readonly<PlotMouseEventCustom>) => void;
     plotZoomRange?: [start: number, end: number];
@@ -27,7 +27,7 @@ export interface MemoryPlotRendererProps {
 const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     chartDataList,
     isZoomedIn,
-    memorySize,
+    memoryZoomEnd,
     className = '',
     title,
     onBufferClick,
@@ -42,7 +42,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
 
-    const range = isZoomedIn ? plotZoomRange : [0, memorySize];
+    const range = isZoomedIn ? plotZoomRange : [0, memoryZoomEnd];
     // If we need more flexibility on the tickformat front, we can expand this to accept a prop instead of defaulting to the below (hex or decimal)
     const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
 

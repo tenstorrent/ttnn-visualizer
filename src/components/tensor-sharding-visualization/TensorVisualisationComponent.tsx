@@ -76,8 +76,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     const width = devices[0].num_x_cores;
     const height = devices[0].num_y_cores;
 
-    const memStart = plotZoomRange[0];
-    const memSize = plotZoomRange[1];
+    const [memStart, memEnd] = plotZoomRange;
     const tensixSize = 120;
     const tensixHeight = tensixSize / 3;
 
@@ -170,8 +169,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                     <SVGBufferRenderer
                                         height={tensixHeight}
                                         data={buffersByBankId[matchIndex]}
-                                        memorySize={memSize}
                                         memoryStart={memStart}
+                                        memoryEnd={memEnd}
                                     />
                                 </button>
                             ) : (
@@ -207,9 +206,9 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                 }`}
                                 className='detailed-l1-memory-renderer l1-memory-renderer'
                                 isZoomedIn
-                                plotZoomRange={[memStart, memSize]}
+                                plotZoomRange={[memStart, memEnd]}
                                 chartDataList={[chartData]}
-                                memorySize={memSize}
+                                memoryZoomEnd={memEnd}
                                 onBufferClick={() => {}}
                                 configuration={{
                                     ...L1RenderConfiguration,

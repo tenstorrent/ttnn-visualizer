@@ -169,7 +169,7 @@ function L1Plots({
                 plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
                 chartDataList={[previousChartData]}
                 isZoomedIn={zoomedInViewMainMemory}
-                memorySize={memorySizeL1}
+                memoryZoomEnd={memorySizeL1}
                 configuration={L1RenderConfiguration}
                 markers={memoryRegionsMarkers}
             />
@@ -182,7 +182,7 @@ function L1Plots({
                 isZoomedIn={zoomedInViewMainMemory}
                 plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
                 chartDataList={[cbChartData, chartData, l1SmallMemory.length > 0 ? l1SmallCondensedChart : []]}
-                memorySize={memorySizeL1}
+                memoryZoomEnd={memorySizeL1}
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
                 markers={memoryRegionsMarkers}
@@ -213,7 +213,7 @@ function L1Plots({
                                         zoomRangeEnd + MEMORY_PADDING_L1,
                                     ]}
                                     isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={memorySizeL1}
+                                    memoryZoomEnd={memorySizeL1}
                                     configuration={BufferRenderConfiguration}
                                     onBufferClick={onBufferClick}
                                     markers={memoryRegionsMarkers}
@@ -236,7 +236,7 @@ function L1Plots({
                         l1SmallZoomEnd + MEMORY_PADDING_L1_SMALL,
                     ]}
                     chartDataList={[l1SmallChartData]}
-                    memorySize={memorySizeL1} // Not used as we're always zoomed in
+                    memoryZoomEnd={memorySizeL1} // Not used as we're always zoomed in
                     configuration={L1SmallRenderConfiguration}
                     onBufferClick={() => {}}
                 />
@@ -271,7 +271,7 @@ function L1Plots({
                                 chartDataList={[plotData]}
                                 plotZoomRange={[cbZoomStart - MEMORY_PADDING_CB, cbZoomEnd + MEMORY_PADDING_CB]}
                                 isZoomedIn={zoomedInViewCBMemory}
-                                memorySize={memorySizeL1}
+                                memoryZoomEnd={memorySizeL1}
                                 configuration={CBRenderConfiguration}
                                 onBufferClick={onBufferClick}
                                 markers={[{ color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker }]}
