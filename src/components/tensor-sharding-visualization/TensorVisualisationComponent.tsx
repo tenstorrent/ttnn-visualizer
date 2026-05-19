@@ -29,22 +29,9 @@ export interface TensorVisualisationComponentProps {
     onClose: () => void;
     tensorByAddress?: Map<number, Tensor>;
     tensorId?: number;
-    zoomRange: [number, number];
+    plotZoomRange: [number, number];
 }
 
-/**
- * @description Component for visualising buffer pagination data on tensix grid
- * @param title popup title
- * @param operationId
- * @param address buffer address or comma separated list of addresses
- * @param bufferType buffer type (always L1 as there is no other page data)
- * @param isOpen
- * @param onClose close callback
- * @param tensorByAddress optional historical lookup map
- * @param tensorId optionally used in the absence of tensorByAddress
- * @param zoomRange range of memory to display
- * @constructor
- */
 const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> = ({
     title,
     operationId,
@@ -53,7 +40,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     isOpen,
     onClose,
     tensorByAddress,
-    zoomRange,
+    plotZoomRange,
     tensorId,
 }) => {
     const { data } = useBufferPages(operationId, address, bufferType);
@@ -89,8 +76,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     const width = devices[0].num_x_cores;
     const height = devices[0].num_y_cores;
 
-    const memStart = zoomRange[0];
-    const memSize = zoomRange[1];
+    const memStart = plotZoomRange[0];
+    const memSize = plotZoomRange[1];
     const tensixSize = 120;
     const tensixHeight = tensixSize / 3;
 

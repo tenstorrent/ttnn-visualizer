@@ -7,7 +7,7 @@ import { useAtomValue } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { Icon, Intent, Switch } from '@blueprintjs/core';
 import { Fragment } from 'react/jsx-runtime';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
@@ -125,6 +125,10 @@ function L1Plots({
 
     const zoomRangeStart = plotZoomRangeStart; // Math.min(plotZoomRangeStart, bufferZoomRangeStart);
     const zoomRangeEnd = plotZoomRangeEnd; // Math.max(plotZoomRangeEnd, bufferZoomRangeEnd);
+    const userL1ZoomRange = useMemo(
+        () => (zoomedInViewMainMemory ? ([plotZoomRangeStart, plotZoomRangeEnd] as [number, number]) : undefined),
+        [zoomedInViewMainMemory, plotZoomRangeStart, plotZoomRangeEnd],
+    );
 
     const memoryRegionsMarkers = showMemoryRegions
         ? [
@@ -298,6 +302,7 @@ function L1Plots({
                         selectedTensorAddress={null}
                         operationDetails={operationDetails}
                         onLegendClick={onLegendClick}
+                        userL1ZoomRange={userL1ZoomRange}
                     />
                 )}
                 {showCircularBuffer &&
@@ -310,6 +315,7 @@ function L1Plots({
                             operationDetails={operationDetails}
                             onLegendClick={onLegendClick}
                             colorVariance={chunk.colorVariance}
+                            userL1ZoomRange={userL1ZoomRange}
                         />
                     ))}
 
@@ -325,6 +331,7 @@ function L1Plots({
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={operationDetails}
                                 onLegendClick={onLegendClick}
+                                userL1ZoomRange={userL1ZoomRange}
                             />
                         ) : (
                             <MemoryLegendElement
@@ -334,6 +341,7 @@ function L1Plots({
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={operationDetails}
                                 onLegendClick={onLegendClick}
+                                userL1ZoomRange={userL1ZoomRange}
                             />
                         );
                     })}
@@ -349,6 +357,7 @@ function L1Plots({
                         selectedTensorAddress={null}
                         operationDetails={operationDetails}
                         onLegendClick={onLegendClick}
+                        userL1ZoomRange={userL1ZoomRange}
                     />
                 )}
             </div>

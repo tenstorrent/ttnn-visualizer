@@ -331,7 +331,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             operationId={operationId}
                                             address={inputOutputAddressList}
                                             bufferType={BufferType.L1}
-                                            zoomRange={[zoomRangeStart, zoomRangeEnd]}
+                                            plotZoomRange={[zoomRangeStart, zoomRangeEnd]}
                                             isOpen={tensixIOVisualisationOpen}
                                             onClose={() => setTensixIOVisualisationOpen(false)}
                                             tensorByAddress={details.tensorListByAddress}
@@ -342,7 +342,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             title={`${operationId} ${operation.name}  (${operation.operationFileIdentifier})  detailed memory report`}
                                             operationId={operationId}
                                             bufferType={BufferType.L1}
-                                            zoomRange={[zoomRangeStart, zoomRangeEnd]}
+                                            plotZoomRange={[zoomRangeStart, zoomRangeEnd]}
                                             isOpen={tensixFullVisualisationOpen}
                                             onClose={() => setTensixFullVisualisationOpen(false)}
                                             tensorByAddress={details.tensorListByAddress}
@@ -436,6 +436,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             operationDetails={details}
                             plotZoomRangeStart={zoomRangeStart}
                             plotZoomRangeEnd={zoomRangeEnd}
+                            zoomedInViewMainMemory={zoomedInViewMainMemory}
                             onTensorClick={onTensorClick}
                         />
 
