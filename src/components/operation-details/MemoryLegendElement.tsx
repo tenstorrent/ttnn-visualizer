@@ -91,10 +91,12 @@ export const MemoryLegendElement: React.FC<{
     const isMatchingBufferColour = memorySquare.backgroundColor === selectedBufferColour;
     // L1_START / L1_SMALL are axis markers
     const isLegendMarker = chunk.markerType === MarkerType.L1_SMALL || chunk.markerType === MarkerType.L1_START;
+    const chunkSize = chunk.size ?? 0;
     const isOutOfL1ZoomRange =
         !isLegendMarker &&
         !Number.isNaN(chunk.address) &&
-        isAddressRangeOutOfL1Zoom(chunk.address, chunk.address + Math.max(chunk.size, 0), userL1ZoomRange);
+        chunkSize > 0 &&
+        isAddressRangeOutOfL1Zoom(chunk.address, chunk.address + chunkSize, userL1ZoomRange);
 
     return (
         <Component

@@ -3,9 +3,10 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 /**
- * Half-open [rangeStart, rangeEnd) overlap with the L1 zoom window [zoomStart, zoomEnd].
- * Matches fragmentation gaps in OperationDetails (gap end equals the next allocation address).
- * Plotly clips the x-axis to the same slider endpoints; bar/gap visibility uses this rule.
+ * Half-open allocation [rangeStart, rangeEnd) vs inclusive zoom [zoomStart, zoomEnd].
+ * Gap end equals the next allocation address (OperationDetails fragmentation).
+ * Zoom low bound is exclusive (rangeEnd > zoomStart); high bound is inclusive (rangeStart <= zoomEnd)
+ * so gaps that start on the slider max address are not dimmed.
  */
 export function isAddressRangeVisibleInL1Zoom(
     rangeStart: number,
@@ -18,7 +19,7 @@ export function isAddressRangeVisibleInL1Zoom(
         return false;
     }
 
-    return rangeEnd > l1ZoomStart && rangeStart < l1ZoomEnd;
+    return rangeEnd > l1ZoomStart && rangeStart <= l1ZoomEnd;
 }
 
 export function isAddressRangeOutOfL1Zoom(

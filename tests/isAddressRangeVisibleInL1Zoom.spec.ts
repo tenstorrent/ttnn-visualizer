@@ -24,13 +24,17 @@ test('isAddressRangeVisibleInL1Zoom treats empty above zoom as outside', () => {
     expect(isAddressRangeOutOfL1Zoom(0x20000, 0x30000, ZOOM)).toBe(true);
 });
 
-test('isAddressRangeVisibleInL1Zoom does not count boundary touch as overlap', () => {
+test('isAddressRangeVisibleInL1Zoom does not count gap ending at zoom start as overlap', () => {
     expect(isAddressRangeVisibleInL1Zoom(0x5000, 0x10000, ZOOM)).toBe(false);
-    expect(isAddressRangeVisibleInL1Zoom(0x15000, 0x20000, ZOOM)).toBe(false);
 });
 
-test('isAddressRangeVisibleInL1Zoom treats fully contained range as visible', () => {
+test('isAddressRangeVisibleInL1Zoom counts gap starting at zoom end as overlap', () => {
+    expect(isAddressRangeVisibleInL1Zoom(0x15000, 0x20000, ZOOM)).toBe(true);
+});
+
+test('isAddressRangeVisibleInL1Zoom treats empty fully inside zoom as visible', () => {
     expect(isAddressRangeVisibleInL1Zoom(0x11000, 0x14000, ZOOM)).toBe(true);
+    expect(isAddressRangeOutOfL1Zoom(0x11000, 0x14000, ZOOM)).toBe(false);
 });
 
 test('isAddressRangeOutOfL1Zoom returns false when zoom range is undefined', () => {
