@@ -86,10 +86,6 @@ $row-background: $tt-grey-2;
     height: 15px;
     display: inline-block;
 
-    &.empty {
-        background-color: $tt-white;
-    }
-
     &.empty-tensor {
         background: repeating-linear-gradient(
             45deg,

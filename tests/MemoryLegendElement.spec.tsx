@@ -34,17 +34,20 @@ function renderLegendElement(chunk: Parameters<typeof MemoryLegendElement>[0]['c
 afterEach(cleanup);
 
 describe('MemoryLegendElement legend swatches', () => {
-    it('renders a vertical-line swatch for L1 START markers', () => {
+    it.each([
+        [MarkerType.L1_START, 'L1 START'],
+        [MarkerType.L1_SMALL, 'L1 SMALL'],
+    ])('renders a vertical-line swatch for %s markers', (markerType, label) => {
         const container = renderLegendElement({
             address: 0x1000,
             size: 0,
-            markerType: MarkerType.L1_START,
+            markerType,
         });
 
         expect(container.querySelector('.legend-marker-swatch')).toBeInTheDocument();
         expect(container.querySelector('.memory-color-block')).not.toBeInTheDocument();
         expect(container.querySelector('.legend-empty-swatch')).not.toBeInTheDocument();
-        expect(screen.getByText('L1 START')).toBeInTheDocument();
+        expect(screen.getByText(label)).toBeInTheDocument();
     });
 
     it('renders a dashed swatch for empty memory gaps', () => {

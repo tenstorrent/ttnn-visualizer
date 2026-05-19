@@ -18,6 +18,11 @@ import { selectedBufferColourAtom, showHexAtom } from '../../store/app';
 import { StringBufferType, StringBufferTypeLabel } from '../../model/BufferType';
 import { isAddressRangeOutOfL1Zoom } from '../../functions/isAddressRangeVisibleInL1Zoom';
 
+const LEGEND_AXIS_MARKER_COLORS: Partial<Record<MarkerType, string>> = {
+    [MarkerType.L1_SMALL]: L1_SMALL_MARKER_COLOR,
+    [MarkerType.L1_START]: L1_START_MARKER_COLOR,
+};
+
 export const MemoryLegendElement: React.FC<{
     chunk: FragmentationEntry;
     memSize: number;
@@ -49,10 +54,11 @@ export const MemoryLegendElement: React.FC<{
 }) => {
     const showHex = useAtomValue(showHexAtom);
     const selectedBufferColour = useAtomValue(selectedBufferColourAtom);
-    const Component =
-        chunk.empty || chunk.markerType === MarkerType.L1_SMALL || chunk.markerType === MarkerType.L1_START
-            ? 'div'
-            : 'button';
+    const legendMarkerColor =
+        chunk.markerType !== undefined ? (LEGEND_AXIS_MARKER_COLORS[chunk.markerType] ?? null) : null;
+    const isLegendMarker = legendMarkerColor !== null;
+
+    const Component = chunk.empty || isLegendMarker ? 'div' : 'button';
     const emptyChunkLabel = (
         <>
             <span>Empty space </span>
@@ -69,15 +75,6 @@ export const MemoryLegendElement: React.FC<{
 
     const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
     const numCoresLabel = numCores && numCores > 1 ? ` x ${numCores} cores` : '';
-
-    const isLegendMarker = chunk.markerType === MarkerType.L1_SMALL || chunk.markerType === MarkerType.L1_START;
-    let legendMarkerColor: string | null = null;
-
-    if (chunk.markerType === MarkerType.L1_SMALL) {
-        legendMarkerColor = L1_SMALL_MARKER_COLOR;
-    } else if (chunk.markerType === MarkerType.L1_START) {
-        legendMarkerColor = L1_START_MARKER_COLOR;
-    }
 
     const memorySquare = {
         ...(!chunk.empty &&
@@ -123,10 +120,7 @@ export const MemoryLegendElement: React.FC<{
             className={classNames(
                 'legend-item',
                 {
-                    button:
-                        !chunk.empty &&
-                        chunk.markerType !== MarkerType.L1_SMALL &&
-                        chunk.markerType !== MarkerType.L1_START,
+                    button: !chunk.empty && !isLegendMarker,
                     active: selectedTensorAddress === chunk.address && isMatchingBufferColour,
                     dimmed:
                         isOutOfL1ZoomRange ||
@@ -137,7 +131,7 @@ export const MemoryLegendElement: React.FC<{
                 },
                 className,
             )}
-            {...(!chunk.empty && chunk.markerType !== MarkerType.L1_SMALL && chunk.markerType !== MarkerType.L1_START
+            {...(!chunk.empty && !isLegendMarker
                 ? {
                       type: 'button',
                       onClick: () => onLegendClick(chunk.address, chunk.tensorId, colorVariance),
@@ -149,11 +143,8 @@ export const MemoryLegendElement: React.FC<{
                 {!Number.isNaN(chunk.address) ? prettyPrintAddress(chunk.address, memSize, showHex) : 'N/A'}
             </div>
             <div className='format-numbers monospace nowrap'>
-                {/* eslint-disable-next-line no-nested-ternary */}
-                {chunk.markerType === MarkerType.L1_SMALL ? (
-                    MarkerTypeLabel.L1_SMALL
-                ) : chunk.markerType === MarkerType.L1_START ? (
-                    MarkerTypeLabel.L1_START
+                {isLegendMarker && chunk.markerType ? (
+                    MarkerTypeLabel[chunk.markerType]
                 ) : (
                     <>
                         {formatMemorySize(chunk.size, 2)}
