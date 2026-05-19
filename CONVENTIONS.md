@@ -40,12 +40,12 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 
 **Rationale.** `pnpm lint:spdx` (`scripts/check-spdx.mjs`) walks the whole repo and validates two distinct things, each keyed on the file:
 
-- **SPDX comment header** on files whose extension is `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.scss`, `.xml`, or `.py` (`scripts/check-spdx.mjs:29:31, 92:95`). The accepted format is invariant enough to pin here so contributors don't reinvent it.
-- **`license` + `author` object check on `package.json` specifically** (`scripts/check-spdx.mjs:96:98`). The script matches `.json` extension *and* a path that includes `'package.json'` — so this is a single-file special case, not a rule that applies to every JSON file in the repo. All other JSON files are skipped.
+- **SPDX comment header** on files whose extension is `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.scss`, `.xml`, or `.py` (`scripts/check-spdx.mjs`). The accepted format is invariant enough to pin here so contributors don't reinvent it.
+- **`license` + `author` object check on `package.json` specifically** (`scripts/check-spdx.mjs`). The script matches `.json` extension *and* a path that includes `'package.json'` — so this is a single-file special case, not a rule that applies to every JSON file in the repo. All other JSON files are skipped.
 
 Files outside both buckets (markdown, YAML, TOML, plus most JSON) are skipped. Missing or malformed headers on covered files fail CI.
 
-The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`** (`scripts/check-spdx.mjs:12:19`). Two comment styles are accepted, keyed on file extension:
+The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`** (`scripts/check-spdx.mjs`). Two comment styles are accepted, keyed on file extension:
 
 ```ts
 // SPDX-License-Identifier: Apache-2.0
@@ -59,7 +59,7 @@ The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`**
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 ```
 
-For `package.json` the brand metadata lives in the JSON `license` and `author` fields rather than as a header comment (`scripts/check-spdx.mjs:20:26`).
+For `package.json` the brand metadata lives in the JSON `license` and `author` fields rather than as a header comment (`scripts/check-spdx.mjs`).
 
 ### The year is the file's creation year, not the edit year
 
@@ -75,7 +75,9 @@ Don't bump the year on edits — that's a hot path for noisy diffs reviewers hav
 
 **Good.** The comment surfaces a constraint not visible from the code:
 
-```src/hooks/useAPI.tsx:76:78
+`src/hooks/useAPI.tsx`
+
+```tsx
  * Mutates the passed array in place for performance — these arrays can be
  * very large and are consumed immediately by the hooks below.
  */
@@ -129,7 +131,7 @@ const dataset = new DataSet<OperationNode>(initial);
 const cache = new Map<string, Buffer>();
 ```
 
-When using `DataSet<T>` from `vis-data` (paired with `Edge`/`Node`/`Network` from `vis-network` — see `src/components/OperationGraphComponent.tsx:8:9`), `Map<K, V>`, or a similar container, write the type parameter. Letting inference quietly widen to `any`/`unknown` is the single most common source of latent typing bugs we hit.
+When using `DataSet<T>` from `vis-data` (paired with `Edge`/`Node`/`Network` from `vis-network` — see `src/components/OperationGraphComponent.tsx`), `Map<K, V>`, or a similar container, write the type parameter. Letting inference quietly widen to `any`/`unknown` is the single most common source of latent typing bugs we hit.
 
 ### Respect `react-hooks/exhaustive-deps`
 
@@ -204,7 +206,9 @@ If a pixel value, threshold, or duration is used in more than one place, promote
 
 **Rationale.** Sass deprecated `@import` and the codebase has already migrated. `@use` requires explicit handling of name collisions; the convention is `as *` for tokens we want ergonomic at call sites (colour variables, `$tt-grey-2`) and a short namespace for everything else (`variables.$base-font`).
 
-```5:7:src/scss/_base.scss
+`src/scss/_base.scss`
+
+```scss
 @use 'definitions/colours' as *;
 @use 'definitions/variables' as variables;
 ```
@@ -220,9 +224,11 @@ Don't mix the two: a new component stylesheet doesn't need an underscore, and a 
 
 ### Stylesheet imports go through the `styles/` alias
 
-The `styles/` alias is wired up in three places that must stay in sync — `tsconfig.json:23:30`, `vite.config.ts:66:71`, and `vitest.config.ts:28:30`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.
+The `styles/` alias is wired up in three places that must stay in sync — `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.
 
-```7:9:src/components/SearchField.tsx
+`src/components/SearchField.tsx`
+
+```tsx
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/SearchField.scss';
 import classNames from 'classnames';
@@ -242,7 +248,9 @@ The file is organized into commented sections (`// App state`, `// Reports`, `//
 
 Every export in `src/store/app.ts` follows this:
 
-```src/store/app.ts:40:48
+`src/store/app.ts`
+
+```ts
 export const activeProfilerReportAtom = atom<ReportFolder | null>(null);
 export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
@@ -276,7 +284,9 @@ const [report, setReport] = useAtom(activeProfilerReportAtom); // read+write
 
 UI toggles and view preferences that should survive a reload go through `atomWithStorage`, not raw `localStorage`/`sessionStorage`. Examples currently in the store:
 
-```src/store/app.ts:34:36
+`src/store/app.ts`
+
+```ts
 export const showHexAtom = atomWithStorage('showHex', false); // Used in Buffers and Operation Details
 export const showMemoryRegionsAtom = atomWithStorage('showMemoryRegions', true); // Used in Buffers and Operation Details
 export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', false); // Used in Buffers and Operation Details
@@ -292,9 +302,11 @@ The first argument is the storage key — pick something stable; renaming it lat
 
 **Rationale.** The shared instance in `src/libs/axiosInstance.ts` carries two interceptors every consumer depends on: a request interceptor that injects `instanceId` into query params, and a response interceptor that auto-retries the operations endpoint when a large payload comes back as a string instead of an array. Bypassing the instance means losing both.
 
-**Scope.** This rule applies to **HTTP request methods** (`.get/.post/.put/.delete/.patch/.head`). Importing types and helpers from the `axios` package — `AxiosError`, `AxiosProgressEvent`, `AxiosRequestConfig`, `HttpStatusCode`, `axios.isAxiosError` — at a call site is fine and idiomatic; you'll see this pattern in `src/functions/getResponseError.ts:5`, `src/hooks/useRemote.tsx:5`, `src/hooks/useAPI.tsx:5`, and elsewhere. The thing to never do is `axios.get(url, ...)` at a call site — that bypasses the interceptors.
+**Scope.** This rule applies to **HTTP request methods** (`.get/.post/.put/.delete/.patch/.head`). Importing types and helpers from the `axios` package — `AxiosError`, `AxiosProgressEvent`, `AxiosRequestConfig`, `HttpStatusCode`, `axios.isAxiosError` — at a call site is fine and idiomatic; you'll see this pattern in `src/functions/getResponseError.ts`, `src/hooks/useRemote.tsx`, `src/hooks/useAPI.tsx`, and elsewhere. The thing to never do is `axios.get(url, ...)` at a call site — that bypasses the interceptors.
 
-```12:16:src/libs/axiosInstance.ts
+`src/libs/axiosInstance.ts`
+
+```ts
 const axiosInstance = axios.create({
     maxContentLength: Infinity,
     maxBodyLength: Infinity,
@@ -302,7 +314,9 @@ const axiosInstance = axios.create({
 });
 ```
 
-```40:57:src/libs/axiosInstance.ts
+`src/libs/axiosInstance.ts`
+
+```ts
 axiosInstance.interceptors.request.use(
     (config) => {
         const instanceId = getOrCreateInstanceId();
@@ -323,21 +337,23 @@ axiosInstance.interceptors.request.use(
 
 ### `instanceId` travels as a query parameter, never in the URL path
 
-For HTTP API calls going through `axiosInstance`, the frontend never embeds the instance ID in the URL — it's set once by the request interceptor and read on the backend by `@with_instance` (`backend/ttnn_visualizer/decorators.py:33:35`) via `request.args.get("instanceId")`. Endpoints that take an `:id` path parameter mean something else (e.g. `/api/operations/<operation_id>` is an operation ID, not an instance ID).
+For HTTP API calls going through `axiosInstance`, the frontend never embeds the instance ID in the URL — it's set once by the request interceptor and read on the backend by `@with_instance` (`backend/ttnn_visualizer/decorators.py`) via `request.args.get("instanceId")`. Endpoints that take an `:id` path parameter mean something else (e.g. `/api/operations/<operation_id>` is an operation ID, not an instance ID).
 
 **Don't.** Building a URL like `${Endpoints.OPERATIONS_LIST}/${instanceId}` collides with the operation-detail route shape and loses session scoping for every other call sharing the axios config.
 
-**Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx:18` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
+**Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
 ### Cross-cutting retries belong in the interceptor, not in individual hooks
 
-The operations endpoint occasionally returns a string instead of an array under heavy load. The response interceptor handles this with `MAX_RETRIES = 3` and exponential backoff (`src/libs/axiosInstance.ts:63, 66:108`). Don't replicate retry logic inside a `queryFn` — extend the interceptor instead so every consumer of the endpoint benefits.
+The operations endpoint occasionally returns a string instead of an array under heavy load. The response interceptor handles this with `MAX_RETRIES = 3` and exponential backoff (`src/libs/axiosInstance.ts`). Don't replicate retry logic inside a `queryFn` — extend the interceptor instead so every consumer of the endpoint benefits.
 
 ### The `socket` instance is module-scope in `SocketProvider`
 
 **Rationale.** React StrictMode mounts then re-mounts components in development. A `socket = io(...)` call inside the provider's body (or even inside a `useState` initialiser) would re-open the connection on every mount, double the listeners, and surface as duplicate `fileTransferProgress` updates in dev. Module scope guarantees one connection per page load.
 
-```16:20:src/libs/SocketProvider.tsx
+`src/libs/SocketProvider.tsx`
+
+```tsx
 const { BASE_PATH } = getServerConfig();
 
 const socket = io(`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}`);
@@ -347,7 +363,9 @@ const SocketContext = createContext<SocketContextType>(null);
 
 Listeners live inside `useEffect`. The convention is to pair every `socket.on(name)` with a matching `socket.off(name)` in the cleanup so the singleton's listener list doesn't leak across mounts:
 
-```66:73:src/libs/SocketProvider.tsx
+`src/libs/SocketProvider.tsx`
+
+```tsx
 return () => {
     // socket.offAny();
     socket.off('connect');
@@ -357,7 +375,7 @@ return () => {
 };
 ```
 
-> The current cleanup `off()`s connect/disconnect/connect_error/reconnect but **does not** unregister the `fileTransferProgress` handler registered at `src/libs/SocketProvider.tsx:49:59`. That's tracked as a pre-existing gap (see [Known inconsistencies](#known-inconsistencies)). New listeners should follow the pairing rule.
+> The current cleanup `off()`s connect/disconnect/connect_error/reconnect but **does not** unregister the `fileTransferProgress` handler registered at `src/libs/SocketProvider.tsx`. That's tracked as a pre-existing gap (see [Known inconsistencies](#known-inconsistencies)). New listeners should follow the pairing rule.
 
 Adding a new event handler? Add the matching `off()` in the same change. Don't introduce a second `io(...)` call elsewhere in the codebase — the connection is shared.
 
@@ -369,7 +387,9 @@ Adding a new event handler? Add the matching `off()` in the same change. Don't i
 
 Don't let the error parameter fall back to `unknown`. Call sites depend on `AxiosError` shape — most commonly `error?.status === HttpStatusCode.UnprocessableEntity`.
 
-```src/hooks/useAPI.tsx:244:247
+`src/hooks/useAPI.tsx`
+
+```tsx
 return useQuery<Buffer[], AxiosError>({
     queryFn: () => fetchAllBuffersData(bufferType),
     queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport?.path],
@@ -380,7 +400,9 @@ return useQuery<Buffer[], AxiosError>({
 
 The first element is the human-readable name, then every reactive value the query depends on. Re-used keys (invalidated from another module) are exported as `*_QUERY_KEY` constants.
 
-```src/hooks/useAPI.tsx:325:328
+`src/hooks/useAPI.tsx`
+
+```tsx
 queryKey: ['get-operation-buffers', operationId],
 ```
 
@@ -390,7 +412,9 @@ If the underlying data only changes when the user loads a different report (i.e.
 
 Time-bound or session-bound queries use a finite value:
 
-```src/hooks/useAPI.tsx:497:499
+`src/hooks/useAPI.tsx`
+
+```tsx
 queryKey: ['fetch-npe', fileName],
 …
 staleTime: 30000,
@@ -454,7 +478,9 @@ Rule of thumb: **if it mirrors a backend response, it's a model.** If it's a con
 
 API URLs live in the `Endpoints` enum:
 
-```src/definitions/Endpoints.ts:5:26
+`src/definitions/Endpoints.ts`
+
+```ts
 enum Endpoints {
     BUFFER = '/api/buffer',
     BUFFERS_LIST = '/api/buffers',
@@ -481,7 +507,9 @@ Frontend route paths live in `src/definitions/Routes.ts` (a `Object.freeze`'d co
 
 **Rationale.** `ROUTES` (`src/definitions/Routes.ts`) holds absolute paths so that `<Link to={ROUTES.OPERATIONS} />` reads naturally. React Router's nested-route children, however, take **relative** paths. `stripFirstSlash` bridges the two and keeps `ROUTES` the single source of truth:
 
-```17:28:src/definitions/RouteObjectList.tsx
+`src/definitions/RouteObjectList.tsx`
+
+```tsx
 // Allows us to keep absolute paths in ROUTES while using relative paths in route objects
 const stripFirstSlash = (path: string) => {
     return path.startsWith('/') ? path.slice(1) : path;
@@ -501,7 +529,9 @@ New routes add an entry to `routeObjectList` and (if they require an active repo
 
 `Layout.tsx` declares the base template once, and each route file mounts its own short `<Helmet title='...' />`:
 
-```32:41:src/components/Layout.tsx
+`src/components/Layout.tsx`
+
+```tsx
 <Helmet
     defaultTitle='TT-NN Visualizer'
     titleTemplate='%s | TT-NN Visualizer'
@@ -514,7 +544,9 @@ New routes add an entry to `routeObjectList` and (if they require an active repo
 </Helmet>
 ```
 
-```9:18:src/routes/Operations.tsx
+`src/routes/Operations.tsx`
+
+```tsx
 export default function Operations() {
     useClearSelectedBuffer();
 
@@ -527,7 +559,7 @@ export default function Operations() {
 }
 ```
 
-`HelmetProvider` is mounted once at the top of the tree in `src/main.tsx:50:58`. Don't add a second provider or override `titleTemplate` at the page level — the layout owns the suffix.
+`HelmetProvider` is mounted once at the top of the tree in `src/main.tsx`. Don't add a second provider or override `titleTemplate` at the page level — the layout owns the suffix.
 
 ---
 
@@ -543,7 +575,9 @@ export default function Operations() {
 | `is*`, `has*` | Boolean predicate | `isDeviceOperation`, `hasClusterDescriptionAtom` |
 | `fetch*` | Async axios wrapper returning `Promise<T>` | `fetchInstance`, `fetchBufferPages` |
 
-```src/hooks/useAPI.tsx:108:116
+`src/hooks/useAPI.tsx`
+
+```tsx
 export const fetchInstance = async (): Promise<Instance | null> => {
     const response = await axiosInstance.get<Instance>(Endpoints.INSTANCE);
     return response?.data ?? null;
@@ -606,7 +640,9 @@ ESLint warnings often point at a real latent issue. Example: a `react-hooks/refs
 
 `@typescript-eslint/no-floating-promises` is configured as **error** with `ignoreVoid: true` and `ignoreIIFE: true`:
 
-```97:103:eslint.config.cjs
+`eslint.config.cjs`
+
+```js
 '@typescript-eslint/no-floating-promises': [
     'error',
     {
@@ -638,14 +674,14 @@ Run with `pnpm test`. Tests live in `tests/` at the repo root — see [the dedic
 
 ### Backend: pytest + the shared `client` fixture
 
-The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py:50`. Routes are mounted under the **`{BASE_PATH}api`** prefix — `backend/ttnn_visualizer/app.py:86` registers the `api = Blueprint("api", __name__)` blueprint with `url_prefix=f"{app.config['BASE_PATH']}api"`. When `BASE_PATH` is `/` (the default in `conftest.app` and in single-tenant deployments) the effective prefix is `/api`; when `BASE_PATH` is something like `/visualizer/` the prefix becomes `/visualizer/api`. Tests run against `conftest.app` so `/api/...` is the right path in test URLs — just don't hard-code that assumption into production-facing docs or curl examples. Endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. Pass it through `query_string={...}` (see the dedicated subsection below).
+The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py`. Routes are mounted under the **`{BASE_PATH}api`** prefix — `backend/ttnn_visualizer/app.py` registers the `api = Blueprint("api", __name__)` blueprint with `url_prefix=f"{app.config['BASE_PATH']}api"`. When `BASE_PATH` is `/` (the default in `conftest.app` and in single-tenant deployments) the effective prefix is `/api`; when `BASE_PATH` is something like `/visualizer/` the prefix becomes `/visualizer/api`. Tests run against `conftest.app` so `/api/...` is the right path in test URLs — just don't hard-code that assumption into production-facing docs or curl examples. Endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. Pass it through `query_string={...}` (see the dedicated subsection below).
 
 Two `conftest.app` defaults that bite local-upload tests in particular:
 
-- **`SERVER_MODE=True`** (`conftest.py:34`) — local-only handlers like `/api/local/upload/mlir` return `403 Forbidden` until you override it.
-- **`LOCAL_DATA_DIRECTORY` is a `str`** (`conftest.py:38`) but production `settings.py` initialises it as a `Path` and handlers do `data_directory / config["MLIR_DIRECTORY_NAME"]`. Cast it to `Path` in the test so you exercise the same operand types as the deployed app.
+- **`SERVER_MODE=True`** (`conftest.py`) — local-only handlers like `/api/local/upload/mlir` return `403 Forbidden` until you override it.
+- **`LOCAL_DATA_DIRECTORY` is a `str`** (`conftest.py`) but production `settings.py` initialises it as a `Path` and handlers do `data_directory / config["MLIR_DIRECTORY_NAME"]`. Cast it to `Path` in the test so you exercise the same operand types as the deployed app.
 
-Both overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py:322:323`. A runnable example:
+Both overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py`. A runnable example:
 
 ```python
 from http import HTTPStatus
@@ -673,7 +709,7 @@ def test_local_upload_rejects_non_json(app, client, make_report):
     assert response.status_code == HTTPStatus.OK
     body = response.get_json()
     # `StatusMessage.status` is a `ConnectionTestStates` enum; FAILED is `2`
-    # after JSON serialisation (see `test_file_uploads.py:549:550`).
+    # after JSON serialisation (see `test_file_uploads.py`).
     assert body["status"] == ConnectionTestStates.FAILED.value
 ```
 
@@ -706,7 +742,9 @@ Use `.spec.ts` for non-React tests, `.spec.tsx` for tests that render JSX. Don't
 
 `query_string=` is the Flask test-client idiom and survives encoding (commas, spaces, unicode) correctly. Manual concatenation drifts: `?foo=&bar=` produces empty-string params that the backend then has to disambiguate from `None`.
 
-```9:13:backend/ttnn_visualizer/tests/views/test_remote_stack_source_routes.py
+`backend/ttnn_visualizer/tests/views/test_remote_stack_source_routes.py`
+
+```python
 def test_stack_source_availability_requires_instance(client):
     response = client.get(
         "/api/remote/stack-trace/test", query_string={"filePath": "/some/path"}
@@ -718,7 +756,9 @@ def test_stack_source_availability_requires_instance(client):
 
 **Rationale.** `views.py` does `from ttnn_visualizer.stack_trace_source import read_stack_source_local` at module load. Patching `ttnn_visualizer.stack_trace_source.read_stack_source_local` after that import has happened replaces the *defining* module's binding — but `views.py` already captured its own reference, so the view code calls the real function. Always patch the consumer's namespace.
 
-```49:60:backend/ttnn_visualizer/tests/views/test_remote_stack_source_routes.py
+`backend/ttnn_visualizer/tests/views/test_remote_stack_source_routes.py`
+
+```python
 def test_stack_source_content_local_read_sets_no_store(app, client, make_report):
     instance_id = make_report()
     app.config["SERVER_MODE"] = False
@@ -747,7 +787,9 @@ If the user uploads a file the app parses as JSON, validate it on the frontend b
 
 **Rationale.** Route components downstream key off `error?.status === HttpStatusCode.UnprocessableEntity` to drive validation-error UI. When the failure is a client-side `JSON.parse` (the backend streams the bytes without parsing), throwing a plain `Error` would force every consumer to grow a parallel branch. Throwing a synthetic `AxiosError` with the right status keeps the existing UI mapping working without changes.
 
-```504:526:src/hooks/useAPI.tsx
+`src/hooks/useAPI.tsx`
+
+```tsx
 const fetchMLIRJson = async (): Promise<GraphBundle> => {
     // Fetch as raw text and parse client-side. The backend deliberately
     // streams the uploaded file bytes without parsing them — large MLIR
@@ -878,17 +920,19 @@ class Instance(db.Model):
 
 ### One module-scope `api = Blueprint("api", __name__)`
 
-`backend/ttnn_visualizer/views.py:104` declares the single blueprint:
+`backend/ttnn_visualizer/views.py` declares the single blueprint:
 
-```104:104:backend/ttnn_visualizer/views.py
+`backend/ttnn_visualizer/views.py`
+
+```python
 api = Blueprint("api", __name__)
 ```
 
-Every route in the file decorates with `@api.route("/path", methods=[...])` and is registered onto `api` at module load. `app.py:86` mounts the blueprint at `url_prefix=f"{app.config['BASE_PATH']}api"` — `/api` when `BASE_PATH=/` (single-tenant deployments, including tests), `/<prefix>/api` under a prefixed mount. Either way, route definitions in `views.py` use bare paths like `/operations`, not `/api/operations`.
+Every route in the file decorates with `@api.route("/path", methods=[...])` and is registered onto `api` at module load. `app.py` mounts the blueprint at `url_prefix=f"{app.config['BASE_PATH']}api"` — `/api` when `BASE_PATH=/` (single-tenant deployments, including tests), `/<prefix>/api` under a prefixed mount. Either way, route definitions in `views.py` use bare paths like `/operations`, not `/api/operations`.
 
 **Don't.** Create a second blueprint for a new endpoint group unless you genuinely need a separate `url_prefix` and lifecycle (e.g. an unauthenticated `/health` namespace). Two blueprints with the same prefix create silent registration-order bugs.
 
-Module-private helpers inside `views.py` (cross-route utilities like rank-parameter parsing) carry a leading underscore — covered under [Naming](#naming). Examples currently in `views.py`: `_file_path_from_stack_source_request:107`, `_optional_rank_query_param:118`, `_reject_nonzero_rank_on_legacy_db:144`, `_stack_source_availability_response:157`. New cross-endpoint helpers go in the same file with the same prefix; only reach for a separate module if the helper is needed outside `views.py`.
+Module-private helpers inside `views.py` (cross-route utilities like rank-parameter parsing) carry a leading underscore — covered under [Naming](#naming). Examples currently in `views.py`: `_file_path_from_stack_source_request`, `_optional_rank_query_param`, `_reject_nonzero_rank_on_legacy_db`, `_stack_source_availability_response`. New cross-endpoint helpers go in the same file with the same prefix; only reach for a separate module if the helper is needed outside `views.py`.
 
 ### Prefer `Response(orjson.dumps(payload), mimetype="application/json")` for read-mostly endpoints
 
@@ -896,14 +940,16 @@ Module-private helpers inside `views.py` (cross-route utilities like rank-parame
 
 Standard pattern:
 
-```300:303:backend/ttnn_visualizer/views.py
+`backend/ttnn_visualizer/views.py`
+
+```python
 return Response(
     orjson.dumps(serialized_operations),
     mimetype="application/json",
 )
 ```
 
-`jsonify` is still fine for tiny payloads where the performance delta doesn't matter and Flask's request-context coercion adds value — e.g. health checks. **Don't** mix the two patterns inside one endpoint, and don't reach for `orjson.dumps` if the response is `[]` and you'd be returning a `jsonify([])` one line later (`views.py:480`).
+`jsonify` is still fine for tiny payloads where the performance delta doesn't matter and Flask's request-context coercion adds value — e.g. health checks. **Don't** mix the two patterns inside one endpoint, and don't reach for `orjson.dumps` if the response is `[]` and you'd be returning a `jsonify([])` one line later (`views.py`).
 
 ### Module-level logger at the top of every backend module
 
@@ -917,9 +963,11 @@ Use `logger.info / warning / error / exception` — never `print`. `logger.excep
 
 ### View decorator stack order
 
-Most read endpoints use the two-decorator stack `@api.route → @with_instance → @timer` (e.g. `views.py:1846:1848` for the NPE GET endpoint). Endpoints that must refuse `SERVER_MODE` insert `@local_only` between `@with_instance` and the function:
+Most read endpoints use the two-decorator stack `@api.route → @with_instance → @timer` (e.g. `views.py` for the NPE GET endpoint). Endpoints that must refuse `SERVER_MODE` insert `@local_only` between `@with_instance` and the function:
 
-```884:887:backend/ttnn_visualizer/views.py
+`backend/ttnn_visualizer/views.py`
+
+```python
 @api.route("/profiler/<profiler_name>", methods=["DELETE"])
 @with_instance
 @local_only
@@ -927,8 +975,8 @@ def delete_profiler_report(profiler_name, instance: Instance):
 ```
 
 - `@api.route` outermost (Flask registers the URL).
-- `@with_instance` (from `decorators.py:26`) resolves the `instanceId` query param into an `instance` kwarg and updates the session's report list. Always present on `/api/*` endpoints.
-- `@local_only` (from `decorators.py:147`), when needed, aborts with 403 in `SERVER_MODE`. Sits **below** `@with_instance` so the 403 fires after instance resolution.
+- `@with_instance` (from `decorators.py`) resolves the `instanceId` query param into an `instance` kwarg and updates the session's report list. Always present on `/api/*` endpoints.
+- `@local_only` (from `decorators.py`), when needed, aborts with 403 in `SERVER_MODE`. Sits **below** `@with_instance` so the 403 fires after instance resolution.
 - `@timer` innermost — wraps just the view body for timing. Used selectively on hot-path read endpoints; not present on every route.
 
 ### Error responses go through helpers, not hand-rolled `jsonify`
@@ -979,11 +1027,11 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **Upload size cap.** No `MAX_CONTENT_LENGTH` is set on the Flask app; large uploads succeed until they exhaust memory. Tracked as a separate hardening task.
 - **Default-export vs named-export of components.** The codebase mixes `export default function Foo()` and `export function Foo()`. Components are predominantly default-exported; hooks and utility functions are predominantly named-exported. Mirror the file you're editing.
 - **Two component-typing styles coexist: plain props parameter vs `React.FC<...>`.** Plenty of components are written as `function Foo({ x }: FooProps)`, but `React.FC<FooProps>` (and the bare `: FC<FooProps>` variant) is also in active use across ~30+ files (`src/libs/SocketProvider.tsx`, `src/routes/GraphView.tsx`, `src/components/OperationGraphComponent.tsx`, `src/components/npe/NPEViewComponent.tsx`, `src/components/operation-details/OperationDetailsComponent.tsx`, and many more). The codebase has no single canonical answer. Mirror the file you're editing. The community-wide foot-gun of `React.FC` (implicit `children` in older `@types/react`) is a real consideration, but it's not a project-wide migration in this repo.
-- **Raw `toast()` in `useBufferFocus`.** `src/hooks/useBufferFocus.tsx:42:53` calls `toast()` from `react-toastify` directly because it needs `autoClose: false` and persists the returned `Id` into `activeToastAtom` — capabilities `createToastNotification` doesn't expose. Intentional exception, not a precedent. New code still goes through `createToastNotification`; if you need richer options, extend the wrapper.
-- **`print()` calls in `sockets.py`.** `backend/ttnn_visualizer/sockets.py:126, 135, 137, 155` use `print()` instead of `logger.info / debug`. Pre-existing tech debt; do not introduce new `print()` calls anywhere else in the backend.
-- **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8:10` and `pyproject.toml:69:71` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.
-- **`@with_instance` returns 404 on missing `instanceId`.** `backend/ttnn_visualizer/decorators.py:33:35` aborts with 404 when the query param is absent; 400 ("Bad Request") would be more semantically accurate. Pre-existing; flag if you're rewriting the decorator, otherwise leave it.
-- **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py:143:148` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
-- **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription:457`, `usePerfMeta:925`, `useReportFolderList:1119`, `useInstance:1023`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
-- **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py:505, 631, 697`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.
-- **`SocketProvider` cleanup is incomplete.** `src/libs/SocketProvider.tsx:66:73` `off()`s `connect`/`disconnect`/`connect_error`/`reconnect` but not the `fileTransferProgress` handler registered at `49:59`. Pre-existing; the listener list will grow on every remount of the provider (rare in production, common under StrictMode in dev). New listeners follow the pairing rule; the existing miss is tracked tech debt.
+- **Raw `toast()` in `useBufferFocus`.** `src/hooks/useBufferFocus.tsx` calls `toast()` from `react-toastify` directly because it needs `autoClose: false` and persists the returned `Id` into `activeToastAtom` — capabilities `createToastNotification` doesn't expose. Intentional exception, not a precedent. New code still goes through `createToastNotification`; if you need richer options, extend the wrapper.
+- **`print()` calls in `sockets.py`.** `backend/ttnn_visualizer/sockets.py` use `print()` instead of `logger.info / debug`. Pre-existing tech debt; do not introduce new `print()` calls anywhere else in the backend.
+- **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8` and `pyproject.toml` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.
+- **`@with_instance` returns 404 on missing `instanceId`.** `backend/ttnn_visualizer/decorators.py` aborts with 404 when the query param is absent; 400 ("Bad Request") would be more semantically accurate. Pre-existing; flag if you're rewriting the decorator, otherwise leave it.
+- **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
+- **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription`, `usePerfMeta`, `useReportFolderList`, `useInstance`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
+- **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.
+- **`SocketProvider` cleanup is incomplete.** `src/libs/SocketProvider.tsx` `off()`s `connect`/`disconnect`/`connect_error`/`reconnect` but not the `fileTransferProgress` handler registered alongside them. Pre-existing; the listener list will grow on every remount of the provider (rare in production, common under StrictMode in dev). New listeners follow the pairing rule; the existing miss is tracked tech debt.
