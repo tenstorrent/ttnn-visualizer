@@ -7,7 +7,7 @@ import { useAtomValue } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { Icon, Intent, Switch } from '@blueprintjs/core';
 import { Fragment } from 'react/jsx-runtime';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
@@ -125,6 +125,10 @@ function L1Plots({
 
     const zoomRangeStart = plotZoomRangeStart; // Math.min(plotZoomRangeStart, bufferZoomRangeStart);
     const zoomRangeEnd = plotZoomRangeEnd; // Math.max(plotZoomRangeEnd, bufferZoomRangeEnd);
+    const userL1ZoomRange = useMemo(
+        () => (zoomedInViewMainMemory ? ([plotZoomRangeStart, plotZoomRangeEnd] as [number, number]) : undefined),
+        [zoomedInViewMainMemory, plotZoomRangeStart, plotZoomRangeEnd],
+    );
 
     const memoryRegionsMarkers = showMemoryRegions
         ? [
@@ -165,7 +169,7 @@ function L1Plots({
                 plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
                 chartDataList={[previousChartData]}
                 isZoomedIn={zoomedInViewMainMemory}
-                memorySize={memorySizeL1}
+                memoryZoomEnd={memorySizeL1}
                 configuration={L1RenderConfiguration}
                 markers={memoryRegionsMarkers}
             />
@@ -178,7 +182,7 @@ function L1Plots({
                 isZoomedIn={zoomedInViewMainMemory}
                 plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
                 chartDataList={[cbChartData, chartData, l1SmallMemory.length > 0 ? l1SmallCondensedChart : []]}
-                memorySize={memorySizeL1}
+                memoryZoomEnd={memorySizeL1}
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
                 markers={memoryRegionsMarkers}
@@ -209,7 +213,7 @@ function L1Plots({
                                         zoomRangeEnd + MEMORY_PADDING_L1,
                                     ]}
                                     isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={memorySizeL1}
+                                    memoryZoomEnd={memorySizeL1}
                                     configuration={BufferRenderConfiguration}
                                     onBufferClick={onBufferClick}
                                     markers={memoryRegionsMarkers}
@@ -232,7 +236,7 @@ function L1Plots({
                         l1SmallZoomEnd + MEMORY_PADDING_L1_SMALL,
                     ]}
                     chartDataList={[l1SmallChartData]}
-                    memorySize={memorySizeL1} // Not used as we're always zoomed in
+                    memoryZoomEnd={memorySizeL1} // Not used as we're always zoomed in
                     configuration={L1SmallRenderConfiguration}
                     onBufferClick={() => {}}
                 />
@@ -267,7 +271,7 @@ function L1Plots({
                                 chartDataList={[plotData]}
                                 plotZoomRange={[cbZoomStart - MEMORY_PADDING_CB, cbZoomEnd + MEMORY_PADDING_CB]}
                                 isZoomedIn={zoomedInViewCBMemory}
-                                memorySize={memorySizeL1}
+                                memoryZoomEnd={memorySizeL1}
                                 configuration={CBRenderConfiguration}
                                 onBufferClick={onBufferClick}
                                 markers={[{ color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker }]}
@@ -298,6 +302,7 @@ function L1Plots({
                         selectedTensorAddress={null}
                         operationDetails={operationDetails}
                         onLegendClick={onLegendClick}
+                        userL1ZoomRange={userL1ZoomRange}
                     />
                 )}
                 {showCircularBuffer &&
@@ -310,6 +315,7 @@ function L1Plots({
                             operationDetails={operationDetails}
                             onLegendClick={onLegendClick}
                             colorVariance={chunk.colorVariance}
+                            userL1ZoomRange={userL1ZoomRange}
                         />
                     ))}
 
@@ -325,6 +331,7 @@ function L1Plots({
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={operationDetails}
                                 onLegendClick={onLegendClick}
+                                userL1ZoomRange={userL1ZoomRange}
                             />
                         ) : (
                             <MemoryLegendElement
@@ -334,6 +341,7 @@ function L1Plots({
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={operationDetails}
                                 onLegendClick={onLegendClick}
+                                userL1ZoomRange={userL1ZoomRange}
                             />
                         );
                     })}
@@ -349,6 +357,7 @@ function L1Plots({
                         selectedTensorAddress={null}
                         operationDetails={operationDetails}
                         onLegendClick={onLegendClick}
+                        userL1ZoomRange={userL1ZoomRange}
                     />
                 )}
             </div>

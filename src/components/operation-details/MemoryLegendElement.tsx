@@ -16,6 +16,7 @@ import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 import { selectedBufferColourAtom, showHexAtom } from '../../store/app';
 import { StringBufferType, StringBufferTypeLabel } from '../../model/BufferType';
+import { isAddressRangeOutOfL1Zoom } from '../../functions/isAddressRangeVisibleInL1Zoom';
 
 export const MemoryLegendElement: React.FC<{
     chunk: FragmentationEntry;
@@ -30,6 +31,7 @@ export const MemoryLegendElement: React.FC<{
     isGroupHeader?: boolean;
     className?: string;
     numCores?: number;
+    userL1ZoomRange?: [number, number];
 }> = ({
     // no wrap eslint
     chunk,
@@ -43,6 +45,7 @@ export const MemoryLegendElement: React.FC<{
     isMultiDeviceBuffer = false,
     className,
     numCores,
+    userL1ZoomRange,
 }) => {
     const showHex = useAtomValue(showHexAtom);
     const selectedBufferColour = useAtomValue(selectedBufferColourAtom);
@@ -86,6 +89,14 @@ export const MemoryLegendElement: React.FC<{
     };
 
     const isMatchingBufferColour = memorySquare.backgroundColor === selectedBufferColour;
+    // L1_START / L1_SMALL are axis markers
+    const isLegendMarker = chunk.markerType === MarkerType.L1_SMALL || chunk.markerType === MarkerType.L1_START;
+    const chunkSize = chunk.size ?? 0;
+    const isOutOfL1ZoomRange =
+        !isLegendMarker &&
+        !Number.isNaN(chunk.address) &&
+        chunkSize > 0 &&
+        isAddressRangeOutOfL1Zoom(chunk.address, chunk.address + chunkSize, userL1ZoomRange);
 
     return (
         <Component
@@ -99,9 +110,10 @@ export const MemoryLegendElement: React.FC<{
                         chunk.markerType !== MarkerType.L1_START,
                     active: selectedTensorAddress === chunk.address && isMatchingBufferColour,
                     dimmed:
-                        selectedBufferColour !== null &&
-                        selectedTensorAddress !== null &&
-                        (selectedTensorAddress !== chunk.address || !isMatchingBufferColour),
+                        isOutOfL1ZoomRange ||
+                        (selectedBufferColour !== null &&
+                            selectedTensorAddress !== null &&
+                            (selectedTensorAddress !== chunk.address || !isMatchingBufferColour)),
                     'extra-info': bufferType || layout,
                 },
                 className,

@@ -9,17 +9,17 @@ import { pageDataToChunkArray } from '../../functions/getChartData';
 interface SVGBufferRendererProps {
     height: number;
     data: BufferPage[];
-    memorySize: number;
     memoryStart: number;
+    memoryEnd: number;
 }
 
 const SVGBufferRenderer: React.FC<SVGBufferRendererProps> = ({
     height,
     data,
-    memorySize,
     memoryStart,
+    memoryEnd,
 }: SVGBufferRendererProps) => {
-    const memoryRange = memorySize - memoryStart;
+    const memoryRange = memoryEnd - memoryStart;
     const mergedRange = pageDataToChunkArray(data);
 
     return (
