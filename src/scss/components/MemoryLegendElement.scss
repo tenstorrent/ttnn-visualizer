@@ -63,4 +63,29 @@
     .nowrap {
         white-space: nowrap;
     }
+
+    .legend-marker-swatch {
+        width: 15px;
+        height: 15px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        &::before {
+            content: '';
+            display: block;
+            width: 2px;
+            height: 15px;
+            background-color: var(--legend-marker-color);
+        }
+    }
+
+    .legend-empty-swatch {
+        width: 15px;
+        height: 15px;
+        display: inline-block;
+        background-color: transparent;
+        border: 1px dashed $tt-grey-5;
+        box-sizing: border-box;
+    }
 }

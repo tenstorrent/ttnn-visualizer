@@ -70,33 +70,52 @@ export const MemoryLegendElement: React.FC<{
     const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
     const numCoresLabel = numCores && numCores > 1 ? ` x ${numCores} cores` : '';
 
+    const isLegendMarker = chunk.markerType === MarkerType.L1_SMALL || chunk.markerType === MarkerType.L1_START;
+    let legendMarkerColor: string | null = null;
+
+    if (chunk.markerType === MarkerType.L1_SMALL) {
+        legendMarkerColor = L1_SMALL_MARKER_COLOR;
+    } else if (chunk.markerType === MarkerType.L1_START) {
+        legendMarkerColor = L1_START_MARKER_COLOR;
+    }
+
     const memorySquare = {
-        ...(chunk.empty
-            ? {}
-            : {
-                  backgroundColor:
-                      chunk.tensorId || derivedTensor
-                          ? getTensorColor(chunk.tensorId) || getTensorColor(derivedTensor?.id)
-                          : getBufferColor(chunk.address + (colorVariance || 0)),
-              }),
-        ...(chunk.markerType === MarkerType.L1_SMALL && {
-            backgroundColor: L1_SMALL_MARKER_COLOR,
-        }),
-        ...(chunk.markerType === MarkerType.L1_START && {
-            backgroundColor: L1_START_MARKER_COLOR,
-        }),
+        ...(!chunk.empty &&
+            !isLegendMarker && {
+                backgroundColor:
+                    chunk.tensorId || derivedTensor
+                        ? getTensorColor(chunk.tensorId) || getTensorColor(derivedTensor?.id)
+                        : getBufferColor(chunk.address + (colorVariance || 0)),
+            }),
         ...(Number.isNaN(chunk.address) && { backgroundColor: 'white' }),
     };
 
     const isMatchingBufferColour = memorySquare.backgroundColor === selectedBufferColour;
-    // L1_START / L1_SMALL are axis markers
-    const isLegendMarker = chunk.markerType === MarkerType.L1_SMALL || chunk.markerType === MarkerType.L1_START;
     const chunkSize = chunk.size ?? 0;
     const isOutOfL1ZoomRange =
         !isLegendMarker &&
         !Number.isNaN(chunk.address) &&
         chunkSize > 0 &&
         isAddressRangeOutOfL1Zoom(chunk.address, chunk.address + chunkSize, userL1ZoomRange);
+
+    let legendSwatch: React.ReactNode;
+    if (isLegendMarker) {
+        legendSwatch = (
+            <div
+                className='legend-marker-swatch'
+                style={{ '--legend-marker-color': legendMarkerColor } as React.CSSProperties}
+            />
+        );
+    } else if (chunk.empty) {
+        legendSwatch = <div className='legend-empty-swatch' />;
+    } else {
+        legendSwatch = (
+            <div
+                className='memory-color-block'
+                style={memorySquare}
+            />
+        );
+    }
 
     return (
         <Component
@@ -125,12 +144,7 @@ export const MemoryLegendElement: React.FC<{
                   }
                 : {})}
         >
-            <div
-                className={classNames('memory-color-block', {
-                    empty: chunk.empty,
-                })}
-                style={memorySquare}
-            />
+            {legendSwatch}
             <div className='format-numbers monospace'>
                 {!Number.isNaN(chunk.address) ? prettyPrintAddress(chunk.address, memSize, showHex) : 'N/A'}
             </div>
