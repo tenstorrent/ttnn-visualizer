@@ -127,7 +127,7 @@ describe('BufferSummaryVirtualizedList', () => {
         renderVirtualizedList(false);
 
         const plotProps = memoryPlotRendererMock.mock.calls[0][0];
-        expect(plotProps.memorySize).toBe(1024);
+        expect(plotProps.memoryZoomEnd).toBe(1024);
         expect(plotProps.plotZoomRange).toEqual([0, 1024]);
 
         const rowProps = bufferSummaryRowMock.mock.calls[0][0];
@@ -139,7 +139,7 @@ describe('BufferSummaryVirtualizedList', () => {
         renderVirtualizedList(true);
 
         const plotProps = memoryPlotRendererMock.mock.calls[0][0];
-        expect(plotProps.memorySize).toBe(200);
+        expect(plotProps.memoryZoomEnd).toBe(200);
         expect(plotProps.plotZoomRange).toEqual([90, 210]);
 
         const rowProps = bufferSummaryRowMock.mock.calls[0][0];
