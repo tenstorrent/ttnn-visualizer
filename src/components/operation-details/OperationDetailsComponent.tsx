@@ -379,7 +379,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         plotZoomRange={[plotZoomRangeMin, plotZoomRangeMax]}
                                         chartDataList={[chartData]}
                                         isZoomedIn={zoomedInViewMainMemory}
-                                        memorySize={memorySizeL1}
+                                        memoryZoomEnd={memorySizeL1}
                                         configuration={L1RenderZoomoutConfiguration}
                                     />
                                     <div className='zoom-range-wrap'>
