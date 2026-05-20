@@ -474,5 +474,7 @@ def stack_source_response(text: str, resolved: str) -> Response:
     # Source files can change underneath a stable filePath (e.g. after
     # re-syncing a remote folder), so disable caching for the GET endpoint.
     resp.headers["Cache-Control"] = "no-store"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Content-Disposition"] = 'inline; filename="stack-source.txt"'
 
     return resp

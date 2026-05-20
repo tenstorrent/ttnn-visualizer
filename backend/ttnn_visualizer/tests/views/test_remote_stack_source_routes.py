@@ -68,6 +68,11 @@ def test_stack_source_content_local_read_sets_no_store(app, client, make_report)
     assert response.status_code == HTTPStatus.OK
     assert response.headers.get("Cache-Control") == "no-store"
     assert response.headers.get("X-TTNN-Resolved-Source-Path") == "/abs/resolved.py"
+    assert response.headers.get("X-Content-Type-Options") == "nosniff"
+    assert (
+        response.headers.get("Content-Disposition")
+        == 'inline; filename="stack-source.txt"'
+    )
 
 
 def test_stack_source_content_requires_instance(client):
