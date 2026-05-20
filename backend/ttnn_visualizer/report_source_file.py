@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def _source_file_has_contents(source_file: Optional["SourceFile"]) -> bool:
-    return source_file is not None and bool(source_file.contents)
+    return source_file is not None and source_file.contents is not None
 
 
 def lookup_report_source_file(
