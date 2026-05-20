@@ -17,8 +17,7 @@ from ttnn_visualizer.report_source_file import (
 class TestReportSourceFile(unittest.TestCase):
     def setUp(self):
         self.connection = sqlite3.connect(":memory:")
-        self.connection.executescript(
-            """
+        self.connection.executescript("""
             CREATE TABLE source_files (
                 id int PRIMARY KEY,
                 path text,
@@ -26,8 +25,7 @@ class TestReportSourceFile(unittest.TestCase):
             );
             INSERT INTO source_files VALUES (1, '/proj/model.py', 'def forward(): pass');
             INSERT INTO source_files VALUES (2, '/proj/other.py', '');
-            """
-        )
+            """)
         self.db = DatabaseQueries(connection=self.connection)
 
     def test_lookup_by_id(self):

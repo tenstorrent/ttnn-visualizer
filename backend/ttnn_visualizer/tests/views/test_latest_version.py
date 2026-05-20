@@ -49,9 +49,7 @@ class TestLatestVersionSuccess:
                 <item><title>2.1.0</title></item>
             </channel>
         </rss>
-        """.encode(
-            "utf-8"
-        )
+        """.encode("utf-8")
 
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_response = MagicMock()
@@ -118,9 +116,7 @@ class TestLatestVersionFailures:
                 <item><title>Latest Update</title></item>
             </channel>
         </rss>
-        """.encode(
-            "utf-8"
-        )
+        """.encode("utf-8")
 
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_response = MagicMock()
