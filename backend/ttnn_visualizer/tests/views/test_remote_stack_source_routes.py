@@ -117,7 +117,7 @@ def test_stack_source_read_from_report_db_by_path_only_in_server_mode(
     instance_id = make_report(
         schema_sql=SCHEMA_V2_WITH_SOURCE_FILES_STACK_TRACES,
         inserts_sql="""
-        INSERT INTO source_files VALUES (3, '/proj/other.py', 'print(2)\\n');
+        INSERT INTO source_files VALUES (3, '/proj/other.py', 'print(2)\n');
         """,
     )
     response = client.get(
@@ -133,7 +133,7 @@ def test_stack_source_read_from_report_db_in_server_mode(client, make_report):
     instance_id = make_report(
         schema_sql=SCHEMA_V2_WITH_SOURCE_FILES_STACK_TRACES,
         inserts_sql="""
-        INSERT INTO source_files VALUES (1, '/proj/model.py', 'print(1)\\n');
+        INSERT INTO source_files VALUES (1, '/proj/model.py', 'print(1)\n');
         """,
     )
     response = client.get(
