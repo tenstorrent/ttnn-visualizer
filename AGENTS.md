@@ -102,3 +102,100 @@ When looking up **issues, pull requests, or releases**, use **github.com/tenstor
 ### Pull request base branch
 
 Open pull requests with **`dev`** as the base branch by default.
+
+## Code style and conventions
+
+> See [`CONVENTIONS.md`](./CONVENTIONS.md) for the expanded reference — same rules as below, with examples, file/line references, and rationale.
+
+### Comments
+
+- Comments must explain **why**, not what. Avoid restating what the code obviously does (`// increment counter`, `// import module`). Don't narrate the change you're making in a comment (`// Fixed the bug by adding a guard`).
+- Preserve `//` placeholder lines inside multi-line array/object literals where they already exist — they intentionally prevent auto-formatters from collapsing the line.
+- Stale comments are bugs. If you change behaviour, update or delete the comment.
+
+### TypeScript
+
+- Prefer **named enums** over inline string-literal unions when the union has semantic meaning (e.g. `enum NodeRelation { Input = 'input', Output = 'output' }` rather than `'input' | 'output'`). Use string-valued enums so the runtime values match the previous union — bare `enum NodeRelation { Input, Output }` is a numeric enum (`Input = 0`, `Output = 1`) and silently breaks string comparisons. One-off booleans/flags don't need enum promotion.
+- When using third-party generic containers (`DataSet<T>`, `Map<K, V>`), spell out the type parameter rather than relying on inference that obscures intent.
+- Respect `react-hooks/exhaustive-deps`. If you suppress it, add a one-line comment explaining the trade-off and why the missing dep is intentionally stable.
+- Default to **`interface ComponentNameProps`** for component props (the `Props` suffix is required), declared immediately above the component. Reserve `type` for unions, generic-constrained mappings, and `Omit`/`Pick` derivations.
+- Prefer **`null`** over **`undefined`** for intentional “no value” in your own state, return types, and API-shaped data (`T | null`, default `null`). Keep **`undefined`** for optional properties, omitted keys, and third-party signatures you cannot change.
+
+### CSS / SCSS
+
+- Don't hardcode colour values in TS/TSX. Promote to a CSS custom property in `src/scss/_base.scss` (e.g. `--graph-focused-node: #f6bc42;`), then expose it through `GRAPH_COLORS` in `src/definitions/GraphColors.ts` via the `cssVar()` helper. Components import from `GRAPH_COLORS`, never from a literal.
+- The same rule applies to magic layout numbers used in more than one place — promote to a SCSS variable or CSS custom property.
+
+### Lint discipline
+
+- Pre-existing lints in code you didn't touch are not yours to fix in unrelated PRs. Surface them if they matter; don't sprawl scope.
+- Lint suppressions (`// eslint-disable-next-line ...`, `# type: ignore`, etc.) require an explanatory comment on the same or preceding line.
+- When a lint warning looks wrong, assess its **validity** before reaching for a suppression. Many warnings point at a real latent issue worth fixing properly (e.g. ref-read-in-render warnings often signal a stable-singleton pattern that could be expressed more cleanly).
+
+### Testing
+
+- Frontend: **Vitest** + `@testing-library/react` (`pnpm test`).
+- Backend: **pytest** with `caplog`, `tmp_path`, and the shared **`client`** fixture (Flask's `app.test_client()`, defined in `backend/ttnn_visualizer/tests/conftest.py`) for endpoint tests.
+- For larger test suites — characterisation tests, refactor regressions — build **shared fixture helpers** (see `tests/mlirFixtures/builders.ts`) and **cross-cutting invariant checks** (see `tests/mlirFixtures/invariants.ts`) instead of repeating ad-hoc setup.
+
+### Frontend data integrity
+
+- Prefer **client-side JSON validation** for user-uploaded JSON before the backend parses it. Surface validation errors with a friendly UI message rather than a 5xx round-trip. Use `try { JSON.parse(...) } catch (e) { ... }` and shape-check predicates.
+
+### Upload security
+
+- All file-upload handlers must apply `Path(filename).name` to user-supplied filenames before composing destination paths. On our Linux/macOS servers this collapses POSIX-style traversal components (`../`, absolute prefixes). **Caveat:** `\` isn't a path separator under POSIX, so backslash-separated paths and Windows drive-letter prefixes survive `.name` unchanged — they become literal filename characters inside the target directory rather than traversal vectors, so containment still holds, but don't read the helper as a full cross-platform sanitiser. Add a regression test that submits a crafted traversal filename and asserts the file lands inside the intended directory.
+
+### Toolchain and package management
+
+- **pnpm** is the only supported frontend package manager (`engines.pnpm >= 11`). Don't `npm install` or `yarn add`.
+- The Node version is pinned via **`.nvmrc`**. Use `nvm use` from the repo root; `corepack` handles pnpm shimming automatically on Node 16+.
+
+### Database schema changes
+
+- New columns on existing tables go via **Alembic migrations**, not ad-hoc `ALTER TABLE`. The app declares `alembic` in `pyproject.toml` and runs migrations on startup.
+- When adding a column referenced by ORM models, declare it `nullable=True` (or with a default) so existing databases don't break before migrations apply.
+
+### State management (Jotai)
+
+- All shared atoms live in **`src/store/app.ts`** and end with the `Atom` suffix (e.g. `activeProfilerReportAtom`). Components and hooks consume atoms — they do not declare new ones inline. Add new atoms in the section comment block matching their feature area.
+- Prefer **`useAtomValue`** for read-only consumers and **`useSetAtom`** for write-only consumers; use **`useAtom`** when a component both reads and writes the same atom. Don't subscribe via `useAtom` if you only need one half of the tuple.
+- Use **`atomWithStorage`** from `jotai/utils` for user-preference flags that need to survive reloads — never reach for `localStorage` directly.
+
+### Data fetching (React Query)
+
+- Type every hook as **`useQuery<Data, AxiosError>`** — don't let the error parameter fall back to `unknown`. Call sites depend on `AxiosError` shape (e.g. `error?.status === HttpStatusCode.UnprocessableEntity`).
+- Query keys are tuples of `['kebab-string-name', ...reactiveDeps]` (e.g. `['fetch-all-buffers', bufferType, activeProfilerReport?.path]`). Report-bound queries use `staleTime: Infinity`. Keys that need invalidation from another module are exported as `*_QUERY_KEY` constants.
+
+### Errors and toasts
+
+- Funnel error-string extraction through **`getResponseError(error, fallback?)`** (`src/functions/getResponseError.ts`). Don't reach into `error.response.data.error` ad-hoc — the helper handles AxiosError, Error, and string fallbacks consistently.
+- Emit toasts via **`createToastNotification(message, fileName, ToastType.X)`** (`src/functions/createToastNotification.tsx`). Don't import `toast` from `react-toastify` directly in components. The `<ToastContainer>` is mounted once in `Layout.tsx`.
+
+### File organization and modules
+
+- **`src/definitions/`** holds *primitives*: enums, route/endpoint maps, plot/colour configs, plain interfaces. **`src/model/`** holds richer domain types — usually API response shapes, sometimes classes with methods. If it mirrors a backend response, it's a model.
+- URL endpoints are centralized in the **`Endpoints` enum** (`src/definitions/Endpoints.ts`); routes in the **`ROUTES` frozen const** (`src/definitions/Routes.ts`). Never inline a URL string in a component.
+- Test IDs are centralized in **`TEST_IDS`** (`src/definitions/TestIds.ts`, `Object.freeze`'d) and referenced from both component `data-testid` attributes and test queries. No hardcoded test-id strings.
+
+### Naming
+
+- Function-name prefixes carry meaning. Match them when you add new functions:
+
+  | Prefix | Purpose |
+  |---|---|
+  | `use*` | React hook (must follow rules of hooks) |
+  | `handle*` | Event handler bound to a UI event |
+  | `get*` | Pure accessor or formatter |
+  | `is*`, `has*` | Boolean predicate |
+  | `fetch*` | Async axios wrapper returning `Promise<T>` |
+
+- **Module-level constants** use `SCREAMING_SNAKE_CASE` (`MAX_RETRIES`, `LOCAL_STORAGE_KEY_*`). **Module-level** means the outer scope of a file, not “only used in this file” — use `const` without `export` for values private to that module; export shared constants from a central module such as **`src/definitions/`** (see File organization above), not ad hoc from leaf components.
+- Backend module-private helpers prefix with a single underscore (e.g. `_file_path_from_stack_source_request`).
+
+### Backend conventions
+
+- Module-level logger: **`logger = logging.getLogger(__name__)`** at the top of every backend module that logs. Use `logger.info/warning/error/exception`, never `print`.
+- View decorator stack order: **`@api.route → @with_instance → @timer`**. Use **`@local_only`** to gate endpoints that must refuse `SERVER_MODE` (uploads, local-only flows); it returns 403 automatically.
+- Error responses go through the helpers in `backend/ttnn_visualizer/exceptions.py`: **`response_bad_request / response_not_found / response_forbidden / response_unprocessable_entity / response_internal_server_error`**. Don't hand-roll `jsonify({...}), 400`. Use **`StatusMessage`** (Pydantic) when the response needs to carry a `ConnectionTestStates` status alongside the message (uploads, sync, connection-test endpoints).
+- Env-var booleans go through **`str_to_bool(os.getenv("FOO", "false"))`** — never `bool(os.getenv(...))` (which is truthy for `"false"`).

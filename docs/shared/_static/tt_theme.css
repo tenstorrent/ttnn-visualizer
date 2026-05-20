@@ -1,12 +1,13 @@
+/* stylelint-disable declaration-no-important */
 @font-face {
-    font-family: 'Degular';
+    font-family: Degular;
     src:
         url('./fonts/DegularText-Medium.woff') format('woff'),
         url('./fonts/DegularText-Medium.woff2') format('woff2');
 }
 
 @font-face {
-    font-family: 'Degular';
+    font-family: Degular;
     src:
         url('./fonts/DegularText-Bold.woff') format('woff'),
         url('./fonts/DegularText-Bold.woff2') format('woff2');
@@ -14,7 +15,7 @@
 }
 
 @font-face {
-    font-family: 'Degular';
+    font-family: Degular;
     src:
         url('./fonts/DegularText-MediumItalic.woff') format('woff'),
         url('./fonts/DegularText-MediumItalic.woff2') format('woff2');
@@ -22,14 +23,14 @@
 }
 
 @font-face {
-    font-family: 'DegularDisplay';
+    font-family: DegularDisplay;
     src:
         url('./fonts/DegularDisplay-Light.woff') format('woff'),
         url('./fonts/DegularDisplay-Light.woff2') format('woff2');
 }
 
 @font-face {
-    font-family: 'RMMono';
+    font-family: RMMono;
     src:
         url('./fonts/RMMono-Regular.woff') format('woff'),
         url('./fonts/RMMono-Regular.woff2') format('woff2');
@@ -41,7 +42,6 @@
     --color-background-alt2: #ccd2f9;
     --color-foreground: #202020;
     --color-accent: #5164e0;
-
     --color-purple: var(--color-accent);
     --color-dark-purple: #7584e6;
     --color-red: #fa512e;
@@ -49,24 +49,18 @@
     --color-green: #6faba0;
     --color-dark-green: #3a3433;
     --color-yellow: #f9c80e;
-
     --color-main: var(--color-foreground);
-
     --color-background-20: #d7dbeb33;
     --color-background-40: #d7dbeb66;
     --color-background-60: #d7dbeb99;
     --color-background-80: #d7dbebcc;
     --color-background-100: #d7dbebff;
-
     --base-text-size: 16px;
-
     --font-main: 'Degular', sans-serif;
     --font-display: 'DegularDisplay', sans-serif;
     --font-mono: 'RMMono', monospace;
-
     --transition-duration: 150ms;
     --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
-
     --transition-color: color var(--transition-duration) var(--transition-timing);
     --transition-background: background var(--transition-duration) var(--transition-timing);
     --transition-all: all var(--transition-duration) var(--transition-timing);
@@ -150,7 +144,7 @@ i {
     min-height: 100vh;
 }
 
-@media screen and (min-width: 1100px) {
+@media screen and (width >= 1100px) {
     .wy-nav-content-wrap {
         background: none;
     }
@@ -176,7 +170,7 @@ i {
 .wy-side-nav-search a {
     color: var(--color-foreground);
     font-family: var(--font-display);
-    font-size: 2.5rem;
+    font-size: 2.3rem;
     font-weight: 400;
     line-height: 100%;
 }
@@ -220,10 +214,8 @@ i {
     border: 2px solid var(--color-dark-purple);
     border-radius: 0;
     color: var(--color-foreground);
-    font-family: var(--font-main);
     padding: 0.5rem;
     font-size: 1rem;
-    font-weight: 400;
     outline: none;
     font-family: var(--font-main);
     font-weight: 400;
@@ -305,7 +297,7 @@ li.toctree-l1.current > a {
 
 /* Nav: mobile */
 
-@media screen and (max-width: 768px) {
+@media screen and (width <= 768px) {
     .wy-nav-top {
         background: var(--color-background);
         display: flex;
@@ -331,8 +323,8 @@ li.toctree-l1.current > a {
     color: var(--color-main);
 }
 
-.wy-nav-top > .fa:before,
-.wy-nav-top > .fa-bars:before {
+.wy-nav-top > .fa::before,
+.wy-nav-top > .fa-bars::before {
     font-weight: 300 !important;
 }
 
@@ -402,10 +394,7 @@ dl.cpp.function {
 }
 
 html.writer-html4 .rst-content dl:not(.docutils) > dt,
-html.writer-html5
-    .rst-content
-    dl[class]:not(.option-list):not(.field-list):not(.footnote):not(.citation):not(.glossary):not(.simple)
-    > dt {
+html.writer-html5 .rst-content dl[class]:not(.option-list, .field-list, .footnote, .citation, .glossary, .simple) > dt {
     background: var(--color-background-alt);
     color: var(--color-accent);
     border-top: 3px solid var(--color-accent);
@@ -423,7 +412,6 @@ html.writer-html5
 .btn,
 .btn-neutral {
     background-color: var(--color-foreground) !important;
-    background: var(--color-foreground) !important;
     color: var(--color-background) !important;
     border: none;
     border-radius: 4rem;
@@ -452,6 +440,5 @@ html.writer-html5
 
 .btn-neutral:hover {
     background-color: var(--color-background-alt2) !important;
-    background: var(--color-background-alt2) !important;
     color: var(--color-foreground) !important;
 }

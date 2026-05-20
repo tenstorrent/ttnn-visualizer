@@ -149,7 +149,7 @@ function BufferSummaryVirtualizedList({
                     className='buffer-summary-plot'
                     chartDataList={CHART_DATA}
                     isZoomedIn={isZoomedIn}
-                    memorySize={plotMemorySize}
+                    memoryZoomEnd={plotMemorySize}
                     plotZoomRange={plotZoomRange}
                     configuration={axisConfiguration}
                     markers={markers}

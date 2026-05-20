@@ -1,3 +1,10 @@
+allowBuilds:
+  '@parcel/watcher': true
+  canvas: true
+  es5-ext: true
+  esbuild: true
+  unrs-resolver: true
+
 engineStrict: true
 
 nodeLinker: hoisted

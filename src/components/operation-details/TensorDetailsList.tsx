@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { useMemo } from 'react';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/TensorDetailsList.scss';
@@ -10,6 +11,7 @@ interface TensorDetailsProps {
     operationDetails: OperationDetails;
     plotZoomRangeStart: number;
     plotZoomRangeEnd: number;
+    zoomedInViewMainMemory: boolean;
     onTensorClick: (address?: number, tensorId?: number) => void;
 }
 
@@ -17,9 +19,18 @@ function TensorDetailsList({
     operationDetails,
     plotZoomRangeStart,
     plotZoomRangeEnd,
+    zoomedInViewMainMemory,
     onTensorClick,
 }: TensorDetailsProps) {
     const { id, inputs, outputs } = operationDetails;
+    const plotZoomRange = useMemo(
+        () => [plotZoomRangeStart, plotZoomRangeEnd] as [number, number],
+        [plotZoomRangeStart, plotZoomRangeEnd],
+    );
+    const userL1ZoomRange = useMemo(
+        () => (zoomedInViewMainMemory ? plotZoomRange : undefined),
+        [zoomedInViewMainMemory, plotZoomRange],
+    );
 
     return (
         <div className='tensor-list'>
@@ -32,7 +43,8 @@ function TensorDetailsList({
                         key={`${tensor.id}-${index}`}
                         onTensorClick={onTensorClick}
                         operationId={id}
-                        zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                        plotZoomRange={plotZoomRange}
+                        userL1ZoomRange={userL1ZoomRange}
                     />
                 ))}
             </div>
@@ -46,7 +58,8 @@ function TensorDetailsList({
                         key={`${tensor.id}-${index}`}
                         onTensorClick={onTensorClick}
                         operationId={id}
-                        zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                        plotZoomRange={plotZoomRange}
+                        userL1ZoomRange={userL1ZoomRange}
                     />
                 ))}
             </div>

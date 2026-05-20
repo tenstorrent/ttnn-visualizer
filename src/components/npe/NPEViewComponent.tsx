@@ -116,6 +116,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
 
     useEffect(() => {
         if (!isFabricTransfersFilteringEnabled && fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
         }
     }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
@@ -223,13 +224,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     useEffect(() => {
         resetRouteColors();
         if (isShowingAllTransfers) {
+            // eslint-disable-next-line react-hooks/immutability
             showAllTransfers();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedTimestep, isShowingAllTransfers]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/immutability
         stopAnimation();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSelectedTimestep(0);
         setSelectedNode(null);
         setSelectedTransferList([]);

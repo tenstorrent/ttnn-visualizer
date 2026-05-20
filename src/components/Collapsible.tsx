@@ -4,9 +4,9 @@
 
 import { Button, ButtonVariant, Collapse, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { JSX } from 'react/jsx-runtime';
-import '../scss/components/Collapsible.scss';
+import 'styles/components/Collapsible.scss';
 import classNames from 'classnames';
 
 interface CollapsibleProps {
@@ -34,11 +34,14 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     isDisabled = false,
 }) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
-    useEffect(() => {
-        setIsOpenState(isOpen);
-    }, [isOpen]);
-
+    const [prevIsOpenProp, setPrevIsOpenProp] = React.useState(isOpen);
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
+
+    if (isOpen !== prevIsOpenProp) {
+        setPrevIsOpenProp(isOpen);
+        setIsOpenState(isOpen);
+    }
+
     return (
         <div className={classNames('collapsible-component', collapseClassName)}>
             <div className='collapsible-controls'>

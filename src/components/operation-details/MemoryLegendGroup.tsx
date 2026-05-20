@@ -16,6 +16,7 @@ export const MemoryLegendGroup: React.FC<{
     selectedTensorAddress: number | null;
     operationDetails: OperationDetails;
     onLegendClick: (selectedTensorAddress: number, tensorId?: number, colorVariance?: number) => void;
+    userL1ZoomRange?: [number, number];
 }> = ({
     // no wrap eslint
     group,
@@ -23,6 +24,7 @@ export const MemoryLegendGroup: React.FC<{
     selectedTensorAddress,
     operationDetails,
     onLegendClick,
+    userL1ZoomRange,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
 
@@ -37,6 +39,7 @@ export const MemoryLegendGroup: React.FC<{
                     operationDetails={operationDetails}
                     onLegendClick={onLegendClick}
                     isGroupHeader
+                    userL1ZoomRange={userL1ZoomRange}
                 />
 
                 <strong>x{group.length}</strong>
@@ -67,6 +70,7 @@ export const MemoryLegendGroup: React.FC<{
                             operationDetails={operationDetails}
                             onLegendClick={onLegendClick}
                             isMultiDeviceBuffer
+                            userL1ZoomRange={userL1ZoomRange}
                         />
                     ))}
                 </div>

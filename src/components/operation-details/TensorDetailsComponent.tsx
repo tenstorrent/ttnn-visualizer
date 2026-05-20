@@ -22,19 +22,22 @@ import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator'
 import MemoryTag from '../MemoryTag';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { showHexAtom } from '../../store/app';
+import { isAddressRangeOutOfL1Zoom } from '../../functions/isAddressRangeVisibleInL1Zoom';
 
 export interface TensorDetailsComponentProps {
     tensor: Tensor;
     onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
-    zoomRange: [number, number];
+    plotZoomRange: [number, number];
+    userL1ZoomRange?: [number, number];
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     tensor,
     onTensorClick,
     operationId,
-    zoomRange,
+    plotZoomRange,
+    userL1ZoomRange,
 }) => {
     const [overlayOpen, setOverlayOpen] = useState(false);
     const useHex = useAtomValue(showHexAtom);
@@ -43,6 +46,10 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     const { data: operations } = useOperationsList();
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
     const { selectedTensorId } = useBufferFocus();
+    const isTensorOutOfL1ZoomRange =
+        tensor.buffer_type === BufferType.L1 &&
+        tensor.address !== null &&
+        isAddressRangeOutOfL1Zoom(tensor.address, tensor.address + Math.max(tensor.size ?? 0, 0), userL1ZoomRange);
 
     const shardSpec = tensor.memory_config?.shard_spec;
 
@@ -50,7 +57,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
         <div
             className={classNames('tensor-item', {
                 active: tensor.id === selectedTensorId,
-                dimmed: selectedTensorId !== null && tensor.id !== selectedTensorId,
+                dimmed: isTensorOutOfL1ZoomRange || (selectedTensorId !== null && tensor.id !== selectedTensorId),
             })}
         >
             <div className='tensor-header'>
@@ -105,7 +112,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         bufferType={tensor.buffer_type}
                         isOpen={overlayOpen}
                         onClose={() => setOverlayOpen(false)}
-                        zoomRange={zoomRange}
+                        plotZoomRange={plotZoomRange}
                         tensorId={tensor.id}
                     />
                 )}

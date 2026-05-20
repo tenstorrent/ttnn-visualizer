@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Edge, IdType, Network, Node } from 'vis-network';
 import { DataSet } from 'vis-data';
@@ -11,7 +13,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { NavigateFunction, useNavigate } from 'react-router';
 import tinycolor from 'tinycolor2';
 import { OperationDescription, Tensor } from '../model/APIData';
-import '../scss/components/OperationGraphComponent.scss';
+import 'styles/components/OperationGraphComponent.scss';
 import LoadingSpinner from './LoadingSpinner';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';
@@ -151,6 +153,7 @@ const OperationGraph: React.FC<{
     const data = useMemo(
         () => ({
             nodes,
+            // eslint-disable-next-line react-hooks/refs
             edges: edgesDataSetRef.current,
         }),
         [nodes],
@@ -489,6 +492,7 @@ const OperationGraph: React.FC<{
                     networkRef.current.once('afterDrawing', () => {
                         networkRef.current?.moveTo({ scale });
                         focusOnNode(focusNodeId);
+                        colorHighlightIO(focusNodeId);
                         setIsLoading(false);
                         // @ts-expect-error this is normal
                         currentOpIdRef.current = focusNodeId;

@@ -32,6 +32,7 @@
     grid-template-columns: 15px 0.5fr 2fr 13fr 3fr;
     column-gap: 15px;
     text-align: left;
+    align-items: center;
 
     &.extra-info {
         grid-template-columns: 15px 0.5fr 2fr 10fr 3fr 3fr;
@@ -62,5 +63,32 @@
 
     .nowrap {
         white-space: nowrap;
+    }
+
+    .legend-marker-swatch {
+        width: 15px;
+        height: 15px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        &::before {
+            content: '';
+            display: block;
+            width: 2px;
+            height: 15px;
+            background-color: var(--legend-marker-color);
+            transform: rotate(90deg);
+            transform-origin: center;
+        }
+    }
+
+    .legend-empty-swatch {
+        width: 15px;
+        height: 15px;
+        display: inline-block;
+        background-color: transparent;
+        border: 1px dashed $tt-grey-5;
+        box-sizing: border-box;
     }
 }

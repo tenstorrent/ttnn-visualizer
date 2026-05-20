@@ -85,4 +85,4 @@ export const tracingModeAtom = atom<boolean>(false);
 export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
 
 // NPE
-export const altCongestionColorsAtom = atomWithStorage('altCongestionColorsAtom', false);
+export const altCongestionColorsAtom = atomWithStorage('altCongestionColors', false);
