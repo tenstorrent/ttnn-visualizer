@@ -206,7 +206,7 @@ def middleware(app: flask.Flask):
     CORS(
         app,
         origins=origins,
-        expose_headers=["X-TTNN-Resolved-Source-Path", "X-TTNN-Source-Remapped"],
+        expose_headers=["X-TTNN-Resolved-Source-Path"],
     )
 
     return None

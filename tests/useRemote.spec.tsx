@@ -5,6 +5,7 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AxiosResponse } from 'axios';
+import { StackSourceOrigin } from '../src/definitions/StackTrace';
 import useRemoteConnection from '../src/hooks/useRemote';
 
 vi.mock('../src/libs/axiosInstance', () => ({
@@ -27,13 +28,15 @@ describe('useRemoteConnection - stack source GETs', () => {
     it('isSourceFileAvailable issues GET /api/remote/stack-trace/test with filePath query and forwards signal', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockGet = vi.mocked(axiosInstance.default.get);
-        mockGet.mockResolvedValue({ data: { available: true } } as AxiosResponse);
+        mockGet.mockResolvedValue({
+            data: { available: true, source: StackSourceOrigin.Path },
+        } as AxiosResponse);
 
         const { result } = renderHook(() => useRemoteConnection());
         const controller = new AbortController();
-        const available = await result.current.isSourceFileAvailable('/some/file.py', controller.signal);
+        const availability = await result.current.isSourceFileAvailable('/some/file.py', controller.signal);
 
-        expect(available).toBe(true);
+        expect(availability).toEqual({ available: true, source: StackSourceOrigin.Path });
         expect(mockGet).toHaveBeenCalledTimes(1);
         const [url, config] = mockGet.mock.calls[0];
         expect(url).toBe('/api/remote/stack-trace/test');
@@ -43,35 +46,34 @@ describe('useRemoteConnection - stack source GETs', () => {
         });
     });
 
-    it('isSourceFileAvailable returns false when the request rejects', async () => {
+    it('isSourceFileAvailable returns unavailable when the request rejects', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockGet = vi.mocked(axiosInstance.default.get);
         mockGet.mockRejectedValue(new Error('boom'));
 
         const { result } = renderHook(() => useRemoteConnection());
-        const available = await result.current.isSourceFileAvailable('/x');
+        const availability = await result.current.isSourceFileAvailable('/x');
 
-        expect(available).toBe(false);
+        expect(availability).toEqual({ available: false, source: null });
     });
 
-    it('isSourceFileAvailable returns false when the response shape is unexpected', async () => {
+    it('isSourceFileAvailable returns unavailable when the response shape is unexpected', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockGet = vi.mocked(axiosInstance.default.get);
         mockGet.mockResolvedValue({ data: { available: 'maybe' } } as AxiosResponse);
 
         const { result } = renderHook(() => useRemoteConnection());
-        const available = await result.current.isSourceFileAvailable('/x');
+        const availability = await result.current.isSourceFileAvailable('/x');
 
-        expect(available).toBe(false);
+        expect(availability).toEqual({ available: false, source: null });
     });
 
-    it('readRemoteFile issues GET /api/remote/stack-trace/read and parses X-TTNN headers', async () => {
+    it('readRemoteFile issues GET /api/remote/stack-trace/read and parses X-TTNN-Resolved-Source-Path', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockGet = vi.mocked(axiosInstance.default.get);
         mockGet.mockResolvedValue({
             data: 'file contents',
             headers: {
-                'x-ttnn-source-remapped': 'true',
                 'x-ttnn-resolved-source-path': '/abs/resolved.py',
             },
         } as unknown as AxiosResponse);
@@ -86,12 +88,11 @@ describe('useRemoteConnection - stack source GETs', () => {
         expect(out).toEqual({
             data: 'file contents',
             error: null,
-            isRemapped: true,
             resolvedPath: '/abs/resolved.py',
         });
     });
 
-    it('readRemoteFile reports isRemapped=false and null resolvedPath when headers are absent', async () => {
+    it('readRemoteFile reports null resolvedPath when header is absent', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockGet = vi.mocked(axiosInstance.default.get);
         mockGet.mockResolvedValue({
@@ -103,7 +104,6 @@ describe('useRemoteConnection - stack source GETs', () => {
         const out = await result.current.readRemoteFile('/x');
 
         expect(out.data).toBe('plain');
-        expect(out.isRemapped).toBe(false);
         expect(out.resolvedPath).toBeNull();
         expect(out.error).toBeNull();
     });
@@ -117,7 +117,6 @@ describe('useRemoteConnection - stack source GETs', () => {
         const out = await result.current.readRemoteFile('/x');
 
         expect(out.data).toBeNull();
-        expect(out.isRemapped).toBe(false);
         expect(out.resolvedPath).toBeNull();
         expect(typeof out.error).toBe('string');
     });

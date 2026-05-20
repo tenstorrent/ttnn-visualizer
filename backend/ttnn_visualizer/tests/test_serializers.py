@@ -91,6 +91,7 @@ class TestSerializers(unittest.TestCase):
                 "duration": 0.5,
                 "rank": 0,
                 "stack_trace": "trace1",
+                "stack_trace_source_file_id": None,
                 "device_operations": [{"id": 1, "op_id": 1}],
                 "arguments": [
                     {
@@ -484,10 +485,48 @@ class TestSerializers(unittest.TestCase):
                 }
             ],
             "stack_trace": "trace1",
+            "stack_trace_source_file_id": None,
             "error": None,
         }
 
         self.assertEqual(orjson.loads(orjson.dumps(result)), expected)
+
+    def test_serialize_operations_with_stack_trace_source_file_id(self):
+        operations = [Operation(1, "op1", 0.5)]
+        stack_traces = [StackTrace(1, "trace text", source_file_id=42)]
+        result = serialize_operations(
+            [],
+            [],
+            operations,
+            [],
+            stack_traces,
+            [],
+            [],
+            [],
+            [],
+        )
+        self.assertEqual(result[0]["stack_trace"], "trace text")
+        self.assertEqual(result[0]["stack_trace_source_file_id"], 42)
+
+    def test_serialize_operation_with_stack_trace_source_file_id(self):
+        operation = Operation(1, "op1", 0.5)
+        stack_trace = StackTrace(1, "trace text", source_file_id=7)
+        result = serialize_operation(
+            [],
+            [],
+            operation,
+            [],
+            [],
+            stack_trace,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+        self.assertEqual(result["stack_trace"], "trace text")
+        self.assertEqual(result["stack_trace_source_file_id"], 7)
 
     def test_serialize_buffer_pages(self):
         buffer_pages = [

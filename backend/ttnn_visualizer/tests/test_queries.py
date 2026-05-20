@@ -307,6 +307,34 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].stack_trace, "trace_data")
 
+    def test_query_source_files(self):
+        self.connection.executescript("""
+            CREATE TABLE source_files (
+                id int PRIMARY KEY,
+                path text,
+                contents text
+            );
+            INSERT INTO source_files VALUES (1, '/a.py', 'contents');
+            """)
+        results = list(self.db_queries.query_source_files())
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].contents, "contents")
+
+    def test_get_source_file_by_id_and_path(self):
+        self.connection.executescript("""
+            CREATE TABLE source_files (
+                id int PRIMARY KEY,
+                path text,
+                contents text
+            );
+            INSERT INTO source_files VALUES (5, '/b.py', 'body');
+            """)
+        by_id = self.db_queries.get_source_file_by_id(5)
+        self.assertIsNotNone(by_id)
+        self.assertEqual(by_id.path, "/b.py")
+        by_path = self.db_queries.get_source_file_by_path("/b.py")
+        self.assertEqual(by_path.id, 5)
+
     def test_query_tensor_comparisons(self):
         self.connection.execute("""
             INSERT INTO local_tensor_comparison_records

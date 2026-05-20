@@ -33,6 +33,7 @@ from ttnn_visualizer.models import (
     OperationArgument,
     OutputTensor,
     ProducersConsumers,
+    SourceFile,
     StackTrace,
     Tensor,
     TensorComparisonRecord,
@@ -300,6 +301,24 @@ class DatabaseQueries:
         rows = self._query_table("stack_traces", filters, select_clause=select_clause)
         for row in rows:
             yield StackTrace(*row)
+
+    def query_source_files(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[SourceFile, None, None]:
+        if not self._check_table_exists("source_files"):
+            return
+        select_clause = self._dataclass_select_clause("source_files", SourceFile)
+        rows = self._query_table("source_files", filters, select_clause=select_clause)
+        for row in rows:
+            yield SourceFile(*row)
+
+    def get_source_file_by_id(self, source_file_id: int) -> Optional[SourceFile]:
+        rows = list(self.query_source_files(filters={"id": source_file_id}))
+        return rows[0] if rows else None
+
+    def get_source_file_by_path(self, path: str) -> Optional[SourceFile]:
+        rows = list(self.query_source_files(filters={"path": path}))
+        return rows[0] if rows else None
 
     def query_error_records(
         self, filters: Optional[Dict[str, Any]] = None

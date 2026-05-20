@@ -397,33 +397,47 @@ def _remote_regular_file_exists(ssh_client: "SSHClient", posix_path: str) -> boo
         return False
 
 
+def check_stack_source_local_with_origin(raw_path: str) -> Optional[bool]:
+    """
+    Probe whether a local stack source file is readable and how it was resolved.
+
+    :return: ``None`` when the file is not available, ``False`` when matched at the
+        literal path, ``True`` when matched via a ``/tt-metal/`` remap.
+    """
+    try:
+        _, remapped = _resolve_local_stack_path(raw_path)
+        return remapped
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+
+
 def check_stack_source_local(raw_path: str) -> bool:
     """Whether _resolve_local_stack_path would succeed (including /tt-metal/ remaps)."""
-    try:
-        _resolve_local_stack_path(raw_path)
-        return True
-    except (FileNotFoundError, OSError, ValueError):
-        return False
+    return check_stack_source_local_with_origin(raw_path) is not None
 
 
-def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
+def check_stack_source_remote_with_origin(
+    ssh_client: "SSHClient", raw_path: str
+) -> Optional[bool]:
     """
-    Whether read_stack_source_remote would succeed: literal path or remapped under any
-    discovered tt-metal root (same roots as local).
+    Probe whether a remote stack source file is readable and how it was resolved.
+
+    Mirrors ``check_stack_source_local_with_origin``: ``None`` for unavailable,
+    ``False`` for a literal path hit, ``True`` for a ``/tt-metal/`` remap hit.
     """
     try:
         validated_path = _validate_stack_trace_raw_path(
             raw_path, require_absolute_posix=True
         )
     except ValueError:
-        return False
+        return None
 
     path_str = _normalize_remote_posix_path(validated_path)
     if _remote_regular_file_exists(ssh_client, path_str):
-        return True
+        return False
     suffix = _extract_suffix_after_tt_metal(validated_path)
     if suffix is None:
-        return False
+        return None
     roots = _remote_roots_for_raw_path(ssh_client, validated_path)
     for root_str in roots:
         try:
@@ -432,19 +446,30 @@ def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
             continue
         if _remote_regular_file_exists(ssh_client, remapped_str):
             return True
-    return False
+    return None
 
 
-def stack_source_response(text: str, resolved: str, remapped: bool) -> Response:
+def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
+    """
+    Whether read_stack_source_remote would succeed: literal path or remapped under any
+    discovered tt-metal root (same roots as local).
+    """
+    return check_stack_source_remote_with_origin(ssh_client, raw_path) is not None
+
+
+def stack_source_response(text: str, resolved: str) -> Response:
+    """
+    Plain-text body for ``GET /api/remote/stack-trace/read``.
+
+    Remap vs exact-path resolution is reported on ``GET .../stack-trace/test``
+    via the JSON ``source`` field, not on this response.
+    """
     resp = Response(
         response=text,
         status=HTTPStatus.OK,
         mimetype="text/plain; charset=utf-8",
     )
     resp.headers["X-TTNN-Resolved-Source-Path"] = resolved
-
-    if remapped:
-        resp.headers["X-TTNN-Source-Remapped"] = "true"
 
     # Source files can change underneath a stable filePath (e.g. after
     # re-syncing a remote folder), so disable caching for the GET endpoint.

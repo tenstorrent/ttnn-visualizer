@@ -10,6 +10,12 @@ import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import Endpoints from '../definitions/Endpoints';
+import { StackSourceOrigin } from '../definitions/StackTrace';
+
+export interface StackSourceAvailability {
+    available: boolean;
+    source: StackSourceOrigin | null;
+}
 
 const FAILED_NO_CONNECTION = {
     status: ConnectionTestStates.FAILED,
@@ -186,39 +192,64 @@ const useRemoteConnection = () => {
         setAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS, safeJsonStringify(connectionList, '[]'));
     };
 
-    const isSourceFileAvailable = useCallback(async (filePath: string, signal?: AbortSignal): Promise<boolean> => {
-        try {
-            const { data } = await axiosInstance.get<{ available?: boolean }>(`${Endpoints.REMOTE}/stack-trace/test`, {
-                signal,
-                params: { filePath },
-            });
+    const isSourceFileAvailable = useCallback(
+        async (
+            filePath: string,
+            signal?: AbortSignal,
+            sourceFileId?: number | null,
+        ): Promise<StackSourceAvailability> => {
+            try {
+                const params: { filePath?: string; sourceFileId?: number } = {};
+                if (filePath) {
+                    params.filePath = filePath;
+                }
+                if (sourceFileId != null) {
+                    params.sourceFileId = sourceFileId;
+                }
+                const { data } = await axiosInstance.get<{
+                    available?: boolean;
+                    source?: StackSourceOrigin | null;
+                }>(`${Endpoints.REMOTE}/stack-trace/test`, {
+                    signal,
+                    params,
+                });
 
-            return data?.available === true;
-        } catch {
-            return false;
-        }
-    }, []);
+                const available = data?.available === true;
+                return {
+                    available,
+                    source: available && data?.source ? data.source : null,
+                };
+            } catch {
+                return { available: false, source: null };
+            }
+        },
+        [],
+    );
 
-    const readRemoteFile = async (filePath: string) => {
+    const readRemoteFile = async (filePath: string, sourceFileId?: number | null) => {
         try {
+            const params: { filePath?: string; sourceFileId?: number } = {};
+            if (filePath) {
+                params.filePath = filePath;
+            }
+            if (sourceFileId != null) {
+                params.sourceFileId = sourceFileId;
+            }
             const response = await axiosInstance.get<string>(`${Endpoints.REMOTE}/stack-trace/read`, {
-                params: { filePath },
+                params,
                 responseType: 'text',
             });
 
-            const isRemapped = response.headers['x-ttnn-source-remapped'] === 'true';
             const resolvedPath = response.headers['x-ttnn-resolved-source-path'] || null;
 
             return {
                 data: response.data,
                 error: null,
-                isRemapped,
                 resolvedPath: typeof resolvedPath === 'string' ? resolvedPath : null,
             };
         } catch (error: unknown) {
             const standardError = {
                 data: null,
-                isRemapped: false,
                 resolvedPath: null,
                 error: 'An unexpected error occurred',
             };

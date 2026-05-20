@@ -137,6 +137,20 @@ CREATE TABLE buffer_pages (
 );
 """
 
+SCHEMA_V2_WITH_SOURCE_FILES_STACK_TRACES = (
+    SCHEMA_V2.replace(
+        "CREATE TABLE stack_traces (\n    operation_id int,\n    stack_trace text\n);",
+        "CREATE TABLE stack_traces (\n    operation_id int,\n    stack_trace text,\n    source_file_id int\n);",
+    )
+    + """
+CREATE TABLE source_files (
+    id int PRIMARY KEY,
+    path text,
+    contents text
+);
+"""
+)
+
 SCHEMA_V2_WITH_LIFETIME = SCHEMA_V2 + """
 CREATE TABLE tensor_lifetime (
     tensor_id int UNIQUE,

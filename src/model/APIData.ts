@@ -22,6 +22,7 @@ export interface Operation {
     inputs: Tensor[];
     outputs: Tensor[];
     stack_trace: string;
+    stack_trace_source_file_id: number | null;
     device_operations: Node[];
     operationFileIdentifier: string;
     error: OperationError | null;
@@ -135,6 +136,7 @@ export const defaultOperation: OperationDetailsData = {
     buffersSummary: [],
     l1_sizes: [],
     stack_trace: '',
+    stack_trace_source_file_id: null,
     device_operations: [],
     operationFileIdentifier: '',
     error: null,

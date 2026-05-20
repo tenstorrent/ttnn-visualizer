@@ -11,3 +11,9 @@ class ConnectionTestStates(enum.Enum):
     FAILED = 2
     OK = 3
     WARNING = 4
+
+
+class StackSourceOrigin(enum.Enum):
+    DATABASE = "database"
+    PATH = "path"
+    REMAPPED = "remapped"

@@ -195,6 +195,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.stack_trace && (
                             <StackTrace
                                 stackTrace={details.stack_trace}
+                                stackTraceSourceFileId={operationDetails?.stack_trace_source_file_id ?? null}
                                 language={StackTraceLanguage.PYTHON}
                                 isInitiallyExpanded={showFullStackTrace}
                                 onExpandChange={() => setShowFullStackTrace(!showFullStackTrace)}

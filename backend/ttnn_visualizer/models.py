@@ -169,9 +169,17 @@ class OperationArgument(SerializeableDataclass):
 
 
 @dataclasses.dataclass
+class SourceFile(SerializeableDataclass):
+    id: int
+    path: str
+    contents: str
+
+
+@dataclasses.dataclass
 class StackTrace(SerializeableDataclass):
     operation_id: int
     stack_trace: str
+    source_file_id: Optional[int] = None
     rank: int = 0
 
 
