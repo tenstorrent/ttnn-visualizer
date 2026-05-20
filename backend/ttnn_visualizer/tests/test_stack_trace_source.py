@@ -364,6 +364,12 @@ def test_validate_stack_trace_raw_path_rejects_unsafe():
         _validate_stack_trace_raw_path("/a/../b")
     with pytest.raises(ValueError, match="absolute"):
         _validate_stack_trace_raw_path("relative-only", require_absolute_posix=True)
+    # Reject mid-path control characters (including CR/LF) so DB-stored paths
+    # can't smuggle extra HTTP headers via X-TTNN-Resolved-Source-Path.
+    # Trailing whitespace is fine because strip() removes it before this check.
+    for bad in ("/a/b\r\nX-Evil: 1", "/a/inner\nhead.py", "/a/b\x1ftail"):
+        with pytest.raises(ValueError, match="control"):
+            _validate_stack_trace_raw_path(bad)
 
 
 def test_remote_roots_for_raw_path_prioritizes_preferred_user_root(monkeypatch):

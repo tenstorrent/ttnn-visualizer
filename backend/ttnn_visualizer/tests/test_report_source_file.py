@@ -57,3 +57,33 @@ class TestReportSourceFile(unittest.TestCase):
     def test_read_report_source_file(self):
         result = read_report_source_file(self.db, source_file_id=1)
         self.assertEqual(result, ("def forward(): pass", "/proj/model.py"))
+
+    def test_read_and_availability_reject_unsafe_db_paths(self):
+        """
+        DB-stored paths must pass _validate_stack_trace_raw_path before
+        becoming the X-TTNN-Resolved-Source-Path response header. lookup_*
+        may still surface the row (it's the SQL layer), but read_* and
+        available_* must refuse it so HTTP callers never see it.
+        """
+        unsafe_cases = [
+            (10, "/a/../evil.py"),
+            (11, "/proj/x.py\r\nInjected: 1"),
+            (12, "/proj/inner\nhead.py"),
+            (13, "/proj/\x00.py"),
+            (14, "   "),
+        ]
+        for row_id, bad_path in unsafe_cases:
+            self.connection.execute(
+                "INSERT INTO source_files VALUES (?, ?, 'body')",
+                (row_id, bad_path),
+            )
+        self.connection.commit()
+
+        for row_id, bad_path in unsafe_cases:
+            with self.subTest(bad_path=bad_path):
+                self.assertIsNone(
+                    read_report_source_file(self.db, source_file_id=row_id)
+                )
+                self.assertFalse(
+                    report_source_file_available(self.db, source_file_id=row_id)
+                )

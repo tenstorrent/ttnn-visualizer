@@ -62,6 +62,11 @@ def _validate_stack_trace_raw_path(
         raise ValueError("Path exceeds maximum length")
     if "\x00" in s:
         raise ValueError("Path contains null byte")
+    # Reject control characters (including CR/LF) to keep DB-stored paths safe
+    # for filesystem use *and* for response headers like X-TTNN-Resolved-Source-Path
+    # (defends against header injection / smuggling, beyond what Werkzeug enforces).
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in s):
+        raise ValueError("Path contains control characters")
     if _path_parts_contain_dotdot(s):
         raise ValueError("Path must not contain '..' components")
     if require_absolute_posix and not s.startswith("/"):
