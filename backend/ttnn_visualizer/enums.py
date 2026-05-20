@@ -13,7 +13,9 @@ class ConnectionTestStates(enum.Enum):
     WARNING = 4
 
 
-class StackSourceOrigin(enum.Enum):
+class StackSourceOrigin(str, enum.Enum):
+    """Possible ``source`` values on ``GET /api/remote/stack-trace/test`` JSON."""
+
     DATABASE = "database"
     PATH = "path"
     REMAPPED = "remapped"

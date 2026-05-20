@@ -133,7 +133,13 @@ def _stack_source_request_params():
             )
 
     if source_file_id is None and (not file_path or not file_path.strip()):
-        return None, None, response_bad_request("Missing or invalid filePath")
+        return (
+            None,
+            None,
+            response_bad_request(
+                "Missing or invalid query: provide filePath and/or sourceFileId."
+            ),
+        )
 
     return file_path, source_file_id, None
 

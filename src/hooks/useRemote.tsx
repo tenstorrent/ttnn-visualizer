@@ -215,9 +215,14 @@ const useRemoteConnection = () => {
                 });
 
                 const available = data?.available === true;
+                const rawSource = data?.source;
+                const knownSource =
+                    typeof rawSource === 'string' && (Object.values(StackSourceOrigin) as string[]).includes(rawSource)
+                        ? (rawSource as StackSourceOrigin)
+                        : null;
                 return {
                     available,
-                    source: available && data?.source ? data.source : null,
+                    source: available ? knownSource : null,
                 };
             } catch {
                 return { available: false, source: null };

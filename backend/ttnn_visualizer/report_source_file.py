@@ -70,7 +70,8 @@ def read_report_source_file(
     """
     Return ``(contents, resolved_path)`` when the report DB has a matching row.
 
-    ``resolved_path`` is ``source_files.path`` for response headers.
+    ``resolved_path`` is ``source_files.path`` used as the resolved-path header
+    (``X-TTNN-Resolved-Source-Path``) on ``GET /api/remote/stack-trace/read``.
     """
     source_file = lookup_report_source_file(
         db, source_file_id=source_file_id, file_path=file_path

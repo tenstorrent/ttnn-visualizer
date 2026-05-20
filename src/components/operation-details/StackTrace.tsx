@@ -14,7 +14,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import 'styles/components/StackTrace.scss';
 import { ReportLocation } from '../../definitions/Reports';
 import { SourceFileStatus, StackSourceOrigin, StackTraceLanguage } from '../../definitions/StackTrace';
-import getServerConfig from '../../functions/getServerConfig';
 import useRemoteConnection from '../../hooks/useRemote';
 import { profilerReportLocationAtom } from '../../store/app';
 import Overlay from '../Overlay';
@@ -110,14 +109,13 @@ function StackTrace({
 
     const toggleViewingFile = useCallback(() => setIsViewingSourceFile((open) => !open), [setIsViewingSourceFile]);
 
-    const serverMode = !!getServerConfig()?.SERVER_MODE;
     const hasReportSourceFileId = stackTraceSourceFileId != null;
     const canProbeSource = !!filePath || hasReportSourceFileId;
 
     const shouldShowSourceControls = !hideSourceButton;
     const sourceTooltip = useMemo(
-        () => getSourceTooltipContents(serverMode, canProbeSource, sourceFileStatus),
-        [serverMode, canProbeSource, sourceFileStatus],
+        () => getSourceTooltipContents(canProbeSource, sourceFileStatus),
+        [canProbeSource, sourceFileStatus],
     );
 
     const handleReadSource = async () => {
@@ -430,17 +428,9 @@ const scrollToLineNumberInFile = () => {
  * Source button tooltip. Intentionally generic for all ``StackSourceOrigin`` values
  * (database, path, remapped); only availability state affects the message.
  */
-function getSourceTooltipContents(
-    serverMode: boolean,
-    canProbeSource: boolean,
-    sourceFileStatus: SourceFileStatus,
-): string {
+function getSourceTooltipContents(canProbeSource: boolean, sourceFileStatus: SourceFileStatus): string {
     if (!canProbeSource) {
         return 'No file path found for this stack trace';
-    }
-
-    if (serverMode && sourceFileStatus === SourceFileStatus.Unavailable) {
-        return 'Source file is not available in this report';
     }
 
     if (sourceFileStatus === SourceFileStatus.Pending) {

@@ -5,6 +5,7 @@
 from http import HTTPStatus
 from unittest.mock import patch
 
+import pytest
 from ttnn_visualizer.tests.report_schemas import (
     SCHEMA_V2_WITH_SOURCE_FILES_STACK_TRACES,
 )
@@ -53,6 +54,9 @@ def test_stack_source_content_forbidden_in_server_mode_without_remote(
 def test_stack_source_content_local_read_sets_no_store(app, client, make_report):
     instance_id = make_report()
     app.config["SERVER_MODE"] = False
+    # read_stack_source_local still returns (content, resolved, remapped); the third
+    # element is unused by stack_source_response since the remap signal moved to
+    # /stack-trace/test's JSON `source` field.
     with patch(
         "ttnn_visualizer.views.read_stack_source_local",
         return_value=("print('hi')\n", "/abs/resolved.py", False),
@@ -82,24 +86,17 @@ def test_stack_source_content_rejects_missing_file_path(client, make_report):
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
-def test_stack_source_availability_from_report_db_by_path_only_in_server_mode(
-    client, make_report
+@pytest.mark.parametrize(
+    "extra_query",
+    [
+        pytest.param({"filePath": "/proj/model.py"}, id="path-only"),
+        pytest.param({"sourceFileId": 1}, id="source-file-id-only"),
+        pytest.param({"sourceFileId": 1, "filePath": "/proj/model.py"}, id="both"),
+    ],
+)
+def test_stack_source_availability_from_report_db_in_server_mode(
+    client, make_report, extra_query
 ):
-    instance_id = make_report(
-        schema_sql=SCHEMA_V2_WITH_SOURCE_FILES_STACK_TRACES,
-        inserts_sql="""
-        INSERT INTO source_files VALUES (3, '/proj/other.py', 'print(2)');
-        """,
-    )
-    response = client.get(
-        "/api/remote/stack-trace/test",
-        query_string={"instanceId": instance_id, "filePath": "/proj/other.py"},
-    )
-    assert response.status_code == HTTPStatus.OK
-    assert response.get_json() == {"available": True, "source": "database"}
-
-
-def test_stack_source_availability_from_report_db_in_server_mode(client, make_report):
     instance_id = make_report(
         schema_sql=SCHEMA_V2_WITH_SOURCE_FILES_STACK_TRACES,
         inserts_sql="""
@@ -108,11 +105,7 @@ def test_stack_source_availability_from_report_db_in_server_mode(client, make_re
     )
     response = client.get(
         "/api/remote/stack-trace/test",
-        query_string={
-            "instanceId": instance_id,
-            "sourceFileId": 1,
-            "filePath": "/proj/model.py",
-        },
+        query_string={"instanceId": instance_id, **extra_query},
     )
     assert response.status_code == HTTPStatus.OK
     assert response.get_json() == {"available": True, "source": "database"}
@@ -150,23 +143,6 @@ def test_stack_source_read_from_report_db_in_server_mode(client, make_report):
     assert response.status_code == HTTPStatus.OK
     assert response.get_data(as_text=True) == "print(1)\n"
     assert response.headers.get("X-TTNN-Resolved-Source-Path") == "/proj/model.py"
-
-
-def test_stack_source_availability_accepts_source_file_id_without_file_path(
-    client, make_report
-):
-    instance_id = make_report(
-        schema_sql=SCHEMA_V2_WITH_SOURCE_FILES_STACK_TRACES,
-        inserts_sql="""
-        INSERT INTO source_files VALUES (2, '/x.py', 'body');
-        """,
-    )
-    response = client.get(
-        "/api/remote/stack-trace/test",
-        query_string={"instanceId": instance_id, "sourceFileId": 2},
-    )
-    assert response.status_code == HTTPStatus.OK
-    assert response.get_json() == {"available": True, "source": "database"}
 
 
 def test_stack_source_availability_reports_path_origin_on_literal_match(
