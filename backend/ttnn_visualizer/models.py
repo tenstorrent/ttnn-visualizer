@@ -171,8 +171,10 @@ class OperationArgument(SerializeableDataclass):
 @dataclasses.dataclass
 class SourceFile(SerializeableDataclass):
     id: int
-    path: str
-    contents: str
+    # SQLite columns are nullable: empty/NULL contents fall through to
+    # tt-metal local/SSH; a NULL path skips the exact-path lookup.
+    path: Optional[str] = None
+    contents: Optional[str] = None
 
 
 @dataclasses.dataclass

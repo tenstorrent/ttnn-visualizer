@@ -107,7 +107,7 @@ def read_report_source_file(
     source_file = lookup_report_source_file(
         db, source_file_id=source_file_id, file_path=file_path
     )
-    if source_file is None:
+    if source_file is None or source_file.contents is None:
         return None
     validated_path = _validated_report_source_path(source_file.path)
     if validated_path is None:
