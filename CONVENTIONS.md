@@ -874,7 +874,7 @@ if not files:
 
 Without the guard, downstream `files[0]` indexing or empty-collection iteration falls over silently or with an opaque error.
 
-> **Note:** the rules above cover **single-file** uploads (NPE, MLIR, future single-blob endpoints). **Folder-upload** branches (profiler/performance report trees) deliberately preserve subpath structure and need a different fix shape — a resolved-path containment check (`dest.resolve().is_relative_to(target.resolve())`). That hardening is tracked separately; ask before extending the `.name` pattern into folder uploads.
+> **Note:** the rules above cover **single-file** uploads (NPE, MLIR, future single-blob endpoints). **Folder-upload** branches (profiler/performance report trees) deliberately preserve subpath structure and use a different fix shape — a resolved-path containment check inside `construct_dest_path` that rejects any candidate whose resolved path lands outside the per-report folder (raising `DataFormatError`, which the view handlers map to 422). Don't extend the `.name` collapse pattern into the folder branch; rely on the containment check.
 
 ---
 
@@ -1021,7 +1021,6 @@ Don't `raise Exception("...")` — there's an existing class for almost every ca
 
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both:
 
-- **Folder-upload sanitization.** Single-file uploads sanitize filenames via `Path(...).name`; folder uploads preserve subpaths and need a resolved-path containment check instead. The latter isn't yet implemented (tracked as a follow-up).
 - **`extract_npe_name` is a misnomer.** It's used by both NPE and MLIR upload handlers. Rename to `extract_uploaded_name` is tracked as a follow-up; don't perpetuate the NPE-specific name in new helpers.
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload a state field called `errorMessage` with both success and failure text. A rename to `statusMessage` is pending.
 - **Upload size cap.** No `MAX_CONTENT_LENGTH` is set on the Flask app; large uploads succeed until they exhaust memory. Tracked as a separate hardening task.

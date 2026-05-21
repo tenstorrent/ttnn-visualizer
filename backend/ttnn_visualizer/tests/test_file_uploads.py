@@ -93,8 +93,10 @@ def test_construct_dest_path_folder_branch_unchanged_for_subpaths(app, tmp_path)
     """Folder uploads legitimately carry sub-paths; hardening must not break them.
 
     `validate_files` / `os.utime` accounting rely on filenames like
-    `subdir/file.csv` reaching `dest_path`. Path-traversal hardening for the
-    folder branch is a broader follow-up tracked in PR_REVIEW_TRIAGE_2.md.
+    `subdir/file.csv` reaching `dest_path`. The folder branch's traversal
+    hardening is a *resolved-path containment* check (see the dedicated
+    `_rejects_*` tests below), which permits legitimate sub-paths and only
+    rejects candidates whose resolved path escapes the per-report folder.
     """
     with app.app_context():
         dest = construct_dest_path(
