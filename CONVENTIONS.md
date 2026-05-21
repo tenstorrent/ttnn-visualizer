@@ -372,10 +372,9 @@ return () => {
     socket.off('disconnect');
     socket.off('connect_error');
     socket.off('reconnect');
+    socket.off('fileTransferProgress');
 };
 ```
-
-> The current cleanup `off()`s connect/disconnect/connect_error/reconnect but **does not** unregister the `fileTransferProgress` handler registered at `src/libs/SocketProvider.tsx`. That's tracked as a pre-existing gap (see [Known inconsistencies](#known-inconsistencies)). New listeners should follow the pairing rule.
 
 Adding a new event handler? Add the matching `off()` in the same change. Don't introduce a second `io(...)` call elsewhere in the codebase — the connection is shared.
 
@@ -1034,4 +1033,3 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
 - **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription`, `usePerfMeta`, `useReportFolderList`, `useInstance`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
 - **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.
-- **`SocketProvider` cleanup is incomplete.** `src/libs/SocketProvider.tsx` `off()`s `connect`/`disconnect`/`connect_error`/`reconnect` but not the `fileTransferProgress` handler registered alongside them. Pre-existing; the listener list will grow on every remount of the provider (rare in production, common under StrictMode in dev). New listeners follow the pairing rule; the existing miss is tracked tech debt.
