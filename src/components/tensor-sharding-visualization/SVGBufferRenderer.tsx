@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React from 'react';
 import { BufferPage } from '../../model/APIData';
 import { pageDataToChunkArray } from '../../functions/getChartData';
 
@@ -13,12 +12,7 @@ interface SVGBufferRendererProps {
     memoryEnd: number;
 }
 
-const SVGBufferRenderer: React.FC<SVGBufferRendererProps> = ({
-    height,
-    data,
-    memoryStart,
-    memoryEnd,
-}: SVGBufferRendererProps) => {
+const SVGBufferRenderer = ({ height, data, memoryStart, memoryEnd }: SVGBufferRendererProps) => {
     const memoryRange = memoryEnd - memoryStart;
     const mergedRange = pageDataToChunkArray(data);
 

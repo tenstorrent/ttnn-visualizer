@@ -5,7 +5,7 @@
 import { Button, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
-import { FC, type PropsWithChildren } from 'react';
+import { type ReactNode } from 'react';
 import 'styles/components/FolderPicker.scss';
 import {
     NEVER_SYNCED_LABEL,
@@ -93,9 +93,10 @@ interface RemoteFolderSelectorProps {
     onSelectFolder: (folder: RemoteFolder) => void;
     type: FolderTypes;
     showReportName?: boolean;
+    children?: ReactNode;
 }
 
-const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = ({
+const RemoteFolderSelector = ({
     remoteFolder,
     remoteFolderList = [],
     loading = false,
@@ -106,7 +107,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     icon = IconNames.DOCUMENT_OPEN,
     type,
     showReportName,
-}) => {
+}: RemoteFolderSelectorProps) => {
     const { persistentState } = useRemoteConnection();
     const remoteConnection = persistentState.selectedConnection;
 

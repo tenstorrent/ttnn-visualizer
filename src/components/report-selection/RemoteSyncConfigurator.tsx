@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
@@ -29,7 +29,7 @@ import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
 
-const RemoteSyncConfigurator: FC = () => {
+const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
     const { setPersistentSelectedConnection, setPersistentSavedConnectionList } = remote;
     const queryClient = useQueryClient();

@@ -7,7 +7,7 @@
 /* eslint-disable no-continue */
 /* eslint-disable no-nested-ternary */
 
-import React, {
+import {
     type MouseEvent,
     createContext,
     memo,
@@ -267,7 +267,7 @@ function builtGraphToReactFlow(built: BuiltGraph): { nodes: MLNode[]; edges: Edg
     return { nodes, edges };
 }
 
-const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
+const MlGraphInner = ({ data }: ViewProps) => {
     const { fitView, getViewport, setViewport } = useReactFlow();
     const graph = data.graphs[0];
     const [nodes, setNodes, onNodesChange] = useNodesState<MLNode>([]);
@@ -776,7 +776,7 @@ const MlGraphInner: React.FC<ViewProps> = ({ data }) => {
     );
 };
 
-const MlGraphWithProvider: React.FC<ViewProps> = (props) => (
+const MlGraphWithProvider = (props: ViewProps) => (
     <ReactFlowProvider>
         {/* Keying on graph.id remounts the inner subtree when the user
             switches graphs — cleaner than imperatively resetting half a

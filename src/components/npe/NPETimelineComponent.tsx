@@ -43,7 +43,7 @@ interface NPEHeatMapProps {
 const HEATMAP_HEIGHT = 30;
 const ZONE_HEIGHT = 10;
 
-const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
+const NPETimelineComponent = ({
     timestepList,
     canvasWidth,
     nocType = null,
@@ -52,7 +52,7 @@ const NPETimelineComponent: React.FC<NPEHeatMapProps> = ({
     cyclesPerTimestep,
     selectedZoneList = [],
     navigationCallback,
-}) => {
+}: NPEHeatMapProps) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [hoverMap, setHoverMap] = useState<Map<string, Rect>>(new Map());

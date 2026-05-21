@@ -4,7 +4,7 @@
 
 /* eslint-disable no-continue */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Network } from 'vis-network/standalone';
 import { DataSet } from 'vis-data';
 import { Edge, IdType } from 'vis-network';
@@ -67,11 +67,13 @@ const getTensorMetadata = (tensor: TensorNode) => {
     };
 };
 
-const DeviceOperationTensorList: React.FC<{
+interface DeviceOperationTensorListProps {
     title: string;
     tensors: TensorNode[];
     variant: 'inputs' | 'outputs';
-}> = ({ title, tensors, variant }) => {
+}
+
+const DeviceOperationTensorList = ({ title, tensors, variant }: DeviceOperationTensorListProps) => {
     return (
         <section className={`graph-details-section ${variant}`}>
             <h4>{title}</h4>
@@ -123,9 +125,11 @@ const DeviceOperationTensorList: React.FC<{
     );
 };
 
-const DeviceOperationGraphInfoComponent: React.FC<{
+interface DeviceOperationGraphInfoComponentProps {
     operation: ConnectedDeviceOperation | null;
-}> = ({ operation }) => {
+}
+
+const DeviceOperationGraphInfoComponent = ({ operation }: DeviceOperationGraphInfoComponentProps) => {
     if (!operation) {
         return (
             <aside className='graph-side-panel empty'>
@@ -225,7 +229,7 @@ function removeRedundantEdgesViaIntermediateNodes(edges: Edge[]): Edge[] {
     });
 }
 
-const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) => {
+const GraphComponent = ({ data, open, onClose }: GraphComponentProps) => {
     const networkRef = useRef<Network | null>(null);
     const [currentOperationId, setCurrentOperationId] = useState<number | null>(null);
 

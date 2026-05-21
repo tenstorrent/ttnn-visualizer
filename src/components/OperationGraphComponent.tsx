@@ -4,7 +4,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Edge, IdType, Network, Node } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
@@ -37,10 +37,12 @@ enum NodeRelation {
     Output = 'output',
 }
 
-const OperationGraph: React.FC<{
+interface OperationGraphProps {
     operationList: OperationList;
     operationId?: number;
-}> = ({ operationList, operationId }) => {
+}
+
+const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
 
@@ -717,7 +719,11 @@ const OperationGraph: React.FC<{
     );
 };
 
-const TensorDetailsComponent: React.FC<{ tensor: Tensor }> = ({ tensor }) => {
+interface OperationGraphTensorDetailsProps {
+    tensor: Tensor;
+}
+
+const TensorDetailsComponent = ({ tensor }: OperationGraphTensorDetailsProps) => {
     return (
         <div className='tensor-details'>
             <h3 className='tensor-header'>
@@ -788,10 +794,12 @@ const groupTensorsByConnectedOp = (
     return Array.from(groups.values());
 };
 
-const ConnectedOpHeader: React.FC<{
+interface ConnectedOpHeaderProps {
     group: ConnectedOpGroup;
     onLocate: (opId: number) => void;
-}> = ({ group, onLocate }) => {
+}
+
+const ConnectedOpHeader = ({ group, onLocate }: ConnectedOpHeaderProps) => {
     return (
         <div className='connected-op-header'>
             <h2 className='connected-op-name'>{group.label}</h2>
@@ -813,21 +821,23 @@ const ConnectedOpHeader: React.FC<{
     );
 };
 
-const OperationGraphInfoComponent: React.FC<{
+interface OperationGraphInfoComponentProps {
     currentOperationId: number;
     operationList: OperationList;
     operationNamesById: Map<number, string>;
     onNavigate: NavigateFunction;
     onLocateConnectedNode: (opId: number) => void;
     onRecenterOnCurrent: () => void;
-}> = ({
+}
+
+const OperationGraphInfoComponent = ({
     currentOperationId,
     operationList,
     operationNamesById,
     onNavigate,
     onLocateConnectedNode,
     onRecenterOnCurrent,
-}) => {
+}: OperationGraphInfoComponentProps) => {
     const operation = operationList.find((op) => op.id === currentOperationId);
 
     const inputGroups = useMemo(

@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React from 'react';
 import { Tooltip } from '@blueprintjs/core';
 import { CommonInfo, NPE_KPI, NPE_KPI_METADATA } from '../../model/NPEModel';
 import Collapsible from '../Collapsible';
@@ -12,7 +11,7 @@ interface NPEMetadataProps {
     numTransfers: number;
 }
 
-const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
+const NPEMetadata = ({ info, numTransfers }: NPEMetadataProps) => {
     const hasKey = (key: keyof CommonInfo) => {
         return NPE_KPI_METADATA[key] !== undefined && NPE_KPI_METADATA[key] !== null;
     };

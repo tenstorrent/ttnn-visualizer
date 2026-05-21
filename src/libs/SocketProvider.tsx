@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 /* eslint-disable no-console */
-import React, { ReactNode, createContext, useEffect } from 'react';
+import { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
 import { useSetAtom } from 'jotai';
 import { getOrCreateInstanceId } from './axiosInstance';
@@ -23,7 +23,7 @@ interface SocketProviderProps {
     children: ReactNode;
 }
 
-export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
+export const SocketProvider = ({ children }: SocketProviderProps) => {
     const setFileTransferProgress = useSetAtom(fileTransferProgressAtom);
     const instanceId = getOrCreateInstanceId();
 
@@ -69,6 +69,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             socket.off('disconnect');
             socket.off('connect_error');
             socket.off('reconnect');
+            socket.off('fileTransferProgress');
         };
     }, [instanceId, setFileTransferProgress]);
 
