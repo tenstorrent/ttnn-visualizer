@@ -508,6 +508,29 @@ class TestSerializers(unittest.TestCase):
         self.assertEqual(result[0]["stack_trace"], "trace text")
         self.assertEqual(result[0]["stack_trace_source_file_id"], 42)
 
+    def test_serialize_operations_null_source_file_id_does_not_fallback_to_rank_zero(
+        self,
+    ):
+        """Explicit NULL at a rank must not inherit rank-0's source_file_id."""
+        operations = [Operation(1, "op1", 0.5, rank=1)]
+        stack_traces = [
+            StackTrace(1, "trace rank 0", source_file_id=42, rank=0),
+            StackTrace(1, "trace rank 1", source_file_id=None, rank=1),
+        ]
+        result = serialize_operations(
+            [],
+            [],
+            operations,
+            [],
+            stack_traces,
+            [],
+            [],
+            [],
+            [],
+        )
+        self.assertEqual(result[0]["stack_trace"], "trace rank 1")
+        self.assertIsNone(result[0]["stack_trace_source_file_id"])
+
     def test_serialize_operation_with_stack_trace_source_file_id(self):
         operation = Operation(1, "op1", 0.5)
         stack_trace = StackTrace(1, "trace text", source_file_id=7)

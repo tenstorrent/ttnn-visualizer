@@ -74,9 +74,7 @@ def serialize_operations(
         (st.operation_id, st.rank): st.stack_trace for st in stack_traces
     }
     stack_trace_source_file_ids_dict = {
-        (st.operation_id, st.rank): st.source_file_id
-        for st in stack_traces
-        if st.source_file_id is not None
+        (st.operation_id, st.rank): st.source_file_id for st in stack_traces
     }
 
     errors_dict = {}
