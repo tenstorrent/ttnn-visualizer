@@ -12,12 +12,11 @@ import { normaliseReportFolder } from '../functions/validateReportFolder';
 import Endpoints from '../definitions/Endpoints';
 import { StackSourceOrigin } from '../definitions/StackTrace';
 
-export interface StackSourceAvailability {
+interface StackSourceAvailability {
     available: boolean;
     source: StackSourceOrigin | null;
 }
 
-/** JSON body from ``GET /api/remote/stack-trace/read``. */
 interface StackSourceReadResponse {
     content?: string;
     resolved_path?: string | null;

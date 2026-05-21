@@ -13,7 +13,6 @@ export enum SourceFileStatus {
     Available = 'available',
 }
 
-/** Values returned by ``GET /api/remote/stack-trace/test`` in the ``source`` field. */
 export enum StackSourceOrigin {
     Database = 'database',
     Path = 'path',
