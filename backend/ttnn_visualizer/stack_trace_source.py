@@ -14,7 +14,7 @@ from http import HTTPStatus
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Optional, Tuple
 
-from flask import Response
+from flask import Response, jsonify
 from ttnn_visualizer.exceptions import RemoteFileReadException
 from ttnn_visualizer.ssh_client import SSHException
 
@@ -63,7 +63,7 @@ def _validate_stack_trace_raw_path(
     if "\x00" in s:
         raise ValueError("Path contains null byte")
     # Reject control characters (including CR/LF) to keep DB-stored paths safe
-    # for filesystem use *and* for response headers like X-TTNN-Resolved-Source-Path
+    # for filesystem use and for JSON ``resolved_path`` on stack-trace read responses
     # (defends against header injection / smuggling, beyond what Werkzeug enforces).
     if any(ord(c) < 0x20 or ord(c) == 0x7F for c in s):
         raise ValueError("Path contains control characters")
@@ -464,22 +464,14 @@ def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
 
 def stack_source_response(text: str, resolved: str) -> Response:
     """
-    Plain-text body for ``GET /api/remote/stack-trace/read``.
+    JSON body for ``GET /api/remote/stack-trace/read``.
 
     Remap vs exact-path resolution is reported on ``GET .../stack-trace/test``
     via the JSON ``source`` field, not on this response.
     """
-    resp = Response(
-        response=text,
-        status=HTTPStatus.OK,
-        mimetype="text/plain; charset=utf-8",
-    )
-    resp.headers["X-TTNN-Resolved-Source-Path"] = resolved
-
+    resp = jsonify({"content": text, "resolved_path": resolved})
+    resp.status_code = HTTPStatus.OK
     # Source files can change underneath a stable filePath (e.g. after
     # re-syncing a remote folder), so disable caching for the GET endpoint.
     resp.headers["Cache-Control"] = "no-store"
-    resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["Content-Disposition"] = 'inline; filename="stack-source.txt"'
-
     return resp

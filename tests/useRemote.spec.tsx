@@ -68,22 +68,21 @@ describe('useRemoteConnection - stack source GETs', () => {
         expect(availability).toEqual({ available: false, source: null });
     });
 
-    it('readRemoteFile issues GET /api/remote/stack-trace/read and parses X-TTNN-Resolved-Source-Path', async () => {
+    it('readRemoteFile issues GET /api/remote/stack-trace/read and parses JSON body', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockGet = vi.mocked(axiosInstance.default.get);
         mockGet.mockResolvedValue({
-            data: 'file contents',
-            headers: {
-                'x-ttnn-resolved-source-path': '/abs/resolved.py',
+            data: {
+                content: 'file contents',
+                resolved_path: '/abs/resolved.py',
             },
-        } as unknown as AxiosResponse);
+        } as AxiosResponse);
 
         const { result } = renderHook(() => useRemoteConnection());
         const out = await result.current.readRemoteFile('/some/file.py');
 
         expect(mockGet).toHaveBeenCalledWith('/api/remote/stack-trace/read', {
             params: { filePath: '/some/file.py' },
-            responseType: 'text',
         });
         expect(out).toEqual({
             data: 'file contents',
@@ -92,13 +91,12 @@ describe('useRemoteConnection - stack source GETs', () => {
         });
     });
 
-    it('readRemoteFile reports null resolvedPath when header is absent', async () => {
+    it('readRemoteFile reports null resolvedPath when JSON field is absent', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockGet = vi.mocked(axiosInstance.default.get);
         mockGet.mockResolvedValue({
-            data: 'plain',
-            headers: {},
-        } as unknown as AxiosResponse);
+            data: { content: 'plain' },
+        } as AxiosResponse);
 
         const { result } = renderHook(() => useRemoteConnection());
         const out = await result.current.readRemoteFile('/x');

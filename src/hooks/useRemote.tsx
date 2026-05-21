@@ -17,6 +17,12 @@ export interface StackSourceAvailability {
     source: StackSourceOrigin | null;
 }
 
+/** JSON body from ``GET /api/remote/stack-trace/read``. */
+interface StackSourceReadResponse {
+    content?: string;
+    resolved_path?: string | null;
+}
+
 const FAILED_NO_CONNECTION = {
     status: ConnectionTestStates.FAILED,
     message: 'No connection provided',
@@ -240,17 +246,17 @@ const useRemoteConnection = () => {
             if (sourceFileId != null) {
                 params.sourceFileId = sourceFileId;
             }
-            const response = await axiosInstance.get<string>(`${Endpoints.REMOTE}/stack-trace/read`, {
+            const { data } = await axiosInstance.get<StackSourceReadResponse>(`${Endpoints.REMOTE}/stack-trace/read`, {
                 params,
-                responseType: 'text',
             });
 
-            const resolvedPath = response.headers['x-ttnn-resolved-source-path'] || null;
+            const content = typeof data?.content === 'string' ? data.content : null;
+            const resolvedPath = typeof data?.resolved_path === 'string' ? data.resolved_path : null;
 
             return {
-                data: response.data,
+                data: content,
                 error: null,
-                resolvedPath: typeof resolvedPath === 'string' ? resolvedPath : null,
+                resolvedPath,
             };
         } catch (error: unknown) {
             const standardError = {

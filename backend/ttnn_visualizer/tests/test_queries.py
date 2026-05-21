@@ -335,6 +335,36 @@ class TestDatabaseQueries(unittest.TestCase):
         by_path = self.db_queries.get_source_file_by_path("/b.py")
         self.assertEqual(by_path.id, 5)
 
+    def test_get_source_file_path_if_present(self):
+        self.connection.executescript("""
+            CREATE TABLE source_files (
+                id int PRIMARY KEY,
+                path text,
+                contents text
+            );
+            INSERT INTO source_files VALUES (1, '/has.py', 'body');
+            INSERT INTO source_files VALUES (2, '/empty.py', '');
+            INSERT INTO source_files VALUES (3, '/null.py', NULL);
+            """)
+        self.assertEqual(
+            self.db_queries.get_source_file_path_if_present(source_file_id=1),
+            "/has.py",
+        )
+        self.assertEqual(
+            self.db_queries.get_source_file_path_if_present(file_path="/has.py"),
+            "/has.py",
+        )
+        self.assertIsNone(
+            self.db_queries.get_source_file_path_if_present(source_file_id=2)
+        )
+        self.assertIsNone(
+            self.db_queries.get_source_file_path_if_present(source_file_id=3)
+        )
+        self.assertIsNone(
+            self.db_queries.get_source_file_path_if_present(source_file_id=999)
+        )
+        self.assertIsNone(self.db_queries.get_source_file_path_if_present())
+
     def test_query_tensor_comparisons(self):
         self.connection.execute("""
             INSERT INTO local_tensor_comparison_records

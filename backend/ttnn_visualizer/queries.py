@@ -320,6 +320,44 @@ class DatabaseQueries:
         rows = list(self.query_source_files(filters={"path": path}))
         return rows[0] if rows else None
 
+    def get_source_file_path_if_present(
+        self,
+        *,
+        source_file_id: Optional[int] = None,
+        file_path: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Return ``source_files.path`` for the first row whose ``contents`` is
+        non-empty, **without** loading the (potentially large) blob.
+
+        Used by availability probes (``GET /api/remote/stack-trace/test``) so the
+        cost scales with row count, not with embedded source size. ``source_file_id``
+        is preferred over ``file_path`` (mirrors ``lookup_report_source_file``).
+        """
+        if source_file_id is None and not file_path:
+            return None
+        if not self._check_table_exists("source_files"):
+            return None
+        if source_file_id is not None:
+            rows = self.query_runner.execute_query(
+                "SELECT path FROM source_files "
+                "WHERE id = ? AND contents IS NOT NULL AND length(contents) > 0 "
+                "LIMIT 1",
+                [source_file_id],
+            )
+            if rows:
+                return rows[0][0]
+        if file_path:
+            rows = self.query_runner.execute_query(
+                "SELECT path FROM source_files "
+                "WHERE path = ? AND contents IS NOT NULL AND length(contents) > 0 "
+                "LIMIT 1",
+                [file_path],
+            )
+            if rows:
+                return rows[0][0]
+        return None
+
     def query_error_records(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[ErrorRecord, None, None]:

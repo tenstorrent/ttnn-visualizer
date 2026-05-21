@@ -67,12 +67,10 @@ def test_stack_source_content_local_read_sets_no_store(app, client, make_report)
         )
     assert response.status_code == HTTPStatus.OK
     assert response.headers.get("Cache-Control") == "no-store"
-    assert response.headers.get("X-TTNN-Resolved-Source-Path") == "/abs/resolved.py"
-    assert response.headers.get("X-Content-Type-Options") == "nosniff"
-    assert (
-        response.headers.get("Content-Disposition")
-        == 'inline; filename="stack-source.txt"'
-    )
+    assert response.get_json() == {
+        "content": "print('hi')\n",
+        "resolved_path": "/abs/resolved.py",
+    }
 
 
 def test_stack_source_content_requires_instance(client):
@@ -130,8 +128,10 @@ def test_stack_source_read_from_report_db_by_path_only_in_server_mode(
         query_string={"instanceId": instance_id, "filePath": "/proj/other.py"},
     )
     assert response.status_code == HTTPStatus.OK
-    assert response.get_data(as_text=True) == "print(2)\n"
-    assert response.headers.get("X-TTNN-Resolved-Source-Path") == "/proj/other.py"
+    assert response.get_json() == {
+        "content": "print(2)\n",
+        "resolved_path": "/proj/other.py",
+    }
 
 
 def test_stack_source_read_from_report_db_in_server_mode(client, make_report):
@@ -146,8 +146,10 @@ def test_stack_source_read_from_report_db_in_server_mode(client, make_report):
         query_string={"instanceId": instance_id, "sourceFileId": 1},
     )
     assert response.status_code == HTTPStatus.OK
-    assert response.get_data(as_text=True) == "print(1)\n"
-    assert response.headers.get("X-TTNN-Resolved-Source-Path") == "/proj/model.py"
+    assert response.get_json() == {
+        "content": "print(1)\n",
+        "resolved_path": "/proj/model.py",
+    }
 
 
 def test_stack_source_availability_reports_path_origin_on_literal_match(

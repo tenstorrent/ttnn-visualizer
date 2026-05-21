@@ -68,12 +68,29 @@ def report_source_file_available(
     source_file_id: Optional[int] = None,
     file_path: Optional[str] = None,
 ) -> bool:
-    # Mirror read_report_source_file: don't claim availability for a row whose
-    # stored path can't safely become an X-TTNN-Resolved-Source-Path header.
-    return (
-        read_report_source_file(db, source_file_id=source_file_id, file_path=file_path)
-        is not None
+    """
+    Lightweight availability probe used by ``GET /api/remote/stack-trace/test``.
+
+    Avoids loading ``source_files.contents`` (which can be large) by asking the
+    DB only for the stored ``path``. The same path validation that gates
+    ``read_report_source_file`` applies here so unsafe stored paths report as
+    unavailable instead of being approved for a header that would later be
+    rejected.
+    """
+    validated_file_path: Optional[str] = None
+    if file_path:
+        try:
+            validated_file_path = _validate_stack_trace_raw_path(file_path)
+        except ValueError:
+            validated_file_path = None
+    if source_file_id is None and not validated_file_path:
+        return False
+    stored_path = db.get_source_file_path_if_present(
+        source_file_id=source_file_id, file_path=validated_file_path
     )
+    if stored_path is None:
+        return False
+    return _validated_report_source_path(stored_path) is not None
 
 
 def read_report_source_file(
@@ -85,8 +102,8 @@ def read_report_source_file(
     """
     Return ``(contents, resolved_path)`` when the report DB has a matching row.
 
-    ``resolved_path`` is ``source_files.path`` used as the resolved-path header
-    (``X-TTNN-Resolved-Source-Path``) on ``GET /api/remote/stack-trace/read``.
+    ``resolved_path`` is ``source_files.path`` returned in the JSON body of
+    ``GET /api/remote/stack-trace/read``.
     """
     source_file = lookup_report_source_file(
         db, source_file_id=source_file_id, file_path=file_path

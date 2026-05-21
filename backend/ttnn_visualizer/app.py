@@ -203,11 +203,7 @@ def middleware(app: flask.Flask):
     # CORS configuration
     origins = app.config["ALLOWED_ORIGINS"]
 
-    CORS(
-        app,
-        origins=origins,
-        expose_headers=["X-TTNN-Resolved-Source-Path"],
-    )
+    CORS(app, origins=origins)
 
     return None
 
