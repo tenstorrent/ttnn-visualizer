@@ -69,6 +69,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             socket.off('disconnect');
             socket.off('connect_error');
             socket.off('reconnect');
+            socket.off('fileTransferProgress');
         };
     }, [instanceId, setFileTransferProgress]);
 
