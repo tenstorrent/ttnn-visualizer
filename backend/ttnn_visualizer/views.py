@@ -243,7 +243,7 @@ def _remote_stack_source_read(
     file_path: Optional[str],
     source_file_id: Optional[int] = None,
 ):
-    """Return plain-text stack source (report DB, then local or SSH tt-metal)."""
+    """Return JSON stack source (content + resolved_path) from report DB, then local or SSH tt-metal."""
     with DatabaseQueries(instance) as db:
         report_result = read_report_source_file(
             db, source_file_id=source_file_id, file_path=file_path

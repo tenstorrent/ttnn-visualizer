@@ -68,6 +68,50 @@ describe('useRemoteConnection - stack source GETs', () => {
         expect(availability).toEqual({ available: false, source: null });
     });
 
+    it('isSourceFileAvailable forwards sourceFileId and parses database origin', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockGet = vi.mocked(axiosInstance.default.get);
+        mockGet.mockResolvedValue({
+            data: { available: true, source: StackSourceOrigin.Database },
+        } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        const availability = await result.current.isSourceFileAvailable('', undefined, 42);
+
+        expect(availability).toEqual({ available: true, source: StackSourceOrigin.Database });
+        expect(mockGet).toHaveBeenCalledWith('/api/remote/stack-trace/test', {
+            params: { sourceFileId: 42 },
+        });
+    });
+
+    it('isSourceFileAvailable forwards both filePath and sourceFileId', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockGet = vi.mocked(axiosInstance.default.get);
+        mockGet.mockResolvedValue({
+            data: { available: true, source: StackSourceOrigin.Database },
+        } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        await result.current.isSourceFileAvailable('/proj/model.py', undefined, 1);
+
+        expect(mockGet).toHaveBeenCalledWith('/api/remote/stack-trace/test', {
+            params: { filePath: '/proj/model.py', sourceFileId: 1 },
+        });
+    });
+
+    it('isSourceFileAvailable drops unknown source values when available', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockGet = vi.mocked(axiosInstance.default.get);
+        mockGet.mockResolvedValue({
+            data: { available: true, source: 'not-a-real-origin' },
+        } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        const availability = await result.current.isSourceFileAvailable('/x');
+
+        expect(availability).toEqual({ available: true, source: null });
+    });
+
     it('readRemoteFile issues GET /api/remote/stack-trace/read and parses JSON body', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockGet = vi.mocked(axiosInstance.default.get);
@@ -88,6 +132,26 @@ describe('useRemoteConnection - stack source GETs', () => {
             data: 'file contents',
             error: null,
             resolvedPath: '/abs/resolved.py',
+        });
+    });
+
+    it('readRemoteFile forwards sourceFileId without filePath', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockGet = vi.mocked(axiosInstance.default.get);
+        mockGet.mockResolvedValue({
+            data: { content: 'from db', resolved_path: '/proj/model.py' },
+        } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        const out = await result.current.readRemoteFile('', 1);
+
+        expect(mockGet).toHaveBeenCalledWith('/api/remote/stack-trace/read', {
+            params: { sourceFileId: 1 },
+        });
+        expect(out).toEqual({
+            data: 'from db',
+            error: null,
+            resolvedPath: '/proj/model.py',
         });
     });
 

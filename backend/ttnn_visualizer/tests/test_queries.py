@@ -364,6 +364,14 @@ class TestDatabaseQueries(unittest.TestCase):
             self.db_queries.get_source_file_path_if_present(source_file_id=999)
         )
         self.assertIsNone(self.db_queries.get_source_file_path_if_present())
+        # When source_file_id misses and file_path is also supplied, the
+        # implementation must fall through to the path branch.
+        self.assertEqual(
+            self.db_queries.get_source_file_path_if_present(
+                source_file_id=999, file_path="/has.py"
+            ),
+            "/has.py",
+        )
 
     def test_query_tensor_comparisons(self):
         self.connection.execute("""

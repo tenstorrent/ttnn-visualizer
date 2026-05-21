@@ -54,9 +54,8 @@ def test_stack_source_content_forbidden_in_server_mode_without_remote(
 def test_stack_source_content_local_read_sets_no_store(app, client, make_report):
     instance_id = make_report()
     app.config["SERVER_MODE"] = False
-    # read_stack_source_local still returns (content, resolved, remapped); the third
-    # element is unused by stack_source_response since the remap signal moved to
-    # /stack-trace/test's JSON `source` field.
+    # read_stack_source_local still returns (content, resolved, remapped); remap is
+    # reported on /stack-trace/test's JSON `source` field, not on /read's JSON body.
     with patch(
         "ttnn_visualizer.views.read_stack_source_local",
         return_value=("print('hi')\n", "/abs/resolved.py", False),
