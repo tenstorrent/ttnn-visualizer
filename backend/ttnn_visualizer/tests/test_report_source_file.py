@@ -28,6 +28,9 @@ class TestReportSourceFile(unittest.TestCase):
             """)
         self.db = DatabaseQueries(connection=self.connection)
 
+    def tearDown(self):
+        self.connection.close()
+
     def test_lookup_by_id(self):
         row = lookup_report_source_file(self.db, source_file_id=1)
         self.assertIsInstance(row, SourceFile)
