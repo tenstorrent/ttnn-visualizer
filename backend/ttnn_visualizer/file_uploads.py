@@ -217,8 +217,9 @@ def construct_dest_path(file, target_directory, folder_name):
     if folder_name:
         # Folder uploads legitimately carry sub-paths in `file.filename`
         # (e.g. `subdir/file.csv`) and `validate_files` / `os.utime` accounting
-        # depend on that. Path-traversal hardening for the folder branch is a
-        # separate, broader follow-up — see PR_REVIEW_TRIAGE_2.md §1.J.
+        # depend on that, so we can't just collapse to the basename the way
+        # the single-file branch does. Instead, build the candidate path and
+        # then assert a resolved-path containment check below.
         prefixed_folder_name = f"{prefix}{folder_name}"
         # Chromium-based browsers send each file's relative path as the
         # multipart filename (e.g. `report/db.sqlite`), while Safari sends just
@@ -229,7 +230,31 @@ def construct_dest_path(file, target_directory, folder_name):
         head, sep, tail = relative_filename.partition("/")
         if sep and head == folder_name:
             relative_filename = tail
-        dest_path = Path(target_directory) / prefixed_folder_name / relative_filename
+        report_root = Path(target_directory) / prefixed_folder_name
+        dest_path = report_root / relative_filename
+
+        # Defense against `../` (or absolute-path) traversal in the
+        # client-supplied filename. The single-file branch hardens this by
+        # collapsing to `Path(...).name`, which we can't do here because legit
+        # folder uploads need their sub-paths preserved. Instead, resolve both
+        # paths and require the destination to stay within the per-report
+        # directory. `resolve(strict=False)` normalises `..` segments and (on
+        # macOS) walks shared symlinks like `/tmp` -> `/private/tmp`, so the
+        # comparison is symlink-stable.
+        resolved_dest = dest_path.resolve()
+        resolved_root = report_root.resolve()
+        if not (
+            resolved_dest == resolved_root
+            or resolved_dest.is_relative_to(resolved_root)
+        ):
+            logger.warning(
+                "Upload filename %r escapes report directory %s",
+                str(file.filename),
+                resolved_root,
+            )
+            raise DataFormatError(
+                f"Upload filename {file.filename!r} escapes report directory"
+            )
     else:
         # Single-file branch (NPE, MLIR): collapse the client-supplied
         # filename to its basename so `"../etc/passwd.json"` / `"/etc/x.json"`
