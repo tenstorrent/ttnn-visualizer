@@ -10,6 +10,7 @@ import 'styles/components/FileStatusOverlay.scss';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import { formatMemorySize, formatPercentage } from '../functions/math';
+import { getFileStatusLabel, shouldShowStatus } from '../functions/getFileStatusLabel';
 import { getOverallFileTransferPercent } from '../functions/getOverallFileTransferPercent';
 
 const ELAPSED_REFRESH_MS = 1000;
@@ -35,11 +36,10 @@ const FileStatusOverlay = () => {
     const showFileCount = numberOfFiles > 0 && !isUpload;
     const showUploadFileCount = numberOfFiles > 0 && isUpload;
 
-    // Elapsed time for the current transfer. All time reads happen inside the
-    // interval callback so the render body stays pure (no Date.now during
-    // render, no setState in effect body, no refs read during render).
-    // For remote sync the key is the current file (resets per file); for
-    // uploads the key is the status itself (whole-upload timer).
+    // Total elapsed time for the whole transfer (not per-file). The timer
+    // starts on the first STARTED/DOWNLOADING/UPLOADING tick and resets only
+    // when the active session ends. All time reads happen inside the interval
+    // callback so the render body stays pure.
     const [timer, setTimer] = useState<{ key: string; startedAt: number | null; now: number }>({
         key: '',
         startedAt: null,
@@ -49,8 +49,8 @@ const FileStatusOverlay = () => {
         const intervalId = window.setInterval(() => {
             setTimer((prev) => {
                 let expectedKey = '';
-                if (status === FileStatus.DOWNLOADING && currentFileName) {
-                    expectedKey = `file:${currentFileName}`;
+                if (status === FileStatus.DOWNLOADING || status === FileStatus.STARTED) {
+                    expectedKey = 'sync';
                 } else if (status === FileStatus.UPLOADING) {
                     expectedKey = 'upload';
                 }
@@ -62,7 +62,7 @@ const FileStatusOverlay = () => {
             });
         }, ELAPSED_REFRESH_MS);
         return () => window.clearInterval(intervalId);
-    }, [currentFileName, status]);
+    }, [status]);
     const elapsedSeconds = timer.startedAt === null ? 0 : Math.max(0, Math.floor((timer.now - timer.startedAt) / 1000));
 
     return (
@@ -93,7 +93,7 @@ const FileStatusOverlay = () => {
 
                 {currentFileName && (
                     <p>
-                        {status && status.valueOf()} <u>{currentFileName}</u>
+                        {shouldShowStatus(status) && getFileStatusLabel(status)} <u>{currentFileName}</u>
                         {showCurrentFileSize && <> ({formatMemorySize(currentFileSize, 1)})</>}
                     </p>
                 )}
