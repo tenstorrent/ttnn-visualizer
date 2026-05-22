@@ -8,22 +8,21 @@ const FILE_STATUS_LABEL: Readonly<Record<FileStatus, string>> = Object.freeze({
     [FileStatus.STARTED]: 'Starting',
     [FileStatus.DOWNLOADING]: 'Downloading',
     [FileStatus.UPLOADING]: 'Uploading',
-    [FileStatus.COMPRESSING]: 'Compressing',
     [FileStatus.FINISHED]: 'Finished',
     [FileStatus.FAILED]: 'Failed',
     [FileStatus.INACTIVE]: 'Inactive',
 });
 
 export function getFileStatusLabel(status: FileStatus): string {
-    return FILE_STATUS_LABEL[status] ?? status;
+    return FILE_STATUS_LABEL[status];
 }
 
-export function shouldShowStatus(status: FileStatus): boolean {
-    return [
-        FileStatus.DOWNLOADING,
-        FileStatus.STARTED,
-        FileStatus.UPLOADING,
-        FileStatus.COMPRESSING,
-        FileStatus.FAILED,
-    ].includes(status);
+const ACTIVE_TRANSFER_STATUSES: ReadonlySet<FileStatus> = new Set([
+    FileStatus.STARTED,
+    FileStatus.DOWNLOADING,
+    FileStatus.UPLOADING,
+]);
+
+export function isActiveTransferStatus(status: FileStatus): boolean {
+    return ACTIVE_TRANSFER_STATUSES.has(status);
 }
