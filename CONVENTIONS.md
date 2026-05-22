@@ -158,6 +158,27 @@ interface SearchFieldProps {
 export default function SearchField({ placeholder, onSearch }: SearchFieldProps) { … }
 ```
 
+### Don't use `React.FC` / `FC` for component typing
+
+**Rationale.** The codebase mixed two styles (`function Foo({ x }: FooProps)` vs `const Foo: React.FC<FooProps> = …`). `React.FC` is deprecated by the React team, changes return-type inference (`ReactNode` vs `JSX.Element | null`), and under older `@types/react` versions it implicitly added `children` to every props type. Under `@types/react` 18 that foot-gun is gone, but a single canonical style keeps reviews predictable and eases a future React 19 migration.
+
+Type props **on the function signature**, not on a separate `FC` annotation:
+
+```tsx
+interface SocketProviderProps {
+    children: ReactNode;
+}
+
+export const SocketProvider = ({ children }: SocketProviderProps) => { … };
+```
+
+```tsx
+// Don't
+const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => { … };
+```
+
+Components that accept element children declare `children: ReactNode` (or `children?: ReactNode`) on `*Props` — don't wrap the interface in `PropsWithChildren` just to satisfy `React.FC`. ESLint bans `FC`, `React.FC`, `FunctionComponent`, and `React.FunctionComponent` via `no-restricted-syntax` in `eslint.config.cjs`.
+
 Reserve `type` for unions, generic-constrained mappings, and `Omit`/`Pick` derivations:
 
 ```ts
@@ -1025,7 +1046,6 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload a state field called `errorMessage` with both success and failure text. A rename to `statusMessage` is pending.
 - **Upload size cap.** No `MAX_CONTENT_LENGTH` is set on the Flask app; large uploads succeed until they exhaust memory. Tracked as a separate hardening task.
 - **Default-export vs named-export of components.** The codebase mixes `export default function Foo()` and `export function Foo()`. Components are predominantly default-exported; hooks and utility functions are predominantly named-exported. Mirror the file you're editing.
-- **Two component-typing styles coexist: plain props parameter vs `React.FC<...>`.** Plenty of components are written as `function Foo({ x }: FooProps)`, but `React.FC<FooProps>` (and the bare `: FC<FooProps>` variant) is also in active use across ~30+ files (`src/libs/SocketProvider.tsx`, `src/routes/GraphView.tsx`, `src/components/OperationGraphComponent.tsx`, `src/components/npe/NPEViewComponent.tsx`, `src/components/operation-details/OperationDetailsComponent.tsx`, and many more). The codebase has no single canonical answer. Mirror the file you're editing. The community-wide foot-gun of `React.FC` (implicit `children` in older `@types/react`) is a real consideration, but it's not a project-wide migration in this repo.
 - **Raw `toast()` in `useBufferFocus`.** `src/hooks/useBufferFocus.tsx` calls `toast()` from `react-toastify` directly because it needs `autoClose: false` and persists the returned `Id` into `activeToastAtom` — capabilities `createToastNotification` doesn't expose. Intentional exception, not a precedent. New code still goes through `createToastNotification`; if you need richer options, extend the wrapper.
 - **`print()` calls in `sockets.py`.** `backend/ttnn_visualizer/sockets.py` use `print()` instead of `logger.info / debug`. Pre-existing tech debt; do not introduce new `print()` calls anywhere else in the backend.
 - **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8` and `pyproject.toml` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.

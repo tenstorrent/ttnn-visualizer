@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router';
@@ -17,7 +17,7 @@ import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
 import { NPEValidationError, validateNpeData } from '../definitions/NPEData';
 
-const NPE: FC = () => {
+const NPE = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
     const { data: loadedData, isLoading: isLoadingNPE, error: httpError } = useNpe(filepath ? null : npeFileName);

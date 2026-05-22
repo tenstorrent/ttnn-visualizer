@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { PlotData } from 'plotly.js';
@@ -32,7 +32,7 @@ export interface TensorVisualisationComponentProps {
     plotZoomRange: [number, number];
 }
 
-const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> = ({
+const TensorVisualisationComponent = ({
     title,
     operationId,
     address,
@@ -42,7 +42,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     tensorByAddress,
     plotZoomRange,
     tensorId,
-}) => {
+}: TensorVisualisationComponentProps) => {
     const { data } = useBufferPages(operationId, address, bufferType);
     const { data: devices } = useDevices();
     const showHex = useAtomValue(showHexAtom);

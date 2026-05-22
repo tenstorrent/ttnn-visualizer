@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, Fragment, useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -33,13 +33,13 @@ interface StackedPerformanceTableProps {
     reportName: string | null;
 }
 
-const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
+const StackedPerformanceTable = ({
     data,
     stackedData,
     stackedComparisonData,
     filters,
     reportName,
-}) => {
+}: StackedPerformanceTableProps) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
     const mergeDevices = useAtomValue(mergeDevicesAtom);

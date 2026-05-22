@@ -119,6 +119,7 @@ Open pull requests with **`dev`** as the base branch by default.
 - When using third-party generic containers (`DataSet<T>`, `Map<K, V>`), spell out the type parameter rather than relying on inference that obscures intent.
 - Respect `react-hooks/exhaustive-deps`. If you suppress it, add a one-line comment explaining the trade-off and why the missing dep is intentionally stable.
 - Default to **`interface ComponentNameProps`** for component props (the `Props` suffix is required), declared immediately above the component. Reserve `type` for unions, generic-constrained mappings, and `Omit`/`Pick` derivations.
+- Don't annotate components with **`React.FC`**, **`FC`**, or **`React.FunctionComponent`**. Type props directly on the function (`function Foo({…}: FooProps)` / `const Foo = ({…}: FooProps) =>`). Components with children declare **`children: ReactNode`** on `FooProps`.
 - Prefer **`null`** over **`undefined`** for intentional “no value” in your own state, return types, and API-shaped data (`T | null`, default `null`). Keep **`undefined`** for optional properties, omitted keys, and third-party signatures you cannot change.
 
 ### CSS / SCSS

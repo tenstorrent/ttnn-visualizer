@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router';
 
@@ -13,7 +13,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import { selectedOperationRangeAtom } from '../store/app';
 
-const GraphView: React.FC = () => {
+const GraphView = () => {
     const { data: operationList, isLoading } = useOperationsList();
     const { operationId } = useParams<{ operationId?: string }>();
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import PerfCoreCountUtilizationChart from './PerfCoreCountUtilizationChart';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
@@ -23,11 +23,7 @@ interface NonFilterablePerfChartsProps {
     opCodeOptions: Marker[];
 }
 
-const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
-    chartData,
-    secondaryData = [],
-    opCodeOptions,
-}) => {
+const NonFilterablePerfCharts = ({ chartData, secondaryData = [], opCodeOptions }: NonFilterablePerfChartsProps) => {
     const performanceReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 

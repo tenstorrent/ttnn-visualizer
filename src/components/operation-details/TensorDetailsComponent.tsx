@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -32,13 +32,13 @@ export interface TensorDetailsComponentProps {
     userL1ZoomRange?: [number, number];
 }
 
-const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
+const TensorDetailsComponent = ({
     tensor,
     onTensorClick,
     operationId,
     plotZoomRange,
     userL1ZoomRange,
-}) => {
+}: TensorDetailsComponentProps) => {
     const [overlayOpen, setOverlayOpen] = useState(false);
     const useHex = useAtomValue(showHexAtom);
 
