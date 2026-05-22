@@ -27,7 +27,6 @@ class Messages(object):
 class FileStatus(Enum):
     DOWNLOADING = "DOWNLOADING"
     FAILED = "FAILED"
-    COMPRESSING = "COMPRESSING"
     FINISHED = "FINISHED"
     STARTED = "STARTED"
 

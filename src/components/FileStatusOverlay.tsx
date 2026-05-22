@@ -25,16 +25,15 @@ const formatElapsed = (totalSeconds: number): string => {
 };
 
 const FileStatusOverlay = () => {
-    // Total elapsed time for the whole transfer (not per-file). The timer
-    // starts on the first STARTED/DOWNLOADING/UPLOADING tick and resets only
-    // when the active session ends. All time reads happen inside the interval
-    // callback so the render body stays pure.
-    const [timer, setTimer] = useState<{ key: string; startedAt: number | null; now: number }>({
-        key: '',
+    const [progress] = useAtom(fileTransferProgressAtom);
+    // Total elapsed time for the whole transfer (not per-file). The interval
+    // only runs while the overlay is active, so an idle overlay mounted in a
+    // parent page does no per-second work. All time reads happen inside the
+    // interval callback so the render body stays pure.
+    const [timer, setTimer] = useState<{ startedAt: number | null; now: number }>({
         startedAt: null,
         now: 0,
     });
-    const [progress] = useAtom(fileTransferProgressAtom);
     const { currentFileName, finishedFiles, numberOfFiles, status, bytesTransferred, bytesTotal, currentFileSize } =
         progress;
     const overallPercent = getOverallFileTransferPercent(progress);
@@ -44,23 +43,32 @@ const FileStatusOverlay = () => {
     const showByteTotals = bytesTotal !== undefined && bytesTotal > 0;
     const showCurrentFileSize = currentFileSize !== undefined && currentFileSize > 0;
     const showFileCount = numberOfFiles > 0;
-    const expectedKey = isActive ? 'transfer' : '';
+    // Uploads stream as a single multipart request, so the backend never
+    // reports per-file completion (finishedFiles stays 0). Hide the `0/N`
+    // prefix in that case to avoid showing misleading progress.
+    const showFinishedCount = showFileCount && !isUpload;
     const elapsedSeconds = timer.startedAt === null ? 0 : Math.max(0, Math.floor((timer.now - timer.startedAt) / 1000));
 
     useEffect(() => {
+        if (!isActive) {
+            return undefined;
+        }
+
         const intervalId = window.setInterval(() => {
             setTimer((prev) => {
                 const tickNow = Date.now();
-
-                if (expectedKey !== prev.key) {
-                    return { key: expectedKey, startedAt: expectedKey === '' ? null : tickNow, now: tickNow };
+                if (prev.startedAt === null) {
+                    return { startedAt: tickNow, now: tickNow };
                 }
-
                 return { ...prev, now: tickNow };
             });
         }, ELAPSED_REFRESH_MS);
-        return () => window.clearInterval(intervalId);
-    }, [expectedKey]);
+
+        return () => {
+            window.clearInterval(intervalId);
+            setTimer((prev) => (prev.startedAt === null ? prev : { startedAt: null, now: 0 }));
+        };
+    }, [isActive]);
 
     return (
         <Overlay
@@ -71,12 +79,13 @@ const FileStatusOverlay = () => {
         >
             <div className='overlay'>
                 <h2 className='heading'>{isRemoteSync ? 'Remote Sync Progress' : 'File Transfer Progress'}</h2>
-                <p>
-                    {finishedFiles}
-                    {showFileCount ? `/${numberOfFiles}` : ''} files{' '}
-                    {showByteTotals &&
-                        `(${formatMemorySize(bytesTransferred ?? 0, 1)} / ${formatMemorySize(bytesTotal, 1)})`}
-                </p>
+                {showFileCount && (
+                    <p>
+                        {showFinishedCount ? `${finishedFiles}/${numberOfFiles}` : `${numberOfFiles}`}` files{' '}
+                        {showByteTotals &&
+                            `(${formatMemorySize(bytesTransferred ?? 0, 1)} / ${formatMemorySize(bytesTotal, 1)})`}
+                    </p>
+                )}
 
                 {currentFileName && (
                     <p>

@@ -360,10 +360,12 @@ def get_remote_file_list(
     """
     exclude_patterns = exclude_patterns or []
 
-    # GNU find: print '<size>\t<path>'. Tab separator avoids collisions with
-    # spaces in filenames. Falls back below if -printf is unsupported.
+    # GNU find: emit '<size>\t<path>\0' records. NUL terminator is illegal in
+    # POSIX paths, so paths containing tabs/newlines round-trip safely; the
+    # first '\t' in each record is the unambiguous separator between the
+    # decimal size and the path. Falls back below if -printf is unsupported.
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find '{remote_folder}' -type f -printf '%s\\t%p\\n'",
+        f"find '{remote_folder}' -type f -printf '%s\\t%p\\0'",
     ]
 
     try:
@@ -376,12 +378,11 @@ def get_remote_file_list(
         )
 
         entries: List[tuple[str, int]] = []
-        for line in result.stdout.splitlines():
-            stripped = line.strip()
-            if not stripped:
+        for record in result.stdout.split("\x00"):
+            if not record:
                 continue
-            size_str, _, path_str = stripped.partition("\t")
-            if not path_str or is_excluded(path_str, exclude_patterns):
+            size_str, separator, path_str = record.partition("\t")
+            if not separator or not path_str or is_excluded(path_str, exclude_patterns):
                 continue
             try:
                 size = int(size_str)
@@ -428,11 +429,13 @@ def _get_remote_file_list_without_sizes(
             check=True,
             timeout=_ssh_subprocess_timeout_seconds(),
         )
-        return [
-            (path.strip(), 0)
-            for path in result.stdout.strip().splitlines()
-            if path.strip() and not is_excluded(path.strip(), exclude_patterns)
-        ]
+        entries: List[tuple[str, int]] = []
+        for line in result.stdout.splitlines():
+            path = line.strip()
+            if not path or is_excluded(path, exclude_patterns):
+                continue
+            entries.append((path, 0))
+        return entries
     except subprocess.CalledProcessError as e:
         if e.returncode == 255:
             handle_ssh_subprocess_error(e, remote_connection)
