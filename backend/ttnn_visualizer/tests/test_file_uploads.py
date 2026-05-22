@@ -639,11 +639,15 @@ def test_performance_upload_chromium_style_lands_under_report_folder(
 
 
 def test_profiler_upload_rejects_traversal_within_folder(app, client, make_report):
-    """Folder upload with a `../`-bearing filename must 422 and write nothing.
+    """Folder upload with a `../`-bearing filename must 422 and stay contained.
 
     End-to-end counterpart to the `construct_dest_path` unit tests: confirms
     the handler propagates `DataFormatError` from the upload pipeline as the
-    expected 422 status, and that no file from the batch makes it onto disk.
+    expected 422 status, that no file from the batch escapes the profiler
+    directory, and that the traversal-bearing `escape.json` is never written.
+    Earlier files in the batch may land on disk before the bad one raises —
+    that non-atomic behaviour is preserved here and is not what this test
+    targets.
     """
     instance_id = make_report()
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])

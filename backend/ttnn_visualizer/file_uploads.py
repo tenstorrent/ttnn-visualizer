@@ -241,8 +241,8 @@ def construct_dest_path(file, target_directory, folder_name):
         # directory. `resolve(strict=False)` normalises `..` segments and (on
         # macOS) walks shared symlinks like `/tmp` -> `/private/tmp`, so the
         # comparison is symlink-stable.
-        resolved_dest = dest_path.resolve()
-        resolved_root = report_root.resolve()
+        resolved_dest = dest_path.resolve(strict=False)
+        resolved_root = report_root.resolve(strict=False)
         if not (
             resolved_dest == resolved_root
             or resolved_dest.is_relative_to(resolved_root)
