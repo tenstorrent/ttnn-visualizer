@@ -3,7 +3,6 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import React from 'react';
 
 interface HighlightedTextProps {
     text: string;
@@ -11,7 +10,7 @@ interface HighlightedTextProps {
     className?: string;
 }
 
-const HighlightedText: React.FC<HighlightedTextProps> = ({ text, filter, className }) => {
+const HighlightedText = ({ text, filter, className }: HighlightedTextProps) => {
     const index = text.toLowerCase().indexOf(filter.toLowerCase());
 
     if (index === -1) {

@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React from 'react';
 import { useAtom } from 'jotai';
 import Overlay from './Overlay';
 import ProgressBar from './ProgressBar';
@@ -11,7 +10,7 @@ import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import { formatPercentage } from '../functions/math';
 
-const FileStatusOverlay: React.FC = () => {
+const FileStatusOverlay = () => {
     const [progress] = useAtom(fileTransferProgressAtom);
     const { currentFileName, finishedFiles, numberOfFiles, percentOfCurrent, status } = progress;
 

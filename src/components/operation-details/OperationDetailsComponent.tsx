@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, Label, RangeSlider, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
@@ -54,7 +54,7 @@ interface ZoomMemoryChunk {
     size: number;
 }
 
-const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
+const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     const [renderMemoryLayoutPattern, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
