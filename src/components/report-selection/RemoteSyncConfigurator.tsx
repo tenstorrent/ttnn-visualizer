@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtom } from 'jotai';
+import { getDefaultStore, useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
@@ -18,16 +18,30 @@ import useRemoteConnection from '../../hooks/useRemote';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
+    fileTransferProgressAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
 } from '../../store/app';
+import FileStatusOverlay from '../FileStatusOverlay';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
-import { ActiveReport } from '../../model/APIData';
+import { ActiveReport, FileStatus } from '../../model/APIData';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
+
+const INACTIVE_FILE_TRANSFER_PROGRESS = {
+    currentFileName: '',
+    numberOfFiles: 0,
+    percentOfCurrent: 0,
+    finishedFiles: 0,
+    status: FileStatus.INACTIVE,
+};
+
+const resetFileTransferProgress = () => {
+    getDefaultStore().set(fileTransferProgressAtom, INACTIVE_FILE_TRANSFER_PROGRESS);
+};
 
 const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
@@ -216,6 +230,7 @@ const RemoteSyncConfigurator = () => {
             createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
         } finally {
             setIsSyncingReportFolder(false);
+            resetFileTransferProgress();
         }
     };
 
@@ -263,6 +278,7 @@ const RemoteSyncConfigurator = () => {
             createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
         } finally {
             setIsSyncingPerformanceFolder(false);
+            resetFileTransferProgress();
         }
     };
 
@@ -312,6 +328,7 @@ const RemoteSyncConfigurator = () => {
 
     return (
         <>
+            <FileStatusOverlay />
             <FormGroup
                 className='form-group'
                 label={<h3 className='label'>Add remote sync server</h3>}

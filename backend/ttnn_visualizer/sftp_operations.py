@@ -252,20 +252,53 @@ def sync_files_and_directories(
 
     # Download files with progress reporting
     total_files = len(all_files)
+    total_bytes = sum(size for _, size in all_files)
     finished_files = 0
+    bytes_transferred = 0
 
     logger.info(f"Starting download of {total_files} files...")
 
-    for remote_file in all_files:
+    if current_app.config["USE_WEBSOCKETS"]:
+        emit_file_status(
+            FileProgress(
+                current_file_name="",
+                number_of_files=total_files,
+                percent_of_current=0,
+                finished_files=0,
+                bytes_transferred=0,
+                bytes_total=total_bytes,
+                current_file_size=0,
+                status=FileStatus.STARTED,
+            ),
+            sid,
+        )
+
+    for remote_file, remote_file_size in all_files:
         try:
             # Calculate relative path from the base remote folder
             relative_path = Path(remote_file).relative_to(remote_profiler_folder)
             local_file = destination_dir / relative_path
 
+            if current_app.config["USE_WEBSOCKETS"]:
+                emit_file_status(
+                    FileProgress(
+                        current_file_name=str(relative_path),
+                        number_of_files=total_files,
+                        percent_of_current=0,
+                        finished_files=finished_files,
+                        bytes_transferred=bytes_transferred,
+                        bytes_total=total_bytes,
+                        current_file_size=remote_file_size,
+                        status=FileStatus.DOWNLOADING,
+                    ),
+                    sid,
+                )
+
             # Download the file using SFTP
             download_single_file_sftp(remote_connection, remote_file, local_file)
 
             finished_files += 1
+            bytes_transferred += remote_file_size
 
             # Emit progress
             progress = FileProgress(
@@ -273,6 +306,9 @@ def sync_files_and_directories(
                 number_of_files=total_files,
                 percent_of_current=100,  # We don't get per-file progress with SFTP
                 finished_files=finished_files,
+                bytes_transferred=bytes_transferred,
+                bytes_total=total_bytes,
+                current_file_size=remote_file_size,
                 status=FileStatus.DOWNLOADING,
             )
 
@@ -300,6 +336,9 @@ def sync_files_and_directories(
         number_of_files=total_files,
         percent_of_current=100,
         finished_files=finished_files,
+        bytes_transferred=bytes_transferred,
+        bytes_total=total_bytes,
+        current_file_size=0,
         status=FileStatus.FINISHED,
     )
 
@@ -313,13 +352,18 @@ def sync_files_and_directories(
 
 def get_remote_file_list(
     remote_connection: RemoteConnection, remote_folder: str, exclude_patterns=None
-) -> List[str]:
-    """Get a list of all files in the remote directory recursively, applying exclusion patterns."""
+) -> List[tuple[str, int]]:
+    """Get a list of (path, size_bytes) for all files in the remote directory.
+
+    Uses GNU find's -printf to fetch size and path in one SSH call; falls back
+    to plain -type f (sizes = 0) if the remote find lacks -printf support.
+    """
     exclude_patterns = exclude_patterns or []
 
-    # Build SSH command to find all files recursively (never prompts for password)
+    # GNU find: print '<size>\t<path>'. Tab separator avoids collisions with
+    # spaces in filenames. Falls back below if -printf is unsupported.
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find '{remote_folder}' -type f",
+        f"find '{remote_folder}' -type f -printf '%s\\t%p\\n'",
     ]
 
     try:
@@ -331,25 +375,69 @@ def get_remote_file_list(
             timeout=_ssh_subprocess_timeout_seconds(),
         )
 
-        all_files = result.stdout.strip().splitlines()
+        entries: List[tuple[str, int]] = []
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            size_str, _, path_str = stripped.partition("\t")
+            if not path_str or is_excluded(path_str, exclude_patterns):
+                continue
+            try:
+                size = int(size_str)
+            except ValueError:
+                size = 0
+            entries.append((path_str, size))
 
-        # Filter out excluded files
-        filtered_files = []
-        for file_path in all_files:
-            if not is_excluded(file_path, exclude_patterns):
-                filtered_files.append(file_path.strip())
-
-        return filtered_files
+        return entries
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 255:  # SSH protocol errors
             handle_ssh_subprocess_error(e, remote_connection)
             return []
-        else:
-            logger.error(f"Error getting file list: {e.stderr}")
-            return []
+        # Non-GNU find (e.g. BSD) rejects -printf; retry without sizes.
+        logger.warning(
+            "find -printf failed (%s); retrying without size information.",
+            e.stderr.strip() if e.stderr else "no stderr",
+        )
+        return _get_remote_file_list_without_sizes(
+            remote_connection, remote_folder, exclude_patterns
+        )
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout getting file list from: {remote_folder}")
+        return []
+    except Exception as e:
+        logger.error(f"Error getting file list: {e}")
+        return []
+
+
+def _get_remote_file_list_without_sizes(
+    remote_connection: RemoteConnection,
+    remote_folder: str,
+    exclude_patterns: List[str],
+) -> List[tuple[str, int]]:
+    """Fallback when GNU find -printf is unavailable. Sizes default to 0."""
+    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
+        f"find '{remote_folder}' -type f",
+    ]
+    try:
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
+        )
+        return [
+            (path.strip(), 0)
+            for path in result.stdout.strip().splitlines()
+            if path.strip() and not is_excluded(path.strip(), exclude_patterns)
+        ]
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 255:
+            handle_ssh_subprocess_error(e, remote_connection)
+        else:
+            logger.error(f"Error getting file list: {e.stderr}")
         return []
     except Exception as e:
         logger.error(f"Error getting file list: {e}")

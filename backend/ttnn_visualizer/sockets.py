@@ -44,7 +44,12 @@ class FileProgress(SerializeableDataclass):
     number_of_files: int
     percent_of_current: float
     finished_files: int
-    status: FileStatus  # Use the FileStatus Enum
+    status: FileStatus
+    # Bytes-level progress is optional so upload paths that have no size info
+    # (and any future transport) can omit it without breaking the wire format.
+    bytes_transferred: int = 0
+    bytes_total: int = 0
+    current_file_size: int = 0
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
     def __post_init__(self):

@@ -123,6 +123,9 @@ export interface FileProgress {
     percentOfCurrent: number;
     finishedFiles: number;
     status: FileStatus; // Use the FileStatus enum
+    bytesTransferred?: number;
+    bytesTotal?: number;
+    currentFileSize?: number;
     timestamp?: string; // Optional, with default handled elsewhere if necessary
 }
 

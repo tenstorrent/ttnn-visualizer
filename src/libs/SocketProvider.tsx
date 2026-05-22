@@ -47,15 +47,20 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
         });
 
         socket.on('fileTransferProgress', (data) => {
-            if (data.instanceId === instanceId) {
-                setFileTransferProgress({
-                    currentFileName: data.current_file_name,
-                    numberOfFiles: data.number_of_files,
-                    percentOfCurrent: data.percent_of_current,
-                    finishedFiles: data.finished_files,
-                    status: data.status,
-                });
+            if (data.instance_id && data.instance_id !== instanceId) {
+                return;
             }
+
+            setFileTransferProgress({
+                currentFileName: data.current_file_name,
+                numberOfFiles: data.number_of_files,
+                percentOfCurrent: data.percent_of_current,
+                finishedFiles: data.finished_files,
+                status: data.status,
+                bytesTransferred: data.bytes_transferred,
+                bytesTotal: data.bytes_total,
+                currentFileSize: data.current_file_size,
+            });
         });
 
         /* For debugging socket messages */
