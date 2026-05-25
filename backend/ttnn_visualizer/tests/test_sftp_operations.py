@@ -11,6 +11,7 @@ size-aware listings, plus its fallback path when the remote ``find`` lacks
 need network access or a real SSH server.
 """
 
+import shlex
 import subprocess
 from http import HTTPStatus
 from unittest.mock import patch
@@ -20,6 +21,7 @@ from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
     _get_remote_file_list_without_sizes,
+    get_remote_directory_list,
     get_remote_file_list,
     sync_files_and_directories,
 )
@@ -47,6 +49,47 @@ def _called_process_error(
     return subprocess.CalledProcessError(
         returncode=returncode, cmd=["ssh"], output="", stderr=stderr
     )
+
+
+def _remote_shell_command_from_run(mock_run) -> str:
+    """Last argv element is the remote shell command passed to ssh."""
+    return mock_run.call_args[0][0][-1]
+
+
+class TestRemoteFindShellQuoting:
+    """Regression: paths with single quotes must use shlex.quote, not naive '...'."""
+
+    _APOSTROPHE_FOLDER = "/remote/o'brien/reports"
+
+    def test_get_remote_file_list_quotes_path_with_single_quote(self):
+        with patch("subprocess.run", return_value=_completed("")) as run:
+            get_remote_file_list(
+                _connection(), self._APOSTROPHE_FOLDER, exclude_patterns=[]
+            )
+
+        remote_cmd = _remote_shell_command_from_run(run)
+        assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
+        assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
+
+    def test_get_remote_file_list_without_sizes_quotes_path_with_single_quote(self):
+        with patch("subprocess.run", return_value=_completed("")) as run:
+            _get_remote_file_list_without_sizes(
+                _connection(), self._APOSTROPHE_FOLDER, exclude_patterns=[]
+            )
+
+        remote_cmd = _remote_shell_command_from_run(run)
+        assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
+        assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
+
+    def test_get_remote_directory_list_quotes_path_with_single_quote(self):
+        with patch("subprocess.run", return_value=_completed("")) as run:
+            get_remote_directory_list(
+                _connection(), self._APOSTROPHE_FOLDER, exclude_patterns=[]
+            )
+
+        remote_cmd = _remote_shell_command_from_run(run)
+        assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
+        assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
 
 
 class TestGetRemoteFileList:

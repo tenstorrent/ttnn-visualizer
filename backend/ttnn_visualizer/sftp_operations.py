@@ -427,8 +427,9 @@ def get_remote_file_list(
     # POSIX paths, so paths containing tabs/newlines round-trip safely; the
     # first '\t' in each record is the unambiguous separator between the
     # decimal size and the path. Falls back below if -printf is unsupported.
+    quoted_folder = shlex.quote(remote_folder)
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find '{remote_folder}' -type f -printf '%s\\t%p\\0'",
+        f"find {quoted_folder} -type f -printf '%s\\t%p\\0'",
     ]
 
     try:
@@ -492,8 +493,9 @@ def _get_remote_file_list_without_sizes(
     exclude_patterns: List[str],
 ) -> List[tuple[str, int]]:
     """Fallback when GNU find -printf is unavailable. Sizes default to 0."""
+    quoted_folder = shlex.quote(remote_folder)
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find '{remote_folder}' -type f",
+        f"find {quoted_folder} -type f",
     ]
     try:
         result = subprocess.run(
@@ -527,8 +529,9 @@ def get_remote_directory_list(
     exclude_patterns = exclude_patterns or []
 
     # Build SSH command to find all directories recursively (never prompts for password)
+    quoted_folder = shlex.quote(remote_folder)
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find '{remote_folder}' -type d",
+        f"find {quoted_folder} -type d",
     ]
 
     try:
