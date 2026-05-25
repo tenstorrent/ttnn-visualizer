@@ -25,6 +25,7 @@ from ttnn_visualizer.sftp_operations import (
     get_remote_file_list,
     sync_files_and_directories,
 )
+from ttnn_visualizer.sockets import FileStatus
 
 
 def _connection() -> RemoteConnection:
@@ -282,6 +283,78 @@ class TestSyncFilesAndDirectoriesEmptyListing:
                 tmp_path,
                 exclude_patterns=[],
             )
+
+
+class TestSyncFilesAndDirectoriesPartialFailure:
+    """Regression: partial download must not emit FINISHED or stamp .last-synced."""
+
+    def test_raises_and_emits_failed_when_any_download_fails(self, app, tmp_path):
+        files = [("/remote/reports/a.txt", 10), ("/remote/reports/b.txt", 20)]
+
+        def download_side_effect(_conn, remote_file, _local_file):
+            if remote_file.endswith("b.txt"):
+                raise RuntimeError("SFTP transient failure")
+
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_file_list",
+                return_value=files,
+            ),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_directory_list",
+                return_value=["/remote/reports"],
+            ),
+            patch(
+                "ttnn_visualizer.sftp_operations.download_single_file_sftp",
+                side_effect=download_side_effect,
+            ),
+            patch("ttnn_visualizer.sftp_operations.update_last_synced") as last_synced,
+            patch("ttnn_visualizer.sftp_operations.emit_file_status") as emit_status,
+        ):
+            with pytest.raises(RemoteConnectionException) as excinfo:
+                sync_files_and_directories(
+                    _connection(),
+                    "/remote/reports",
+                    tmp_path,
+                    exclude_patterns=[],
+                )
+
+        assert "1 of 2" in excinfo.value.message
+        assert excinfo.value.http_status == HTTPStatus.UNPROCESSABLE_ENTITY
+        last_synced.assert_not_called()
+        terminal = emit_status.call_args_list[-1][0][0]
+        assert terminal.status == FileStatus.FAILED
+        assert terminal.finished_files == 1
+        assert terminal.number_of_files == 2
+
+    def test_all_files_succeed_stamps_last_synced(self, app, tmp_path):
+        files = [("/remote/reports/a.txt", 10)]
+
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_file_list",
+                return_value=files,
+            ),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_directory_list",
+                return_value=["/remote/reports"],
+            ),
+            patch("ttnn_visualizer.sftp_operations.download_single_file_sftp"),
+            patch("ttnn_visualizer.sftp_operations.update_last_synced") as last_synced,
+            patch("ttnn_visualizer.sftp_operations.emit_file_status") as emit_status,
+        ):
+            sync_files_and_directories(
+                _connection(),
+                "/remote/reports",
+                tmp_path,
+                exclude_patterns=[],
+            )
+
+        last_synced.assert_called_once_with(tmp_path)
+        terminal = emit_status.call_args_list[-1][0][0]
+        assert terminal.status == FileStatus.FINISHED
 
 
 class TestGetRemoteFileListWithoutSizes:

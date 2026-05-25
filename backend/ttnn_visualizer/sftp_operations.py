@@ -317,6 +317,7 @@ def sync_files_and_directories(
     total_files = len(all_files)
     total_bytes = sum(size for _, size in all_files)
     finished_files = 0
+    failed_count = 0
     bytes_transferred = 0
 
     logger.info(f"Starting download of {total_files} files...")
@@ -387,13 +388,44 @@ def sync_files_and_directories(
             continue
         except Exception as e:
             logger.error(f"Failed to download {remote_file}: {e}")
-            # Continue with other files rather than failing completely
+            failed_count += 1
+            # Best-effort: try remaining files, but do not report success if any fail.
             continue
 
-    # Create a .last-synced file in directory
+    sync_incomplete = total_files > 0 and finished_files < total_files
+    if sync_incomplete:
+        logger.error(
+            "SFTP sync incomplete: downloaded %s/%s files (%s failed).",
+            finished_files,
+            total_files,
+            failed_count,
+        )
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(
+                FileProgress(
+                    current_file_name="",
+                    number_of_files=total_files,
+                    percent_of_current=0,
+                    finished_files=finished_files,
+                    bytes_transferred=bytes_transferred,
+                    bytes_total=total_bytes,
+                    current_file_size=0,
+                    status=FileStatus.FAILED,
+                ),
+                sid,
+            )
+        raise RemoteConnectionException(
+            message=(
+                f"Sync incomplete: downloaded {finished_files} of {total_files} "
+                f"file(s) ({failed_count} failed). Check logs for per-file errors."
+            ),
+            status=ConnectionTestStates.FAILED,
+            http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
+
+    # Only stamp success after every queued file downloaded.
     update_last_synced(destination_dir)
 
-    # Emit final status
     final_progress = FileProgress(
         current_file_name="",
         number_of_files=total_files,
