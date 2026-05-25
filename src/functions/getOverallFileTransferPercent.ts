@@ -9,7 +9,10 @@ export function getOverallFileTransferPercent(progress: FileProgress): number {
     const { numberOfFiles, finishedFiles, percentOfCurrent, status } = progress;
 
     if (numberOfFiles > 0 && (status === FileStatus.DOWNLOADING || status === FileStatus.STARTED)) {
-        return Math.min(100, Math.max(0, (finishedFiles / numberOfFiles) * 100));
+        // Integer math + round to avoid float artifacts like 30.000000000000004
+        // leaking into ProgressBar / formatPercentage from divisions such as
+        // 1/3 or 2/7.
+        return Math.min(100, Math.max(0, Math.round((finishedFiles * 100) / numberOfFiles)));
     }
 
     return Math.min(100, Math.max(0, percentOfCurrent));

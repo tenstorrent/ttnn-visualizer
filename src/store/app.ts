@@ -23,13 +23,18 @@ export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
 export const listStatesAtom = atom<ListStates | null>(null);
 export const selectedBufferColourAtom = atom<string | null>(null);
-export const fileTransferProgressAtom = atom<FileProgress>({
-    currentFileName: '',
-    numberOfFiles: 0,
-    percentOfCurrent: 0,
-    finishedFiles: 0,
-    status: FileStatus.INACTIVE,
-}); // This atom stores the file transfer progress data in localStorage (or sessionStorage)
+/** Fresh inactive progress snapshot. Always call this for resets — do not reuse a shared object or spread `previous`, or stale `numberOfFiles` / byte fields can linger. */
+export function getInactiveFileTransferProgress(): FileProgress {
+    return {
+        currentFileName: '',
+        numberOfFiles: 0,
+        percentOfCurrent: 0,
+        finishedFiles: 0,
+        status: FileStatus.INACTIVE,
+    };
+}
+
+export const fileTransferProgressAtom = atom<FileProgress>(getInactiveFileTransferProgress());
 export const showDeallocationReportAtom = atom(false);
 export const showHexAtom = atomWithStorage('showHex', false); // Used in Buffers and Operation Details
 export const showMemoryRegionsAtom = atomWithStorage('showMemoryRegions', true); // Used in Buffers and Operation Details

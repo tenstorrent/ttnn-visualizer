@@ -73,9 +73,31 @@ debounce_timer = None
 debounce_delay = 0.5  # Delay in seconds (adjust as needed)
 last_emit_time = 0
 
+# Single lock guards every read/write of `debounce_timer` and
+# `last_emit_time`, plus the body of the deferred `emit_now`. Without it,
+# a worker calling `emit_file_status(FINISHED, ...)` can cancel the timer
+# *after* `Timer.run()` has already begun executing the queued callback,
+# so the client would see FINISHED followed by a stale DOWNLOADING.
+# Holding the lock in both the cancel/flush path and inside the timer
+# callback collapses that window: the timer callback either runs to
+# completion before the terminal flush, or sees that `debounce_timer` has
+# been replaced/cleared and bails out.
+_emit_lock = threading.Lock()
+
+# Terminal statuses bypass debouncing: a delayed FINISHED/FAILED can land
+# *after* the HTTP response and the client-side reset, briefly reopening the
+# overlay or leaving the atom non-inactive until the next user action.
+_TERMINAL_STATUSES = frozenset({FileStatus.FINISHED, FileStatus.FAILED})
+
 
 def emit_file_status(progress: FileProgress, instance_id=None):
-    """Debounced emit for file status updates using a debounce timer."""
+    """Debounced emit for file status updates.
+
+    Intermediate progress (STARTED/DOWNLOADING) is debounced to avoid
+    flooding the socket on fast multi-file syncs. Terminal updates
+    (FINISHED/FAILED) flush immediately and cancel any pending debounce so
+    the client sees the final state before its own post-request reset.
+    """
     global debounce_timer, last_emit_time
 
     def emit_now():
@@ -89,17 +111,49 @@ def emit_file_status(progress: FileProgress, instance_id=None):
         except NameError:
             pass  # Can silently pass since we know the NameError is from sockets being disabled
 
-    # Cancel any existing debounce timer if it exists and is still active
-    if debounce_timer and isinstance(debounce_timer, threading.Timer):
-        debounce_timer.cancel()
+    # Holder lets the deferred callback identify *its own* timer instance
+    # without a forward reference. If the callback enters the lock and
+    # finds `debounce_timer` no longer matches, a newer caller has
+    # already superseded it and the queued payload is stale.
+    scheduled: list[threading.Timer | None] = [None]
 
-    # Check if the last emit was longer than debounce_delay
-    if time.time() - last_emit_time > debounce_delay:
-        emit_now()
-    else:
-        # Set a new debounce timer
-        debounce_timer = threading.Timer(debounce_delay, emit_now)
-        debounce_timer.start()
+    def deferred_emit():
+        with _emit_lock:
+            if debounce_timer is not scheduled[0]:
+                return
+            _clear_timer_locked()
+            emit_now()
+
+    with _emit_lock:
+        # Cancel any existing debounce timer if it exists and is still
+        # active. We do this for *all* emits — the pending payload is now
+        # stale relative to either the new intermediate update or the
+        # incoming terminal one. `Timer.cancel()` only prevents a not-yet-
+        # started callback; the identity check inside `deferred_emit`
+        # handles the case where `run()` already entered the callback
+        # before we acquired the lock.
+        _clear_timer_locked()
+
+        if progress.status in _TERMINAL_STATUSES:
+            emit_now()
+            return
+
+        # Check if the last emit was longer than debounce_delay
+        if time.time() - last_emit_time > debounce_delay:
+            emit_now()
+        else:
+            new_timer = threading.Timer(debounce_delay, deferred_emit)
+            scheduled[0] = new_timer
+            debounce_timer = new_timer
+            new_timer.start()
+
+
+def _clear_timer_locked():
+    """Cancel and forget any pending debounce timer. Caller must hold `_emit_lock`."""
+    global debounce_timer
+    if debounce_timer is not None and isinstance(debounce_timer, threading.Timer):
+        debounce_timer.cancel()
+    debounce_timer = None
 
 
 def emit_report_generated(report_generated: ReportGenerated):

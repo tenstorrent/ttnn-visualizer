@@ -12,13 +12,16 @@ need network access or a real SSH server.
 """
 
 import subprocess
+from http import HTTPStatus
 from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
     _get_remote_file_list_without_sizes,
     get_remote_file_list,
+    sync_files_and_directories,
 )
 
 
@@ -106,6 +109,39 @@ class TestGetRemoteFileList:
             result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
         assert result == [("/remote/a.txt", 0), ("/remote/b.txt", 0)]
 
+    def test_falls_back_for_busybox_find(self):
+        # BusyBox find emits a slightly different message; still -printf.
+        primary_error = _called_process_error(
+            returncode=1, stderr="find: unrecognized: -printf"
+        )
+        fallback_output = _completed("/remote/a.txt\n")
+        with patch("subprocess.run", side_effect=[primary_error, fallback_output]):
+            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+        assert result == [("/remote/a.txt", 0)]
+
+    def test_permission_denied_does_not_fall_back(self):
+        # Regression: only `-printf` unsupported should trigger the second
+        # SSH call. Permission/path errors must surface as an empty list so
+        # the real cause stays visible in the logs.
+        permission_error = _called_process_error(
+            returncode=1,
+            stderr="find: '/remote/private': Permission denied",
+        )
+        with patch("subprocess.run", side_effect=[permission_error]) as run:
+            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+        assert result == []
+        assert run.call_count == 1
+
+    def test_missing_path_does_not_fall_back(self):
+        missing_error = _called_process_error(
+            returncode=1,
+            stderr="find: '/remote/missing': No such file or directory",
+        )
+        with patch("subprocess.run", side_effect=[missing_error]) as run:
+            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+        assert result == []
+        assert run.call_count == 1
+
     def test_ssh_protocol_error_raises(self):
         # Exit 255 means SSH itself failed (auth, connection, etc.); we should
         # surface that rather than silently falling back.
@@ -123,6 +159,86 @@ class TestGetRemoteFileList:
         ):
             result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
         assert result == []
+
+
+class TestSyncFilesAndDirectoriesEmptyListing:
+    """Regression tests for the failed-listing guard.
+
+    `get_remote_directory_list` always returns at least the folder itself when
+    listing succeeds, so an empty dir list is an unambiguous failure signal
+    (permission denied, missing path, etc.). The sync must raise rather than
+    silently FINISH with zero files — that previously masked real errors.
+    """
+
+    def test_raises_when_directory_listing_is_empty(self, app, tmp_path):
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_file_list", return_value=[]
+            ),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_directory_list",
+                return_value=[],
+            ),
+        ):
+            with pytest.raises(RemoteConnectionException) as excinfo:
+                sync_files_and_directories(
+                    _connection(),
+                    "/remote/missing",
+                    tmp_path,
+                    exclude_patterns=[],
+                )
+
+        assert "/remote/missing" in excinfo.value.message
+        # The path is user-supplied input that we *could* reach but cannot
+        # read at the requested location — surface as 422, not 500, so
+        # alerting and toast presentation key off the right bucket.
+        assert excinfo.value.http_status == HTTPStatus.UNPROCESSABLE_ENTITY
+
+    def test_empty_directory_listing_does_not_attempt_download(self, app, tmp_path):
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_file_list", return_value=[]
+            ),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_directory_list",
+                return_value=[],
+            ),
+            patch(
+                "ttnn_visualizer.sftp_operations.download_single_file_sftp"
+            ) as download,
+        ):
+            with pytest.raises(RemoteConnectionException):
+                sync_files_and_directories(
+                    _connection(),
+                    "/remote/missing",
+                    tmp_path,
+                    exclude_patterns=[],
+                )
+
+        assert download.call_count == 0
+
+    def test_successful_listing_with_zero_files_is_not_an_error(self, app, tmp_path):
+        # Real empty folder: find returned the folder itself but no files.
+        # That's legitimate and should complete without raising.
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_file_list", return_value=[]
+            ),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_directory_list",
+                return_value=["/remote/empty"],
+            ),
+            patch("ttnn_visualizer.sftp_operations.download_single_file_sftp"),
+        ):
+            sync_files_and_directories(
+                _connection(),
+                "/remote/empty",
+                tmp_path,
+                exclude_patterns=[],
+            )
 
 
 class TestGetRemoteFileListWithoutSizes:

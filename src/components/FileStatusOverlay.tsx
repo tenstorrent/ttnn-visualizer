@@ -27,7 +27,7 @@ const formatElapsed = (totalSeconds: number): string => {
 };
 
 const UPLOAD_META = {
-    heading: 'Uploading files',
+    heading: 'Uploading report',
     icon: IconNames.CLOUD_UPLOAD,
 } as const;
 const SYNC_META = {
@@ -41,12 +41,11 @@ const FileStatusOverlay = () => {
     const [progress] = useAtom(fileTransferProgressAtom);
     // Total elapsed time for the whole transfer (not per-file). The interval
     // only runs while a transfer is active, so the mounted-but-idle overlay
-    // does no per-second work. All time reads happen inside the interval
-    // callback so the render body stays pure.
-    const [timer, setTimer] = useState<{ startedAt: number | null; now: number }>({
-        startedAt: null,
-        now: 0,
-    });
+    // does no per-second work. `startedAt` is stamped on the inactive→active
+    // edge (render-time adjustment) so sub-second transfers are not under-
+    // counted by up to one interval tick.
+    const [startedAt, setStartedAt] = useState<number | null>(null);
+    const [now, setNow] = useState(0);
     const { currentFileName, finishedFiles, numberOfFiles, status, bytesTransferred, bytesTotal, currentFileSize } =
         progress;
     const overallPercent = getOverallFileTransferPercent(progress);
@@ -60,26 +59,29 @@ const FileStatusOverlay = () => {
     // reports per-file completion (finishedFiles stays 0). Hide the `0/N`
     // prefix in that case to avoid showing misleading progress.
     const showFinishedCount = showFileCount && !isUpload;
-    const elapsedSeconds = timer.startedAt === null ? 0 : Math.max(0, Math.floor((timer.now - timer.startedAt) / 1000));
+    const elapsedSeconds = startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000));
 
     useEffect(() => {
         if (!isActive) {
             return undefined;
         }
 
+        // Stamp before the first interval tick so elapsed time is accurate for
+        // transfers shorter than ELAPSED_REFRESH_MS (Copilot PR feedback).
+        const stamp = Date.now();
+        /* eslint-disable react-hooks/set-state-in-effect -- synchronous init on activation; interval only bumps `now` */
+        setStartedAt(stamp);
+        setNow(stamp);
+        /* eslint-enable react-hooks/set-state-in-effect */
+
         const intervalId = window.setInterval(() => {
-            setTimer((prev) => {
-                const tickNow = Date.now();
-                if (prev.startedAt === null) {
-                    return { startedAt: tickNow, now: tickNow };
-                }
-                return { ...prev, now: tickNow };
-            });
+            setNow(Date.now());
         }, ELAPSED_REFRESH_MS);
 
         return () => {
             window.clearInterval(intervalId);
-            setTimer((prev) => (prev.startedAt === null ? prev : { startedAt: null, now: 0 }));
+            setStartedAt(null);
+            setNow(0);
         };
     }, [isActive]);
 
@@ -114,7 +116,9 @@ const FileStatusOverlay = () => {
                 )}
                 <p>
                     {formatPercentage(overallPercent, 0)} complete
-                    {elapsedSeconds > 0 && ` \u2014 ${formatElapsed(elapsedSeconds)}`}
+                    {/* Show elapsed from the moment the transfer becomes active
+                        so sub-second transfers don't appear time-less. */}
+                    {startedAt !== null && ` \u2014 ${formatElapsed(elapsedSeconds)}`}
                 </p>
             </div>
 

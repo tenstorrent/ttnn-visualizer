@@ -131,6 +131,12 @@ def remote_exception_handler(func):
             )
         except RemoteFileReadException:
             raise
+        except RemoteConnectionException:
+            # Already a domain-shaped error with its own http_status / detail;
+            # rewrapping it via the catch-all below would silently drop any
+            # custom http_status_code (e.g. 422 for "path unreadable") and
+            # downgrade it to the default 500.
+            raise
         except Exception as err:
             # Catch any other unhandled exceptions
             current_app.logger.exception(

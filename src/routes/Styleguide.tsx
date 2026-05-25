@@ -29,7 +29,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
-import { fileTransferProgressAtom } from '../store/app';
+import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
@@ -60,14 +60,6 @@ const UPLOAD_DEMO_PROGRESS = {
     bytesTotal: 1_024_000,
 };
 
-const FILE_TRANSFER_INACTIVE = {
-    currentFileName: '',
-    numberOfFiles: 0,
-    percentOfCurrent: 0,
-    finishedFiles: 0,
-    status: FileStatus.INACTIVE,
-};
-
 const TIME_REMAINING_INTERVAL = 100;
 
 const LATEST_APP_VERSION = '0.80.0';
@@ -90,7 +82,7 @@ export default function Styleguide() {
         }, TIME_REMAINING_INTERVAL);
 
         setTimeout(() => {
-            setUpdateFileTransferProgress(FILE_TRANSFER_INACTIVE);
+            setUpdateFileTransferProgress(getInactiveFileTransferProgress());
             clearInterval(calculateRemainingTime);
             setTimeRemaining(autoCloseTime);
         }, autoCloseTime);

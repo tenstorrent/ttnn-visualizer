@@ -5,7 +5,7 @@
 import { getDefaultStore } from 'jotai';
 import { AxiosProgressEvent } from 'axios';
 import axiosInstance from '../libs/axiosInstance';
-import { fileTransferProgressAtom } from '../store/app';
+import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import Endpoints from '../definitions/Endpoints';
 
@@ -112,14 +112,8 @@ const useLocalConnection = () => {
         });
     };
 
-    const resetTransferProgress = (numberOfFiles: number) => {
-        getDefaultStore().set(fileTransferProgressAtom, {
-            percentOfCurrent: 0,
-            currentFileName: '',
-            finishedFiles: 0,
-            numberOfFiles,
-            status: FileStatus.INACTIVE,
-        });
+    const resetTransferProgress = () => {
+        getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
     };
 
     const uploadLocalFolder = async (files: FileList) => {
@@ -142,7 +136,7 @@ const useLocalConnection = () => {
                 onUploadProgress: (event) => handleUploadProgress(event, files.length),
             });
         } finally {
-            resetTransferProgress(files.length);
+            resetTransferProgress();
         }
     };
 
@@ -166,7 +160,7 @@ const useLocalConnection = () => {
                 onUploadProgress: (event) => handleUploadProgress(event, files.length),
             });
         } finally {
-            resetTransferProgress(files.length);
+            resetTransferProgress();
         }
     };
 
@@ -185,7 +179,7 @@ const useLocalConnection = () => {
                 onUploadProgress: (event) => handleUploadProgress(event, files.length),
             });
         } finally {
-            resetTransferProgress(files.length);
+            resetTransferProgress();
         }
     };
 

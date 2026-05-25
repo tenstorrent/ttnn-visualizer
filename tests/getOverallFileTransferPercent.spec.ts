@@ -53,4 +53,31 @@ describe('getOverallFileTransferPercent', () => {
     it('returns zero when no files and inactive', () => {
         expect(getOverallFileTransferPercent(baseProgress())).toBe(0);
     });
+
+    it('rounds non-exact divisions to an integer percent', () => {
+        // 1/3 = 33.333…; raw float would surface artifacts like
+        // 33.33333333333333 and leak into ProgressBar / formatPercentage.
+        const progress: FileProgress = {
+            ...baseProgress(),
+            numberOfFiles: 3,
+            finishedFiles: 1,
+            status: FileStatus.DOWNLOADING,
+        };
+
+        const result = getOverallFileTransferPercent(progress);
+
+        expect(Number.isInteger(result)).toBe(true);
+        expect(result).toBe(33);
+    });
+
+    it('clamps to 100 if finishedFiles overshoots numberOfFiles', () => {
+        const progress: FileProgress = {
+            ...baseProgress(),
+            numberOfFiles: 2,
+            finishedFiles: 5,
+            status: FileStatus.DOWNLOADING,
+        };
+
+        expect(getOverallFileTransferPercent(progress)).toBe(100);
+    });
 });

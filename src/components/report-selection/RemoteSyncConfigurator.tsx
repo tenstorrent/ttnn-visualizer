@@ -19,6 +19,7 @@ import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     fileTransferProgressAtom,
+    getInactiveFileTransferProgress,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
 } from '../../store/app';
@@ -27,19 +28,11 @@ import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
-import { ActiveReport, FileStatus } from '../../model/APIData';
+import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
 
-const INACTIVE_FILE_TRANSFER_PROGRESS = {
-    currentFileName: '',
-    numberOfFiles: 0,
-    percentOfCurrent: 0,
-    finishedFiles: 0,
-    status: FileStatus.INACTIVE,
-};
-
 const resetFileTransferProgress = () => {
-    getDefaultStore().set(fileTransferProgressAtom, INACTIVE_FILE_TRANSFER_PROGRESS);
+    getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
 };
 
 const RemoteSyncConfigurator = () => {
