@@ -29,7 +29,6 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
-import FileStatusOverlay, { TransferType } from '../components/FileStatusOverlay';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
@@ -40,15 +39,28 @@ const FORM_GROUP = {
     subLabel: 'Sub label here',
 };
 
-const FILE_DOWNLOAD_IN_PROGRESS = {
+const SYNC_DEMO_PROGRESS = {
     currentFileName: 'example_test_file_1.txt',
     numberOfFiles: 3,
     percentOfCurrent: 0,
     finishedFiles: 1,
     status: FileStatus.DOWNLOADING,
+    bytesTransferred: 128_000,
+    bytesTotal: 512_000,
+    currentFileSize: 128_000,
 };
 
-const FILE_DOWNLOAD_INACTIVE = {
+const UPLOAD_DEMO_PROGRESS = {
+    currentFileName: '',
+    numberOfFiles: 5,
+    percentOfCurrent: 0,
+    finishedFiles: 0,
+    status: FileStatus.UPLOADING,
+    bytesTransferred: 64_000,
+    bytesTotal: 1_024_000,
+};
+
+const FILE_TRANSFER_INACTIVE = {
     currentFileName: '',
     numberOfFiles: 0,
     percentOfCurrent: 0,
@@ -65,8 +77,8 @@ export default function Styleguide() {
     const [autoCloseTime, setAutoCloseTime] = useState(1000);
     const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
 
-    const handleUpdateFileTransferProgress = () => {
-        setUpdateFileTransferProgress(FILE_DOWNLOAD_IN_PROGRESS);
+    const runFileTransferDemo = (initial: typeof SYNC_DEMO_PROGRESS | typeof UPLOAD_DEMO_PROGRESS) => {
+        setUpdateFileTransferProgress(initial);
         setTimeRemaining(autoCloseTime);
 
         const calculateRemainingTime = setInterval(() => {
@@ -78,7 +90,7 @@ export default function Styleguide() {
         }, TIME_REMAINING_INTERVAL);
 
         setTimeout(() => {
-            setUpdateFileTransferProgress(FILE_DOWNLOAD_INACTIVE);
+            setUpdateFileTransferProgress(FILE_TRANSFER_INACTIVE);
             clearInterval(calculateRemainingTime);
             setTimeRemaining(autoCloseTime);
         }, autoCloseTime);
@@ -605,23 +617,27 @@ export default function Styleguide() {
                         onChange={(e) => setAutoCloseTime(Number(e.target.value))}
                     />
 
-                    <Button
-                        onClick={handleUpdateFileTransferProgress}
-                        intent={Intent.PRIMARY}
-                        disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
-                    >
-                        Open file status overlay
-                    </Button>
+                    <ButtonGroup>
+                        <Button
+                            onClick={() => runFileTransferDemo(SYNC_DEMO_PROGRESS)}
+                            intent={Intent.PRIMARY}
+                            disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                        >
+                            Open remote sync overlay
+                        </Button>
+                        <Button
+                            onClick={() => runFileTransferDemo(UPLOAD_DEMO_PROGRESS)}
+                            intent={Intent.PRIMARY}
+                            disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                        >
+                            Open local upload overlay
+                        </Button>
+                    </ButtonGroup>
                 </FormGroup>
 
                 {updateFileTransferProgress.status !== FileStatus.INACTIVE && (
                     <p className='countdown'>{timeRemaining}ms</p>
                 )}
-                <FileStatusOverlay
-                    heading='File Transfer Progress'
-                    icon={IconNames.FOLDER_SHARED}
-                    transferType={TransferType.Sync}
-                />
             </div>
 
             <div className='container flex flex-column'>
