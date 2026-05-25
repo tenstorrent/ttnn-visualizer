@@ -24,7 +24,11 @@ const formatElapsed = (totalSeconds: number): string => {
     return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
 };
 
-const FileStatusOverlay = () => {
+interface FileStatusOverlayProps {
+    heading: string;
+}
+
+const FileStatusOverlay = ({ heading }: FileStatusOverlayProps) => {
     const [progress] = useAtom(fileTransferProgressAtom);
     // Total elapsed time for the whole transfer (not per-file). The interval
     // only runs while the overlay is active, so an idle overlay mounted in a
@@ -39,7 +43,6 @@ const FileStatusOverlay = () => {
     const overallPercent = getOverallFileTransferPercent(progress);
     const isActive = isActiveTransferStatus(status);
     const isUpload = status === FileStatus.UPLOADING;
-    const isRemoteSync = isActive && !isUpload && numberOfFiles > 0;
     const showByteTotals = bytesTotal !== undefined && bytesTotal > 0;
     const showCurrentFileSize = currentFileSize !== undefined && currentFileSize > 0;
     const showFileCount = numberOfFiles > 0;
@@ -78,10 +81,10 @@ const FileStatusOverlay = () => {
             canOutsideClickClose={false}
         >
             <div className='overlay'>
-                <h2 className='heading'>{isRemoteSync ? 'Remote Sync Progress' : 'File Transfer Progress'}</h2>
+                <h2 className='heading'>{heading}</h2>
                 {showFileCount && (
                     <p>
-                        {showFinishedCount ? `${finishedFiles}/${numberOfFiles}` : `${numberOfFiles}`}` files{' '}
+                        {showFinishedCount ? `${finishedFiles}/${numberOfFiles}` : `${numberOfFiles} files`}
                         {showByteTotals &&
                             `(${formatMemorySize(bytesTransferred ?? 0, 1)} / ${formatMemorySize(bytesTotal, 1)})`}
                     </p>

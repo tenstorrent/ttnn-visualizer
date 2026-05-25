@@ -617,7 +617,7 @@ export default function Styleguide() {
                 {updateFileTransferProgress.status !== FileStatus.INACTIVE && (
                     <p className='countdown'>{timeRemaining}ms</p>
                 )}
-                <FileStatusOverlay />
+                <FileStatusOverlay heading='File Transfer Progress' />
             </div>
 
             <div className='container flex flex-column'>

@@ -306,7 +306,7 @@ const LocalFolderOptions = () => {
                             }}
                         />
 
-                        <FileStatusOverlay />
+                        <FileStatusOverlay heading='File Transfer Progress' />
 
                         {profilerFolder && !isUploadingReport && (
                             <div

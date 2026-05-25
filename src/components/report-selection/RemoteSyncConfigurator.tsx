@@ -328,7 +328,7 @@ const RemoteSyncConfigurator = () => {
 
     return (
         <>
-            <FileStatusOverlay />
+            <FileStatusOverlay heading='Remote Sync Progress' />
             <FormGroup
                 className='form-group'
                 label={<h3 className='label'>Add remote sync server</h3>}
