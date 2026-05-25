@@ -31,11 +31,8 @@ def with_instance(func):
         instance_id = request.args.get("instanceId")
 
         if not instance_id:
-            # 400 ("Bad Request") is the semantically correct response when a
-            # required query parameter is missing — the resource isn't unknown,
-            # the client simply failed to identify which instance it meant.
             current_app.logger.error("No instanceId present on request, returning 400")
-            abort(400, description="Missing required query parameter: instanceId")
+            abort(400, description="Missing instance id")
 
         instance_query_data = get_or_create_instance(instance_id=instance_id)
 
