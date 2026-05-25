@@ -44,8 +44,10 @@ describe('isActiveTransferStatus', () => {
         },
     );
 
-    // Regression guard: FAILED was previously in the active set; keep it out
-    // until a real backend emit path exists.
+    // Regression guard: the backend now emits FAILED on partial sync and
+    // empty-listing failures, so the overlay relies on FAILED being
+    // *inactive* to close itself. Adding it to the active set would leave
+    // the overlay stuck open on every sync failure.
     it('does not treat FAILED as active', () => {
         expect(isActiveTransferStatus(FileStatus.FAILED)).toBe(false);
     });

@@ -17,7 +17,11 @@ from http import HTTPStatus
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.exceptions import RemoteConnectionException
+from ttnn_visualizer.exceptions import (
+    AuthenticationException,
+    NoValidConnectionsError,
+    RemoteConnectionException,
+)
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
     _get_remote_file_list_without_sizes,
@@ -186,14 +190,26 @@ class TestGetRemoteFileList:
         assert result == []
         assert run.call_count == 1
 
-    def test_ssh_protocol_error_raises(self):
-        # Exit 255 means SSH itself failed (auth, connection, etc.); we should
-        # surface that rather than silently falling back.
-        ssh_error = _called_process_error(
+    def test_ssh_protocol_auth_error_raises_authentication_exception(self):
+        # Exit 255 + auth-flavoured stderr → AuthenticationException, never a
+        # silent empty-list fallback. Pinning the concrete type matters so a
+        # regression that swallows or rewraps the error fails this test.
+        auth_error = _called_process_error(
             returncode=255, stderr="Permission denied (publickey)."
         )
-        with patch("subprocess.run", side_effect=ssh_error):
-            with pytest.raises(Exception):
+        with patch("subprocess.run", side_effect=auth_error):
+            with pytest.raises(AuthenticationException):
+                get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+
+    def test_ssh_protocol_connection_error_raises_no_valid_connections(self):
+        # Exit 255 + connection-flavoured stderr → NoValidConnectionsError.
+        # Covers the second branch of handle_ssh_subprocess_error.
+        conn_error = _called_process_error(
+            returncode=255,
+            stderr="ssh: connect to host example.test port 22: Connection refused",
+        )
+        with patch("subprocess.run", side_effect=conn_error):
+            with pytest.raises(NoValidConnectionsError):
                 get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
 
     def test_timeout_returns_empty_list(self):
@@ -265,7 +281,10 @@ class TestSyncFilesAndDirectoriesEmptyListing:
 
     def test_successful_listing_with_zero_files_is_not_an_error(self, app, tmp_path):
         # Real empty folder: find returned the folder itself but no files.
-        # That's legitimate and should complete without raising.
+        # That's legitimate and should complete without raising. The sync
+        # must also skip transfer-progress emits entirely — STARTED is an
+        # *active* status on the client, so emitting it for an empty folder
+        # would briefly open the overlay only to close it again.
         with (
             app.app_context(),
             patch(
@@ -276,6 +295,8 @@ class TestSyncFilesAndDirectoriesEmptyListing:
                 return_value=["/remote/empty"],
             ),
             patch("ttnn_visualizer.sftp_operations.download_single_file_sftp"),
+            patch("ttnn_visualizer.sftp_operations.update_last_synced") as last_synced,
+            patch("ttnn_visualizer.sftp_operations.emit_file_status") as emit_status,
         ):
             sync_files_and_directories(
                 _connection(),
@@ -283,6 +304,13 @@ class TestSyncFilesAndDirectoriesEmptyListing:
                 tmp_path,
                 exclude_patterns=[],
             )
+
+        # An empty folder is still a *successful* sync, so we stamp .last-synced
+        # — that's the marker downstream consumers key off.
+        last_synced.assert_called_once_with(tmp_path)
+        emitted_statuses = [call.args[0].status for call in emit_status.call_args_list]
+        assert FileStatus.STARTED not in emitted_statuses
+        assert FileStatus.FINISHED not in emitted_statuses
 
 
 class TestSyncFilesAndDirectoriesPartialFailure:

@@ -12,7 +12,6 @@ own post-request reset (otherwise a 500ms-delayed FINISHED can land after
 the overlay has been reset and briefly reopen it).
 """
 
-import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -97,32 +96,37 @@ def test_finished_payload_carries_terminal_status(fake_socketio):
     assert kwargs.get("to") == "abc"
 
 
-def test_terminal_status_does_not_race_a_firing_timer(fake_socketio, monkeypatch):
-    """A FINISHED arriving as the queued timer is about to fire must
-    collapse to exactly one emit, not two.
+def test_terminal_status_does_not_race_a_firing_timer(fake_socketio):
+    """A queued timer callback that fires *after* a terminal FINISHED has
+    cancelled it must bail out, not emit a stale DOWNLOADING.
 
-    Without the identity check inside the deferred callback, `Timer.cancel()`
-    can lose the race when the timer thread has already entered `run()`,
-    producing FINISHED followed by a stale DOWNLOADING.
+    Deterministic reconstruction of the production race:
+      1. Queue a DOWNLOADING timer (captures its callback closure).
+      2. Send FINISHED — flushes immediately, clears `debounce_timer`.
+      3. Manually invoke the captured callback, simulating the case where
+         `Timer.run()` had already entered the callback before `cancel()`
+         won the race. The identity check inside `deferred_emit` must
+         observe `debounce_timer is not scheduled[0]` and return without
+         emitting.
+
+    No `time.sleep`, no real timer scheduling — flake-free on slow CI.
     """
-    # Shrink the debounce so the test stays fast but still exercises the
-    # race window (timer thread asleep, then woken near callback time).
-    monkeypatch.setattr(sockets, "debounce_delay", 0.05)
-
     emit_file_status(_progress(FileStatus.DOWNLOADING), instance_id="abc")  # flushes
     emit_file_status(_progress(FileStatus.DOWNLOADING), instance_id="abc")  # queued
     assert fake_socketio.emit.call_count == 1
     assert sockets.debounce_timer is not None
 
-    # Sleep into the window where the timer thread is likely to be either
-    # about to fire or already inside `run()` but blocked on the lock.
-    time.sleep(0.045)
+    queued_callback = sockets.debounce_timer.function
+
     emit_file_status(_progress(FileStatus.FINISHED), instance_id="abc")
-
-    # Give any racing timer thread a chance to (incorrectly) fire.
-    time.sleep(0.1)
-
     assert fake_socketio.emit.call_count == 2
+    assert sockets.debounce_timer is None
+
+    # Simulate the racing Timer thread invoking its callback after the
+    # terminal flush has already cleared `debounce_timer`.
+    queued_callback()
+
+    assert fake_socketio.emit.call_count == 2  # still 2 — bailed out
     statuses = [call.args[1]["status"] for call in fake_socketio.emit.mock_calls]
     assert statuses == [FileStatus.DOWNLOADING.value, FileStatus.FINISHED.value]
     assert sockets.debounce_timer is None

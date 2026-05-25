@@ -322,7 +322,13 @@ def sync_files_and_directories(
 
     logger.info(f"Starting download of {total_files} files...")
 
-    if current_app.config["USE_WEBSOCKETS"]:
+    # Skip all transfer-progress websocket emits when there's nothing to
+    # download — STARTED is an *active* status on the client, so emitting it
+    # for an empty folder would briefly open the overlay only to close it on
+    # FINISHED below.
+    should_emit_progress = current_app.config["USE_WEBSOCKETS"] and total_files > 0
+
+    if should_emit_progress:
         emit_file_status(
             FileProgress(
                 current_file_name="",
@@ -343,7 +349,7 @@ def sync_files_and_directories(
             relative_path = Path(remote_file).relative_to(remote_profiler_folder)
             local_file = destination_dir / relative_path
 
-            if current_app.config["USE_WEBSOCKETS"]:
+            if should_emit_progress:
                 emit_file_status(
                     FileProgress(
                         current_file_name=str(relative_path),
@@ -376,7 +382,7 @@ def sync_files_and_directories(
                 status=FileStatus.DOWNLOADING,
             )
 
-            if current_app.config["USE_WEBSOCKETS"]:
+            if should_emit_progress:
                 emit_file_status(progress, sid)
 
             if finished_files % 10 == 0:  # Log every 10 files
@@ -437,7 +443,7 @@ def sync_files_and_directories(
         status=FileStatus.FINISHED,
     )
 
-    if current_app.config["USE_WEBSOCKETS"]:
+    if should_emit_progress:
         emit_file_status(final_progress, sid)
 
     logger.info(
