@@ -22,7 +22,6 @@ import {
     performanceReportLocationAtom,
     profilerReportLocationAtom,
 } from '../../store/app';
-import FileStatusOverlay from '../FileStatusOverlay';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
@@ -328,7 +327,6 @@ const RemoteSyncConfigurator = () => {
 
     return (
         <>
-            <FileStatusOverlay heading='Remote Sync Progress' />
             <FormGroup
                 className='form-group'
                 label={<h3 className='label'>Add remote sync server</h3>}

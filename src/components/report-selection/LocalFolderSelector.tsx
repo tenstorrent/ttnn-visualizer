@@ -16,7 +16,6 @@ import {
     profilerReportLocationAtom,
 } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
@@ -305,8 +304,6 @@ const LocalFolderOptions = () => {
                                 'data-testid': TEST_IDS.LOCAL_PROFILER_UPLOAD,
                             }}
                         />
-
-                        <FileStatusOverlay heading='File Transfer Progress' />
 
                         {profilerFolder && !isUploadingReport && (
                             <div

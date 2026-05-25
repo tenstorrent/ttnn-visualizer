@@ -29,7 +29,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
-import FileStatusOverlay from '../components/FileStatusOverlay';
+import FileStatusOverlay, { TransferType } from '../components/FileStatusOverlay';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
@@ -617,7 +617,11 @@ export default function Styleguide() {
                 {updateFileTransferProgress.status !== FileStatus.INACTIVE && (
                     <p className='countdown'>{timeRemaining}ms</p>
                 )}
-                <FileStatusOverlay heading='File Transfer Progress' />
+                <FileStatusOverlay
+                    heading='File Transfer Progress'
+                    icon={IconNames.FOLDER_SHARED}
+                    transferType={TransferType.Sync}
+                />
             </div>
 
             <div className='container flex flex-column'>

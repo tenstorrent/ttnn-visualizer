@@ -4,6 +4,8 @@
 
 import { useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
+import { Icon } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import Overlay from './Overlay';
 import ProgressBar from './ProgressBar';
 import 'styles/components/FileStatusOverlay.scss';
@@ -24,16 +26,23 @@ const formatElapsed = (totalSeconds: number): string => {
     return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
 };
 
-interface FileStatusOverlayProps {
-    heading: string;
-}
+const UPLOAD_META = {
+    heading: 'Uploading files',
+    icon: IconNames.CLOUD_UPLOAD,
+} as const;
+const SYNC_META = {
+    heading: 'Syncing remote report',
+    icon: IconNames.CLOUD_DOWNLOAD,
+} as const;
 
-const FileStatusOverlay = ({ heading }: FileStatusOverlayProps) => {
+type DisplayMeta = typeof UPLOAD_META | typeof SYNC_META;
+
+const FileStatusOverlay = () => {
     const [progress] = useAtom(fileTransferProgressAtom);
     // Total elapsed time for the whole transfer (not per-file). The interval
-    // only runs while the overlay is active, so an idle overlay mounted in a
-    // parent page does no per-second work. All time reads happen inside the
-    // interval callback so the render body stays pure.
+    // only runs while a transfer is active, so the mounted-but-idle overlay
+    // does no per-second work. All time reads happen inside the interval
+    // callback so the render body stays pure.
     const [timer, setTimer] = useState<{ startedAt: number | null; now: number }>({
         startedAt: null,
         now: 0,
@@ -43,6 +52,7 @@ const FileStatusOverlay = ({ heading }: FileStatusOverlayProps) => {
     const overallPercent = getOverallFileTransferPercent(progress);
     const isActive = isActiveTransferStatus(status);
     const isUpload = status === FileStatus.UPLOADING;
+    const displayMeta: DisplayMeta = isUpload ? UPLOAD_META : SYNC_META;
     const showByteTotals = bytesTotal !== undefined && bytesTotal > 0;
     const showCurrentFileSize = currentFileSize !== undefined && currentFileSize > 0;
     const showFileCount = numberOfFiles > 0;
@@ -81,10 +91,16 @@ const FileStatusOverlay = ({ heading }: FileStatusOverlayProps) => {
             canOutsideClickClose={false}
         >
             <div className='overlay'>
-                <h2 className='heading'>{heading}</h2>
+                <h2 className='heading'>
+                    <Icon
+                        icon={displayMeta.icon}
+                        size={24}
+                    />
+                    {displayMeta.heading}
+                </h2>
                 {showFileCount && (
                     <p>
-                        {showFinishedCount ? `${finishedFiles}/${numberOfFiles}` : `${numberOfFiles} files`}
+                        {showFinishedCount ? `File ${finishedFiles}/${numberOfFiles} ` : `${numberOfFiles} files `}
                         {showByteTotals &&
                             `(${formatMemorySize(bytesTransferred ?? 0, 1)} / ${formatMemorySize(bytesTotal, 1)})`}
                     </p>
@@ -97,7 +113,7 @@ const FileStatusOverlay = ({ heading }: FileStatusOverlayProps) => {
                     </p>
                 )}
                 <p>
-                    {formatPercentage(overallPercent, 0)}
+                    {formatPercentage(overallPercent, 0)} complete
                     {elapsedSeconds > 0 && ` \u2014 ${formatElapsed(elapsedSeconds)}`}
                 </p>
             </div>
