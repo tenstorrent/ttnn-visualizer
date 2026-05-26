@@ -819,6 +819,12 @@ export const fetchTensors = async (bufferType?: BufferType): Promise<Tensor[]> =
         params: bufferType !== undefined ? { buffer_type: bufferType } : undefined,
     });
 
+    // Skip the operations fetch + enrichment loop when no tensor has a producer
+    // (e.g. an L1_Small-only fetch). fetchOperations is not cheap on large reports.
+    if (!tensorList.some((t) => t.producers.length > 0)) {
+        return tensorList;
+    }
+
     const operationsList = await fetchOperations();
 
     for (const tensor of tensorList) {
