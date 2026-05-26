@@ -23,3 +23,19 @@ def test_with_instance_returns_400_when_instance_id_missing(client):
     """
     response = client.get("/api/tensors")
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_report_bound_route_returns_404_when_profiler_not_loaded(client):
+    """An instance with no memory profiler report must not surface as 500.
+
+    `get_or_create_instance` accepts arbitrary client-chosen IDs; report-backed
+    routes should respond 404 when that tab has no profiler DB yet.
+    """
+    response = client.get(
+        "/api/operations",
+        query_string={"instanceId": "pytest-empty-instance"},
+    )
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.get_json() == {
+        "error": "No profiler report loaded for this instance"
+    }

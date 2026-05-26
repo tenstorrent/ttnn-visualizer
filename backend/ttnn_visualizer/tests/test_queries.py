@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+from ttnn_visualizer.exceptions import ProfilerReportNotLoadedException
 from ttnn_visualizer.models import DeviceOperation, TensorComparisonRecord
 from ttnn_visualizer.queries import DatabaseQueries, LocalQueryRunner
 
@@ -231,10 +232,10 @@ class TestDatabaseQueries(unittest.TestCase):
         mock_instance = Mock()
         mock_instance.profiler_path = None
         mock_instance.remote_connection = None
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(ProfilerReportNotLoadedException) as context:
             DatabaseQueries(instance=mock_instance)
         self.assertIn(
-            "Report path must be provided for local queries", str(context.exception)
+            "No profiler report loaded for this instance", str(context.exception)
         )
 
     def test_check_table_exists(self):

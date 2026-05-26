@@ -96,6 +96,12 @@ class DatabaseFileNotFoundException(Exception):
     pass
 
 
+class ProfilerReportNotLoadedException(Exception):
+    """Instance exists but has no memory profiler database path configured."""
+
+    pass
+
+
 class DataFormatError(Exception):
     pass
 

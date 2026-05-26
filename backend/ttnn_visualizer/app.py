@@ -27,6 +27,7 @@ from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
     InvalidReportPath,
+    ProfilerReportNotLoadedException,
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
@@ -172,8 +173,8 @@ def middleware(app: flask.Flask):
     """
 
     @app.errorhandler(DatabaseFileNotFoundException)
-    def handle_database_not_found_error(error):
-        # Return a JSON response with a 404 status code
+    @app.errorhandler(ProfilerReportNotLoadedException)
+    def handle_profiler_database_not_available(error):
         response = jsonify({"error": str(error)})
         response.status_code = 404
         return response

@@ -343,6 +343,16 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 
 **Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
+**Report-bound read errors.** Memory-profiler routes (`/api/operations`, `/api/tensors`, …) open the instance's `profiler_path` via `LocalQueryRunner` (`backend/ttnn_visualizer/queries.py`). Status codes for client mistakes vs missing data:
+
+| Condition | HTTP | Body `error` (typical) |
+|-----------|------|------------------------|
+| `instanceId` query param absent | **400** | `Missing instance id` (`@with_instance`) |
+| `instanceId` present, instance has no `profiler_path` (tab never loaded a report) | **404** | `No profiler report loaded for this instance` (`ProfilerReportNotLoadedException`) |
+| `profiler_path` set but `db.sqlite` missing on disk | **404** | `Database not found at path: …` (`DatabaseFileNotFoundException`) |
+
+Arbitrary `instanceId` strings are valid tab identifiers — the server creates the row on first request. A curl like `?instanceId=fake-instance-id` without a prior upload/sync therefore gets **404**, not **400**.
+
 ### Cross-cutting retries belong in the interceptor, not in individual hooks
 
 The operations endpoint occasionally returns a string instead of an array under heavy load. The response interceptor handles this with `MAX_RETRIES = 3` and exponential backoff (`src/libs/axiosInstance.ts`). Don't replicate retry logic inside a `queryFn` — extend the interceptor instead so every consumer of the endpoint benefits.

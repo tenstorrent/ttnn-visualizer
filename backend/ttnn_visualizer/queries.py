@@ -20,7 +20,10 @@ from typing import (
     get_origin,
 )
 
-from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
+from ttnn_visualizer.exceptions import (
+    DatabaseFileNotFoundException,
+    ProfilerReportNotLoadedException,
+)
 from ttnn_visualizer.models import (
     Buffer,
     BufferPage,
@@ -96,7 +99,9 @@ class LocalQueryRunner:
             self.connection = connection
         else:
             if not instance or not instance.profiler_path:
-                raise ValueError("Report path must be provided for local queries")
+                raise ProfilerReportNotLoadedException(
+                    "No profiler report loaded for this instance"
+                )
             db_path = str(instance.profiler_path)
             if not Path(db_path).exists():
                 raise DatabaseFileNotFoundException(
