@@ -23,7 +23,7 @@ const LEGEND_AXIS_MARKER_COLORS: Partial<Record<MarkerType, string>> = {
     [MarkerType.L1_START]: L1_START_MARKER_COLOR,
 };
 
-export const MemoryLegendElement: React.FC<{
+interface MemoryLegendElementProps {
     chunk: FragmentationEntry;
     memSize: number;
     selectedTensorAddress: number | null;
@@ -37,7 +37,9 @@ export const MemoryLegendElement: React.FC<{
     className?: string;
     numCores?: number;
     userL1ZoomRange?: [number, number];
-}> = ({
+}
+
+export const MemoryLegendElement = ({
     // no wrap eslint
     chunk,
     memSize,
@@ -51,7 +53,7 @@ export const MemoryLegendElement: React.FC<{
     className,
     numCores,
     userL1ZoomRange,
-}) => {
+}: MemoryLegendElementProps) => {
     const showHex = useAtomValue(showHexAtom);
     const selectedBufferColour = useAtomValue(selectedBufferColourAtom);
     const legendMarkerColor =

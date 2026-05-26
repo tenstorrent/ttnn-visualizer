@@ -5,7 +5,7 @@
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
-import { FC, useState } from 'react';
+import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
 import useRemoteConnection from '../../hooks/useRemote';
@@ -42,7 +42,7 @@ const DEFAULT_CONNECTION: RemoteConnection = {
     username: '',
 };
 
-const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
+const RemoteConnectionDialog = ({
     open,
     onSave,
     onClose,
@@ -50,7 +50,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     title = 'Add new remote connection',
     buttonLabel = 'Add connection',
     remoteConnection,
-}) => {
+}: RemoteConnectionDialogProps) => {
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(remoteConnection ?? DEFAULT_CONNECTION);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const { testConnection } = useRemoteConnection();

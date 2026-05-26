@@ -143,7 +143,31 @@ module.exports = defineConfig([
             'import/prefer-default-export': 'off',
             'max-classes-per-file': 'off',
             'no-plusplus': 'off',
-            'no-restricted-syntax': 'off',
+            'no-restricted-syntax': [
+                'error',
+                {
+                    selector: "TSTypeReference[typeName.name='FC']",
+                    message:
+                        'Type props directly: function Foo({…}: FooProps). Do not use FC. Declare children: ReactNode on FooProps if needed.',
+                },
+                {
+                    selector:
+                        "TSTypeReference[typeName.type='TSQualifiedName'][typeName.left.name='React'][typeName.right.name='FC']",
+                    message:
+                        'Type props directly: function Foo({…}: FooProps). Do not use React.FC. Declare children: ReactNode on FooProps if needed.',
+                },
+                {
+                    selector: "TSTypeReference[typeName.name='FunctionComponent']",
+                    message:
+                        'Type props directly: function Foo({…}: FooProps). Do not use FunctionComponent.',
+                },
+                {
+                    selector:
+                        "TSTypeReference[typeName.type='TSQualifiedName'][typeName.left.name='React'][typeName.right.name='FunctionComponent']",
+                    message:
+                        'Type props directly: function Foo({…}: FooProps). Do not use React.FunctionComponent.',
+                },
+            ],
             'no-shadow': 'off',
             'no-underscore-dangle': 'off',
             'no-unused-vars': 'off',
@@ -158,7 +182,13 @@ module.exports = defineConfig([
                 },
             ],
 
-            'react/function-component-definition': 0,
+            'react/function-component-definition': [
+                'error',
+                {
+                    namedComponents: ['function-declaration', 'arrow-function'],
+                    unnamedComponents: 'arrow-function',
+                },
+            ],
 
             'react/jsx-filename-extension': [
                 'warn',

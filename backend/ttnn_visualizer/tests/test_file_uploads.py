@@ -18,7 +18,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
 from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.file_uploads import (
     construct_dest_path,
     extract_npe_name,
@@ -91,8 +93,10 @@ def test_construct_dest_path_folder_branch_unchanged_for_subpaths(app, tmp_path)
     """Folder uploads legitimately carry sub-paths; hardening must not break them.
 
     `validate_files` / `os.utime` accounting rely on filenames like
-    `subdir/file.csv` reaching `dest_path`. Path-traversal hardening for the
-    folder branch is a broader follow-up tracked in PR_REVIEW_TRIAGE_2.md.
+    `subdir/file.csv` reaching `dest_path`. The folder branch's traversal
+    hardening is a *resolved-path containment* check (see the dedicated
+    `_rejects_*` tests below), which permits legitimate sub-paths and only
+    rejects candidates whose resolved path escapes the per-report folder.
     """
     with app.app_context():
         dest = construct_dest_path(
@@ -143,39 +147,69 @@ def test_construct_dest_path_folder_branch_safari_basename_only(app, tmp_path):
         assert dest.parent.parent == tmp_path
 
 
-def test_construct_dest_path_folder_branch_traversal_posture_pinned(app, tmp_path):
-    """Pin the documented posture: dedup may shorten an escape but never widens it.
+def test_construct_dest_path_folder_branch_rejects_escape_via_dotdot(app, tmp_path):
+    """Resolved-path containment: `../` after the leading folder must be rejected.
 
-    The folder-upload branch is intentionally permissive about sub-paths — it
-    has to be, because Chromium and Safari alike legitimately carry
-    `subdir/file.csv` patterns. A full path-traversal sweep across this
-    branch is the explicit follow-up tracked at `PR_REVIEW_TRIAGE_2.md §1.J`.
+    Folder uploads legitimately carry sub-paths in `file.filename`, so we
+    can't collapse to the basename the way the single-file branch does.
+    `construct_dest_path` instead resolves the candidate path and requires
+    it to stay inside the per-report directory; a `..` segment that lands
+    beside the report folder (the pre-fix "documented gap") is now an error.
+    """
+    with app.app_context():
+        with pytest.raises(DataFormatError):
+            construct_dest_path(
+                _faux_file("my-report/../escape"),
+                tmp_path,
+                folder_name="my-report",
+            )
 
-    Until that lands, the contract this test pins is:
 
-    * A `..` segment after the leading folder name CAN escape the per-report
-      directory (this is the known gap), but
-    * It MUST NOT escape `target_directory` itself (any future change that
-      breaks this is a real regression).
+def test_construct_dest_path_folder_branch_rejects_deep_dotdot_escape(app, tmp_path):
+    """Multi-segment `../../..` escapes (beyond `target_directory`) are rejected too."""
+    with app.app_context():
+        with pytest.raises(DataFormatError):
+            construct_dest_path(
+                _faux_file("my-report/../../../etc/passwd"),
+                tmp_path,
+                folder_name="my-report",
+            )
 
-    A future hardening commit should flip the first assertion (escape becomes
-    blocked) without touching the second.
+
+def test_construct_dest_path_folder_branch_rejects_absolute_filename(app, tmp_path):
+    """An absolute `file.filename` in the folder branch must not replace the root."""
+    with app.app_context():
+        with pytest.raises(DataFormatError):
+            construct_dest_path(
+                _faux_file("/etc/passwd"),
+                tmp_path,
+                folder_name="my-report",
+            )
+
+
+def test_construct_dest_path_folder_branch_allows_intermediate_dotdot(app, tmp_path):
+    """`subdir/../file.csv` resolves back into the report dir and must pass.
+
+    The containment check is on the resolved path, not a textual `..` scan,
+    so paths whose `..` segments cancel out before leaving the report folder
+    are still legitimate (e.g. a sibling-subdir reference that ends up at
+    `report_root/file.csv`).
     """
     with app.app_context():
         dest = construct_dest_path(
-            _faux_file("my-report/../escape"),
+            _faux_file("my-report/subdir/../file.csv"),
             tmp_path,
             folder_name="my-report",
         )
+        # `construct_dest_path` returns the un-resolved path so consumers see
+        # the literal sub-path they supplied; the containment guarantee is on
+        # the *resolved* form. The report directory carries a `<timestamp>_`
+        # prefix in SERVER_MODE so we match the resolved parent by suffix
+        # rather than reconstructing the prefix here.
         resolved = dest.resolve()
-        target = tmp_path.resolve()
-        # Hard invariant: still inside `target_directory`.
-        assert target in resolved.parents or resolved == target
-        # Documented gap: lands beside the report folder, not under it.
-        # When this stops being true (i.e. the file lands under
-        # `<target>/my-report/`), the §1.J follow-up has shipped and this
-        # test should be tightened to assert the new, stricter posture.
-        assert resolved.parent == target
+        assert resolved.name == "file.csv"
+        assert resolved.parent.name.endswith("my-report")
+        assert resolved.parent.parent == tmp_path.resolve()
 
 
 # ---- extract_npe_name: feeds the DB; rebuilt into a read path later --------
@@ -602,3 +636,56 @@ def test_performance_upload_chromium_style_lands_under_report_folder(
     assert any(p.name.startswith("ops_perf_results") for p in report_dir.iterdir())
     assert not (perf_root / "profile_log_device.csv").exists()
     assert not (report_dir / "perf_run").exists()
+
+
+def test_profiler_upload_rejects_traversal_within_folder(app, client, make_report):
+    """Folder upload with a `../`-bearing filename must 422 and stay contained.
+
+    End-to-end counterpart to the `construct_dest_path` unit tests: confirms
+    the handler propagates `DataFormatError` from the upload pipeline as the
+    expected 422 status, that no file from the batch escapes the profiler
+    directory, and that the traversal-bearing `escape.json` is never written.
+    Earlier files in the batch may land on disk before the bad one raises —
+    that non-atomic behaviour is preserved here and is not what this test
+    targets.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    profiler_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["PROFILER_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        "/api/local/upload/profiler",
+        query_string={"instanceId": instance_id},
+        data={
+            "files": [
+                (BytesIO(b"sqlite-bytes"), "evil_report/db.sqlite"),
+                (BytesIO(b"{}"), "evil_report/../escape.json"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, response.get_data(
+        as_text=True
+    )
+
+    # The legitimate first file may have been written before the bad one
+    # raised (this is the existing non-atomic-upload behaviour and is not
+    # what this fix targets), but nothing must have *escaped* the profiler
+    # directory — the whole point of the containment check.
+    local_root = Path(app.config["LOCAL_DATA_DIRECTORY"]).resolve()
+    for path in local_root.rglob("*"):
+        if not path.is_file():
+            continue
+        resolved = path.resolve()
+        assert (
+            profiler_root in resolved.parents or resolved == profiler_root
+        ), f"File escaped profiler directory: {resolved}"
+        # And specifically: no `escape.json` landed *anywhere*.
+        assert (
+            path.name != "escape.json"
+        ), f"`../escape.json` should have been rejected, found {resolved}"

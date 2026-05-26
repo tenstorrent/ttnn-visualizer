@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { JSX } from 'react';
+import { JSX } from 'react';
 import classNames from 'classnames';
 import { NPE_COORDINATES, NPE_COORDINATE_INDEX } from '../../model/NPEModel';
 
@@ -21,7 +21,7 @@ interface EmptyChipRendererProps {
     renderChipId: boolean;
 }
 
-export const EmptyChipRenderer: React.FC<EmptyChipRendererProps> = ({
+export const EmptyChipRenderer = ({
     id,
     width,
     height,

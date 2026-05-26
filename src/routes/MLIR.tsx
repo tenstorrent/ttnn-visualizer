@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { FC, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { HttpStatusCode } from 'axios';
 import { useAtomValue } from 'jotai';
@@ -14,7 +14,7 @@ import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
 import MlGraph from '../components/mlir/MLIRViewReactFlow';
 import MlirProcessingStatus from '../components/MlirProcessingStatus';
 
-const MLIR: FC = () => {
+const MLIR = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
     const { data: mlirData, isLoading, error: httpError } = useMLIR(filepath ? null : mlirJsonFilename);

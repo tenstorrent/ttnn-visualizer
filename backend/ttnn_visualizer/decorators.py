@@ -32,7 +32,7 @@ def with_instance(func):
 
         if not instance_id:
             current_app.logger.error("No instanceId present on request, returning 400")
-            abort(400, description="Missing instance id")
+            abort(400, description="Missing required query parameter: instanceId")
 
         instance_query_data = get_or_create_instance(instance_id=instance_id)
 

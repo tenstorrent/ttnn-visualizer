@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
-import React, { FC } from 'react';
+import React from 'react';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import {
     NEVER_SYNCED_LABEL,
@@ -23,13 +23,13 @@ interface RemoteSyncButtonProps {
     handleClick(selectedFolder: RemoteFolder | undefined): Promise<void>;
 }
 
-const RemoteSyncButton: FC<RemoteSyncButtonProps> = ({
+const RemoteSyncButton = ({
     selectedReportFolder,
     isSyncingReportFolder,
     isSelectedReportFolderOutdated,
     isDisabled,
     handleClick,
-}) => {
+}: RemoteSyncButtonProps) => {
     return (
         <Tooltip
             content={getTooltipContent(selectedReportFolder, isSyncingReportFolder, isSelectedReportFolderOutdated)}

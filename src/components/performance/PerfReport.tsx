@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { FC, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
@@ -74,13 +74,13 @@ interface PerformanceReportProps {
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
 const STACKED_GROUP_BY = [StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP];
 
-const PerformanceReport: FC<PerformanceReportProps> = ({
+const PerformanceReport = ({
     data,
     comparisonData,
     stackedData,
     comparisonStackedData,
     signposts,
-}) => {
+}: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -15,7 +15,7 @@ interface AddRemoteConnectionProps {
     onAddConnection: (remoteConnection: RemoteConnection) => void;
 }
 
-const AddRemoteConnection: FC<AddRemoteConnectionProps> = ({ disabled, onAddConnection }) => {
+const AddRemoteConnection = ({ disabled, onAddConnection }: AddRemoteConnectionProps) => {
     const [isAddConnectionDialogOpen, setIsAddConnectionDialogOpen] = useState(false);
 
     return (

@@ -14,13 +14,7 @@ interface SVGTensixRendererProps {
     style?: React.CSSProperties;
 }
 
-const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
-    width,
-    height,
-    data,
-    isMulticolor = false,
-    style,
-}: SVGTensixRendererProps) => {
+const TensixTransferRenderer = ({ width, height, data, isMulticolor = false, style }: SVGTensixRendererProps) => {
     const strokeLength = 5;
     const dashMap: Map<NoCID, number> = new Map();
     const dashArray: Map<NoCID, number[]> = new Map();

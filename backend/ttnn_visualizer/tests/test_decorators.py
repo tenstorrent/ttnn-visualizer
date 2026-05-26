@@ -95,6 +95,9 @@ def test_performance_route_returns_404_when_performance_not_loaded(
         query_string={"instanceId": INSTANCE_ID, **extra_query},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
-    assert response.get_json() == {
+    error_json = response.get_json()
+    assert error_json is not None
+    assert error_json == {
         "error": "No performance report loaded for this instance"
     }
+    assert "instanceId" in str(error_json)

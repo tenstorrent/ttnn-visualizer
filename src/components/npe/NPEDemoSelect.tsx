@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC } from 'react';
 import { Button, ButtonVariant, MenuItem } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
@@ -34,11 +33,13 @@ const NPE_DEMO_DATA: NPEDemoData[] = [
     },
 ];
 
-const NPEDemoSelect: FC<{
+interface NPEDemoSelectProps {
     selectedDemo: NPEDemoData | null;
     setSelectedDemo: (demo: NPEDemoData | null) => void;
     setDemoData: (data: NPEData | null) => void;
-}> = ({ selectedDemo, setSelectedDemo, setDemoData }) => {
+}
+
+const NPEDemoSelect = ({ selectedDemo, setSelectedDemo, setDemoData }: NPEDemoSelectProps) => {
     const renderItem: ItemRenderer<NPEDemoData> = (item, { handleClick, modifiers }) => (
         <div
             className='folder-picker-menu-item'
