@@ -30,6 +30,7 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     DataFormatError,
+    PerformanceReportNotLoadedException,
     RemoteConnectionException,
     RemoteFileReadException,
     error_response,
@@ -1004,9 +1005,6 @@ def get_performance_data_list(instance: Instance):
 @api.route("/performance/device-log", methods=["GET"])
 @with_instance
 def get_performance_data(instance: Instance):
-    if not instance.performance_path:
-        return response_not_found()
-
     with DeviceLogProfilerQueries(instance) as csv:
         result = csv.get_all_entries(as_dict=True, limit=100)
         return Response(orjson.dumps(result), mimetype="application/json")
@@ -1015,8 +1013,6 @@ def get_performance_data(instance: Instance):
 @api.route("/performance/perf-results", methods=["GET"])
 @with_instance
 def get_profiler_performance_data(instance: Instance):
-    if not instance.performance_path:
-        return response_not_found()
     with OpsPerformanceQueries(instance) as csv:
         # result = csv.query_by_op_code(op_code="(torch) contiguous", as_dict=True)
         result = csv.get_all_entries(as_dict=True, limit=100)
@@ -1073,8 +1069,6 @@ def delete_performance_report(performance_name, instance: Instance):
 @api.route("/performance/perf-results/raw", methods=["GET"])
 @with_instance
 def get_performance_results_data_raw(instance: Instance):
-    if not instance.performance_path:
-        return response_not_found()
     content = OpsPerformanceQueries.get_raw_csv(instance)
     return Response(
         content,
@@ -1086,9 +1080,6 @@ def get_performance_results_data_raw(instance: Instance):
 @api.route("/performance/perf-results/report", methods=["GET"])
 @with_instance
 def get_performance_results_report(instance: Instance):
-    if not instance.performance_path:
-        return response_bad_request("No performance data found for instance.")
-
     name = request.args.get("name", None)
     start_signpost = request.args.get("start_signpost", None)
     end_signpost = request.args.get("end_signpost", None)
@@ -1097,6 +1088,9 @@ def get_performance_results_report(instance: Instance):
     merge_devices = str_to_bool(request.args.get("merge_devices", "true"))
     tracing_mode = str_to_bool(request.args.get("tracing_mode", "false"))
     group_by = request.args.get("group_by", None)
+
+    if not instance.performance_path:
+        raise PerformanceReportNotLoadedException()
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -1124,10 +1118,10 @@ def get_performance_results_report(instance: Instance):
 @api.route("/performance/device-log/raw", methods=["GET"])
 @with_instance
 def get_performance_data_raw(instance: Instance):
-    if not instance.performance_path:
-        return response_not_found()
-
     name = request.args.get("name", None)
+
+    if not instance.performance_path:
+        raise PerformanceReportNotLoadedException()
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -1168,7 +1162,7 @@ def get_performance_device_meta(instance: Instance):
     name = request.args.get("name", None)
 
     if not instance.performance_path:
-        return response_not_found()
+        raise PerformanceReportNotLoadedException()
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -1196,8 +1190,6 @@ def get_performance_device_meta(instance: Instance):
 @api.route("/performance/npe/manifest", methods=["GET"])
 @with_instance
 def get_npe_manifest(instance: Instance):
-    if not instance.performance_path:
-        return response_not_found()
     try:
         content = NPEQueries.get_npe_manifest(instance)
     except FileNotFoundError:
@@ -1209,9 +1201,6 @@ def get_npe_manifest(instance: Instance):
 @api.route("/performance/npe/timeline", methods=["GET"])
 @with_instance
 def get_npe_timeline(instance: Instance):
-    if not instance.performance_path:
-        return response_not_found()
-
     filename = request.args.get("filename", default=None)
 
     if not filename:
@@ -1230,8 +1219,6 @@ def get_npe_timeline(instance: Instance):
 @api.route("/performance/device-log/zone/<zone>", methods=["GET"])
 @with_instance
 def get_zone_statistics(zone, instance: Instance):
-    if not instance.performance_path:
-        return response_not_found()
     with DeviceLogProfilerQueries(instance) as csv:
         result = csv.query_zone_statistics(zone_name=zone, as_dict=True)
         return Response(orjson.dumps(result), mimetype="application/json")

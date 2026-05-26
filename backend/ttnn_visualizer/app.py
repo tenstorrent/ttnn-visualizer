@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import webbrowser
+from http import HTTPStatus
 from os import environ
 from pathlib import Path
 from typing import cast
@@ -27,6 +28,7 @@ from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
     InvalidReportPath,
+    ReportNotLoadedException,
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
@@ -172,16 +174,19 @@ def middleware(app: flask.Flask):
     """
 
     @app.errorhandler(DatabaseFileNotFoundException)
-    def handle_database_not_found_error(error):
-        # Return a JSON response with a 404 status code
+    @app.errorhandler(ReportNotLoadedException)
+    def handle_report_not_available(error):
         response = jsonify({"error": str(error)})
-        response.status_code = 404
+        response.status_code = HTTPStatus.NOT_FOUND
         return response
 
     @app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException):
         message = error.description or error.name or "Request failed"
-        return jsonify({"error": message}), error.code or 500
+        return (
+            jsonify({"error": message}),
+            error.code or HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     # Preserve the interactive traceback in debug mode.
     if not app.debug:
@@ -189,7 +194,10 @@ def middleware(app: flask.Flask):
         @app.errorhandler(Exception)
         def handle_unexpected_error(error: Exception):
             logger.exception("Unhandled server error", exc_info=error)
-            return jsonify({"error": "Internal server error"}), 500
+            return (
+                jsonify({"error": "Internal server error"}),
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     # Only use the middleware if running in pure WSGI (HTTP requests)
     if not app.config.get("USE_WEBSOCKETS"):

@@ -364,6 +364,23 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 
 **Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
+**Report-bound read errors.** Memory-profiler routes (`/api/operations`, `/api/tensors`, `/api/buffers`, …) open the instance's `profiler_path` via `LocalQueryRunner` (`backend/ttnn_visualizer/queries.py`); performance routes (`/api/performance/...`) open the instance's `performance_path` via the helpers in `backend/ttnn_visualizer/csv_queries.py`. Status codes for client mistakes vs missing data:
+
+| Condition | HTTP | Body `error` |
+|-----------|------|--------------|
+| `instanceId` query param absent | **400** | `Missing required query parameter: instanceId` (`@with_instance`) |
+| `instanceId` present, instance has no `profiler_path` | **404** | `No profiler report loaded for this instance` (`ProfilerReportNotLoadedException`) |
+| `instanceId` present, instance has no `performance_path` | **404** | `No performance report loaded for this instance` (`PerformanceReportNotLoadedException`) |
+| `profiler_path` set but `db.sqlite` missing on disk | **404** | `Database not found at path: <path>` (`DatabaseFileNotFoundException`) |
+
+Arbitrary `instanceId` strings are valid tab identifiers — the server creates the row on first request. A curl like `?instanceId=fake-instance-id` without a prior upload/sync therefore gets **404**, not **400**.
+
+Both `…NotLoadedException` classes inherit from `ReportNotLoadedException`, registered on a single 404 error handler in `app.py` alongside `DatabaseFileNotFoundException`. The body string lives on each subclass as `DEFAULT_MESSAGE`, so call sites read as `raise PerformanceReportNotLoadedException()` (no message argument). Helpers raise at the top of every code path that touches a missing report path; routes don't need (and shouldn't add) a `if not instance.<kind>_path: return response_not_found()` guard **when the helper they call is the next thing the route does**.
+
+Routes that **dereference `instance.<kind>_path` directly** before invoking a helper — for instance to compute `Path(instance.performance_path).parent / name` from a `?name=` swap — must keep an explicit `raise <Kind>ReportNotLoadedException()` at the top. Mypy enforces this (otherwise `Path(None)` is a type error) and runtime would crash with `TypeError: argument should be a str or PathLike, not NoneType`. `views.py::get_performance_results_report`, `get_performance_data_raw`, and `get_performance_device_meta` are the live examples — don't delete those guards thinking they're stale.
+
+NPE (`/api/npe`) and MLIR (`/api/mlir`) routes do their own filesystem IO without a helper class and still use per-route `response_not_found()` guards — leave them alone unless you're refactoring those readers.
+
 ### Cross-cutting retries belong in the interceptor, not in individual hooks
 
 The operations endpoint occasionally returns a string instead of an array under heavy load. The response interceptor handles this with `MAX_RETRIES = 3` and exponential backoff (`src/libs/axiosInstance.ts`). Don't replicate retry logic inside a `queryFn` — extend the interceptor instead so every consumer of the endpoint benefits.
