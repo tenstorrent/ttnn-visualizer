@@ -813,9 +813,10 @@ export const useBufferPages = (operationId: number, address?: number | string, b
     });
 };
 
-export const fetchTensors = async (): Promise<Tensor[]> => {
+export const fetchTensors = async (bufferType?: BufferType): Promise<Tensor[]> => {
     const { data: tensorList } = await axiosInstance.get<Tensor[]>(Endpoints.TENSOR_LIST, {
         maxRedirects: 1,
+        params: bufferType !== undefined ? { buffer_type: bufferType } : undefined,
     });
 
     const operationsList = await fetchOperations();
@@ -835,12 +836,12 @@ export const fetchTensors = async (): Promise<Tensor[]> => {
     return tensorList;
 };
 
-export const useTensors = () => {
+export const useTensors = (bufferType?: BufferType) => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<Tensor[], AxiosError>({
-        queryFn: () => fetchTensors(),
-        queryKey: ['get-tensors', activeProfilerReport?.path],
+        queryFn: () => fetchTensors(bufferType),
+        queryKey: ['get-tensors', activeProfilerReport?.path, bufferType ?? 'all'],
         retry: false,
         staleTime: Infinity,
     });

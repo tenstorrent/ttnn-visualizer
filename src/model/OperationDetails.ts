@@ -65,6 +65,11 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         l1end: number;
     };
 
+    // TEMP (#1291): address -> real L1_Small Tensor sourced from /api/tensors?buffer_type=3.
+    // Used by getTensorListByAddress() until tt-metal records producers/consumers for L1_Small
+    // and the standard backward op-walk can locate them via op.inputs/op.outputs.
+    private l1SmallTensorsByAddress: Map<number, Tensor> = new Map();
+
     private options: OperationDetailsOptions = {
         renderPattern: false,
         lateDeallocation: false,
@@ -128,6 +133,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             l1end: number;
         },
         options?: OperationDetailsOptions,
+        // TEMP (#1291): pre-fetched L1_Small tensor list, supplied so the address->tensor
+        // map can be populated with real tensor ids/shape/dtype while tt-metal does not yet
+        // emit input_tensors/output_tensors rows for L1_Small allocations.
+        l1SmallTensors: Tensor[] = [],
     ) {
         this.id = data.id;
         this.inputs = data.inputs;
@@ -145,6 +154,11 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.device_operations = this.preprocessConnections(data.device_operations);
         this.options = options || { renderPattern: false, lateDeallocation: false, showHex: false };
         this.memoryConfig = memoryConfig;
+        this.l1SmallTensorsByAddress = new Map(
+            l1SmallTensors
+                .filter((t): t is Tensor & { address: number } => t.address !== null)
+                .map((t) => [t.address, t]),
+        );
 
         this.inputs.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
@@ -575,6 +589,21 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
                     ...tensor,
                     buffer_type: bufferType,
                 });
+            } else if (bufferType === BufferType.L1_SMALL) {
+                // TEMP (#1291): L1_Small tensors are not yet reported with
+                // producers/consumers from tt-metal, so they never match the
+                // backward op-walk above. Look them up by address in the
+                // pre-fetched L1_Small tensor list (/api/tensors?buffer_type=3).
+                // Remove this entire branch once tt-metal emits proper
+                // input_tensors/output_tensors rows for L1_Small (see tt-metal
+                // graph_processor.cpp::track_allocate).
+                const l1SmallTensor = this.l1SmallTensorsByAddress.get(bufferAddress);
+                if (l1SmallTensor !== undefined) {
+                    tensorsByBufferAddress.set(bufferAddress, {
+                        ...l1SmallTensor,
+                        buffer_type: bufferType,
+                    });
+                }
             }
         }
 
