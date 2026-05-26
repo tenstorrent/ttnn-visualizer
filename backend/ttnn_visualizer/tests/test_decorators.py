@@ -15,8 +15,10 @@ contract intact.
 """
 
 from http import HTTPStatus
+from unittest.mock import Mock
 
 import pytest
+from ttnn_visualizer.csv_queries import NPEQueries
 from ttnn_visualizer.exceptions import (
     PerformanceReportNotLoadedException,
     ProfilerReportNotLoadedException,
@@ -42,6 +44,14 @@ def test_profiler_report_not_loaded_exception_default_message():
     assert str(err) == ProfilerReportNotLoadedException.DEFAULT_MESSAGE
 
 
+def test_npe_get_npe_timeline_rejects_empty_filename():
+    instance = Mock()
+    instance.performance_path = "/some/path"
+
+    with pytest.raises(ValueError, match="filename is required"):
+        NPEQueries.get_npe_timeline(instance, "")
+
+
 def test_with_instance_returns_400_when_instance_id_missing(client):
     """A request without `instanceId` must surface as 400 (Bad Request).
 
@@ -52,6 +62,9 @@ def test_with_instance_returns_400_when_instance_id_missing(client):
     """
     response = client.get("/api/tensors")
     assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.get_json() == {
+        "error": "Missing required query parameter: instanceId"
+    }
 
 
 # Routes that read from the memory profiler database. With no profiler report

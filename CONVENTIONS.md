@@ -368,7 +368,7 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 
 | Condition | HTTP | Body `error` |
 |-----------|------|--------------|
-| `instanceId` query param absent | **400** | `Missing instance id` (`@with_instance`) |
+| `instanceId` query param absent | **400** | `Missing required query parameter: instanceId` (`@with_instance`) |
 | `instanceId` present, instance has no `profiler_path` | **404** | `No profiler report loaded for this instance` (`ProfilerReportNotLoadedException`) |
 | `instanceId` present, instance has no `performance_path` | **404** | `No performance report loaded for this instance` (`PerformanceReportNotLoadedException`) |
 | `profiler_path` set but `db.sqlite` missing on disk | **404** | `Database not found at path: <path>` (`DatabaseFileNotFoundException`) |

@@ -131,7 +131,7 @@ class NPEQueries:
     @staticmethod
     def get_npe_timeline(instance: Instance, filename: str):
         if not filename:
-            raise FileNotFoundError("filename is required")
+            raise ValueError("filename is required")
 
         if not instance.performance_path:
             raise PerformanceReportNotLoadedException()
