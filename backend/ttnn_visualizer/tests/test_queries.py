@@ -234,8 +234,8 @@ class TestDatabaseQueries(unittest.TestCase):
         mock_instance.remote_connection = None
         with self.assertRaises(ProfilerReportNotLoadedException) as context:
             DatabaseQueries(instance=mock_instance)
-        self.assertIn(
-            "No profiler report loaded for this instance", str(context.exception)
+        self.assertEqual(
+            str(context.exception), ProfilerReportNotLoadedException.DEFAULT_MESSAGE
         )
 
     def test_check_table_exists(self):

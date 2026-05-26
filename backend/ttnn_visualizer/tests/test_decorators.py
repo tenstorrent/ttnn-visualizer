@@ -17,12 +17,29 @@ contract intact.
 from http import HTTPStatus
 
 import pytest
+from ttnn_visualizer.exceptions import (
+    PerformanceReportNotLoadedException,
+    ProfilerReportNotLoadedException,
+)
+from ttnn_visualizer.extensions import db
+from ttnn_visualizer.models import InstanceTable
 
 # A throwaway client-chosen tab id. The `app` fixture spins up a fresh DB tmpdir
 # per test, so each parametrized case starts with no row in `instances`; the
 # request handler creates one through `get_or_create_instance` with no
 # `profiler_path`/`performance_path`.
 INSTANCE_ID = "pytest-empty-instance"
+MISSING_DB_INSTANCE_ID = "pytest-missing-db"
+
+
+def test_report_not_loaded_exception_accepts_custom_message():
+    err = PerformanceReportNotLoadedException("custom")
+    assert str(err) == "custom"
+
+
+def test_profiler_report_not_loaded_exception_default_message():
+    err = ProfilerReportNotLoadedException()
+    assert str(err) == ProfilerReportNotLoadedException.DEFAULT_MESSAGE
 
 
 def test_with_instance_returns_400_when_instance_id_missing(client):
@@ -61,8 +78,36 @@ def test_profiler_route_returns_404_when_profiler_not_loaded(client, path):
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert response.get_json() == {
-        "error": "No profiler report loaded for this instance"
+        "error": ProfilerReportNotLoadedException.DEFAULT_MESSAGE
     }
+
+
+def test_profiler_route_returns_404_when_db_file_missing(client, app):
+    """When profiler_path points at a missing db.sqlite, surface 404 not 500."""
+    with app.app_context():
+        existing = InstanceTable.query.filter_by(
+            instance_id=MISSING_DB_INSTANCE_ID
+        ).first()
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+        db.session.add(
+            InstanceTable(
+                instance_id=MISSING_DB_INSTANCE_ID,
+                active_report={},
+                profiler_path="/tmp/pytest-does-not-exist/db.sqlite",
+            )
+        )
+        db.session.commit()
+
+    response = client.get(
+        "/api/operations",
+        query_string={"instanceId": MISSING_DB_INSTANCE_ID},
+    )
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    error_json = response.get_json()
+    assert error_json is not None
+    assert error_json["error"].startswith("Database not found at path:")
 
 
 # Routes that read from a performance report directory, paired with the
@@ -95,9 +140,6 @@ def test_performance_route_returns_404_when_performance_not_loaded(
         query_string={"instanceId": INSTANCE_ID, **extra_query},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
-    error_json = response.get_json()
-    assert error_json is not None
-    assert error_json == {
-        "error": "No performance report loaded for this instance"
+    assert response.get_json() == {
+        "error": PerformanceReportNotLoadedException.DEFAULT_MESSAGE
     }
-    assert "instanceId" in str(error_json)
