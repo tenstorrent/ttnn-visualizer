@@ -96,10 +96,32 @@ class DatabaseFileNotFoundException(Exception):
     pass
 
 
-class ProfilerReportNotLoadedException(Exception):
-    """Instance exists but has no memory profiler database path configured."""
+class ReportNotLoadedException(Exception):
+    """Instance exists but the requested report kind is not loaded.
 
-    pass
+    Used as a uniform 404 signal across profiler and performance routes so
+    the global error handler can render a single response shape. Subclass
+    per report kind and override ``DEFAULT_MESSAGE`` so call sites read as
+    ``raise ProfilerReportNotLoadedException()`` without having to repeat
+    the body string.
+    """
+
+    DEFAULT_MESSAGE = "Report is not loaded for this instance"
+
+    def __init__(self, message: Optional[str] = None) -> None:
+        super().__init__(message or self.DEFAULT_MESSAGE)
+
+
+class ProfilerReportNotLoadedException(ReportNotLoadedException):
+    """Instance has no memory profiler database path configured."""
+
+    DEFAULT_MESSAGE = "No profiler report loaded for this instance"
+
+
+class PerformanceReportNotLoadedException(ReportNotLoadedException):
+    """Instance has no performance report directory configured."""
+
+    DEFAULT_MESSAGE = "No performance report loaded for this instance"
 
 
 class DataFormatError(Exception):

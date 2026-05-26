@@ -22,7 +22,10 @@ from typing import (
 import pandas as pd
 import zstd
 from tt_perf_report import perf_report
-from ttnn_visualizer.exceptions import DataFormatError
+from ttnn_visualizer.exceptions import (
+    DataFormatError,
+    PerformanceReportNotLoadedException,
+)
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
@@ -116,7 +119,7 @@ class NPEQueries:
     @staticmethod
     def get_npe_manifest(instance: Instance):
         if not instance.performance_path:
-            raise ValueError("instance.performance_path is None")
+            raise PerformanceReportNotLoadedException()
         file_path = Path(
             instance.performance_path,
             NPEQueries.NPE_FOLDER,
@@ -127,13 +130,8 @@ class NPEQueries:
 
     @staticmethod
     def get_npe_timeline(instance: Instance, filename: str):
-        if not filename:
-            raise ValueError(
-                "filename parameter is required and cannot be None or empty"
-            )
-
         if not instance.performance_path:
-            raise ValueError("instance.performance_path is None")
+            raise PerformanceReportNotLoadedException()
 
         file_path = Path(instance.performance_path, NPEQueries.NPE_FOLDER, filename)
 
@@ -178,7 +176,7 @@ class DeviceLogProfilerQueries:
         Determine the appropriate query runner based on the instance's remote connection.
         """
         if not self.instance.performance_path:
-            raise ValueError("instance.performance_path is None")
+            raise PerformanceReportNotLoadedException()
         self.runner = LocalCSVQueryRunner(
             file_path=Path(self.instance.performance_path).joinpath(
                 self.DEVICE_LOG_FILE
@@ -258,7 +256,7 @@ class DeviceLogProfilerQueries:
     @staticmethod
     def get_raw_csv(instance: Instance):
         if not instance.performance_path:
-            raise ValueError("instance.performance_path is None")
+            raise PerformanceReportNotLoadedException()
         file_path = Path(
             instance.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
         )
@@ -291,7 +289,7 @@ class OpsPerformanceQueries:
     @staticmethod
     def get_local_ops_perf_file_path(instance):
         if not instance.performance_path:
-            raise ValueError("instance.performance_path is None")
+            raise PerformanceReportNotLoadedException()
         performance_path = Path(instance.performance_path)
 
         # Find the latest file with the correct prefix

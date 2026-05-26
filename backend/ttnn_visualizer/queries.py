@@ -99,9 +99,7 @@ class LocalQueryRunner:
             self.connection = connection
         else:
             if not instance or not instance.profiler_path:
-                raise ProfilerReportNotLoadedException(
-                    "No profiler report loaded for this instance"
-                )
+                raise ProfilerReportNotLoadedException()
             db_path = str(instance.profiler_path)
             if not Path(db_path).exists():
                 raise DatabaseFileNotFoundException(

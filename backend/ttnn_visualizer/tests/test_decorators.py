@@ -3,14 +3,26 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 """
-Tests for the request-scoped decorators in `ttnn_visualizer.decorators`.
+Tests for the request-scoped decorators in `ttnn_visualizer.decorators` and
+the cross-cutting "report not loaded" 404 contract enforced by the global
+error handler in `ttnn_visualizer.app`.
 
 Most decorator behaviour is exercised transitively through view tests, but the
 missing-parameter branch of `with_instance` has no natural caller (the React
-frontend always sends `instanceId`), so we pin it here.
+frontend always sends `instanceId`), so we pin it here. The empty-instance
+404 cases are pinned alongside it so future refactors of either side keep the
+contract intact.
 """
 
 from http import HTTPStatus
+
+import pytest
+
+# A throwaway client-chosen tab id. The `app` fixture spins up a fresh DB tmpdir
+# per test, so each parametrized case starts with no row in `instances`; the
+# request handler creates one through `get_or_create_instance` with no
+# `profiler_path`/`performance_path`.
+INSTANCE_ID = "pytest-empty-instance"
 
 
 def test_with_instance_returns_400_when_instance_id_missing(client):
@@ -25,17 +37,64 @@ def test_with_instance_returns_400_when_instance_id_missing(client):
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
-def test_report_bound_route_returns_404_when_profiler_not_loaded(client):
-    """An instance with no memory profiler report must not surface as 500.
+# Routes that read from the memory profiler database. With no profiler report
+# loaded, every one of these must respond 404 via
+# `ProfilerReportNotLoadedException` (raised inside `LocalQueryRunner`), not
+# 500 from a leaked `ValueError`.
+PROFILER_ROUTES = [
+    "/api/operations",
+    "/api/operations/1",
+    "/api/tensors",
+    "/api/tensors/1",
+    "/api/buffers",
+    "/api/buffer-pages",
+]
 
-    `get_or_create_instance` accepts arbitrary client-chosen IDs; report-backed
-    routes should respond 404 when that tab has no profiler DB yet.
-    """
+
+@pytest.mark.parametrize("path", PROFILER_ROUTES)
+def test_profiler_route_returns_404_when_profiler_not_loaded(client, path):
+    """`get_or_create_instance` accepts arbitrary client-chosen IDs; report-
+    backed routes must respond 404 when that tab has no profiler DB yet."""
     response = client.get(
-        "/api/operations",
-        query_string={"instanceId": "pytest-empty-instance"},
+        path,
+        query_string={"instanceId": INSTANCE_ID},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert response.get_json() == {
         "error": "No profiler report loaded for this instance"
+    }
+
+
+# Routes that read from a performance report directory, paired with the
+# minimum query string each route needs to advance past its own input
+# validation into the helper that touches `instance.performance_path`. With
+# no performance report loaded the previous behaviour was a mix of generic
+# 404 (`response_not_found()`) and 400 (`/perf-results/report`); they now
+# all return 404 with the shared "No performance report loaded ..." body.
+PERFORMANCE_ROUTES = [
+    ("/api/performance/device-log", {}),
+    ("/api/performance/device-log/raw", {}),
+    ("/api/performance/device-log/meta", {}),
+    ("/api/performance/device-log/zone/foo", {}),
+    ("/api/performance/perf-results", {}),
+    ("/api/performance/perf-results/raw", {}),
+    ("/api/performance/perf-results/report", {}),
+    ("/api/performance/npe/manifest", {}),
+    ("/api/performance/npe/timeline", {"filename": "x.json"}),
+]
+
+
+@pytest.mark.parametrize("path,extra_query", PERFORMANCE_ROUTES)
+def test_performance_route_returns_404_when_performance_not_loaded(
+    client, path, extra_query
+):
+    """Same contract as profiler routes, raised by the helpers in
+    `csv_queries.py` and surfaced via `PerformanceReportNotLoadedException`."""
+    response = client.get(
+        path,
+        query_string={"instanceId": INSTANCE_ID, **extra_query},
+    )
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.get_json() == {
+        "error": "No performance report loaded for this instance"
     }
