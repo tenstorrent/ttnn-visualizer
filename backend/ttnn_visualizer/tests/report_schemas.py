@@ -7,21 +7,25 @@ SQL DDL constants representing historical TTNN report database schema versions.
 
 Import these into tests to build SQLite fixture databases via the
 ``make_report`` fixture defined in conftest.py.  Each constant is a complete
-set of ``CREATE TABLE`` statements — no data rows — so test data can be
-supplied independently through the ``inserts_sql`` argument.
+DDL block — no data rows — so test data can be supplied independently
+through the ``inserts_sql`` argument.
 
 The ``SCHEMA_V*`` constants below are verbatim ``.schema`` dumps from
 representative TTNN report databases, lightly normalised (12-space indent
-collapsed to 4-space) for readability. Each constant records its source
-report above its definition. To regenerate from a fresh representative
-report::
+collapsed to 4-space) for readability. To regenerate from a fresh
+representative report::
 
     sqlite3 path/to/db.sqlite ".schema" \\
         | sed 's/^            /    /; s/^        );/);/'
 
-Then paste the output into the corresponding triple-quoted string.
+Then paste the output into the corresponding triple-quoted string. A
+provenance comment above each constant records which TTNN feature flag
+shape produced it.
 """
 
+# Source: TTNN profiler report from before stack-trace source-file storage
+# was introduced (no ``source_files`` table; ``stack_traces`` has only
+# ``operation_id`` and ``stack_trace`` columns).
 SCHEMA_V2 = """
 CREATE TABLE devices (
     device_id int,
@@ -148,14 +152,17 @@ CREATE TABLE buffer_pages (
 );
 """
 
-# Source: representative TTNN profiler report after PR #1364 added the
-# ``source_files`` table and the ``stack_traces.source_file_id`` foreign
-# key. Dumped from
-# ``~/.ttnn-visualizer/reports/local/profiler-reports/resnet50_may08_1841/db.sqlite``.
-# Differences from ``SCHEMA_V2`` (verbatim from production): a new
-# ``source_files`` table with ``path text UNIQUE NOT NULL``, a
+# Source: TTNN profiler report after stack-trace source-file storage was
+# introduced. Verbatim differences from ``SCHEMA_V2``: a new ``source_files``
+# table with ``path text UNIQUE NOT NULL``, a
 # ``source_file_id int REFERENCES source_files(id)`` column on
 # ``stack_traces``, and an ``idx_stack_traces_source_file_id`` index.
+#
+# Note: the foreign key on ``stack_traces.source_file_id`` is structural-only
+# in test contexts. SQLite enforces foreign keys per-connection only when
+# ``PRAGMA foreign_keys = ON`` is set, which neither ``make_report`` nor
+# ``DatabaseQueries`` issues — matching production TTNN behaviour. Test data
+# may reference nonexistent ``source_files.id`` values without raising.
 SCHEMA_V2_1 = """
 CREATE TABLE devices (
     device_id int,
