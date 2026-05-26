@@ -30,14 +30,14 @@ interface NPEZoneFilterComponentProps {
     onZoneClick: (zone: NPEZone) => void;
 }
 
-const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
+const NPEZoneFilterComponent = ({
     npeData,
     open = false,
     onClose,
     onSelect,
     onExpand,
     onZoneClick,
-}) => {
+}: NPEZoneFilterComponentProps) => {
     const [selectedDeviceId, setSelectedDeviceId] = React.useState<number | null>(null);
     const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string | null>(null);
     const sortCoreAddress = useCallback((a: NPERootZone, b: NPERootZone) => {

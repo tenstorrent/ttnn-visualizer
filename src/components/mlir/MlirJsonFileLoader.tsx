@@ -30,7 +30,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.WARNING]: Intent.WARNING,
 };
 
-const MlirJsonFileLoader: React.FC = () => {
+const MlirJsonFileLoader = () => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { uploadMlirFile } = useLocalConnection();
     const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);

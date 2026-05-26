@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { FC, useState } from 'react';
+import React, { useState } from 'react';
 import { Button, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRendererProps, Select } from '@blueprintjs/select';
@@ -25,7 +25,7 @@ interface RemoteConnectionSelectorProps {
 const EDIT_CONNECTION_LABEL = 'Edit selected connection';
 const REMOVE_CONNECTION_LABEL = 'Remove selected connection';
 
-const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
+const RemoteConnectionSelector = ({
     connectionList,
     connection,
     disabled,
@@ -34,7 +34,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     onEditConnection,
     onRemoveConnection,
     onSyncRemoteFolderList,
-}) => {
+}: RemoteConnectionSelectorProps) => {
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const selectedConnection = connection ?? connectionList[0];
 

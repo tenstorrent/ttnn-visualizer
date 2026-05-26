@@ -30,7 +30,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.WARNING]: Intent.WARNING,
 };
 
-const NPEFileLoader: React.FC = () => {
+const NPEFileLoader = () => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { uploadNpeFile } = useLocalConnection();
     const [npeFileName, setActiveNpe] = useAtom(activeNpeOpTraceAtom);

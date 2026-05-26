@@ -479,11 +479,13 @@ function useDeviceOperationsFullRenderModel(args: {
     };
 }
 
-const DeviceOperationsFullRender: React.FC<{
+interface DeviceOperationsFullRenderProps {
     deviceOperations: Node[];
     details: OperationDetails;
     onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
-}> = ({ deviceOperations, details, onLegendClick }) => {
+}
+
+const DeviceOperationsFullRender = ({ deviceOperations, details, onLegendClick }: DeviceOperationsFullRenderProps) => {
     hljs.registerLanguage('cpp', cpp);
     const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);
     const [deviceOperationsArgsNode, setDeviceOperationsArgsNode] = useState<DeviceOperationNode | null>(null);
@@ -523,13 +525,14 @@ const DeviceOperationsFullRender: React.FC<{
     );
 };
 
-const DeviceOperationNodeComponent: React.FC<
-    React.PropsWithChildren<{
-        title: string;
-        memoryInfo?: JSX.Element;
-        _node: Node;
-    }>
-> = ({ title, memoryInfo, _node, children }) => {
+interface DeviceOperationNodeComponentProps {
+    title: string;
+    memoryInfo?: JSX.Element;
+    _node: Node;
+    children?: React.ReactNode;
+}
+
+const DeviceOperationNodeComponent = ({ title, memoryInfo, _node, children }: DeviceOperationNodeComponentProps) => {
     return (
         <div className='device-operation'>
             <hr />
@@ -546,7 +549,12 @@ const DeviceOperationNodeComponent: React.FC<
     );
 };
 
-const DeviceID: React.FC<{ _deviceId?: number | string; _node?: Node }> = ({ _deviceId, _node }) => {
+interface DeviceIDProps {
+    _deviceId?: number | string;
+    _node?: Node;
+}
+
+const DeviceID = ({ _deviceId, _node }: DeviceIDProps) => {
     // if (_node === undefined) {
     return null;
     // }
@@ -564,11 +572,13 @@ const DeviceID: React.FC<{ _deviceId?: number | string; _node?: Node }> = ({ _de
     // );
     // return _deviceId !== undefined && <span className='device-id'>{_deviceId}</span>;
 };
-const DeviceOperationArgumentsComponent: React.FC<{
+interface DeviceOperationArgumentsComponentProps {
     node: DeviceOperationNode | null;
     open: boolean;
     onClose: () => void;
-}> = ({ node, open, onClose }) => {
+}
+
+const DeviceOperationArgumentsComponent = ({ node, open, onClose }: DeviceOperationArgumentsComponentProps) => {
     return (
         <Overlay2
             isOpen={open}

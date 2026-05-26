@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { Button, ButtonVariant, Icon, Switch, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -196,7 +196,7 @@ interface ZoneDetailsProps {
     zones: string;
 }
 
-const ZoneDetails: React.FC<ZoneDetailsProps> = ({ zones }) => {
+const ZoneDetails = ({ zones }: ZoneDetailsProps) => {
     const render = zones.split('/').map((zone: string, index: number) => (
         <Tag
             style={{ marginLeft: `${15 * index}px` }}

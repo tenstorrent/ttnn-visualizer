@@ -15,7 +15,7 @@ def test_stack_source_availability_requires_instance(client):
     response = client.get(
         "/api/remote/stack-trace/test", query_string={"filePath": "/some/path"}
     )
-    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
 def test_stack_source_availability_rejects_missing_file_path(client, make_report):
@@ -76,7 +76,7 @@ def test_stack_source_content_requires_instance(client):
     response = client.get(
         "/api/remote/stack-trace/read", query_string={"filePath": "/some/path"}
     )
-    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
 def test_stack_source_content_rejects_missing_file_path(client, make_report):

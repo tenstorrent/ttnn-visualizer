@@ -2,18 +2,18 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import logging
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from logging import getLogger
 from typing import Any
 
 from flask_socketio import disconnect, join_room, leave_room
 from ttnn_visualizer.utils import SerializeableDataclass
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Set in register_handlers; may be None when websockets are disabled
 socketio: Any | None = None
@@ -123,18 +123,16 @@ def register_handlers(socketio_instance):
         sid = getattr(request, "sid", "")
 
         instance_id = request.args.get("instanceId")
-        print(
-            f"Received instanceId: {instance_id}, socket ID: {sid}"
-        )  # Log for debugging
+        logger.info(f"Received instanceId: {instance_id}, socket ID: {sid}")
 
         if instance_id:
             join_room(instance_id)  # Join the room identified by the instanceId
             tab_clients[instance_id] = (
                 sid  # Store the socket ID associated with this instanceId
             )
-            print(f"Joined room: {instance_id}")
+            logger.info(f"Joined room: {instance_id}")
         else:
-            print("No instanceId provided, disconnecting client.")
+            logger.warning("No instanceId provided, disconnecting client.")
             disconnect()
 
     @socketio.on("disconnect")
@@ -152,6 +150,6 @@ def register_handlers(socketio_instance):
         if instance_id:
             leave_room(instance_id)
             del tab_clients[instance_id]
-            print(
+            logger.info(
                 f"Client disconnected from instanceId: {instance_id}, Socket ID: {sid}"
             )
