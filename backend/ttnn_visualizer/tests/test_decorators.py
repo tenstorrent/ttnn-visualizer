@@ -23,3 +23,6 @@ def test_with_instance_returns_400_when_instance_id_missing(client):
     """
     response = client.get("/api/tensors")
     assert response.status_code == HTTPStatus.BAD_REQUEST
+    error_json = response.get_json()
+    assert error_json is not None
+    assert "instanceId" in str(error_json)
