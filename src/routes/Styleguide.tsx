@@ -50,6 +50,20 @@ const SYNC_DEMO_PROGRESS = {
     currentFileSize: 128_000,
 };
 
+// STARTED phase of a remote sync: backend has emitted job totals but no
+// per-file event yet, so `currentFileName` is empty and the overlay shows the
+// "Preparing transfer..." placeholder (issue #1599).
+const SYNC_STARTING_DEMO_PROGRESS = {
+    currentFileName: '',
+    numberOfFiles: 3,
+    percentOfCurrent: 0,
+    finishedFiles: 0,
+    status: FileStatus.STARTED,
+    bytesTransferred: 0,
+    bytesTotal: 512_000,
+    currentFileSize: 0,
+};
+
 const UPLOAD_DEMO_PROGRESS = {
     currentFileName: '',
     numberOfFiles: 5,
@@ -69,7 +83,9 @@ export default function Styleguide() {
     const [autoCloseTime, setAutoCloseTime] = useState(1000);
     const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
 
-    const runFileTransferDemo = (initial: typeof SYNC_DEMO_PROGRESS | typeof UPLOAD_DEMO_PROGRESS) => {
+    const runFileTransferDemo = (
+        initial: typeof SYNC_DEMO_PROGRESS | typeof SYNC_STARTING_DEMO_PROGRESS | typeof UPLOAD_DEMO_PROGRESS,
+    ) => {
         setUpdateFileTransferProgress(initial);
         setTimeRemaining(autoCloseTime);
 
@@ -610,6 +626,13 @@ export default function Styleguide() {
                     />
 
                     <ButtonGroup>
+                        <Button
+                            onClick={() => runFileTransferDemo(SYNC_STARTING_DEMO_PROGRESS)}
+                            intent={Intent.PRIMARY}
+                            disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                        >
+                            Open remote sync overlay (preparing)
+                        </Button>
                         <Button
                             onClick={() => runFileTransferDemo(SYNC_DEMO_PROGRESS)}
                             intent={Intent.PRIMARY}

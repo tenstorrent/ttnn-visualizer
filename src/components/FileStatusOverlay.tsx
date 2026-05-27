@@ -110,13 +110,13 @@ const FileStatusOverlay = () => {
 
                 {(currentFileName || status === FileStatus.STARTED) && (
                     <p>
-                        {currentFileName ? (
+                        {getFileStatusLabel(status)}
+                        {currentFileName && (
                             <>
-                                {getFileStatusLabel(status)} <u>{currentFileName}</u>
+                                {' '}
+                                <u>{currentFileName}</u>
                                 {showCurrentFileSize && <> ({formatMemorySize(currentFileSize, 1)})</>}
                             </>
-                        ) : (
-                            'Preparing transfer\u2026'
                         )}
                     </p>
                 )}

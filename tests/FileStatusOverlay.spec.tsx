@@ -23,9 +23,9 @@ afterEach(cleanup);
 describe('FileStatusOverlay status row', () => {
     // Regression for issue #1599: the overlay opens on STARTED (empty filename)
     // and previously showed no per-file row, so the first DOWNLOADING event
-    // injected a new <p> and grew the modal height. Show a placeholder during
-    // STARTED so height stays stable across the STARTED -> DOWNLOADING edge.
-    it('shows a placeholder during the STARTED phase before a filename arrives', () => {
+    // injected a new <p> and grew the modal height. The STARTED label now
+    // renders standalone so height stays stable across STARTED -> DOWNLOADING.
+    it('shows the standalone STARTED label before a filename arrives', () => {
         renderOverlay({
             currentFileName: '',
             numberOfFiles: 3,
@@ -37,7 +37,7 @@ describe('FileStatusOverlay status row', () => {
             currentFileSize: 0,
         });
 
-        expect(screen.getByText(/Preparing transfer/)).toBeInTheDocument();
+        expect(screen.getByText('Preparing\u2026')).toBeInTheDocument();
     });
 
     it('shows the filename row when DOWNLOADING reports a current file', () => {
@@ -53,13 +53,13 @@ describe('FileStatusOverlay status row', () => {
         });
 
         expect(screen.getByText('db.sqlite')).toBeInTheDocument();
-        expect(screen.queryByText(/Preparing transfer/)).not.toBeInTheDocument();
+        expect(screen.queryByText('Preparing\u2026')).not.toBeInTheDocument();
     });
 
     // Uploads stream as a single multipart request, so currentFileName stays
-    // empty throughout. Don't introduce a "Preparing transfer" line that would
-    // persist for the whole upload — the placeholder is scoped to STARTED.
-    it('does not show the placeholder for UPLOADING with no filename', () => {
+    // empty throughout. The STARTED-only guard keeps the per-file row hidden
+    // for UPLOADING — no standalone "Uploading" line for the whole upload.
+    it('does not render the per-file row for UPLOADING with no filename', () => {
         renderOverlay({
             currentFileName: '',
             numberOfFiles: 5,
@@ -70,6 +70,7 @@ describe('FileStatusOverlay status row', () => {
             bytesTotal: 1_024_000,
         });
 
-        expect(screen.queryByText(/Preparing transfer/)).not.toBeInTheDocument();
+        expect(screen.queryByText('Preparing\u2026')).not.toBeInTheDocument();
+        expect(screen.queryByText('Uploading')).not.toBeInTheDocument();
     });
 });
