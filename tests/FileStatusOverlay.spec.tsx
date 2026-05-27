@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+import { cleanup, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import FileStatusOverlay from '../src/components/FileStatusOverlay';
+import { FileProgress, FileStatus } from '../src/model/APIData';
+import { fileTransferProgressAtom } from '../src/store/app';
+import { TestProviders } from './helpers/TestProviders';
+
+function renderOverlay(progress: FileProgress) {
+    return render(
+        <TestProviders initialAtomValues={[[fileTransferProgressAtom, progress]]}>
+            <FileStatusOverlay />
+        </TestProviders>,
+    );
+}
+
+afterEach(cleanup);
+
+describe('FileStatusOverlay status row', () => {
+    // Regression for issue #1599: the overlay opens on STARTED (empty filename)
+    // and previously showed no per-file row, so the first DOWNLOADING event
+    // injected a new <p> and grew the modal height. Show a placeholder during
+    // STARTED so height stays stable across the STARTED -> DOWNLOADING edge.
+    it('shows a placeholder during the STARTED phase before a filename arrives', () => {
+        renderOverlay({
+            currentFileName: '',
+            numberOfFiles: 3,
+            percentOfCurrent: 0,
+            finishedFiles: 0,
+            status: FileStatus.STARTED,
+            bytesTransferred: 0,
+            bytesTotal: 200,
+            currentFileSize: 0,
+        });
+
+        expect(screen.getByText(/Preparing transfer/)).toBeInTheDocument();
+    });
+
+    it('shows the filename row when DOWNLOADING reports a current file', () => {
+        renderOverlay({
+            currentFileName: 'db.sqlite',
+            numberOfFiles: 3,
+            percentOfCurrent: 0,
+            finishedFiles: 0,
+            status: FileStatus.DOWNLOADING,
+            bytesTransferred: 0,
+            bytesTotal: 200,
+            currentFileSize: 183 * 1024 * 1024,
+        });
+
+        expect(screen.getByText('db.sqlite')).toBeInTheDocument();
+        expect(screen.queryByText(/Preparing transfer/)).not.toBeInTheDocument();
+    });
+
+    // Uploads stream as a single multipart request, so currentFileName stays
+    // empty throughout. Don't introduce a "Preparing transfer" line that would
+    // persist for the whole upload — the placeholder is scoped to STARTED.
+    it('does not show the placeholder for UPLOADING with no filename', () => {
+        renderOverlay({
+            currentFileName: '',
+            numberOfFiles: 5,
+            percentOfCurrent: 0,
+            finishedFiles: 0,
+            status: FileStatus.UPLOADING,
+            bytesTransferred: 64_000,
+            bytesTotal: 1_024_000,
+        });
+
+        expect(screen.queryByText(/Preparing transfer/)).not.toBeInTheDocument();
+    });
+});
