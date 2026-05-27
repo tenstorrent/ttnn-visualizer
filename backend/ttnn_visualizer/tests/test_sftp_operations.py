@@ -32,7 +32,8 @@ from ttnn_visualizer.sftp_operations import (
 from ttnn_visualizer.sockets import FileStatus
 
 
-def _connection() -> RemoteConnection:
+@pytest.fixture
+def connection() -> RemoteConnection:
     return RemoteConnection(
         name="test",
         username="user",
@@ -66,30 +67,32 @@ class TestRemoteFindShellQuoting:
 
     _APOSTROPHE_FOLDER = "/remote/o'brien/reports"
 
-    def test_get_remote_file_list_quotes_path_with_single_quote(self):
+    def test_get_remote_file_list_quotes_path_with_single_quote(self, connection):
         with patch("subprocess.run", return_value=_completed("")) as run:
             get_remote_file_list(
-                _connection(), self._APOSTROPHE_FOLDER, exclude_patterns=[]
+                connection, self._APOSTROPHE_FOLDER, exclude_patterns=[]
             )
 
         remote_cmd = _remote_shell_command_from_run(run)
         assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
         assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
 
-    def test_get_remote_file_list_without_sizes_quotes_path_with_single_quote(self):
+    def test_get_remote_file_list_without_sizes_quotes_path_with_single_quote(
+        self, connection
+    ):
         with patch("subprocess.run", return_value=_completed("")) as run:
             _get_remote_file_list_without_sizes(
-                _connection(), self._APOSTROPHE_FOLDER, exclude_patterns=[]
+                connection, self._APOSTROPHE_FOLDER, exclude_patterns=[]
             )
 
         remote_cmd = _remote_shell_command_from_run(run)
         assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
         assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
 
-    def test_get_remote_directory_list_quotes_path_with_single_quote(self):
+    def test_get_remote_directory_list_quotes_path_with_single_quote(self, connection):
         with patch("subprocess.run", return_value=_completed("")) as run:
             get_remote_directory_list(
-                _connection(), self._APOSTROPHE_FOLDER, exclude_patterns=[]
+                connection, self._APOSTROPHE_FOLDER, exclude_patterns=[]
             )
 
         remote_cmd = _remote_shell_command_from_run(run)
@@ -98,76 +101,76 @@ class TestRemoteFindShellQuoting:
 
 
 class TestGetRemoteFileList:
-    def test_parses_size_and_path_pairs(self):
+    def test_parses_size_and_path_pairs(self, connection):
         stdout = "100\t/remote/a.txt\x00200\t/remote/b.txt\x00"
         with patch("subprocess.run", return_value=_completed(stdout)):
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == [("/remote/a.txt", 100), ("/remote/b.txt", 200)]
 
-    def test_path_containing_tabs_roundtrips(self):
+    def test_path_containing_tabs_roundtrips(self, connection):
         # First tab is the size/path separator; subsequent tabs are part of
         # the filename and must be preserved. Regression for the original
         # `splitlines() + partition("\t")` bug that truncated such paths.
         stdout = "42\t/remote/has\ttabs\there.txt\x00"
         with patch("subprocess.run", return_value=_completed(stdout)):
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == [("/remote/has\ttabs\there.txt", 42)]
 
-    def test_path_containing_newlines_roundtrips(self):
+    def test_path_containing_newlines_roundtrips(self, connection):
         # NUL separator means newlines in filenames must also round-trip.
         stdout = "7\t/remote/line\nbreak.txt\x00"
         with patch("subprocess.run", return_value=_completed(stdout)):
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == [("/remote/line\nbreak.txt", 7)]
 
-    def test_exclude_patterns_filter_results(self):
+    def test_exclude_patterns_filter_results(self, connection):
         stdout = "100\t/remote/keep.txt\x00200\t/remote/tensors/skip.bin\x00"
         with patch("subprocess.run", return_value=_completed(stdout)):
             result = get_remote_file_list(
-                _connection(), "/remote", exclude_patterns=["/tensors"]
+                connection, "/remote", exclude_patterns=["/tensors"]
             )
         assert result == [("/remote/keep.txt", 100)]
 
-    def test_invalid_size_defaults_to_zero(self):
+    def test_invalid_size_defaults_to_zero(self, connection):
         # A malformed size should not crash parsing — we degrade to size=0.
         stdout = "notanumber\t/remote/a.txt\x00500\t/remote/b.txt\x00"
         with patch("subprocess.run", return_value=_completed(stdout)):
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == [("/remote/a.txt", 0), ("/remote/b.txt", 500)]
 
-    def test_record_without_tab_separator_is_skipped(self):
+    def test_record_without_tab_separator_is_skipped(self, connection):
         # Defensive: a malformed record (no `\t`) shouldn't blow up parsing.
         stdout = "no-tab-here\x00100\t/remote/a.txt\x00"
         with patch("subprocess.run", return_value=_completed(stdout)):
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == [("/remote/a.txt", 100)]
 
-    def test_empty_output_returns_empty_list(self):
+    def test_empty_output_returns_empty_list(self, connection):
         with patch("subprocess.run", return_value=_completed("")):
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == []
 
-    def test_falls_back_when_printf_unsupported(self):
+    def test_falls_back_when_printf_unsupported(self, connection):
         # BSD find rejects -printf; we should retry via the size-less path.
         primary_error = _called_process_error(
             returncode=1, stderr="find: -printf: unknown predicate"
         )
         fallback_output = _completed("/remote/a.txt\n/remote/b.txt\n")
         with patch("subprocess.run", side_effect=[primary_error, fallback_output]):
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == [("/remote/a.txt", 0), ("/remote/b.txt", 0)]
 
-    def test_falls_back_for_busybox_find(self):
+    def test_falls_back_for_busybox_find(self, connection):
         # BusyBox find emits a slightly different message; still -printf.
         primary_error = _called_process_error(
             returncode=1, stderr="find: unrecognized: -printf"
         )
         fallback_output = _completed("/remote/a.txt\n")
         with patch("subprocess.run", side_effect=[primary_error, fallback_output]):
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == [("/remote/a.txt", 0)]
 
-    def test_permission_denied_does_not_fall_back(self):
+    def test_permission_denied_does_not_fall_back(self, connection):
         # Regression: only `-printf` unsupported should trigger the second
         # SSH call. Permission/path errors must surface as an empty list so
         # the real cause stays visible in the logs.
@@ -176,21 +179,21 @@ class TestGetRemoteFileList:
             stderr="find: '/remote/private': Permission denied",
         )
         with patch("subprocess.run", side_effect=[permission_error]) as run:
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == []
         assert run.call_count == 1
 
-    def test_missing_path_does_not_fall_back(self):
+    def test_missing_path_does_not_fall_back(self, connection):
         missing_error = _called_process_error(
             returncode=1,
             stderr="find: '/remote/missing': No such file or directory",
         )
         with patch("subprocess.run", side_effect=[missing_error]) as run:
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == []
         assert run.call_count == 1
 
-    def test_ssh_protocol_auth_error_raises_authentication_exception(self):
+    def test_ssh_protocol_auth_error_raises_authentication_exception(self, connection):
         # Exit 255 + auth-flavoured stderr → AuthenticationException, never a
         # silent empty-list fallback. Pinning the concrete type matters so a
         # regression that swallows or rewraps the error fails this test.
@@ -199,9 +202,11 @@ class TestGetRemoteFileList:
         )
         with patch("subprocess.run", side_effect=auth_error):
             with pytest.raises(AuthenticationException):
-                get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+                get_remote_file_list(connection, "/remote", exclude_patterns=[])
 
-    def test_ssh_protocol_connection_error_raises_no_valid_connections(self):
+    def test_ssh_protocol_connection_error_raises_no_valid_connections(
+        self, connection
+    ):
         # Exit 255 + connection-flavoured stderr → NoValidConnectionsError.
         # Covers the second branch of handle_ssh_subprocess_error.
         conn_error = _called_process_error(
@@ -210,14 +215,14 @@ class TestGetRemoteFileList:
         )
         with patch("subprocess.run", side_effect=conn_error):
             with pytest.raises(NoValidConnectionsError):
-                get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+                get_remote_file_list(connection, "/remote", exclude_patterns=[])
 
-    def test_timeout_returns_empty_list(self):
+    def test_timeout_returns_empty_list(self, connection):
         with patch(
             "subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd=["ssh"], timeout=5),
         ):
-            result = get_remote_file_list(_connection(), "/remote", exclude_patterns=[])
+            result = get_remote_file_list(connection, "/remote", exclude_patterns=[])
         assert result == []
 
 
@@ -230,7 +235,7 @@ class TestSyncFilesAndDirectoriesEmptyListing:
     silently FINISH with zero files — that previously masked real errors.
     """
 
-    def test_raises_when_directory_listing_is_empty(self, app, tmp_path):
+    def test_raises_when_directory_listing_is_empty(self, app, tmp_path, connection):
         with (
             app.app_context(),
             patch(
@@ -243,7 +248,7 @@ class TestSyncFilesAndDirectoriesEmptyListing:
         ):
             with pytest.raises(RemoteConnectionException) as excinfo:
                 sync_files_and_directories(
-                    _connection(),
+                    connection,
                     "/remote/missing",
                     tmp_path,
                     exclude_patterns=[],
@@ -255,7 +260,9 @@ class TestSyncFilesAndDirectoriesEmptyListing:
         # alerting and toast presentation key off the right bucket.
         assert excinfo.value.http_status == HTTPStatus.UNPROCESSABLE_ENTITY
 
-    def test_empty_directory_listing_does_not_attempt_download(self, app, tmp_path):
+    def test_empty_directory_listing_does_not_attempt_download(
+        self, app, tmp_path, connection
+    ):
         with (
             app.app_context(),
             patch(
@@ -271,7 +278,7 @@ class TestSyncFilesAndDirectoriesEmptyListing:
         ):
             with pytest.raises(RemoteConnectionException):
                 sync_files_and_directories(
-                    _connection(),
+                    connection,
                     "/remote/missing",
                     tmp_path,
                     exclude_patterns=[],
@@ -279,7 +286,9 @@ class TestSyncFilesAndDirectoriesEmptyListing:
 
         assert download.call_count == 0
 
-    def test_successful_listing_with_zero_files_is_not_an_error(self, app, tmp_path):
+    def test_successful_listing_with_zero_files_is_not_an_error(
+        self, app, tmp_path, connection
+    ):
         # Real empty folder: find returned the folder itself but no files.
         # That's legitimate and should complete without raising. The sync
         # must also skip transfer-progress emits entirely — STARTED is an
@@ -299,7 +308,7 @@ class TestSyncFilesAndDirectoriesEmptyListing:
             patch("ttnn_visualizer.sftp_operations.emit_file_status") as emit_status,
         ):
             sync_files_and_directories(
-                _connection(),
+                connection,
                 "/remote/empty",
                 tmp_path,
                 exclude_patterns=[],
@@ -316,7 +325,9 @@ class TestSyncFilesAndDirectoriesEmptyListing:
 class TestSyncFilesAndDirectoriesPartialFailure:
     """Regression: partial download must not emit FINISHED or stamp .last-synced."""
 
-    def test_raises_and_emits_failed_when_any_download_fails(self, app, tmp_path):
+    def test_raises_and_emits_failed_when_any_download_fails(
+        self, app, tmp_path, connection
+    ):
         files = [("/remote/reports/a.txt", 10), ("/remote/reports/b.txt", 20)]
 
         def download_side_effect(_conn, remote_file, _local_file):
@@ -342,7 +353,7 @@ class TestSyncFilesAndDirectoriesPartialFailure:
         ):
             with pytest.raises(RemoteConnectionException) as excinfo:
                 sync_files_and_directories(
-                    _connection(),
+                    connection,
                     "/remote/reports",
                     tmp_path,
                     exclude_patterns=[],
@@ -356,7 +367,7 @@ class TestSyncFilesAndDirectoriesPartialFailure:
         assert terminal.finished_files == 1
         assert terminal.number_of_files == 2
 
-    def test_all_files_succeed_stamps_last_synced(self, app, tmp_path):
+    def test_all_files_succeed_stamps_last_synced(self, app, tmp_path, connection):
         files = [("/remote/reports/a.txt", 10)]
 
         with (
@@ -374,7 +385,7 @@ class TestSyncFilesAndDirectoriesPartialFailure:
             patch("ttnn_visualizer.sftp_operations.emit_file_status") as emit_status,
         ):
             sync_files_and_directories(
-                _connection(),
+                connection,
                 "/remote/reports",
                 tmp_path,
                 exclude_patterns=[],
@@ -386,26 +397,26 @@ class TestSyncFilesAndDirectoriesPartialFailure:
 
 
 class TestGetRemoteFileListWithoutSizes:
-    def test_returns_paths_with_zero_size(self):
+    def test_returns_paths_with_zero_size(self, connection):
         stdout = "/remote/a.txt\n/remote/b.txt\n"
         with patch("subprocess.run", return_value=_completed(stdout)):
             result = _get_remote_file_list_without_sizes(
-                _connection(), "/remote", exclude_patterns=[]
+                connection, "/remote", exclude_patterns=[]
             )
         assert result == [("/remote/a.txt", 0), ("/remote/b.txt", 0)]
 
-    def test_applies_exclude_patterns(self):
+    def test_applies_exclude_patterns(self, connection):
         stdout = "/remote/keep.txt\n/remote/tensors/skip.bin\n"
         with patch("subprocess.run", return_value=_completed(stdout)):
             result = _get_remote_file_list_without_sizes(
-                _connection(), "/remote", exclude_patterns=["/tensors"]
+                connection, "/remote", exclude_patterns=["/tensors"]
             )
         assert result == [("/remote/keep.txt", 0)]
 
-    def test_skips_blank_lines(self):
+    def test_skips_blank_lines(self, connection):
         stdout = "/remote/a.txt\n\n   \n/remote/b.txt\n"
         with patch("subprocess.run", return_value=_completed(stdout)):
             result = _get_remote_file_list_without_sizes(
-                _connection(), "/remote", exclude_patterns=[]
+                connection, "/remote", exclude_patterns=[]
             )
         assert result == [("/remote/a.txt", 0), ("/remote/b.txt", 0)]
