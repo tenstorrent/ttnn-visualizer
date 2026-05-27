@@ -6,6 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it } from 'vitest';
 import FileStatusOverlay from '../src/components/FileStatusOverlay';
+import { FILE_STATUS_LABEL } from '../src/functions/getFileStatusLabel';
 import { FileProgress, FileStatus } from '../src/model/APIData';
 import { fileTransferProgressAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
@@ -37,7 +38,7 @@ describe('FileStatusOverlay status row', () => {
             currentFileSize: 0,
         });
 
-        expect(screen.getByText('Preparing\u2026')).toBeInTheDocument();
+        expect(screen.getByText(FILE_STATUS_LABEL[FileStatus.STARTED])).toBeInTheDocument();
     });
 
     it('shows the filename row when DOWNLOADING reports a current file', () => {
@@ -53,7 +54,7 @@ describe('FileStatusOverlay status row', () => {
         });
 
         expect(screen.getByText('db.sqlite')).toBeInTheDocument();
-        expect(screen.queryByText('Preparing\u2026')).not.toBeInTheDocument();
+        expect(screen.queryByText(FILE_STATUS_LABEL[FileStatus.STARTED])).not.toBeInTheDocument();
     });
 
     // Uploads stream as a single multipart request, so currentFileName stays
@@ -70,7 +71,7 @@ describe('FileStatusOverlay status row', () => {
             bytesTotal: 1_024_000,
         });
 
-        expect(screen.queryByText('Preparing\u2026')).not.toBeInTheDocument();
-        expect(screen.queryByText('Uploading')).not.toBeInTheDocument();
+        expect(screen.queryByText(FILE_STATUS_LABEL[FileStatus.STARTED])).not.toBeInTheDocument();
+        expect(screen.queryByText(FILE_STATUS_LABEL[FileStatus.UPLOADING])).not.toBeInTheDocument();
     });
 });

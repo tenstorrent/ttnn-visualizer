@@ -4,7 +4,7 @@
 
 import { FileStatus } from '../model/APIData';
 
-const FILE_STATUS_LABEL: Readonly<Record<FileStatus, string>> = Object.freeze({
+export const FILE_STATUS_LABEL: Readonly<Record<FileStatus, string>> = Object.freeze({
     // STARTED is the only label that may render standalone (before the first
     // per-file event populates `currentFileName`), so it's phrased as a
     // self-contained user message rather than a transitive verb — see

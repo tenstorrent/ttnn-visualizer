@@ -51,8 +51,8 @@ const SYNC_DEMO_PROGRESS = {
 };
 
 // STARTED phase of a remote sync: backend has emitted job totals but no
-// per-file event yet, so `currentFileName` is empty and the overlay shows the
-// "Preparing transfer..." placeholder (issue #1599).
+// per-file event yet, so `currentFileName` is empty and the overlay renders
+// the standalone `Preparing\u2026` label (issue #1599).
 const SYNC_STARTING_DEMO_PROGRESS = {
     currentFileName: '',
     numberOfFiles: 3,
