@@ -604,17 +604,11 @@ export default function Styleguide() {
             <h3>Progress bar</h3>
 
             <div className='container short-width'>
-                <ProgressBar
-                    progress={0}
-                    estimated={36}
-                />
+                <ProgressBar progress={0} />
             </div>
 
             <div className='container short-width'>
-                <ProgressBar
-                    progress={0.85}
-                    estimated={1}
-                />
+                <ProgressBar progress={0.85} />
             </div>
 
             <div className='container flex'>
