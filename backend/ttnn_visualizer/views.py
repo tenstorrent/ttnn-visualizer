@@ -26,7 +26,7 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceReportQueries,
 )
 from ttnn_visualizer.decorators import local_only, with_instance
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.enums import ConnectionTestStates, StackSourceOrigin
 from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     DataFormatError,
@@ -55,6 +55,10 @@ from ttnn_visualizer.models import (
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.report_source_file import (
+    read_report_source_file,
+    report_source_file_available,
+)
 from ttnn_visualizer.serializers import (
     serialize_buffer,
     serialize_buffer_pages,
@@ -76,8 +80,8 @@ from ttnn_visualizer.sftp_operations import (
 )
 from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.stack_trace_source import (
-    check_stack_source_local,
-    check_stack_source_remote,
+    check_stack_source_local_with_origin,
+    check_stack_source_remote_with_origin,
     read_stack_source_local,
     read_stack_source_remote,
     stack_source_response,
@@ -105,15 +109,40 @@ logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__)
 
 
-def _file_path_from_stack_source_request():
+def _stack_source_request_params():
     """
-    Parse ``?filePath=`` for stack-trace availability/content GET requests.
-    Returns ``(path, None)`` or ``(None, error_response)``.
+    Parse ``?filePath=`` and optional ``?sourceFileId=`` for stack-trace GET requests.
+
+    Returns ``(file_path, source_file_id, None)`` or ``(None, None, error_response)``.
     """
     file_path = request.args.get("filePath")
-    if not file_path or not isinstance(file_path, str):
-        return None, response_bad_request("Missing or invalid filePath")
-    return file_path, None
+    if file_path is not None and not isinstance(file_path, str):
+        return None, None, response_bad_request("Invalid filePath")
+
+    source_file_id: Optional[int] = None
+    raw_source_file_id = request.args.get("sourceFileId")
+    if raw_source_file_id is not None and raw_source_file_id != "":
+        try:
+            source_file_id = int(raw_source_file_id)
+        except (TypeError, ValueError):
+            return (
+                None,
+                None,
+                response_bad_request(
+                    "Invalid query parameter 'sourceFileId': expected an integer."
+                ),
+            )
+
+    if source_file_id is None and (not file_path or not file_path.strip()):
+        return (
+            None,
+            None,
+            response_bad_request(
+                "Missing or invalid query: provide filePath and/or sourceFileId."
+            ),
+        )
+
+    return file_path, source_file_id, None
 
 
 def _optional_rank_query_param() -> Optional[int]:
@@ -155,44 +184,87 @@ def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
     return response_unprocessable_entity(_NONZERO_RANK_UNSUPPORTED_MSG)
 
 
-def _stack_source_availability_response(is_available: bool) -> Response:
+def _stack_source_availability_response(
+    is_available: bool, source: Optional[StackSourceOrigin] = None
+) -> Response:
     # Match stack_source_response: same filePath can resolve differently after
     # re-syncing remote reports, so don't let caches serve a stale answer.
-    resp = jsonify({"available": is_available})
+    payload = {
+        "available": is_available,
+        "source": source.value if is_available and source is not None else None,
+    }
+    resp = jsonify(payload)
     resp.headers["Cache-Control"] = "no-store"
 
     return resp
 
 
-def _remote_stack_source_path_availability(instance: Instance, file_path: str):
-    """Whether stack source ``file_path`` is readable for this instance (local or SSH)."""
-    remote_connection = instance.remote_connection
-    is_available = False
+def _remote_stack_source_path_availability(
+    instance: Instance,
+    file_path: Optional[str],
+    source_file_id: Optional[int] = None,
+):
+    """Whether stack source is readable (report DB, then local or SSH tt-metal)."""
+    with DatabaseQueries(instance) as db:
+        if report_source_file_available(
+            db, source_file_id=source_file_id, file_path=file_path
+        ):
+            return _stack_source_availability_response(
+                True, source=StackSourceOrigin.DATABASE
+            )
 
+    remote_connection = instance.remote_connection
+
+    if not file_path:
+        return _stack_source_availability_response(False)
+
+    # `remapped` is None when the file is unavailable, False on a literal-path hit,
+    # and True when resolved via a /tt-metal/ remap. The /test endpoint surfaces this
+    # distinction so clients can warn only about approximate (remapped) matches.
+    remapped: Optional[bool] = None
     if remote_connection:
         try:
             ssh_client = SSHClient(remote_connection)
-            is_available = check_stack_source_remote(ssh_client, file_path)
+            remapped = check_stack_source_remote_with_origin(ssh_client, file_path)
         except RemoteConnectionException:
             return _stack_source_availability_response(False)
-    else:
-        if not current_app.config.get("SERVER_MODE"):
-            is_available = check_stack_source_local(file_path)
+    elif not current_app.config.get("SERVER_MODE"):
+        remapped = check_stack_source_local_with_origin(file_path)
 
-    return _stack_source_availability_response(is_available)
+    if remapped is None:
+        return _stack_source_availability_response(False)
+    return _stack_source_availability_response(
+        True,
+        source=StackSourceOrigin.REMAPPED if remapped else StackSourceOrigin.PATH,
+    )
 
 
-def _remote_stack_source_read(instance: Instance, file_path: str):
-    """Return plain-text stack source (or error response)."""
+def _remote_stack_source_read(
+    instance: Instance,
+    file_path: Optional[str],
+    source_file_id: Optional[int] = None,
+):
+    """Return JSON stack source (content + resolved_path) from report DB, then local or SSH tt-metal."""
+    with DatabaseQueries(instance) as db:
+        report_result = read_report_source_file(
+            db, source_file_id=source_file_id, file_path=file_path
+        )
+        if report_result is not None:
+            content, resolved_path = report_result
+            return stack_source_response(content, resolved_path)
+
     remote_connection = instance.remote_connection
+
+    if not file_path:
+        return response_not_found("Source file not found.")
 
     if remote_connection:
         try:
             ssh_client = SSHClient(remote_connection)
-            content, resolved, remapped = read_stack_source_remote(
+            content, resolved, _remapped = read_stack_source_remote(
                 ssh_client, file_path
             )
-            return stack_source_response(content, resolved, remapped)
+            return stack_source_response(content, resolved)
         except RemoteConnectionException as e:
             return error_response(e.http_status, e.message)
         except RemoteFileReadException as e:
@@ -204,8 +276,8 @@ def _remote_stack_source_read(instance: Instance, file_path: str):
         )
 
     try:
-        content, resolved, remapped = read_stack_source_local(file_path)
-        return stack_source_response(content, resolved, remapped)
+        content, resolved, _remapped = read_stack_source_local(file_path)
+        return stack_source_response(content, resolved)
     except ValueError as e:
         return response_bad_request(str(e))
     except FileNotFoundError as e:
@@ -1652,19 +1724,19 @@ def test_remote_folder():
 @api.route("/remote/stack-trace/test", methods=["GET"])
 @with_instance
 def remote_stack_trace_test(instance: Instance):
-    file_path, err = _file_path_from_stack_source_request()
+    file_path, source_file_id, err = _stack_source_request_params()
     if err is not None:
         return err
-    return _remote_stack_source_path_availability(instance, file_path)
+    return _remote_stack_source_path_availability(instance, file_path, source_file_id)
 
 
 @api.route("/remote/stack-trace/read", methods=["GET"])
 @with_instance
 def remote_stack_trace_read(instance: Instance):
-    file_path, err = _file_path_from_stack_source_request()
+    file_path, source_file_id, err = _stack_source_request_params()
     if err is not None:
         return err
-    return _remote_stack_source_read(instance, file_path)
+    return _remote_stack_source_read(instance, file_path, source_file_id)
 
 
 @api.route("/remote/sync", methods=["POST"])

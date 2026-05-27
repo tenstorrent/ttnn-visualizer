@@ -17,6 +17,8 @@ from ttnn_visualizer.stack_trace_source import (
     _safe_join_under_tt_metal_root,
     _validate_stack_trace_raw_path,
     check_stack_source_local,
+    check_stack_source_local_with_origin,
+    check_stack_source_remote_with_origin,
     read_stack_source_remote,
 )
 
@@ -149,6 +151,104 @@ def test_check_stack_source_local_matches_resolve(monkeypatch, tmp_path):
     assert check_stack_source_local("/x/tt-metal/ttnn/missing.py") is False
 
 
+def test_check_stack_source_local_with_origin_literal_match(monkeypatch, tmp_path):
+    """Literal path under a discovered root returns False (no remap)."""
+    metal = tmp_path / "tt-metal"
+    (metal / "ttnn").mkdir(parents=True)
+    target = metal / "ttnn" / "literal.py"
+    target.write_text("# x", encoding="utf-8")
+    monkeypatch.setenv("TT_METAL_HOME", str(metal))
+
+    assert check_stack_source_local_with_origin(str(target)) is False
+
+
+def test_check_stack_source_local_with_origin_remapped_match(monkeypatch, tmp_path):
+    """Foreign tt-metal prefix that exists under a discovered root returns True."""
+    metal = tmp_path / "tt-metal"
+    (metal / "ttnn").mkdir(parents=True)
+    target = metal / "ttnn" / "remapped.py"
+    target.write_text("# x", encoding="utf-8")
+    monkeypatch.setenv("TT_METAL_HOME", str(metal))
+
+    assert (
+        check_stack_source_local_with_origin("/elsewhere/tt-metal/ttnn/remapped.py")
+        is True
+    )
+
+
+def test_check_stack_source_local_with_origin_missing_returns_none(
+    monkeypatch, tmp_path
+):
+    metal = tmp_path / "tt-metal"
+    metal.mkdir()
+    monkeypatch.setenv("TT_METAL_HOME", str(metal))
+
+    assert (
+        check_stack_source_local_with_origin("/elsewhere/tt-metal/ttnn/missing.py")
+        is None
+    )
+
+
+def test_check_stack_source_local_with_origin_rejects_bad_input():
+    assert check_stack_source_local_with_origin("a\x00b") is None
+    assert check_stack_source_local_with_origin("/a/../b") is None
+
+
+def test_check_stack_source_remote_with_origin_literal_hit(monkeypatch):
+    """Literal path hit on the remote returns False (no remap)."""
+    import ttnn_visualizer.stack_trace_source as sts
+
+    raw = "/home/dev/tt-metal/ttnn/literal.py"
+
+    def fake_exists(_ssh, path: str) -> bool:
+        return path == raw
+
+    monkeypatch.setattr(sts, "_remote_regular_file_exists", fake_exists)
+
+    ssh = MagicMock()
+    assert check_stack_source_remote_with_origin(ssh, raw) is False
+
+
+def test_check_stack_source_remote_with_origin_remapped_hit(monkeypatch):
+    """Hit under a discovered root after literal miss returns True."""
+    import ttnn_visualizer.stack_trace_source as sts
+
+    monkeypatch.setattr(
+        sts,
+        "_discover_tt_metal_roots_remote",
+        lambda _ssh: ["/good/tt-metal"],
+    )
+
+    def fake_exists(_ssh, path: str) -> bool:
+        return path == "/good/tt-metal/u/v.py"
+
+    monkeypatch.setattr(sts, "_remote_regular_file_exists", fake_exists)
+
+    ssh = MagicMock()
+    assert (
+        check_stack_source_remote_with_origin(ssh, "/container/tt-metal/u/v.py") is True
+    )
+
+
+def test_check_stack_source_remote_with_origin_missing_returns_none(monkeypatch):
+    import ttnn_visualizer.stack_trace_source as sts
+
+    monkeypatch.setattr(sts, "_discover_tt_metal_roots_remote", lambda _ssh: [])
+    monkeypatch.setattr(sts, "_remote_regular_file_exists", lambda _ssh, _p: False)
+
+    ssh = MagicMock()
+    assert (
+        check_stack_source_remote_with_origin(ssh, "/container/tt-metal/u/v.py") is None
+    )
+
+
+def test_check_stack_source_remote_with_origin_rejects_bad_input():
+    ssh = MagicMock()
+    # Relative path; remote helper requires absolute POSIX paths.
+    assert check_stack_source_remote_with_origin(ssh, "relative.py") is None
+    ssh.execute_command.assert_not_called()
+
+
 def test_read_stack_source_remote_remaps_after_not_found(monkeypatch):
     from http import HTTPStatus
 
@@ -264,6 +364,12 @@ def test_validate_stack_trace_raw_path_rejects_unsafe():
         _validate_stack_trace_raw_path("/a/../b")
     with pytest.raises(ValueError, match="absolute"):
         _validate_stack_trace_raw_path("relative-only", require_absolute_posix=True)
+    # Reject mid-path control characters (including CR/LF) so DB-stored paths
+    # are safe in JSON ``resolved_path`` on stack-trace read responses.
+    # Trailing whitespace is fine because strip() removes it before this check.
+    for bad in ("/a/b\r\nX-Evil: 1", "/a/inner\nhead.py", "/a/b\x1ftail"):
+        with pytest.raises(ValueError, match="control"):
+            _validate_stack_trace_raw_path(bad)
 
 
 def test_remote_roots_for_raw_path_prioritizes_preferred_user_root(monkeypatch):

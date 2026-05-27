@@ -10,6 +10,17 @@ import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import Endpoints from '../definitions/Endpoints';
+import { StackSourceOrigin } from '../definitions/StackTrace';
+
+interface StackSourceAvailability {
+    available: boolean;
+    source: StackSourceOrigin | null;
+}
+
+interface StackSourceReadResponse {
+    content?: string;
+    resolved_path?: string | null;
+}
 
 const FAILED_NO_CONNECTION = {
     status: ConnectionTestStates.FAILED,
@@ -186,39 +197,69 @@ const useRemoteConnection = () => {
         setAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS, safeJsonStringify(connectionList, '[]'));
     };
 
-    const isSourceFileAvailable = useCallback(async (filePath: string, signal?: AbortSignal): Promise<boolean> => {
+    const isSourceFileAvailable = useCallback(
+        async (
+            filePath: string,
+            signal?: AbortSignal,
+            sourceFileId?: number | null,
+        ): Promise<StackSourceAvailability> => {
+            try {
+                const params: { filePath?: string; sourceFileId?: number } = {};
+                if (filePath) {
+                    params.filePath = filePath;
+                }
+                if (sourceFileId != null) {
+                    params.sourceFileId = sourceFileId;
+                }
+                const { data } = await axiosInstance.get<{
+                    available?: boolean;
+                    source?: StackSourceOrigin | null;
+                }>(`${Endpoints.REMOTE}/stack-trace/test`, {
+                    signal,
+                    params,
+                });
+
+                const available = data?.available === true;
+                const rawSource = data?.source;
+                const knownSource =
+                    typeof rawSource === 'string' && (Object.values(StackSourceOrigin) as string[]).includes(rawSource)
+                        ? (rawSource as StackSourceOrigin)
+                        : null;
+                return {
+                    available,
+                    source: available ? knownSource : null,
+                };
+            } catch {
+                return { available: false, source: null };
+            }
+        },
+        [],
+    );
+
+    const readRemoteFile = async (filePath: string, sourceFileId?: number | null) => {
         try {
-            const { data } = await axiosInstance.get<{ available?: boolean }>(`${Endpoints.REMOTE}/stack-trace/test`, {
-                signal,
-                params: { filePath },
+            const params: { filePath?: string; sourceFileId?: number } = {};
+            if (filePath) {
+                params.filePath = filePath;
+            }
+            if (sourceFileId != null) {
+                params.sourceFileId = sourceFileId;
+            }
+            const { data } = await axiosInstance.get<StackSourceReadResponse>(`${Endpoints.REMOTE}/stack-trace/read`, {
+                params,
             });
 
-            return data?.available === true;
-        } catch {
-            return false;
-        }
-    }, []);
-
-    const readRemoteFile = async (filePath: string) => {
-        try {
-            const response = await axiosInstance.get<string>(`${Endpoints.REMOTE}/stack-trace/read`, {
-                params: { filePath },
-                responseType: 'text',
-            });
-
-            const isRemapped = response.headers['x-ttnn-source-remapped'] === 'true';
-            const resolvedPath = response.headers['x-ttnn-resolved-source-path'] || null;
+            const content = typeof data?.content === 'string' ? data.content : null;
+            const resolvedPath = typeof data?.resolved_path === 'string' ? data.resolved_path : null;
 
             return {
-                data: response.data,
+                data: content,
                 error: null,
-                isRemapped,
-                resolvedPath: typeof resolvedPath === 'string' ? resolvedPath : null,
+                resolvedPath,
             };
         } catch (error: unknown) {
             const standardError = {
                 data: null,
-                isRemapped: false,
                 resolvedPath: null,
                 error: 'An unexpected error occurred',
             };

@@ -14,7 +14,7 @@ from http import HTTPStatus
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Optional, Tuple
 
-from flask import Response
+from flask import Response, jsonify
 from ttnn_visualizer.exceptions import RemoteFileReadException
 from ttnn_visualizer.ssh_client import SSHException
 
@@ -62,6 +62,11 @@ def _validate_stack_trace_raw_path(
         raise ValueError("Path exceeds maximum length")
     if "\x00" in s:
         raise ValueError("Path contains null byte")
+    # Reject control characters (including CR/LF) to keep DB-stored paths safe
+    # for filesystem use and for JSON ``resolved_path`` on stack-trace read responses
+    # (defends against header injection / smuggling, beyond what Werkzeug enforces).
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in s):
+        raise ValueError("Path contains control characters")
     if _path_parts_contain_dotdot(s):
         raise ValueError("Path must not contain '..' components")
     if require_absolute_posix and not s.startswith("/"):
@@ -397,33 +402,47 @@ def _remote_regular_file_exists(ssh_client: "SSHClient", posix_path: str) -> boo
         return False
 
 
+def check_stack_source_local_with_origin(raw_path: str) -> Optional[bool]:
+    """
+    Probe whether a local stack source file is readable and how it was resolved.
+
+    :return: ``None`` when the file is not available, ``False`` when matched at the
+        literal path, ``True`` when matched via a ``/tt-metal/`` remap.
+    """
+    try:
+        _, remapped = _resolve_local_stack_path(raw_path)
+        return remapped
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+
+
 def check_stack_source_local(raw_path: str) -> bool:
     """Whether _resolve_local_stack_path would succeed (including /tt-metal/ remaps)."""
-    try:
-        _resolve_local_stack_path(raw_path)
-        return True
-    except (FileNotFoundError, OSError, ValueError):
-        return False
+    return check_stack_source_local_with_origin(raw_path) is not None
 
 
-def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
+def check_stack_source_remote_with_origin(
+    ssh_client: "SSHClient", raw_path: str
+) -> Optional[bool]:
     """
-    Whether read_stack_source_remote would succeed: literal path or remapped under any
-    discovered tt-metal root (same roots as local).
+    Probe whether a remote stack source file is readable and how it was resolved.
+
+    Mirrors ``check_stack_source_local_with_origin``: ``None`` for unavailable,
+    ``False`` for a literal path hit, ``True`` for a ``/tt-metal/`` remap hit.
     """
     try:
         validated_path = _validate_stack_trace_raw_path(
             raw_path, require_absolute_posix=True
         )
     except ValueError:
-        return False
+        return None
 
     path_str = _normalize_remote_posix_path(validated_path)
     if _remote_regular_file_exists(ssh_client, path_str):
-        return True
+        return False
     suffix = _extract_suffix_after_tt_metal(validated_path)
     if suffix is None:
-        return False
+        return None
     roots = _remote_roots_for_raw_path(ssh_client, validated_path)
     for root_str in roots:
         try:
@@ -432,22 +451,27 @@ def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
             continue
         if _remote_regular_file_exists(ssh_client, remapped_str):
             return True
-    return False
+    return None
 
 
-def stack_source_response(text: str, resolved: str, remapped: bool) -> Response:
-    resp = Response(
-        response=text,
-        status=HTTPStatus.OK,
-        mimetype="text/plain; charset=utf-8",
-    )
-    resp.headers["X-TTNN-Resolved-Source-Path"] = resolved
+def check_stack_source_remote(ssh_client: "SSHClient", raw_path: str) -> bool:
+    """
+    Whether read_stack_source_remote would succeed: literal path or remapped under any
+    discovered tt-metal root (same roots as local).
+    """
+    return check_stack_source_remote_with_origin(ssh_client, raw_path) is not None
 
-    if remapped:
-        resp.headers["X-TTNN-Source-Remapped"] = "true"
 
+def stack_source_response(text: str, resolved: str) -> Response:
+    """
+    JSON body for ``GET /api/remote/stack-trace/read``.
+
+    Remap vs exact-path resolution is reported on ``GET .../stack-trace/test``
+    via the JSON ``source`` field, not on this response.
+    """
+    resp = jsonify({"content": text, "resolved_path": resolved})
+    resp.status_code = HTTPStatus.OK
     # Source files can change underneath a stable filePath (e.g. after
     # re-syncing a remote folder), so disable caching for the GET endpoint.
     resp.headers["Cache-Control"] = "no-store"
-
     return resp
