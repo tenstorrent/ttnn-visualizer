@@ -111,7 +111,6 @@ export enum FileStatus {
     DOWNLOADING = 'DOWNLOADING',
     FAILED = 'FAILED',
     UPLOADING = 'UPLOADING',
-    COMPRESSING = 'COMPRESSING',
     FINISHED = 'FINISHED',
     STARTED = 'STARTED',
     INACTIVE = 'INACTIVE',
@@ -124,6 +123,9 @@ export interface FileProgress {
     percentOfCurrent: number;
     finishedFiles: number;
     status: FileStatus; // Use the FileStatus enum
+    bytesTransferred?: number;
+    bytesTotal?: number;
+    currentFileSize?: number;
     timestamp?: string; // Optional, with default handled elsewhere if necessary
 }
 

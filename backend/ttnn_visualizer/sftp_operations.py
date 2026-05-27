@@ -8,9 +8,10 @@ import os
 import shlex
 import subprocess
 import time
+from http import HTTPStatus
 from pathlib import Path
 from threading import Thread
-from typing import List, Optional
+from typing import List, NoReturn, Optional
 
 import yaml
 from flask import current_app
@@ -88,10 +89,13 @@ def _sftp_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
 
 def handle_ssh_subprocess_error(
     e: subprocess.CalledProcessError, remote_connection: RemoteConnection
-) -> None:
+) -> NoReturn:
     """
     Convert subprocess SSH errors to appropriate exceptions with clear messages.
-    Never returns; raises AuthenticationException, NoValidConnectionsError, or SSHException.
+
+    Always raises (`NoReturn`); the type checker now treats every line after
+    a call to this helper as unreachable, which keeps the call sites tidy
+    and prevents accidental fall-through.
     """
     stderr = (e.stderr or "").lower()
     raw_error = (e.stderr or "").strip() or "No stderr output"
@@ -209,6 +213,24 @@ def is_excluded(file_path, exclude_patterns):
     return False
 
 
+def _is_unsupported_printf_error(stderr: str) -> bool:
+    """True when stderr looks like a find variant rejecting `-printf`.
+
+    Covers the messages seen from BSD find (macOS, FreeBSD) and busybox
+    find. We deliberately match the literal `-printf` token plus an
+    "unknown"/"unrecognized" signal so that ordinary failures (permission
+    denied, path not found, etc.) do not silently downgrade to the
+    size-less fallback.
+    """
+    lowered = stderr.lower()
+    if "-printf" not in lowered:
+        return False
+    return any(
+        marker in lowered
+        for marker in ("unknown", "unrecognized", "not supported", "illegal option")
+    )
+
+
 @remote_exception_handler
 def sync_files_and_directories(
     remote_connection: RemoteConnection,
@@ -238,6 +260,40 @@ def sync_files_and_directories(
 
     logger.info(f"Found {len(all_files)} files and {len(all_dirs)} directories to sync")
 
+    # `find -type d` on an existing readable folder always returns at least
+    # the folder itself, so an empty dir list is the unambiguous "listing
+    # failed" signal (permission denied, missing path, SSH downgrade to
+    # fallback after a real error, etc.). Surface it as a real error rather
+    # than letting the loop fall through to a misleading "0 files synced"
+    # FINISHED. The list helpers already log the underlying stderr.
+    if not all_dirs:
+        if current_app.config["USE_WEBSOCKETS"]:
+            # Emit FAILED before raising so the overlay closes even if a
+            # caller swallows the exception; flush ordering matters because
+            # `emit_file_status` treats FAILED as terminal and bypasses the
+            # debounce.
+            emit_file_status(
+                FileProgress(
+                    current_file_name="",
+                    number_of_files=0,
+                    percent_of_current=0,
+                    finished_files=0,
+                    status=FileStatus.FAILED,
+                ),
+                sid,
+            )
+        # 422, not 500: the remote path is user-supplied input that the
+        # server *could* talk to over SSH but cannot read at the requested
+        # location. Matches the precedent set by `AuthenticationFailedException`.
+        raise RemoteConnectionException(
+            message=(
+                f"Could not list remote folder {remote_profiler_folder!r}. "
+                "Check that the path exists and is readable by the SSH user."
+            ),
+            status=ConnectionTestStates.FAILED,
+            http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
+
     # Create local directory structure
     logger.info("Creating local directory structure...")
     for remote_dir in all_dirs:
@@ -250,22 +306,69 @@ def sync_files_and_directories(
             # Skip if remote_dir is not relative to remote_profiler_folder
             continue
 
-    # Download files with progress reporting
+    # Download files with progress reporting.
+    #
+    # NOTE: byte progress is file-granular, not streaming. SFTP gives us no
+    # per-chunk callback, so `bytes_transferred` jumps up only after each
+    # full file completes; the UI may look idle between updates while a
+    # large file is in flight (compounded by the 500ms debounce in
+    # emit_file_status). Acceptable for v1 — streaming byte progress would
+    # require Paramiko or rsync.
     total_files = len(all_files)
+    total_bytes = sum(size for _, size in all_files)
     finished_files = 0
+    failed_count = 0
+    bytes_transferred = 0
 
     logger.info(f"Starting download of {total_files} files...")
 
-    for remote_file in all_files:
+    # Skip all transfer-progress websocket emits when there's nothing to
+    # download — STARTED is an *active* status on the client, so emitting it
+    # for an empty folder would briefly open the overlay only to close it on
+    # FINISHED below.
+    should_emit_progress = current_app.config["USE_WEBSOCKETS"] and total_files > 0
+
+    if should_emit_progress:
+        emit_file_status(
+            FileProgress(
+                current_file_name="",
+                number_of_files=total_files,
+                percent_of_current=0,
+                finished_files=0,
+                bytes_transferred=0,
+                bytes_total=total_bytes,
+                current_file_size=0,
+                status=FileStatus.STARTED,
+            ),
+            sid,
+        )
+
+    for remote_file, remote_file_size in all_files:
         try:
             # Calculate relative path from the base remote folder
             relative_path = Path(remote_file).relative_to(remote_profiler_folder)
             local_file = destination_dir / relative_path
 
+            if should_emit_progress:
+                emit_file_status(
+                    FileProgress(
+                        current_file_name=str(relative_path),
+                        number_of_files=total_files,
+                        percent_of_current=0,
+                        finished_files=finished_files,
+                        bytes_transferred=bytes_transferred,
+                        bytes_total=total_bytes,
+                        current_file_size=remote_file_size,
+                        status=FileStatus.DOWNLOADING,
+                    ),
+                    sid,
+                )
+
             # Download the file using SFTP
             download_single_file_sftp(remote_connection, remote_file, local_file)
 
             finished_files += 1
+            bytes_transferred += remote_file_size
 
             # Emit progress
             progress = FileProgress(
@@ -273,10 +376,13 @@ def sync_files_and_directories(
                 number_of_files=total_files,
                 percent_of_current=100,  # We don't get per-file progress with SFTP
                 finished_files=finished_files,
+                bytes_transferred=bytes_transferred,
+                bytes_total=total_bytes,
+                current_file_size=remote_file_size,
                 status=FileStatus.DOWNLOADING,
             )
 
-            if current_app.config["USE_WEBSOCKETS"]:
+            if should_emit_progress:
                 emit_file_status(progress, sid)
 
             if finished_files % 10 == 0:  # Log every 10 files
@@ -288,22 +394,56 @@ def sync_files_and_directories(
             continue
         except Exception as e:
             logger.error(f"Failed to download {remote_file}: {e}")
-            # Continue with other files rather than failing completely
+            failed_count += 1
+            # Best-effort: try remaining files, but do not report success if any fail.
             continue
 
-    # Create a .last-synced file in directory
+    sync_incomplete = total_files > 0 and finished_files < total_files
+    if sync_incomplete:
+        logger.error(
+            "SFTP sync incomplete: downloaded %s/%s files (%s failed).",
+            finished_files,
+            total_files,
+            failed_count,
+        )
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(
+                FileProgress(
+                    current_file_name="",
+                    number_of_files=total_files,
+                    percent_of_current=0,
+                    finished_files=finished_files,
+                    bytes_transferred=bytes_transferred,
+                    bytes_total=total_bytes,
+                    current_file_size=0,
+                    status=FileStatus.FAILED,
+                ),
+                sid,
+            )
+        raise RemoteConnectionException(
+            message=(
+                f"Sync incomplete: downloaded {finished_files} of {total_files} "
+                f"file(s) ({failed_count} failed). Check logs for per-file errors."
+            ),
+            status=ConnectionTestStates.FAILED,
+            http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
+
+    # Only stamp success after every queued file downloaded.
     update_last_synced(destination_dir)
 
-    # Emit final status
     final_progress = FileProgress(
         current_file_name="",
         number_of_files=total_files,
         percent_of_current=100,
         finished_files=finished_files,
+        bytes_transferred=bytes_transferred,
+        bytes_total=total_bytes,
+        current_file_size=0,
         status=FileStatus.FINISHED,
     )
 
-    if current_app.config["USE_WEBSOCKETS"]:
+    if should_emit_progress:
         emit_file_status(final_progress, sid)
 
     logger.info(
@@ -313,13 +453,21 @@ def sync_files_and_directories(
 
 def get_remote_file_list(
     remote_connection: RemoteConnection, remote_folder: str, exclude_patterns=None
-) -> List[str]:
-    """Get a list of all files in the remote directory recursively, applying exclusion patterns."""
+) -> List[tuple[str, int]]:
+    """Get a list of (path, size_bytes) for all files in the remote directory.
+
+    Uses GNU find's -printf to fetch size and path in one SSH call; falls back
+    to plain -type f (sizes = 0) if the remote find lacks -printf support.
+    """
     exclude_patterns = exclude_patterns or []
 
-    # Build SSH command to find all files recursively (never prompts for password)
+    # GNU find: emit '<size>\t<path>\0' records. NUL terminator is illegal in
+    # POSIX paths, so paths containing tabs/newlines round-trip safely; the
+    # first '\t' in each record is the unambiguous separator between the
+    # decimal size and the path. Falls back below if -printf is unsupported.
+    quoted_folder = shlex.quote(remote_folder)
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find '{remote_folder}' -type f",
+        f"find {quoted_folder} -type f -printf '%s\\t%p\\0'",
     ]
 
     try:
@@ -331,25 +479,81 @@ def get_remote_file_list(
             timeout=_ssh_subprocess_timeout_seconds(),
         )
 
-        all_files = result.stdout.strip().splitlines()
+        entries: List[tuple[str, int]] = []
+        for record in result.stdout.split("\x00"):
+            if not record:
+                continue
+            size_str, separator, path_str = record.partition("\t")
+            if not separator or not path_str or is_excluded(path_str, exclude_patterns):
+                continue
+            try:
+                size = int(size_str)
+            except ValueError:
+                size = 0
+            entries.append((path_str, size))
 
-        # Filter out excluded files
-        filtered_files = []
-        for file_path in all_files:
-            if not is_excluded(file_path, exclude_patterns):
-                filtered_files.append(file_path.strip())
-
-        return filtered_files
+        return entries
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-            return []
-        else:
-            logger.error(f"Error getting file list: {e.stderr}")
-            return []
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        stderr = (e.stderr or "").strip()
+        # Only fall back when stderr indicates the remote find lacks -printf
+        # support (BSD/busybox find variants). Other non-255 failures
+        # (permission denied, missing directory, etc.) must surface as an
+        # empty list + error log instead of triggering a second SSH call
+        # that would hide the real cause.
+        if _is_unsupported_printf_error(stderr):
+            logger.warning(
+                "find -printf unsupported on remote (%s); retrying without size information.",
+                stderr or "no stderr",
+            )
+            return _get_remote_file_list_without_sizes(
+                remote_connection, remote_folder, exclude_patterns
+            )
+        logger.error(
+            "Error getting file list from %s: %s",
+            remote_folder,
+            stderr or "no stderr",
+        )
+        return []
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout getting file list from: {remote_folder}")
+        return []
+    except Exception as e:
+        logger.error(f"Error getting file list: {e}")
+        return []
+
+
+def _get_remote_file_list_without_sizes(
+    remote_connection: RemoteConnection,
+    remote_folder: str,
+    exclude_patterns: List[str],
+) -> List[tuple[str, int]]:
+    """Fallback when GNU find -printf is unavailable. Sizes default to 0."""
+    quoted_folder = shlex.quote(remote_folder)
+    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
+        f"find {quoted_folder} -type f",
+    ]
+    try:
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
+        )
+        entries: List[tuple[str, int]] = []
+        for line in result.stdout.splitlines():
+            path = line.strip()
+            if not path or is_excluded(path, exclude_patterns):
+                continue
+            entries.append((path, 0))
+        return entries
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 255:  # SSH protocol errors
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        logger.error(f"Error getting file list: {e.stderr}")
         return []
     except Exception as e:
         logger.error(f"Error getting file list: {e}")
@@ -363,8 +567,9 @@ def get_remote_directory_list(
     exclude_patterns = exclude_patterns or []
 
     # Build SSH command to find all directories recursively (never prompts for password)
+    quoted_folder = shlex.quote(remote_folder)
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find '{remote_folder}' -type d",
+        f"find {quoted_folder} -type d",
     ]
 
     try:
@@ -388,11 +593,9 @@ def get_remote_directory_list(
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-            return []
-        else:
-            logger.error(f"Error getting directory list: {e.stderr}")
-            return []
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        logger.error(f"Error getting directory list: {e.stderr}")
+        return []
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout getting directory list from: {remote_folder}")
         return []
@@ -428,10 +631,9 @@ def download_single_file_sftp(
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-        else:
-            logger.error(f"Error downloading file {remote_file}: {e.stderr}")
-            raise RuntimeError(f"Failed to download {remote_file}")
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        logger.error(f"Error downloading file {remote_file}: {e.stderr}")
+        raise RuntimeError(f"Failed to download {remote_file}")
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout downloading file: {remote_file}")
         raise RuntimeError(f"Timeout downloading {remote_file}")
@@ -543,22 +745,14 @@ def get_remote_profiler_folder_from_config_path(
         logger.error(f"SSH command failed while reading config: {e}")
         logger.error(f"stderr: {e.stderr}")
 
-        # Check if it's an SSH-specific error (authentication, connection, etc.)
         if e.returncode == 255:  # SSH returns 255 for SSH protocol errors
             handle_ssh_subprocess_error(e, remote_connection)
-            # This line never executes as handle_ssh_subprocess_error raises an exception
-            return RemoteReportFolder(
-                remotePath=folder_str,
-                reportName=parent_folder_name,
-                lastModified=int(time.time()),
-            )
-        else:
-            # Fall back to current time if we can't get modification time
-            return RemoteReportFolder(
-                remotePath=folder_str,
-                reportName=parent_folder_name,
-                lastModified=int(time.time()),
-            )
+        # Fall back to current time if we can't get modification time.
+        return RemoteReportFolder(
+            remotePath=folder_str,
+            reportName=parent_folder_name,
+            lastModified=int(time.time()),
+        )
     except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"Error parsing config file {config_path}: {e}")
         # Fall back to current time and no report name
@@ -753,26 +947,21 @@ def find_folders_by_files(
     except subprocess.CalledProcessError as e:
         if e.returncode == 255:  # SSH protocol errors
             handle_ssh_subprocess_error(e, remote_connection)
-            # This line should never be reached as handle_ssh_subprocess_error raises an exception
-            return []
-        else:
-            stderr = e.stderr.lower() if e.stderr else ""
-            # Check for permission denied errors
-            if "permission denied" in stderr:
-                error_msg = (
-                    f"Permission denied accessing '{root_folder}'. "
-                    f"The user '{remote_connection.username}' does not have read access to this directory. "
-                    "Please check directory permissions on the remote server or choose a different path."
-                )
-                logger.error(f"Error finding folders: {e.stderr}")
-                raise RemoteConnectionException(
-                    message=error_msg,
-                    status=ConnectionTestStates.FAILED,
-                    detail=e.stderr.strip() if e.stderr else None,
-                )
-            else:
-                logger.error(f"Error finding folders: {e.stderr}")
-                return []
+        stderr = e.stderr.lower() if e.stderr else ""
+        if "permission denied" in stderr:
+            error_msg = (
+                f"Permission denied accessing '{root_folder}'. "
+                f"The user '{remote_connection.username}' does not have read access to this directory. "
+                "Please check directory permissions on the remote server or choose a different path."
+            )
+            logger.error(f"Error finding folders: {e.stderr}")
+            raise RemoteConnectionException(
+                message=error_msg,
+                status=ConnectionTestStates.FAILED,
+                detail=e.stderr.strip() if e.stderr else None,
+            )
+        logger.error(f"Error finding folders: {e.stderr}")
+        return []
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout finding folders in: {root_folder}")
         return []

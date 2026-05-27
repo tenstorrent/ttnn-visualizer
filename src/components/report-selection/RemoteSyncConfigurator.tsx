@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtom } from 'jotai';
+import { getDefaultStore, useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
@@ -18,6 +18,8 @@ import useRemoteConnection from '../../hooks/useRemote';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
+    fileTransferProgressAtom,
+    getInactiveFileTransferProgress,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
 } from '../../store/app';
@@ -28,6 +30,10 @@ import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
+
+const resetFileTransferProgress = () => {
+    getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
+};
 
 const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
@@ -216,6 +222,7 @@ const RemoteSyncConfigurator = () => {
             createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
         } finally {
             setIsSyncingReportFolder(false);
+            resetFileTransferProgress();
         }
     };
 
@@ -263,6 +270,7 @@ const RemoteSyncConfigurator = () => {
             createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
         } finally {
             setIsSyncingPerformanceFolder(false);
+            resetFileTransferProgress();
         }
     };
 

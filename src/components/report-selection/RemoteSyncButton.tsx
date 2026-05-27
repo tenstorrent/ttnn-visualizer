@@ -3,8 +3,11 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { useAtomValue } from 'jotai';
 import React from 'react';
 import { IconName, IconNames } from '@blueprintjs/icons';
+import { fileTransferProgressAtom } from '../../store/app';
+import { FileProgress, FileStatus } from '../../model/APIData';
 import {
     NEVER_SYNCED_LABEL,
     REPORT_OUTDATED_LABEL,
@@ -30,9 +33,16 @@ const RemoteSyncButton = ({
     isDisabled,
     handleClick,
 }: RemoteSyncButtonProps) => {
+    const fileTransferProgress = useAtomValue(fileTransferProgressAtom);
+
     return (
         <Tooltip
-            content={getTooltipContent(selectedReportFolder, isSyncingReportFolder, isSelectedReportFolderOutdated)}
+            content={getTooltipContent(
+                selectedReportFolder,
+                isSyncingReportFolder,
+                isSelectedReportFolderOutdated,
+                fileTransferProgress,
+            )}
             position={PopoverPosition.TOP}
         >
             <Button
@@ -57,13 +67,22 @@ const getTooltipContent = (
     folder: RemoteFolder | undefined,
     isSyncing: boolean,
     isOutdated: boolean,
+    fileTransferProgress: FileProgress,
 ): string | React.JSX.Element => {
     if (!folder) {
         return '';
     }
 
     if (isSyncing) {
-        return `Syncing report folder...`;
+        const { finishedFiles, numberOfFiles, status } = fileTransferProgress;
+        const isRemoteSyncInProgress =
+            numberOfFiles > 0 && (status === FileStatus.DOWNLOADING || status === FileStatus.STARTED);
+
+        if (isRemoteSyncInProgress) {
+            return `Syncing… ${finishedFiles}/${numberOfFiles}`;
+        }
+
+        return 'Syncing report folder...';
     }
 
     return (
