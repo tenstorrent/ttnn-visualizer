@@ -20,7 +20,10 @@ from typing import (
     get_origin,
 )
 
-from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
+from ttnn_visualizer.exceptions import (
+    DatabaseFileNotFoundException,
+    ProfilerReportNotLoadedException,
+)
 from ttnn_visualizer.models import (
     Buffer,
     BufferPage,
@@ -33,6 +36,7 @@ from ttnn_visualizer.models import (
     OperationArgument,
     OutputTensor,
     ProducersConsumers,
+    SourceFile,
     StackTrace,
     Tensor,
     TensorComparisonRecord,
@@ -96,7 +100,7 @@ class LocalQueryRunner:
             self.connection = connection
         else:
             if not instance or not instance.profiler_path:
-                raise ValueError("Report path must be provided for local queries")
+                raise ProfilerReportNotLoadedException()
             db_path = str(instance.profiler_path)
             if not Path(db_path).exists():
                 raise DatabaseFileNotFoundException(
@@ -300,6 +304,62 @@ class DatabaseQueries:
         rows = self._query_table("stack_traces", filters, select_clause=select_clause)
         for row in rows:
             yield StackTrace(*row)
+
+    def query_source_files(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[SourceFile, None, None]:
+        if not self._check_table_exists("source_files"):
+            return
+        select_clause = self._dataclass_select_clause("source_files", SourceFile)
+        rows = self._query_table("source_files", filters, select_clause=select_clause)
+        for row in rows:
+            yield SourceFile(*row)
+
+    def get_source_file_by_id(self, source_file_id: int) -> Optional[SourceFile]:
+        rows = list(self.query_source_files(filters={"id": source_file_id}))
+        return rows[0] if rows else None
+
+    def get_source_file_by_path(self, path: str) -> Optional[SourceFile]:
+        rows = list(self.query_source_files(filters={"path": path}))
+        return rows[0] if rows else None
+
+    def get_source_file_path_if_present(
+        self,
+        *,
+        source_file_id: Optional[int] = None,
+        file_path: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Return ``source_files.path`` for the first row whose ``contents`` is
+        non-empty, **without** loading the (potentially large) blob.
+
+        Used by availability probes (``GET /api/remote/stack-trace/test``) so the
+        cost scales with row count, not with embedded source size. ``source_file_id``
+        is preferred over ``file_path`` (mirrors ``lookup_report_source_file``).
+        """
+        if source_file_id is None and not file_path:
+            return None
+        if not self._check_table_exists("source_files"):
+            return None
+        if source_file_id is not None:
+            rows = self.query_runner.execute_query(
+                "SELECT path FROM source_files "
+                "WHERE id = ? AND contents IS NOT NULL AND length(contents) > 0 "
+                "LIMIT 1",
+                [source_file_id],
+            )
+            if rows:
+                return rows[0][0]
+        if file_path:
+            rows = self.query_runner.execute_query(
+                "SELECT path FROM source_files "
+                "WHERE path = ? AND contents IS NOT NULL AND length(contents) > 0 "
+                "LIMIT 1",
+                [file_path],
+            )
+            if rows:
+                return rows[0][0]
+        return None
 
     def query_error_records(
         self, filters: Optional[Dict[str, Any]] = None

@@ -158,6 +158,27 @@ interface SearchFieldProps {
 export default function SearchField({ placeholder, onSearch }: SearchFieldProps) { … }
 ```
 
+### Don't use `React.FC` / `FC` for component typing
+
+**Rationale.** The codebase mixed two styles (`function Foo({ x }: FooProps)` vs `const Foo: React.FC<FooProps> = …`). `React.FC` is deprecated by the React team, changes return-type inference (`ReactNode` vs `JSX.Element | null`), and under older `@types/react` versions it implicitly added `children` to every props type. Under `@types/react` 18 that foot-gun is gone, but a single canonical style keeps reviews predictable and eases a future React 19 migration.
+
+Type props **on the function signature**, not on a separate `FC` annotation:
+
+```tsx
+interface SocketProviderProps {
+    children: ReactNode;
+}
+
+export const SocketProvider = ({ children }: SocketProviderProps) => { … };
+```
+
+```tsx
+// Don't
+const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => { … };
+```
+
+Components that accept element children declare `children: ReactNode` (or `children?: ReactNode`) on `*Props` — don't wrap the interface in `PropsWithChildren` just to satisfy `React.FC`. ESLint bans `FC`, `React.FC`, `FunctionComponent`, and `React.FunctionComponent` via `no-restricted-syntax` in `eslint.config.cjs`.
+
 Reserve `type` for unions, generic-constrained mappings, and `Omit`/`Pick` derivations:
 
 ```ts
@@ -343,6 +364,23 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 
 **Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
+**Report-bound read errors.** Memory-profiler routes (`/api/operations`, `/api/tensors`, `/api/buffers`, …) open the instance's `profiler_path` via `LocalQueryRunner` (`backend/ttnn_visualizer/queries.py`); performance routes (`/api/performance/...`) open the instance's `performance_path` via the helpers in `backend/ttnn_visualizer/csv_queries.py`. Status codes for client mistakes vs missing data:
+
+| Condition | HTTP | Body `error` |
+|-----------|------|--------------|
+| `instanceId` query param absent | **400** | `Missing required query parameter: instanceId` (`@with_instance`) |
+| `instanceId` present, instance has no `profiler_path` | **404** | `No profiler report loaded for this instance` (`ProfilerReportNotLoadedException`) |
+| `instanceId` present, instance has no `performance_path` | **404** | `No performance report loaded for this instance` (`PerformanceReportNotLoadedException`) |
+| `profiler_path` set but `db.sqlite` missing on disk | **404** | `Database not found at path: <path>` (`DatabaseFileNotFoundException`) |
+
+Arbitrary `instanceId` strings are valid tab identifiers — the server creates the row on first request. A curl like `?instanceId=fake-instance-id` without a prior upload/sync therefore gets **404**, not **400**.
+
+Both `…NotLoadedException` classes inherit from `ReportNotLoadedException`, registered on a single 404 error handler in `app.py` alongside `DatabaseFileNotFoundException`. The body string lives on each subclass as `DEFAULT_MESSAGE`, so call sites read as `raise PerformanceReportNotLoadedException()` (no message argument). Helpers raise at the top of every code path that touches a missing report path; routes don't need (and shouldn't add) a `if not instance.<kind>_path: return response_not_found()` guard **when the helper they call is the next thing the route does**.
+
+Routes that **dereference `instance.<kind>_path` directly** before invoking a helper — for instance to compute `Path(instance.performance_path).parent / name` from a `?name=` swap — must keep an explicit `raise <Kind>ReportNotLoadedException()` at the top. Mypy enforces this (otherwise `Path(None)` is a type error) and runtime would crash with `TypeError: argument should be a str or PathLike, not NoneType`. `views.py::get_performance_results_report`, `get_performance_data_raw`, and `get_performance_device_meta` are the live examples — don't delete those guards thinking they're stale.
+
+NPE (`/api/npe`) and MLIR (`/api/mlir`) routes do their own filesystem IO without a helper class and still use per-route `response_not_found()` guards — leave them alone unless you're refactoring those readers.
+
 ### Cross-cutting retries belong in the interceptor, not in individual hooks
 
 The operations endpoint occasionally returns a string instead of an array under heavy load. The response interceptor handles this with `MAX_RETRIES = 3` and exponential backoff (`src/libs/axiosInstance.ts`). Don't replicate retry logic inside a `queryFn` — extend the interceptor instead so every consumer of the endpoint benefits.
@@ -372,10 +410,9 @@ return () => {
     socket.off('disconnect');
     socket.off('connect_error');
     socket.off('reconnect');
+    socket.off('fileTransferProgress');
 };
 ```
-
-> The current cleanup `off()`s connect/disconnect/connect_error/reconnect but **does not** unregister the `fileTransferProgress` handler registered at `src/libs/SocketProvider.tsx`. That's tracked as a pre-existing gap (see [Known inconsistencies](#known-inconsistencies)). New listeners should follow the pairing rule.
 
 Adding a new event handler? Add the matching `off()` in the same change. Don't introduce a second `io(...)` call elsewhere in the codebase — the connection is shared.
 
@@ -874,7 +911,7 @@ if not files:
 
 Without the guard, downstream `files[0]` indexing or empty-collection iteration falls over silently or with an opaque error.
 
-> **Note:** the rules above cover **single-file** uploads (NPE, MLIR, future single-blob endpoints). **Folder-upload** branches (profiler/performance report trees) deliberately preserve subpath structure and need a different fix shape — a resolved-path containment check (`dest.resolve().is_relative_to(target.resolve())`). That hardening is tracked separately; ask before extending the `.name` pattern into folder uploads.
+> **Note:** the rules above cover **single-file** uploads (NPE, MLIR, future single-blob endpoints). **Folder-upload** branches (profiler/performance report trees) deliberately preserve subpath structure and use a different fix shape — a resolved-path containment check inside `construct_dest_path` that rejects any candidate whose resolved path lands outside the per-report folder (raising `DataFormatError`, which the view handlers map to 422). Don't extend the `.name` collapse pattern into the folder branch; rely on the containment check.
 
 ---
 
@@ -1021,17 +1058,12 @@ Don't `raise Exception("...")` — there's an existing class for almost every ca
 
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both:
 
-- **Folder-upload sanitization.** Single-file uploads sanitize filenames via `Path(...).name`; folder uploads preserve subpaths and need a resolved-path containment check instead. The latter isn't yet implemented (tracked as a follow-up).
 - **`extract_npe_name` is a misnomer.** It's used by both NPE and MLIR upload handlers. Rename to `extract_uploaded_name` is tracked as a follow-up; don't perpetuate the NPE-specific name in new helpers.
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload a state field called `errorMessage` with both success and failure text. A rename to `statusMessage` is pending.
 - **Upload size cap.** No `MAX_CONTENT_LENGTH` is set on the Flask app; large uploads succeed until they exhaust memory. Tracked as a separate hardening task.
 - **Default-export vs named-export of components.** The codebase mixes `export default function Foo()` and `export function Foo()`. Components are predominantly default-exported; hooks and utility functions are predominantly named-exported. Mirror the file you're editing.
-- **Two component-typing styles coexist: plain props parameter vs `React.FC<...>`.** Plenty of components are written as `function Foo({ x }: FooProps)`, but `React.FC<FooProps>` (and the bare `: FC<FooProps>` variant) is also in active use across ~30+ files (`src/libs/SocketProvider.tsx`, `src/routes/GraphView.tsx`, `src/components/OperationGraphComponent.tsx`, `src/components/npe/NPEViewComponent.tsx`, `src/components/operation-details/OperationDetailsComponent.tsx`, and many more). The codebase has no single canonical answer. Mirror the file you're editing. The community-wide foot-gun of `React.FC` (implicit `children` in older `@types/react`) is a real consideration, but it's not a project-wide migration in this repo.
 - **Raw `toast()` in `useBufferFocus`.** `src/hooks/useBufferFocus.tsx` calls `toast()` from `react-toastify` directly because it needs `autoClose: false` and persists the returned `Id` into `activeToastAtom` — capabilities `createToastNotification` doesn't expose. Intentional exception, not a precedent. New code still goes through `createToastNotification`; if you need richer options, extend the wrapper.
-- **`print()` calls in `sockets.py`.** `backend/ttnn_visualizer/sockets.py` use `print()` instead of `logger.info / debug`. Pre-existing tech debt; do not introduce new `print()` calls anywhere else in the backend.
 - **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8` and `pyproject.toml` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.
-- **`@with_instance` returns 404 on missing `instanceId`.** `backend/ttnn_visualizer/decorators.py` aborts with 404 when the query param is absent; 400 ("Bad Request") would be more semantically accurate. Pre-existing; flag if you're rewriting the decorator, otherwise leave it.
 - **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
 - **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription`, `usePerfMeta`, `useReportFolderList`, `useInstance`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
 - **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.
-- **`SocketProvider` cleanup is incomplete.** `src/libs/SocketProvider.tsx` `off()`s `connect`/`disconnect`/`connect_error`/`reconnect` but not the `fileTransferProgress` handler registered alongside them. Pre-existing; the listener list will grow on every remount of the provider (rare in production, common under StrictMode in dev). New listeners follow the pairing rule; the existing miss is tracked tech debt.

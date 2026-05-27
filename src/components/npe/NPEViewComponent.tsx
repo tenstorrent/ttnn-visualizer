@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import 'styles/components/NPEZoneFilterComponent.scss';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -76,7 +76,7 @@ const getRootZoneKey = (proc: KERNEL_PROCESS, address: NPE_COORDINATES): Rootzon
     return `${proc}:${address.join(',')}`;
 };
 
-const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
+const NPEView = ({ npeData }: NPEViewProps) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);

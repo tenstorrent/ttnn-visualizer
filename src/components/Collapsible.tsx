@@ -19,9 +19,10 @@ interface CollapsibleProps {
     keepChildrenMounted?: boolean;
     onExpandToggle?: (state: boolean) => void;
     isDisabled?: boolean;
+    children?: React.ReactNode;
 }
 
-const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
+const Collapsible = ({
     label,
     additionalElements = undefined,
     isOpen = true,
@@ -32,7 +33,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     onExpandToggle,
     children,
     isDisabled = false,
-}) => {
+}: CollapsibleProps) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
     const [prevIsOpenProp, setPrevIsOpenProp] = React.useState(isOpen);
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;

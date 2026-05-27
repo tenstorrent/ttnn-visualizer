@@ -4,7 +4,7 @@
 
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, type FC, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom } from 'jotai';
@@ -16,7 +16,6 @@ import {
     profilerReportLocationAtom,
 } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
@@ -76,7 +75,7 @@ const directoryErrorStatus: ConnectionStatus = {
     message: 'Selected directory does not contain a valid report',
 };
 
-const LocalFolderOptions: FC = () => {
+const LocalFolderOptions = () => {
     const queryClient = useQueryClient();
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
     const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
@@ -305,8 +304,6 @@ const LocalFolderOptions: FC = () => {
                                 'data-testid': TEST_IDS.LOCAL_PROFILER_UPLOAD,
                             }}
                         />
-
-                        <FileStatusOverlay />
 
                         {profilerFolder && !isUploadingReport && (
                             <div

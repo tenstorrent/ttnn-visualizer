@@ -71,6 +71,21 @@ it('handles invalid JSON data', () => {
     expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON).textContent).toBeDefined();
 });
 
+it('handles empty NPE traces', () => {
+    render(
+        <TestProviders>
+            <NPEProcessingStatus
+                isLoading={false}
+                hasUploadedFile
+                dataVersion={MIN_SUPPORTED_VERSION}
+                errorCode={NPEValidationError.EMPTY_NPE_TRACE}
+            />
+        </TestProviders>,
+    );
+
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_EMPTY_TRACE).textContent).toBeDefined();
+});
+
 it('handles unknown errors', () => {
     render(
         <TestProviders>

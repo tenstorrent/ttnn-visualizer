@@ -14,6 +14,7 @@ import FooterInfobar from './FooterInfobar';
 import ClusterRenderer from './cluster/ClusterRenderer';
 import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
 import FeedbackButton from './FeedbackButton';
+import FileStatusOverlay from './FileStatusOverlay';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -68,6 +69,8 @@ function Layout() {
             <FooterInfobar />
 
             <FeedbackButton />
+
+            <FileStatusOverlay />
 
             <ToastContainer
                 position={'bottom-right' as ToastPosition}

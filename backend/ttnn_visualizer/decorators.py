@@ -31,8 +31,8 @@ def with_instance(func):
         instance_id = request.args.get("instanceId")
 
         if not instance_id:
-            current_app.logger.error("No instanceId present on request, returning 404")
-            abort(404)
+            current_app.logger.error("No instanceId present on request, returning 400")
+            abort(400, description="Missing required query parameter: instanceId")
 
         instance_query_data = get_or_create_instance(instance_id=instance_id)
 
@@ -130,6 +130,12 @@ def remote_exception_handler(func):
                 status=ConnectionTestStates.FAILED, message=message
             )
         except RemoteFileReadException:
+            raise
+        except RemoteConnectionException:
+            # Already a domain-shaped error with its own http_status / detail;
+            # rewrapping it via the catch-all below would silently drop any
+            # custom http_status_code (e.g. 422 for "path unreadable") and
+            # downgrade it to the default 500.
             raise
         except Exception as err:
             # Catch any other unhandled exceptions

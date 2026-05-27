@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, Fragment, useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -43,7 +43,7 @@ const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
 const CACHE_HIT_INSERTION_POINT = 15;
 
-const PerformanceTable: FC<PerformanceTableProps> = ({
+const PerformanceTable = ({
     data,
     comparisonData,
     filters,
@@ -51,7 +51,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     hiliteHighDispatch,
     reportName,
     showHashColumn,
-}) => {
+}: PerformanceTableProps) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
 

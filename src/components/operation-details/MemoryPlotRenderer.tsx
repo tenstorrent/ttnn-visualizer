@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { CSSProperties, useMemo, useState } from 'react';
+import { CSSProperties, useMemo, useState } from 'react';
 import { Config, Layout, PlotData, Shape } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import Plot from '../../libs/PlotComponent';
@@ -24,7 +24,7 @@ export interface MemoryPlotRendererProps {
     markers?: PlotMarker[];
 }
 
-const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
+const MemoryPlotRenderer = ({
     chartDataList,
     isZoomedIn,
     memoryZoomEnd,
@@ -35,7 +35,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     configuration,
     style,
     markers,
-}) => {
+}: MemoryPlotRendererProps) => {
     const showHex = useAtomValue(showHexAtom);
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
 

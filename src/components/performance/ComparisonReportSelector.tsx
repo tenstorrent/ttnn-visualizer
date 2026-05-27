@@ -4,7 +4,7 @@
 
 import { Button, ButtonVariant, FormGroup } from '@blueprintjs/core';
 import { useAtom, useAtomValue } from 'jotai';
-import React, { FC } from 'react';
+import React from 'react';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import LocalFolderPicker from '../report-selection/LocalFolderPicker';
@@ -20,13 +20,13 @@ interface ComparisonReportSelectorProps {
     className?: string;
 }
 
-const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({
+const ComparisonReportSelector = ({
     folderList,
     reportIndex,
     label,
     subLabel,
     className,
-}) => {
+}: ComparisonReportSelectorProps) => {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 

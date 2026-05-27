@@ -28,6 +28,15 @@ def _stack_trace_for_operation(stack_traces_by_key, operation):
     return stack_traces_by_key.get((operation.operation_id, 0))
 
 
+def _stack_trace_source_file_id_for_operation(
+    stack_trace_source_file_ids_by_key, operation
+):
+    key = (operation.operation_id, operation.rank)
+    if key in stack_trace_source_file_ids_by_key:
+        return stack_trace_source_file_ids_by_key[key]
+    return stack_trace_source_file_ids_by_key.get((operation.operation_id, 0))
+
+
 def _error_for_operation(errors_by_key, operation):
     key = (operation.operation_id, operation.rank)
     if key in errors_by_key:
@@ -64,6 +73,9 @@ def serialize_operations(
     stack_traces_dict = {
         (st.operation_id, st.rank): st.stack_trace for st in stack_traces
     }
+    stack_trace_source_file_ids_dict = {
+        (st.operation_id, st.rank): st.source_file_id for st in stack_traces
+    }
 
     errors_dict = {}
     if error_records:
@@ -97,6 +109,9 @@ def serialize_operations(
                 **operation_data,
                 "id": id,
                 "stack_trace": _stack_trace_for_operation(stack_traces_dict, operation),
+                "stack_trace_source_file_id": _stack_trace_source_file_id_for_operation(
+                    stack_trace_source_file_ids_dict, operation
+                ),
                 "device_operations": operation_device_operations,
                 "arguments": arguments,
                 "inputs": inputs,
@@ -245,6 +260,11 @@ def serialize_operation(
         "l1_sizes": l1_sizes,
         "device_operations": device_operations_data,
         "stack_trace": stack_trace.stack_trace if stack_trace else "",
+        "stack_trace_source_file_id": (
+            stack_trace.source_file_id
+            if stack_trace and stack_trace.source_file_id is not None
+            else None
+        ),
         "buffers": buffer_list,
         "arguments": arguments_data,
         "inputs": inputs_data or [],

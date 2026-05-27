@@ -29,8 +29,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
-import FileStatusOverlay from '../components/FileStatusOverlay';
-import { fileTransferProgressAtom } from '../store/app';
+import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
@@ -40,20 +39,25 @@ const FORM_GROUP = {
     subLabel: 'Sub label here',
 };
 
-const FILE_DOWNLOAD_IN_PROGRESS = {
+const SYNC_DEMO_PROGRESS = {
     currentFileName: 'example_test_file_1.txt',
     numberOfFiles: 3,
     percentOfCurrent: 0,
     finishedFiles: 1,
     status: FileStatus.DOWNLOADING,
+    bytesTransferred: 128_000,
+    bytesTotal: 512_000,
+    currentFileSize: 128_000,
 };
 
-const FILE_DOWNLOAD_INACTIVE = {
+const UPLOAD_DEMO_PROGRESS = {
     currentFileName: '',
-    numberOfFiles: 0,
+    numberOfFiles: 5,
     percentOfCurrent: 0,
     finishedFiles: 0,
-    status: FileStatus.INACTIVE,
+    status: FileStatus.UPLOADING,
+    bytesTransferred: 64_000,
+    bytesTotal: 1_024_000,
 };
 
 const TIME_REMAINING_INTERVAL = 100;
@@ -65,8 +69,8 @@ export default function Styleguide() {
     const [autoCloseTime, setAutoCloseTime] = useState(1000);
     const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
 
-    const handleUpdateFileTransferProgress = () => {
-        setUpdateFileTransferProgress(FILE_DOWNLOAD_IN_PROGRESS);
+    const runFileTransferDemo = (initial: typeof SYNC_DEMO_PROGRESS | typeof UPLOAD_DEMO_PROGRESS) => {
+        setUpdateFileTransferProgress(initial);
         setTimeRemaining(autoCloseTime);
 
         const calculateRemainingTime = setInterval(() => {
@@ -78,7 +82,7 @@ export default function Styleguide() {
         }, TIME_REMAINING_INTERVAL);
 
         setTimeout(() => {
-            setUpdateFileTransferProgress(FILE_DOWNLOAD_INACTIVE);
+            setUpdateFileTransferProgress(getInactiveFileTransferProgress());
             clearInterval(calculateRemainingTime);
             setTimeRemaining(autoCloseTime);
         }, autoCloseTime);
@@ -605,19 +609,27 @@ export default function Styleguide() {
                         onChange={(e) => setAutoCloseTime(Number(e.target.value))}
                     />
 
-                    <Button
-                        onClick={handleUpdateFileTransferProgress}
-                        intent={Intent.PRIMARY}
-                        disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
-                    >
-                        Open file status overlay
-                    </Button>
+                    <ButtonGroup>
+                        <Button
+                            onClick={() => runFileTransferDemo(SYNC_DEMO_PROGRESS)}
+                            intent={Intent.PRIMARY}
+                            disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                        >
+                            Open remote sync overlay
+                        </Button>
+                        <Button
+                            onClick={() => runFileTransferDemo(UPLOAD_DEMO_PROGRESS)}
+                            intent={Intent.PRIMARY}
+                            disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                        >
+                            Open local upload overlay
+                        </Button>
+                    </ButtonGroup>
                 </FormGroup>
 
                 {updateFileTransferProgress.status !== FileStatus.INACTIVE && (
                     <p className='countdown'>{timeRemaining}ms</p>
                 )}
-                <FileStatusOverlay />
             </div>
 
             <div className='container flex flex-column'>
@@ -677,6 +689,14 @@ export default function Styleguide() {
                     hasUploadedFile
                     dataVersion={MIN_SUPPORTED_VERSION}
                     errorCode={NPEValidationError.INVALID_NPE_DATA}
+                    isLoading={false}
+                />
+
+                <h4>Empty NPE trace (no transfers or timesteps)</h4>
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorCode={NPEValidationError.EMPTY_NPE_TRACE}
                     isLoading={false}
                 />
 

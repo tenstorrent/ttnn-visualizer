@@ -169,9 +169,19 @@ class OperationArgument(SerializeableDataclass):
 
 
 @dataclasses.dataclass
+class SourceFile(SerializeableDataclass):
+    id: int
+    # SQLite columns are nullable: empty/NULL contents fall through to
+    # tt-metal local/SSH; a NULL path skips the exact-path lookup.
+    path: Optional[str] = None
+    contents: Optional[str] = None
+
+
+@dataclasses.dataclass
 class StackTrace(SerializeableDataclass):
     operation_id: int
     stack_trace: str
+    source_file_id: Optional[int] = None
     rank: int = 0
 
 

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, Label, RangeSlider, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
@@ -14,6 +14,7 @@ import {
     useOperationDetails,
     useOperationsList,
     usePreviousOperationDetails,
+    useTensors,
 } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
@@ -54,7 +55,7 @@ interface ZoomMemoryChunk {
     size: number;
 }
 
-const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
+const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     const [renderMemoryLayoutPattern, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
@@ -74,6 +75,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: operations } = useOperationsList();
     const l1start = useGetL1StartMarker();
     const l1end = useGetL1SmallMarker();
+    // TEMP (#1291): fetch L1_Small tensors separately while tt-metal does not emit
+    // input_tensors/output_tensors for them. Drop this and the constructor argument
+    // below once proper producer/consumer reporting is in place.
+    const { data: l1SmallTensors } = useTensors(BufferType.L1_SMALL);
 
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -110,12 +115,17 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 lateDeallocation: showDeallocationReport,
                 showHex,
             },
+            l1SmallTensors ?? [],
         );
 
-        previousDetails = new OperationDetails(previousOperationDetails, operations, [], {
-            l1start,
-            l1end,
-        });
+        previousDetails = new OperationDetails(
+            previousOperationDetails,
+            operations,
+            [],
+            { l1start, l1end },
+            undefined,
+            l1SmallTensors ?? [],
+        );
 
         l1MemoryData = details.memoryData();
         memorySizeL1 = details.memorySizeL1;
@@ -195,6 +205,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.stack_trace && (
                             <StackTrace
                                 stackTrace={details.stack_trace}
+                                stackTraceSourceFileId={operationDetails?.stack_trace_source_file_id ?? null}
                                 language={StackTraceLanguage.PYTHON}
                                 isInitiallyExpanded={showFullStackTrace}
                                 onExpandChange={() => setShowFullStackTrace(!showFullStackTrace)}

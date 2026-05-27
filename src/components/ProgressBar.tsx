@@ -17,6 +17,7 @@ function ProgressBar({ progress, estimated, ariaLabel = 'Progress bar' }: Progre
             <BlueprintProgressBar
                 value={progress}
                 aria-label={ariaLabel}
+                animate
             />
 
             {progress && estimated ? (

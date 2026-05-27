@@ -22,6 +22,7 @@ export interface Operation {
     inputs: Tensor[];
     outputs: Tensor[];
     stack_trace: string;
+    stack_trace_source_file_id: number | null;
     device_operations: Node[];
     operationFileIdentifier: string;
     error: OperationError | null;
@@ -110,7 +111,6 @@ export enum FileStatus {
     DOWNLOADING = 'DOWNLOADING',
     FAILED = 'FAILED',
     UPLOADING = 'UPLOADING',
-    COMPRESSING = 'COMPRESSING',
     FINISHED = 'FINISHED',
     STARTED = 'STARTED',
     INACTIVE = 'INACTIVE',
@@ -123,6 +123,9 @@ export interface FileProgress {
     percentOfCurrent: number;
     finishedFiles: number;
     status: FileStatus; // Use the FileStatus enum
+    bytesTransferred?: number;
+    bytesTotal?: number;
+    currentFileSize?: number;
     timestamp?: string; // Optional, with default handled elsewhere if necessary
 }
 
@@ -135,6 +138,7 @@ export const defaultOperation: OperationDetailsData = {
     buffersSummary: [],
     l1_sizes: [],
     stack_trace: '',
+    stack_trace_source_file_id: null,
     device_operations: [],
     operationFileIdentifier: '',
     error: null,

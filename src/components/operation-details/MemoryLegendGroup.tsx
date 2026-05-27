@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button, ButtonVariant, Collapse, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { FragmentationEntry } from '../../model/APIData';
@@ -10,14 +10,16 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import 'styles/components/MemoryLegendElement.scss';
 
-export const MemoryLegendGroup: React.FC<{
+interface MemoryLegendGroupProps {
     group: FragmentationEntry[];
     memSize: number;
     selectedTensorAddress: number | null;
     operationDetails: OperationDetails;
     onLegendClick: (selectedTensorAddress: number, tensorId?: number, colorVariance?: number) => void;
     userL1ZoomRange?: [number, number];
-}> = ({
+}
+
+export const MemoryLegendGroup = ({
     // no wrap eslint
     group,
     memSize,
@@ -25,7 +27,7 @@ export const MemoryLegendGroup: React.FC<{
     operationDetails,
     onLegendClick,
     userL1ZoomRange,
-}) => {
+}: MemoryLegendGroupProps) => {
     const [isOpen, setIsOpen] = useState(false);
 
     return (

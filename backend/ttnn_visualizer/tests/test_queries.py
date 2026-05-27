@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+from ttnn_visualizer.exceptions import ProfilerReportNotLoadedException
 from ttnn_visualizer.models import DeviceOperation, TensorComparisonRecord
 from ttnn_visualizer.queries import DatabaseQueries, LocalQueryRunner
 
@@ -231,10 +232,10 @@ class TestDatabaseQueries(unittest.TestCase):
         mock_instance = Mock()
         mock_instance.profiler_path = None
         mock_instance.remote_connection = None
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(ProfilerReportNotLoadedException) as context:
             DatabaseQueries(instance=mock_instance)
-        self.assertIn(
-            "Report path must be provided for local queries", str(context.exception)
+        self.assertEqual(
+            str(context.exception), ProfilerReportNotLoadedException.DEFAULT_MESSAGE
         )
 
     def test_check_table_exists(self):
@@ -306,6 +307,72 @@ class TestDatabaseQueries(unittest.TestCase):
         results = list(self.db_queries.query_stack_traces(filters={"operation_id": 1}))
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].stack_trace, "trace_data")
+
+    def test_query_source_files(self):
+        self.connection.executescript("""
+            CREATE TABLE source_files (
+                id int PRIMARY KEY,
+                path text,
+                contents text
+            );
+            INSERT INTO source_files VALUES (1, '/a.py', 'contents');
+            """)
+        results = list(self.db_queries.query_source_files())
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].contents, "contents")
+
+    def test_get_source_file_by_id_and_path(self):
+        self.connection.executescript("""
+            CREATE TABLE source_files (
+                id int PRIMARY KEY,
+                path text,
+                contents text
+            );
+            INSERT INTO source_files VALUES (5, '/b.py', 'body');
+            """)
+        by_id = self.db_queries.get_source_file_by_id(5)
+        self.assertIsNotNone(by_id)
+        self.assertEqual(by_id.path, "/b.py")
+        by_path = self.db_queries.get_source_file_by_path("/b.py")
+        self.assertEqual(by_path.id, 5)
+
+    def test_get_source_file_path_if_present(self):
+        self.connection.executescript("""
+            CREATE TABLE source_files (
+                id int PRIMARY KEY,
+                path text,
+                contents text
+            );
+            INSERT INTO source_files VALUES (1, '/has.py', 'body');
+            INSERT INTO source_files VALUES (2, '/empty.py', '');
+            INSERT INTO source_files VALUES (3, '/null.py', NULL);
+            """)
+        self.assertEqual(
+            self.db_queries.get_source_file_path_if_present(source_file_id=1),
+            "/has.py",
+        )
+        self.assertEqual(
+            self.db_queries.get_source_file_path_if_present(file_path="/has.py"),
+            "/has.py",
+        )
+        self.assertIsNone(
+            self.db_queries.get_source_file_path_if_present(source_file_id=2)
+        )
+        self.assertIsNone(
+            self.db_queries.get_source_file_path_if_present(source_file_id=3)
+        )
+        self.assertIsNone(
+            self.db_queries.get_source_file_path_if_present(source_file_id=999)
+        )
+        self.assertIsNone(self.db_queries.get_source_file_path_if_present())
+        # When source_file_id misses and file_path is also supplied, the
+        # implementation must fall through to the path branch.
+        self.assertEqual(
+            self.db_queries.get_source_file_path_if_present(
+                source_file_id=999, file_path="/has.py"
+            ),
+            "/has.py",
+        )
 
     def test_query_tensor_comparisons(self):
         self.connection.execute("""
