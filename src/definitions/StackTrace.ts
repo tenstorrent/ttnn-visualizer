@@ -12,3 +12,9 @@ export enum SourceFileStatus {
     Pending = 'pending',
     Available = 'available',
 }
+
+export enum StackSourceOrigin {
+    Database = 'database',
+    Path = 'path',
+    Remapped = 'remapped',
+}

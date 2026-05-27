@@ -68,13 +68,20 @@ const TensorList = () => {
 
     const tensorsWithRange = useMemo(() => {
         if (fetchedTensors && selectedOperationRange) {
-            return fetchedTensors.filter(
-                (tensor) =>
+            return fetchedTensors.filter((tensor) => {
+                // Tensors with no producers/consumers (e.g. L1_Small scratch tensors)
+                // can't be range-filtered, so pass them through.
+                if (tensor.producers.length === 0 && tensor.consumers.length === 0) {
+                    return true;
+                }
+
+                return (
                     (tensor.producers.some((producer) => producer >= selectedOperationRange[0]) &&
                         tensor.producers.some((producer) => producer <= selectedOperationRange[1])) ||
                     (tensor.consumers.some((consumer) => consumer >= selectedOperationRange[0]) &&
-                        tensor.consumers.some((consumer) => consumer <= selectedOperationRange[1])),
-            );
+                        tensor.consumers.some((consumer) => consumer <= selectedOperationRange[1]))
+                );
+            });
         }
 
         return fetchedTensors;

@@ -115,6 +115,83 @@ def test_tensors_list_partial_lifetime_fields_are_nullable(client, make_report):
 
 
 # ---------------------------------------------------------------------------
+# /api/tensors — buffer_type filter
+# ---------------------------------------------------------------------------
+
+# Tensors covering multiple buffer_type values across two devices so the filter
+# semantics and its composition with device_id can both be exercised.
+# buffer_type values: 0=DRAM, 1=L1, 3=L1_Small (matches BufferType enum).
+_MIXED_BUFFER_TYPE_INSERTS = """
+INSERT INTO operations VALUES (1, 'op_a', 1.0);
+INSERT INTO tensors VALUES (10, '(2, 4)', 'bfloat16',  'TILE',      '{}', 0, 200, 0);
+INSERT INTO tensors VALUES (20, '(1,)',   'float32',   'ROW_MAJOR', '{}', 0, 300, 1);
+INSERT INTO tensors VALUES (30, '(1,)',   'uint16',    'ROW_MAJOR', '{}', 0, 400, 3);
+INSERT INTO tensors VALUES (40, '(1,)',   'uint16',    'ROW_MAJOR', '{}', 1, 500, 3);
+"""
+
+
+def test_tensors_list_buffer_type_filter(client, make_report):
+    """?buffer_type=N restricts results to tensors with that buffer_type."""
+    instance_id = make_report(_MIXED_BUFFER_TYPE_INSERTS, SCHEMA_V2)
+
+    response = client.get(
+        "/api/tensors",
+        query_string={"instanceId": instance_id, "buffer_type": 3},
+    )
+    assert response.status_code == HTTPStatus.OK
+
+    data = response.get_json()
+    ids = sorted(t["id"] for t in data)
+    assert ids == [30, 40]
+
+
+def test_tensors_list_buffer_type_filter_composes_with_device_id(client, make_report):
+    """buffer_type and device_id filters compose with AND semantics."""
+    instance_id = make_report(_MIXED_BUFFER_TYPE_INSERTS, SCHEMA_V2)
+
+    response = client.get(
+        "/api/tensors",
+        query_string={
+            "instanceId": instance_id,
+            "buffer_type": 3,
+            "device_id": 0,
+        },
+    )
+    assert response.status_code == HTTPStatus.OK
+
+    data = response.get_json()
+    ids = sorted(t["id"] for t in data)
+    assert ids == [30]
+
+
+def test_tensors_list_omitted_buffer_type_returns_all_types(client, make_report):
+    """Omitting buffer_type leaves the list unfiltered by type."""
+    instance_id = make_report(_MIXED_BUFFER_TYPE_INSERTS, SCHEMA_V2)
+
+    response = client.get("/api/tensors", query_string={"instanceId": instance_id})
+    assert response.status_code == HTTPStatus.OK
+
+    data = response.get_json()
+    ids = sorted(t["id"] for t in data)
+    assert ids == [10, 20, 30, 40]
+
+
+def test_tensors_list_non_numeric_buffer_type_is_ignored(client, make_report):
+    """A non-numeric buffer_type query value is silently ignored (no filter applied)."""
+    instance_id = make_report(_MIXED_BUFFER_TYPE_INSERTS, SCHEMA_V2)
+
+    response = client.get(
+        "/api/tensors",
+        query_string={"instanceId": instance_id, "buffer_type": "abc"},
+    )
+    assert response.status_code == HTTPStatus.OK
+
+    data = response.get_json()
+    ids = sorted(t["id"] for t in data)
+    assert ids == [10, 20, 30, 40]
+
+
+# ---------------------------------------------------------------------------
 # /api/tensors/<tensor_id> — detail endpoint
 # ---------------------------------------------------------------------------
 
