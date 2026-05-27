@@ -14,6 +14,7 @@ import {
     useOperationDetails,
     useOperationsList,
     usePreviousOperationDetails,
+    useTensors,
 } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
@@ -74,6 +75,10 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     const { data: operations } = useOperationsList();
     const l1start = useGetL1StartMarker();
     const l1end = useGetL1SmallMarker();
+    // TEMP (#1291): fetch L1_Small tensors separately while tt-metal does not emit
+    // input_tensors/output_tensors for them. Drop this and the constructor argument
+    // below once proper producer/consumer reporting is in place.
+    const { data: l1SmallTensors } = useTensors(BufferType.L1_SMALL);
 
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -110,12 +115,17 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                 lateDeallocation: showDeallocationReport,
                 showHex,
             },
+            l1SmallTensors ?? [],
         );
 
-        previousDetails = new OperationDetails(previousOperationDetails, operations, [], {
-            l1start,
-            l1end,
-        });
+        previousDetails = new OperationDetails(
+            previousOperationDetails,
+            operations,
+            [],
+            { l1start, l1end },
+            undefined,
+            l1SmallTensors ?? [],
+        );
 
         l1MemoryData = details.memoryData();
         memorySizeL1 = details.memorySizeL1;

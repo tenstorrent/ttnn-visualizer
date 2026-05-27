@@ -572,9 +572,12 @@ def tensors_list(instance: Instance):
         if rejected is not None:
             return rejected
         device_id = request.args.get("device_id", None)
+        buffer_type_param = request.args.get("buffer_type", None)
         tensor_filters: dict = {}
         if device_id is not None:
             tensor_filters["device_id"] = device_id
+        if buffer_type_param is not None and str.isdigit(buffer_type_param):
+            tensor_filters["buffer_type"] = int(buffer_type_param)
         tensors = list(
             db.query_tensors(db.merge_rank_filter("tensors", tensor_filters, rank))
         )
