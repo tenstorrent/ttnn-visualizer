@@ -39,6 +39,9 @@ const ProcessingErrors: Record<NPEValidationError, { title: string }> = {
     [NPEValidationError.INVALID_NPE_DATA]: {
         title: 'Invalid NPE data',
     },
+    [NPEValidationError.EMPTY_NPE_TRACE]: {
+        title: 'Empty NPE trace',
+    },
 };
 
 interface NPEProcessingStatusProps {
@@ -109,6 +112,19 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
                                     The uploaded data cannot be parsed as valid JSON.
                                 </p>
                                 <p>Check the file contents or use {NPE_REPO_URL} to generate a new dataset.</p>
+                            </>
+                        );
+                    case NPEValidationError.EMPTY_NPE_TRACE:
+                        return (
+                            <>
+                                <p data-testid={TEST_IDS.NPE_PROCESSING_EMPTY_TRACE}>
+                                    This NPE trace contains no transfers or timesteps. The producer completed but
+                                    captured no NoC activity.
+                                </p>
+                                <p>
+                                    Check the cycle range and instrumented region in your {NPE_REPO_URL} run
+                                    configuration, then regenerate the report.
+                                </p>
                             </>
                         );
 

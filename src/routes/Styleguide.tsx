@@ -692,6 +692,14 @@ export default function Styleguide() {
                     isLoading={false}
                 />
 
+                <h4>Empty NPE trace (no transfers or timesteps)</h4>
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorCode={NPEValidationError.EMPTY_NPE_TRACE}
+                    isLoading={false}
+                />
+
                 <h4>Unprocessable JSON error (HTTP 422)</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
