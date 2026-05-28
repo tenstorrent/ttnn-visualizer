@@ -3,9 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { useAtomValue } from 'jotai';
-import { Link } from 'react-router-dom';
-import ROUTES from '../../definitions/Routes';
 import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
+import { getLastConsumerLink, getOperationLink } from '../../functions/getOperationLink';
 import isValidNumber from '../../functions/isValidNumber';
 import { formatMemorySize, getMemoryAddress } from '../../functions/math';
 import { ShardSpec } from '../../functions/parseMemoryConfig';
@@ -20,36 +19,6 @@ export interface PerfTensorRowProps {
     tensor: Tensor;
     operations: OperationDescription[];
     label: string;
-}
-
-function getOperationLink(operationId: number, operations: OperationDescription[]) {
-    const operation = operations.find((entry) => entry.id === operationId);
-
-    if (!operation) {
-        return null;
-    }
-
-    return (
-        <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
-            {operation.id} {operation.name} ({operation.operationFileIdentifier})
-        </Link>
-    );
-}
-
-function getLastConsumerLink(tensor: Tensor, operations: OperationDescription[]) {
-    const lastOperationId = tensor.consumers[tensor.consumers.length - 1];
-
-    if (!isValidNumber(lastOperationId)) {
-        return 'No consumers for this tensor';
-    }
-
-    let operation = operations.find((entry) => entry.id === lastOperationId);
-
-    if (operation?.name.includes('deallocate') && tensor.consumers.length > 1) {
-        operation = operations.find((entry) => entry.id === tensor.consumers[tensor.consumers.length - 2]);
-    }
-
-    return operation ? getOperationLink(operation.id, operations) : null;
 }
 
 function PerfTensorRow({ tensor, operations, label }: PerfTensorRowProps) {
@@ -78,7 +47,11 @@ function PerfTensorRow({ tensor, operations, label }: PerfTensorRowProps) {
 
                     <tr>
                         <th>Last consumer</th>
-                        <td>{getLastConsumerLink(tensor, operations)}</td>
+                        <td>
+                            {isValidNumber(tensor.consumers[tensor.consumers.length - 1])
+                                ? getLastConsumerLink(tensor, operations)
+                                : 'No consumers for this tensor'}
+                        </td>
                     </tr>
 
                     <tr>

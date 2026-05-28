@@ -24,6 +24,17 @@
         align-items: center;
         gap: 6px;
     }
+
+    .perf-tensor-drawer-empty {
+        margin: 0;
+        color: colours.$tt-grey-3;
+    }
+}
+
+// Inline-flex wrapper keeps the disabled Button as a valid Tooltip target
+// (Blueprint Tooltips do not bind to disabled controls directly).
+.perf-tensor-trigger-wrapper {
+    display: inline-flex;
 }
 
 .perf-tensor-panel {

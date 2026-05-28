@@ -5,13 +5,14 @@
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
-import { Operation, OperationDescription, Tensor } from '../model/APIData';
+import { OperationDescription, Tensor } from '../model/APIData';
 import { getMemoryAddress } from '../functions/math';
 import { toReadableShape, toReadableType } from '../functions/formatting';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
+import { getLastConsumerLink, getOperationLink } from '../functions/getOperationLink';
 import isValidNumber from '../functions/isValidNumber';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
@@ -46,7 +47,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <th>Producer</th>
                         <td>
                             {isValidNumber(firstOperationId)
-                                ? getFirstOperation(firstOperationId, operations)
+                                ? getOperationLink(firstOperationId, operations)
                                 : 'No producer for this tensor'}
                         </td>
                     </tr>
@@ -55,7 +56,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <th>Last consumer</th>
                         <td>
                             {isValidNumber(lastOperationId)
-                                ? getLastOperation(lastOperationId, operations, tensor)
+                                ? getLastConsumerLink(tensor, operations)
                                 : 'No consumers for this tensor'}
                         </td>
                     </tr>
@@ -153,30 +154,6 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
             </table>
         </>
     );
-}
-
-function getFirstOperation(operationId: number, operations: Operation[]) {
-    const op = operations.find((operation) => operation.id === operationId);
-
-    return op ? (
-        <Link to={`${ROUTES.OPERATIONS}/${op.id}`}>
-            {op?.id} {op.name} ({op.operationFileIdentifier})
-        </Link>
-    ) : null;
-}
-
-function getLastOperation(operationId: number, operations: Operation[], tensor: Tensor) {
-    let op = operations.find((operation) => operation.id === operationId);
-
-    if (op?.name.includes('deallocate') && tensor.consumers.length > 1) {
-        op = operations.find((operation) => operation.id === tensor.consumers[tensor.consumers.length - 2]);
-    }
-
-    return op ? (
-        <Link to={`${ROUTES.OPERATIONS}/${op.id}`}>
-            {op?.id} {op.name} ({op.operationFileIdentifier})
-        </Link>
-    ) : null;
 }
 
 export default BufferDetails;

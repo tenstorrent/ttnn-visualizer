@@ -5,7 +5,7 @@
 import { Button, ButtonVariant, Icon, Intent, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { Fragment, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import 'styles/components/PerfReport.scss';
@@ -20,6 +20,7 @@ import {
 } from '../../definitions/PerfTable';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
+import isValidNumber from '../../functions/isValidNumber';
 import { formatPercentage, formatSize } from '../../functions/math';
 import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
@@ -56,7 +57,8 @@ const PerformanceTable = ({
 }: PerformanceTableProps) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
-    const [selectedPerfRowId, setSelectedPerfRowId] = useAtom(selectedPerfRowIdAtom);
+    const selectedPerfRowId = useAtomValue(selectedPerfRowIdAtom);
+    const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
 
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
@@ -98,12 +100,26 @@ const PerformanceTable = ({
     const isReportsSynced = opIdsMap.length > 0;
 
     useEffect(() => {
-        if (!isReportsSynced && selectedPerfRowId !== null) {
+        if (!isReportsSynced) {
             setSelectedPerfRowId(null);
         }
-    }, [isReportsSynced, selectedPerfRowId, setSelectedPerfRowId]);
+    }, [isReportsSynced, setSelectedPerfRowId]);
 
-    const enableTensorDrawer = useMemo(() => isReportsSynced, [isReportsSynced]);
+    const getTensorDrawerStatus = (row: TypedPerfTableRow): { canOpen: boolean; reason: string } => {
+        if (!isReportsSynced) {
+            return { canOpen: false, reason: 'Load a synced profiler report to see tensor details' };
+        }
+
+        if (row.raw_op_code.includes('MISSING')) {
+            return { canOpen: false, reason: 'No tensor data for missing operations' };
+        }
+
+        if (!isValidNumber(row.op)) {
+            return { canOpen: false, reason: 'No linked profiler operation for this row' };
+        }
+
+        return { canOpen: true, reason: 'View input/output tensor details' };
+    };
 
     const cellFormattingProxy = (
         row: TypedPerfTableRow,
@@ -240,90 +256,94 @@ const PerformanceTable = ({
                     </thead>
 
                     <tbody>
-                        {tableFields?.map((row, i) => (
-                            <Fragment key={i}>
-                                <tr
-                                    className={classNames({
-                                        'missing-data': row.raw_op_code.includes('MISSING'),
-                                        'signpost-op': row.op_type === OpType.SIGNPOST,
-                                        'is-selected': row.id === selectedPerfRowId,
-                                    })}
-                                >
-                                    <td className='cell'>
-                                        <Tooltip
-                                            content={
-                                                enableTensorDrawer
-                                                    ? 'View input/output tensor details'
-                                                    : 'Load a synced profiler report to see tensor details'
-                                            }
-                                        >
-                                            <Button
-                                                disabled={!enableTensorDrawer}
-                                                icon={IconNames.INFO_SIGN}
-                                                variant={ButtonVariant.MINIMAL}
-                                                size={Size.SMALL}
-                                                aria-label={`View tensor details for ${row.raw_op_code}`}
-                                                data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
-                                                onClick={() => setSelectedPerfRowId(row.id)}
-                                            />
-                                        </Tooltip>
-                                    </td>
-                                    {visibleColumns.map((h) => (
-                                        <td
-                                            key={h.key}
-                                            className={classNames('cell', {
-                                                'align-right': h.key === ColumnKeys.MathFidelity,
-                                            })}
-                                        >
-                                            {cellFormattingProxy(row, h, operationsList, filters?.[h.key])}
-                                        </td>
-                                    ))}
-                                </tr>
+                        {tableFields?.map((row, i) => {
+                            const isSignpost = row.op_type === OpType.SIGNPOST;
+                            const tensorDrawerStatus = getTensorDrawerStatus(row);
 
-                                {comparisonDataTableFields?.length > 0 &&
-                                    comparisonDataTableFields.map((dataset, index) => (
-                                        <tr
-                                            key={`comparison-${i}-${index}`}
-                                            className={classNames(
-                                                {
-                                                    'missing-data': dataset[i]?.raw_op_code?.includes('MISSING'),
-                                                    'signpost-op': dataset[i]?.op_type === OpType.SIGNPOST,
-                                                },
-                                                'comparison-row',
-                                                `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
+                            return (
+                                <Fragment key={i}>
+                                    <tr
+                                        className={classNames({
+                                            'missing-data': row.raw_op_code.includes('MISSING'),
+                                            'signpost-op': isSignpost,
+                                            'is-selected': row.id === selectedPerfRowId,
+                                        })}
+                                    >
+                                        <td className='cell'>
+                                            {!isSignpost && (
+                                                <Tooltip content={tensorDrawerStatus.reason}>
+                                                    {/* span wrapper lets the Tooltip attach to disabled buttons (Blueprint quirk) */}
+                                                    <span className='perf-tensor-trigger-wrapper'>
+                                                        <Button
+                                                            disabled={!tensorDrawerStatus.canOpen}
+                                                            icon={IconNames.INFO_SIGN}
+                                                            variant={ButtonVariant.MINIMAL}
+                                                            size={Size.SMALL}
+                                                            aria-label={`View tensor details for ${row.raw_op_code}`}
+                                                            data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
+                                                            onClick={() => setSelectedPerfRowId(row.id)}
+                                                        />
+                                                    </span>
+                                                </Tooltip>
                                             )}
-                                        >
-                                            <td className='cell' />
-                                            {visibleColumns.map((h) => (
-                                                <td
-                                                    key={h.key}
-                                                    className={classNames('cell', {
-                                                        'align-right': h.key === ColumnKeys.MathFidelity,
-                                                    })}
-                                                >
-                                                    {comparisonKeys.includes(h.key) &&
-                                                        dataset[i] &&
-                                                        formatCell(dataset[i], h, operationsList, filters?.[h.key])}
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                {provideMatmulAdvice && row.op_code.includes('Matmul') && (
-                                    <tr>
-                                        <td
-                                            colSpan={visibleColumns.length + 1}
-                                            className='cell advice'
-                                        >
-                                            <ul>
-                                                {row?.advice.map((advice, j) => (
-                                                    <li key={`advice-${j}`}>{advice}</li>
-                                                ))}
-                                            </ul>
                                         </td>
+                                        {visibleColumns.map((h) => (
+                                            <td
+                                                key={h.key}
+                                                className={classNames('cell', {
+                                                    'align-right': h.key === ColumnKeys.MathFidelity,
+                                                })}
+                                            >
+                                                {cellFormattingProxy(row, h, operationsList, filters?.[h.key])}
+                                            </td>
+                                        ))}
                                     </tr>
-                                )}
-                            </Fragment>
-                        ))}
+
+                                    {comparisonDataTableFields?.length > 0 &&
+                                        comparisonDataTableFields.map((dataset, index) => (
+                                            <tr
+                                                key={`comparison-${i}-${index}`}
+                                                className={classNames(
+                                                    {
+                                                        'missing-data': dataset[i]?.raw_op_code?.includes('MISSING'),
+                                                        'signpost-op': dataset[i]?.op_type === OpType.SIGNPOST,
+                                                    },
+                                                    'comparison-row',
+                                                    `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
+                                                )}
+                                            >
+                                                <td className='cell' />
+                                                {visibleColumns.map((h) => (
+                                                    <td
+                                                        key={h.key}
+                                                        className={classNames('cell', {
+                                                            'align-right': h.key === ColumnKeys.MathFidelity,
+                                                        })}
+                                                    >
+                                                        {comparisonKeys.includes(h.key) &&
+                                                            dataset[i] &&
+                                                            formatCell(dataset[i], h, operationsList, filters?.[h.key])}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    {provideMatmulAdvice && row.op_code.includes('Matmul') && (
+                                        <tr>
+                                            <td
+                                                colSpan={visibleColumns.length + 1}
+                                                className='cell advice'
+                                            >
+                                                <ul>
+                                                    {row?.advice.map((advice, j) => (
+                                                        <li key={`advice-${j}`}>{advice}</li>
+                                                    ))}
+                                                </ul>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </Fragment>
+                            );
+                        })}
                     </tbody>
 
                     <tfoot className='table-footer'>

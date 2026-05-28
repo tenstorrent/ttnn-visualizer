@@ -4,8 +4,7 @@
 
 import { Drawer, DrawerSize, Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom } from 'jotai';
-import { useMemo } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { Link } from 'react-router-dom';
 import 'styles/components/PerfTensorDrawer.scss';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
@@ -21,21 +20,14 @@ interface PerfTensorDrawerProps {
 }
 
 function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
-    const [selectedPerfRowId, setSelectedPerfRowId] = useAtom(selectedPerfRowIdAtom);
+    const selectedPerfRowId = useAtomValue(selectedPerfRowIdAtom);
+    const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
     const { data: operations = [] } = useOperationsList();
 
-    const selectedRow = useMemo(
-        () => rows.find((row) => row.id === selectedPerfRowId) ?? null,
-        [rows, selectedPerfRowId],
-    );
-
-    const matchedOperation = useMemo(() => {
-        if (!isValidNumber(selectedRow?.op)) {
-            return null;
-        }
-
-        return operations.find((operation) => operation.id === selectedRow.op) ?? null;
-    }, [operations, selectedRow]);
+    const selectedRow = rows.find((row) => row.id === selectedPerfRowId) ?? null;
+    const matchedOperation = isValidNumber(selectedRow?.op)
+        ? (operations.find((operation) => operation.id === selectedRow.op) ?? null)
+        : null;
 
     const handleClose = () => {
         setSelectedPerfRowId(null);
@@ -68,7 +60,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
                             >
                                 <Icon icon={IconNames.CUBE} />
                                 <span>
-                                    View producer {matchedOperation.id}: {matchedOperation.name}
+                                    View operation {matchedOperation.id}: {matchedOperation.name}
                                 </span>
                             </Link>
                         </p>
@@ -78,7 +70,11 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
                             operations={operations}
                         />
                     </>
-                ) : null}
+                ) : (
+                    <p className='perf-tensor-drawer-empty'>
+                        <em>No linked profiler operation for this row.</em>
+                    </p>
+                )}
             </div>
         </Drawer>
     );
