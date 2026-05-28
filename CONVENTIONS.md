@@ -638,6 +638,128 @@ const MAX_RETRIES = 3;
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 ```
 
+### Prefer named constants over magic strings or numbers
+
+**Rationale.** Inline literals lose the *why*. `setTimeout(retry, 500)` and `if (status === 'started')` read as folklore unless the value sits next to a name that explains it. Once a literal has a name, search-and-replace becomes a real refactor instead of a string hunt, reviewers can see intent without re-reading every call site, and the centralisation rules under [File organization and modules](#file-organization-and-modules) start to apply automatically (shared keys end up in `src/definitions/`, not duplicated as string literals across components).
+
+**Apply when the literal carries semantic meaning**, regardless of how many call sites it has:
+
+- User-visible copy that is *the same string* in multiple places, or whose phrasing is product-specific (`'Preparing transfer…'`, `'No files found'`, `'Connection refused'`).
+- Status / mode / kind keys used in equality checks (`status === 'started'` → use the enum or a `STATUS_*` const).
+- Thresholds, durations, retry counts, debounce/poll intervals, byte sizes (`MAX_RETRIES`, `ELAPSED_REFRESH_MS`, `DEFAULT_DEBOUNCE_MS`).
+- Storage keys, query keys, endpoint suffixes, header names — anything that needs to stay in lockstep across reader/writer (`LOCAL_STORAGE_KEY_REMOTE_HOST`, `'fetch-all-buffers'` already exported as `*_QUERY_KEY`).
+- The same literal appearing in test setup and production code (promote, then import on both sides).
+
+**Don't sprawl** to literals that are self-explanatory at the call site:
+
+- Arithmetic plumbing (`arr.length - 1`, `index + 1`, `total > 0`, division by `100`, `Math.floor(x / 60)`).
+- Array indices on a tuple whose shape is local (`[head] = pathParts`, `[, value] = entry`).
+- Constructor arguments that are obvious in context (`new Date(0)`, `JSON.stringify(obj, null, 2)` for pretty-printing).
+- One-shot regex literals that are clearer inline than as a named const.
+
+**Counter-example (don't):**
+
+```tsx
+setInterval(() => setNow(Date.now()), 1000);
+
+if (retries < 3) {
+    setTimeout(retry, 500);
+}
+```
+
+**Good:**
+
+```tsx
+const ELAPSED_REFRESH_MS = 1000;
+const MAX_RETRIES = 3;
+const RETRY_BACKOFF_MS = 500;
+
+setInterval(() => setNow(Date.now()), ELAPSED_REFRESH_MS);
+
+if (retries < MAX_RETRIES) {
+    setTimeout(retry, RETRY_BACKOFF_MS);
+}
+```
+
+When the literal is a user-facing string that already has a canonical home — e.g. the status-keyed map in `src/functions/getFileStatusLabel.ts` — route the new copy through that helper instead of introducing a parallel `*_LABEL` const at the call site. The point is *one* source of truth, not just "anywhere but inline".
+
+**Boundary with the [CSS / SCSS](#css--scss) rules.** Colour literals (hex / `rgb()` / `hsl()`) and layout values used in more than one place must be promoted to a **CSS custom property or SCSS variable**, not to a TypeScript const — see [No hex literals in TS/TSX](#no-hex-literals-in-tstsx) and [Same rule for magic layout numbers](#same-rule-for-magic-layout-numbers). The rule in this section covers every *other* semantic literal in TS/TSX.
+
+`src/components/FileStatusOverlay.tsx`
+
+```ts
+const ELAPSED_REFRESH_MS = 1000;
+
+const UPLOAD_META = {
+    heading: 'Uploading report',
+    icon: IconNames.CLOUD_UPLOAD,
+} as const;
+const SYNC_META = {
+    heading: 'Syncing remote report',
+    icon: IconNames.CLOUD_DOWNLOAD,
+} as const;
+```
+
+The interval period and the two heading/icon pairs live at module scope so the JSX below stays declarative — and so a copy edit lives in exactly one place. The matching example for a *string* is the `FILE_STATUS_LABEL` map in `src/functions/getFileStatusLabel.ts`: every user-facing status string is owned by that map, and `FileStatusOverlay` renders `getFileStatusLabel(status)` rather than literals.
+
+### Prefer an enum for a related set of constants
+
+**Rationale.** The [magic-values rule](#prefer-named-constants-over-magic-strings-or-numbers) above tells you to give an individual literal a name. When literals come in a *related set* — status values, mode kinds, validation states, toast types — collecting them in an `enum` (rather than scattering N independent `SCREAMING_SNAKE_CASE` consts) buys things a bag of consts can't:
+
+- **Exhaustive checks for free.** `Record<MLIRValidationError, { title: string }>` (`src/components/MlirProcessingStatus.tsx`) is a compile error the moment a new enum member is added without a label. The same pattern over a free-standing `STATUS_*` family of consts needs a hand-maintained mapped type that no compiler can keep honest.
+- **One canonical symbol.** Components that compare `errorCode === MLIRValidationError.INVALID_JSON` import a single symbol from `src/definitions/` instead of four sibling consts whose relationship has to be inferred by name.
+- **Pairs naturally with the type-side rule.** [Prefer named enums over string-literal unions](#prefer-named-enums-over-string-literal-unions-when-the-union-has-semantic-meaning) (in the TypeScript section above) covers the *type* side — `'input' | 'output'` → `enum NodeRelation`. This rule covers the *runtime-value* side — `'idle' | 'progress' | 'ok' | 'failed' | 'warning'` literals scattered across modules → `enum ConnectionTestStates`.
+
+**Apply when:**
+
+- The literals belong to one closed set, semantically (states of one state machine, kinds of one entity, codes from one classification).
+- The set is referenced from more than one module — equality checks, switches, or as object keys.
+- A backend response can return any value from the set and the frontend wants compile-time confidence the handling is exhaustive.
+
+**Don't reach for an enum when:**
+
+- There's only one value and "the set" is hypothetical.
+- The values are independent constants that share nothing but the `const` keyword (`MAX_RETRIES`, `RETRY_BACKOFF_MS`, `ELAPSED_REFRESH_MS` are individually named — don't bolt them into a synthetic enum just because they're all numbers).
+- The set is a TypeScript type union used only as a type with no runtime comparisons — the [string-literal-union rule](#prefer-named-enums-over-string-literal-unions-when-the-union-has-semantic-meaning) handles that case.
+
+**Numeric vs string-valued.** Default to **string-valued** enums when the value crosses any serialisation boundary (logs, JSON payloads, URL params, storage keys, comparisons against strings the backend produces). Use numeric enums only when the value is purely internal. `ConnectionTestStates` (`src/definitions/ConnectionStatus.ts`) is the canonical numeric exception in the repo, and the backend test in `backend/ttnn_visualizer/tests/test_file_uploads.py` deliberately asserts on `ConnectionTestStates.FAILED.value` (i.e. `2`) because JSON serialisation drops the symbolic name — so changing the declaration order silently breaks the wire contract. New numeric enums need this kind of cross-stack lock-in to justify the choice.
+
+**Good** (string-valued enum, used at every call site):
+
+`src/functions/createToastNotification.tsx`
+
+```ts
+export enum ToastType {
+    INFO = 'info',
+    SUCCESS = 'success',
+    WARNING = 'warning',
+    ERROR = 'error',
+}
+
+createToastNotification('MLIR', file.name, ToastType.SUCCESS);
+```
+
+**Don't** (parallel consts that don't compose):
+
+```ts
+const TOAST_INFO = 'info';
+const TOAST_SUCCESS = 'success';
+const TOAST_WARNING = 'warning';
+const TOAST_ERROR = 'error';
+
+createToastNotification('MLIR', file.name, TOAST_SUCCESS); // parameter widens to string; no exhaustiveness
+```
+
+**Once the enum exists, use the enum member — never the underlying value.** Even when the literal would compile and match at runtime:
+
+```ts
+// Don't — bypasses the enum, and ESLint/grep can't tie this call back to ToastType:
+createToastNotification('MLIR', file.name, 'success' as ToastType);
+
+// Do:
+createToastNotification('MLIR', file.name, ToastType.SUCCESS);
+```
+
 ### Backend module-private helpers prefix with a single underscore
 
 ```python
