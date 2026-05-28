@@ -2,12 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Fragment, useMemo } from 'react';
-import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useNavigate } from 'react-router';
+import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
+import { Fragment, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import 'styles/components/PerfReport.scss';
+import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
 import {
     ColumnDefinition,
     ColumnKeys,
@@ -16,20 +18,18 @@ import {
     TypedPerfTableRow,
     comparisonKeys,
 } from '../../definitions/PerfTable';
-import 'styles/components/PerfReport.scss';
-import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
+import ROUTES from '../../definitions/Routes';
+import { TEST_IDS } from '../../definitions/TestIds';
+import { formatPercentage, formatSize } from '../../functions/math';
 import { formatCell, isHostOp } from '../../functions/perfFunctions';
+import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
-import ROUTES from '../../definitions/Routes';
-import { formatPercentage, formatSize } from '../../functions/math';
-import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import { hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
-import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
+import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTensorDrawer from './PerfTensorDrawer';
-import { TEST_IDS } from '../../definitions/TestIds';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -97,8 +97,13 @@ const PerformanceTable = ({
 
     const isReportsSynced = opIdsMap.length > 0;
 
-    const canShowTensorDrawer = (row: TypedPerfTableRow): boolean =>
-        isReportsSynced && row.op_type !== OpType.SIGNPOST && !row.raw_op_code.includes('MISSING') && row.id !== null;
+    useEffect(() => {
+        if (!isReportsSynced && selectedPerfRowId !== null) {
+            setSelectedPerfRowId(null);
+        }
+    }, [isReportsSynced, selectedPerfRowId, setSelectedPerfRowId]);
+
+    const enableTensorDrawer = useMemo(() => isReportsSynced, [isReportsSynced]);
 
     const cellFormattingProxy = (
         row: TypedPerfTableRow,
@@ -165,12 +170,10 @@ const PerformanceTable = ({
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
                         <tr>
-                            {isReportsSynced && (
-                                <th
-                                    className='cell-header'
-                                    aria-label='Tensor details'
-                                />
-                            )}
+                            <th
+                                className='cell-header'
+                                aria-label='Tensor details'
+                            />
                             {visibleColumns.map((h) => {
                                 const targetSortDirection =
                                     // eslint-disable-next-line no-nested-ternary
@@ -246,22 +249,25 @@ const PerformanceTable = ({
                                         'is-selected': row.id === selectedPerfRowId,
                                     })}
                                 >
-                                    {isReportsSynced && (
-                                        <td className='cell'>
-                                            {canShowTensorDrawer(row) ? (
-                                                <Tooltip content='View input/output tensor details'>
-                                                    <Button
-                                                        icon={IconNames.INFO_SIGN}
-                                                        variant={ButtonVariant.MINIMAL}
-                                                        size={Size.SMALL}
-                                                        aria-label={`View tensor details for ${row.raw_op_code}`}
-                                                        data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
-                                                        onClick={() => setSelectedPerfRowId(row.id)}
-                                                    />
-                                                </Tooltip>
-                                            ) : null}
-                                        </td>
-                                    )}
+                                    <td className='cell'>
+                                        <Tooltip
+                                            content={
+                                                enableTensorDrawer
+                                                    ? 'View input/output tensor details'
+                                                    : 'Load a synced profiler report to see tensor details'
+                                            }
+                                        >
+                                            <Button
+                                                disabled={!enableTensorDrawer}
+                                                icon={IconNames.INFO_SIGN}
+                                                variant={ButtonVariant.MINIMAL}
+                                                size={Size.SMALL}
+                                                aria-label={`View tensor details for ${row.raw_op_code}`}
+                                                data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
+                                                onClick={() => setSelectedPerfRowId(row.id)}
+                                            />
+                                        </Tooltip>
+                                    </td>
                                     {visibleColumns.map((h) => (
                                         <td
                                             key={h.key}
@@ -287,7 +293,7 @@ const PerformanceTable = ({
                                                 `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
                                             )}
                                         >
-                                            {isReportsSynced && <td className='cell' />}
+                                            <td className='cell' />
                                             {visibleColumns.map((h) => (
                                                 <td
                                                     key={h.key}
@@ -305,7 +311,7 @@ const PerformanceTable = ({
                                 {provideMatmulAdvice && row.op_code.includes('Matmul') && (
                                     <tr>
                                         <td
-                                            colSpan={visibleColumns.length + (isReportsSynced ? 1 : 0)}
+                                            colSpan={visibleColumns.length + 1}
                                             className='cell advice'
                                         >
                                             <ul>
@@ -322,7 +328,7 @@ const PerformanceTable = ({
 
                     <tfoot className='table-footer'>
                         <tr>
-                            {isReportsSynced && <td />}
+                            <td />
                             {visibleColumns.length > 0 &&
                                 data?.length > 0 &&
                                 visibleColumns

@@ -2,34 +2,25 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Link } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
-import { BasicTensor } from '../../functions/parsePerfRowTensors';
-import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
-import { formatMemorySize, getMemoryAddress } from '../../functions/math';
-import isValidNumber from '../../functions/isValidNumber';
-import { OperationDescription, Tensor } from '../../model/APIData';
-import { BufferType, BufferTypeLabel } from '../../model/BufferType';
-import MemoryTag from '../MemoryTag';
-import MemoryConfigRow from '../MemoryConfigRow';
-import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
+import { Link } from 'react-router-dom';
 import ROUTES from '../../definitions/Routes';
+import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
+import isValidNumber from '../../functions/isValidNumber';
+import { formatMemorySize, getMemoryAddress } from '../../functions/math';
 import { ShardSpec } from '../../functions/parseMemoryConfig';
+import { OperationDescription, Tensor } from '../../model/APIData';
+import { BufferTypeLabel } from '../../model/BufferType';
 import { showHexAtom } from '../../store/app';
+import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
+import MemoryConfigRow from '../MemoryConfigRow';
+import MemoryTag from '../MemoryTag';
 
-interface PerfTensorRowBasicProps {
-    mode: 'basic';
-    basic: BasicTensor;
-}
-
-interface PerfTensorRowEnrichedProps {
-    mode: 'enriched';
+export interface PerfTensorRowProps {
     tensor: Tensor;
     operations: OperationDescription[];
     label: string;
 }
-
-export type PerfTensorRowProps = PerfTensorRowBasicProps | PerfTensorRowEnrichedProps;
 
 function getOperationLink(operationId: number, operations: OperationDescription[]) {
     const operation = operations.find((entry) => entry.id === operationId);
@@ -61,60 +52,12 @@ function getLastConsumerLink(tensor: Tensor, operations: OperationDescription[])
     return operation ? getOperationLink(operation.id, operations) : null;
 }
 
-function PerfTensorRowBasic({ basic }: { basic: BasicTensor }) {
-    return (
-        <div className='perf-tensor-row perf-tensor-row-basic'>
-            <h4 className='perf-tensor-row-title'>{basic.label}</h4>
-
-            <dl className='perf-tensor-row-fields'>
-                {basic.dtype ? (
-                    <>
-                        <dt>Dtype</dt>
-                        <dd>{toReadableType(basic.dtype)}</dd>
-                    </>
-                ) : null}
-
-                {basic.memory ? (
-                    <>
-                        <dt>Memory</dt>
-                        <dd>{basic.memory}</dd>
-                    </>
-                ) : null}
-
-                {basic.buffer_type !== null ? (
-                    <>
-                        <dt>Type</dt>
-                        <dd>
-                            <MemoryTag memory={BufferTypeLabel[basic.buffer_type]} />
-                        </dd>
-                    </>
-                ) : null}
-
-                {basic.layout ? (
-                    <>
-                        <dt>Layout</dt>
-                        <dd>{basic.layout}</dd>
-                    </>
-                ) : null}
-            </dl>
-        </div>
-    );
-}
-
-function PerfTensorRowEnriched({
-    tensor,
-    operations,
-    label,
-}: {
-    tensor: Tensor;
-    operations: OperationDescription[];
-    label: string;
-}) {
+function PerfTensorRow({ tensor, operations, label }: PerfTensorRowProps) {
     const showHex = useAtomValue(showHexAtom);
     const firstProducerId = tensor.producers[0];
 
     return (
-        <div className='perf-tensor-row perf-tensor-row-enriched'>
+        <div className='perf-tensor-row'>
             <h4 className='perf-tensor-row-title'>{label}</h4>
 
             <table className='ttnn-table two-tone-rows perf-tensor-row-table'>
@@ -162,7 +105,7 @@ function PerfTensorRowEnriched({
                         <tr>
                             <th>Type</th>
                             <td>
-                                <MemoryTag memory={BufferTypeLabel[tensor.buffer_type as BufferType]} />
+                                <MemoryTag memory={BufferTypeLabel[tensor.buffer_type]} />
                             </td>
                         </tr>
                     ) : null}
@@ -177,7 +120,7 @@ function PerfTensorRowEnriched({
                     {tensor.size !== null ? (
                         <tr>
                             <th>Size</th>
-                            <td>{formatMemorySize(tensor.size ?? undefined)}</td>
+                            <td>{formatMemorySize(tensor.size)}</td>
                         </tr>
                     ) : null}
 
@@ -227,25 +170,6 @@ function PerfTensorRowEnriched({
                 </tbody>
             </table>
         </div>
-    );
-}
-
-function PerfTensorRow(props: PerfTensorRowProps) {
-    const { mode } = props;
-
-    if (mode === 'basic') {
-        const { basic } = props;
-        return <PerfTensorRowBasic basic={basic} />;
-    }
-
-    const { tensor, operations, label } = props;
-
-    return (
-        <PerfTensorRowEnriched
-            tensor={tensor}
-            operations={operations}
-            label={label}
-        />
     );
 }
 

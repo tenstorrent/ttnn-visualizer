@@ -6,49 +6,10 @@ import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it } from 'vitest';
 import PerfTensorPanel from '../src/components/performance/PerfTensorPanel';
-import { BoundType, TypedPerfTableRow } from '../src/definitions/PerfTable';
-import { TEST_IDS } from '../src/definitions/TestIds';
 import ROUTES from '../src/definitions/Routes';
 import { OperationDescription, Tensor } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
-import { OpType } from '../src/definitions/Performance';
 import { TestProviders } from './helpers/TestProviders';
-
-const baseRow: TypedPerfTableRow = {
-    id: 42,
-    global_call_count: 0,
-    advice: [],
-    total_percent: 1,
-    bound: BoundType.FLOP,
-    op_code: 'Matmul',
-    raw_op_code: 'Matmul',
-    device: 0,
-    device_time: 10,
-    op_to_op_gap: 0,
-    cores: 1,
-    dram: 0,
-    dram_percent: 0,
-    flops: 0,
-    flops_percent: 0,
-    math_fidelity: 'HiFi4',
-    output_datatype: 'DataType::BFLOAT16',
-    output_0_memory: 'DEV_0_DRAM_TILE',
-    input_0_datatype: 'DataType::BFLOAT16',
-    input_1_datatype: '',
-    dram_sharded: '',
-    input_0_memory: 'DEV_0_L1_TILE',
-    input_1_memory: '',
-    inner_dim_block_size: '',
-    output_subblock_h: '',
-    output_subblock_w: '',
-    pm_ideal_ns: null,
-    op_type: OpType.DEVICE_OP,
-    hash: null,
-    cache_hit: null,
-    buffer_type: BufferType.L1,
-    layout: null,
-    isFirstHashOccurrence: true,
-};
 
 const enrichedTensor: Tensor = {
     id: 100,
@@ -116,15 +77,10 @@ const operations: OperationDescription[] = [
     },
 ];
 
-function renderPanel(
-    row: TypedPerfTableRow,
-    operation: OperationDescription | null,
-    ops: OperationDescription[] = operations,
-) {
+function renderPanel(operation: OperationDescription, ops: OperationDescription[] = operations) {
     return render(
         <TestProviders>
             <PerfTensorPanel
-                row={row}
                 operation={operation}
                 operations={ops}
             />
@@ -135,20 +91,9 @@ function renderPanel(
 afterEach(cleanup);
 
 describe('PerfTensorPanel', () => {
-    it('shows basic tensor info and CTA when not enriched', () => {
-        renderPanel(baseRow, null);
+    it('renders enriched input and output tensor fields', () => {
+        renderPanel(operations[0]);
 
-        expect(screen.getByTestId(TEST_IDS.PERF_TENSOR_DRAWER_CTA)).toBeInTheDocument();
-        expect(screen.getByText('Input 0')).toBeInTheDocument();
-        expect(screen.getByText('DEV_0_L1_TILE')).toBeInTheDocument();
-        expect(screen.getByText('DEV_0_DRAM_TILE')).toBeInTheDocument();
-        expect(screen.queryByText('Tensor Id')).not.toBeInTheDocument();
-    });
-
-    it('shows enriched tensor fields and hides CTA when operation is matched', () => {
-        renderPanel({ ...baseRow, op: 11 }, operations[0]);
-
-        expect(screen.queryByTestId(TEST_IDS.PERF_TENSOR_DRAWER_CTA)).not.toBeInTheDocument();
         expect(screen.getAllByText('Tensor Id')).toHaveLength(2);
         expect(screen.getByText('100')).toBeInTheDocument();
         expect(screen.getByText('101')).toBeInTheDocument();
@@ -157,7 +102,7 @@ describe('PerfTensorPanel', () => {
     });
 
     it('links producer and consumer operations to operation details', () => {
-        renderPanel({ ...baseRow, op: 11 }, operations[0]);
+        renderPanel(operations[0]);
 
         expect(screen.getByRole('link', { name: /10 producer_op/i })).toHaveAttribute(
             'href',
@@ -167,5 +112,12 @@ describe('PerfTensorPanel', () => {
             'href',
             `${ROUTES.OPERATIONS}/12`,
         );
+    });
+
+    it('shows an empty state when the operation has no input or output tensors', () => {
+        renderPanel({ ...operations[0], inputs: [], outputs: [] });
+
+        expect(screen.getByText('No input tensors')).toBeInTheDocument();
+        expect(screen.getByText('No output tensors')).toBeInTheDocument();
     });
 });

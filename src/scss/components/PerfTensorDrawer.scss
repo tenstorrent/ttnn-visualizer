@@ -19,8 +19,10 @@
         margin: 0 0 16px;
     }
 
-    .bp6-drawer-body {
-        overflow-y: auto;
+    .perf-tensor-drawer-op-link-anchor {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
 }
 
@@ -28,10 +30,6 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
-
-    .perf-tensor-panel-cta {
-        margin-bottom: 4px;
-    }
 
     .perf-tensor-panel-section {
         display: flex;
@@ -56,22 +54,6 @@
     .perf-tensor-row-title {
         margin: 0 0 8px;
         font-size: 14px;
-    }
-
-    .perf-tensor-row-fields {
-        display: grid;
-        grid-template-columns: minmax(80px, auto) 1fr;
-        gap: 6px 12px;
-        margin: 0;
-
-        dt {
-            margin: 0;
-            font-weight: 600;
-        }
-
-        dd {
-            margin: 0;
-        }
     }
 
     .perf-tensor-row-table {

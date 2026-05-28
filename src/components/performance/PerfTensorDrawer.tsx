@@ -2,18 +2,19 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
-import { Button, ButtonVariant, Drawer, DrawerSize, Intent } from '@blueprintjs/core';
-import { useNavigate } from 'react-router-dom';
-import { useAtom } from 'jotai';
+import { Drawer, DrawerSize, Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtom } from 'jotai';
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import 'styles/components/PerfTensorDrawer.scss';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
-import { TEST_IDS } from '../../definitions/TestIds';
 import ROUTES from '../../definitions/Routes';
+import { TEST_IDS } from '../../definitions/TestIds';
+import isValidNumber from '../../functions/isValidNumber';
 import { useOperationsList } from '../../hooks/useAPI';
 import { selectedPerfRowIdAtom } from '../../store/app';
 import PerfTensorPanel from './PerfTensorPanel';
-import 'styles/components/PerfTensorDrawer.scss';
 
 interface PerfTensorDrawerProps {
     rows: TypedPerfTableRow[];
@@ -22,7 +23,6 @@ interface PerfTensorDrawerProps {
 function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
     const [selectedPerfRowId, setSelectedPerfRowId] = useAtom(selectedPerfRowIdAtom);
     const { data: operations = [] } = useOperationsList();
-    const navigate = useNavigate();
 
     const selectedRow = useMemo(
         () => rows.find((row) => row.id === selectedPerfRowId) ?? null,
@@ -30,7 +30,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
     );
 
     const matchedOperation = useMemo(() => {
-        if (!selectedRow?.op) {
+        if (!isValidNumber(selectedRow?.op)) {
             return null;
         }
 
@@ -48,7 +48,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
             title={
                 selectedRow ? (
                     <span className='perf-tensor-drawer-title'>
-                        Row {selectedRow.id} — {selectedRow.raw_op_code}
+                        Row ID {selectedRow.id}: {selectedRow.raw_op_code}
                     </span>
                 ) : (
                     'Tensor details'
@@ -59,23 +59,21 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
             data-testid={TEST_IDS.PERF_TENSOR_DRAWER}
         >
             <div className='perf-tensor-drawer-content'>
-                {selectedRow ? (
+                {matchedOperation ? (
                     <>
-                        {matchedOperation ? (
-                            <p className='perf-tensor-drawer-op-link'>
-                                <Button
-                                    onClick={() => navigate(`${ROUTES.OPERATIONS}/${matchedOperation.id}`)}
-                                    variant={ButtonVariant.SOLID}
-                                    icon={IconNames.CUBE}
-                                    intent={Intent.PRIMARY}
-                                >
-                                    View operation {matchedOperation.id}: {matchedOperation.name}
-                                </Button>
-                            </p>
-                        ) : null}
+                        <p className='perf-tensor-drawer-op-link'>
+                            <Link
+                                className='perf-tensor-drawer-op-link-anchor'
+                                to={`${ROUTES.OPERATIONS}/${matchedOperation.id}`}
+                            >
+                                <Icon icon={IconNames.CUBE} />
+                                <span>
+                                    View producer {matchedOperation.id}: {matchedOperation.name}
+                                </span>
+                            </Link>
+                        </p>
 
                         <PerfTensorPanel
-                            row={selectedRow}
                             operation={matchedOperation}
                             operations={operations}
                         />
