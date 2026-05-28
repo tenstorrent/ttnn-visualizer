@@ -18,7 +18,12 @@ When changing ingestion, sync, or path logic, keep these flows and paths in mind
 
 ## Deployment and security posture
 
-The app usually runs on the engineer's own machine; **ttnn-visualizer.tenstorrent.com** is a demo, not the primary product shape. Default to "one local user" for threat model, defaults, and feature tradeoffs — don't assume multi-tenant SaaS unless a change explicitly targets the demo deployment.
+The app ships in two first-class shapes, and changes should work in both unless a feature is explicitly local-only:
+
+- **Local install** on the engineer's own machine — full feature set, including local filesystem access, uploads, and remote SSH sync.
+- **Hosted** at **ttnn-visualizer.tenstorrent.com** — runs with `SERVER_MODE` enabled, so `@local_only` endpoints return 403 and the frontend hides the matching UI via `getServerConfig()`.
+
+Treat the hosted deployment as **multi-user and untrusted-input**: requests can come from anyone, instances are not mutually trusted, and uploaded payloads must be validated rather than blindly parsed. Authentication is not part of the app's model, so the `@local_only` boundary *is* the security boundary — when adding endpoints, sockets, or data flows, decide consciously whether they're safe under `SERVER_MODE`, and gate genuinely local-only features on both backend and frontend.
 
 ## Python environment
 
