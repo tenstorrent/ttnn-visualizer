@@ -738,18 +738,8 @@ Two `conftest.app` defaults that bite local-upload tests in particular:
 Both overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py`. A runnable example:
 
 ```python
-from http import HTTPStatus
-from io import BytesIO
-from pathlib import Path
-
-from ttnn_visualizer.enums import ConnectionTestStates
-
-
 def test_local_upload_rejects_non_json(app, client, make_report):
     instance_id = make_report()
-    # Two conftest.app defaults that bite local-upload tests:
-    # SERVER_MODE=True would block the route with 403, and
-    # LOCAL_DATA_DIRECTORY ships as a str.
     app.config["SERVER_MODE"] = False
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
 
@@ -761,13 +751,10 @@ def test_local_upload_rejects_non_json(app, client, make_report):
     )
 
     assert response.status_code == HTTPStatus.OK
-    body = response.get_json()
-    # `StatusMessage.status` is a `ConnectionTestStates` enum; FAILED is `2`
-    # after JSON serialisation (see `test_file_uploads.py`).
-    assert body["status"] == ConnectionTestStates.FAILED.value
+    assert response.get_json()["status"] == ConnectionTestStates.FAILED.value
 ```
 
-Use `caplog` for log assertions, `tmp_path` for filesystem-touching tests. Don't construct a raw `werkzeug.test.Client` — go through the Flask wrapper so the app context and request hooks fire correctly.
+`StatusMessage.status` is a `ConnectionTestStates` enum (`FAILED` serialises as `2`). Use `caplog` for log assertions, `tmp_path` for filesystem-touching tests. Don't construct a raw `werkzeug.test.Client` — go through the Flask wrapper so the app context and request hooks fire correctly.
 
 ### Build shared fixture helpers for large test suites
 
@@ -868,18 +855,9 @@ prefixed_filename = f"{prefix}{Path(file.filename).name}"
 dest_path = Path(target_directory) / prefixed_filename
 ```
 
-`Path(...).name` on POSIX (which is what our Linux/macOS deployments use) collapses `/`-separated traversal: `'../../etc/passwd'` becomes `'passwd'`, and `'/absolute/path'` becomes `'path'`.
+`Path(...).name` on POSIX (our Linux/macOS deployments) collapses `/`-separated traversal: `'../../etc/passwd'` → `'passwd'`, `'/absolute/path'` → `'path'`.
 
-**Caveat.** `\` is not a path separator under `PurePosixPath`, so backslash-separated paths and Windows drive-letter prefixes survive `.name` unchanged:
-
-```python
->>> Path('..\\..\\etc\\passwd').name
-'..\\..\\etc\\passwd'
->>> Path('C:\\evil\\file').name
-'C:\\evil\\file'
-```
-
-This still doesn't *escape* the target directory on POSIX — backslashes become literal filename characters rather than separators — so containment holds. But don't read the helper as a full cross-platform sanitiser. If a future deployment ever needs to handle filenames coming from a Windows-aware client more strictly, layer on `werkzeug.utils.secure_filename` or an equivalent normalization step.
+**Caveat.** `\` isn't a path separator under `PurePosixPath`, so backslash-separated paths and Windows drive-letter prefixes (`'..\\..\\etc\\passwd'`, `'C:\\evil\\file'`) survive `.name` unchanged — they become literal filename characters inside the target directory, so containment holds, but the helper isn't a full cross-platform sanitiser. If a deployment needs to handle Windows-style filenames, layer on `werkzeug.utils.secure_filename` or an equivalent normalisation step.
 
 Add a regression test that submits a crafted traversal filename and asserts the file lands inside the intended directory.
 
