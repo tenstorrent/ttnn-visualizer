@@ -27,6 +27,9 @@ export const TEST_IDS = Object.freeze({
     // Performance components
     PERFORMANCE_CHART: 'performance-chart',
     PERFORMANCE_TABLE: 'performance-table',
+    PERF_TENSOR_DRAWER: 'perf-tensor-drawer',
+    PERF_TENSOR_DRAWER_OPEN_BUTTON: 'perf-tensor-drawer-open-button',
+    PERF_TENSOR_DRAWER_CTA: 'perf-tensor-drawer-cta',
 
     // General UI
     LOADING_SPINNER: 'loading-spinner',

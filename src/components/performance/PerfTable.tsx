@@ -7,7 +7,7 @@ import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import {
     ColumnDefinition,
     ColumnKeys,
@@ -24,10 +24,12 @@ import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
 import { formatPercentage, formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
-import { hideHostOpsAtom, mergeDevicesAtom } from '../../store/app';
+import { hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
 import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
+import PerfTensorDrawer from './PerfTensorDrawer';
+import { TEST_IDS } from '../../definitions/TestIds';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -54,6 +56,7 @@ const PerformanceTable = ({
 }: PerformanceTableProps) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
+    const [selectedPerfRowId, setSelectedPerfRowId] = useAtom(selectedPerfRowIdAtom);
 
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
@@ -91,6 +94,11 @@ const PerformanceTable = ({
         ...Columns.slice(CACHE_HIT_INSERTION_POINT),
         ...(npeManifest && npeManifest.length > 0 ? [{ name: 'NPE', key: ColumnKeys.GlobalCallCount }] : []),
     ];
+
+    const isReportsSynced = opIdsMap.length > 0;
+
+    const canShowTensorDrawer = (row: TypedPerfTableRow): boolean =>
+        isReportsSynced && row.op_type !== OpType.SIGNPOST && !row.raw_op_code.includes('MISSING') && row.id !== null;
 
     const cellFormattingProxy = (
         row: TypedPerfTableRow,
@@ -157,6 +165,12 @@ const PerformanceTable = ({
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
                         <tr>
+                            {isReportsSynced && (
+                                <th
+                                    className='cell-header'
+                                    aria-label='Tensor details'
+                                />
+                            )}
                             {visibleColumns.map((h) => {
                                 const targetSortDirection =
                                     // eslint-disable-next-line no-nested-ternary
@@ -229,8 +243,25 @@ const PerformanceTable = ({
                                     className={classNames({
                                         'missing-data': row.raw_op_code.includes('MISSING'),
                                         'signpost-op': row.op_type === OpType.SIGNPOST,
+                                        'is-selected': row.id === selectedPerfRowId,
                                     })}
                                 >
+                                    {isReportsSynced && (
+                                        <td className='cell'>
+                                            {canShowTensorDrawer(row) ? (
+                                                <Tooltip content='View input/output tensor details'>
+                                                    <Button
+                                                        icon={IconNames.INFO_SIGN}
+                                                        variant={ButtonVariant.MINIMAL}
+                                                        size={Size.SMALL}
+                                                        aria-label={`View tensor details for ${row.raw_op_code}`}
+                                                        data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
+                                                        onClick={() => setSelectedPerfRowId(row.id)}
+                                                    />
+                                                </Tooltip>
+                                            ) : null}
+                                        </td>
+                                    )}
                                     {visibleColumns.map((h) => (
                                         <td
                                             key={h.key}
@@ -256,6 +287,7 @@ const PerformanceTable = ({
                                                 `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
                                             )}
                                         >
+                                            {isReportsSynced && <td className='cell' />}
                                             {visibleColumns.map((h) => (
                                                 <td
                                                     key={h.key}
@@ -273,7 +305,7 @@ const PerformanceTable = ({
                                 {provideMatmulAdvice && row.op_code.includes('Matmul') && (
                                     <tr>
                                         <td
-                                            colSpan={visibleColumns.length}
+                                            colSpan={visibleColumns.length + (isReportsSynced ? 1 : 0)}
                                             className='cell advice'
                                         >
                                             <ul>
@@ -290,6 +322,7 @@ const PerformanceTable = ({
 
                     <tfoot className='table-footer'>
                         <tr>
+                            {isReportsSynced && <td />}
                             {visibleColumns.length > 0 &&
                                 data?.length > 0 &&
                                 visibleColumns
@@ -313,6 +346,8 @@ const PerformanceTable = ({
                     <em>No data to display</em>
                 </p>
             )}
+
+            {isReportsSynced && <PerfTensorDrawer rows={tableFields} />}
         </>
     );
 };

@@ -88,6 +88,7 @@ export const layoutFilterListAtom = atom<TypedPerfTableRow['layout'][]>([]);
 export const mergeDevicesAtom = atom<boolean>(true);
 export const tracingModeAtom = atom<boolean>(false);
 export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
+export const selectedPerfRowIdAtom = atom<number | null>(null);
 
 // NPE
 export const altCongestionColorsAtom = atomWithStorage('altCongestionColors', false);
