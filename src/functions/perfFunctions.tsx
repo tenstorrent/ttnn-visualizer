@@ -3,12 +3,13 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React from 'react';
-import { Icon, Intent, Tooltip } from '@blueprintjs/core';
+import classNames from 'classnames';
+import { Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
 import { BoundType, ColumnDefinition, ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
-import { formatPercentage, formatSize, toSecondsPretty } from './math';
+import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
 import { HIGH_DISPATCH_THRESHOLD_MS, OpType } from '../definitions/Performance';
@@ -54,6 +55,10 @@ const FALLBACK_COLOUR = CellColour.Grey;
 const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
+const L1_FULLNESS_WARNING_PERCENT = 75;
+const L1_FULLNESS_CRITICAL_PERCENT = 90;
+const L1_LARGEST_FREE_WARNING_PERCENT = 10;
+const L1_LARGEST_FREE_CRITICAL_PERCENT = 5;
 
 // https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
@@ -61,6 +66,7 @@ export const formatCell = (
     column: ColumnDefinition,
     operations?: OperationDescription[],
     highlight?: string | null,
+    isFirstOfOpRun: boolean = true,
 ): React.JSX.Element | string => {
     const { key, unit, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
@@ -69,6 +75,11 @@ export const formatCell = (
     let formatted: string | boolean | string[];
 
     if (value === null || value === '' || Number.isNaN(value)) {
+        return '';
+    }
+
+    // L1 pressure values reflect a TTNN-op snapshot; suppress repeats inside the same op group.
+    if (!isFirstOfOpRun && (key === ColumnKeys.L1Fullness || key === ColumnKeys.L1LargestFreePercent)) {
         return '';
     }
 
@@ -165,6 +176,48 @@ export const formatCell = (
                     intent={Intent.WARNING}
                     icon={IconNames.WARNING_SIGN}
                 />
+            </Tooltip>
+        );
+    }
+
+    if (key === ColumnKeys.L1LargestFreePercent) {
+        if (typeof value !== 'number') {
+            return '';
+        }
+
+        const largestFreeBytes = row.l1_largest_free;
+        const freeSegments = row.l1_free_segments;
+        const tooltipBody = (
+            <>
+                Largest contiguous free block as % of usable L1.
+                <br />
+                <strong>Largest free:</strong>{' '}
+                {largestFreeBytes != null ? formatMemorySize(largestFreeBytes, 2) : 'n/a'}
+                <br />
+                <strong>Free segments:</strong> {freeSegments ?? 'n/a'}
+                <br />
+                <em>Excludes circular buffers.</em>
+            </>
+        );
+        const colour = getCellColour(row, key);
+        const formattedPercent = formatPercentage(value, decimals);
+
+        return (
+            <Tooltip
+                content={tooltipBody}
+                usePortal={false}
+            >
+                <span className={classNames(Classes.TOOLTIP_INDICATOR, colour)}>
+                    {highlight ? (
+                        <HighlightedText
+                            className={colour}
+                            text={formattedPercent}
+                            filter={highlight}
+                        />
+                    ) : (
+                        formattedPercent
+                    )}
+                </span>
             </Tooltip>
         );
     }
@@ -324,6 +377,30 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
 
     if (key === ColumnKeys.OpToOpGap) {
         return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : FALLBACK_COLOUR;
+    }
+
+    if (key === ColumnKeys.L1Fullness && typeof keyValue === 'number') {
+        if (keyValue >= L1_FULLNESS_CRITICAL_PERCENT) {
+            return CellColour.Red;
+        }
+
+        if (keyValue >= L1_FULLNESS_WARNING_PERCENT) {
+            return CellColour.Yellow;
+        }
+
+        return DEFAULT_COLOUR;
+    }
+
+    if (key === ColumnKeys.L1LargestFreePercent && typeof keyValue === 'number') {
+        if (keyValue <= L1_LARGEST_FREE_CRITICAL_PERCENT) {
+            return CellColour.Red;
+        }
+
+        if (keyValue <= L1_LARGEST_FREE_WARNING_PERCENT) {
+            return CellColour.Yellow;
+        }
+
+        return DEFAULT_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something

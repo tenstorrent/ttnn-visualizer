@@ -10,6 +10,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import getResponseError from '../functions/getResponseError';
 import {
+    useL1PressureByOperation,
     useOpToPerfIdFiltered,
     usePerfFolderList,
     usePerformanceComparisonReport,
@@ -27,6 +28,7 @@ import {
 import PerfCharts from '../components/performance/PerfCharts';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 import { Marker, MarkerColours, PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
+import { L1PressureMetrics } from '../functions/l1Pressure';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
@@ -61,6 +63,8 @@ export default function Performance() {
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
+    const l1PressureMap = useL1PressureByOperation();
+    const hasL1PressureData = l1PressureMap !== null;
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
@@ -110,10 +114,13 @@ export default function Performance() {
         [selectedRange, perfData],
     );
 
-    const enrichedData = useMemo(() => enrichRowData(rangedData, opIdsMap), [rangedData, opIdsMap]);
+    const enrichedData = useMemo(
+        () => enrichRowData(rangedData, opIdsMap, l1PressureMap),
+        [rangedData, opIdsMap, l1PressureMap],
+    );
     const enrichedComparisonData = useMemo(
-        () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [],
-        [comparisonPerfData, opIdsMap],
+        () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap, l1PressureMap)) || [],
+        [comparisonPerfData, opIdsMap, l1PressureMap],
     );
 
     const selectedOpCodeSet = useMemo(
@@ -257,6 +264,7 @@ export default function Performance() {
                             stackedData={enrichedStackedData}
                             comparisonStackedData={enrichedComparisonStackedData}
                             signposts={data?.signposts}
+                            hasL1PressureData={hasL1PressureData}
                         />
                     }
                 />
@@ -337,11 +345,17 @@ const getRowAttributes = (row: PerfTableRow): RowAttributes => {
     };
 };
 
-const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
+const enrichRowData = (
+    rows: PerfTableRow[],
+    opIdsMap: { perfId?: string; opId: number }[],
+    l1PressureMap: Map<number, L1PressureMetrics> | null,
+): TypedPerfTableRow[] => {
     const typedRows = rows.map((row) => {
         const val = parseInt(row.op_to_op_gap, 10);
         const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
         const op = opStr !== undefined ? Number(opStr) : undefined;
+        // TTNN-op snapshot is shared by all device ops that map to the same row.op.
+        const l1Pressure = op !== undefined ? l1PressureMap?.get(op) : undefined;
 
         return {
             ...row,
@@ -358,6 +372,10 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
             flops: row.flops ? parseFloat(row.flops) : null,
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
             pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
+            l1_fullness_percent: l1Pressure?.fullnessPercent ?? null,
+            l1_free_segments: l1Pressure?.freeSegments ?? null,
+            l1_largest_free: l1Pressure?.largestFreeBytes ?? null,
+            l1_largest_free_percent: l1Pressure?.largestFreePercent ?? null,
             ...getRowAttributes(row),
             isFirstHashOccurrence: true, // Default to true, will be updated if needed in next step
         };

@@ -69,6 +69,7 @@ interface PerformanceReportProps {
     stackedData: TypedStackedPerfRow[];
     comparisonStackedData: TypedStackedPerfRow[][];
     signposts?: Signpost[];
+    hasL1PressureData?: boolean;
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -80,6 +81,7 @@ const PerformanceReport = ({
     stackedData,
     comparisonStackedData,
     signposts,
+    hasL1PressureData = false,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -629,6 +631,7 @@ const PerformanceReport = ({
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     reportName={activePerformanceReport?.reportName || null}
                                     showHashColumn={false}
+                                    hasL1PressureData={hasL1PressureData}
                                 />
                             )
                         }
@@ -680,6 +683,7 @@ const PerformanceReport = ({
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         reportName={report}
                                         showHashColumn={false}
+                                        hasL1PressureData={hasL1PressureData}
                                     />
                                 )
                             }

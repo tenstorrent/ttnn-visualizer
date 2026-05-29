@@ -12,6 +12,7 @@ import {
     ColumnDefinition,
     ColumnKeys,
     Columns,
+    L1PressureColumns,
     PerfTableFilters,
     TypedPerfTableRow,
     comparisonKeys,
@@ -37,9 +38,11 @@ interface PerformanceTableProps {
     hiliteHighDispatch: boolean;
     reportName: string | null;
     showHashColumn: boolean;
+    hasL1PressureData?: boolean;
 }
 
 const OP_ID_INSERTION_POINT = 1;
+const L1_PRESSURE_INSERTION_POINT = 2;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
 const CACHE_HIT_INSERTION_POINT = 15;
 
@@ -51,6 +54,7 @@ const PerformanceTable = ({
     hiliteHighDispatch,
     reportName,
     showHashColumn,
+    hasL1PressureData = false,
 }: PerformanceTableProps) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
@@ -84,7 +88,9 @@ const PerformanceTable = ({
     const visibleColumns = [
         ...Columns.slice(0, OP_ID_INSERTION_POINT),
         ...(opIdsMap.length > 0 ? [{ name: 'OP', key: ColumnKeys.OP, sortable: true }] : []),
-        ...Columns.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...Columns.slice(OP_ID_INSERTION_POINT, L1_PRESSURE_INSERTION_POINT),
+        ...(hasL1PressureData ? L1PressureColumns : []),
+        ...Columns.slice(L1_PRESSURE_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
         ...(hiliteHighDispatch ? [{ name: 'Slow', key: ColumnKeys.HighDispatch }] : []),
         ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT, CACHE_HIT_INSERTION_POINT),
         ...(showHashColumn ? [{ name: 'Hash', key: ColumnKeys.Hash }] : []),
@@ -97,6 +103,7 @@ const PerformanceTable = ({
         column: ColumnDefinition,
         operations?: OperationDescription[],
         highlight?: string | null,
+        isFirstOfOpRun: boolean = true,
     ) => {
         const { key } = column;
 
@@ -126,7 +133,7 @@ const PerformanceTable = ({
             return null;
         }
 
-        return formatCell(row, column, operations, highlight);
+        return formatCell(row, column, operations, highlight, isFirstOfOpRun);
     };
 
     if (!data) {
@@ -223,69 +230,81 @@ const PerformanceTable = ({
                     </thead>
 
                     <tbody>
-                        {tableFields?.map((row, i) => (
-                            <Fragment key={i}>
-                                <tr
-                                    className={classNames({
-                                        'missing-data': row.raw_op_code.includes('MISSING'),
-                                        'signpost-op': row.op_type === OpType.SIGNPOST,
-                                    })}
-                                >
-                                    {visibleColumns.map((h) => (
-                                        <td
-                                            key={h.key}
-                                            className={classNames('cell', {
-                                                'align-right': h.key === ColumnKeys.MathFidelity,
-                                            })}
-                                        >
-                                            {cellFormattingProxy(row, h, operationsList, filters?.[h.key])}
-                                        </td>
-                                    ))}
-                                </tr>
+                        {tableFields?.map((row, i) => {
+                            // Collapse same-op runs: L1 cells render only on the first row of each TTNN-op group.
+                            const previousOp = i > 0 ? tableFields[i - 1].op : undefined;
+                            const isFirstOfOpRun = row.op === undefined || row.op !== previousOp;
 
-                                {comparisonDataTableFields?.length > 0 &&
-                                    comparisonDataTableFields.map((dataset, index) => (
-                                        <tr
-                                            key={`comparison-${i}-${index}`}
-                                            className={classNames(
-                                                {
-                                                    'missing-data': dataset[i]?.raw_op_code?.includes('MISSING'),
-                                                    'signpost-op': dataset[i]?.op_type === OpType.SIGNPOST,
-                                                },
-                                                'comparison-row',
-                                                `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
-                                            )}
-                                        >
-                                            {visibleColumns.map((h) => (
-                                                <td
-                                                    key={h.key}
-                                                    className={classNames('cell', {
-                                                        'align-right': h.key === ColumnKeys.MathFidelity,
-                                                    })}
-                                                >
-                                                    {comparisonKeys.includes(h.key) &&
-                                                        dataset[i] &&
-                                                        formatCell(dataset[i], h, operationsList, filters?.[h.key])}
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                {provideMatmulAdvice && row.op_code.includes('Matmul') && (
-                                    <tr>
-                                        <td
-                                            colSpan={visibleColumns.length}
-                                            className='cell advice'
-                                        >
-                                            <ul>
-                                                {row?.advice.map((advice, j) => (
-                                                    <li key={`advice-${j}`}>{advice}</li>
-                                                ))}
-                                            </ul>
-                                        </td>
+                            return (
+                                <Fragment key={i}>
+                                    <tr
+                                        className={classNames({
+                                            'missing-data': row.raw_op_code.includes('MISSING'),
+                                            'signpost-op': row.op_type === OpType.SIGNPOST,
+                                        })}
+                                    >
+                                        {visibleColumns.map((h) => (
+                                            <td
+                                                key={h.key}
+                                                className={classNames('cell', {
+                                                    'align-right': h.key === ColumnKeys.MathFidelity,
+                                                })}
+                                            >
+                                                {cellFormattingProxy(
+                                                    row,
+                                                    h,
+                                                    operationsList,
+                                                    filters?.[h.key],
+                                                    isFirstOfOpRun,
+                                                )}
+                                            </td>
+                                        ))}
                                     </tr>
-                                )}
-                            </Fragment>
-                        ))}
+
+                                    {comparisonDataTableFields?.length > 0 &&
+                                        comparisonDataTableFields.map((dataset, index) => (
+                                            <tr
+                                                key={`comparison-${i}-${index}`}
+                                                className={classNames(
+                                                    {
+                                                        'missing-data': dataset[i]?.raw_op_code?.includes('MISSING'),
+                                                        'signpost-op': dataset[i]?.op_type === OpType.SIGNPOST,
+                                                    },
+                                                    'comparison-row',
+                                                    `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
+                                                )}
+                                            >
+                                                {visibleColumns.map((h) => (
+                                                    <td
+                                                        key={h.key}
+                                                        className={classNames('cell', {
+                                                            'align-right': h.key === ColumnKeys.MathFidelity,
+                                                        })}
+                                                    >
+                                                        {comparisonKeys.includes(h.key) &&
+                                                            dataset[i] &&
+                                                            formatCell(dataset[i], h, operationsList, filters?.[h.key])}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    {provideMatmulAdvice && row.op_code.includes('Matmul') && (
+                                        <tr>
+                                            <td
+                                                colSpan={visibleColumns.length}
+                                                className='cell advice'
+                                            >
+                                                <ul>
+                                                    {row?.advice.map((advice, j) => (
+                                                        <li key={`advice-${j}`}>{advice}</li>
+                                                    ))}
+                                                </ul>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </Fragment>
+                            );
+                        })}
                     </tbody>
 
                     <tfoot className='table-footer'>

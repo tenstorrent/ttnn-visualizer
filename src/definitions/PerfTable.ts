@@ -94,6 +94,10 @@ export interface TypedPerfTableRow extends Omit<
     buffer_type: BufferTypeEnum | null;
     layout: DeviceOperationLayoutTypes | null;
     isFirstHashOccurrence: boolean;
+    l1_fullness_percent: number | null;
+    l1_free_segments: number | null;
+    l1_largest_free: number | null;
+    l1_largest_free_percent: number | null;
 }
 
 export const MarkerColours = [
@@ -156,6 +160,10 @@ export enum ColumnKeys {
     GlobalCallCount = 'global_call_count',
     Hash = 'hash',
     CacheHit = 'cache_hit',
+    L1Fullness = 'l1_fullness_percent',
+    L1FreeSegments = 'l1_free_segments',
+    L1LargestFree = 'l1_largest_free',
+    L1LargestFreePercent = 'l1_largest_free_percent',
 }
 
 export const Columns: ColumnDefinition[] = [
@@ -184,6 +192,11 @@ export const Columns: ColumnDefinition[] = [
     { name: 'Cache Hit', key: ColumnKeys.CacheHit, colour: 'magenta', filterable: true },
 ];
 
+export const L1PressureColumns: ColumnDefinition[] = [
+    { name: 'L1 usage %', key: ColumnKeys.L1Fullness, unit: '%', decimals: 1, sortable: true },
+    { name: 'L1 max free %', key: ColumnKeys.L1LargestFreePercent, unit: '%', decimals: 1, sortable: true },
+];
+
 export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.Bound,
     ColumnKeys.BufferType,
@@ -196,6 +209,8 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.FlopsPercent,
     ColumnKeys.GlobalCallCount,
     ColumnKeys.HighDispatch,
+    ColumnKeys.L1Fullness,
+    ColumnKeys.L1LargestFreePercent,
     ColumnKeys.Layout,
     ColumnKeys.MathFidelity,
     ColumnKeys.OpCode,
@@ -234,6 +249,10 @@ export const signpostRowDefaults = Object.freeze({
     hash: null,
     cache_hit: null,
     isFirstHashOccurrence: true,
+    l1_fullness_percent: null,
+    l1_free_segments: null,
+    l1_largest_free: null,
+    l1_largest_free_percent: null,
 });
 
 export type PerfTableFilters = Partial<Record<ColumnKeys, string>> | null;

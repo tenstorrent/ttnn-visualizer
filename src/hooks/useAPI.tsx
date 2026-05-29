@@ -30,6 +30,7 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
+import { L1PressureMetrics, computeL1PressureForOperation } from '../functions/l1Pressure';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
@@ -927,6 +928,30 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
 
         return response;
     }, [range, response, useRange]);
+};
+
+export const useL1PressureByOperation = (): Map<number, L1PressureMetrics> | null => {
+    const { data: buffersByOperation, isLoading, isError } = useBuffers(BufferType.L1, false);
+    const l1Start = useGetL1StartMarker();
+    const l1End = useGetL1SmallMarker();
+
+    return useMemo(() => {
+        if (isLoading || isError || !buffersByOperation) {
+            return null;
+        }
+
+        if (l1End <= l1Start) {
+            return null;
+        }
+
+        const pressureByOperation = new Map<number, L1PressureMetrics>();
+
+        for (const operation of buffersByOperation) {
+            pressureByOperation.set(operation.id, computeL1PressureForOperation(operation.buffers, l1Start, l1End));
+        }
+
+        return pressureByOperation;
+    }, [buffersByOperation, isError, isLoading, l1End, l1Start]);
 };
 
 export const usePerfMeta = (name?: string | null) => {

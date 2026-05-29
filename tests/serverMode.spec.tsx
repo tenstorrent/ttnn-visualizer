@@ -29,6 +29,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     usePerformanceRange: () => ({ data: null }),
     useInstance: () => ({ data: mockInstance }),
     useOpToPerfIdFiltered: () => [],
+    useL1PressureByOperation: () => null,
     useOperationsList: () => ({ data: [] }),
     useReportFolderList: () => ({ data: mockProfilerFolderList }),
     useGetNPEManifest: () => ({ data: null }),
