@@ -680,6 +680,7 @@ const PerformanceReport = ({
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         reportName={report}
                                         showHashColumn={false}
+                                        activeReportComparisonIndex={0}
                                     />
                                 )
                             }

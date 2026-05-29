@@ -45,17 +45,25 @@ const missingRow = baseRow({ id: 2, raw_op_code: 'Reshape MISSING', op: undefine
 const unmappedRow = baseRow({ id: 3, raw_op_code: 'AddOp', op: undefined });
 const signpost = signpostRow(4);
 
-function renderTable(rows: TypedPerfTableRow[]) {
+interface RenderTableOptions {
+    comparisonData?: TypedPerfTableRow[][];
+    activeReportComparisonIndex?: number | null;
+}
+
+function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}) {
+    const { comparisonData = [], activeReportComparisonIndex = null } = options;
+
     return render(
         <TestProviders>
             <PerfTable
                 data={rows}
-                comparisonData={[]}
+                comparisonData={comparisonData}
                 filters={null}
                 provideMatmulAdvice={false}
                 hiliteHighDispatch={false}
                 reportName='unit-test'
                 showHashColumn={false}
+                activeReportComparisonIndex={activeReportComparisonIndex}
             />
         </TestProviders>,
     );
@@ -109,6 +117,27 @@ describe('PerfTable tensor-drawer trigger column', () => {
         fireEvent.click(trigger);
 
         expect(trigger.closest('tr')).toHaveClass('is-selected');
+    });
+
+    it('renders the trigger on the comparison sub-row that holds the active report (comparison-report tab)', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
+
+        // Comparison-report tab layout: primary `data` rows are the selected comparison
+        // report, and `comparisonData[0]` rows are the active profiler report.
+        const comparisonReportRow = baseRow({ id: 99, raw_op_code: 'Matmul', op: undefined });
+        const activeReportSubRow = baseRow({ id: 11, raw_op_code: 'Matmul', op: 11 });
+
+        renderTable([comparisonReportRow], {
+            comparisonData: [[activeReportSubRow]],
+            activeReportComparisonIndex: 0,
+        });
+
+        const triggers = screen.getAllByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON);
+        expect(triggers).toHaveLength(1);
+
+        const triggerRow = triggers[0].closest('tr')!;
+        expect(triggerRow).toHaveClass('comparison-row');
+        expect(triggers[0]).toBeEnabled();
     });
 
     it('highlights the row that matches the hydrated selectedPerfRowIdAtom', () => {

@@ -40,6 +40,12 @@ interface PerformanceTableProps {
     hiliteHighDispatch: boolean;
     reportName: string | null;
     showHashColumn: boolean;
+    // Identifies which comparison dataset holds the active profiler report's rows. The
+    // tensor-drawer trigger only renders on those rows, since op-id sync from
+    // `useOpToPerfIdFiltered()` and tensor lookups in `useOperationsList()` are both
+    // keyed to the active report. When `null` (default), `data` is the active report
+    // and triggers render on the primary rows.
+    activeReportComparisonIndex?: number | null;
 }
 
 const OP_ID_INSERTION_POINT = 1;
@@ -54,6 +60,7 @@ const PerformanceTable = ({
     hiliteHighDispatch,
     reportName,
     showHashColumn,
+    activeReportComparisonIndex = null,
 }: PerformanceTableProps) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
@@ -98,12 +105,18 @@ const PerformanceTable = ({
     ];
 
     const isReportsSynced = opIdsMap.length > 0;
+    const isPrimaryActiveReport = activeReportComparisonIndex === null;
+    const activeReportRows = useMemo<TypedPerfTableRow[]>(
+        () => (isPrimaryActiveReport ? tableFields : (comparisonDataTableFields[activeReportComparisonIndex] ?? [])),
+        [isPrimaryActiveReport, tableFields, comparisonDataTableFields, activeReportComparisonIndex],
+    );
+    const canShowTensorDrawer = isReportsSynced && activeReportRows.length > 0;
 
     useEffect(() => {
-        if (!isReportsSynced) {
+        if (!canShowTensorDrawer) {
             setSelectedPerfRowId(null);
         }
-    }, [isReportsSynced, setSelectedPerfRowId]);
+    }, [canShowTensorDrawer, setSelectedPerfRowId]);
 
     const getTensorDrawerStatus = (row: TypedPerfTableRow): { canOpen: boolean; reason: string } => {
         if (!isReportsSynced) {
@@ -119,6 +132,32 @@ const PerformanceTable = ({
         }
 
         return { canOpen: true, reason: 'View input/output tensor details' };
+    };
+
+    const renderTensorDrawerTrigger = (row: TypedPerfTableRow) => {
+        if (row.op_type === OpType.SIGNPOST) {
+            return null;
+        }
+
+        const status = getTensorDrawerStatus(row);
+
+        return (
+            <Tooltip content={status.reason}>
+                {/* span wrapper lets the Tooltip attach to disabled buttons (Blueprint quirk) */}
+                <span className='perf-tensor-trigger-wrapper'>
+                    <Button
+                        className='perf-tensor-trigger'
+                        disabled={!status.canOpen}
+                        icon={IconNames.FLOW_LINEAR}
+                        variant={ButtonVariant.MINIMAL}
+                        size={Size.SMALL}
+                        aria-label={`View tensor details for ${row.raw_op_code}`}
+                        data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
+                        onClick={() => setSelectedPerfRowId(row.id)}
+                    />
+                </span>
+            </Tooltip>
+        );
     };
 
     const cellFormattingProxy = (
@@ -258,7 +297,7 @@ const PerformanceTable = ({
                     <tbody>
                         {tableFields?.map((row, i) => {
                             const isSignpost = row.op_type === OpType.SIGNPOST;
-                            const tensorDrawerStatus = getTensorDrawerStatus(row);
+                            const isPrimarySelected = isPrimaryActiveReport && row.id === selectedPerfRowId;
 
                             return (
                                 <Fragment key={i}>
@@ -266,27 +305,11 @@ const PerformanceTable = ({
                                         className={classNames({
                                             'missing-data': row.raw_op_code.includes('MISSING'),
                                             'signpost-op': isSignpost,
-                                            'is-selected': row.id === selectedPerfRowId,
+                                            'is-selected': isPrimarySelected,
                                         })}
                                     >
                                         <td className='cell'>
-                                            {!isSignpost && (
-                                                <Tooltip content={tensorDrawerStatus.reason}>
-                                                    {/* span wrapper lets the Tooltip attach to disabled buttons (Blueprint quirk) */}
-                                                    <span className='perf-tensor-trigger-wrapper'>
-                                                        <Button
-                                                            className='perf-tensor-trigger'
-                                                            disabled={!tensorDrawerStatus.canOpen}
-                                                            icon={IconNames.FLOW_LINEAR}
-                                                            variant={ButtonVariant.MINIMAL}
-                                                            size={Size.SMALL}
-                                                            aria-label={`View tensor details for ${row.raw_op_code}`}
-                                                            data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
-                                                            onClick={() => setSelectedPerfRowId(row.id)}
-                                                        />
-                                                    </span>
-                                                </Tooltip>
-                                            )}
+                                            {isPrimaryActiveReport && renderTensorDrawerTrigger(row)}
                                         </td>
                                         {visibleColumns.map((h) => (
                                             <td
@@ -301,33 +324,45 @@ const PerformanceTable = ({
                                     </tr>
 
                                     {comparisonDataTableFields?.length > 0 &&
-                                        comparisonDataTableFields.map((dataset, index) => (
-                                            <tr
-                                                key={`comparison-${i}-${index}`}
-                                                className={classNames(
-                                                    {
-                                                        'missing-data': dataset[i]?.raw_op_code?.includes('MISSING'),
-                                                        'signpost-op': dataset[i]?.op_type === OpType.SIGNPOST,
-                                                    },
-                                                    'comparison-row',
-                                                    `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
-                                                )}
-                                            >
-                                                <td className='cell' />
-                                                {visibleColumns.map((h) => (
-                                                    <td
-                                                        key={h.key}
-                                                        className={classNames('cell', {
-                                                            'align-right': h.key === ColumnKeys.MathFidelity,
-                                                        })}
-                                                    >
-                                                        {comparisonKeys.includes(h.key) &&
-                                                            dataset[i] &&
-                                                            formatCell(dataset[i], h, operationsList, filters?.[h.key])}
+                                        comparisonDataTableFields.map((dataset, index) => {
+                                            const subRow = dataset[i];
+                                            const isActiveReportRow = index === activeReportComparisonIndex;
+                                            const isSubRowSelected =
+                                                isActiveReportRow && subRow?.id === selectedPerfRowId;
+
+                                            return (
+                                                <tr
+                                                    key={`comparison-${i}-${index}`}
+                                                    className={classNames(
+                                                        {
+                                                            'missing-data': subRow?.raw_op_code?.includes('MISSING'),
+                                                            'signpost-op': subRow?.op_type === OpType.SIGNPOST,
+                                                            'is-selected': isSubRowSelected,
+                                                        },
+                                                        'comparison-row',
+                                                        `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
+                                                    )}
+                                                >
+                                                    <td className='cell'>
+                                                        {isActiveReportRow && subRow
+                                                            ? renderTensorDrawerTrigger(subRow)
+                                                            : null}
                                                     </td>
-                                                ))}
-                                            </tr>
-                                        ))}
+                                                    {visibleColumns.map((h) => (
+                                                        <td
+                                                            key={h.key}
+                                                            className={classNames('cell', {
+                                                                'align-right': h.key === ColumnKeys.MathFidelity,
+                                                            })}
+                                                        >
+                                                            {comparisonKeys.includes(h.key) &&
+                                                                subRow &&
+                                                                formatCell(subRow, h, operationsList, filters?.[h.key])}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            );
+                                        })}
                                     {provideMatmulAdvice && row.op_code.includes('Matmul') && (
                                         <tr>
                                             <td
@@ -374,7 +409,7 @@ const PerformanceTable = ({
                 </p>
             )}
 
-            {isReportsSynced && <PerfTensorDrawer rows={tableFields} />}
+            {canShowTensorDrawer && <PerfTensorDrawer rows={activeReportRows} />}
         </>
     );
 };
