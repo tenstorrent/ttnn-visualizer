@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Config, Layout, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
+import { Annotations, Config, Layout, PlotData, PlotDatum, PlotMouseEvent, Shape } from 'plotly.js';
 import { Tensor } from '../model/APIData';
 
 export const L1RenderConfiguration: PlotConfiguration = {
@@ -118,6 +118,8 @@ export interface PlotConfiguration {
     yAxis?: AxisConfig;
     yAxis2?: AxisConfig;
     barMode?: 'stack' | 'group';
+    shapes?: Partial<Shape>[];
+    annotations?: Partial<Annotations>[];
 }
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';

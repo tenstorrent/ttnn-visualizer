@@ -97,6 +97,8 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
             tickformat: configuration.yAxis2?.tickformat,
             hoverformat: configuration.yAxis2?.hoverformat,
         },
+        shapes: configuration.shapes,
+        annotations: configuration.annotations,
     };
 
     const config: Partial<Config> = {

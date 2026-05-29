@@ -8,6 +8,12 @@ import { Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
 import { BoundType, ColumnDefinition, ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import {
+    L1_FULLNESS_CRITICAL_PERCENT,
+    L1_FULLNESS_WARNING_PERCENT,
+    L1_LARGEST_FREE_CRITICAL_PERCENT,
+    L1_LARGEST_FREE_WARNING_PERCENT,
+} from '../definitions/L1Pressure';
 import { OperationDescription } from '../model/APIData';
 import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
@@ -55,11 +61,6 @@ const FALLBACK_COLOUR = CellColour.Grey;
 const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
-// Thresholds calibrated against real reports (resnet50, llama_attn_32l).
-const L1_FULLNESS_WARNING_PERCENT = 25;
-const L1_FULLNESS_CRITICAL_PERCENT = 50;
-const L1_LARGEST_FREE_WARNING_PERCENT = 60;
-const L1_LARGEST_FREE_CRITICAL_PERCENT = 30;
 
 // https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
@@ -190,14 +191,14 @@ export const formatCell = (
         const freeSegments = row.l1_free_segments;
         const tooltipBody = (
             <>
-                Largest contiguous free block as % of usable L1.
+                Largest contiguous free block as % of usable L1
                 <br />
                 <strong>Largest free:</strong>{' '}
                 {largestFreeBytes != null ? formatMemorySize(largestFreeBytes, 2) : 'n/a'}
                 <br />
                 <strong>Free segments:</strong> {freeSegments ?? 'n/a'}
                 <br />
-                <em>Excludes circular buffers.</em>
+                <em>Excludes circular buffers</em>
             </>
         );
         const colour = getCellColour(row, key);

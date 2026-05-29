@@ -290,6 +290,7 @@ export default function Performance() {
                                             filteredPerfData={filteredEnrichedData}
                                             comparisonData={filteredEnrichedComparisonData}
                                             selectedOpCodes={selectedOpCodes}
+                                            hasL1PressureData={hasL1PressureData}
                                         />
                                     </div>
 

@@ -11,4 +11,6 @@ export const GRAPH_COLORS = {
     outputEdge: cssVar(`--graph-output-edge`),
     normal: cssVar(`--graph-normal`),
     focusedNode: cssVar(`--graph-focused-node`),
+    l1PressureWarning: cssVar(`--l1-pressure-warning`),
+    l1PressureCritical: cssVar(`--l1-pressure-critical`),
 };
