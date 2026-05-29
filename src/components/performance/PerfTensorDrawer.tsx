@@ -48,9 +48,11 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
             }
             size={DrawerSize.SMALL}
             className='perf-tensor-drawer'
-            data-testid={TEST_IDS.PERF_TENSOR_DRAWER}
         >
-            <div className='perf-tensor-drawer-content'>
+            <div
+                className='perf-tensor-drawer-content'
+                data-testid={TEST_IDS.PERF_TENSOR_DRAWER}
+            >
                 {matchedOperation ? (
                     <>
                         <p className='perf-tensor-drawer-op-link'>
