@@ -26,7 +26,6 @@ interface PerfL1PressureChartProps {
 
 interface ThresholdLine {
     y: number;
-    yref: 'y' | 'y2';
     label: string;
     colour: string;
 }
@@ -76,14 +75,12 @@ function PerfL1PressureChart({ datasets = [] }: PerfL1PressureChartProps) {
                     type: 'scatter',
                     mode: 'lines',
                     connectgaps: true,
-                    yaxis: 'y2',
                     name: `${label} — L1 max free`,
                     legendgroup: `group${dataIndex}`,
                     showlegend: true,
                     line: {
                         color: getSecondaryDataColours(dataIndex),
                         width: 1.5,
-                        dash: 'dot',
                     },
                     hovertemplate:
                         '<b>%{fullData.name}</b><br />Op %{x}: %{customdata}<br />L1 max free: %{y:.1f}%<br /><i>Excludes circular buffers.</i><extra></extra>',
@@ -96,25 +93,21 @@ function PerfL1PressureChart({ datasets = [] }: PerfL1PressureChartProps) {
         const lines: ThresholdLine[] = [
             {
                 y: L1_FULLNESS_WARNING_PERCENT,
-                yref: 'y',
                 label: 'fullness warn',
                 colour: GRAPH_COLORS.l1PressureWarning,
             },
             {
                 y: L1_FULLNESS_CRITICAL_PERCENT,
-                yref: 'y',
                 label: 'fullness critical',
                 colour: GRAPH_COLORS.l1PressureCritical,
             },
             {
                 y: L1_LARGEST_FREE_WARNING_PERCENT,
-                yref: 'y2',
                 label: 'max-free warn',
                 colour: GRAPH_COLORS.l1PressureWarning,
             },
             {
                 y: L1_LARGEST_FREE_CRITICAL_PERCENT,
-                yref: 'y2',
                 label: 'max-free critical',
                 colour: GRAPH_COLORS.l1PressureCritical,
             },
@@ -125,12 +118,12 @@ function PerfL1PressureChart({ datasets = [] }: PerfL1PressureChartProps) {
             xref: 'paper',
             x0: 0,
             x1: 1,
-            yref: line.yref,
+            yref: 'y',
             y0: line.y,
             y1: line.y,
             line: {
                 color: line.colour,
-                width: 1,
+                width: 2,
                 dash: 'dash',
             },
             layer: 'below',
@@ -138,9 +131,9 @@ function PerfL1PressureChart({ datasets = [] }: PerfL1PressureChartProps) {
 
         const annotationList: Partial<Annotations>[] = lines.map((line) => ({
             xref: 'paper',
-            x: line.yref === 'y2' ? 0 : 1,
-            xanchor: line.yref === 'y2' ? 'left' : 'right',
-            yref: line.yref,
+            x: 1,
+            xanchor: 'right',
+            yref: 'y',
             y: line.y,
             yanchor: 'bottom',
             text: `${line.label} ${line.y}%`,
@@ -157,7 +150,7 @@ function PerfL1PressureChart({ datasets = [] }: PerfL1PressureChartProps) {
     const configuration: PlotConfiguration = {
         margin: {
             l: 60,
-            r: 60,
+            r: 20,
             b: 50,
             t: 0,
         },
@@ -167,13 +160,7 @@ function PerfL1PressureChart({ datasets = [] }: PerfL1PressureChartProps) {
             range: [0, maxDataSize],
         },
         yAxis: {
-            title: { text: 'L1 fullness %' },
-            range: [0, 100],
-            tickformat: '.0f',
-            hoverformat: '.1f',
-        },
-        yAxis2: {
-            title: { text: 'L1 max free %' },
+            title: { text: 'L1 usage %' },
             range: [0, 100],
             tickformat: '.0f',
             hoverformat: '.1f',
