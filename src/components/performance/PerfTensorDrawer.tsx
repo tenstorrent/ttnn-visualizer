@@ -40,7 +40,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
             title={
                 selectedRow ? (
                     <span className='perf-tensor-drawer-title'>
-                        Row ID {selectedRow.id}: {selectedRow.raw_op_code}
+                        Row {selectedRow.id}: {selectedRow.raw_op_code}
                     </span>
                 ) : (
                     'Tensor details'

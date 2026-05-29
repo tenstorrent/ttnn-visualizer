@@ -5,12 +5,16 @@
 @use '../definitions/colours' as colours;
 
 .perf-tensor-drawer-content {
-    padding: 10px 20px;
+    padding: 10px 15px;
     height: 100%;
     overflow-y: auto;
 }
 
 .perf-tensor-drawer {
+    .bp6-drawer-header {
+        padding-left: 15px;
+    }
+
     .perf-tensor-drawer-title {
         font-family: var(--monospace-font-family);
     }
@@ -31,12 +35,6 @@
     }
 }
 
-// Inline-flex wrapper keeps the disabled Button as a valid Tooltip target
-// (Blueprint Tooltips do not bind to disabled controls directly).
-.perf-tensor-trigger-wrapper {
-    display: inline-flex;
-}
-
 .perf-tensor-panel {
     display: flex;
     flex-direction: column;
@@ -49,6 +47,7 @@
     }
 
     .perf-tensor-panel-heading {
+        text-decoration: underline;
         margin: 0;
     }
 

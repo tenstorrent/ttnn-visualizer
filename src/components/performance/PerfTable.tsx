@@ -275,8 +275,9 @@ const PerformanceTable = ({
                                                     {/* span wrapper lets the Tooltip attach to disabled buttons (Blueprint quirk) */}
                                                     <span className='perf-tensor-trigger-wrapper'>
                                                         <Button
+                                                            className='perf-tensor-trigger'
                                                             disabled={!tensorDrawerStatus.canOpen}
-                                                            icon={IconNames.INFO_SIGN}
+                                                            icon={IconNames.FLOW_LINEAR}
                                                             variant={ButtonVariant.MINIMAL}
                                                             size={Size.SMALL}
                                                             aria-label={`View tensor details for ${row.raw_op_code}`}

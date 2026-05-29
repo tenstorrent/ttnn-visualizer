@@ -40,6 +40,7 @@ const FeedbackButton = () => {
     return (
         <>
             <Button
+                // bp6-intent-none does not exist in Blueprint CLASSES object
                 className={classNames('feedback-button bp6-intent-none', {
                     'animate-in': isInitialState,
                     'user-is-interacting': isUserInteracting,

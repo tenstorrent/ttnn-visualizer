@@ -6,6 +6,7 @@ import {
     Button,
     ButtonGroup,
     ButtonVariant,
+    Classes,
     FormGroup,
     InputGroup,
     Intent,
@@ -512,7 +513,7 @@ export default function Styleguide() {
 
             <FormGroup>
                 <label
-                    className='bp6-file-input'
+                    className={Classes.FILE_INPUT}
                     htmlFor='local-upload'
                 >
                     <input
@@ -520,7 +521,7 @@ export default function Styleguide() {
                         type='file'
                         multiple
                     />
-                    <span className='bp6-file-upload-input'>Select files...</span>
+                    <span className={Classes.FILE_UPLOAD_INPUT}>Select files...</span>
                 </label>
             </FormGroup>
 
