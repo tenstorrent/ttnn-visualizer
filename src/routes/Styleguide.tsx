@@ -465,7 +465,6 @@ export default function Styleguide() {
                 className='short-width'
             >
                 <InputGroup
-                    className='bp6-light'
                     onChange={() => {}}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
@@ -473,28 +472,24 @@ export default function Styleguide() {
 
             <div className='container flex'>
                 <InputGroup
-                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.PRIMARY}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
 
                 <InputGroup
-                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.WARNING}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
 
                 <InputGroup
-                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.SUCCESS}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
 
                 <InputGroup
-                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.DANGER}
                     leftIcon={IconNames.FOLDER_NEW}
