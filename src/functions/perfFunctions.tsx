@@ -55,10 +55,11 @@ const FALLBACK_COLOUR = CellColour.Grey;
 const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
-const L1_FULLNESS_WARNING_PERCENT = 75;
-const L1_FULLNESS_CRITICAL_PERCENT = 90;
-const L1_LARGEST_FREE_WARNING_PERCENT = 10;
-const L1_LARGEST_FREE_CRITICAL_PERCENT = 5;
+// Thresholds calibrated against real reports (resnet50, llama_attn_32l).
+const L1_FULLNESS_WARNING_PERCENT = 25;
+const L1_FULLNESS_CRITICAL_PERCENT = 50;
+const L1_LARGEST_FREE_WARNING_PERCENT = 60;
+const L1_LARGEST_FREE_CRITICAL_PERCENT = 30;
 
 // https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
