@@ -30,7 +30,7 @@ import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
 import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
-import { FileStatus } from '../model/APIData';
+import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 
@@ -83,9 +83,7 @@ export default function Styleguide() {
     const [autoCloseTime, setAutoCloseTime] = useState(1000);
     const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
 
-    const runFileTransferDemo = (
-        initial: typeof SYNC_DEMO_PROGRESS | typeof SYNC_STARTING_DEMO_PROGRESS | typeof UPLOAD_DEMO_PROGRESS,
-    ) => {
+    const runFileTransferDemo = (initial: FileProgress) => {
         setUpdateFileTransferProgress(initial);
         setTimeRemaining(autoCloseTime);
 
