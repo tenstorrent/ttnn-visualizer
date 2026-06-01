@@ -9,11 +9,6 @@ import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../st
 import { FileStatus } from '../model/APIData';
 import Endpoints from '../definitions/Endpoints';
 
-export interface UploadProgress {
-    progress?: number;
-    estimated?: number;
-}
-
 type FileWithRelativePath = File & { webkitRelativePath?: string };
 
 const ua = navigator.userAgent.toLowerCase();

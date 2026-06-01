@@ -5,7 +5,7 @@
 import { FileStatus } from '../model/APIData';
 
 const FILE_STATUS_LABEL: Readonly<Record<FileStatus, string>> = Object.freeze({
-    [FileStatus.STARTED]: 'Starting',
+    [FileStatus.STARTED]: 'Preparing\u2026',
     [FileStatus.DOWNLOADING]: 'Downloading',
     [FileStatus.UPLOADING]: 'Uploading',
     [FileStatus.FINISHED]: 'Finished',
