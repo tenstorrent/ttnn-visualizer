@@ -31,7 +31,7 @@ import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
 import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
-import { FileStatus } from '../model/APIData';
+import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 
@@ -49,6 +49,20 @@ const SYNC_DEMO_PROGRESS = {
     bytesTransferred: 128_000,
     bytesTotal: 512_000,
     currentFileSize: 128_000,
+};
+
+// STARTED phase of a remote sync: backend has emitted job totals but no
+// per-file event yet, so `currentFileName` is empty and the overlay renders
+// the standalone `Preparing\u2026` label (issue #1599).
+const SYNC_STARTING_DEMO_PROGRESS = {
+    currentFileName: '',
+    numberOfFiles: 3,
+    percentOfCurrent: 0,
+    finishedFiles: 0,
+    status: FileStatus.STARTED,
+    bytesTransferred: 0,
+    bytesTotal: 512_000,
+    currentFileSize: 0,
 };
 
 const UPLOAD_DEMO_PROGRESS = {
@@ -70,7 +84,7 @@ export default function Styleguide() {
     const [autoCloseTime, setAutoCloseTime] = useState(1000);
     const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
 
-    const runFileTransferDemo = (initial: typeof SYNC_DEMO_PROGRESS | typeof UPLOAD_DEMO_PROGRESS) => {
+    const runFileTransferDemo = (initial: FileProgress) => {
         setUpdateFileTransferProgress(initial);
         setTimeRemaining(autoCloseTime);
 
@@ -584,17 +598,11 @@ export default function Styleguide() {
             <h3>Progress bar</h3>
 
             <div className='container short-width'>
-                <ProgressBar
-                    progress={0}
-                    estimated={36}
-                />
+                <ProgressBar progress={0} />
             </div>
 
             <div className='container short-width'>
-                <ProgressBar
-                    progress={0.85}
-                    estimated={1}
-                />
+                <ProgressBar progress={0.85} />
             </div>
 
             <div className='container flex'>
@@ -606,6 +614,13 @@ export default function Styleguide() {
                     />
 
                     <ButtonGroup>
+                        <Button
+                            onClick={() => runFileTransferDemo(SYNC_STARTING_DEMO_PROGRESS)}
+                            intent={Intent.PRIMARY}
+                            disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                        >
+                            Open remote sync overlay (preparing)
+                        </Button>
                         <Button
                             onClick={() => runFileTransferDemo(SYNC_DEMO_PROGRESS)}
                             intent={Intent.PRIMARY}

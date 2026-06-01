@@ -8,7 +8,7 @@ import { FileStatus } from '../src/model/APIData';
 
 describe('getFileStatusLabel', () => {
     it.each<[FileStatus, string]>([
-        [FileStatus.STARTED, 'Starting'],
+        [FileStatus.STARTED, 'Preparing\u2026'],
         [FileStatus.DOWNLOADING, 'Downloading'],
         [FileStatus.UPLOADING, 'Uploading'],
         [FileStatus.FINISHED, 'Finished'],
