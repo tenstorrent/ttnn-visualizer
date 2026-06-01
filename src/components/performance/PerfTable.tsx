@@ -149,6 +149,7 @@ const PerformanceTable = ({
                         className='perf-tensor-trigger'
                         disabled={!status.canOpen}
                         icon={IconNames.FLOW_LINEAR}
+                        intent={Intent.PRIMARY}
                         variant={ButtonVariant.MINIMAL}
                         size={Size.SMALL}
                         aria-label={`View tensor details for ${row.raw_op_code}`}

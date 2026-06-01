@@ -40,7 +40,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
             title={
                 selectedRow ? (
                     <span className='perf-tensor-drawer-title'>
-                        Row {selectedRow.id}: {selectedRow.raw_op_code}
+                        {selectedRow.id} {selectedRow.raw_op_code}
                     </span>
                 ) : (
                     'Tensor details'
@@ -62,7 +62,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
                             >
                                 <Icon icon={IconNames.CUBE} />
                                 <span>
-                                    View operation {matchedOperation.id}: {matchedOperation.name}
+                                    View operation {matchedOperation.id} {matchedOperation.name}
                                 </span>
                             </Link>
                         </p>
