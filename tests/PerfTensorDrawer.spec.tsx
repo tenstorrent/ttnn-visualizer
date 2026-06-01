@@ -84,9 +84,9 @@ describe('PerfTensorDrawer', () => {
         );
 
         expect(screen.getByTestId(TEST_IDS.PERF_TENSOR_DRAWER)).toBeInTheDocument();
-        expect(screen.getByText(/Row 1:/)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /1\s+Matmul/ })).toBeInTheDocument();
 
-        const opLink = screen.getByRole('link', { name: /View operation 11: matmul_op/i });
+        const opLink = screen.getByRole('link', { name: /View operation 11\s+matmul_op/i });
         expect(opLink).toHaveAttribute('href', `${ROUTES.OPERATIONS}/11`);
 
         expect(screen.getByText('Inputs')).toBeInTheDocument();
