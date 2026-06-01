@@ -212,6 +212,56 @@ describe('PerfTable tensor-drawer trigger column', () => {
         expect(screen.getByTestId('selected-row-probe')).toHaveTextContent('null');
         expect(screen.queryByTestId(TEST_IDS.PERF_TENSOR_DRAWER)).not.toBeInTheDocument();
     });
+
+    // Regression guard for the second clean-up branch: if filters or the range
+    // slider drop the selected row from `activeReportRows` while other rows
+    // remain (drawer still showable), the selection must be cleared so it can't
+    // silently re-open later when the row reappears.
+    it('clears selectedPerfRowIdAtom when the selected row is filtered out of activeReportRows', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
+
+        const otherRow = baseRow({ id: 7, raw_op_code: 'OtherOp', op: 12 });
+
+        const { rerender } = render(
+            <TestProviders initialAtomValues={[[selectedPerfRowIdAtom, matmulRow.id]]}>
+                <PerfTable
+                    data={[matmulRow, otherRow]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                />
+                <SelectedRowProbe />
+            </TestProviders>,
+        );
+
+        expect(screen.getByText('Matmul').closest('tr')).toHaveClass('is-selected');
+        expect(screen.getByTestId('selected-row-probe')).toHaveTextContent('1');
+
+        rerender(
+            <TestProviders initialAtomValues={[[selectedPerfRowIdAtom, matmulRow.id]]}>
+                <PerfTable
+                    data={[otherRow]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                />
+                <SelectedRowProbe />
+            </TestProviders>,
+        );
+
+        // Matmul cell renders inside the table body; the drawer header still
+        // surfaces the row's op code from the previous selection until the
+        // Drawer animates closed, so scope the lookup to the table.
+        const tableBody = screen.getByRole('table').querySelector('tbody')!;
+        expect(within(tableBody).queryByText('Matmul')).not.toBeInTheDocument();
+        expect(screen.getByTestId('selected-row-probe')).toHaveTextContent('null');
+    });
 });
 
 function SelectedRowProbe() {

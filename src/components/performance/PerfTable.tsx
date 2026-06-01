@@ -115,8 +115,14 @@ const PerformanceTable = ({
     useEffect(() => {
         if (!canShowTensorDrawer) {
             setSelectedPerfRowId(null);
+            return;
         }
-    }, [canShowTensorDrawer, setSelectedPerfRowId]);
+
+        // Drop the selection when filters/range no longer include the row
+        if (selectedPerfRowId !== null && !activeReportRows.some((row) => row.id === selectedPerfRowId)) {
+            setSelectedPerfRowId(null);
+        }
+    }, [canShowTensorDrawer, activeReportRows, selectedPerfRowId, setSelectedPerfRowId]);
 
     const getTensorDrawerStatus = (row: TypedPerfTableRow): { canOpen: boolean; reason: string } => {
         if (!isReportsSynced) {
