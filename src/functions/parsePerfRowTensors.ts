@@ -8,6 +8,8 @@ import { BufferType } from '../model/BufferType';
 
 const DEV_MEMORY_REGEX = /DEV_(\d+)_(DRAM|L1)_(\w*)/m;
 
+const KNOWN_LAYOUTS = new Set<string>(Object.values(DeviceOperationLayoutTypes));
+
 export interface ParsedPerfRowAttributes {
     buffer_type: BufferType | null;
     layout: DeviceOperationLayoutTypes | null;
@@ -29,11 +31,14 @@ const getBufferType = (type?: string): BufferType | null => {
     return null;
 };
 
+const getLayout = (layout?: string): DeviceOperationLayoutTypes | null =>
+    layout && KNOWN_LAYOUTS.has(layout) ? (layout as DeviceOperationLayoutTypes) : null;
+
 export const parsePerfRowTensors = (row: Pick<PerfTableRow, 'input_0_memory'>): ParsedPerfRowAttributes => {
     const match = DEV_MEMORY_REGEX.exec(row.input_0_memory);
 
     return {
         buffer_type: getBufferType(match?.[2]),
-        layout: match?.[3] ? (match[3] as DeviceOperationLayoutTypes) : null,
+        layout: getLayout(match?.[3]),
     };
 };

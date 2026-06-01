@@ -4,6 +4,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { useAtomValue } from 'jotai';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerfTable from '../src/components/performance/PerfTable';
 import { TypedPerfTableRow, signpostRowDefaults } from '../src/definitions/PerfTable';
@@ -163,4 +164,58 @@ describe('PerfTable tensor-drawer trigger column', () => {
         expect(matmulCell).toHaveClass('is-selected');
         expect(missingCell).not.toHaveClass('is-selected');
     });
+
+    // Regression guard for the clean-up effect inside `PerfTable` that resets
+    // `selectedPerfRowIdAtom` whenever the table can no longer show the drawer
+    // (no op-id sync, no active-report rows). Without this, a stale selection
+    // from a previous render would silently re-open the drawer once sync returns.
+    it('clears selectedPerfRowIdAtom when the reports become unsynced', () => {
+        let opIdMapping: { opId: number; perfId: string }[] = [{ opId: 11, perfId: '1' }];
+        (useOpToPerfIdFiltered as Mock).mockImplementation(() => opIdMapping);
+
+        const { rerender } = render(
+            <TestProviders initialAtomValues={[[selectedPerfRowIdAtom, matmulRow.id]]}>
+                <PerfTable
+                    data={[matmulRow]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                />
+                <SelectedRowProbe />
+            </TestProviders>,
+        );
+
+        expect(screen.getByText('Matmul').closest('tr')).toHaveClass('is-selected');
+        expect(screen.getByTestId('selected-row-probe')).toHaveTextContent('1');
+        expect(screen.getByTestId(TEST_IDS.PERF_TENSOR_DRAWER)).toBeInTheDocument();
+
+        opIdMapping = [];
+        rerender(
+            <TestProviders initialAtomValues={[[selectedPerfRowIdAtom, matmulRow.id]]}>
+                <PerfTable
+                    data={[matmulRow]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                />
+                <SelectedRowProbe />
+            </TestProviders>,
+        );
+
+        expect(screen.getByText('Matmul').closest('tr')).not.toHaveClass('is-selected');
+        expect(screen.getByTestId('selected-row-probe')).toHaveTextContent('null');
+        expect(screen.queryByTestId(TEST_IDS.PERF_TENSOR_DRAWER)).not.toBeInTheDocument();
+    });
 });
+
+function SelectedRowProbe() {
+    const selected = useAtomValue(selectedPerfRowIdAtom);
+
+    return <span data-testid='selected-row-probe'>{selected === null ? 'null' : String(selected)}</span>;
+}

@@ -35,4 +35,11 @@ describe('parsePerfRowTensors', () => {
         expect(parsed.buffer_type).toBeNull();
         expect(parsed.layout).toBeNull();
     });
+
+    it('returns a null layout when the captured layout is not a known DeviceOperationLayoutTypes member', () => {
+        const parsed = parsePerfRowTensors({ input_0_memory: 'DEV_0_L1_FOO' });
+
+        expect(parsed.buffer_type).toBe(BufferType.L1);
+        expect(parsed.layout).toBeNull();
+    });
 });
