@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React from 'react';
+import { JSX } from 'react';
 import HighlightedText from '../components/HighlightedText';
 import { formatPercentage, formatSize } from './math';
 import { StackedColumnKeys, StackedTableColumn, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
@@ -41,7 +41,7 @@ export const formatStackedCell = (
     row: TypedStackedPerfRow,
     column: StackedTableColumn,
     highlight?: string | null,
-): React.JSX.Element | string => {
+): JSX.Element | string => {
     const { key, unit, decimals } = column;
     const value = row[key];
     let formatted: string | boolean | string[];

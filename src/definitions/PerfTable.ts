@@ -193,8 +193,8 @@ export const Columns: ColumnDefinition[] = [
 ];
 
 export const L1PressureColumns: ColumnDefinition[] = [
-    { name: 'L1 usage %', key: ColumnKeys.L1Fullness, unit: '%', decimals: 1, sortable: true },
-    { name: 'L1 max free %', key: ColumnKeys.L1LargestFreePercent, unit: '%', decimals: 1, sortable: true },
+    { name: 'L1 Usage %', key: ColumnKeys.L1Fullness, unit: '%', decimals: 1, sortable: true },
+    // { name: 'L1 max free %', key: ColumnKeys.L1LargestFreePercent, unit: '%', decimals: 1, sortable: true },
 ];
 
 export const comparisonKeys: ColumnKeys[] = [

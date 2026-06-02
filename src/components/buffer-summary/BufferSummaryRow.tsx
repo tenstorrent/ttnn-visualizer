@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import 'styles/components/BufferSummaryRow.scss';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { JSX, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtomValue } from 'jotai/index';
 import classNames from 'classnames';
@@ -48,7 +48,7 @@ const BufferSummaryRow = ({
     showMemoryLayout,
     isScrolling = false,
 }: BufferSummaryRowProps) => {
-    const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
+    const [tooltip, setTooltip] = useState<{ x: number; y: number; text: JSX.Element } | null>(null);
     const showHex = useAtomValue(showHexAtom);
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);

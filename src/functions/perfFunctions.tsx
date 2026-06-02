@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React from 'react';
+import { JSX } from 'react';
 import classNames from 'classnames';
 import { Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -17,18 +17,8 @@ import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 import { NormalisedPerfData } from './normalisePerformanceData';
 import MemoryTag from '../components/MemoryTag';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
-
-export enum CellColour {
-    White = 'white',
-    Green = 'green',
-    Red = 'red',
-    Blue = 'blue',
-    Magenta = 'magenta',
-    Cyan = 'cyan',
-    Yellow = 'yellow',
-    Orange = 'orange',
-    Grey = 'grey',
-}
+import L1FullnessBar from '../components/performance/L1FullnessBar';
+import { CellColour } from '../definitions/CellColour';
 
 export interface Signpost {
     id: number;
@@ -68,7 +58,7 @@ export const formatCell = (
     operations?: OperationDescription[],
     highlight?: string | null,
     isFirstOfOpRun: boolean = true,
-): React.JSX.Element | string => {
+): JSX.Element | string => {
     const { key, unit, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
     const isHost = isHostOp(row.bound);
@@ -181,26 +171,30 @@ export const formatCell = (
         );
     }
 
-    if (key === ColumnKeys.L1LargestFreePercent) {
+    if (key === ColumnKeys.L1Fullness) {
         if (typeof value !== 'number') {
             return '';
         }
 
         const largestFreeBytes = row.l1_largest_free;
         const freeSegments = row.l1_free_segments;
+        const colour = getCellColour(row, key);
         const tooltipBody = (
             <>
-                Largest contiguous free block as % of usable L1.
+                <L1FullnessBar
+                    fullnessPercent={value}
+                    largestFreePercent={row.l1_largest_free_percent}
+                />
+                <strong className='tooltip-label'>Free segments:</strong> {freeSegments ?? 'n/a'}
                 <br />
-                <strong>Largest free:</strong>{' '}
+                <strong className='tooltip-label'>Largest free segment:</strong>{' '}
                 {largestFreeBytes != null ? formatMemorySize(largestFreeBytes, 2) : 'n/a'}
                 <br />
-                <strong>Free segments:</strong> {freeSegments ?? 'n/a'}
-                <br />
-                <em>Excludes circular buffers.</em>
+                <small>
+                    <em>Excludes circular buffers</em>
+                </small>
             </>
         );
-        const colour = getCellColour(row, key);
         const formattedPercent = formatPercentage(value, decimals);
 
         return (
@@ -208,7 +202,10 @@ export const formatCell = (
                 content={tooltipBody}
                 usePortal={false}
             >
-                <span className={classNames(Classes.TOOLTIP_INDICATOR, colour)}>
+                <span
+                    className={classNames(Classes.TOOLTIP_INDICATOR, colour)}
+                    style={{ whiteSpace: 'nowrap' }}
+                >
                     {highlight ? (
                         <HighlightedText
                             className={colour}
@@ -222,6 +219,53 @@ export const formatCell = (
             </Tooltip>
         );
     }
+
+    // if (key === ColumnKeys.L1LargestFreePercent) {
+    //     if (typeof value !== 'number') {
+    //         return '';
+    //     }
+
+    //     const largestFreeBytes = row.l1_largest_free;
+    //     const freeSegments = row.l1_free_segments;
+    //     const colour = getCellColour(row, key);
+    //     const tooltipBody = (
+    //         <>
+    //             <L1FullnessBar
+    //                 fullnessPercent={row.l1_fullness_percent ?? 0}
+    //                 largestFreePercent={value}
+    //                 usedColour={getCellColour(row, ColumnKeys.L1Fullness)}
+    //             />
+    //             Largest contiguous free block as % of usable L1
+    //             <br />
+    //             <strong>Free segments:</strong> {freeSegments ?? 'n/a'}
+    //             <br />
+    //             <strong>Largest free:</strong>{' '}
+    //             {largestFreeBytes != null ? formatMemorySize(largestFreeBytes, 2) : 'n/a'}
+    //             <br />
+    //             <em>Excludes circular buffers</em>
+    //         </>
+    //     );
+    //     const formattedPercent = formatPercentage(value, decimals);
+
+    //     return (
+    //         <Tooltip
+    //             content={tooltipBody}
+    //             usePortal={false}
+    //         >
+    //             <span className={classNames(Classes.TOOLTIP_INDICATOR, colour)}>
+    //                 {highlight ? (
+    //                     <HighlightedText
+    //                         className={colour}
+    //                         text={formattedPercent}
+    //                         filter={highlight}
+    //                     />
+    //                 ) : (
+    //                     formattedPercent
+    //                 )}
+    //             </span>
+    //         </Tooltip>
+    //     );
+    // }
 
     if (typeof value === 'number' && key !== ColumnKeys.Id) {
         formatted = formatSize(value, decimals);

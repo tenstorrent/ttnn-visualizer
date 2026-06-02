@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { JSX, useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
@@ -704,7 +704,7 @@ interface RenderSignpostProps<T> {
         selectedSignposts: (T | null)[],
         allSignposts: T[],
         selectType: SignpostSelectType,
-    ): React.JSX.Element | null;
+    ): JSX.Element | null;
 }
 
 const renderSignpost: RenderSignpostProps<Signpost> = (
@@ -764,7 +764,7 @@ const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
 };
 
 interface RenderStackedGroupByProps<T> {
-    (item: T, itemProps: ItemRendererProps): React.JSX.Element | null;
+    (item: T, itemProps: ItemRendererProps): JSX.Element | null;
 }
 
 const renderStackedGroupBy: RenderStackedGroupByProps<StackedGroupBy> = (
