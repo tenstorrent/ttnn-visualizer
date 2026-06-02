@@ -178,21 +178,20 @@ export const formatCell = (
 
         const largestFreeBytes = row.l1_largest_free;
         const freeSegments = row.l1_free_segments;
-        const colour = getCellColour(row, key);
         const tooltipBody = (
             <>
                 <L1FullnessBar
                     fullnessPercent={value}
                     largestFreePercent={row.l1_largest_free_percent}
                 />
-                <strong className='tooltip-label'>Free segments:</strong> {freeSegments ?? 'n/a'}
-                <br />
-                <strong className='tooltip-label'>Largest free segment:</strong>{' '}
-                {largestFreeBytes != null ? formatMemorySize(largestFreeBytes, 2) : 'n/a'}
-                <br />
-                <small>
+                <div className='l1-fullness-attributes'>
+                    <strong>Free segments:</strong> {freeSegments ?? 'n/a'}
+                    <br />
+                    <strong>Largest free segment:</strong>{' '}
+                    {largestFreeBytes != null ? formatMemorySize(largestFreeBytes, 2) : 'n/a'}
+                    <br />
                     <em>Excludes circular buffers</em>
-                </small>
+                </div>
             </>
         );
         const formattedPercent = formatPercentage(value, decimals);
@@ -203,12 +202,11 @@ export const formatCell = (
                 usePortal={false}
             >
                 <span
-                    className={classNames(Classes.TOOLTIP_INDICATOR, colour)}
+                    className={classNames(Classes.TOOLTIP_INDICATOR)}
                     style={{ whiteSpace: 'nowrap' }}
                 >
                     {highlight ? (
                         <HighlightedText
-                            className={colour}
                             text={formattedPercent}
                             filter={highlight}
                         />
@@ -227,7 +225,6 @@ export const formatCell = (
 
     //     const largestFreeBytes = row.l1_largest_free;
     //     const freeSegments = row.l1_free_segments;
-    //     const colour = getCellColour(row, key);
     //     const tooltipBody = (
     //         <>
     //             <L1FullnessBar
@@ -252,10 +249,9 @@ export const formatCell = (
     //             content={tooltipBody}
     //             usePortal={false}
     //         >
-    //             <span className={classNames(Classes.TOOLTIP_INDICATOR, colour)}>
+    //             <span className={classNames(Classes.TOOLTIP_INDICATOR)}>
     //                 {highlight ? (
     //                     <HighlightedText
-    //                         className={colour}
     //                         text={formattedPercent}
     //                         filter={highlight}
     //                     />

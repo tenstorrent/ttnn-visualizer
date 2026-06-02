@@ -6,18 +6,7 @@ import { JSX } from 'react';
 import HighlightedText from '../components/HighlightedText';
 import { formatPercentage, formatSize } from './math';
 import { StackedColumnKeys, StackedTableColumn, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
-
-export enum CellColour {
-    White = 'white',
-    Green = 'green',
-    Red = 'red',
-    Blue = 'blue',
-    Magenta = 'magenta',
-    Cyan = 'cyan',
-    Yellow = 'yellow',
-    Orange = 'orange',
-    Grey = 'grey',
-}
+import { CellColour } from '../definitions/CellColour';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,

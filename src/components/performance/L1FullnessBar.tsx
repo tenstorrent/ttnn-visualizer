@@ -29,9 +29,6 @@ const USED_LABEL = 'Used';
 const LARGEST_FREE_LABEL = 'Largest free';
 const FRAGMENTED_FREE_LABEL = 'Fragmented free';
 
-// Used / largest-contiguous-free / fragmented-free segments derived from the same
-// numbers the surrounding tooltip already states in text. Mirrors the colour the
-// cell uses for the used % so the threshold signal is consistent.
 function L1FullnessBar({ fullnessPercent, largestFreePercent }: L1FullnessBarProps) {
     const used = clampPercent(fullnessPercent);
     const freeTotal = Math.max(MAX_PERCENT - used, 0);
