@@ -43,6 +43,40 @@ export function computeL1PressureForOperation(buffers: Buffer[], l1Start: number
         };
     }
 
+    // Each device has its own physical L1 sharing the same address layout, so buffers must be
+    // grouped by device_id before deduping/merging — otherwise same-offset buffers on different
+    // devices collide and the merged layout is meaningless. We surface the worst-case (most full)
+    // device, since that is the binding L1 constraint for the operation, and keep its fragmentation
+    // figures internally consistent (segments + largest-free come from that same device).
+    const buffersByDevice = new Map<number, Buffer[]>();
+
+    for (const buffer of buffers) {
+        const deviceBuffers = buffersByDevice.get(buffer.device_id);
+
+        if (deviceBuffers) {
+            deviceBuffers.push(buffer);
+        } else {
+            buffersByDevice.set(buffer.device_id, [buffer]);
+        }
+    }
+
+    const deviceGroups = [...buffersByDevice.values()];
+
+    if (deviceGroups.length === 0) {
+        return computeMetricsForDevice([], l1Start, l1End, usableSize);
+    }
+
+    return deviceGroups
+        .map((deviceBuffers) => computeMetricsForDevice(deviceBuffers, l1Start, l1End, usableSize))
+        .reduce((worst, metrics) => (metrics.fullnessPercent > worst.fullnessPercent ? metrics : worst));
+}
+
+function computeMetricsForDevice(
+    buffers: Buffer[],
+    l1Start: number,
+    l1End: number,
+    usableSize: number,
+): L1PressureMetrics {
     const clippedChunks = dedupeAndClipBuffers(buffers, l1Start, l1End);
     const mergedChunks = mergeOverlappingChunks(clippedChunks);
     const gapSizes = computeGapSizes(mergedChunks, l1Start, l1End);

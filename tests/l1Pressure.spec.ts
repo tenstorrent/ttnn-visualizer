@@ -10,11 +10,11 @@ import { computeL1PressureForOperation } from '../src/functions/l1Pressure';
 const L1_START = 0;
 const L1_END = 1000;
 
-const makeBuffer = (address: number, size: number): Buffer => ({
+const makeBuffer = (address: number, size: number, deviceId = 0): Buffer => ({
     address,
     size,
     buffer_type: BufferType.L1,
-    device_id: 0,
+    device_id: deviceId,
 });
 
 test('computeL1PressureForOperation returns fully free L1 when no buffers are allocated', () => {
@@ -101,5 +101,36 @@ test('computeL1PressureForOperation returns zeros when the usable L1 window is i
         freeSegments: 0,
         largestFreeBytes: 0,
         largestFreePercent: 0,
+    });
+});
+
+test('computeL1PressureForOperation does not merge same-offset buffers across devices', () => {
+    // Both devices allocate at address 0; treating them as one address space would dedupe to a
+    // single 200-byte chunk. Grouping by device keeps device 1's 400-byte allocation distinct.
+    const result = computeL1PressureForOperation([makeBuffer(0, 200, 0), makeBuffer(0, 400, 1)], L1_START, L1_END);
+
+    // Worst-case device is device 1 (400/1000 = 40% full), not the merged 20%.
+    expect(result).toEqual({
+        fullnessPercent: 40,
+        freeSegments: 1,
+        largestFreeBytes: 600,
+        largestFreePercent: 60,
+    });
+});
+
+test('computeL1PressureForOperation reports the most-full device across devices', () => {
+    // Device 0: two buffers leaving a fragmented layout; device 1: a single denser allocation.
+    const result = computeL1PressureForOperation(
+        [makeBuffer(0, 100, 0), makeBuffer(300, 100, 0), makeBuffer(0, 700, 1)],
+        L1_START,
+        L1_END,
+    );
+
+    // Device 1 is fuller (70% vs 20%), so its figures win and stay internally consistent.
+    expect(result).toEqual({
+        fullnessPercent: 70,
+        freeSegments: 1,
+        largestFreeBytes: 300,
+        largestFreePercent: 30,
     });
 });
