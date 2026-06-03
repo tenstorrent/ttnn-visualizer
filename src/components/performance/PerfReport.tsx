@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { JSX, useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
@@ -69,6 +69,7 @@ interface PerformanceReportProps {
     stackedData: TypedStackedPerfRow[];
     comparisonStackedData: TypedStackedPerfRow[][];
     signposts?: Signpost[];
+    hasL1PressureData?: boolean;
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -80,6 +81,7 @@ const PerformanceReport = ({
     stackedData,
     comparisonStackedData,
     signposts,
+    hasL1PressureData = false,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -629,6 +631,7 @@ const PerformanceReport = ({
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     reportName={activePerformanceReport?.reportName || null}
                                     showHashColumn={false}
+                                    hasL1PressureData={hasL1PressureData}
                                 />
                             )
                         }
@@ -680,6 +683,7 @@ const PerformanceReport = ({
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         reportName={report}
                                         showHashColumn={false}
+                                        hasL1PressureData={hasL1PressureData}
                                         activeReportComparisonIndex={0}
                                     />
                                 )
@@ -701,7 +705,7 @@ interface RenderSignpostProps<T> {
         selectedSignposts: (T | null)[],
         allSignposts: T[],
         selectType: SignpostSelectType,
-    ): React.JSX.Element | null;
+    ): JSX.Element | null;
 }
 
 const renderSignpost: RenderSignpostProps<Signpost> = (
@@ -761,7 +765,7 @@ const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
 };
 
 interface RenderStackedGroupByProps<T> {
-    (item: T, itemProps: ItemRendererProps): React.JSX.Element | null;
+    (item: T, itemProps: ItemRendererProps): JSX.Element | null;
 }
 
 const renderStackedGroupBy: RenderStackedGroupByProps<StackedGroupBy> = (

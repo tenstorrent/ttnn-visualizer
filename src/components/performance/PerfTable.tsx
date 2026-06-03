@@ -14,6 +14,7 @@ import {
     ColumnDefinition,
     ColumnKeys,
     Columns,
+    L1PressureColumns,
     PerfTableFilters,
     TypedPerfTableRow,
     comparisonKeys,
@@ -40,6 +41,7 @@ interface PerformanceTableProps {
     hiliteHighDispatch: boolean;
     reportName: string | null;
     showHashColumn: boolean;
+    hasL1PressureData?: boolean;
     // Identifies which comparison dataset holds the active profiler report's rows. The
     // tensor-drawer trigger only renders on those rows, since op-id sync from
     // `useOpToPerfIdFiltered()` and tensor lookups in `useOperationsList()` are both
@@ -49,6 +51,7 @@ interface PerformanceTableProps {
 }
 
 const OP_ID_INSERTION_POINT = 1;
+const L1_PRESSURE_INSERTION_POINT = 2;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
 const CACHE_HIT_INSERTION_POINT = 15;
 
@@ -60,6 +63,7 @@ const PerformanceTable = ({
     hiliteHighDispatch,
     reportName,
     showHashColumn,
+    hasL1PressureData = false,
     activeReportComparisonIndex = null,
 }: PerformanceTableProps) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
@@ -93,10 +97,32 @@ const PerformanceTable = ({
         [comparisonData, sortTableFields],
     );
 
+    // L1 pressure is a per-TTNN-op snapshot, so it renders only on the first device-op row of each
+    // op. Derive that "first" row from the current display order (`tableFields`, post-sort) rather
+    // than source order, so the value always lands on the topmost visible row of its op group —
+    // matching what the user sees under any sort instead of an arbitrary execution-order row.
+    const firstRowOfOpRun = useMemo<Set<TypedPerfTableRow>>(() => {
+        const seenOps = new Set<number>();
+        const firstRows = new Set<TypedPerfTableRow>();
+
+        for (const row of tableFields) {
+            if (row.op !== undefined && !seenOps.has(row.op)) {
+                seenOps.add(row.op);
+                firstRows.add(row);
+            }
+        }
+
+        return firstRows;
+    }, [tableFields]);
+
     const visibleColumns = [
         ...Columns.slice(0, OP_ID_INSERTION_POINT),
         ...(opIdsMap.length > 0 ? [{ name: 'OP', key: ColumnKeys.OP, sortable: true }] : []),
-        ...Columns.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...Columns.slice(OP_ID_INSERTION_POINT, L1_PRESSURE_INSERTION_POINT),
+        // L1 metrics only available for the active profiler report; comparison sub-rows render an
+        // empty L1 cell because ColumnKeys.L1Fullness is excluded from `comparisonKeys`.
+        ...(hasL1PressureData ? L1PressureColumns : []),
+        ...Columns.slice(L1_PRESSURE_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
         ...(hiliteHighDispatch ? [{ name: 'Slow', key: ColumnKeys.HighDispatch }] : []),
         ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT, CACHE_HIT_INSERTION_POINT),
         ...(showHashColumn ? [{ name: 'Hash', key: ColumnKeys.Hash }] : []),
@@ -172,6 +198,7 @@ const PerformanceTable = ({
         column: ColumnDefinition,
         operations?: OperationDescription[],
         highlight?: string | null,
+        isFirstOfOpRun: boolean = true,
     ) => {
         const { key } = column;
 
@@ -201,7 +228,7 @@ const PerformanceTable = ({
             return null;
         }
 
-        return formatCell(row, column, operations, highlight);
+        return formatCell(row, column, operations, highlight, isFirstOfOpRun);
     };
 
     if (!data) {
@@ -303,6 +330,7 @@ const PerformanceTable = ({
 
                     <tbody>
                         {tableFields?.map((row, i) => {
+                            const isFirstOfOpRun = row.op === undefined || firstRowOfOpRun.has(row);
                             const isSignpost = row.op_type === OpType.SIGNPOST;
                             const isPrimarySelected = isPrimaryActiveReport && row.id === selectedPerfRowId;
 
@@ -325,7 +353,13 @@ const PerformanceTable = ({
                                                     'align-right': h.key === ColumnKeys.MathFidelity,
                                                 })}
                                             >
-                                                {cellFormattingProxy(row, h, operationsList, filters?.[h.key])}
+                                                {cellFormattingProxy(
+                                                    row,
+                                                    h,
+                                                    operationsList,
+                                                    filters?.[h.key],
+                                                    isFirstOfOpRun,
+                                                )}
                                             </td>
                                         ))}
                                     </tr>

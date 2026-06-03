@@ -10,6 +10,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import getResponseError from '../functions/getResponseError';
 import {
+    useL1PressureByOperation,
     useOpToPerfIdFiltered,
     usePerfFolderList,
     usePerformanceComparisonReport,
@@ -27,6 +28,7 @@ import {
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
 import { Marker, MarkerColours, PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
+import { L1PressureMetrics, L1PressureStatus } from '../functions/l1Pressure';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
@@ -61,6 +63,11 @@ export default function Performance() {
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
+    const l1Pressure = useL1PressureByOperation();
+    const l1PressureMap = l1Pressure.data;
+    // Reserve the column while still loading so it doesn't pop in and shift the table sideways;
+    // hide it only once we know the data is genuinely unavailable.
+    const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
     const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
@@ -111,9 +118,13 @@ export default function Performance() {
         [selectedRange, perfData],
     );
 
-    const enrichedData = useMemo(() => enrichRowData(rangedData, opIdsMap), [rangedData, opIdsMap]);
+    const enrichedData = useMemo(
+        () => enrichRowData(rangedData, opIdsMap, l1PressureMap),
+        [rangedData, opIdsMap, l1PressureMap],
+    );
     const enrichedComparisonData = useMemo(
-        () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [],
+        // L1 metrics come from the active memory report only — do not attach the active report's map here.
+        () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap, null)) || [],
         [comparisonPerfData, opIdsMap],
     );
 
@@ -262,6 +273,7 @@ export default function Performance() {
                             stackedData={enrichedStackedData}
                             comparisonStackedData={enrichedComparisonStackedData}
                             signposts={data?.signposts}
+                            hasL1PressureData={hasL1PressureData}
                         />
                     }
                 />
@@ -307,11 +319,25 @@ const getRowAttributes = (row: PerfTableRow): RowAttributes => {
     };
 };
 
-const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
+const enrichRowData = (
+    rows: PerfTableRow[],
+    opIdsMap: { perfId?: string; opId: number }[],
+    l1PressureMap: Map<number, L1PressureMetrics> | null,
+): TypedPerfTableRow[] => {
+    // Build the perf-id -> op-id lookup once so enrichment stays O(N) instead of O(N·M) — the
+    // previous `.find()` per row scaled with both row count and the active report's op count.
+    const opIdByPerfId = new Map<string, number>();
+    for (const { perfId, opId } of opIdsMap) {
+        if (perfId !== undefined) {
+            opIdByPerfId.set(perfId, opId);
+        }
+    }
+
     const typedRows = rows.map((row) => {
         const val = parseInt(row.op_to_op_gap, 10);
-        const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
-        const op = opStr !== undefined ? Number(opStr) : undefined;
+        const op = opIdByPerfId.get(row.id);
+        // TTNN-op snapshot is shared by all device ops that map to the same row.op.
+        const l1Pressure = op !== undefined ? l1PressureMap?.get(op) : undefined;
 
         return {
             ...row,
@@ -328,6 +354,10 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
             flops: row.flops ? parseFloat(row.flops) : null,
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
             pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
+            l1_fullness_percent: l1Pressure?.fullnessPercent ?? null,
+            l1_free_segments: l1Pressure?.freeSegments ?? null,
+            l1_largest_free: l1Pressure?.largestFreeBytes ?? null,
+            l1_largest_free_percent: l1Pressure?.largestFreePercent ?? null,
             ...getRowAttributes(row),
             isFirstHashOccurrence: true, // Default to true, will be updated if needed in next step
         };

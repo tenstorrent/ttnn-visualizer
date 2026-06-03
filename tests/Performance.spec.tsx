@@ -8,6 +8,7 @@ import { useAtom, useSetAtom } from 'jotai';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Performance from '../src/routes/Performance';
 import {
+    useL1PressureByOperation,
     useOpToPerfIdFiltered,
     usePerfFolderList,
     usePerformanceComparisonReport,
@@ -15,9 +16,11 @@ import {
     usePerformanceReport,
 } from '../src/hooks/useAPI';
 import { activePerformanceReportAtom, selectedPerfRowIdAtom } from '../src/store/app';
+import { L1PressureStatus } from '../src/functions/l1Pressure';
 import { TestProviders } from './helpers/TestProviders';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
+    useL1PressureByOperation: vi.fn(),
     useOpToPerfIdFiltered: vi.fn(),
     usePerfFolderList: vi.fn(),
     usePerformanceComparisonReport: vi.fn(),
@@ -44,6 +47,7 @@ beforeEach(() => {
     (usePerfFolderList as Mock).mockReturnValue({ data: undefined });
     (usePerformanceRange as Mock).mockReturnValue(null);
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
+    (useL1PressureByOperation as Mock).mockReturnValue({ status: L1PressureStatus.Unavailable, data: null });
 });
 
 function PerformanceController() {

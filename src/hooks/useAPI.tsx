@@ -30,6 +30,7 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
+import { L1PressureResult, buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
@@ -927,6 +928,33 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
 
         return response;
     }, [range, response, useRange]);
+};
+
+export const useL1PressureByOperation = (): L1PressureResult => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const { data: buffersByOperation, isLoading, isError } = useBuffers(BufferType.L1, false);
+    // The markers depend on these two queries; read their load state directly so we don't compute
+    // pressure against the default L1 window before the real markers resolve (which would briefly
+    // show one set of percentages and then flicker into another).
+    const { data: devices } = useDevices();
+    const { data: l1SmallBuffers } = useGetAllBuffers(BufferType.L1_SMALL);
+    const l1Start = useGetL1StartMarker();
+    const l1End = useGetL1SmallMarker();
+
+    return useMemo(
+        () =>
+            buildL1PressureResult({
+                hasProfilerReport: activeProfilerReport !== null,
+                isError,
+                isLoading,
+                buffersByOperation,
+                devices,
+                l1SmallBuffers,
+                l1Start,
+                l1End,
+            }),
+        [activeProfilerReport, buffersByOperation, devices, l1SmallBuffers, isError, isLoading, l1End, l1Start],
+    );
 };
 
 export const usePerfMeta = (name?: string | null) => {
