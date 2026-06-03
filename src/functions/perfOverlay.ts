@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { PERF_BINS } from '../definitions/GraphColors';
 
@@ -61,8 +61,6 @@ export interface OpPerfScore {
     opId: number;
     /** Normalised log10 position in `[0, 1]` across the observed min/max. */
     t: number;
-    /** Index into `PERF_BINS` for sizing (still discrete — keeps zoom-out legible). */
-    sizeBin: number;
 }
 
 export interface ScoreResult {
@@ -73,11 +71,7 @@ export interface ScoreResult {
 
 /**
  * Score each aggregated op against the observed min/max device time using a
- * log10 scale. Returns:
- *  - `t` for continuous colour interpolation,
- *  - `sizeBin` for discrete sizing (we still want a couple of size steps so
- *    hot ops remain visible when the graph is zoomed out, but the colour is
- *    smooth so neighbours in the ramp don't visually flip).
+ * log10 scale. `t` is the continuous position used for colour interpolation.
  *
  * Real-world perf data is long-tailed (a handful of ops dominate the budget),
  * so a linear scale would crush 95% of nodes into the cool end. Log scale
@@ -85,12 +79,9 @@ export interface ScoreResult {
  *
  * Edge cases:
  * - Empty input → empty map, zero min/max.
- * - All values equal → everything gets `t=0`, `sizeBin=0` (no signal to rank).
+ * - All values equal → everything gets `t=0` (no signal to rank).
  */
-export const scoreOps = (
-    aggregates: Map<number, OpPerfAggregate>,
-    binCount: number = PERF_BINS.length,
-): ScoreResult => {
+export const scoreOps = (aggregates: Map<number, OpPerfAggregate>): ScoreResult => {
     const scoreByOpId = new Map<number, OpPerfScore>();
     if (aggregates.size === 0) {
         return { scoreByOpId, minNs: 0, maxNs: 0 };
@@ -107,7 +98,7 @@ export const scoreOps = (
     }
     if (minNs === maxNs) {
         for (const a of aggregates.values()) {
-            scoreByOpId.set(a.opId, { opId: a.opId, t: 0, sizeBin: 0 });
+            scoreByOpId.set(a.opId, { opId: a.opId, t: 0 });
         }
         return { scoreByOpId, minNs, maxNs };
     }
@@ -115,8 +106,7 @@ export const scoreOps = (
     const range = Math.log10(maxNs) - logMin;
     for (const a of aggregates.values()) {
         const t = Math.min(1, Math.max(0, (Math.log10(a.deviceTimeNs) - logMin) / range));
-        const sizeBin = Math.min(binCount - 1, Math.max(0, Math.floor(t * binCount)));
-        scoreByOpId.set(a.opId, { opId: a.opId, t, sizeBin });
+        scoreByOpId.set(a.opId, { opId: a.opId, t });
     }
     return { scoreByOpId, minNs, maxNs };
 };

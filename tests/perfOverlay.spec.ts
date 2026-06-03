@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
 import { aggregatePerfByOp, perfColorScale, scoreOps } from '../src/functions/perfOverlay';
@@ -53,26 +53,22 @@ describe('scoreOps', () => {
         expect(result.maxNs).toBe(0);
     });
 
-    it('assigns t=0 and sizeBin=0 to every op when all device times are equal', () => {
+    it('assigns t=0 to every op when all device times are equal', () => {
         // Inputs are µs (100 µs); aggregator stores ns (100_000 ns).
         const map = aggregatePerfByOp([row(1, 100), row(2, 100), row(3, 100)]);
         const { scoreByOpId, minNs, maxNs } = scoreOps(map);
         for (const id of [1, 2, 3]) {
-            const score = scoreByOpId.get(id);
-            expect(score?.t).toBe(0);
-            expect(score?.sizeBin).toBe(0);
+            expect(scoreByOpId.get(id)?.t).toBe(0);
         }
         expect(minNs).toBe(100_000);
         expect(maxNs).toBe(100_000);
     });
 
-    it('puts the min at t=0 / sizeBin=0 and the max at t=1 / top sizeBin', () => {
+    it('puts the min at t=0 and the max at t=1', () => {
         const map = aggregatePerfByOp([row(1, 10), row(2, 100_000)]);
         const { scoreByOpId } = scoreOps(map);
         expect(scoreByOpId.get(1)?.t).toBe(0);
-        expect(scoreByOpId.get(1)?.sizeBin).toBe(0);
         expect(scoreByOpId.get(2)?.t).toBe(1);
-        expect(scoreByOpId.get(2)?.sizeBin).toBe(PERF_BINS.length - 1);
     });
 
     it('produces monotonically non-decreasing t for monotonically increasing input', () => {
@@ -84,13 +80,6 @@ describe('scoreOps', () => {
         }
         expect(ts[0]).toBe(0);
         expect(ts[ts.length - 1]).toBe(1);
-    });
-
-    it('respects a custom bin count for sizing', () => {
-        const map = aggregatePerfByOp([row(1, 1), row(2, 1_000_000)]);
-        const { scoreByOpId } = scoreOps(map, 3);
-        expect(scoreByOpId.get(1)?.sizeBin).toBe(0);
-        expect(scoreByOpId.get(2)?.sizeBin).toBe(2);
     });
 });
 

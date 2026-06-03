@@ -53,9 +53,6 @@ export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const activeMlirJsonAtom = atom<string | null>(null);
 export const hasClusterDescriptionAtom = atom(false);
 
-// Operation graph route
-export const perfOverlayEnabledAtom = atomWithStorage('perfOverlayEnabled', false);
-
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);
 export const operationListFilterAtom = atom('');

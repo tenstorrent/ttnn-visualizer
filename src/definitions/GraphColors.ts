@@ -14,19 +14,18 @@ export const GRAPH_COLORS = {
 };
 
 // Perf overlay bins (#1515). Hardcoded hex — these are tuned for the dark
-// vis-network canvas. Top two bins grow node size so the hottest ops remain
-// visible when the graph is zoomed out.
+// vis-network canvas. Colour-only encoding for now: vis-network's `size`
+// option is ignored for the `'box'` shape used by op nodes (boxes size
+// to their label content), so a node-size dimension would need a shape
+// change to take effect. Revisit alongside any future shape rework.
 export interface PerfBin {
     color: string;
-    size: number;
 }
 
-export const PERF_BIN_DEFAULT_SIZE = 20;
-
 export const PERF_BINS: readonly PerfBin[] = [
-    { color: '#3b4a6b', size: PERF_BIN_DEFAULT_SIZE },
-    { color: '#3f7d8c', size: PERF_BIN_DEFAULT_SIZE },
-    { color: '#f0c800', size: PERF_BIN_DEFAULT_SIZE },
-    { color: '#f08a00', size: 26 },
-    { color: '#ff3b1f', size: 32 },
+    { color: '#3b4a6b' },
+    { color: '#3f7d8c' },
+    { color: '#f0c800' },
+    { color: '#f08a00' },
+    { color: '#ff3b1f' },
 ] as const;

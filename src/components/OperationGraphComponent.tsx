@@ -12,7 +12,7 @@ import { Button, ButtonVariant, Intent, Label, PopoverPosition, Slider, Switch, 
 import { IconNames } from '@blueprintjs/icons';
 import { NavigateFunction, useNavigate } from 'react-router';
 import tinycolor from 'tinycolor2';
-import { useAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { OperationDescription, Tensor } from '../model/APIData';
 import 'styles/components/OperationGraphComponent.scss';
 import LoadingSpinner from './LoadingSpinner';
@@ -22,7 +22,7 @@ import { BufferType } from '../model/BufferType';
 import { formatDuration, toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
 import MemoryTag from './MemoryTag';
-import { GRAPH_COLORS, PERF_BINS } from '../definitions/GraphColors';
+import { GRAPH_COLORS } from '../definitions/GraphColors';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import {
     PERF_GRADIENT_CSS,
@@ -31,7 +31,7 @@ import {
     perfColorScale,
     scoreOps,
 } from '../functions/perfOverlay';
-import { perfOverlayEnabledAtom } from '../store/app';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 
 type OperationList = OperationDescription[];
 
@@ -82,7 +82,16 @@ const OperationGraph = ({ operationList, operationId, perfRows }: OperationGraph
     const blinkIntervalRef = useRef<number | null>(null);
     const blinkTimeoutRef = useRef<number | null>(null);
     const [compactView, setCompactView] = useState<boolean>(false);
-    const [perfOverlayEnabled, setPerfOverlayEnabled] = useAtom(perfOverlayEnabledAtom);
+    // Perf overlay toggle is intentionally local — it shouldn't persist across
+    // sessions or carry over to a different report. The effect below resets it
+    // to off whenever the active profiler or performance report changes, so a
+    // newly loaded report always starts with the overlay off.
+    const [perfOverlayEnabled, setPerfOverlayEnabled] = useState<boolean>(false);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    useEffect(() => {
+        setPerfOverlayEnabled(false);
+    }, [activeProfilerReport, activePerformanceReport]);
 
     const perfAggregates = useMemo(() => aggregatePerfByOp(perfRows ?? []), [perfRows]);
     const { scoreByOpId, minNs, maxNs } = useMemo(() => scoreOps(perfAggregates), [perfAggregates]);
@@ -213,12 +222,7 @@ const OperationGraph = ({ operationList, operationId, perfRows }: OperationGraph
                             shape: 'box',
                             filterString: `${op.name}`,
                             deviceOpFilter: op.deviceOperationNameList.join(' '),
-                            ...(score
-                                ? {
-                                      color: { background: perfColorScale(score.t) },
-                                      size: PERF_BINS[score.sizeBin].size,
-                                  }
-                                : {}),
+                            ...(score ? { color: { background: perfColorScale(score.t) } } : {}),
                         };
                     }),
             ),
