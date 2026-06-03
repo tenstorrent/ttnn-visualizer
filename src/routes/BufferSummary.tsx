@@ -2,12 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { AnchorButton, ButtonGroup, ButtonVariant, Intent, Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import useBufferFocus from '../hooks/useBufferFocus';
+import { useActiveSection } from '../hooks/useActiveSection';
 import ROUTES from '../definitions/Routes';
 import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import 'styles/components/BufferSummary.scss';
@@ -17,33 +17,8 @@ import { selectedBufferSummaryTabAtom } from '../store/app';
 function BufferSummary() {
     const { activeToast, resetToasts } = useBufferFocus();
 
-    const plotRef = useRef<HTMLHeadingElement>(null);
-    const tableRef = useRef<HTMLHeadingElement>(null);
-    const [activeSection, setActiveSection] = useState<SECTION_IDS>(SECTION_IDS.PLOT);
+    const activeSection = useActiveSection([SECTION_IDS.PLOT, SECTION_IDS.TABLE]);
     const [selectedTabId, setSelectedTabId] = useAtom(selectedBufferSummaryTabAtom);
-
-    useEffect(() => {
-        const scrollRefs = [plotRef, tableRef];
-
-        function navHighlighter() {
-            const { scrollY } = window;
-
-            scrollRefs.forEach((ref) => {
-                if (ref?.current?.offsetHeight && ref?.current?.offsetTop) {
-                    const sectionHeight = ref.current.offsetHeight;
-                    const sectionTop = ref.current.offsetTop - 250;
-                    const sectionId = ref.current.getAttribute('id') as SECTION_IDS | null;
-
-                    if (sectionId && scrollY > sectionTop && scrollY <= sectionTop + sectionHeight) {
-                        setActiveSection(sectionId);
-                    }
-                }
-            });
-        }
-
-        window.addEventListener('scroll', navHighlighter);
-        return () => window.removeEventListener('scroll', navHighlighter);
-    }, []);
 
     return (
         <div className='buffer-summary data-padding'>
@@ -90,24 +65,14 @@ function BufferSummary() {
                     id={TAB_IDS.L1}
                     title='L1'
                     icon={IconNames.PAGE_LAYOUT}
-                    panel={
-                        <BufferSummaryTab
-                            plotRef={plotRef}
-                            tableRef={tableRef}
-                        />
-                    }
+                    panel={<BufferSummaryTab />}
                 />
 
                 <Tab
                     id={TAB_IDS.DRAM}
                     title='DRAM'
                     icon={IconNames.PAGE_LAYOUT}
-                    panel={
-                        <BufferSummaryTab
-                            plotRef={plotRef}
-                            tableRef={tableRef}
-                        />
-                    }
+                    panel={<BufferSummaryTab />}
                 />
             </Tabs>
         </div>

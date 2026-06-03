@@ -8,6 +8,7 @@ import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
@@ -18,9 +19,10 @@ import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 interface PerfCoreCountUtilizationChartProps {
     datasets?: TypedPerfTableRow[][];
     maxCores: number;
+    chartId: PerfChartId;
 }
 
-function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCountUtilizationChartProps) {
+function PerfCoreCountUtilizationChart({ datasets = [], maxCores, chartId }: PerfCoreCountUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
@@ -83,7 +85,8 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
         <>
             {maxY2Value > 0 && mergeDevices && <PerfMultiDeviceNotice />}
             <PerfChart
-                title='Core Count + Utilization'
+                id={chartId}
+                title={PERF_CHART_LABELS[chartId]}
                 chartData={[...chartDataDuration, ...chartDataUtilization]}
                 configuration={configuration}
             />

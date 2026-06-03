@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import PerfCoreCountUtilizationChart from './PerfCoreCountUtilizationChart';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
@@ -10,20 +9,32 @@ import PerfOperationTypesChart from './PerfOperationTypesChart';
 import SkeletalChart from './SkeletalChart';
 import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
 import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
-import 'styles/components/PerfCharts.scss';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import PerfDeviceTimeChart from './PerfDeviceTimeChart';
 import getCoreCount from '../../functions/getCoreCount';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { usePerfMeta } from '../../hooks/useAPI';
+import { PerfChartId, getOperationTypesChartId } from '../../definitions/PerformanceCharts';
 
 interface NonFilterablePerfChartsProps {
     chartData: TypedPerfTableRow[];
     secondaryData?: TypedPerfTableRow[][];
     opCodeOptions: Marker[];
+    matmulData: TypedPerfTableRow[][];
+    convData: TypedPerfTableRow[][];
+    hasMatmulData: boolean;
+    hasConvData: boolean;
 }
 
-const NonFilterablePerfCharts = ({ chartData, secondaryData = [], opCodeOptions }: NonFilterablePerfChartsProps) => {
+const NonFilterablePerfCharts = ({
+    chartData,
+    secondaryData = [],
+    opCodeOptions,
+    matmulData,
+    convData,
+    hasMatmulData,
+    hasConvData,
+}: NonFilterablePerfChartsProps) => {
     const performanceReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
@@ -33,37 +44,33 @@ const NonFilterablePerfCharts = ({ chartData, secondaryData = [], opCodeOptions 
     const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
     const maxCores = getCoreCount(architecture, datasets[0] ?? []);
 
-    const matmulData = useMemo(
-        () => datasets.map((set) => set.filter((row) => row.raw_op_code.toLowerCase().includes('matmul'))),
-        [datasets],
-    );
-
-    const convData = useMemo(
-        () => datasets.map((set) => set.filter((row) => row.raw_op_code.toLowerCase().includes('conv'))),
-        [datasets],
-    );
-
     return (
-        <div className='charts'>
+        <>
             <h2>Matmul operations</h2>
 
-            {matmulData.filter((data) => data.length).length > 0 ? (
+            {hasMatmulData ? (
                 <>
                     <PerfCoreCountUtilizationChart
                         datasets={matmulData}
                         maxCores={maxCores}
+                        chartId={PerfChartId.MatmulCoreCountUtilization}
                     />
 
-                    <PerfDeviceTimeChart datasets={matmulData} />
+                    <PerfDeviceTimeChart
+                        datasets={matmulData}
+                        chartId={PerfChartId.MatmulDeviceTime}
+                    />
 
                     <PerfOperationKernelUtilizationChart
                         datasets={matmulData}
                         maxCores={maxCores}
+                        chartId={PerfChartId.MatmulKernelDurationUtilization}
                     />
 
                     <PerfKernelDurationUtilizationChart
                         datasets={matmulData}
                         maxCores={maxCores}
+                        chartId={PerfChartId.MatmulUtilizationVsKernelDuration}
                     />
                 </>
             ) : (
@@ -72,23 +79,29 @@ const NonFilterablePerfCharts = ({ chartData, secondaryData = [], opCodeOptions 
 
             <h2>Conv operations</h2>
 
-            {convData.filter((data) => data.length).length > 0 ? (
+            {hasConvData ? (
                 <>
                     <PerfCoreCountUtilizationChart
                         datasets={convData}
                         maxCores={maxCores}
+                        chartId={PerfChartId.ConvCoreCountUtilization}
                     />
 
-                    <PerfDeviceTimeChart datasets={convData} />
+                    <PerfDeviceTimeChart
+                        datasets={convData}
+                        chartId={PerfChartId.ConvDeviceTime}
+                    />
 
                     <PerfOperationKernelUtilizationChart
                         datasets={convData}
                         maxCores={maxCores}
+                        chartId={PerfChartId.ConvKernelDurationUtilization}
                     />
 
                     <PerfKernelDurationUtilizationChart
                         datasets={convData}
                         maxCores={maxCores}
+                        chartId={PerfChartId.ConvUtilizationVsKernelDuration}
                     />
                 </>
             ) : (
@@ -103,6 +116,7 @@ const NonFilterablePerfCharts = ({ chartData, secondaryData = [], opCodeOptions 
                         reportTitle={comparisonReportList ? performanceReport.reportName : ''}
                         data={chartData}
                         opCodes={opCodeOptions}
+                        id={getOperationTypesChartId('active')}
                     />
                 )}
 
@@ -113,10 +127,11 @@ const NonFilterablePerfCharts = ({ chartData, secondaryData = [], opCodeOptions 
                         reportTitle={performanceReport ? report : ''}
                         data={secondaryData[index]}
                         opCodes={opCodeOptions}
+                        id={getOperationTypesChartId(`comparison-${index}`)}
                     />
                 ))}
             </div>
-        </div>
+        </>
     );
 };
 
