@@ -8,6 +8,7 @@ import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
@@ -55,7 +56,8 @@ function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurati
 
     return (
         <PerfChart
-            title='Device Kernel Duration vs Core Count'
+            id={PerfChartId.KernelDurationVsCoreCount}
+            title={PERF_CHART_LABELS[PerfChartId.KernelDurationVsCoreCount]}
             chartData={chartData}
             configuration={configuration}
         />

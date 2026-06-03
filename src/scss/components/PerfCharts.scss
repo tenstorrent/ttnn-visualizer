@@ -8,6 +8,10 @@
     position: relative;
     gap: 30px;
 
+    .charts-column {
+        min-width: 0; // Allow the column to shrink below content width so .charts can scroll horizontally
+    }
+
     .charts {
         min-width: 800px; // Ensures charts are wide enough to display properly and allows overflow
         overflow: auto;
