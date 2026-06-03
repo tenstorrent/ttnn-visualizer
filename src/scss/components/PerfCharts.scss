@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+@use '../definitions/variables' as variables;
 
 .charts-container {
     display: grid;
@@ -15,6 +16,13 @@
     .charts {
         min-width: 800px; // Ensures charts are wide enough to display properly and allows overflow
         overflow: auto;
+    }
+
+    // Anchored chart targets sit below the sticky "Jump to chart" nav bar, so their
+    // titles would otherwise land hidden underneath it when navigated to via hash link.
+    .chart-container,
+    .operation-types-chart {
+        scroll-margin-top: variables.$perf-charts-index-scroll-offset;
     }
 }
 

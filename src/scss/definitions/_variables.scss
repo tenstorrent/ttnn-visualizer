@@ -36,3 +36,6 @@ $z-index-3-overlay: 1000;
 
 // Component-specific variables
 $active-transfer-width: 380px;
+
+// Clears the sticky "Jump to chart" nav bar when scrolling to an anchored chart
+$perf-charts-index-scroll-offset: 60px;

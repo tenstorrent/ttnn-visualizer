@@ -7,7 +7,7 @@
 .perf-charts-index {
     position: sticky;
     top: 0;
-    z-index: variables.$z-index-2-interactive;
+    z-index: variables.$z-index-2-interactive; // Above base content and allows internal dropdown to be fully visible
     margin-bottom: 10px;
     padding: 5px;
     background-color: $tt-background;
