@@ -99,3 +99,49 @@ export const CONV_CHART_ENTRIES: PerfChartIndexEntry[] = [
         label: PERF_CHART_LABELS[PerfChartId.ConvUtilizationVsKernelDuration],
     },
 ];
+
+interface ChartIndexParams {
+    hasMatmulData: boolean;
+    hasConvData: boolean;
+    activeReportName: string | null;
+    comparisonReportNames: string[] | null;
+}
+
+/**
+ * Assembles the ordered list of chart-index entries shown in the "jump to chart" menu, matching the
+ * order charts render on the page: filterable charts, then matmul/conv groups (only when present),
+ * then one Operation Types entry per visible report. Operation Types labels carry the report name
+ * only while a comparison is active, mirroring the chart headings.
+ */
+export function buildChartIndexEntries({
+    hasMatmulData,
+    hasConvData,
+    activeReportName,
+    comparisonReportNames,
+}: ChartIndexParams): PerfChartIndexEntry[] {
+    const entries: PerfChartIndexEntry[] = [...FILTERABLE_CHART_ENTRIES];
+
+    if (hasMatmulData) {
+        entries.push(...MATMUL_CHART_ENTRIES);
+    }
+
+    if (hasConvData) {
+        entries.push(...CONV_CHART_ENTRIES);
+    }
+
+    if (activeReportName !== null) {
+        entries.push({
+            id: getOperationTypesChartId('active'),
+            label: getOperationTypesChartLabel(comparisonReportNames ? activeReportName : ''),
+        });
+    }
+
+    comparisonReportNames?.forEach((report, index) => {
+        entries.push({
+            id: getOperationTypesChartId(`comparison-${index}`),
+            label: getOperationTypesChartLabel(activeReportName !== null ? report : ''),
+        });
+    });
+
+    return entries;
+}

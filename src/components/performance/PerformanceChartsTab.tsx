@@ -9,14 +9,7 @@ import PerfCharts from './PerfCharts';
 import PerfChartsIndex from './PerfChartsIndex';
 import NonFilterablePerfCharts from './NonFilterablePerfCharts';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
-import {
-    CONV_CHART_ENTRIES,
-    FILTERABLE_CHART_ENTRIES,
-    MATMUL_CHART_ENTRIES,
-    type PerfChartIndexEntry,
-    getOperationTypesChartId,
-    getOperationTypesChartLabel,
-} from '../../definitions/PerformanceCharts';
+import { buildChartIndexEntries } from '../../definitions/PerformanceCharts';
 import { useActiveSection } from '../../hooks/useActiveSection';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import 'styles/components/PerfCharts.scss';
@@ -61,33 +54,16 @@ const PerformanceChartsTab = ({
     const hasMatmulData = matmulData.some((set) => set.length > 0);
     const hasConvData = convData.some((set) => set.length > 0);
 
-    const chartIndexEntries = useMemo(() => {
-        const entries: PerfChartIndexEntry[] = [...FILTERABLE_CHART_ENTRIES];
-
-        if (hasMatmulData) {
-            entries.push(...MATMUL_CHART_ENTRIES);
-        }
-
-        if (hasConvData) {
-            entries.push(...CONV_CHART_ENTRIES);
-        }
-
-        if (performanceReport) {
-            entries.push({
-                id: getOperationTypesChartId('active'),
-                label: getOperationTypesChartLabel(comparisonReportList ? performanceReport.reportName : ''),
-            });
-        }
-
-        comparisonReportList?.forEach((report, index) => {
-            entries.push({
-                id: getOperationTypesChartId(`comparison-${index}`),
-                label: getOperationTypesChartLabel(performanceReport ? report : ''),
-            });
-        });
-
-        return entries;
-    }, [comparisonReportList, hasConvData, hasMatmulData, performanceReport]);
+    const chartIndexEntries = useMemo(
+        () =>
+            buildChartIndexEntries({
+                hasMatmulData,
+                hasConvData,
+                activeReportName: performanceReport?.reportName ?? null,
+                comparisonReportNames: comparisonReportList,
+            }),
+        [comparisonReportList, hasConvData, hasMatmulData, performanceReport],
+    );
 
     const chartIndexIds = useMemo(() => chartIndexEntries.map((entry) => entry.id), [chartIndexEntries]);
     const activeId = useActiveSection(chartIndexIds);

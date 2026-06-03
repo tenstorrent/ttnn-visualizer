@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
-@use '../definitions/variables' as variables;
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI UL
+
+// Clears the sticky "Jump to chart" nav bar when scrolling to an anchored chart
+$perf-charts-index-scroll-offset: 60px;
 
 .charts-container {
     display: grid;
@@ -22,7 +24,7 @@
     // titles would otherwise land hidden underneath it when navigated to via hash link.
     .chart-container,
     .operation-types-chart {
-        scroll-margin-top: variables.$perf-charts-index-scroll-offset;
+        scroll-margin-top: $perf-charts-index-scroll-offset;
     }
 }
 
