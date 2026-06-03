@@ -37,6 +37,38 @@ interface OutputPortView {
 
 type SectionKey = 'attrs' | 'inputs' | 'outputs';
 
+interface NodeRefProps {
+    label: string | null;
+    id: string;
+}
+
+/** Two-line node reference: op label on top, raw id below.
+ *
+ * Producer/consumer rows in Inputs/Outputs need to surface the op name
+ * (e.g. `stablehlo.add`) because the raw id is usually a location string
+ * (`loc("-":33:13)__1`) that doesn't read as the op. We show both so the
+ * user can match the row to a node on the canvas by either signal.
+ *
+ * When the label is missing or duplicates the id (rare — e.g. synthesised
+ * arg nodes), we collapse to just the id so we don't render the same
+ * string twice. */
+const NodeRef = ({ label, id }: NodeRefProps) => {
+    if (label && label !== id) {
+        return (
+            <>
+                <span className='mlir-node-details-io-label'>{label}</span>
+                <span
+                    className='mlir-node-details-io-loc'
+                    title={id}
+                >
+                    {id}
+                </span>
+            </>
+        );
+    }
+    return <span className='mlir-node-details-io-id'>{id}</span>;
+};
+
 interface DetailsSectionProps {
     title: string;
     sectionKey: SectionKey;
@@ -213,12 +245,24 @@ const MlirNodeDetailsPanel = ({
                             key={`${edge.sourceNodeId}:${edge.sourceNodeOutputId}->${edge.targetNodeInputId}:${idx}`}
                             className='mlir-node-details-io-row'
                         >
-                            <span className='mlir-node-details-io-id'>{edge.sourceNodeId}</span>
+                            <NodeRef
+                                label={edge.sourceNodeLabel}
+                                id={edge.sourceNodeId}
+                            />
                             <span className='mlir-node-details-io-port'>
                                 out {edge.sourceNodeOutputId} → in {edge.targetNodeInputId}
                             </span>
-                            {edge.label && <span className='mlir-node-details-io-shape'>{edge.label}</span>}
-                            {edge.sourcePortMetadata && <MlirPortAttrs attrs={edge.sourcePortMetadata.attrs} />}
+                            {/* When sourcePortMetadata is present, MlirPortAttrs renders
+                                a compact `[shape] dtype` pill derived from the same
+                                tensor attrs that produced `edge.label`. Showing both is
+                                redundant and the slightly different font sizes look like
+                                a visual bug — fall back to edge.label only when no port
+                                metadata is available (e.g. input args, raw producers). */}
+                            {edge.sourcePortMetadata ? (
+                                <MlirPortAttrs attrs={edge.sourcePortMetadata.attrs} />
+                            ) : (
+                                edge.label && <span className='mlir-node-details-io-shape'>{edge.label}</span>
+                            )}
                         </li>
                     ))}
                 </ul>
@@ -250,7 +294,10 @@ const MlirNodeDetailsPanel = ({
                                             key={`${consumer.targetNodeId}:${consumer.targetNodeInputId}:${idx}`}
                                             className='mlir-node-details-consumer-row'
                                         >
-                                            <span className='mlir-node-details-io-id'>{consumer.targetNodeId}</span>
+                                            <NodeRef
+                                                label={consumer.targetNodeLabel}
+                                                id={consumer.targetNodeId}
+                                            />
                                             <span className='mlir-node-details-io-port'>
                                                 in {consumer.targetNodeInputId}
                                             </span>

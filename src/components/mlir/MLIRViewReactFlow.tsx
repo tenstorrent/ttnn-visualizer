@@ -609,13 +609,14 @@ const MlGraphInner = ({ data }: ViewProps) => {
             }
             result.push({
                 targetNodeId: edge.target,
+                targetNodeLabel: sourceNodeById.get(edge.target)?.label ?? null,
                 sourceNodeOutputId: edge.sourceHandle ?? '0',
                 targetNodeInputId: edge.targetHandle ?? '0',
                 label: typeof edge.label === 'string' ? edge.label : undefined,
             });
         }
         return result;
-    }, [edges, selectedNodeId, regionOutputPartnerByNodeId]);
+    }, [edges, selectedNodeId, regionOutputPartnerByNodeId, sourceNodeById]);
 
     // Output port metadata for the panel: the selected node's own metadata
     // when present, else the partner's. For a region's terminator (no own
@@ -663,6 +664,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
             const sourcePortMetadata = producer?.outputsMetadata.find((p) => p.id === sourcePortId) ?? null;
             result.push({
                 sourceNodeId: edge.source,
+                sourceNodeLabel: producer?.label ?? null,
                 sourceNodeOutputId: sourcePortId,
                 targetNodeInputId: targetInputId,
                 label: typeof edge.label === 'string' ? edge.label : undefined,

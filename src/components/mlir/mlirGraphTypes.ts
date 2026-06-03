@@ -21,6 +21,8 @@ export type IndexedEdge = {
  */
 export type OutgoingEdge = {
     targetNodeId: string;
+    /** Consumer op label (e.g. "stablehlo.reshape"). null when the target node is unknown to the source-data index. */
+    targetNodeLabel: string | null;
     sourceNodeOutputId: string;
     targetNodeInputId: string;
     label?: string;
@@ -37,6 +39,8 @@ export type OutgoingEdge = {
  */
 export type IncomingEdgeView = {
     sourceNodeId: string;
+    /** Producer op label (e.g. "stablehlo.add"). null when the source node is unknown to the source-data index. */
+    sourceNodeLabel: string | null;
     sourceNodeOutputId: string;
     targetNodeInputId: string;
     label?: string;

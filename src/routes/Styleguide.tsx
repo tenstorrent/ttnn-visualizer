@@ -115,8 +115,20 @@ const MLIR_RICH_NODE: SourceNode = {
 };
 
 const MLIR_RICH_NODE_OUTGOING: OutgoingEdge[] = [
-    { targetNodeId: 'loc("-":7:4)__2', sourceNodeOutputId: '0', targetNodeInputId: '0', label: '[4, 8] f32' },
-    { targetNodeId: 'loc("-":9:4)__3', sourceNodeOutputId: '0', targetNodeInputId: '1', label: '[4, 8] f32' },
+    {
+        targetNodeId: 'loc("-":7:4)__2',
+        targetNodeLabel: 'stablehlo.add',
+        sourceNodeOutputId: '0',
+        targetNodeInputId: '0',
+        label: '[4, 8] f32',
+    },
+    {
+        targetNodeId: 'loc("-":9:4)__3',
+        targetNodeLabel: 'stablehlo.reshape',
+        sourceNodeOutputId: '0',
+        targetNodeInputId: '1',
+        label: '[4, 8] f32',
+    },
 ];
 
 const MLIR_EMPTY_NODE: SourceNode = {
@@ -145,7 +157,13 @@ const MLIR_TERMINATOR_NODE: SourceNode = {
 };
 
 const MLIR_TERMINATOR_OUTGOING: OutgoingEdge[] = [
-    { targetNodeId: 'stablehlo.reshape_0', sourceNodeOutputId: '0', targetNodeInputId: '0', label: '[7, 3072] bf16' },
+    {
+        targetNodeId: 'stablehlo.reshape_0',
+        targetNodeLabel: 'stablehlo.reshape',
+        sourceNodeOutputId: '0',
+        targetNodeInputId: '0',
+        label: '[7, 3072] bf16',
+    },
 ];
 
 export default function Styleguide() {
