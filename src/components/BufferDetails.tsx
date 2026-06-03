@@ -25,6 +25,8 @@ interface BufferDetailsProps {
     className?: string;
 }
 
+// TODO: The tensor-details table below largely duplicates the one in PerfTensorRow.tsx.
+// Extract a shared TensorDetailsTable both can consume so the two don't drift.
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, dtype, layout, shape } = tensor;
     const firstOperationId = tensor.producers[0];

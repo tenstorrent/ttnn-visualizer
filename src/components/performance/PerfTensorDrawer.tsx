@@ -4,7 +4,7 @@
 
 import { Button, Drawer, DrawerSize, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import 'styles/components/PerfTensorDrawer.scss';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
@@ -20,8 +20,7 @@ interface PerfTensorDrawerProps {
 }
 
 function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
-    const selectedPerfRowId = useAtomValue(selectedPerfRowIdAtom);
-    const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
+    const [selectedPerfRowId, setSelectedPerfRowId] = useAtom(selectedPerfRowIdAtom);
     const { data: operations = [] } = useOperationsList();
     const navigate = useNavigate();
 

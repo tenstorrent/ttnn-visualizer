@@ -34,7 +34,7 @@ const getBufferType = (type?: string): BufferType | null => {
 const getLayout = (layout?: string): DeviceOperationLayoutTypes | null =>
     layout && KNOWN_LAYOUTS.has(layout) ? (layout as DeviceOperationLayoutTypes) : null;
 
-export const parsePerfRowTensors = (row: Pick<PerfTableRow, 'input_0_memory'>): ParsedPerfRowAttributes => {
+export const parsePerfRowTensorAttributes = (row: Pick<PerfTableRow, 'input_0_memory'>): ParsedPerfRowAttributes => {
     const match = DEV_MEMORY_REGEX.exec(row.input_0_memory);
 
     return {

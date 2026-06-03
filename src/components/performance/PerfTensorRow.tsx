@@ -21,6 +21,10 @@ export interface PerfTensorRowProps {
     label: string;
 }
 
+// TODO: The tensor-details table below largely duplicates the one in BufferDetails.tsx
+// (Tensor Id, Producer, Last consumer, Device Id, Shape, Dtype, Layout, Address, Size,
+// memory_config, comparison). Extract a shared TensorDetailsTable both can consume so the
+// two don't drift.
 function PerfTensorRow({ tensor, operations, label }: PerfTensorRowProps) {
     const showHex = useAtomValue(showHexAtom);
     const firstProducerId = tensor.producers[0];

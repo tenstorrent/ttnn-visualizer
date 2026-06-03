@@ -84,9 +84,11 @@ describe('PerfTensorDrawer', () => {
         );
 
         expect(screen.getByTestId(TEST_IDS.PERF_TENSOR_DRAWER)).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: /1\s+Matmul/ })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /11\s+matmul_op/ })).toBeInTheDocument();
 
-        const opLink = screen.getByRole('link', { name: /View operation 11\s+matmul_op/i });
+        expect(screen.getByRole('button', { name: 'Memory Details' })).toBeInTheDocument();
+
+        const opLink = screen.getByRole('link', { name: /11 matmul_op \(matmul\.cpp\)/i });
         expect(opLink).toHaveAttribute('href', `${ROUTES.OPERATIONS}/11`);
 
         expect(screen.getByText('Inputs')).toBeInTheDocument();
@@ -103,6 +105,7 @@ describe('PerfTensorDrawer', () => {
         );
 
         expect(screen.getByText('No linked profiler operation for this row.')).toBeInTheDocument();
-        expect(screen.queryByRole('link', { name: /View operation/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Memory Details' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /matmul_op/i })).not.toBeInTheDocument();
     });
 });

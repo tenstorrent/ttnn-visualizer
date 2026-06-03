@@ -36,7 +36,7 @@ import { HIGH_DISPATCH_THRESHOLD_MS, OpType, PerfTabIds } from '../definitions/P
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
-import { parsePerfRowTensors } from '../functions/parsePerfRowTensors';
+import { parsePerfRowTensorAttributes } from '../functions/parsePerfRowTensorAttributes';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
@@ -319,7 +319,7 @@ interface RowAttributes {
 }
 
 const getRowAttributes = (row: PerfTableRow): RowAttributes => {
-    const { buffer_type: bufferType, layout } = parsePerfRowTensors(row);
+    const { buffer_type: bufferType, layout } = parsePerfRowTensorAttributes(row);
 
     return {
         buffer_type: bufferType,
