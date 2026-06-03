@@ -258,6 +258,31 @@
     border-left: 1px solid rgb(255 255 255 / 10%);
 }
 
+.mlir-node-details-consumer-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding-left: 8px;
+    border-left: 1px solid rgb(255 255 255 / 10%);
+}
+
+.mlir-node-details-consumer-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 2px 0;
+}
+
+.mlir-node-details-io-shape {
+    font-family: monospace;
+    font-size: 10px;
+    color: $tt-teal-tint-1;
+    word-break: break-all;
+}
+
 /* On narrower viewports, shrink the panel so the canvas remains usable. */
 @media screen and (width <= 1200px) {
     .mlir-node-details-panel {

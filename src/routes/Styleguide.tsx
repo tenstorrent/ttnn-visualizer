@@ -34,7 +34,7 @@ import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 import MlirNodeDetailsPanel from '../components/mlir/MlirNodeDetailsPanel';
-import type { SourceNode } from '../components/mlir/mlirGraphTypes';
+import type { OutgoingEdge, SourceNode } from '../components/mlir/mlirGraphTypes';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -114,6 +114,11 @@ const MLIR_RICH_NODE: SourceNode = {
     config: null,
 };
 
+const MLIR_RICH_NODE_OUTGOING: OutgoingEdge[] = [
+    { targetNodeId: 'loc("-":7:4)__2', sourceNodeOutputId: '0', targetNodeInputId: '0', label: '[4, 8] f32' },
+    { targetNodeId: 'loc("-":9:4)__3', sourceNodeOutputId: '0', targetNodeInputId: '1', label: '[4, 8] f32' },
+];
+
 const MLIR_EMPTY_NODE: SourceNode = {
     id: 'input_0',
     label: '%arg0',
@@ -123,6 +128,25 @@ const MLIR_EMPTY_NODE: SourceNode = {
     outputsMetadata: [],
     config: null,
 };
+
+// Terminator-style op: empty outputsMetadata but synthesised outgoing edges
+// (e.g. `stablehlo.return` plumbing its region value to a downstream op).
+const MLIR_TERMINATOR_NODE: SourceNode = {
+    id: 'loc("-":24:8)__1',
+    label: 'stablehlo.return',
+    namespace: 'func.func_main/stablehlo.all_reduce_0',
+    attrs: [
+        { key: 'full_location', value: 'loc("-":24:8)' },
+        { key: 'schedule', value: '20' },
+    ],
+    incomingEdges: [{ sourceNodeId: 'loc("-":23:16)__1', sourceNodeOutputId: '0', targetNodeInputId: '0' }],
+    outputsMetadata: [],
+    config: null,
+};
+
+const MLIR_TERMINATOR_OUTGOING: OutgoingEdge[] = [
+    { targetNodeId: 'stablehlo.reshape_0', sourceNodeOutputId: '0', targetNodeInputId: '0', label: '[7, 3072] bf16' },
+];
 
 export default function Styleguide() {
     const [updateFileTransferProgress, setUpdateFileTransferProgress] = useAtom(fileTransferProgressAtom);
@@ -813,6 +837,17 @@ export default function Styleguide() {
                 <div className='styleguide-bounded-host'>
                     <MlirNodeDetailsPanel
                         node={MLIR_RICH_NODE}
+                        outgoingEdges={MLIR_RICH_NODE_OUTGOING}
+                        onClose={() => {}}
+                        onRecenter={() => {}}
+                    />
+                </div>
+
+                <h4>Terminator op (empty outputs metadata, but has outgoing edges)</h4>
+                <div className='styleguide-bounded-host'>
+                    <MlirNodeDetailsPanel
+                        node={MLIR_TERMINATOR_NODE}
+                        outgoingEdges={MLIR_TERMINATOR_OUTGOING}
                         onClose={() => {}}
                         onRecenter={() => {}}
                     />
@@ -822,6 +857,7 @@ export default function Styleguide() {
                 <div className='styleguide-bounded-host'>
                     <MlirNodeDetailsPanel
                         node={MLIR_EMPTY_NODE}
+                        outgoingEdges={[]}
                         onClose={() => {}}
                         onRecenter={() => {}}
                     />

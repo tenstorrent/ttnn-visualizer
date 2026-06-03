@@ -10,6 +10,22 @@ export type IndexedEdge = {
     targetNodeInputId: string;
 };
 
+/**
+ * Outgoing-edge view used to render consumers ("Outputs") for a selected node
+ * in the details panel. Derived from the rendered React Flow edges rather
+ * than the raw source data — terminator ops like `stablehlo.return` have
+ * synthesised outgoing connections that the layout worker emits but that
+ * never round-trip through the source data's `incomingEdges`. `label` is the
+ * tensor shape that the edge carries on the canvas (e.g. "[7, 3072] bf16"),
+ * when present.
+ */
+export type OutgoingEdge = {
+    targetNodeId: string;
+    sourceNodeOutputId: string;
+    targetNodeInputId: string;
+    label?: string;
+};
+
 export type IndexedAttr = { key: string; value: string };
 export type IndexedPortMetadata = { id: string; attrs: IndexedAttr[] };
 

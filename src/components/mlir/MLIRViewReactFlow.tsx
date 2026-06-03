@@ -38,7 +38,7 @@ import '@xyflow/react/dist/style.css';
 
 import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
-import type { BuiltGraph, SourceNode, WorkerNode } from './mlirGraphTypes';
+import type { BuiltGraph, OutgoingEdge, SourceNode, WorkerNode } from './mlirGraphTypes';
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
@@ -515,7 +515,35 @@ const MlGraphInner = ({ data }: ViewProps) => {
         }
         return result;
     }, [sourceNodes]);
+
     const selectedSourceNode = selectedNodeId ? (sourceNodeById.get(selectedNodeId) ?? null) : null;
+
+    // Outgoing edges for the details panel ("Outputs" section) are read from
+    // the React Flow `edges` array — i.e. the connections actually drawn on
+    // the canvas — rather than inverted from source-data `incomingEdges`.
+    // Terminator ops (e.g. `stablehlo.return`) have outgoing arrows that the
+    // layout worker synthesises for region plumbing but that don't exist as
+    // back-references in the raw graph JSON, so the source-data inversion
+    // would miss them. The label captures the tensor shape (e.g.
+    // "[7, 3072] bf16") so the panel can surface that alongside each consumer.
+    const selectedOutgoingEdges = useMemo<OutgoingEdge[]>(() => {
+        if (!selectedNodeId) {
+            return [];
+        }
+        const result: OutgoingEdge[] = [];
+        for (const edge of edges) {
+            if (edge.source !== selectedNodeId) {
+                continue;
+            }
+            result.push({
+                targetNodeId: edge.target,
+                sourceNodeOutputId: edge.sourceHandle ?? '0',
+                targetNodeInputId: edge.targetHandle ?? '0',
+                label: typeof edge.label === 'string' ? edge.label : undefined,
+            });
+        }
+        return result;
+    }, [edges, selectedNodeId]);
 
     const closeDetailsPanel = useCallback(() => {
         setSelectedNodeId(null);
@@ -801,6 +829,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
             {selectedSourceNode && (
                 <MlirNodeDetailsPanel
                     node={selectedSourceNode}
+                    outgoingEdges={selectedOutgoingEdges}
                     onClose={closeDetailsPanel}
                     onRecenter={recenterOnSelected}
                 />

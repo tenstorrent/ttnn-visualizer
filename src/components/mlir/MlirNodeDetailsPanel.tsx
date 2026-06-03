@@ -2,20 +2,27 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import type { ReactNode } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { Button, ButtonVariant, Collapse, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirNodeDetailsPanel.scss';
 import classNames from 'classnames';
-import type { SourceNode } from './mlirGraphTypes';
+import type { IndexedPortMetadata, OutgoingEdge, SourceNode } from './mlirGraphTypes';
 import MlirAttrValue from './MlirAttrValue';
 import { mlirNodeDetailsCollapsedAtom } from '../../store/app';
 
 interface MlirNodeDetailsPanelProps {
     node: SourceNode;
+    outgoingEdges: OutgoingEdge[];
     onClose: () => void;
     onRecenter: () => void;
+}
+
+interface OutputPortView {
+    portId: string;
+    metadata: IndexedPortMetadata | null;
+    consumers: OutgoingEdge[];
 }
 
 type SectionKey = 'attrs' | 'inputs' | 'outputs';
@@ -68,12 +75,46 @@ const DetailsSection = ({
     </section>
 );
 
-const MlirNodeDetailsPanel = ({ node, onClose, onRecenter }: MlirNodeDetailsPanelProps) => {
+const MlirNodeDetailsPanel = ({ node, outgoingEdges, onClose, onRecenter }: MlirNodeDetailsPanelProps) => {
     const [collapsed, setCollapsed] = useAtom(mlirNodeDetailsCollapsedAtom);
 
     const toggleSection = (key: SectionKey) => {
         setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
     };
+
+    // Output ports come from two independent sources:
+    //   1. `outputsMetadata` — per-port shape/dtype/etc declared on the node.
+    //   2. Outgoing edges — synthesised consumer connections. Terminator ops
+    //      (e.g. `stablehlo.return`) have empty outputsMetadata but still
+    //      carry outgoing edges for region plumbing.
+    // We union the two by port id, preserving the order from outputsMetadata
+    // and appending any extra ports discovered only via outgoing edges.
+    const outputPorts = useMemo<OutputPortView[]>(() => {
+        const consumersByPort = new Map<string, OutgoingEdge[]>();
+        for (const edge of outgoingEdges) {
+            const list = consumersByPort.get(edge.sourceNodeOutputId);
+            if (list) {
+                list.push(edge);
+            } else {
+                consumersByPort.set(edge.sourceNodeOutputId, [edge]);
+            }
+        }
+        const seen = new Set<string>();
+        const ports: OutputPortView[] = node.outputsMetadata.map((port) => {
+            seen.add(port.id);
+            return {
+                portId: port.id,
+                metadata: port,
+                consumers: consumersByPort.get(port.id) ?? [],
+            };
+        });
+        for (const [portId, consumers] of consumersByPort) {
+            if (!seen.has(portId)) {
+                ports.push({ portId, metadata: null, consumers });
+            }
+        }
+        return ports;
+    }, [node.outputsMetadata, outgoingEdges]);
 
     return (
         <aside
@@ -168,23 +209,21 @@ const MlirNodeDetailsPanel = ({ node, onClose, onRecenter }: MlirNodeDetailsPane
                 collapsed={collapsed.outputs}
                 onToggle={toggleSection}
                 emptyHint='No outputs.'
-                isEmpty={node.outputsMetadata.length === 0}
-                count={node.outputsMetadata.length}
+                isEmpty={outputPorts.length === 0}
+                count={outputPorts.length}
             >
                 {/* Placeholder rendering — #1548 replaces this with paginated
                     per-port metadata and locate affordances. */}
                 <ul className='mlir-node-details-io-list'>
-                    {node.outputsMetadata.map((port) => (
+                    {outputPorts.map((port) => (
                         <li
-                            key={port.id}
+                            key={port.portId}
                             className='mlir-node-details-io-row mlir-node-details-output-row'
                         >
-                            <span className='mlir-node-details-io-port'>port {port.id}</span>
-                            {port.attrs.length === 0 ? (
-                                <span className='mlir-node-details-empty-inline'>no metadata</span>
-                            ) : (
+                            <span className='mlir-node-details-io-port'>port {port.portId}</span>
+                            {port.metadata && port.metadata.attrs.length > 0 && (
                                 <dl className='mlir-node-details-attrs mlir-node-details-port-attrs'>
-                                    {port.attrs.map((attr) => (
+                                    {port.metadata.attrs.map((attr) => (
                                         <div
                                             className='mlir-node-details-attr-row'
                                             key={attr.key}
@@ -196,6 +235,27 @@ const MlirNodeDetailsPanel = ({ node, onClose, onRecenter }: MlirNodeDetailsPane
                                         </div>
                                     ))}
                                 </dl>
+                            )}
+                            {port.consumers.length > 0 && (
+                                <ul className='mlir-node-details-consumer-list'>
+                                    {port.consumers.map((consumer, idx) => (
+                                        <li
+                                            key={`${consumer.targetNodeId}:${consumer.targetNodeInputId}:${idx}`}
+                                            className='mlir-node-details-consumer-row'
+                                        >
+                                            <span className='mlir-node-details-io-id'>{consumer.targetNodeId}</span>
+                                            <span className='mlir-node-details-io-port'>
+                                                in {consumer.targetNodeInputId}
+                                            </span>
+                                            {consumer.label && (
+                                                <span className='mlir-node-details-io-shape'>{consumer.label}</span>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                            {!port.metadata && port.consumers.length === 0 && (
+                                <span className='mlir-node-details-empty-inline'>no metadata</span>
                             )}
                         </li>
                     ))}
