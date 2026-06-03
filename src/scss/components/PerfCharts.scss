@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 // Clears the sticky "Jump to chart" nav bar when scrolling to an anchored chart.
-// Keep in sync with PERF_CHARTS_NAV_OFFSET_PX (PerformanceCharts.ts).
+// Keep in sync with PERF_CHARTS_NAV_OFFSET_PX (PerformanceChartsTab.tsx).
 $perf-charts-nav-offset: 60px;
 
 .charts-container {
