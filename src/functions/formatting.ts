@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { formatSize } from './math';
 import { TensorMemoryLayout } from './parseMemoryConfig';
 
 export const toReadableShape = (input: string) => {
@@ -52,4 +53,34 @@ const toShortTypeLabel = (input: string) => {
         return input;
     }
     return TYPE_LABELS[key] ?? key.toLowerCase();
+};
+
+/**
+ * Human-readable nanosecond formatter — picks the largest unit that still
+ * yields a reasonable mantissa (ns → µs → ms → s).
+ *
+ * Zero, negative, and non-finite input collapse to `'0 ns'` so callers can
+ * use this in legends/labels without guarding upstream.
+ *
+ * Numeric formatting goes through `formatSize` so we get locale-aware
+ * separators and consistent fraction-digit handling across the codebase.
+ * `Intl.NumberFormat` doesn't sanction `nanosecond`/`microsecond` as unit
+ * identifiers yet, so we keep the unit suffix as a literal string instead
+ * of using `formatUnit` for some tiers only — uniform formatting beats a
+ * half-and-half split.
+ */
+export const formatDuration = (ns: number): string => {
+    if (!Number.isFinite(ns) || ns <= 0) {
+        return '0 ns';
+    }
+    if (ns < 1_000) {
+        return `${formatSize(ns, 0)} ns`;
+    }
+    if (ns < 1_000_000) {
+        return `${formatSize(ns / 1_000, 1)} µs`;
+    }
+    if (ns < 1_000_000_000) {
+        return `${formatSize(ns / 1_000_000, 2)} ms`;
+    }
+    return `${formatSize(ns / 1_000_000_000, 2)} s`;
 };

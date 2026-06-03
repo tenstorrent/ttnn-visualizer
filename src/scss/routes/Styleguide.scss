@@ -9,6 +9,24 @@
     margin-bottom: 20px;
 }
 
+// Inline-render `.perf-overlay-legend` inside the styleguide rather than
+// pinning it to the viewport. Component default (`.operation-graph-component
+// .perf-overlay-legend`) is `position: fixed` — we wrap the styleguide
+// preview in `.operation-graph-component` to inherit the component styling,
+// then explicitly out-specify the position rule so the legend sits inline.
+.operation-graph-component .styleguide-perf-overlay-host {
+    position: relative;
+    display: inline-block;
+    min-height: 80px;
+    margin-bottom: 10px;
+
+    .perf-overlay-legend {
+        position: relative;
+        right: auto;
+        bottom: auto;
+    }
+}
+
 .table {
     border-spacing: 5px;
 }
