@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import type { IndexedAttr } from './mlirGraphTypes';
-import { tryParseAttrValue } from './attrFormatter';
+import { ParsedAttrKind, tryParseAttrValue } from './attrFormatter';
 import MlirAttrValue from './MlirAttrValue';
 
 /**
@@ -37,12 +37,12 @@ const formatCompactTensor = (attrs: IndexedAttr[]): string | null => {
     for (const attr of attrs) {
         if (attr.key === 'shape') {
             const parsed = tryParseAttrValue(attr.value);
-            if (parsed.kind === 'array' && parsed.parsed.every(isPrimitive)) {
+            if (parsed.kind === ParsedAttrKind.Array && parsed.parsed.every(isPrimitive)) {
                 shape = parsed.parsed;
             }
         } else if (attr.key === 'dtype') {
             const parsed = tryParseAttrValue(attr.value);
-            if (parsed.kind === 'scalar') {
+            if (parsed.kind === ParsedAttrKind.Scalar) {
                 dtype = parsed.text;
             }
         }

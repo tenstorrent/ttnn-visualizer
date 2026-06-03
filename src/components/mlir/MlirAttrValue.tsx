@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { tryParseAttrValue } from './attrFormatter';
+import { ParsedAttrKind, tryParseAttrValue } from './attrFormatter';
 
 interface MlirAttrValueProps {
     value: string;
@@ -78,7 +78,7 @@ const NestedTree = ({ data }: NestedTreeProps) => {
 
 const MlirAttrValue = ({ value }: MlirAttrValueProps) => {
     const parsed = tryParseAttrValue(value);
-    if (parsed.kind === 'scalar') {
+    if (parsed.kind === ParsedAttrKind.Scalar) {
         return <span className='mlir-attr-value mlir-attr-value-scalar'>{parsed.text}</span>;
     }
     return <NestedTree data={parsed.parsed} />;

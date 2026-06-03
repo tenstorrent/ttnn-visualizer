@@ -50,7 +50,7 @@
 .mlir-node-details-label {
     margin: 0;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 700;
     color: $tt-white;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -93,7 +93,7 @@
     border-left: 3px solid transparent;
     color: $tt-grey-7;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     text-align: left;
     cursor: pointer;
 
@@ -164,7 +164,7 @@
 
 .mlir-node-details-attr-key {
     margin: 0;
-    font-weight: 600;
+    font-weight: 700;
     color: $tt-grey-6;
     font-family: monospace;
     font-size: 11px;
@@ -252,7 +252,7 @@
 // raw id renders below in `.mlir-node-details-io-loc` for disambiguation.
 .mlir-node-details-io-label {
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
     color: $tt-white;
     word-break: break-all;
 }
