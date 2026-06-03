@@ -51,6 +51,10 @@ export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const activeMlirJsonAtom = atom<string | null>(null);
+export const mlirNodeDetailsCollapsedAtom = atomWithStorage<{ attrs: boolean; inputs: boolean; outputs: boolean }>(
+    'mlirNodeDetailsCollapsed',
+    { attrs: false, inputs: true, outputs: true },
+);
 export const hasClusterDescriptionAtom = atom(false);
 
 // Operations route
@@ -88,6 +92,10 @@ export const layoutFilterListAtom = atom<TypedPerfTableRow['layout'][]>([]);
 export const mergeDevicesAtom = atom<boolean>(true);
 export const tracingModeAtom = atom<boolean>(false);
 export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
+// Valid only while the modal tensor drawer is open — the backdrop blocks perf-tab switching,
+// so a selection can't leak across reports. Cleared on active-report change (Performance.tsx)
+// and on drawer close / row removal / unsynced reports (PerfTable.tsx).
+export const selectedPerfRowIdAtom = atom<number | null>(null);
 
 // NPE
 export const altCongestionColorsAtom = atomWithStorage('altCongestionColors', false);

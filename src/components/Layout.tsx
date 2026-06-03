@@ -3,7 +3,6 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Link, useLocation } from 'react-router-dom';
-import { Classes } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { Theme, ToastContainer, ToastPosition, cssTransition } from 'react-toastify';
 import 'styles/components/ToastOverrides.scss';
@@ -29,7 +28,7 @@ function Layout() {
     const state = location.state as { background?: Location };
 
     return (
-        <div className={Classes.DARK}>
+        <>
             <Helmet
                 defaultTitle='TT-NN Visualizer'
                 titleTemplate='%s | TT-NN Visualizer'
@@ -83,7 +82,7 @@ function Layout() {
                 theme={'light' as Theme}
                 transition={BounceIn}
             />
-        </div>
+        </>
     );
 }
 

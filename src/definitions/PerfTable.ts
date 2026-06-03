@@ -94,6 +94,10 @@ export interface TypedPerfTableRow extends Omit<
     buffer_type: BufferTypeEnum | null;
     layout: DeviceOperationLayoutTypes | null;
     isFirstHashOccurrence: boolean;
+    l1_fullness_percent: number | null;
+    l1_free_segments: number | null;
+    l1_largest_free: number | null;
+    l1_largest_free_percent: number | null;
 }
 
 export const MarkerColours = [
@@ -156,6 +160,7 @@ export enum ColumnKeys {
     GlobalCallCount = 'global_call_count',
     Hash = 'hash',
     CacheHit = 'cache_hit',
+    L1Fullness = 'l1_fullness_percent',
 }
 
 export const Columns: ColumnDefinition[] = [
@@ -184,6 +189,14 @@ export const Columns: ColumnDefinition[] = [
     { name: 'Cache Hit', key: ColumnKeys.CacheHit, colour: 'magenta', filterable: true },
 ];
 
+export const L1PressureColumns: ColumnDefinition[] = [
+    { name: 'L1 Usage %', key: ColumnKeys.L1Fullness, unit: '%', decimals: 1, sortable: true },
+];
+
+// L1 pressure is computed from the active profiler report's buffers (op-id sync and buffer
+// lookups are both keyed to that report), so it cannot be attributed per comparison report.
+// ColumnKeys.L1Fullness is intentionally excluded here — comparison sub-rows render an empty
+// L1 cell rather than the active report's numbers misattributed to another report.
 export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.Bound,
     ColumnKeys.BufferType,
@@ -234,6 +247,10 @@ export const signpostRowDefaults = Object.freeze({
     hash: null,
     cache_hit: null,
     isFirstHashOccurrence: true,
+    l1_fullness_percent: null,
+    l1_free_segments: null,
+    l1_largest_free: null,
+    l1_largest_free_percent: null,
 });
 
 export type PerfTableFilters = Partial<Record<ColumnKeys, string>> | null;

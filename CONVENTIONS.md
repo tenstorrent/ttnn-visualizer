@@ -38,14 +38,9 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 
 ### Every source file carries an SPDX header in the project format
 
-**Rationale.** `pnpm lint:spdx` (`scripts/check-spdx.mjs`) walks the whole repo and validates two distinct things, each keyed on the file:
+`pnpm lint:spdx` (`scripts/check-spdx.mjs`) validates `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.scss`, `.xml`, and `.py` files for a header comment; `package.json` is a separate single-file check on its `license` + `author` fields. Everything else (markdown, YAML, TOML, other JSON) is skipped. Missing or malformed headers on covered files fail CI.
 
-- **SPDX comment header** on files whose extension is `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.scss`, `.xml`, or `.py` (`scripts/check-spdx.mjs`). The accepted format is invariant enough to pin here so contributors don't reinvent it.
-- **`license` + `author` object check on `package.json` specifically** (`scripts/check-spdx.mjs`). The script matches `.json` extension *and* a path that includes `'package.json'` — so this is a single-file special case, not a rule that applies to every JSON file in the repo. All other JSON files are skipped.
-
-Files outside both buckets (markdown, YAML, TOML, plus most JSON) are skipped. Missing or malformed headers on covered files fail CI.
-
-The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`** (`scripts/check-spdx.mjs`). Two comment styles are accepted, keyed on file extension:
+The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`**. Two accepted comment styles, keyed on file extension:
 
 ```ts
 // SPDX-License-Identifier: Apache-2.0
@@ -59,11 +54,9 @@ The brand string is **`Tenstorrent AI ULC`** and the licence is **`Apache-2.0`**
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 ```
 
-For `package.json` the brand metadata lives in the JSON `license` and `author` fields rather than as a header comment (`scripts/check-spdx.mjs`).
-
 ### The year is the file's creation year, not the edit year
 
-Don't bump the year on edits — that's a hot path for noisy diffs reviewers have to wade through. New files take the current year.
+New files take the current year. Don't bump the year when editing existing files.
 
 ---
 
@@ -160,9 +153,7 @@ export default function SearchField({ placeholder, onSearch }: SearchFieldProps)
 
 ### Don't use `React.FC` / `FC` for component typing
 
-**Rationale.** The codebase mixed two styles (`function Foo({ x }: FooProps)` vs `const Foo: React.FC<FooProps> = …`). `React.FC` is deprecated by the React team, changes return-type inference (`ReactNode` vs `JSX.Element | null`), and under older `@types/react` versions it implicitly added `children` to every props type. Under `@types/react` 18 that foot-gun is gone, but a single canonical style keeps reviews predictable and eases a future React 19 migration.
-
-Type props **on the function signature**, not on a separate `FC` annotation:
+`React.FC` is deprecated by the React team and the codebase has standardised on typing props on the function signature instead. ESLint bans `FC`, `React.FC`, `FunctionComponent`, and `React.FunctionComponent` via `no-restricted-syntax` in `eslint.config.cjs`.
 
 ```tsx
 interface SocketProviderProps {
@@ -170,16 +161,12 @@ interface SocketProviderProps {
 }
 
 export const SocketProvider = ({ children }: SocketProviderProps) => { … };
-```
 
-```tsx
 // Don't
 const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => { … };
 ```
 
-Components that accept element children declare `children: ReactNode` (or `children?: ReactNode`) on `*Props` — don't wrap the interface in `PropsWithChildren` just to satisfy `React.FC`. ESLint bans `FC`, `React.FC`, `FunctionComponent`, and `React.FunctionComponent` via `no-restricted-syntax` in `eslint.config.cjs`.
-
-Reserve `type` for unions, generic-constrained mappings, and `Omit`/`Pick` derivations:
+Components that accept element children declare `children: ReactNode` (or `children?: ReactNode`) on `*Props` — don't wrap the interface in `PropsWithChildren` just to satisfy `React.FC`. Reserve `type` for unions, generic-constrained mappings, and `Omit`/`Pick` derivations:
 
 ```ts
 type ToastVariant = 'info' | 'success' | 'warning' | 'error';
@@ -364,7 +351,7 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 
 **Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
-**Report-bound read errors.** Memory-profiler routes (`/api/operations`, `/api/tensors`, `/api/buffers`, …) open the instance's `profiler_path` via `LocalQueryRunner` (`backend/ttnn_visualizer/queries.py`); performance routes (`/api/performance/...`) open the instance's `performance_path` via the helpers in `backend/ttnn_visualizer/csv_queries.py`. Status codes for client mistakes vs missing data:
+**Report-bound read errors.** Memory-profiler routes (`/api/operations`, `/api/tensors`, `/api/buffers`, …) open the instance's `profiler_path` via `LocalQueryRunner` (`backend/ttnn_visualizer/queries.py`); performance routes (`/api/performance/...`) open `performance_path` via `backend/ttnn_visualizer/csv_queries.py`. Status codes:
 
 | Condition | HTTP | Body `error` |
 |-----------|------|--------------|
@@ -373,13 +360,11 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 | `instanceId` present, instance has no `performance_path` | **404** | `No performance report loaded for this instance` (`PerformanceReportNotLoadedException`) |
 | `profiler_path` set but `db.sqlite` missing on disk | **404** | `Database not found at path: <path>` (`DatabaseFileNotFoundException`) |
 
-Arbitrary `instanceId` strings are valid tab identifiers — the server creates the row on first request. A curl like `?instanceId=fake-instance-id` without a prior upload/sync therefore gets **404**, not **400**.
+Arbitrary `instanceId` strings are valid tab identifiers — the server creates the row on first request — so `?instanceId=fake-instance-id` without a prior upload/sync gets **404**, not **400**.
 
-Both `…NotLoadedException` classes inherit from `ReportNotLoadedException`, registered on a single 404 error handler in `app.py` alongside `DatabaseFileNotFoundException`. The body string lives on each subclass as `DEFAULT_MESSAGE`, so call sites read as `raise PerformanceReportNotLoadedException()` (no message argument). Helpers raise at the top of every code path that touches a missing report path; routes don't need (and shouldn't add) a `if not instance.<kind>_path: return response_not_found()` guard **when the helper they call is the next thing the route does**.
+Both `…NotLoadedException` classes inherit from `ReportNotLoadedException` and share one 404 handler in `app.py`; the body string lives on each subclass as `DEFAULT_MESSAGE` so call sites raise without a message argument. Helpers raise at the top of every path that touches a missing report path, so routes don't need a parallel `if not instance.<kind>_path` guard **when the helper is the next thing they call**.
 
-Routes that **dereference `instance.<kind>_path` directly** before invoking a helper — for instance to compute `Path(instance.performance_path).parent / name` from a `?name=` swap — must keep an explicit `raise <Kind>ReportNotLoadedException()` at the top. Mypy enforces this (otherwise `Path(None)` is a type error) and runtime would crash with `TypeError: argument should be a str or PathLike, not NoneType`. `views.py::get_performance_results_report`, `get_performance_data_raw`, and `get_performance_device_meta` are the live examples — don't delete those guards thinking they're stale.
-
-NPE (`/api/npe`) and MLIR (`/api/mlir`) routes do their own filesystem IO without a helper class and still use per-route `response_not_found()` guards — leave them alone unless you're refactoring those readers.
+Routes that **dereference `instance.<kind>_path` directly** before invoking a helper (e.g. computing `Path(instance.performance_path).parent / name` from a `?name=` swap) must keep an explicit `raise <Kind>ReportNotLoadedException()` at the top — otherwise mypy fails (`Path(None)`) and runtime crashes. `views.py::get_performance_results_report`, `get_performance_data_raw`, and `get_performance_device_meta` are the live examples. NPE and MLIR routes do their own filesystem IO and still use per-route `response_not_found()` guards.
 
 ### Cross-cutting retries belong in the interceptor, not in individual hooks
 
@@ -542,16 +527,9 @@ Frontend route paths live in `src/definitions/Routes.ts` (a `Object.freeze`'d co
 
 ### Frontend route definitions go through `routeObjectList`
 
-**Rationale.** `ROUTES` (`src/definitions/Routes.ts`) holds absolute paths so that `<Link to={ROUTES.OPERATIONS} />` reads naturally. React Router's nested-route children, however, take **relative** paths. `stripFirstSlash` bridges the two and keeps `ROUTES` the single source of truth:
-
-`src/definitions/RouteObjectList.tsx`
+`ROUTES` (`src/definitions/Routes.ts`) holds absolute paths so that `<Link to={ROUTES.OPERATIONS} />` reads naturally. React Router's nested-route children take **relative** paths, so `stripFirstSlash` in `src/definitions/RouteObjectList.tsx` bridges the two and keeps `ROUTES` as the single source of truth:
 
 ```tsx
-// Allows us to keep absolute paths in ROUTES while using relative paths in route objects
-const stripFirstSlash = (path: string) => {
-    return path.startsWith('/') ? path.slice(1) : path;
-};
-
 export const routeObjectList = [
     { index: true, element: <Home /> },
     { path: stripFirstSlash(ROUTES.OPERATIONS), element: <Operations /> },
@@ -560,43 +538,11 @@ export const routeObjectList = [
 ];
 ```
 
-New routes add an entry to `routeObjectList` and (if they require an active report) a matching entry to `RouteRequirements` in the same file. Don't reach into `createBrowserRouter([...])` in `main.tsx` and hardcode another route — `main.tsx` consumes `routeObjectList` and nothing else.
+New routes add an entry to `routeObjectList` and (if they require an active report) a matching entry to `RouteRequirements` in the same file. `main.tsx` consumes `routeObjectList` and nothing else — don't hardcode routes into `createBrowserRouter` separately.
 
 ### Page titles via `react-helmet-async`; layout sets the template, routes set the title
 
-`Layout.tsx` declares the base template once, and each route file mounts its own short `<Helmet title='...' />`:
-
-`src/components/Layout.tsx`
-
-```tsx
-<Helmet
-    defaultTitle='TT-NN Visualizer'
-    titleTemplate='%s | TT-NN Visualizer'
->
-    <meta charSet='utf-8' />
-    <meta
-        name='description'
-        content='A comprehensive tool for visualizing and analyzing model execution, …'
-    />
-</Helmet>
-```
-
-`src/routes/Operations.tsx`
-
-```tsx
-export default function Operations() {
-    useClearSelectedBuffer();
-
-    return (
-        <>
-            <Helmet title='Operations' />
-            <OperationList />
-        </>
-    );
-}
-```
-
-`HelmetProvider` is mounted once at the top of the tree in `src/main.tsx`. Don't add a second provider or override `titleTemplate` at the page level — the layout owns the suffix.
+`Layout.tsx` declares `titleTemplate='%s | TT-NN Visualizer'` once, and each route file mounts its own `<Helmet title='Operations' />`. `HelmetProvider` is mounted at the top of the tree in `src/main.tsx` — don't add a second provider or override `titleTemplate` at the page level.
 
 ---
 
@@ -628,14 +574,85 @@ export const updateInstance = async (payload: Partial<Instance>): Promise<Instan
 
 If you find yourself mixing prefixes (e.g. `getUserData` doing an `await fetch(...)`), the prefix is wrong — rename to `fetchUserData`.
 
-### Module-level constants are `SCREAMING_SNAKE_CASE`
+### Prefer named constants over magic strings or numbers
 
-**Module-level** means declared at the outer scope of a module (the file), not inside a function or block — it does not mean “only used in this file.” Use **`const`** (no `export`) for values private to that module. If a constant is **shared across modules**, define and export it from a sensible central place (for example `src/definitions/` next to related types or endpoint maps — see [File organization](#file-organization-and-modules)) instead of exporting ad hoc from a leaf component just because the name is `SCREAMING_SNAKE_CASE`.
+Module-level constants use **`SCREAMING_SNAKE_CASE`** — declared at the outer scope of the file, not inside a function or block. Use `const` (no `export`) for module-private values; export shared constants from a sensible central place like `src/definitions/` (see [File organization](#file-organization-and-modules)) rather than ad-hoc from a leaf component.
+
+Inline literals lose the *why*. `setTimeout(retry, 500)` and `if (status === 'started')` read as folklore. Once a literal has a name, reviewers can see intent without re-reading every call site, and shared values can't drift between reader and writer.
+
+**Apply when the literal carries semantic meaning**, regardless of how many call sites it has:
+
+- User-visible copy repeated in multiple places, or product-specific phrasing (`'Preparing transfer…'`, `'No files found'`).
+- Status / mode / kind keys used in equality checks (`status === 'started'` → use the enum or a `STATUS_*` const).
+- Thresholds, durations, retry counts, debounce/poll intervals, byte sizes (`MAX_RETRIES`, `ELAPSED_REFRESH_MS`).
+- Storage keys, query keys, endpoint suffixes, header names — anything that needs to stay in lockstep across reader/writer (`'fetch-all-buffers'` is already exported as `*_QUERY_KEY`).
+- The same literal in test setup and production code (promote, then import on both sides).
+
+**Don't sprawl** to literals that are self-explanatory at the call site:
+
+- Arithmetic plumbing (`arr.length - 1`, `index + 1`, `total > 0`, division by `100`, `Math.floor(x / 60)`).
+- Array indices on a tuple whose shape is local (`[head] = pathParts`).
+- Constructor arguments that are obvious in context (`new Date(0)`, `JSON.stringify(obj, null, 2)`).
+- One-shot regex literals that are clearer inline than as a named const.
+
+**Counter-example (don't):**
+
+```tsx
+setInterval(() => setNow(Date.now()), 1000);
+
+if (retries < 3) {
+    setTimeout(retry, 500);
+}
+```
+
+**Good:**
+
+```tsx
+const ELAPSED_REFRESH_MS = 1000;
+const MAX_RETRIES = 3;
+const RETRY_BACKOFF_MS = 500;
+
+setInterval(() => setNow(Date.now()), ELAPSED_REFRESH_MS);
+
+if (retries < MAX_RETRIES) {
+    setTimeout(retry, RETRY_BACKOFF_MS);
+}
+```
+
+When the literal is a user-facing string that already has a canonical home — e.g. the status-keyed map in `src/functions/getFileStatusLabel.ts` — route the new copy through that helper instead of introducing a parallel `*_LABEL` const at the call site. The point is *one* source of truth, not just "anywhere but inline". Colour literals and shared layout values follow the stricter rules under [CSS / SCSS](#css--scss) (CSS custom property / SCSS variable, not a TS const).
+
+### Prefer an enum for a related set of constants
+
+When literals come in a *related set* — status values, mode kinds, validation states, toast types — collect them in an `enum` rather than scattering N independent `SCREAMING_SNAKE_CASE` consts. An enum buys things a bag of consts can't:
+
+- **Exhaustive checks for free.** `Record<MLIRValidationError, { title: string }>` (`src/components/MlirProcessingStatus.tsx`) is a compile error the moment a new enum member is added without a label.
+- **One canonical symbol.** Components compare `errorCode === MLIRValidationError.INVALID_JSON` against a single import instead of four sibling consts whose relationship has to be inferred by name.
+- **Pairs with the type-side rule.** [Prefer named enums over string-literal unions](#prefer-named-enums-over-string-literal-unions-when-the-union-has-semantic-meaning) covers the *type* side (`'input' | 'output'` → `enum NodeRelation`); this rule covers the *runtime-value* side (`'idle' | 'progress' | 'ok' | 'failed' | 'warning'` literals scattered across modules → `enum ConnectionTestStates`).
+
+**Apply when** the literals belong to one closed semantic set, are referenced from more than one module (equality checks, switches, object keys), or come from a backend response that the frontend wants compile-time confidence about handling exhaustively.
+
+**Don't reach for an enum when** the values are independent constants that share nothing but a `const` keyword (`MAX_RETRIES`, `RETRY_BACKOFF_MS`, `ELAPSED_REFRESH_MS` — individually named, not bolted into a synthetic enum), or when the set is a TypeScript type union used only as a type — the [string-literal-union rule](#prefer-named-enums-over-string-literal-unions-when-the-union-has-semantic-meaning) handles that.
+
+**Numeric vs string-valued.** Default to **string-valued** enums when the value crosses any serialisation boundary (logs, JSON, URL params, storage keys, backend-string comparisons). Numeric enums are reserved for purely internal sets. `ConnectionTestStates` (`src/definitions/ConnectionStatus.ts`) is the canonical numeric exception — `backend/ttnn_visualizer/tests/test_file_uploads.py` deliberately asserts on `ConnectionTestStates.FAILED.value` (i.e. `2`), so reordering members silently breaks the wire contract. New numeric enums need that kind of cross-stack lock-in to justify the choice.
+
+**Good** (string-valued enum, used at every call site):
 
 ```ts
-const DEFAULT_ERROR_MESSAGE = 'An unexpected error occurred';
-const MAX_RETRIES = 3;
-const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
+// src/functions/createToastNotification.tsx
+export enum ToastType {
+    INFO = 'info',
+    SUCCESS = 'success',
+    WARNING = 'warning',
+    ERROR = 'error',
+}
+
+createToastNotification('MLIR', file.name, ToastType.SUCCESS);
+```
+
+**Don't** — never reintroduce the underlying value at a call site, even when the literal would compile:
+
+```ts
+createToastNotification('MLIR', file.name, 'success' as ToastType); // bypasses the enum
 ```
 
 ### Backend module-private helpers prefix with a single underscore
@@ -721,18 +738,8 @@ Two `conftest.app` defaults that bite local-upload tests in particular:
 Both overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py`. A runnable example:
 
 ```python
-from http import HTTPStatus
-from io import BytesIO
-from pathlib import Path
-
-from ttnn_visualizer.enums import ConnectionTestStates
-
-
 def test_local_upload_rejects_non_json(app, client, make_report):
     instance_id = make_report()
-    # Two conftest.app defaults that bite local-upload tests:
-    # SERVER_MODE=True would block the route with 403, and
-    # LOCAL_DATA_DIRECTORY ships as a str.
     app.config["SERVER_MODE"] = False
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
 
@@ -744,13 +751,10 @@ def test_local_upload_rejects_non_json(app, client, make_report):
     )
 
     assert response.status_code == HTTPStatus.OK
-    body = response.get_json()
-    # `StatusMessage.status` is a `ConnectionTestStates` enum; FAILED is `2`
-    # after JSON serialisation (see `test_file_uploads.py`).
-    assert body["status"] == ConnectionTestStates.FAILED.value
+    assert response.get_json()["status"] == ConnectionTestStates.FAILED.value
 ```
 
-Use `caplog` for log assertions, `tmp_path` for filesystem-touching tests. Don't construct a raw `werkzeug.test.Client` — go through the Flask wrapper so the app context and request hooks fire correctly.
+`StatusMessage.status` is a `ConnectionTestStates` enum (`FAILED` serialises as `2`). Use `caplog` for log assertions, `tmp_path` for filesystem-touching tests. Don't construct a raw `werkzeug.test.Client` — go through the Flask wrapper so the app context and request hooks fire correctly.
 
 ### Build shared fixture helpers for large test suites
 
@@ -822,41 +826,19 @@ If the user uploads a file the app parses as JSON, validate it on the frontend b
 
 ### Convert client-side validation failures into a synthetic `AxiosError` with a real `HttpStatusCode`
 
-**Rationale.** Route components downstream key off `error?.status === HttpStatusCode.UnprocessableEntity` to drive validation-error UI. When the failure is a client-side `JSON.parse` (the backend streams the bytes without parsing), throwing a plain `Error` would force every consumer to grow a parallel branch. Throwing a synthetic `AxiosError` with the right status keeps the existing UI mapping working without changes.
-
-`src/hooks/useAPI.tsx`
+Downstream route components key off `error?.status === HttpStatusCode.UnprocessableEntity` to drive validation-error UI. When the failure is a client-side `JSON.parse` (the backend streams uploaded bytes without parsing them — see `useAPI.tsx::fetchMLIRJson`), throw a synthetic `AxiosError` with the right status so existing call sites still work:
 
 ```tsx
-const fetchMLIRJson = async (): Promise<GraphBundle> => {
-    // Fetch as raw text and parse client-side. The backend deliberately
-    // streams the uploaded file bytes without parsing them — large MLIR
-    // payloads avoid the double-parse / double-stream cost on the server.
-    // If the file contents are malformed JSON, surface a synthetic 422 so
-    // the existing UI mapping in `routes/MLIR.tsx`
-    // (422 → MLIRValidationError.INVALID_JSON) handles it without changes.
-    const response = await axiosInstance.get<string>(Endpoints.MLIR, {
-        responseType: 'text',
-        transformResponse: [(data) => data],
-    });
-    try {
-        return JSON.parse(response.data) as GraphBundle;
-    } catch {
-        throw new AxiosError(
-            'MLIR file is not valid JSON',
-            AxiosError.ERR_BAD_RESPONSE,
-            response.config,
-            response.request,
-            { ...response, status: HttpStatusCode.UnprocessableEntity },
-        );
-    }
-};
+throw new AxiosError(
+    'MLIR file is not valid JSON',
+    AxiosError.ERR_BAD_RESPONSE,
+    response.config,
+    response.request,
+    { ...response, status: HttpStatusCode.UnprocessableEntity },
+);
 ```
 
-Three things to copy when you reuse this pattern:
-
-1. Pass the original `response.config` and `response.request` so any code that reads those fields on the thrown `AxiosError` still sees the same objects (they can be `undefined` if omitted, which breaks callers that assume they exist).
-2. Spread the response (`{ ...response, status: ... }`) so type guards on the error shape still work — don't pass a fresh object.
-3. Use a numeric `HttpStatusCode` constant from `axios`, not a string literal — call sites compare with `===`.
+Pass the original `response.config` and `response.request` (omitting them breaks callers that assume they exist), spread the response so type guards on the error shape still work (don't pass a fresh object), and use the numeric `HttpStatusCode` constant from `axios` — call sites compare with `===`.
 
 ---
 
@@ -873,18 +855,9 @@ prefixed_filename = f"{prefix}{Path(file.filename).name}"
 dest_path = Path(target_directory) / prefixed_filename
 ```
 
-`Path(...).name` on POSIX (which is what our Linux/macOS deployments use) collapses `/`-separated traversal: `'../../etc/passwd'` becomes `'passwd'`, and `'/absolute/path'` becomes `'path'`.
+`Path(...).name` on POSIX (our Linux/macOS deployments) collapses `/`-separated traversal: `'../../etc/passwd'` → `'passwd'`, `'/absolute/path'` → `'path'`.
 
-**Caveat.** `\` is not a path separator under `PurePosixPath`, so backslash-separated paths and Windows drive-letter prefixes survive `.name` unchanged:
-
-```python
->>> Path('..\\..\\etc\\passwd').name
-'..\\..\\etc\\passwd'
->>> Path('C:\\evil\\file').name
-'C:\\evil\\file'
-```
-
-This still doesn't *escape* the target directory on POSIX — backslashes become literal filename characters rather than separators — so containment holds. But don't read the helper as a full cross-platform sanitiser. If a future deployment ever needs to handle filenames coming from a Windows-aware client more strictly, layer on `werkzeug.utils.secure_filename` or an equivalent normalization step.
+**Caveat.** `\` isn't a path separator under `PurePosixPath`, so backslash-separated paths and Windows drive-letter prefixes (`'..\\..\\etc\\passwd'`, `'C:\\evil\\file'`) survive `.name` unchanged — they become literal filename characters inside the target directory, so containment holds, but the helper isn't a full cross-platform sanitiser. If a deployment needs to handle Windows-style filenames, layer on `werkzeug.utils.secure_filename` or an equivalent normalisation step.
 
 Add a regression test that submits a crafted traversal filename and asserts the file lands inside the intended directory.
 

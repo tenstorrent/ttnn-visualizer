@@ -11,6 +11,7 @@ import 'styles/components/PerfChart.scss';
 interface PerfChartProps {
     chartData: Partial<PlotData>[];
     configuration: PlotConfiguration;
+    id?: string;
     title: string;
 }
 
@@ -18,7 +19,7 @@ const GRID_COLOUR = '#575757';
 const LINE_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
 
-function PerfChart({ chartData, configuration, title }: PerfChartProps) {
+function PerfChart({ chartData, configuration, id, title }: PerfChartProps) {
     const layout: Partial<Layout> = {
         autosize: true,
         paper_bgcolor: 'transparent',
@@ -106,7 +107,10 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
     };
 
     return (
-        <div className={classNames('chart-container', { 'legend-instructions': configuration.showLegend })}>
+        <div
+            id={id}
+            className={classNames('chart-container', { 'legend-instructions': configuration.showLegend })}
+        >
             <h3>{title}</h3>
 
             <Plot

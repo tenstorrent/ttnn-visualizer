@@ -151,6 +151,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
                 background-color: rgb(255 255 255 / 5%);
             }
 
+            &.is-selected {
+                background-color: rgb(255 255 255 / 10%);
+            }
+
             &.comparison-row {
                 border-bottom: 2px solid colours.$tt-sand-shade;
                 background-size: 5px 5px;
@@ -179,6 +183,14 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         }
     }
 
+    .perf-tensor-trigger-wrapper {
+        display: inline-flex;
+
+        .perf-tensor-trigger {
+            background-color: transparent;
+        }
+    }
+
     .missing-data {
         background-color: colours.$tt-red-shade;
 
@@ -201,6 +213,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
 
         &.advice {
             border-bottom: none;
+        }
+
+        .l1-fullness-attributes {
+            font-size: 12px;
         }
     }
 

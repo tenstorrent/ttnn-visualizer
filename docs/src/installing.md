@@ -18,6 +18,7 @@ export TTNN_CONFIG_OVERRIDES='{
     "enable_detailed_buffer_report": true,
     "enable_detailed_tensor_report": false,
     "enable_graph_report": true,
+    "enable_graph_python_stack_traces": true,
     "enable_comparison_mode": false
 }'
 ```
@@ -30,6 +31,7 @@ export TTNN_CONFIG_OVERRIDES='{
 | **enable_detailed_buffer_report** | Enable to visualize the detailed buffer report after every operation. **Needed for full buffer information**. |
 | **enable_detailed_tensor_report** | Enable to visualize the values of input and output tensors of every operation. **Data not used by the visualizer**. |
 | **enable_graph_report** | Generates an SVG visualization of the computation graph and enables automatic report generation with pytest. **Must be enabled**. |
+| **enable_graph_python_stack_traces** | Capture the Python stack trace at each operation invocation and store it alongside the graph. **Required for the visualizer's per-operation stack trace and source-file view**. |
 | **enable_comparison_mode** | Enable to test the output of operations against their golden implementation. **Optional, not always available on models**. |
 
 To run a test with custom input data, you can use the following command with suitable values for `input-path`:

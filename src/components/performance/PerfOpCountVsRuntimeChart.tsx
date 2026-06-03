@@ -7,6 +7,7 @@ import { PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
@@ -94,7 +95,8 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
 
     return (
         <PerfChart
-            title='Operation Count vs Device Time'
+            id={PerfChartId.OpCountVsRuntime}
+            title={PERF_CHART_LABELS[PerfChartId.OpCountVsRuntime]}
             chartData={[...opCountData.flat(), ...opDeviceTimeData.flat()]}
             configuration={configuration}
         />

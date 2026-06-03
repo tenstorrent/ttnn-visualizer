@@ -2,15 +2,30 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+// Clears the sticky "Jump to chart" nav bar when scrolling to an anchored chart.
+// Keep in sync with PERF_CHARTS_NAV_OFFSET_PX (PerformanceChartsTab.tsx).
+$perf-charts-nav-offset: 60px;
+
 .charts-container {
     display: grid;
     grid-template-columns: 250px 1fr;
     position: relative;
     gap: 30px;
 
+    .charts-column {
+        min-width: 0; // Allow the column to shrink below content width so .charts can scroll horizontally
+    }
+
     .charts {
         min-width: 800px; // Ensures charts are wide enough to display properly and allows overflow
         overflow: auto;
+    }
+
+    // Anchored chart targets sit below the sticky "Jump to chart" nav bar, so their
+    // titles would otherwise land hidden underneath it when navigated to via hash link.
+    .chart-container,
+    .operation-types-chart {
+        scroll-margin-top: $perf-charts-nav-offset;
     }
 }
 

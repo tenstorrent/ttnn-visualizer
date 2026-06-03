@@ -40,6 +40,10 @@ const PLACEHOLDER: TypedPerfTableRow = {
     hash: null,
     cache_hit: null,
     isFirstHashOccurrence: false,
+    l1_fullness_percent: null,
+    l1_free_segments: null,
+    l1_largest_free: null,
+    l1_largest_free_percent: null,
 };
 
 export interface NormalisedPerfData {

@@ -18,9 +18,12 @@ When changing ingestion, sync, or path logic, keep these flows and paths in mind
 
 ## Deployment and security posture
 
-In practice the app is usually **run by the engineer on their own machine** while developing or profiling. The instance at **ttnn-visualizer.tenstorrent.com** is a **demo**, not the primary product shape.
+The app ships in two first-class shapes, and changes should work in both unless a feature is explicitly local-only:
 
-Do **not** assume a multi-tenant hosted SaaS model for defaults, threat model, or feature tradeoffs: treat “runs locally for one user” as the common case unless a change explicitly targets the demo deployment.
+- **Local install** on the engineer's own machine — full feature set, including local filesystem access, uploads, and remote SSH sync.
+- **Hosted** at **ttnn-visualizer.tenstorrent.com** — runs with `SERVER_MODE` enabled, so `@local_only` endpoints return 403 and the frontend hides the matching UI via `getServerConfig()`.
+
+Treat the hosted deployment as **multi-user and untrusted-input**: requests can come from anyone, instances are not mutually trusted, and uploaded payloads must be validated rather than blindly parsed. Authentication is not part of the app's model, so the `@local_only` boundary *is* the security boundary — when adding endpoints, sockets, or data flows, decide consciously whether they're safe under `SERVER_MODE`, and gate genuinely local-only features on both backend and frontend.
 
 ## Python environment
 
@@ -44,33 +47,10 @@ If you mainly work in Python, you still benefit from knowing that many behaviors
 
 ## Running the app from a development checkout
 
-Prerequisites include **Node** and **pnpm** (see `package.json` `engines`) for scripts that orchestrate Flask and the frontend.
+Prerequisites: **Node** + **pnpm** (see `package.json` `engines`) and an activated **Python virtual environment**.
 
-1. Activate your **Python virtual environment**.
-2. Start Flask (debug-friendly entrypoint used in development):
-
-   ```bash
-   pnpm flask:start-debug
-   ```
-
-### Production-style Flask (single process serves built static UI)
-
-If **`FLASK_ENV`** is **`production`** (`.env` or real environment), Flask can serve the built SPA; you do **not** need a separate Vite dev server. After **frontend** changes, rebuild static assets:
-
-```bash
-pnpm build
-```
-
-Typical workflow for a Python-focused developer who rarely edits the UI: keep `FLASK_ENV=production`, run `pnpm build` when the UI changes, then run Flask.
-
-### Development-style (hot reload, two processes)
-
-With **`FLASK_ENV=development`** (or unset defaulting to development per app settings), frontend developers run **both**:
-
-- **`pnpm dev`** — Vite dev server (hot reload; no need to `pnpm build` on each edit).
-- **`pnpm flask:start-debug`** — Flask API.
-
-Both must be running for full local dev with live frontend updates.
+- **`FLASK_ENV=development`** (or unset) — frontend dev. Run **`pnpm dev`** (Vite, hot reload) and **`pnpm flask:start-debug`** in parallel.
+- **`FLASK_ENV=production`** — Flask serves the built SPA. Run **`pnpm build`** after frontend changes, then `pnpm flask:start-debug`. Suits Python-focused developers who rarely touch the UI.
 
 ## Code quality and linting
 
@@ -80,15 +60,11 @@ All **Python** code in this project should satisfy **Black**, **isort**, and **m
 
 ### Frontend
 
-Treat **`tsconfig*`**, **ESLint**, **Stylelint**, and **Prettier** as the source of truth for TypeScript/React and stylesheet work (including `.css`, `.scss`, and `.sass`). Prefer the style already present in files you edit when it stays compatible with those configs, and keep typing strict under the project compiler options.
-
-Avoid introducing lint suppressions unless the user explicitly asks for them. For edits you make, run linters when practical and fix problems your change causes; format touched code with Prettier and stay within ignore boundaries rather than reformatting unrelated paths. When a formatter and a linter disagree, follow how this repository wires them together instead of ad-hoc overrides; if a rule genuinely blocks the right fix, surface that and confirm before relaxing standards.
-
-All frontend changes should pass **ESLint**: run **`pnpm lint`** to check, or **`pnpm lint:fix`** where automatic fixes apply.
+`tsconfig*`, **ESLint**, **Stylelint**, and **Prettier** are the source of truth for TypeScript/React and stylesheet work (`.css`, `.scss`, `.sass`). Match the style already in the file you're editing and keep typing strict. Don't add lint suppressions unless explicitly requested — assess whether the warning is right first (it usually is). Format only the code you touched; don't reformat unrelated paths. All frontend changes should pass **`pnpm lint`** (`pnpm lint:fix` for auto-fixes).
 
 ### SPDX
 
-Any **new source code files** you add must include a **valid SPDX license identifier** in the file header, consistent with how existing files in this repository are annotated. The **`pnpm lint:spdx`** script (see **`package.json`**) validates SPDX headers for supported paths. When creating a new source code file, ensure the year in the SPDX header is the current year. If editing an existing file, do not change the year unless explicitly requested to do so.
+New source files need a valid SPDX header in the project format with the **current year**. Validate with **`pnpm lint:spdx`**. Don't bump the year when editing existing files.
 
 ## Repository and issue tracking
 
@@ -178,6 +154,7 @@ Open pull requests with **`dev`** as the base branch by default.
 - **`src/definitions/`** holds *primitives*: enums, route/endpoint maps, plot/colour configs, plain interfaces. **`src/model/`** holds richer domain types — usually API response shapes, sometimes classes with methods. If it mirrors a backend response, it's a model.
 - URL endpoints are centralized in the **`Endpoints` enum** (`src/definitions/Endpoints.ts`); routes in the **`ROUTES` frozen const** (`src/definitions/Routes.ts`). Never inline a URL string in a component.
 - Test IDs are centralized in **`TEST_IDS`** (`src/definitions/TestIds.ts`, `Object.freeze`'d) and referenced from both component `data-testid` attributes and test queries. No hardcoded test-id strings.
+- General value formatters (`toReadableShape`, `formatDuration`, `stripEnum`, etc.) live in **`src/functions/formatting.ts`**. Add new pure formatters there instead of redefining ad-hoc helpers inside feature modules.
 
 ### Naming
 
@@ -191,7 +168,9 @@ Open pull requests with **`dev`** as the base branch by default.
   | `is*`, `has*` | Boolean predicate |
   | `fetch*` | Async axios wrapper returning `Promise<T>` |
 
-- **Module-level constants** use `SCREAMING_SNAKE_CASE` (`MAX_RETRIES`, `LOCAL_STORAGE_KEY_*`). **Module-level** means the outer scope of a file, not “only used in this file” — use `const` without `export` for values private to that module; export shared constants from a central module such as **`src/definitions/`** (see File organization above), not ad hoc from leaf components.
+- **Prefer named constants over magic strings or numbers.** Promote semantic literals — user-visible copy, status keys in comparisons, thresholds, durations, retry counts, storage keys — to **`SCREAMING_SNAKE_CASE`** at module scope: `const` (no `export`) for module-private values, exported from `src/definitions/` when shared across modules. The bar is "could a reviewer guess *why* this value, not just *what*?". Self-evident arithmetic (`length - 1`, `> 0`, array index `0`) and one-shot constructor arguments stay inline. Colour and shared layout literals follow the stricter [CSS / SCSS](#css--scss) rules (CSS custom property / SCSS variable, not a TS const).
+- **Prefer an enum when constants belong to a related set.** When literals form one closed group — status values, mode kinds, error codes, toast types, validation states — declare them as an `enum` in `src/definitions/` (or the owning module) rather than a bag of independent `SCREAMING_SNAKE_CASE` consts. Use **string-valued** enums (`enum X { A = 'a', B = 'b' }`) when the value crosses a serialisation boundary (JSON, URL params, storage keys, backend-string comparisons); numeric enums are reserved for purely internal sets. Once the enum exists, every call site uses the enum member — never the underlying literal, even when it would match at runtime. The runtime-value companion to the type-union rule above. **Members use `SCREAMING_SNAKE_CASE`** (e.g. `PerfOverlayStatus.UNAVAILABLE`); some older enums use PascalCase but new code follows the SCREAMING_SNAKE form.
+- **Name `Map`/`Record` accumulators after the relation they encode** — pattern `valueByKey` (`deviceTimeByOpId`, `aggregatesByOpId`, `operationNamesById`). Don't use bare `map`, `obj`, or `result` outside a trivially short scope.
 - Backend module-private helpers prefix with a single underscore (e.g. `_file_path_from_stack_source_request`).
 
 ### Backend conventions
