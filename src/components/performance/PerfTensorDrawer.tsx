@@ -2,10 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Drawer, DrawerSize, Icon } from '@blueprintjs/core';
+import { Button, Drawer, DrawerSize, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import 'styles/components/PerfTensorDrawer.scss';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import ROUTES from '../../definitions/Routes';
@@ -23,6 +23,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
     const selectedPerfRowId = useAtomValue(selectedPerfRowIdAtom);
     const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
     const { data: operations = [] } = useOperationsList();
+    const navigate = useNavigate();
 
     const selectedRow = rows.find((row) => row.id === selectedPerfRowId) ?? null;
     const matchedOperation = isValidNumber(selectedRow?.op)
@@ -40,7 +41,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
             title={
                 selectedRow ? (
                     <span className='perf-tensor-drawer-title'>
-                        {selectedRow.id} {selectedRow.raw_op_code}
+                        {matchedOperation?.id} {matchedOperation?.name}
                     </span>
                 ) : (
                     'Tensor details'
@@ -56,15 +57,14 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
                 {matchedOperation ? (
                     <>
                         <p className='perf-tensor-drawer-op-link'>
-                            <Link
-                                className='perf-tensor-drawer-op-link-anchor'
-                                to={`${ROUTES.OPERATIONS}/${matchedOperation.id}`}
+                            <Button
+                                className='navigate-button'
+                                endIcon={IconNames.SEGMENTED_CONTROL}
+                                intent={Intent.PRIMARY}
+                                onClick={() => navigate(`${ROUTES.OPERATIONS}/${matchedOperation.id}`)}
                             >
-                                <Icon icon={IconNames.CUBE} />
-                                <span>
-                                    View operation {matchedOperation.id} {matchedOperation.name}
-                                </span>
-                            </Link>
+                                Memory Details
+                            </Button>
                         </p>
 
                         <PerfTensorPanel

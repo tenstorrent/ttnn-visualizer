@@ -27,7 +27,10 @@ function PerfTensorRow({ tensor, operations, label }: PerfTensorRowProps) {
 
     return (
         <div className='perf-tensor-row'>
-            <h4 className='perf-tensor-row-title'>{label}</h4>
+            <h4 className='perf-tensor-row-title'>
+                {label}{' '}
+                {tensor.buffer_type !== null ? <MemoryTag memory={BufferTypeLabel[tensor.buffer_type]} /> : null}
+            </h4>
 
             <table className='ttnn-table two-tone-rows perf-tensor-row-table'>
                 <tbody>
@@ -73,15 +76,6 @@ function PerfTensorRow({ tensor, operations, label }: PerfTensorRowProps) {
                         <th>Layout</th>
                         <td>{toReadableLayout(tensor.layout)}</td>
                     </tr>
-
-                    {tensor.buffer_type !== null ? (
-                        <tr>
-                            <th>Type</th>
-                            <td>
-                                <MemoryTag memory={BufferTypeLabel[tensor.buffer_type]} />
-                            </td>
-                        </tr>
-                    ) : null}
 
                     {isValidNumber(tensor.address) ? (
                         <tr>
