@@ -81,7 +81,7 @@ const MlirAttrValue = ({ value }: MlirAttrValueProps) => {
     if (parsed.kind === 'scalar') {
         return <span className='mlir-attr-value mlir-attr-value-scalar'>{parsed.text}</span>;
     }
-    return <NestedTree data={parsed.kind === 'array' ? parsed.parsed : parsed.parsed} />;
+    return <NestedTree data={parsed.parsed} />;
 };
 
 export default MlirAttrValue;
