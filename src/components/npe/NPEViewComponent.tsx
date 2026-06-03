@@ -7,7 +7,7 @@ import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import 'styles/components/NPEZoneFilterComponent.scss';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Classes, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
@@ -562,7 +562,7 @@ const NPEView = ({ npeData }: NPEViewProps) => {
                         onChange={(value: number) => handleScrubberChange(value)}
                     />
                     <div
-                        className='bp6-slider-progress duplicate'
+                        className={classNames(Classes.SLIDER_PROGRESS, 'duplicate')}
                         style={{ width: `${canvasWidth - RIGHT_MARGIN_OFFSET_PX}px` }}
                     />
                 </div>

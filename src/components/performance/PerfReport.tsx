@@ -684,6 +684,7 @@ const PerformanceReport = ({
                                         reportName={report}
                                         showHashColumn={false}
                                         hasL1PressureData={hasL1PressureData}
+                                        activeReportComparisonIndex={0}
                                     />
                                 )
                             }

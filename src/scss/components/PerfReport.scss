@@ -151,6 +151,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
                 background-color: rgb(255 255 255 / 5%);
             }
 
+            &.is-selected {
+                background-color: rgb(255 255 255 / 10%);
+            }
+
             &.comparison-row {
                 border-bottom: 2px solid colours.$tt-sand-shade;
                 background-size: 5px 5px;
@@ -176,6 +180,14 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
                     border-bottom: none;
                 }
             }
+        }
+    }
+
+    .perf-tensor-trigger-wrapper {
+        display: inline-flex;
+
+        .perf-tensor-trigger {
+            background-color: transparent;
         }
     }
 

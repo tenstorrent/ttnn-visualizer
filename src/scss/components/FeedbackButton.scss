@@ -21,20 +21,24 @@ $button-rotation: -90deg; // Rotate the button to face upwards
     top: 42vh;
     right: -3px;
     z-index: variables.$z-index-2-interactive;
-    background-color: $tt-blue-accent;
     border-radius: 2px 2px 0 0;
     font-size: 16px;
     transform: translateX($hide-offset) rotate($button-rotation);
     transition: transform 0.3s ease-in-out;
     transform-origin: right bottom;
 
-    &:hover,
-    &:focus {
-        background-color: color.adjust($tt-blue, $lightness: -12%);
-    }
+    // Override BlueprintJS intent styles for the feedback button
+    &.bp6-intent-primary {
+        background-color: $tt-blue-accent;
 
-    &:active {
-        background-color: color.adjust($tt-blue, $lightness: -15%);
+        &:hover,
+        &:focus {
+            background-color: color.adjust($tt-blue, $lightness: -12%);
+        }
+
+        &:active {
+            background-color: color.adjust($tt-blue, $lightness: -15%);
+        }
     }
 
     &.animate-in {

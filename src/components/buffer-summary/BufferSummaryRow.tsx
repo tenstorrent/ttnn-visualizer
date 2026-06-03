@@ -11,7 +11,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatMemorySize, getMemoryAddress } from '../../functions/math';
-import { toReadableShape, toReadableType } from '../../functions/formatting';
+import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { showHexAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
@@ -190,7 +190,7 @@ const BufferSummaryRow = ({
                             {interactiveBuffer.tensor?.dtype ? toReadableType(interactiveBuffer.tensor.dtype) : ''}{' '}
                             <br />
                             {interactiveBuffer.tensor?.memory_config?.memory_layout
-                                ? interactiveBuffer.tensor?.memory_config?.memory_layout
+                                ? toReadableLayout(interactiveBuffer.tensor.memory_config.memory_layout)
                                 : null}
                             <br />
                             {tensor}

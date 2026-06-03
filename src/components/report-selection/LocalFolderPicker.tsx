@@ -89,7 +89,6 @@ const LocalFolderPicker = ({
                                 onConfirm={() => handleDelete(folderToDelete)}
                                 cancelButtonText='Cancel'
                                 confirmButtonText='Delete'
-                                className='bp6-dark'
                                 // @ts-expect-error BackdropClassName is not defined in AlertProps
                                 backdropClassName='delete-folder-backdrop'
                             >
