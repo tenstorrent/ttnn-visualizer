@@ -1,0 +1,327 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+/* The panel docks inside the MLIR view pane (top-right corner of the
+ * React Flow canvas). Make sure the pane is a positioned ancestor so the
+ * panel's absolute placement anchors to the canvas area rather than the
+ * document — also lets the existing `.mlir-relayout-button` continue to
+ * pin to top-left inside the canvas. */
+/* stylelint-disable selector-class-pattern */
+.mlir-view-pane {
+    position: relative;
+}
+
+.mlir-node-details-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 450px;
+    height: 100%;
+    z-index: 10;
+    background: rgb(52 52 52 / 95%);
+    color: $tt-grey-7;
+    border-left: 1px solid rgb(255 255 255 / 8%);
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+}
+
+.mlir-node-details-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    background: $tt-grey-3;
+    border-bottom: 1px solid rgb(255 255 255 / 8%);
+}
+
+.mlir-node-details-titles {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.mlir-node-details-label {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: $tt-white;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mlir-node-details-id {
+    margin: 2px 0 0;
+    font-family: monospace;
+    font-size: 10px;
+    color: $tt-grey-6;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: text;
+}
+
+.mlir-node-details-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.mlir-node-details-section {
+    border-bottom: 1px solid rgb(255 255 255 / 6%);
+
+    &:last-of-type {
+        border-bottom: none;
+    }
+}
+
+.mlir-node-details-section-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: $tt-grey-4;
+    border: none;
+    border-left: 3px solid transparent;
+    color: $tt-grey-7;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+        background: rgb(87 87 87 / 80%);
+    }
+
+    .mlir-node-details-inputs & {
+        border-left-color: var(--graph-input-edge);
+    }
+
+    .mlir-node-details-outputs & {
+        border-left-color: var(--graph-output-edge);
+    }
+}
+
+.mlir-node-details-section-caret {
+    width: 12px;
+    color: $tt-grey-6;
+    font-size: 11px;
+    line-height: 1;
+}
+
+.mlir-node-details-section-title {
+    flex: 1 1 auto;
+}
+
+.mlir-node-details-section-count {
+    background: rgb(0 0 0 / 30%);
+    color: $tt-grey-7;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.mlir-node-details-section-body {
+    padding: 8px 12px 10px;
+}
+
+.mlir-node-details-empty {
+    margin: 0;
+    color: $tt-grey-5;
+    font-style: italic;
+    font-size: 11px;
+}
+
+.mlir-node-details-empty-inline {
+    color: $tt-grey-5;
+    font-style: italic;
+    font-size: 11px;
+}
+
+.mlir-node-details-attrs {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mlir-node-details-attr-row {
+    display: grid;
+    grid-template-columns: minmax(80px, max-content) 1fr;
+    gap: 6px;
+    align-items: baseline;
+}
+
+.mlir-node-details-attr-key {
+    margin: 0;
+    font-weight: 700;
+    color: $tt-grey-6;
+    font-family: monospace;
+    font-size: 11px;
+    word-break: break-all;
+}
+
+.mlir-node-details-attr-value {
+    margin: 0;
+    color: $tt-grey-7;
+    font-size: 11px;
+    word-break: break-word;
+    min-width: 0;
+}
+
+.mlir-attr-value-scalar {
+    font-family: monospace;
+    color: $tt-white;
+}
+
+.mlir-attr-tree {
+    margin: 0;
+    padding-left: 12px;
+    list-style: none;
+    border-left: 1px solid rgb(255 255 255 / 10%);
+}
+
+.mlir-attr-row {
+    display: grid;
+    grid-template-columns: minmax(40px, max-content) 1fr;
+    gap: 6px;
+    align-items: baseline;
+    padding: 1px 0;
+}
+
+.mlir-attr-key {
+    font-family: monospace;
+    font-size: 10px;
+    color: $tt-purple-tint-1;
+}
+
+.mlir-attr-value {
+    font-family: monospace;
+    font-size: 10px;
+    color: $tt-grey-7;
+    word-break: break-word;
+}
+
+.mlir-attr-empty {
+    font-family: monospace;
+    font-size: 10px;
+    color: $tt-grey-5;
+}
+
+.mlir-node-details-io-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mlir-node-details-io-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 6px;
+    background: rgb(255 255 255 / 4%);
+    border-radius: 4px;
+
+    &.mlir-node-details-output-row {
+        gap: 6px;
+    }
+}
+
+.mlir-node-details-io-id {
+    font-family: monospace;
+    font-size: 11px;
+    color: $tt-white;
+    word-break: break-all;
+}
+
+// Op label for a producer/consumer reference (e.g. `stablehlo.add`).
+// Prominent line so the user can match the row to a canvas node by name;
+// raw id renders below in `.mlir-node-details-io-loc` for disambiguation.
+.mlir-node-details-io-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: $tt-white;
+    word-break: break-all;
+}
+
+// Subdued secondary line for the raw node id below the op label.
+.mlir-node-details-io-loc {
+    font-family: monospace;
+    font-size: 10px;
+    color: $tt-grey-6;
+    word-break: break-all;
+}
+
+.mlir-node-details-io-port {
+    font-family: monospace;
+    font-size: 10px;
+    color: $tt-grey-6;
+}
+
+.mlir-node-details-port-attrs {
+    padding-left: 8px;
+    border-left: 1px solid rgb(255 255 255 / 10%);
+}
+
+// Compact tensor descriptor (e.g. `[1, 7, 3072] f32`) shown in place of the
+// full shape/dtype/rank/__tensor_tag breakdown for port-metadata blocks.
+// Any non-standard attrs (`schedule`, `broadcast_dimensions`, etc.) render
+// as the usual key/value list below the pill via .mlir-node-details-port-attrs.
+.mlir-port-attrs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mlir-port-attrs-compact {
+    font-family: monospace;
+    font-size: 11px;
+    color: $tt-teal-tint-1;
+    word-break: break-all;
+}
+
+.mlir-node-details-consumer-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding-left: 8px;
+    border-left: 1px solid rgb(255 255 255 / 10%);
+}
+
+.mlir-node-details-consumer-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 2px 0;
+}
+
+.mlir-node-details-io-shape {
+    font-family: monospace;
+    font-size: 10px;
+    color: $tt-teal-tint-1;
+    word-break: break-all;
+}
+
+/* On narrower viewports, shrink the panel so the canvas remains usable. */
+@media screen and (width <= 1200px) {
+    .mlir-node-details-panel {
+        width: 360px;
+    }
+}
+/* stylelint-enable selector-class-pattern */

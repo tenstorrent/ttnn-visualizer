@@ -10,6 +10,43 @@ export type IndexedEdge = {
     targetNodeInputId: string;
 };
 
+/**
+ * Outgoing-edge view used to render consumers ("Outputs") for a selected node
+ * in the details panel. Derived from the rendered React Flow edges rather
+ * than the raw source data — terminator ops like `stablehlo.return` have
+ * synthesised outgoing connections that the layout worker emits but that
+ * never round-trip through the source data's `incomingEdges`. `label` is the
+ * tensor shape that the edge carries on the canvas (e.g. "[7, 3072] bf16"),
+ * when present.
+ */
+export type OutgoingEdge = {
+    targetNodeId: string;
+    /** Consumer op label (e.g. "stablehlo.reshape"). null when the target node is unknown to the source-data index. */
+    targetNodeLabel: string | null;
+    sourceNodeOutputId: string;
+    targetNodeInputId: string;
+    label?: string;
+};
+
+/**
+ * Incoming-edge view used to render producers ("Inputs") for a selected node
+ * in the details panel. Derived from the rendered React Flow edges (same
+ * basis as OutgoingEdge), plus the producer's `outputsMetadata` for the
+ * corresponding source port — that's the tensor metadata that flows along
+ * the wire (`shape`, `dtype`, `__tensor_tag`, …). When the producer doesn't
+ * declare metadata for that port, `sourcePortMetadata` is null and the row
+ * shows just the source id + port + label.
+ */
+export type IncomingEdgeView = {
+    sourceNodeId: string;
+    /** Producer op label (e.g. "stablehlo.add"). null when the source node is unknown to the source-data index. */
+    sourceNodeLabel: string | null;
+    sourceNodeOutputId: string;
+    targetNodeInputId: string;
+    label?: string;
+    sourcePortMetadata: IndexedPortMetadata | null;
+};
+
 export type IndexedAttr = { key: string; value: string };
 export type IndexedPortMetadata = { id: string; attrs: IndexedAttr[] };
 
@@ -129,6 +166,16 @@ export type WorkerInteractionIndex = {
     anchorByNamespace: Record<string, string>;
     anchorNamespaceByNodeId: Record<string, string>;
     outerNamespaceByNodeId: Record<string, string>;
+    /** Return / terminator node id per namespace (e.g. stablehlo.return). */
+    namespaceReturnNodeByNamespace: Record<string, string>;
+    /**
+     * Per-namespace inner input-arg node ids, indexed by the outer op's
+     * input port. Used to reverse the layout worker's input remapping —
+     * cross-region edges targeting the outer op are rendered as targeting
+     * `namespaceInputByNamespace[ns][portIdx]`, so the panel needs this map
+     * to attribute those edges back to the outer op's input port.
+     */
+    namespaceInputByNamespace: Record<string, string[]>;
 };
 
 export type WorkerIndexedMessage = {
