@@ -8,12 +8,13 @@ import { Button, ButtonVariant, Collapse, Size, Tooltip } from '@blueprintjs/cor
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirNodeDetailsPanel.scss';
 import classNames from 'classnames';
-import type { IndexedPortMetadata, OutgoingEdge, SourceNode } from './mlirGraphTypes';
+import type { IncomingEdgeView, IndexedPortMetadata, OutgoingEdge, SourceNode } from './mlirGraphTypes';
 import MlirAttrValue from './MlirAttrValue';
 import { mlirNodeDetailsCollapsedAtom } from '../../store/app';
 
 interface MlirNodeDetailsPanelProps {
     node: SourceNode;
+    incomingEdges: IncomingEdgeView[];
     outgoingEdges: OutgoingEdge[];
     onClose: () => void;
     onRecenter: () => void;
@@ -75,7 +76,13 @@ const DetailsSection = ({
     </section>
 );
 
-const MlirNodeDetailsPanel = ({ node, outgoingEdges, onClose, onRecenter }: MlirNodeDetailsPanelProps) => {
+const MlirNodeDetailsPanel = ({
+    node,
+    incomingEdges,
+    outgoingEdges,
+    onClose,
+    onRecenter,
+}: MlirNodeDetailsPanelProps) => {
     const [collapsed, setCollapsed] = useAtom(mlirNodeDetailsCollapsedAtom);
 
     const toggleSection = (key: SectionKey) => {
@@ -183,13 +190,13 @@ const MlirNodeDetailsPanel = ({ node, outgoingEdges, onClose, onRecenter }: Mlir
                 collapsed={collapsed.inputs}
                 onToggle={toggleSection}
                 emptyHint='No inputs.'
-                isEmpty={node.incomingEdges.length === 0}
-                count={node.incomingEdges.length}
+                isEmpty={incomingEdges.length === 0}
+                count={incomingEdges.length}
             >
                 {/* Placeholder rendering — #1548 replaces this with paginated
                     per-port metadata and #1549 adds click-to-locate. */}
                 <ul className='mlir-node-details-io-list'>
-                    {node.incomingEdges.map((edge, idx) => (
+                    {incomingEdges.map((edge, idx) => (
                         <li
                             key={`${edge.sourceNodeId}:${edge.sourceNodeOutputId}->${edge.targetNodeInputId}:${idx}`}
                             className='mlir-node-details-io-row'
@@ -198,6 +205,22 @@ const MlirNodeDetailsPanel = ({ node, outgoingEdges, onClose, onRecenter }: Mlir
                             <span className='mlir-node-details-io-port'>
                                 out {edge.sourceNodeOutputId} → in {edge.targetNodeInputId}
                             </span>
+                            {edge.label && <span className='mlir-node-details-io-shape'>{edge.label}</span>}
+                            {edge.sourcePortMetadata && edge.sourcePortMetadata.attrs.length > 0 && (
+                                <dl className='mlir-node-details-attrs mlir-node-details-port-attrs'>
+                                    {edge.sourcePortMetadata.attrs.map((attr) => (
+                                        <div
+                                            className='mlir-node-details-attr-row'
+                                            key={attr.key}
+                                        >
+                                            <dt className='mlir-node-details-attr-key'>{attr.key}</dt>
+                                            <dd className='mlir-node-details-attr-value'>
+                                                <MlirAttrValue value={attr.value} />
+                                            </dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            )}
                         </li>
                     ))}
                 </ul>

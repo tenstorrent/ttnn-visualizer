@@ -26,6 +26,23 @@ export type OutgoingEdge = {
     label?: string;
 };
 
+/**
+ * Incoming-edge view used to render producers ("Inputs") for a selected node
+ * in the details panel. Derived from the rendered React Flow edges (same
+ * basis as OutgoingEdge), plus the producer's `outputsMetadata` for the
+ * corresponding source port — that's the tensor metadata that flows along
+ * the wire (`shape`, `dtype`, `__tensor_tag`, …). When the producer doesn't
+ * declare metadata for that port, `sourcePortMetadata` is null and the row
+ * shows just the source id + port + label.
+ */
+export type IncomingEdgeView = {
+    sourceNodeId: string;
+    sourceNodeOutputId: string;
+    targetNodeInputId: string;
+    label?: string;
+    sourcePortMetadata: IndexedPortMetadata | null;
+};
+
 export type IndexedAttr = { key: string; value: string };
 export type IndexedPortMetadata = { id: string; attrs: IndexedAttr[] };
 

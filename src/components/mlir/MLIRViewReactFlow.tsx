@@ -38,7 +38,7 @@ import '@xyflow/react/dist/style.css';
 
 import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
-import type { BuiltGraph, OutgoingEdge, SourceNode, WorkerNode } from './mlirGraphTypes';
+import type { BuiltGraph, IncomingEdgeView, OutgoingEdge, SourceNode, WorkerNode } from './mlirGraphTypes';
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
@@ -518,14 +518,16 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
     const selectedSourceNode = selectedNodeId ? (sourceNodeById.get(selectedNodeId) ?? null) : null;
 
-    // Outgoing edges for the details panel ("Outputs" section) are read from
-    // the React Flow `edges` array — i.e. the connections actually drawn on
-    // the canvas — rather than inverted from source-data `incomingEdges`.
-    // Terminator ops (e.g. `stablehlo.return`) have outgoing arrows that the
-    // layout worker synthesises for region plumbing but that don't exist as
-    // back-references in the raw graph JSON, so the source-data inversion
-    // would miss them. The label captures the tensor shape (e.g.
-    // "[7, 3072] bf16") so the panel can surface that alongside each consumer.
+    // Both panel I/O sections read from the React Flow `edges` array — i.e.
+    // the connections actually drawn on the canvas — rather than from the
+    // source-data inversion. Terminator ops (e.g. `stablehlo.return`) have
+    // outgoing arrows that the layout worker synthesises for region plumbing
+    // but that never round-trip through the raw graph JSON, so the source-
+    // data inversion would miss them. The edge `label` carries the tensor
+    // shape (e.g. "[7, 3072] bf16"), and for inputs we additionally enrich
+    // with the producer's `outputsMetadata` for the relevant source port —
+    // that's the per-port shape/dtype/`__tensor_tag` payload that flows
+    // along the wire.
     const selectedOutgoingEdges = useMemo<OutgoingEdge[]>(() => {
         if (!selectedNodeId) {
             return [];
@@ -544,6 +546,28 @@ const MlGraphInner = ({ data }: ViewProps) => {
         }
         return result;
     }, [edges, selectedNodeId]);
+    const selectedIncomingEdges = useMemo<IncomingEdgeView[]>(() => {
+        if (!selectedNodeId) {
+            return [];
+        }
+        const result: IncomingEdgeView[] = [];
+        for (const edge of edges) {
+            if (edge.target !== selectedNodeId) {
+                continue;
+            }
+            const sourcePortId = edge.sourceHandle ?? '0';
+            const producer = sourceNodeById.get(edge.source);
+            const sourcePortMetadata = producer?.outputsMetadata.find((p) => p.id === sourcePortId) ?? null;
+            result.push({
+                sourceNodeId: edge.source,
+                sourceNodeOutputId: sourcePortId,
+                targetNodeInputId: edge.targetHandle ?? '0',
+                label: typeof edge.label === 'string' ? edge.label : undefined,
+                sourcePortMetadata,
+            });
+        }
+        return result;
+    }, [edges, selectedNodeId, sourceNodeById]);
 
     const closeDetailsPanel = useCallback(() => {
         setSelectedNodeId(null);
@@ -829,6 +853,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
             {selectedSourceNode && (
                 <MlirNodeDetailsPanel
                     node={selectedSourceNode}
+                    incomingEdges={selectedIncomingEdges}
                     outgoingEdges={selectedOutgoingEdges}
                     onClose={closeDetailsPanel}
                     onRecenter={recenterOnSelected}

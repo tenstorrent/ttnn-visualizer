@@ -837,6 +837,7 @@ export default function Styleguide() {
                 <div className='styleguide-bounded-host'>
                     <MlirNodeDetailsPanel
                         node={MLIR_RICH_NODE}
+                        incomingEdges={[]}
                         outgoingEdges={MLIR_RICH_NODE_OUTGOING}
                         onClose={() => {}}
                         onRecenter={() => {}}
@@ -847,6 +848,7 @@ export default function Styleguide() {
                 <div className='styleguide-bounded-host'>
                     <MlirNodeDetailsPanel
                         node={MLIR_TERMINATOR_NODE}
+                        incomingEdges={[]}
                         outgoingEdges={MLIR_TERMINATOR_OUTGOING}
                         onClose={() => {}}
                         onRecenter={() => {}}
@@ -857,6 +859,7 @@ export default function Styleguide() {
                 <div className='styleguide-bounded-host'>
                     <MlirNodeDetailsPanel
                         node={MLIR_EMPTY_NODE}
+                        incomingEdges={[]}
                         outgoingEdges={[]}
                         onClose={() => {}}
                         onRecenter={() => {}}
