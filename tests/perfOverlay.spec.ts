@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { aggregatePerfByOp, perfColorScale, scoreOps } from '../src/functions/perfOverlay';
+import { aggregatePerfByOp, isDarkPerfColor, perfColorScale, scoreOps } from '../src/functions/perfOverlay';
 import { PERF_BINS } from '../src/definitions/GraphColors';
 import { TypedPerfTableRow } from '../src/definitions/PerfTable';
 
@@ -106,5 +106,36 @@ describe('perfColorScale', () => {
     it('falls back to the coolest stop for non-finite input', () => {
         expect(perfColorScale(Number.NaN).toLowerCase()).toBe(PERF_BINS[0].color.toLowerCase());
         expect(perfColorScale(Number.POSITIVE_INFINITY).toLowerCase()).toBe(PERF_BINS[0].color.toLowerCase());
+    });
+});
+
+describe('isDarkPerfColor', () => {
+    // Locks the perf-overlay label-colour pivot against the actual bin
+    // palette: the two cold bins and the hot-red sit below the threshold so
+    // the dark default label flips to a light one; the yellow/orange bins
+    // stay above so the dark default still wins.
+    it.each([
+        ['#3b4a6b', true], // PERF_BINS[0] — cold navy
+        ['#3f7d8c', true], // PERF_BINS[1] — cold teal
+        ['#f0c800', false], // PERF_BINS[2] — yellow
+        ['#f08a00', false], // PERF_BINS[3] — orange
+        ['#ff3b1f', true], // PERF_BINS[4] — hot red (low green/blue drag the luma down)
+    ])('treats %s as dark=%s', (hex, expected) => {
+        expect(isDarkPerfColor(hex)).toBe(expected);
+    });
+
+    it('treats the GRAPH_COLORS non-overlay backgrounds as light', () => {
+        // These never flow through `isDarkPerfColor` in practice (the helper is
+        // only consulted when the perf overlay paints a node), but locking the
+        // direction ensures a future palette change is caught before it strands
+        // a light label on a light pill.
+        for (const hex of ['#e0e0e0', '#a8e6a3', '#f6bc42', '#74c5df', '#ccd2f9']) {
+            expect(isDarkPerfColor(hex)).toBe(false);
+        }
+    });
+
+    it('returns false for unparseable input so we never paint white-on-white', () => {
+        expect(isDarkPerfColor('not-a-hex')).toBe(false);
+        expect(isDarkPerfColor('')).toBe(false);
     });
 });

@@ -28,6 +28,7 @@ import {
     PERF_GRADIENT_CSS,
     PerfOverlaySource,
     aggregatePerfByOp,
+    isDarkPerfColor,
     perfColorScale,
     scoreOps,
 } from '../functions/perfOverlay';
@@ -57,6 +58,12 @@ const PERF_OVERLAY_TOOLTIP: Record<PerfOverlayStatus, string> = {
     [PerfOverlayStatus.UNLINKED]: "Loaded performance report doesn't match this graph (no operations in common).",
     [PerfOverlayStatus.READY]: 'Colour and size nodes by per-op kernel duration.',
 };
+
+// Node label colours used for nodes whose background is light enough for the
+// default dark glyph (every state except the cold/hot ends of the perf ramp)
+// and for nodes that flip to a dark perf overlay background.
+const DEFAULT_NODE_FONT_COLOR = '#202020';
+const LIGHT_NODE_FONT_COLOR = '#f5f5f5';
 
 interface OperationGraphProps {
     operationList: OperationList;
@@ -148,13 +155,25 @@ const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoad
         return result;
     }, [perfAggregates]);
 
-    const getNonIONodeColor = useCallback(
-        (nodeId: IdType): string => {
+    // Resolve the (background, label colour) pair for a non-input/output node.
+    // We pair these because the perf overlay's two cold bins push the node bg
+    // dark enough that the default `#202020` label drifts into the canvas
+    // background. The non-overlay path is always light so we keep the default
+    // label colour there.
+    const getNonIONodeStyle = useCallback(
+        (nodeId: IdType): { background: string; fontColor: string } => {
             if (!perfOverlayActive) {
-                return GRAPH_COLORS.normal;
+                return { background: GRAPH_COLORS.normal, fontColor: DEFAULT_NODE_FONT_COLOR };
             }
             const score = scoreByOpId.get(nodeId as number);
-            return score ? perfColorScale(score.t) : GRAPH_COLORS.normal;
+            if (!score) {
+                return { background: GRAPH_COLORS.normal, fontColor: DEFAULT_NODE_FONT_COLOR };
+            }
+            const background = perfColorScale(score.t);
+            return {
+                background,
+                fontColor: isDarkPerfColor(background) ? LIGHT_NODE_FONT_COLOR : DEFAULT_NODE_FONT_COLOR,
+            };
         },
         [perfOverlayActive, scoreByOpId],
     );
@@ -231,7 +250,7 @@ const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoad
                     .filter((op) => !filterOutDeallocate || !DEALLOCATE_OP_NAME_LIST.includes(op.name.toLowerCase()))
                     .map((op) => {
                         const score = perfOverlayActive ? scoreByOpId.get(op.id) : undefined;
-                        return {
+                        const base = {
                             id: op.id,
                             label: `${op.id} ${op.name}${
                                 op.operationFileIdentifier ? `\n${op.operationFileIdentifier}` : ''
@@ -239,7 +258,16 @@ const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoad
                             shape: 'box',
                             filterString: `${op.name}`,
                             deviceOpFilter: op.deviceOperationNameList.join(' '),
-                            ...(score ? { color: { background: perfColorScale(score.t) } } : {}),
+                        };
+                        if (!score) {
+                            return base;
+                        }
+                        const background = perfColorScale(score.t);
+                        const fontColor = isDarkPerfColor(background) ? LIGHT_NODE_FONT_COLOR : DEFAULT_NODE_FONT_COLOR;
+                        return {
+                            ...base,
+                            color: { background },
+                            font: { color: fontColor },
                         };
                     }),
             ),
@@ -306,9 +334,11 @@ const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoad
                         };
                     }
 
+                    const style = getNonIONodeStyle(node.id);
                     return {
                         id: node.id,
-                        color: { background: getNonIONodeColor(node.id) },
+                        color: { background: style.background },
+                        font: { color: style.fontColor },
                     };
                 }),
             );
@@ -338,7 +368,7 @@ const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoad
                 .filter(Boolean);
             edgesDataSetRef.current.update(edgesToUpdate);
         },
-        [nodes, getNonIONodeColor],
+        [nodes, getNonIONodeStyle],
     );
 
     const focusOnNode = useCallback(
@@ -382,30 +412,37 @@ const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoad
         return null;
     }, []);
 
-    const getRestoreColorForNode = useCallback(
-        (nodeId: IdType): { background: string } => {
+    // Both restore- and blink-on styles must round-trip the (background, label
+    // colour) pair so the perf-overlay dark bins don't strand a white label on
+    // a freshly restored light grey node. The blink-on colours are always
+    // light by construction (lightened input/output, orange focused), so they
+    // can hard-code the default label.
+    const getRestoreStyleForNode = useCallback(
+        (nodeId: IdType): { color: { background: string }; font: { color: string } } => {
             const relation = getNodeRelationToFocused(nodeId);
             if (relation === NodeRelation.Input) {
-                return { background: GRAPH_COLORS.inputNode };
+                return { color: { background: GRAPH_COLORS.inputNode }, font: { color: DEFAULT_NODE_FONT_COLOR } };
             }
             if (relation === NodeRelation.Output) {
-                return { background: GRAPH_COLORS.outputNode };
+                return { color: { background: GRAPH_COLORS.outputNode }, font: { color: DEFAULT_NODE_FONT_COLOR } };
             }
-            return { background: getNonIONodeColor(nodeId) };
+            const style = getNonIONodeStyle(nodeId);
+            return { color: { background: style.background }, font: { color: style.fontColor } };
         },
-        [getNodeRelationToFocused, getNonIONodeColor],
+        [getNodeRelationToFocused, getNonIONodeStyle],
     );
 
-    const getBlinkOnColorForNode = useCallback(
-        (nodeId: IdType): { background: string } => {
+    const getBlinkOnStyleForNode = useCallback(
+        (nodeId: IdType): { color: { background: string }; font: { color: string } } => {
             const relation = getNodeRelationToFocused(nodeId);
+            const font = { color: DEFAULT_NODE_FONT_COLOR };
             if (relation === NodeRelation.Input) {
-                return { background: tinycolor(GRAPH_COLORS.inputNode).lighten(20).toString() };
+                return { color: { background: tinycolor(GRAPH_COLORS.inputNode).lighten(20).toString() }, font };
             }
             if (relation === NodeRelation.Output) {
-                return { background: tinycolor(GRAPH_COLORS.outputNode).lighten(20).toString() };
+                return { color: { background: tinycolor(GRAPH_COLORS.outputNode).lighten(20).toString() }, font };
             }
-            return { background: GRAPH_COLORS.focusedNode };
+            return { color: { background: GRAPH_COLORS.focusedNode }, font };
         },
         [getNodeRelationToFocused],
     );
@@ -425,14 +462,14 @@ const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoad
                 return;
             }
 
-            const onColor = getBlinkOnColorForNode(nodeId);
-            const offColor = getRestoreColorForNode(nodeId);
+            const onStyle = getBlinkOnStyleForNode(nodeId);
+            const offStyle = getRestoreStyleForNode(nodeId);
             let isOn = true;
-            nodes.update({ id: nodeId, color: onColor });
+            nodes.update({ id: nodeId, ...onStyle });
 
             blinkIntervalRef.current = window.setInterval(() => {
                 isOn = !isOn;
-                nodes.update({ id: nodeId, color: isOn ? onColor : offColor });
+                nodes.update({ id: nodeId, ...(isOn ? onStyle : offStyle) });
             }, 300);
 
             blinkTimeoutRef.current = window.setTimeout(() => {
@@ -441,10 +478,10 @@ const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoad
                     blinkIntervalRef.current = null;
                 }
                 blinkTimeoutRef.current = null;
-                nodes.update({ id: nodeId, color: getRestoreColorForNode(nodeId) });
+                nodes.update({ id: nodeId, ...getRestoreStyleForNode(nodeId) });
             }, 3000);
         },
-        [nodes, getRestoreColorForNode, getBlinkOnColorForNode],
+        [nodes, getRestoreStyleForNode, getBlinkOnStyleForNode],
     );
 
     const locateConnectedNode = useCallback(

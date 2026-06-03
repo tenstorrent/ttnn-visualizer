@@ -150,3 +150,33 @@ export const perfColorScale = (t: number): string => {
  * Stops are PERF_BINS, evenly spaced left → right.
  */
 export const PERF_GRADIENT_CSS = `linear-gradient(to right, ${PERF_BINS.map((b) => b.color).join(', ')})`;
+
+/**
+ * Threshold on relative luminance (0..1, ITU-R BT.601 coefficients) below
+ * which the dark default node label loses contrast against the perf overlay
+ * background. Tuned against `PERF_BINS`: the two cold bins (`#3b4a6b`,
+ * `#3f7d8c`) and the hot-red bin (`#ff3b1f`) fall below; the yellow/orange
+ * bins land above. Interpolated colours along the cold↔warm boundary flip
+ * once they cross 0.5, which keeps the transition visually smooth.
+ */
+const DARK_BG_LUMINANCE_THRESHOLD = 0.5;
+
+/** ITU-R BT.601 perceived-luminance weights. */
+const LUMA_R = 0.299;
+const LUMA_G = 0.587;
+const LUMA_B = 0.114;
+
+/**
+ * `true` when the dark node label (`#202020`) loses contrast against `hex`
+ * and a light label colour should be used instead. Non-parseable input is
+ * treated as not-dark so we never strand a white label on whatever colour
+ * the fallback rendering path ends up using.
+ */
+export const isDarkPerfColor = (hex: string): boolean => {
+    if (!HEX_RE.test(hex)) {
+        return false;
+    }
+    const [r, g, b] = hexToRgb(hex);
+    const luminance = (LUMA_R * r + LUMA_G * g + LUMA_B * b) / 255;
+    return luminance < DARK_BG_LUMINANCE_THRESHOLD;
+};
