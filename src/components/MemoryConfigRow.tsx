@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { toReadableLayout } from '../functions/formatting';
 import { MEMORY_CONFIG_HEADERS, MemoryKeys, ShardSpec, getMemoryConfigHeader } from '../functions/parseMemoryConfig';
 
 interface MemoryConfigRowProps {
@@ -37,7 +38,11 @@ const MemoryConfigRow = ({ header, value }: MemoryConfigRowProps) => {
             ) : (
                 <>
                     <th>{getMemoryConfigHeader(header as MemoryKeys)}</th>
-                    <td>{value as string}</td>
+                    <td>
+                        {header === 'memory_layout' && typeof value === 'string'
+                            ? toReadableLayout(value)
+                            : (value as string)}
+                    </td>
                 </>
             )}
         </tr>

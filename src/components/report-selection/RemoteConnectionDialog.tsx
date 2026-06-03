@@ -121,7 +121,6 @@ const RemoteConnectionDialog = ({
                 >
                     <InputGroup
                         id='remote-connection-name'
-                        className='bp6-light'
                         key='name'
                         value={connection.name}
                         onChange={(e) => setConnection({ ...connection, name: e.target.value })}

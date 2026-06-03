@@ -2,23 +2,24 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { Classes } from '@blueprintjs/core';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AxiosResponse } from 'axios';
-import { TestProviders } from './helpers/TestProviders';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
-import getButtonWithText from './helpers/getButtonWithText';
-import getAllButtonsWithText from './helpers/getAllButtonsWithText';
-import remoteConnection from './data/remoteConnection.json';
-import mockProfilerFolderList from './data/mockProfilerFolderList.json';
-import mockRemoteProfilerFolderList from './data/mockRemoteProfilerFolderList.json';
-import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
-import mockRemotePerformanceFolderList from './data/mockRemotePerformanceFolderList.json';
-import mockInstance from './data/mockInstance.json';
-import { TEST_IDS } from '../src/definitions/TestIds';
-import testForPortal from './helpers/testForPortal';
 import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
+import mockInstance from './data/mockInstance.json';
+import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
+import mockProfilerFolderList from './data/mockProfilerFolderList.json';
+import mockRemotePerformanceFolderList from './data/mockRemotePerformanceFolderList.json';
+import mockRemoteProfilerFolderList from './data/mockRemoteProfilerFolderList.json';
+import remoteConnection from './data/remoteConnection.json';
+import getAllButtonsWithText from './helpers/getAllButtonsWithText';
+import getButtonWithText from './helpers/getButtonWithText';
+import testForPortal from './helpers/testForPortal';
+import { TestProviders } from './helpers/TestProviders';
 
 // Scrub the markup after each test
 afterEach(() => {
@@ -36,7 +37,6 @@ const CONNECTION_NAME = 'Local - ssh://localhost:2222/';
 const NO_SELECTION = '(No selection)';
 
 const HTML_DISABLED = 'disabled';
-const INTENT_SUCCESS_CLASS = 'bp6-intent-success';
 
 const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance, mockUseReportMetadata } = vi.hoisted(() => {
     return {
@@ -313,7 +313,7 @@ it('sets active performance report and syncs it on selection', async () => {
 
     // Verify the sync button appears
     const syncButton = await screen.findByTestId(TEST_IDS.REMOTE_SYNC_BUTTON, undefined, WAIT_FOR_OPTIONS);
-    expect(syncButton.classList.contains(INTENT_SUCCESS_CLASS)).toBe(true);
+    expect(syncButton.classList.contains(Classes.INTENT_SUCCESS)).toBe(true);
 });
 
 it('handles connection with default port (22)', () => {

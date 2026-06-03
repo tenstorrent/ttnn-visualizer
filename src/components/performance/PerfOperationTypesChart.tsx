@@ -7,6 +7,7 @@ import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from '../../libs/PlotComponent';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import 'styles/components/PerformanceOperationTypesChart.scss';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';
 
@@ -15,6 +16,7 @@ interface PerfOperationTypesChartProps {
     opCodes: Marker[];
     data?: TypedPerfTableRow[];
     className?: string;
+    id?: string;
 }
 
 const LAYOUT: Partial<Layout> = {
@@ -29,7 +31,13 @@ const LAYOUT: Partial<Layout> = {
     showlegend: false,
 };
 
-function PerfOperationTypesChart({ reportTitle, data = [], opCodes, className = '' }: PerfOperationTypesChartProps) {
+function PerfOperationTypesChart({
+    reportTitle,
+    data = [],
+    opCodes,
+    className = '',
+    id,
+}: PerfOperationTypesChartProps) {
     const filteredOpCodes = useMemo(
         () => [...new Set(data?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
         [data],
@@ -56,8 +64,11 @@ function PerfOperationTypesChart({ reportTitle, data = [], opCodes, className = 
     );
 
     return (
-        <div className={classNames('operation-types-chart', className)}>
-            <h3>Operation Types</h3>
+        <div
+            id={id}
+            className={classNames('operation-types-chart', className)}
+        >
+            <h3>{PERF_CHART_LABELS[PerfChartId.OperationTypes]}</h3>
             <p>{reportTitle}</p>
 
             <Plot

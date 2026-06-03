@@ -6,7 +6,7 @@ import { Helmet } from 'react-helmet-async';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import getResponseError from '../functions/getResponseError';
 import {
@@ -22,12 +22,11 @@ import {
     activePerformanceReportAtom,
     comparisonPerformanceReportListAtom,
     perfSelectedTabAtom,
+    selectedPerfRowIdAtom,
     selectedPerformanceRangeAtom,
 } from '../store/app';
-import PerfCharts from '../components/performance/PerfCharts';
-import PerfChartFilter from '../components/performance/PerfChartFilter';
+import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
 import { Marker, MarkerColours, PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
-import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
@@ -35,6 +34,7 @@ import { HIGH_DISPATCH_THRESHOLD_MS, OpType, PerfTabIds } from '../definitions/P
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
+import { parsePerfRowTensorAttributes } from '../functions/parsePerfRowTensorAttributes';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
@@ -61,6 +61,7 @@ export default function Performance() {
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
+    const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
@@ -166,6 +167,10 @@ export default function Performance() {
         [comparisonStackedData],
     );
 
+    useEffect(() => {
+        setSelectedPerfRowId(null);
+    }, [activePerformanceReport?.path, setSelectedPerfRowId]);
+
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
         if (activePerformanceReport && comparisonReportList?.includes(activePerformanceReport?.path)) {
@@ -270,33 +275,15 @@ export default function Performance() {
                             <h3 className='title'>Performance charts</h3>
 
                             {perfData ? (
-                                <>
-                                    <div className='charts-container'>
-                                        <PerfChartFilter
-                                            opCodeOptions={opCodeOptions}
-                                            selectedOpCodes={selectedOpCodes}
-                                            updateOpCodes={setSelectedOpCodesFromUser}
-                                        />
-
-                                        <PerfCharts
-                                            filteredPerfData={filteredEnrichedData}
-                                            comparisonData={filteredEnrichedComparisonData}
-                                            selectedOpCodes={selectedOpCodes}
-                                        />
-                                    </div>
-
-                                    <div className='charts-container non-filterable-charts'>
-                                        <span />
-
-                                        <div>
-                                            <NonFilterablePerfCharts
-                                                chartData={enrichedData}
-                                                secondaryData={enrichedComparisonData || []}
-                                                opCodeOptions={opCodeOptions}
-                                            />
-                                        </div>
-                                    </div>
-                                </>
+                                <PerformanceChartsTab
+                                    filteredPerfData={filteredEnrichedData}
+                                    filteredComparisonData={filteredEnrichedComparisonData}
+                                    enrichedData={enrichedData}
+                                    enrichedComparisonData={enrichedComparisonData}
+                                    selectedOpCodes={selectedOpCodes}
+                                    opCodeOptions={opCodeOptions}
+                                    updateOpCodes={setSelectedOpCodesFromUser}
+                                />
                             ) : null}
                         </div>
                     }
@@ -311,29 +298,12 @@ interface RowAttributes {
     layout: DeviceOperationLayoutTypes | null;
 }
 
-const getBufferType = (type?: string): BufferType | null => {
-    if (!type) {
-        return null;
-    }
-
-    if (type === 'L1') {
-        return BufferType.L1;
-    }
-
-    if (type === 'DRAM') {
-        return BufferType.DRAM;
-    }
-
-    return null;
-};
-
 const getRowAttributes = (row: PerfTableRow): RowAttributes => {
-    const regex = /DEV_(\d+)_(DRAM|L1)_(\w*)/m;
-    const matchIn0 = regex.exec(row.input_0_memory);
+    const { buffer_type: bufferType, layout } = parsePerfRowTensorAttributes(row);
 
     return {
-        buffer_type: getBufferType(matchIn0?.[2]),
-        layout: matchIn0?.[3] ? (matchIn0[3] as DeviceOperationLayoutTypes) : null,
+        buffer_type: bufferType,
+        layout,
     };
 };
 

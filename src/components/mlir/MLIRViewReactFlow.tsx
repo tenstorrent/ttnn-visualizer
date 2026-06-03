@@ -38,9 +38,17 @@ import '@xyflow/react/dist/style.css';
 
 import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
-import type { BuiltGraph, SourceNode, WorkerNode } from './mlirGraphTypes';
+import type {
+    BuiltGraph,
+    IncomingEdgeView,
+    IndexedPortMetadata,
+    OutgoingEdge,
+    SourceNode,
+    WorkerNode,
+} from './mlirGraphTypes';
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
+import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 
 // Re-uses `WorkerNode['data']` (the canonical shape produced by the layout
 // worker) and tacks on `highlight` — a view-layer-only flag. Set when this
@@ -503,6 +511,260 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode, mlirGroup: MlirGroupNode }) as const, []);
 
+    // Look up the canonical SourceNode for the current selection so the
+    // details panel reads from the same authoritative shape that drove the
+    // graph build. `sourceNodes` is already memoised above, so this map is
+    // rebuilt only when the underlying graph changes.
+    const sourceNodeById = useMemo(() => {
+        const result = new Map<string, SourceNode>();
+        for (const sourceNode of sourceNodes) {
+            result.set(sourceNode.id, sourceNode);
+        }
+        return result;
+    }, [sourceNodes]);
+
+    const selectedSourceNode = selectedNodeId ? (sourceNodeById.get(selectedNodeId) ?? null) : null;
+
+    // Region partnership maps for expanded namespaces. The layout worker
+    // remaps cross-region edges in two symmetric ways when a namespace is
+    // expanded:
+    //
+    //   - Outputs: edges conceptually flowing OUT of the region's anchor op
+    //     (e.g. `stablehlo.reduce`) are rendered as sourced from the
+    //     terminator (e.g. `stablehlo.return`). The anchor carries
+    //     `outputsMetadata`; the terminator carries the rendered consumer
+    //     edges. Bonded bidirectionally so selecting either side surfaces
+    //     the same data.
+    //
+    //   - Inputs: edges conceptually flowing INTO the anchor op are rendered
+    //     as targeting the namespace's inner input-arg node for the matching
+    //     port (`namespaceInputByNamespace[ns][portIdx]`). To surface those
+    //     under the anchor's Inputs section, we keep an inverse map from
+    //     arg id → the anchor + port index it represents.
+    //
+    // `anchorByNamespace` is the right key here: it maps every namespace
+    // (top-level or nested) to its representative op. `outerNamespaceByNodeId`
+    // only records *parent-level toggles* (an op in the parent namespace
+    // that controls a child), so it silently misses top-level regions whose
+    // anchor lives inside the namespace — which is exactly the case for ops
+    // like a top-level `stablehlo.all_reduce_N`. All three maps are populated
+    // only for expanded namespaces; collapsed regions need no pairing.
+    const { regionOutputPartnerByNodeId, inputArgIdxByArgIdByAnchor } = useMemo<{
+        regionOutputPartnerByNodeId: Map<string, string>;
+        inputArgIdxByArgIdByAnchor: Map<string, Map<string, number>>;
+    }>(() => {
+        const outputPartner = new Map<string, string>();
+        const inputArgsByAnchor = new Map<string, Map<string, number>>();
+        if (!interactionIndex) {
+            return {
+                regionOutputPartnerByNodeId: outputPartner,
+                inputArgIdxByArgIdByAnchor: inputArgsByAnchor,
+            };
+        }
+        for (const namespace of expandedNamespaces) {
+            const anchorNodeId = interactionIndex.anchorByNamespace[namespace];
+            if (!anchorNodeId) {
+                continue;
+            }
+            const returnNodeId = interactionIndex.namespaceReturnNodeByNamespace[namespace];
+            if (returnNodeId && returnNodeId !== anchorNodeId) {
+                outputPartner.set(anchorNodeId, returnNodeId);
+                outputPartner.set(returnNodeId, anchorNodeId);
+            }
+            const inputArgs = interactionIndex.namespaceInputByNamespace[namespace];
+            if (inputArgs && inputArgs.length > 0) {
+                const argToIdx = new Map<string, number>();
+                inputArgs.forEach((argId, idx) => argToIdx.set(argId, idx));
+                inputArgsByAnchor.set(anchorNodeId, argToIdx);
+            }
+        }
+        return {
+            regionOutputPartnerByNodeId: outputPartner,
+            inputArgIdxByArgIdByAnchor: inputArgsByAnchor,
+        };
+    }, [interactionIndex, expandedNamespaces]);
+
+    // Both panel I/O sections read from the React Flow `edges` array — i.e.
+    // the connections actually drawn on the canvas — rather than from the
+    // source-data inversion. Terminator ops (e.g. `stablehlo.return`) have
+    // outgoing arrows that the layout worker synthesises for region plumbing
+    // but that never round-trip through the raw graph JSON, so the source-
+    // data inversion would miss them. The edge `label` carries the tensor
+    // shape (e.g. "[7, 3072] bf16"), and for inputs we additionally enrich
+    // with the producer's `outputsMetadata` for the relevant source port —
+    // that's the per-port shape/dtype/`__tensor_tag` payload that flows
+    // along the wire.
+    //
+    // Index `edges` once per build by source-id and target-id so each
+    // selection change is O(degree of selected node) instead of O(|E|).
+    // MLIR graphs can run into the tens of thousands of edges; without
+    // these indices, every node click would re-walk the whole edge list.
+    const { outgoingEdgesByNodeId, incomingEdgesByNodeId } = useMemo<{
+        outgoingEdgesByNodeId: Map<string, Edge[]>;
+        incomingEdgesByNodeId: Map<string, Edge[]>;
+    }>(() => {
+        const outgoing = new Map<string, Edge[]>();
+        const incoming = new Map<string, Edge[]>();
+        for (const edge of edges) {
+            const fromBucket = outgoing.get(edge.source);
+            if (fromBucket) {
+                fromBucket.push(edge);
+            } else {
+                outgoing.set(edge.source, [edge]);
+            }
+            const toBucket = incoming.get(edge.target);
+            if (toBucket) {
+                toBucket.push(edge);
+            } else {
+                incoming.set(edge.target, [edge]);
+            }
+        }
+        return { outgoingEdgesByNodeId: outgoing, incomingEdgesByNodeId: incoming };
+    }, [edges]);
+
+    // Per-node output-port lookup so incoming-edge enrichment can grab the
+    // producer's port metadata in O(1) instead of `find()`-ing through the
+    // producer's `outputsMetadata` array on every edge.
+    const outputsPortMetadataByNodeIdAndPortId = useMemo<Map<string, Map<string, IndexedPortMetadata>>>(() => {
+        const result = new Map<string, Map<string, IndexedPortMetadata>>();
+        for (const sourceNode of sourceNodes) {
+            if (sourceNode.outputsMetadata.length === 0) {
+                continue;
+            }
+            const portMap = new Map<string, IndexedPortMetadata>();
+            for (const port of sourceNode.outputsMetadata) {
+                portMap.set(port.id, port);
+            }
+            result.set(sourceNode.id, portMap);
+        }
+        return result;
+    }, [sourceNodes]);
+
+    const selectedOutgoingEdges = useMemo<OutgoingEdge[]>(() => {
+        if (!selectedNodeId) {
+            return [];
+        }
+        // Also pick up edges sourced from the region-output partner so that
+        // selecting either side of the (outer op ↔ terminator) pair surfaces
+        // the same consumers.
+        const partnerNodeId = regionOutputPartnerByNodeId.get(selectedNodeId);
+        const buckets: Edge[][] = [];
+        const selfBucket = outgoingEdgesByNodeId.get(selectedNodeId);
+        if (selfBucket) {
+            buckets.push(selfBucket);
+        }
+        if (partnerNodeId) {
+            const partnerBucket = outgoingEdgesByNodeId.get(partnerNodeId);
+            if (partnerBucket) {
+                buckets.push(partnerBucket);
+            }
+        }
+        const result: OutgoingEdge[] = [];
+        for (const bucket of buckets) {
+            for (const edge of bucket) {
+                result.push({
+                    targetNodeId: edge.target,
+                    targetNodeLabel: sourceNodeById.get(edge.target)?.label ?? null,
+                    sourceNodeOutputId: edge.sourceHandle ?? '0',
+                    targetNodeInputId: edge.targetHandle ?? '0',
+                    label: typeof edge.label === 'string' ? edge.label : undefined,
+                });
+            }
+        }
+        return result;
+    }, [outgoingEdgesByNodeId, selectedNodeId, regionOutputPartnerByNodeId, sourceNodeById]);
+
+    // Output port metadata for the panel: the selected node's own metadata
+    // when present, else the partner's. For a region's terminator (no own
+    // `outputsMetadata`) this surfaces the outer op's port metadata, so the
+    // Outputs section stays consistent across both sides of the pair.
+    const selectedOutputsMetadata = useMemo<IndexedPortMetadata[]>(() => {
+        if (!selectedSourceNode) {
+            return [];
+        }
+        if (selectedSourceNode.outputsMetadata.length > 0) {
+            return selectedSourceNode.outputsMetadata;
+        }
+        const partnerNodeId = regionOutputPartnerByNodeId.get(selectedSourceNode.id);
+        if (!partnerNodeId) {
+            return [];
+        }
+        return sourceNodeById.get(partnerNodeId)?.outputsMetadata ?? [];
+    }, [selectedSourceNode, regionOutputPartnerByNodeId, sourceNodeById]);
+    const selectedIncomingEdges = useMemo<IncomingEdgeView[]>(() => {
+        if (!selectedNodeId) {
+            return [];
+        }
+        // When the selection is the anchor op of an expanded region, the
+        // layout worker has rewritten its cross-region incoming edges to land
+        // on the inner input-arg nodes. Walk those args too and attribute
+        // their edges back to the anchor's input port (the index of the
+        // arg in `namespaceInputByNamespace[ns]`).
+        const argIdxByArgId = inputArgIdxByArgIdByAnchor.get(selectedNodeId);
+        // Build the (bucket, targetInputId resolver) pairs we need to walk.
+        // Direct edges hitting the selection use their own targetHandle; arg
+        // edges resolve to the anchor's input-port index via `argIdxByArgId`.
+        const pairs: Array<{ bucket: Edge[]; resolveTargetInputId: (edge: Edge) => string | null }> = [];
+        const selfBucket = incomingEdgesByNodeId.get(selectedNodeId);
+        if (selfBucket) {
+            pairs.push({
+                bucket: selfBucket,
+                resolveTargetInputId: (edge) => edge.targetHandle ?? '0',
+            });
+        }
+        if (argIdxByArgId) {
+            for (const [argNodeId, portIdx] of argIdxByArgId) {
+                const argBucket = incomingEdgesByNodeId.get(argNodeId);
+                if (argBucket) {
+                    const portIdStr = String(portIdx);
+                    pairs.push({
+                        bucket: argBucket,
+                        resolveTargetInputId: () => portIdStr,
+                    });
+                }
+            }
+        }
+        const result: IncomingEdgeView[] = [];
+        for (const { bucket, resolveTargetInputId } of pairs) {
+            for (const edge of bucket) {
+                const targetInputId = resolveTargetInputId(edge);
+                if (targetInputId === null) {
+                    continue;
+                }
+                const sourcePortId = edge.sourceHandle ?? '0';
+                const producer = sourceNodeById.get(edge.source);
+                const sourcePortMetadata =
+                    outputsPortMetadataByNodeIdAndPortId.get(edge.source)?.get(sourcePortId) ?? null;
+                result.push({
+                    sourceNodeId: edge.source,
+                    sourceNodeLabel: producer?.label ?? null,
+                    sourceNodeOutputId: sourcePortId,
+                    targetNodeInputId: targetInputId,
+                    label: typeof edge.label === 'string' ? edge.label : undefined,
+                    sourcePortMetadata,
+                });
+            }
+        }
+        return result;
+    }, [
+        incomingEdgesByNodeId,
+        outputsPortMetadataByNodeIdAndPortId,
+        selectedNodeId,
+        sourceNodeById,
+        inputArgIdxByArgIdByAnchor,
+    ]);
+
+    const closeDetailsPanel = useCallback(() => {
+        setSelectedNodeId(null);
+    }, []);
+
+    const recenterOnSelected = useCallback(() => {
+        if (!selectedNodeId) {
+            return;
+        }
+        void fitView({ nodes: [{ id: selectedNodeId }], padding: 0.3, duration: 200 });
+    }, [fitView, selectedNodeId]);
+
     // Edge display rules:
     // 1. Drop edges where either endpoint is a real-namespace group node.
     //    The worker's internal-edges loop emits these for nested expanded
@@ -772,6 +1034,17 @@ const MlGraphInner = ({ data }: ViewProps) => {
             >
                 Re-layout
             </Button>
+
+            {selectedSourceNode && (
+                <MlirNodeDetailsPanel
+                    node={selectedSourceNode}
+                    incomingEdges={selectedIncomingEdges}
+                    outgoingEdges={selectedOutgoingEdges}
+                    outputsMetadata={selectedOutputsMetadata}
+                    onClose={closeDetailsPanel}
+                    onRecenter={recenterOnSelected}
+                />
+            )}
         </div>
     );
 };
