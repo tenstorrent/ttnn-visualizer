@@ -42,6 +42,10 @@ export function getOperationTypesChartLabel(reportTitle: string): string {
         : PERF_CHART_LABELS[PerfChartId.OperationTypes];
 }
 
+export function getOperationTypesEntryLabel(reportName: string, hasComparison: boolean): string {
+    return getOperationTypesChartLabel(hasComparison ? reportName : '');
+}
+
 export interface PerfChartIndexEntry {
     id: string;
     label: string;
@@ -129,17 +133,19 @@ export function buildChartIndexEntries({
         entries.push(...CONV_CHART_ENTRIES);
     }
 
+    const hasComparison = Boolean(comparisonReportNames);
+
     if (activeReportName !== null) {
         entries.push({
             id: getOperationTypesChartId('active'),
-            label: getOperationTypesChartLabel(comparisonReportNames ? activeReportName : ''),
+            label: getOperationTypesEntryLabel(activeReportName, hasComparison),
         });
     }
 
     comparisonReportNames?.forEach((report, index) => {
         entries.push({
             id: getOperationTypesChartId(`comparison-${index}`),
-            label: getOperationTypesChartLabel(activeReportName !== null ? report : ''),
+            label: getOperationTypesEntryLabel(report, activeReportName !== null),
         });
     });
 

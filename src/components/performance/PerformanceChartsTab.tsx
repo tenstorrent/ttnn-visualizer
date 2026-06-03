@@ -24,6 +24,8 @@ interface PerformanceChartsTabProps {
     updateOpCodes: (opCodes: Marker[]) => void;
 }
 
+export const PERF_CHARTS_NAV_OFFSET_PX = 60;
+
 const PerformanceChartsTab = ({
     filteredPerfData,
     filteredComparisonData,
@@ -66,7 +68,7 @@ const PerformanceChartsTab = ({
     );
 
     const chartIndexIds = useMemo(() => chartIndexEntries.map((entry) => entry.id), [chartIndexEntries]);
-    const activeId = useActiveSection(chartIndexIds);
+    const activeId = useActiveSection(chartIndexIds, PERF_CHARTS_NAV_OFFSET_PX);
 
     return (
         <div className='charts-container'>

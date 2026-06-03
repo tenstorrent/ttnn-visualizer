@@ -7,7 +7,12 @@ import { useEffect, useState } from 'react';
 const ID_SEPARATOR = '|';
 
 export function useActiveSection<TId extends string>(ids: TId[], offsetPx = 250): TId | null {
-    const [activeId, setActiveId] = useState<TId | null>(ids[0] ?? null);
+    const [trackedId, setTrackedId] = useState<TId | null>(ids[0] ?? null);
+
+    // The set of sections can change after mount (e.g. matmul/conv charts appear as data loads, or
+    // comparison reports are toggled). Clamp during render so a stale id never leaks out: keep the
+    // tracked section while it's still present, otherwise fall back to the first section.
+    const activeId = trackedId !== null && ids.includes(trackedId) ? trackedId : (ids[0] ?? null);
 
     // Callers commonly pass a fresh array literal each render. Keying the effect on the joined
     // ids (rather than the array reference) keeps the scroll listener from re-subscribing on
@@ -24,7 +29,7 @@ export function useActiveSection<TId extends string>(ids: TId[], offsetPx = 250)
             sectionIds.forEach((id) => {
                 const element = document.getElementById(id);
 
-                if (element?.offsetHeight && element.offsetTop) {
+                if (element && element.offsetHeight > 0) {
                     const sectionHeight = element.offsetHeight;
                     const sectionTop = element.offsetTop - offsetPx;
 
@@ -35,7 +40,7 @@ export function useActiveSection<TId extends string>(ids: TId[], offsetPx = 250)
             });
 
             if (current !== null) {
-                setActiveId(current);
+                setTrackedId(current);
             }
         }
 

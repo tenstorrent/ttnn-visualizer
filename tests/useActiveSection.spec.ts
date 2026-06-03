@@ -114,6 +114,70 @@ describe('useActiveSection', () => {
         expect(result.current).toBe('second');
     });
 
+    it('activates a section that sits flush with the top of the page (offsetTop === 0)', () => {
+        vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+            if (id === 'first') {
+                return mockElement(0, 400);
+            }
+
+            if (id === 'second') {
+                return mockElement(700, 400);
+            }
+
+            return null;
+        });
+
+        const { result } = renderHook(() => useActiveSection(['first', 'second'], 60));
+
+        // 'second' spans (640, 1040] once the 60px offset is applied.
+        scrollTo(800);
+        expect(result.current).toBe('second');
+
+        // Back to the top: 'first' spans (-60, 340] and must still be reachable despite offsetTop === 0.
+        scrollTo(0);
+        expect(result.current).toBe('first');
+    });
+
+    it('drops a stale active id and re-seeds when the id set changes', () => {
+        vi.spyOn(document, 'getElementById').mockReturnValue(null);
+
+        const { result, rerender } = renderHook(({ ids }) => useActiveSection(ids), {
+            initialProps: { ids: ['first', 'second'] },
+        });
+
+        expect(result.current).toBe('first');
+
+        // The previous active id is gone from the new set, so it falls back to the new first section.
+        rerender({ ids: ['third', 'fourth'] });
+        expect(result.current).toBe('third');
+    });
+
+    it('keeps the current active id when it survives a change to the id set', () => {
+        vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+            if (id === 'first') {
+                return mockElement(400, 200);
+            }
+
+            if (id === 'second') {
+                return mockElement(700, 200);
+            }
+
+            return null;
+        });
+
+        const { result, rerender } = renderHook(({ ids }) => useActiveSection(ids), {
+            initialProps: { ids: ['first', 'second'] },
+        });
+
+        // 'second' spans (450, 650]; make it the active section before the id set grows.
+        scrollTo(500);
+        expect(result.current).toBe('second');
+
+        // 'second' is still present, so adding a new section must not reset the active id.
+        rerender({ ids: ['first', 'second', 'third'] });
+        expect(result.current).toBe('second');
+    });
+
     it('uses the provided scroll offset when determining the active section', () => {
         vi.spyOn(document, 'getElementById').mockImplementation((id) => {
             if (id === 'section') {
