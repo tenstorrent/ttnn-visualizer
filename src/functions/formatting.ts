@@ -53,3 +53,26 @@ const toShortTypeLabel = (input: string) => {
     }
     return TYPE_LABELS[key] ?? key.toLowerCase();
 };
+
+/**
+ * Human-readable nanosecond formatter — picks the largest unit that still
+ * yields a reasonable mantissa (ns → µs → ms → s).
+ *
+ * Zero, negative, and non-finite input collapse to `'0 ns'` so callers can
+ * use this in legends/labels without guarding upstream.
+ */
+export const formatDuration = (ns: number): string => {
+    if (!Number.isFinite(ns) || ns <= 0) {
+        return '0 ns';
+    }
+    if (ns < 1_000) {
+        return `${ns.toFixed(0)} ns`;
+    }
+    if (ns < 1_000_000) {
+        return `${(ns / 1_000).toFixed(1)} µs`;
+    }
+    if (ns < 1_000_000_000) {
+        return `${(ns / 1_000_000).toFixed(2)} ms`;
+    }
+    return `${(ns / 1_000_000_000).toFixed(2)} s`;
+};

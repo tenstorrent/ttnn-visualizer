@@ -12,17 +12,26 @@ import { Button, ButtonVariant, Intent, Label, PopoverPosition, Slider, Switch, 
 import { IconNames } from '@blueprintjs/icons';
 import { NavigateFunction, useNavigate } from 'react-router';
 import tinycolor from 'tinycolor2';
+import { useAtom } from 'jotai';
 import { OperationDescription, Tensor } from '../model/APIData';
 import 'styles/components/OperationGraphComponent.scss';
 import LoadingSpinner from './LoadingSpinner';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
-import { toReadableShape, toReadableType } from '../functions/formatting';
+import { formatDuration, toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
 import MemoryTag from './MemoryTag';
-import { GRAPH_COLORS } from '../definitions/GraphColors';
+import { GRAPH_COLORS, PERF_BINS } from '../definitions/GraphColors';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
+import {
+    PERF_GRADIENT_CSS,
+    PerfOverlaySource,
+    aggregatePerfByOp,
+    perfColorScale,
+    scoreOps,
+} from '../functions/perfOverlay';
+import { perfOverlayEnabledAtom } from '../store/app';
 
 type OperationList = OperationDescription[];
 
@@ -37,12 +46,25 @@ enum NodeRelation {
     Output = 'output',
 }
 
+enum PerfOverlayStatus {
+    UNAVAILABLE,
+    UNLINKED,
+    READY,
+}
+
+const PERF_OVERLAY_TOOLTIP: Record<PerfOverlayStatus, string> = {
+    [PerfOverlayStatus.UNAVAILABLE]: 'Load a performance report to enable perf overlay.',
+    [PerfOverlayStatus.UNLINKED]: "Loaded performance report doesn't match this graph (no operations in common).",
+    [PerfOverlayStatus.READY]: 'Colour and size nodes by per-op kernel duration.',
+};
+
 interface OperationGraphProps {
     operationList: OperationList;
     operationId?: number;
+    perfRows?: PerfOverlaySource[];
 }
 
-const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => {
+const OperationGraph = ({ operationList, operationId, perfRows }: OperationGraphProps) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
 
@@ -60,6 +82,56 @@ const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => 
     const blinkIntervalRef = useRef<number | null>(null);
     const blinkTimeoutRef = useRef<number | null>(null);
     const [compactView, setCompactView] = useState<boolean>(false);
+    const [perfOverlayEnabled, setPerfOverlayEnabled] = useAtom(perfOverlayEnabledAtom);
+
+    const perfAggregates = useMemo(() => aggregatePerfByOp(perfRows ?? []), [perfRows]);
+    const { scoreByOpId, minNs, maxNs } = useMemo(() => scoreOps(perfAggregates), [perfAggregates]);
+
+    const linkedOpCount = useMemo(() => {
+        if (scoreByOpId.size === 0) {
+            return 0;
+        }
+        let count = 0;
+        for (const op of operationList) {
+            if (scoreByOpId.has(op.id)) {
+                count += 1;
+            }
+        }
+        return count;
+    }, [operationList, scoreByOpId]);
+
+    const perfOverlayStatus: PerfOverlayStatus = useMemo(() => {
+        if (!perfRows || perfRows.length === 0) {
+            return PerfOverlayStatus.UNAVAILABLE;
+        }
+        if (linkedOpCount === 0) {
+            return PerfOverlayStatus.UNLINKED;
+        }
+        return PerfOverlayStatus.READY;
+    }, [perfRows, linkedOpCount]);
+
+    // The atom remembers user intent across sessions, but we only honour it when
+    // perf data is actually available and joined to this graph.
+    const perfOverlayActive = perfOverlayEnabled && perfOverlayStatus === PerfOverlayStatus.READY;
+
+    const deviceTimeByOpId = useMemo(() => {
+        const result = new Map<number, number>();
+        for (const a of perfAggregates.values()) {
+            result.set(a.opId, a.deviceTimeNs);
+        }
+        return result;
+    }, [perfAggregates]);
+
+    const getNonIONodeColor = useCallback(
+        (nodeId: IdType): string => {
+            if (!perfOverlayActive) {
+                return GRAPH_COLORS.normal;
+            }
+            const score = scoreByOpId.get(nodeId as number);
+            return score ? perfColorScale(score.t) : GRAPH_COLORS.normal;
+        },
+        [perfOverlayActive, scoreByOpId],
+    );
 
     const edges = useMemo((): Edge[] => {
         const edgeMap = new Map<string, Edge>();
@@ -131,17 +203,26 @@ const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => 
                 operationList
                     .filter((op) => connectedNodeIds.has(op.id))
                     .filter((op) => !filterOutDeallocate || !DEALLOCATE_OP_NAME_LIST.includes(op.name.toLowerCase()))
-                    .map((op) => ({
-                        id: op.id,
-                        label: `${op.id} ${op.name}${
-                            op.operationFileIdentifier ? `\n${op.operationFileIdentifier}` : ''
-                        }`,
-                        shape: 'box',
-                        filterString: `${op.name}`,
-                        deviceOpFilter: op.deviceOperationNameList.join(' '),
-                    })),
+                    .map((op) => {
+                        const score = perfOverlayActive ? scoreByOpId.get(op.id) : undefined;
+                        return {
+                            id: op.id,
+                            label: `${op.id} ${op.name}${
+                                op.operationFileIdentifier ? `\n${op.operationFileIdentifier}` : ''
+                            }`,
+                            shape: 'box',
+                            filterString: `${op.name}`,
+                            deviceOpFilter: op.deviceOperationNameList.join(' '),
+                            ...(score
+                                ? {
+                                      color: { background: perfColorScale(score.t) },
+                                      size: PERF_BINS[score.sizeBin].size,
+                                  }
+                                : {}),
+                        };
+                    }),
             ),
-        [operationList, connectedNodeIds, filterOutDeallocate],
+        [operationList, connectedNodeIds, filterOutDeallocate, perfOverlayActive, scoreByOpId],
     );
     const edgesDataSetRef = useRef<DataSet<Edge>>(new DataSet());
 
@@ -206,7 +287,7 @@ const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => 
 
                     return {
                         id: node.id,
-                        color: { background: GRAPH_COLORS.normal },
+                        color: { background: getNonIONodeColor(node.id) },
                     };
                 }),
             );
@@ -236,7 +317,7 @@ const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => 
                 .filter(Boolean);
             edgesDataSetRef.current.update(edgesToUpdate);
         },
-        [nodes],
+        [nodes, getNonIONodeColor],
     );
 
     const focusOnNode = useCallback(
@@ -289,9 +370,9 @@ const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => 
             if (relation === NodeRelation.Output) {
                 return { background: GRAPH_COLORS.outputNode };
             }
-            return { background: GRAPH_COLORS.normal };
+            return { background: getNonIONodeColor(nodeId) };
         },
-        [getNodeRelationToFocused],
+        [getNodeRelationToFocused, getNonIONodeColor],
     );
 
     const getBlinkOnColorForNode = useCallback(
@@ -672,6 +753,17 @@ const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => 
                         label='Compact view'
                         disabled={isLoading}
                     />
+                    <Tooltip
+                        content={PERF_OVERLAY_TOOLTIP[perfOverlayStatus]}
+                        placement={PopoverPosition.BOTTOM}
+                    >
+                        <Switch
+                            checked={perfOverlayActive}
+                            onChange={() => setPerfOverlayEnabled(!perfOverlayEnabled)}
+                            label='Perf overlay'
+                            disabled={isLoading || perfOverlayStatus !== PerfOverlayStatus.READY}
+                        />
+                    </Tooltip>
                 </div>
                 <div className='slider-wrapper'>
                     <Label disabled={isLoading}>Scale</Label>
@@ -699,6 +791,12 @@ const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => 
                     onNavigate={navigate}
                     onLocateConnectedNode={locateConnectedNode}
                     onRecenterOnCurrent={recenterOnCurrentOperation}
+                    perfOverlayActive={perfOverlayActive}
+                    perfDeviceTimeNs={deviceTimeByOpId.get(currentOperationId)}
+                    perfColor={(() => {
+                        const score = scoreByOpId.get(currentOperationId);
+                        return score ? perfColorScale(score.t) : undefined;
+                    })()}
                 />
             )}
             {isLoading && (
@@ -711,6 +809,13 @@ const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => 
                 ref={containerRef}
             />
 
+            {perfOverlayActive && !isLoading && (
+                <PerfOverlayLegend
+                    minNs={minNs}
+                    maxNs={maxNs}
+                />
+            )}
+
             <aside className='aside'>
                 Scroll or pinch graph to zoom. Drag to pan. Click a node to see operation details. Drag a node to move
                 horizontally.
@@ -718,6 +823,52 @@ const OperationGraph = ({ operationList, operationId }: OperationGraphProps) => 
         </div>
     );
 };
+
+interface PerfOverlayLegendProps {
+    minNs: number;
+    maxNs: number;
+}
+
+export const PerfOverlayLegend = ({ minNs, maxNs }: PerfOverlayLegendProps) => (
+    <div
+        className='perf-overlay-legend'
+        aria-label='Perf overlay legend'
+    >
+        <div className='perf-overlay-legend-title'>Kernel duration (log)</div>
+        <div
+            className='perf-overlay-legend-gradient'
+            style={{ background: PERF_GRADIENT_CSS }}
+            aria-hidden='true'
+        />
+        <div className='perf-overlay-legend-bounds'>
+            <span>{formatDuration(minNs)}</span>
+            <span>{formatDuration(maxNs)}</span>
+        </div>
+    </div>
+);
+
+interface PerfOverlayOpMetricProps {
+    perfDeviceTimeNs?: number;
+    /** Same colour the node is rendered with on the graph — keeps the panel
+     *  visually tied to the overlay. */
+    perfColor?: string;
+}
+
+export const PerfOverlayOpMetric = ({ perfDeviceTimeNs, perfColor }: PerfOverlayOpMetricProps) => (
+    <div className='perf-overlay-op-metric'>
+        <span className='perf-overlay-op-metric-label'>Kernel duration</span>
+        <span className='perf-overlay-op-metric-value'>
+            {perfColor && perfDeviceTimeNs !== undefined && (
+                <span
+                    className='perf-overlay-op-metric-swatch'
+                    style={{ backgroundColor: perfColor }}
+                    aria-hidden='true'
+                />
+            )}
+            {perfDeviceTimeNs !== undefined ? formatDuration(perfDeviceTimeNs) : 'No perf data'}
+        </span>
+    </div>
+);
 
 interface OperationGraphTensorDetailsProps {
     tensor: Tensor;
@@ -828,6 +979,11 @@ interface OperationGraphInfoComponentProps {
     onNavigate: NavigateFunction;
     onLocateConnectedNode: (opId: number) => void;
     onRecenterOnCurrent: () => void;
+    perfOverlayActive: boolean;
+    /** Aggregated max device_time in ns for the selected op, if any. */
+    perfDeviceTimeNs?: number;
+    /** Pre-computed overlay colour for the selected op. */
+    perfColor?: string;
 }
 
 const OperationGraphInfoComponent = ({
@@ -837,6 +993,9 @@ const OperationGraphInfoComponent = ({
     onNavigate,
     onLocateConnectedNode,
     onRecenterOnCurrent,
+    perfOverlayActive,
+    perfDeviceTimeNs,
+    perfColor,
 }: OperationGraphInfoComponentProps) => {
     const operation = operationList.find((op) => op.id === currentOperationId);
 
@@ -879,6 +1038,13 @@ const OperationGraphInfoComponent = ({
                     Locate {currentOperationId}
                 </Button>
             </div>
+
+            {perfOverlayActive && (
+                <PerfOverlayOpMetric
+                    perfDeviceTimeNs={perfDeviceTimeNs}
+                    perfColor={perfColor}
+                />
+            )}
 
             <h3 className='inputs'>Inputs:</h3>
             <div className='inputs tensors'>

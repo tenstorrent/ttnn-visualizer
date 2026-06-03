@@ -9,6 +9,21 @@
     margin-bottom: 20px;
 }
 
+// Inline-render `.perf-overlay-legend` inside the styleguide rather than
+// pinning it to the viewport. Component default is `position: fixed`.
+.styleguide-perf-overlay-host {
+    position: relative;
+    display: inline-block;
+    min-height: 80px;
+    margin-bottom: 10px;
+
+    .perf-overlay-legend {
+        position: relative;
+        right: auto;
+        bottom: auto;
+    }
+}
+
 .table {
     border-spacing: 5px;
 }

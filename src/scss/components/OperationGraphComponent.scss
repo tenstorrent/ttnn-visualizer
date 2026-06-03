@@ -50,6 +50,72 @@
         bottom: 45px;
     }
 
+    .perf-overlay-legend {
+        position: fixed;
+        right: 470px;
+        bottom: 45px;
+        padding: 8px 10px;
+        background-color: rgba($tt-grey-2, 0.85);
+        border-radius: 4px;
+        font-size: 11px;
+        line-height: 1.4;
+        z-index: variables.$z-index-2-interactive;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        pointer-events: none;
+    }
+
+    .perf-overlay-legend-title {
+        font-weight: 600;
+        opacity: 0.85;
+    }
+
+    .perf-overlay-legend-gradient {
+        width: 160px;
+        height: 10px;
+        border-radius: 2px;
+    }
+
+    .perf-overlay-legend-bounds {
+        display: flex;
+        justify-content: space-between;
+        opacity: 0.75;
+        width: 160px;
+    }
+
+    .perf-overlay-op-metric {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 4px;
+        margin-bottom: 8px;
+        padding: 4px 8px;
+        background-color: rgba($tt-grey-4, 0.6);
+        border-radius: 3px;
+        font-size: 12px;
+    }
+
+    .perf-overlay-op-metric-label {
+        opacity: 0.75;
+    }
+
+    .perf-overlay-op-metric-value {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+    }
+
+    .perf-overlay-op-metric-swatch {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        flex-shrink: 0;
+    }
+
     .operation-graph-props {
         position: fixed;
         z-index: variables.$z-index-2-interactive;

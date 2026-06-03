@@ -32,6 +32,8 @@ import MemoryTag from '../components/MemoryTag';
 import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
+import { PerfOverlayLegend, PerfOverlayOpMetric } from '../components/OperationGraphComponent';
+import { perfColorScale } from '../functions/perfOverlay';
 import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 
 const FORM_GROUP = {
@@ -758,6 +760,47 @@ export default function Styleguide() {
                     appVersion='0.77.0'
                     latestAppVersion={LATEST_APP_VERSION}
                 />
+            </div>
+
+            <div className='container'>
+                <h3>Operation graph perf overlay</h3>
+
+                <h4>Legend &mdash; typical range (µs &ndash; ms)</h4>
+                <div className='styleguide-perf-overlay-host'>
+                    <PerfOverlayLegend
+                        minNs={1_200}
+                        maxNs={48_000_000}
+                    />
+                </div>
+
+                <h4>Legend &mdash; single bin (all equal)</h4>
+                <div className='styleguide-perf-overlay-host'>
+                    <PerfOverlayLegend
+                        minNs={50_000}
+                        maxNs={50_000}
+                    />
+                </div>
+
+                <h4>Op metric &mdash; cool (low t)</h4>
+                <PerfOverlayOpMetric
+                    perfDeviceTimeNs={1_200}
+                    perfColor={perfColorScale(0.15)}
+                />
+
+                <h4>Op metric &mdash; warm (mid t)</h4>
+                <PerfOverlayOpMetric
+                    perfDeviceTimeNs={12_500_000}
+                    perfColor={perfColorScale(0.6)}
+                />
+
+                <h4>Op metric &mdash; hot (high t)</h4>
+                <PerfOverlayOpMetric
+                    perfDeviceTimeNs={48_000_000}
+                    perfColor={perfColorScale(0.95)}
+                />
+
+                <h4>Op metric &mdash; no perf data for selected op</h4>
+                <PerfOverlayOpMetric />
             </div>
         </>
     );
