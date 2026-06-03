@@ -164,6 +164,14 @@ export type WorkerInteractionIndex = {
     outerNamespaceByNodeId: Record<string, string>;
     /** Return / terminator node id per namespace (e.g. stablehlo.return). */
     namespaceReturnNodeByNamespace: Record<string, string>;
+    /**
+     * Per-namespace inner input-arg node ids, indexed by the outer op's
+     * input port. Used to reverse the layout worker's input remapping —
+     * cross-region edges targeting the outer op are rendered as targeting
+     * `namespaceInputByNamespace[ns][portIdx]`, so the panel needs this map
+     * to attribute those edges back to the outer op's input port.
+     */
+    namespaceInputByNamespace: Record<string, string[]>;
 };
 
 export type WorkerIndexedMessage = {

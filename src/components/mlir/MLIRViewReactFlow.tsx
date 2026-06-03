@@ -525,34 +525,63 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
     const selectedSourceNode = selectedNodeId ? (sourceNodeById.get(selectedNodeId) ?? null) : null;
 
-    // Region-output partner map. When a namespace is expanded, the layout
-    // worker remaps edges that conceptually flow out of the region's outer op
-    // (e.g. `stablehlo.reduce`) so they're rendered as sourced from the
-    // region's terminator (e.g. `stablehlo.return`). The two ops are visually
-    // distinct but represent the same logical output: the outer op carries
-    // `outputsMetadata` (shape/dtype/__tensor_tag/…), the terminator carries
-    // the rendered outgoing edges (consumers). Without bonding them, the
-    // panel reports inconsistent data depending on which side of the pair
-    // the user selected. Built bidirectionally so `partner.get(outerOp) ===
-    // returnNode` and `partner.get(returnNode) === outerOp`.
-    const regionOutputPartnerByNodeId = useMemo<Map<string, string>>(() => {
-        const result = new Map<string, string>();
+    // Region partnership maps for expanded namespaces. The layout worker
+    // remaps cross-region edges in two symmetric ways when a namespace is
+    // expanded:
+    //
+    //   - Outputs: edges conceptually flowing OUT of the region's anchor op
+    //     (e.g. `stablehlo.reduce`) are rendered as sourced from the
+    //     terminator (e.g. `stablehlo.return`). The anchor carries
+    //     `outputsMetadata`; the terminator carries the rendered consumer
+    //     edges. Bonded bidirectionally so selecting either side surfaces
+    //     the same data.
+    //
+    //   - Inputs: edges conceptually flowing INTO the anchor op are rendered
+    //     as targeting the namespace's inner input-arg node for the matching
+    //     port (`namespaceInputByNamespace[ns][portIdx]`). To surface those
+    //     under the anchor's Inputs section, we keep an inverse map from
+    //     arg id → the anchor + port index it represents.
+    //
+    // `anchorByNamespace` is the right key here: it maps every namespace
+    // (top-level or nested) to its representative op. `outerNamespaceByNodeId`
+    // only records *parent-level toggles* (an op in the parent namespace
+    // that controls a child), so it silently misses top-level regions whose
+    // anchor lives inside the namespace — which is exactly the case for ops
+    // like a top-level `stablehlo.all_reduce_N`. All three maps are populated
+    // only for expanded namespaces; collapsed regions need no pairing.
+    const { regionOutputPartnerByNodeId, inputArgIdxByArgIdByAnchor } = useMemo<{
+        regionOutputPartnerByNodeId: Map<string, string>;
+        inputArgIdxByArgIdByAnchor: Map<string, Map<string, number>>;
+    }>(() => {
+        const outputPartner = new Map<string, string>();
+        const inputArgsByAnchor = new Map<string, Map<string, number>>();
         if (!interactionIndex) {
-            return result;
-        }
-        const outerOpByNamespace = new Map<string, string>();
-        for (const [outerOpId, namespace] of Object.entries(interactionIndex.outerNamespaceByNodeId)) {
-            outerOpByNamespace.set(namespace, outerOpId);
+            return {
+                regionOutputPartnerByNodeId: outputPartner,
+                inputArgIdxByArgIdByAnchor: inputArgsByAnchor,
+            };
         }
         for (const namespace of expandedNamespaces) {
-            const outerOpId = outerOpByNamespace.get(namespace);
+            const anchorNodeId = interactionIndex.anchorByNamespace[namespace];
+            if (!anchorNodeId) {
+                continue;
+            }
             const returnNodeId = interactionIndex.namespaceReturnNodeByNamespace[namespace];
-            if (outerOpId && returnNodeId && outerOpId !== returnNodeId) {
-                result.set(outerOpId, returnNodeId);
-                result.set(returnNodeId, outerOpId);
+            if (returnNodeId && returnNodeId !== anchorNodeId) {
+                outputPartner.set(anchorNodeId, returnNodeId);
+                outputPartner.set(returnNodeId, anchorNodeId);
+            }
+            const inputArgs = interactionIndex.namespaceInputByNamespace[namespace];
+            if (inputArgs && inputArgs.length > 0) {
+                const argToIdx = new Map<string, number>();
+                inputArgs.forEach((argId, idx) => argToIdx.set(argId, idx));
+                inputArgsByAnchor.set(anchorNodeId, argToIdx);
             }
         }
-        return result;
+        return {
+            regionOutputPartnerByNodeId: outputPartner,
+            inputArgIdxByArgIdByAnchor: inputArgsByAnchor,
+        };
     }, [interactionIndex, expandedNamespaces]);
 
     // Both panel I/O sections read from the React Flow `edges` array — i.e.
@@ -609,9 +638,24 @@ const MlGraphInner = ({ data }: ViewProps) => {
         if (!selectedNodeId) {
             return [];
         }
+        // When the selection is the anchor op of an expanded region, the
+        // layout worker has rewritten its cross-region incoming edges to land
+        // on the inner input-arg nodes. Walk those args too and attribute
+        // their edges back to the anchor's input port (the index of the
+        // arg in `namespaceInputByNamespace[ns]`).
+        const argIdxByArgId = inputArgIdxByArgIdByAnchor.get(selectedNodeId);
         const result: IncomingEdgeView[] = [];
         for (const edge of edges) {
-            if (edge.target !== selectedNodeId) {
+            let targetInputId: string | null = null;
+            if (edge.target === selectedNodeId) {
+                targetInputId = edge.targetHandle ?? '0';
+            } else if (argIdxByArgId) {
+                const idx = argIdxByArgId.get(edge.target);
+                if (idx !== undefined) {
+                    targetInputId = String(idx);
+                }
+            }
+            if (targetInputId === null) {
                 continue;
             }
             const sourcePortId = edge.sourceHandle ?? '0';
@@ -620,13 +664,13 @@ const MlGraphInner = ({ data }: ViewProps) => {
             result.push({
                 sourceNodeId: edge.source,
                 sourceNodeOutputId: sourcePortId,
-                targetNodeInputId: edge.targetHandle ?? '0',
+                targetNodeInputId: targetInputId,
                 label: typeof edge.label === 'string' ? edge.label : undefined,
                 sourcePortMetadata,
             });
         }
         return result;
-    }, [edges, selectedNodeId, sourceNodeById]);
+    }, [edges, selectedNodeId, sourceNodeById, inputArgIdxByArgIdByAnchor]);
 
     const closeDetailsPanel = useCallback(() => {
         setSelectedNodeId(null);
