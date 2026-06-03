@@ -33,6 +33,8 @@ import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../st
 import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
+import MlirNodeDetailsPanel from '../components/mlir/MlirNodeDetailsPanel';
+import type { SourceNode } from '../components/mlir/mlirGraphTypes';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -77,6 +79,50 @@ const UPLOAD_DEMO_PROGRESS = {
 const TIME_REMAINING_INTERVAL = 100;
 
 const LATEST_APP_VERSION = '0.80.0';
+
+const MLIR_RICH_NODE: SourceNode = {
+    id: 'loc("-":4:12)__1',
+    label: 'stablehlo.dot_general',
+    namespace: 'func.func_main/stablehlo.dot_general_0',
+    attrs: [
+        { key: 'name', value: 'f0_dot' },
+        { key: 'precision_config', value: '["DEFAULT","DEFAULT"]' },
+        {
+            key: 'dot_dimension_numbers',
+            value: '{"lhs_contracting_dims":[1],"rhs_contracting_dims":[0],"lhs_batching_dims":[],"rhs_batching_dims":[]}',
+        },
+        { key: 'tensor', value: 'tensor<4x8xf32>' },
+        { key: 'is_stable', value: 'true' },
+        { key: 'cost', value: '128' },
+    ],
+    incomingEdges: [
+        { sourceNodeId: '%arg42', sourceNodeOutputId: '0', targetNodeInputId: '0' },
+        { sourceNodeId: '%arg7', sourceNodeOutputId: '0', targetNodeInputId: '1' },
+        { sourceNodeId: 'loc("-":3:8)__0', sourceNodeOutputId: '2', targetNodeInputId: '2' },
+    ],
+    outputsMetadata: [
+        {
+            id: '0',
+            attrs: [
+                { key: 'shape', value: 'tensor<4x8xf32>' },
+                { key: 'dtype', value: 'f32' },
+                { key: 'tag', value: 'primary' },
+            ],
+        },
+        { id: '1', attrs: [] },
+    ],
+    config: null,
+};
+
+const MLIR_EMPTY_NODE: SourceNode = {
+    id: 'input_0',
+    label: '%arg0',
+    namespace: '',
+    attrs: [],
+    incomingEdges: [],
+    outputsMetadata: [],
+    config: null,
+};
 
 export default function Styleguide() {
     const [updateFileTransferProgress, setUpdateFileTransferProgress] = useAtom(fileTransferProgressAtom);
@@ -758,6 +804,28 @@ export default function Styleguide() {
                     appVersion='0.77.0'
                     latestAppVersion={LATEST_APP_VERSION}
                 />
+            </div>
+
+            <div className='container'>
+                <h3>MLIR Node Details Panel</h3>
+
+                <h4>Selected op with attrs + I/O (nested JSON attribute included)</h4>
+                <div className='styleguide-bounded-host'>
+                    <MlirNodeDetailsPanel
+                        node={MLIR_RICH_NODE}
+                        onClose={() => {}}
+                        onRecenter={() => {}}
+                    />
+                </div>
+
+                <h4>Selected node with no attributes and no I/O (empty states)</h4>
+                <div className='styleguide-bounded-host'>
+                    <MlirNodeDetailsPanel
+                        node={MLIR_EMPTY_NODE}
+                        onClose={() => {}}
+                        onRecenter={() => {}}
+                    />
+                </div>
             </div>
         </>
     );

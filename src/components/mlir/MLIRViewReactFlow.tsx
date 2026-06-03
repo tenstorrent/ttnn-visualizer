@@ -41,6 +41,7 @@ import { GraphBundle } from '../../model/MLIRJsonModel';
 import type { BuiltGraph, SourceNode, WorkerNode } from './mlirGraphTypes';
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
+import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 
 // Re-uses `WorkerNode['data']` (the canonical shape produced by the layout
 // worker) and tacks on `highlight` — a view-layer-only flag. Set when this
@@ -503,6 +504,30 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode, mlirGroup: MlirGroupNode }) as const, []);
 
+    // Look up the canonical SourceNode for the current selection so the
+    // details panel reads from the same authoritative shape that drove the
+    // graph build. `sourceNodes` is already memoised above, so this map is
+    // rebuilt only when the underlying graph changes.
+    const sourceNodeById = useMemo(() => {
+        const result = new Map<string, SourceNode>();
+        for (const sourceNode of sourceNodes) {
+            result.set(sourceNode.id, sourceNode);
+        }
+        return result;
+    }, [sourceNodes]);
+    const selectedSourceNode = selectedNodeId ? (sourceNodeById.get(selectedNodeId) ?? null) : null;
+
+    const closeDetailsPanel = useCallback(() => {
+        setSelectedNodeId(null);
+    }, []);
+
+    const recenterOnSelected = useCallback(() => {
+        if (!selectedNodeId) {
+            return;
+        }
+        void fitView({ nodes: [{ id: selectedNodeId }], padding: 0.3, duration: 200 });
+    }, [fitView, selectedNodeId]);
+
     // Edge display rules:
     // 1. Drop edges where either endpoint is a real-namespace group node.
     //    The worker's internal-edges loop emits these for nested expanded
@@ -772,6 +797,14 @@ const MlGraphInner = ({ data }: ViewProps) => {
             >
                 Re-layout
             </Button>
+
+            {selectedSourceNode && (
+                <MlirNodeDetailsPanel
+                    node={selectedSourceNode}
+                    onClose={closeDetailsPanel}
+                    onRecenter={recenterOnSelected}
+                />
+            )}
         </div>
     );
 };
