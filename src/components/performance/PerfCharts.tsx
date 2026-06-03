@@ -6,7 +6,6 @@ import PerfDeviceKernelDurationChart from './PerfDeviceKernelDurationChart';
 import PerfDeviceKernelRuntimeChart from './PerfDeviceKernelRuntimeChart';
 import PerfOpCountVsRuntimeChart from './PerfOpCountVsRuntimeChart';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
-import 'styles/components/PerfCharts.scss';
 
 interface PerfChartsProps {
     filteredPerfData: TypedPerfTableRow[];
@@ -18,7 +17,7 @@ const PerfCharts = ({ filteredPerfData, comparisonData, selectedOpCodes }: PerfC
     const data = [filteredPerfData, ...(comparisonData || [])].filter((set) => set.length > 0);
 
     return (
-        <div className='charts'>
+        <>
             <PerfOpCountVsRuntimeChart
                 datasets={data}
                 selectedOpCodes={selectedOpCodes}
@@ -27,7 +26,7 @@ const PerfCharts = ({ filteredPerfData, comparisonData, selectedOpCodes }: PerfC
             <PerfDeviceKernelRuntimeChart datasets={data} />
 
             <PerfDeviceKernelDurationChart datasets={data} />
-        </div>
+        </>
     );
 };
 

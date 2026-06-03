@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
@@ -15,9 +16,10 @@ import { getPrimaryDataColours, getSecondaryDataColours } from '../../definition
 
 interface PerfDeviceTimeChartProps {
     datasets?: TypedPerfTableRow[][];
+    chartId: PerfChartId;
 }
 
-function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
+function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
@@ -79,7 +81,8 @@ function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
 
     return (
         <PerfChart
-            title='Device Time + Ideal Time'
+            id={chartId}
+            title={PERF_CHART_LABELS[chartId]}
             chartData={[...deviceTimes, ...idealTimes]}
             configuration={configuration}
         />

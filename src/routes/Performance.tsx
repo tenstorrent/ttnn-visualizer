@@ -26,11 +26,9 @@ import {
     selectedPerfRowIdAtom,
     selectedPerformanceRangeAtom,
 } from '../store/app';
-import PerfCharts from '../components/performance/PerfCharts';
-import PerfChartFilter from '../components/performance/PerfChartFilter';
+import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
 import { Marker, MarkerColours, PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
 import { L1PressureMetrics, L1PressureStatus } from '../functions/l1Pressure';
-import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
@@ -289,33 +287,15 @@ export default function Performance() {
                             <h3 className='title'>Performance charts</h3>
 
                             {perfData ? (
-                                <>
-                                    <div className='charts-container'>
-                                        <PerfChartFilter
-                                            opCodeOptions={opCodeOptions}
-                                            selectedOpCodes={selectedOpCodes}
-                                            updateOpCodes={setSelectedOpCodesFromUser}
-                                        />
-
-                                        <PerfCharts
-                                            filteredPerfData={filteredEnrichedData}
-                                            comparisonData={filteredEnrichedComparisonData}
-                                            selectedOpCodes={selectedOpCodes}
-                                        />
-                                    </div>
-
-                                    <div className='charts-container non-filterable-charts'>
-                                        <span />
-
-                                        <div>
-                                            <NonFilterablePerfCharts
-                                                chartData={enrichedData}
-                                                secondaryData={enrichedComparisonData || []}
-                                                opCodeOptions={opCodeOptions}
-                                            />
-                                        </div>
-                                    </div>
-                                </>
+                                <PerformanceChartsTab
+                                    filteredPerfData={filteredEnrichedData}
+                                    filteredComparisonData={filteredEnrichedComparisonData}
+                                    enrichedData={enrichedData}
+                                    enrichedComparisonData={enrichedComparisonData}
+                                    selectedOpCodes={selectedOpCodes}
+                                    opCodeOptions={opCodeOptions}
+                                    updateOpCodes={setSelectedOpCodesFromUser}
+                                />
                             ) : null}
                         </div>
                     }

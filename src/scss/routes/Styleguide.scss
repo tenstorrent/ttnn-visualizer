@@ -9,6 +9,24 @@
     margin-bottom: 20px;
 }
 
+// Inline-render `.perf-overlay-legend` inside the styleguide rather than
+// pinning it to the viewport. Component default (`.operation-graph-component
+// .perf-overlay-legend`) is `position: fixed` — we wrap the styleguide
+// preview in `.operation-graph-component` to inherit the component styling,
+// then explicitly out-specify the position rule so the legend sits inline.
+.operation-graph-component .styleguide-perf-overlay-host {
+    position: relative;
+    display: inline-block;
+    min-height: 80px;
+    margin-bottom: 10px;
+
+    .perf-overlay-legend {
+        position: relative;
+        right: auto;
+        bottom: auto;
+    }
+}
+
 .table {
     border-spacing: 5px;
 }
@@ -98,4 +116,15 @@
     left: 0;
     right: 0;
     z-index: variables.$z-index-3-overlay;
+}
+
+// Bounded host for components that normally pin to a viewport-sized parent.
+// Used by the MLIR Node Details panel (absolute inside `.mlir-view-pane`).
+.styleguide-bounded-host {
+    position: relative;
+    width: 100%;
+    height: 520px;
+    background: $tt-grey-2;
+    border: 1px dashed rgba($tt-grey-5, 0.5);
+    overflow: hidden;
 }
