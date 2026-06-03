@@ -62,9 +62,18 @@ interface OperationGraphProps {
     operationList: OperationList;
     operationId?: number;
     perfRows?: PerfOverlaySource[];
+    /**
+     * Whether *any* perf report is currently loaded for this profiler report,
+     * independent of whether it links up. Lets the overlay distinguish
+     * "load a report to enable this" (UNAVAILABLE) from "loaded report
+     * doesn't match" (UNLINKED). When omitted, the component infers
+     * availability from `perfRows.length > 0`, which only works in tests
+     * that bypass the linking pipeline.
+     */
+    isPerfReportLoaded?: boolean;
 }
 
-const OperationGraph = ({ operationList, operationId, perfRows }: OperationGraphProps) => {
+const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoaded }: OperationGraphProps) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
 
@@ -109,15 +118,23 @@ const OperationGraph = ({ operationList, operationId, perfRows }: OperationGraph
         return count;
     }, [operationList, scoreByOpId]);
 
+    // Availability is "is any perf report loaded at all", linking is "do the
+    // ops actually overlap". Splitting these lets the tooltip say "load a
+    // report" only when there genuinely is none, and "this report doesn't
+    // match this graph" when one is loaded but the run is wrong. Caller can
+    // omit `isPerfReportLoaded` (tests / storybook), in which case we fall
+    // back to the row-count heuristic — same behaviour as before for those
+    // contexts.
+    const isPerfReportAvailable = isPerfReportLoaded ?? (perfRows !== undefined && perfRows.length > 0);
     const perfOverlayStatus: PerfOverlayStatus = useMemo(() => {
-        if (!perfRows || perfRows.length === 0) {
+        if (!isPerfReportAvailable) {
             return PerfOverlayStatus.UNAVAILABLE;
         }
         if (linkedOpCount === 0) {
             return PerfOverlayStatus.UNLINKED;
         }
         return PerfOverlayStatus.READY;
-    }, [perfRows, linkedOpCount]);
+    }, [isPerfReportAvailable, linkedOpCount]);
 
     // The atom remembers user intent across sessions, but we only honour it when
     // perf data is actually available and joined to this graph.
