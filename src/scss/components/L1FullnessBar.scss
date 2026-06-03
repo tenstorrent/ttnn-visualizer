@@ -6,7 +6,7 @@
 
 $bar-height: 10px;
 $bar-radius: 2px;
-$bar-used-default: colours.$tt-red-shade;
+$bar-used: colours.$tt-red-shade;
 $bar-largest-free: rgb(0 169 70);
 
 // Striped fragmented segment visually distinguishes 'lots of free, not usable as one block'.
@@ -16,7 +16,7 @@ $swatch-size: 10px;
 $swatch-radius: 2px;
 
 %bar-used-fill {
-    background-color: $bar-used-default;
+    background-color: $bar-used;
 }
 
 %bar-largest-free-fill {

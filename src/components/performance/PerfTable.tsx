@@ -97,6 +97,23 @@ const PerformanceTable = ({
         [comparisonData, sortTableFields],
     );
 
+    // L1 pressure is a per-TTNN-op snapshot, so it renders only on the first device-op row of each
+    // op. Derive that "first" row from source (execution) order — which is stable — instead of
+    // display adjacency, so collapsing survives the user sorting the table by any column.
+    const firstRowOfOpRun = useMemo<Set<TypedPerfTableRow>>(() => {
+        const seenOps = new Set<number>();
+        const firstRows = new Set<TypedPerfTableRow>();
+
+        for (const row of data) {
+            if (row.op !== undefined && !seenOps.has(row.op)) {
+                seenOps.add(row.op);
+                firstRows.add(row);
+            }
+        }
+
+        return firstRows;
+    }, [data]);
+
     const visibleColumns = [
         ...Columns.slice(0, OP_ID_INSERTION_POINT),
         ...(opIdsMap.length > 0 ? [{ name: 'OP', key: ColumnKeys.OP, sortable: true }] : []),
@@ -310,9 +327,7 @@ const PerformanceTable = ({
 
                     <tbody>
                         {tableFields?.map((row, i) => {
-                            // Collapse same-op runs: L1 cells render only on the first row of each TTNN-op group.
-                            const previousOp = i > 0 ? tableFields[i - 1].op : undefined;
-                            const isFirstOfOpRun = row.op === undefined || row.op !== previousOp;
+                            const isFirstOfOpRun = row.op === undefined || firstRowOfOpRun.has(row);
                             const isSignpost = row.op_type === OpType.SIGNPOST;
                             const isPrimarySelected = isPrimaryActiveReport && row.id === selectedPerfRowId;
 
