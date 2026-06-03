@@ -10,6 +10,7 @@ import 'styles/components/MlirNodeDetailsPanel.scss';
 import classNames from 'classnames';
 import type { IncomingEdgeView, IndexedPortMetadata, OutgoingEdge, SourceNode } from './mlirGraphTypes';
 import MlirAttrValue from './MlirAttrValue';
+import MlirPortAttrs from './MlirPortAttrs';
 import { mlirNodeDetailsCollapsedAtom } from '../../store/app';
 
 interface MlirNodeDetailsPanelProps {
@@ -217,21 +218,7 @@ const MlirNodeDetailsPanel = ({
                                 out {edge.sourceNodeOutputId} → in {edge.targetNodeInputId}
                             </span>
                             {edge.label && <span className='mlir-node-details-io-shape'>{edge.label}</span>}
-                            {edge.sourcePortMetadata && edge.sourcePortMetadata.attrs.length > 0 && (
-                                <dl className='mlir-node-details-attrs mlir-node-details-port-attrs'>
-                                    {edge.sourcePortMetadata.attrs.map((attr) => (
-                                        <div
-                                            className='mlir-node-details-attr-row'
-                                            key={attr.key}
-                                        >
-                                            <dt className='mlir-node-details-attr-key'>{attr.key}</dt>
-                                            <dd className='mlir-node-details-attr-value'>
-                                                <MlirAttrValue value={attr.value} />
-                                            </dd>
-                                        </div>
-                                    ))}
-                                </dl>
-                            )}
+                            {edge.sourcePortMetadata && <MlirPortAttrs attrs={edge.sourcePortMetadata.attrs} />}
                         </li>
                     ))}
                 </ul>
@@ -255,21 +242,7 @@ const MlirNodeDetailsPanel = ({
                             className='mlir-node-details-io-row mlir-node-details-output-row'
                         >
                             <span className='mlir-node-details-io-port'>port {port.portId}</span>
-                            {port.metadata && port.metadata.attrs.length > 0 && (
-                                <dl className='mlir-node-details-attrs mlir-node-details-port-attrs'>
-                                    {port.metadata.attrs.map((attr) => (
-                                        <div
-                                            className='mlir-node-details-attr-row'
-                                            key={attr.key}
-                                        >
-                                            <dt className='mlir-node-details-attr-key'>{attr.key}</dt>
-                                            <dd className='mlir-node-details-attr-value'>
-                                                <MlirAttrValue value={attr.value} />
-                                            </dd>
-                                        </div>
-                                    ))}
-                                </dl>
-                            )}
+                            {port.metadata && <MlirPortAttrs attrs={port.metadata.attrs} />}
                             {port.consumers.length > 0 && (
                                 <ul className='mlir-node-details-consumer-list'>
                                     {port.consumers.map((consumer, idx) => (

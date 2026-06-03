@@ -258,6 +258,23 @@
     border-left: 1px solid rgb(255 255 255 / 10%);
 }
 
+// Compact tensor descriptor (e.g. `[1, 7, 3072] f32`) shown in place of the
+// full shape/dtype/rank/__tensor_tag breakdown for port-metadata blocks.
+// Any non-standard attrs (`schedule`, `broadcast_dimensions`, etc.) render
+// as the usual key/value list below the pill via .mlir-node-details-port-attrs.
+.mlir-port-attrs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mlir-port-attrs-compact {
+    font-family: monospace;
+    font-size: 11px;
+    color: $tt-teal-tint-1;
+    word-break: break-all;
+}
+
 .mlir-node-details-consumer-list {
     margin: 0;
     padding: 0;
