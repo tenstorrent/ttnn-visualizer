@@ -38,7 +38,14 @@ import '@xyflow/react/dist/style.css';
 
 import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
-import type { BuiltGraph, IncomingEdgeView, OutgoingEdge, SourceNode, WorkerNode } from './mlirGraphTypes';
+import type {
+    BuiltGraph,
+    IncomingEdgeView,
+    IndexedPortMetadata,
+    OutgoingEdge,
+    SourceNode,
+    WorkerNode,
+} from './mlirGraphTypes';
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
@@ -518,6 +525,36 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
     const selectedSourceNode = selectedNodeId ? (sourceNodeById.get(selectedNodeId) ?? null) : null;
 
+    // Region-output partner map. When a namespace is expanded, the layout
+    // worker remaps edges that conceptually flow out of the region's outer op
+    // (e.g. `stablehlo.reduce`) so they're rendered as sourced from the
+    // region's terminator (e.g. `stablehlo.return`). The two ops are visually
+    // distinct but represent the same logical output: the outer op carries
+    // `outputsMetadata` (shape/dtype/__tensor_tag/…), the terminator carries
+    // the rendered outgoing edges (consumers). Without bonding them, the
+    // panel reports inconsistent data depending on which side of the pair
+    // the user selected. Built bidirectionally so `partner.get(outerOp) ===
+    // returnNode` and `partner.get(returnNode) === outerOp`.
+    const regionOutputPartnerByNodeId = useMemo<Map<string, string>>(() => {
+        const result = new Map<string, string>();
+        if (!interactionIndex) {
+            return result;
+        }
+        const outerOpByNamespace = new Map<string, string>();
+        for (const [outerOpId, namespace] of Object.entries(interactionIndex.outerNamespaceByNodeId)) {
+            outerOpByNamespace.set(namespace, outerOpId);
+        }
+        for (const namespace of expandedNamespaces) {
+            const outerOpId = outerOpByNamespace.get(namespace);
+            const returnNodeId = interactionIndex.namespaceReturnNodeByNamespace[namespace];
+            if (outerOpId && returnNodeId && outerOpId !== returnNodeId) {
+                result.set(outerOpId, returnNodeId);
+                result.set(returnNodeId, outerOpId);
+            }
+        }
+        return result;
+    }, [interactionIndex, expandedNamespaces]);
+
     // Both panel I/O sections read from the React Flow `edges` array — i.e.
     // the connections actually drawn on the canvas — rather than from the
     // source-data inversion. Terminator ops (e.g. `stablehlo.return`) have
@@ -532,9 +569,13 @@ const MlGraphInner = ({ data }: ViewProps) => {
         if (!selectedNodeId) {
             return [];
         }
+        // Also pick up edges sourced from the region-output partner so that
+        // selecting either side of the (outer op ↔ terminator) pair surfaces
+        // the same consumers.
+        const partnerNodeId = regionOutputPartnerByNodeId.get(selectedNodeId);
         const result: OutgoingEdge[] = [];
         for (const edge of edges) {
-            if (edge.source !== selectedNodeId) {
+            if (edge.source !== selectedNodeId && edge.source !== partnerNodeId) {
                 continue;
             }
             result.push({
@@ -545,7 +586,25 @@ const MlGraphInner = ({ data }: ViewProps) => {
             });
         }
         return result;
-    }, [edges, selectedNodeId]);
+    }, [edges, selectedNodeId, regionOutputPartnerByNodeId]);
+
+    // Output port metadata for the panel: the selected node's own metadata
+    // when present, else the partner's. For a region's terminator (no own
+    // `outputsMetadata`) this surfaces the outer op's port metadata, so the
+    // Outputs section stays consistent across both sides of the pair.
+    const selectedOutputsMetadata = useMemo<IndexedPortMetadata[]>(() => {
+        if (!selectedSourceNode) {
+            return [];
+        }
+        if (selectedSourceNode.outputsMetadata.length > 0) {
+            return selectedSourceNode.outputsMetadata;
+        }
+        const partnerNodeId = regionOutputPartnerByNodeId.get(selectedSourceNode.id);
+        if (!partnerNodeId) {
+            return [];
+        }
+        return sourceNodeById.get(partnerNodeId)?.outputsMetadata ?? [];
+    }, [selectedSourceNode, regionOutputPartnerByNodeId, sourceNodeById]);
     const selectedIncomingEdges = useMemo<IncomingEdgeView[]>(() => {
         if (!selectedNodeId) {
             return [];
@@ -855,6 +914,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     node={selectedSourceNode}
                     incomingEdges={selectedIncomingEdges}
                     outgoingEdges={selectedOutgoingEdges}
+                    outputsMetadata={selectedOutputsMetadata}
                     onClose={closeDetailsPanel}
                     onRecenter={recenterOnSelected}
                 />

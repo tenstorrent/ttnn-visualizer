@@ -839,6 +839,7 @@ export default function Styleguide() {
                         node={MLIR_RICH_NODE}
                         incomingEdges={[]}
                         outgoingEdges={MLIR_RICH_NODE_OUTGOING}
+                        outputsMetadata={MLIR_RICH_NODE.outputsMetadata}
                         onClose={() => {}}
                         onRecenter={() => {}}
                     />
@@ -850,6 +851,7 @@ export default function Styleguide() {
                         node={MLIR_TERMINATOR_NODE}
                         incomingEdges={[]}
                         outgoingEdges={MLIR_TERMINATOR_OUTGOING}
+                        outputsMetadata={MLIR_TERMINATOR_NODE.outputsMetadata}
                         onClose={() => {}}
                         onRecenter={() => {}}
                     />
@@ -861,6 +863,7 @@ export default function Styleguide() {
                         node={MLIR_EMPTY_NODE}
                         incomingEdges={[]}
                         outgoingEdges={[]}
+                        outputsMetadata={[]}
                         onClose={() => {}}
                         onRecenter={() => {}}
                     />

@@ -119,6 +119,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerInboundMessage>) => 
                     anchorByNamespace: index.anchorByNamespace,
                     anchorNamespaceByNodeId: index.anchorNamespaceByNodeId,
                     outerNamespaceByNodeId: index.outerNamespaceByNodeId,
+                    namespaceReturnNodeByNamespace: index.namespaceReturnNodeByNamespace,
                 },
             });
         } catch (error) {

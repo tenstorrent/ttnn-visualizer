@@ -162,6 +162,8 @@ export type WorkerInteractionIndex = {
     anchorByNamespace: Record<string, string>;
     anchorNamespaceByNodeId: Record<string, string>;
     outerNamespaceByNodeId: Record<string, string>;
+    /** Return / terminator node id per namespace (e.g. stablehlo.return). */
+    namespaceReturnNodeByNamespace: Record<string, string>;
 };
 
 export type WorkerIndexedMessage = {

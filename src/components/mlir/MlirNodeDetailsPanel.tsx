@@ -16,6 +16,14 @@ interface MlirNodeDetailsPanelProps {
     node: SourceNode;
     incomingEdges: IncomingEdgeView[];
     outgoingEdges: OutgoingEdge[];
+    /**
+     * Output-port metadata to render in the Outputs section. Usually
+     * `node.outputsMetadata`, but for nodes that share a logical output with
+     * a region partner (e.g. a `stablehlo.return` terminator paired with its
+     * outer `stablehlo.reduce`), the view supplies the partner's metadata so
+     * both selections render consistent data.
+     */
+    outputsMetadata: IndexedPortMetadata[];
     onClose: () => void;
     onRecenter: () => void;
 }
@@ -80,6 +88,7 @@ const MlirNodeDetailsPanel = ({
     node,
     incomingEdges,
     outgoingEdges,
+    outputsMetadata,
     onClose,
     onRecenter,
 }: MlirNodeDetailsPanelProps) => {
@@ -90,7 +99,9 @@ const MlirNodeDetailsPanel = ({
     };
 
     // Output ports come from two independent sources:
-    //   1. `outputsMetadata` — per-port shape/dtype/etc declared on the node.
+    //   1. `outputsMetadata` — per-port shape/dtype/etc. For region terminator
+    //      ops the view sources this from the outer-op partner so both ends
+    //      of the pair show the same per-port info.
     //   2. Outgoing edges — synthesised consumer connections. Terminator ops
     //      (e.g. `stablehlo.return`) have empty outputsMetadata but still
     //      carry outgoing edges for region plumbing.
@@ -107,7 +118,7 @@ const MlirNodeDetailsPanel = ({
             }
         }
         const seen = new Set<string>();
-        const ports: OutputPortView[] = node.outputsMetadata.map((port) => {
+        const ports: OutputPortView[] = outputsMetadata.map((port) => {
             seen.add(port.id);
             return {
                 portId: port.id,
@@ -121,7 +132,7 @@ const MlirNodeDetailsPanel = ({
             }
         }
         return ports;
-    }, [node.outputsMetadata, outgoingEdges]);
+    }, [outputsMetadata, outgoingEdges]);
 
     return (
         <aside
