@@ -40,10 +40,11 @@ const FeedbackButton = () => {
     return (
         <>
             <Button
-                className={classNames('feedback-button bp6-intent-none', {
+                className={classNames('feedback-button', {
                     'animate-in': isInitialState,
                     'user-is-interacting': isUserInteracting,
                 })}
+                intent={Intent.PRIMARY}
                 text='Feedback'
                 endIcon={IconNames.COMMENT}
                 onClick={() => setIsDialogOpen(true)}

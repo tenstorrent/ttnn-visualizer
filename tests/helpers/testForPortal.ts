@@ -2,12 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { Classes } from '@blueprintjs/core';
 import { expect } from 'vitest';
 
-const PORTAL_CLASS = '.bp6-portal';
-
 const testForPortal = () => {
-    const portal = document.querySelector(PORTAL_CLASS);
+    const portal = document.querySelector(`.${Classes.PORTAL}`);
     expect(portal).not.toBeNull();
 };
 
