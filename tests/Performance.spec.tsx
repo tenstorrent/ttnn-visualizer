@@ -16,6 +16,7 @@ import {
     usePerformanceReport,
 } from '../src/hooks/useAPI';
 import { activePerformanceReportAtom, selectedPerfRowIdAtom } from '../src/store/app';
+import { L1PressureStatus } from '../src/functions/l1Pressure';
 import { TestProviders } from './helpers/TestProviders';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
@@ -46,7 +47,7 @@ beforeEach(() => {
     (usePerfFolderList as Mock).mockReturnValue({ data: undefined });
     (usePerformanceRange as Mock).mockReturnValue(null);
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
-    (useL1PressureByOperation as Mock).mockReturnValue(null);
+    (useL1PressureByOperation as Mock).mockReturnValue({ status: L1PressureStatus.Unavailable, data: null });
 });
 
 function PerformanceController() {

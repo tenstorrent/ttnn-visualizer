@@ -29,7 +29,7 @@ import {
 import PerfCharts from '../components/performance/PerfCharts';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 import { Marker, MarkerColours, PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
-import { L1PressureMetrics } from '../functions/l1Pressure';
+import { L1PressureMetrics, L1PressureStatus } from '../functions/l1Pressure';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
@@ -65,8 +65,11 @@ export default function Performance() {
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
-    const l1PressureMap = useL1PressureByOperation();
-    const hasL1PressureData = l1PressureMap !== null;
+    const l1Pressure = useL1PressureByOperation();
+    const l1PressureMap = l1Pressure.data;
+    // Reserve the column while still loading so it doesn't pop in and shift the table sideways;
+    // hide it only once we know the data is genuinely unavailable.
+    const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
     const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
@@ -340,10 +343,18 @@ const enrichRowData = (
     opIdsMap: { perfId?: string; opId: number }[],
     l1PressureMap: Map<number, L1PressureMetrics> | null,
 ): TypedPerfTableRow[] => {
+    // Build the perf-id -> op-id lookup once so enrichment stays O(N) instead of O(N·M) — the
+    // previous `.find()` per row scaled with both row count and the active report's op count.
+    const opIdByPerfId = new Map<string, number>();
+    for (const { perfId, opId } of opIdsMap) {
+        if (perfId !== undefined) {
+            opIdByPerfId.set(perfId, opId);
+        }
+    }
+
     const typedRows = rows.map((row) => {
         const val = parseInt(row.op_to_op_gap, 10);
-        const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
-        const op = opStr !== undefined ? Number(opStr) : undefined;
+        const op = opIdByPerfId.get(row.id);
         // TTNN-op snapshot is shared by all device ops that map to the same row.op.
         const l1Pressure = op !== undefined ? l1PressureMap?.get(op) : undefined;
 

@@ -193,6 +193,10 @@ export const L1PressureColumns: ColumnDefinition[] = [
     { name: 'L1 Usage %', key: ColumnKeys.L1Fullness, unit: '%', decimals: 1, sortable: true },
 ];
 
+// L1 pressure is computed from the active profiler report's buffers (op-id sync and buffer
+// lookups are both keyed to that report), so it cannot be attributed per comparison report.
+// ColumnKeys.L1Fullness is intentionally excluded here — comparison sub-rows render an empty
+// L1 cell rather than the active report's numbers misattributed to another report.
 export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.Bound,
     ColumnKeys.BufferType,
@@ -205,7 +209,6 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.FlopsPercent,
     ColumnKeys.GlobalCallCount,
     ColumnKeys.HighDispatch,
-    ColumnKeys.L1Fullness,
     ColumnKeys.Layout,
     ColumnKeys.MathFidelity,
     ColumnKeys.OpCode,

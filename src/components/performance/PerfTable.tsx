@@ -98,13 +98,14 @@ const PerformanceTable = ({
     );
 
     // L1 pressure is a per-TTNN-op snapshot, so it renders only on the first device-op row of each
-    // op. Derive that "first" row from source (execution) order — which is stable — instead of
-    // display adjacency, so collapsing survives the user sorting the table by any column.
+    // op. Derive that "first" row from the current display order (`tableFields`, post-sort) rather
+    // than source order, so the value always lands on the topmost visible row of its op group —
+    // matching what the user sees under any sort instead of an arbitrary execution-order row.
     const firstRowOfOpRun = useMemo<Set<TypedPerfTableRow>>(() => {
         const seenOps = new Set<number>();
         const firstRows = new Set<TypedPerfTableRow>();
 
-        for (const row of data) {
+        for (const row of tableFields) {
             if (row.op !== undefined && !seenOps.has(row.op)) {
                 seenOps.add(row.op);
                 firstRows.add(row);
@@ -112,12 +113,14 @@ const PerformanceTable = ({
         }
 
         return firstRows;
-    }, [data]);
+    }, [tableFields]);
 
     const visibleColumns = [
         ...Columns.slice(0, OP_ID_INSERTION_POINT),
         ...(opIdsMap.length > 0 ? [{ name: 'OP', key: ColumnKeys.OP, sortable: true }] : []),
         ...Columns.slice(OP_ID_INSERTION_POINT, L1_PRESSURE_INSERTION_POINT),
+        // L1 metrics only available for the active profiler report; comparison sub-rows render an
+        // empty L1 cell because ColumnKeys.L1Fullness is excluded from `comparisonKeys`.
         ...(hasL1PressureData ? L1PressureColumns : []),
         ...Columns.slice(L1_PRESSURE_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
         ...(hiliteHighDispatch ? [{ name: 'Slow', key: ColumnKeys.HighDispatch }] : []),

@@ -30,7 +30,12 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
-import { L1PressureMetrics, computeL1PressureForOperation } from '../functions/l1Pressure';
+import {
+    L1PressureMetrics,
+    L1PressureResult,
+    L1PressureStatus,
+    computeL1PressureForOperation,
+} from '../functions/l1Pressure';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
@@ -930,18 +935,30 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
     }, [range, response, useRange]);
 };
 
-export const useL1PressureByOperation = (): Map<number, L1PressureMetrics> | null => {
+export const useL1PressureByOperation = (): L1PressureResult => {
     const { data: buffersByOperation, isLoading, isError } = useBuffers(BufferType.L1, false);
+    // The markers depend on these two queries; read their load state directly so we don't compute
+    // pressure against the default L1 window before the real markers resolve (which would briefly
+    // show one set of percentages and then flicker into another).
+    const { data: devices } = useDevices();
+    const { data: l1SmallBuffers } = useGetAllBuffers(BufferType.L1_SMALL);
     const l1Start = useGetL1StartMarker();
     const l1End = useGetL1SmallMarker();
 
     return useMemo(() => {
-        if (isLoading || isError || !buffersByOperation) {
-            return null;
+        if (isError) {
+            return { status: L1PressureStatus.Unavailable, data: null };
+        }
+
+        const inputsResolved =
+            !isLoading && buffersByOperation !== undefined && devices !== undefined && l1SmallBuffers !== undefined;
+
+        if (!inputsResolved) {
+            return { status: L1PressureStatus.Loading, data: null };
         }
 
         if (l1End <= l1Start) {
-            return null;
+            return { status: L1PressureStatus.Unavailable, data: null };
         }
 
         const pressureByOperation = new Map<number, L1PressureMetrics>();
@@ -950,8 +967,8 @@ export const useL1PressureByOperation = (): Map<number, L1PressureMetrics> | nul
             pressureByOperation.set(operation.id, computeL1PressureForOperation(operation.buffers, l1Start, l1End));
         }
 
-        return pressureByOperation;
-    }, [buffersByOperation, isError, isLoading, l1End, l1Start]);
+        return { status: L1PressureStatus.Ready, data: pressureByOperation };
+    }, [buffersByOperation, devices, l1SmallBuffers, isError, isLoading, l1End, l1Start]);
 };
 
 export const usePerfMeta = (name?: string | null) => {

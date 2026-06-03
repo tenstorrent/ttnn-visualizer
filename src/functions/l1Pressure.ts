@@ -11,6 +11,19 @@ export interface L1PressureMetrics {
     largestFreePercent: number;
 }
 
+export enum L1PressureStatus {
+    Loading = 'loading',
+    Unavailable = 'unavailable',
+    Ready = 'ready',
+}
+
+// Discriminated result so consumers can reserve the L1 column while inputs are still resolving
+// (avoiding a mid-render layout jump) and hide it only when the data is genuinely unavailable.
+export interface L1PressureResult {
+    status: L1PressureStatus;
+    data: Map<number, L1PressureMetrics> | null;
+}
+
 interface MemoryChunk {
     address: number;
     size: number;
