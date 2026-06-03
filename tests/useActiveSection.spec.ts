@@ -23,6 +23,19 @@ function mockElement(top: number, height: number): HTMLDivElement {
     return element;
 }
 
+// Mirrors a real scroll: move the viewport, then fire the event the hook listens for.
+function scrollTo(scrollY: number): void {
+    Object.defineProperty(window, 'scrollY', {
+        configurable: true,
+        value: scrollY,
+        writable: true,
+    });
+
+    act(() => {
+        window.dispatchEvent(new Event('scroll'));
+    });
+}
+
 describe('useActiveSection', () => {
     beforeEach(() => {
         Object.defineProperty(window, 'scrollY', {
@@ -67,31 +80,37 @@ describe('useActiveSection', () => {
             return null;
         });
 
-        const { result, rerender } = renderHook(
-            ({ scrollY }) => {
-                Object.defineProperty(window, 'scrollY', {
-                    configurable: true,
-                    value: scrollY,
-                    writable: true,
-                });
+        const { result } = renderHook(() => useActiveSection(['first', 'second']));
 
-                return useActiveSection(['first', 'second']);
-            },
-            { initialProps: { scrollY: 200 } },
-        );
-
-        act(() => {
-            rerender({ scrollY: 200 });
-            window.dispatchEvent(new Event('scroll'));
-        });
-
+        // 'first' spans (150, 350] once the 250px offset is applied.
+        scrollTo(200);
         expect(result.current).toBe('first');
 
-        act(() => {
-            rerender({ scrollY: 500 });
-            window.dispatchEvent(new Event('scroll'));
+        // 'second' spans (450, 650].
+        scrollTo(500);
+        expect(result.current).toBe('second');
+    });
+
+    it('does not change the active section when scrollY falls outside every section range', () => {
+        vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+            if (id === 'first') {
+                return mockElement(400, 200);
+            }
+
+            if (id === 'second') {
+                return mockElement(700, 200);
+            }
+
+            return null;
         });
 
+        const { result } = renderHook(() => useActiveSection(['first', 'second']));
+
+        scrollTo(500);
+        expect(result.current).toBe('second');
+
+        // 5000 is past both ranges; the hook keeps the last matched section rather than clearing it.
+        scrollTo(5000);
         expect(result.current).toBe('second');
     });
 
@@ -104,24 +123,10 @@ describe('useActiveSection', () => {
             return null;
         });
 
-        const { result, rerender } = renderHook(
-            ({ scrollY }) => {
-                Object.defineProperty(window, 'scrollY', {
-                    configurable: true,
-                    value: scrollY,
-                    writable: true,
-                });
+        const { result } = renderHook(() => useActiveSection(['section'], SCROLL_OFFSET_PX));
 
-                return useActiveSection(['section'], SCROLL_OFFSET_PX);
-            },
-            { initialProps: { scrollY: SCROLL_OFFSET_PX + 100 } },
-        );
-
-        act(() => {
-            rerender({ scrollY: SCROLL_OFFSET_PX + 100 });
-            window.dispatchEvent(new Event('scroll'));
-        });
-
+        // With a 250px offset the section spans (150, 350]; 350 is the inclusive upper bound.
+        scrollTo(SCROLL_OFFSET_PX + 100);
         expect(result.current).toBe('section');
     });
 });
