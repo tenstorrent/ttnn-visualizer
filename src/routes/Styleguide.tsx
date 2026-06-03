@@ -34,7 +34,7 @@ import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 import MlirNodeDetailsPanel from '../components/mlir/MlirNodeDetailsPanel';
-import type { OutgoingEdge, SourceNode } from '../components/mlir/mlirGraphTypes';
+import type { IncomingEdgeView, OutgoingEdge, SourceNode } from '../components/mlir/mlirGraphTypes';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -91,7 +91,6 @@ const MLIR_RICH_NODE: SourceNode = {
             key: 'dot_dimension_numbers',
             value: '{"lhs_contracting_dims":[1],"rhs_contracting_dims":[0],"lhs_batching_dims":[],"rhs_batching_dims":[]}',
         },
-        { key: 'tensor', value: 'tensor<4x8xf32>' },
         { key: 'is_stable', value: 'true' },
         { key: 'cost', value: '128' },
     ],
@@ -100,13 +99,22 @@ const MLIR_RICH_NODE: SourceNode = {
         { sourceNodeId: '%arg7', sourceNodeOutputId: '0', targetNodeInputId: '1' },
         { sourceNodeId: 'loc("-":3:8)__0', sourceNodeOutputId: '2', targetNodeInputId: '2' },
     ],
+    // Port 0 has shape + dtype (renders as a compact `[4, 8] f32` pill) plus
+    // `schedule` (renders as an extra below the pill). `rank` and
+    // `__tensor_tag` are also present but are filtered out by the panel —
+    // they're included here so the example reflects what real adapter
+    // output looks like.
+    // Port 1 carries no metadata at all and shows the "no metadata" hint
+    // unless it has consumers.
     outputsMetadata: [
         {
             id: '0',
             attrs: [
-                { key: 'shape', value: 'tensor<4x8xf32>' },
+                { key: 'shape', value: '[4, 8]' },
                 { key: 'dtype', value: 'f32' },
-                { key: 'tag', value: 'primary' },
+                { key: '__tensor_tag', value: '%result_42' },
+                { key: 'rank', value: '2' },
+                { key: 'schedule', value: '12' },
             ],
         },
         { id: '1', attrs: [] },
@@ -114,6 +122,53 @@ const MLIR_RICH_NODE: SourceNode = {
     config: null,
 };
 
+// Incoming-edge view fixtures for the rich-node example:
+//   - First edge has rich port metadata → compact pill + `broadcast_dimensions` extra.
+//   - Second edge has port metadata with only shape/dtype → compact pill, no extras.
+//   - Third edge has no port metadata → falls back to the bare `edge.label` shape line.
+const MLIR_RICH_NODE_INCOMING: IncomingEdgeView[] = [
+    {
+        sourceNodeId: 'loc("-":3:8)__0',
+        sourceNodeLabel: 'stablehlo.broadcast_in_dim',
+        sourceNodeOutputId: '0',
+        targetNodeInputId: '0',
+        label: '[4, 8] f32',
+        sourcePortMetadata: {
+            id: '0',
+            attrs: [
+                { key: 'shape', value: '[4, 8]' },
+                { key: 'dtype', value: 'f32' },
+                { key: 'broadcast_dimensions', value: '[0]' },
+            ],
+        },
+    },
+    {
+        sourceNodeId: 'loc("-":2:8)__0',
+        sourceNodeLabel: 'stablehlo.constant',
+        sourceNodeOutputId: '0',
+        targetNodeInputId: '1',
+        label: '[8] f32',
+        sourcePortMetadata: {
+            id: '0',
+            attrs: [
+                { key: 'shape', value: '[8]' },
+                { key: 'dtype', value: 'f32' },
+            ],
+        },
+    },
+    {
+        sourceNodeId: '%arg42',
+        sourceNodeLabel: '%arg42',
+        sourceNodeOutputId: '0',
+        targetNodeInputId: '2',
+        label: '[4] f32',
+        sourcePortMetadata: null,
+    },
+];
+
+// Outgoing-edge fixtures: port 0 fans out to two consumers. We give the
+// fan-out a heterogeneous shape so the example shows that the edge label
+// belongs to the *edge*, not the port.
 const MLIR_RICH_NODE_OUTGOING: OutgoingEdge[] = [
     {
         targetNodeId: 'loc("-":7:4)__2',
@@ -851,11 +906,17 @@ export default function Styleguide() {
             <div className='container'>
                 <h3>MLIR Node Details Panel</h3>
 
-                <h4>Selected op with attrs + I/O (nested JSON attribute included)</h4>
+                <h4>Selected op with rich attrs, port metadata, and fan-out outputs</h4>
+                <p>
+                    Inputs demonstrate the three port-metadata states: rich (compact pill + extras), shape/dtype only
+                    (compact pill alone), and no metadata (fall back to the edge&apos;s shape label). Outputs show the
+                    compact pill with a `schedule` extra plus a sibling port that has no metadata. `rank` and
+                    `__tensor_tag` are present in the source data but filtered out of the rendered view.
+                </p>
                 <div className='styleguide-bounded-host'>
                     <MlirNodeDetailsPanel
                         node={MLIR_RICH_NODE}
-                        incomingEdges={[]}
+                        incomingEdges={MLIR_RICH_NODE_INCOMING}
                         outgoingEdges={MLIR_RICH_NODE_OUTGOING}
                         outputsMetadata={MLIR_RICH_NODE.outputsMetadata}
                         onClose={() => {}}
