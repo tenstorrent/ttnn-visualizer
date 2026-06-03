@@ -45,11 +45,6 @@ const FALLBACK_COLOUR = CellColour.Grey;
 const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
-// Thresholds calibrated against real reports (resnet50, llama_attn_32l).
-const L1_FULLNESS_WARNING_PERCENT = 25;
-const L1_FULLNESS_CRITICAL_PERCENT = 50;
-const L1_LARGEST_FREE_WARNING_PERCENT = 60;
-const L1_LARGEST_FREE_CRITICAL_PERCENT = 30;
 
 // https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
@@ -70,7 +65,7 @@ export const formatCell = (
     }
 
     // L1 pressure values reflect a TTNN-op snapshot; suppress repeats inside the same op group.
-    if (!isFirstOfOpRun && (key === ColumnKeys.L1Fullness || key === ColumnKeys.L1LargestFreePercent)) {
+    if (!isFirstOfOpRun && key === ColumnKeys.L1Fullness) {
         return '';
     }
 
@@ -184,6 +179,7 @@ export const formatCell = (
                     fullnessPercent={value}
                     largestFreePercent={row.l1_largest_free_percent}
                 />
+
                 <div className='l1-fullness-attributes'>
                     <strong>Free segments:</strong> {freeSegments ?? 'n/a'}
                     <br />
@@ -194,6 +190,7 @@ export const formatCell = (
                 </div>
             </>
         );
+
         const formattedPercent = formatPercentage(value, decimals);
 
         return (
@@ -217,51 +214,6 @@ export const formatCell = (
             </Tooltip>
         );
     }
-
-    // if (key === ColumnKeys.L1LargestFreePercent) {
-    //     if (typeof value !== 'number') {
-    //         return '';
-    //     }
-
-    //     const largestFreeBytes = row.l1_largest_free;
-    //     const freeSegments = row.l1_free_segments;
-    //     const tooltipBody = (
-    //         <>
-    //             <L1FullnessBar
-    //                 fullnessPercent={row.l1_fullness_percent ?? 0}
-    //                 largestFreePercent={value}
-    //                 usedColour={getCellColour(row, ColumnKeys.L1Fullness)}
-    //             />
-    //             Largest contiguous free block as % of usable L1
-    //             <br />
-    //             <strong>Free segments:</strong> {freeSegments ?? 'n/a'}
-    //             <br />
-    //             <strong>Largest free:</strong>{' '}
-    //             {largestFreeBytes != null ? formatMemorySize(largestFreeBytes, 2) : 'n/a'}
-    //             <br />
-    //             <em>Excludes circular buffers</em>
-    //         </>
-    //     );
-    //     const formattedPercent = formatPercentage(value, decimals);
-
-    //     return (
-    //         <Tooltip
-    //             content={tooltipBody}
-    //             usePortal={false}
-    //         >
-    //             <span className={classNames(Classes.TOOLTIP_INDICATOR)}>
-    //                 {highlight ? (
-    //                     <HighlightedText
-    //                         text={formattedPercent}
-    //                         filter={highlight}
-    //                     />
-    //                 ) : (
-    //                     formattedPercent
-    //                 )}
-    //             </span>
-    //         </Tooltip>
-    //     );
-    // }
 
     if (typeof value === 'number' && key !== ColumnKeys.Id) {
         formatted = formatSize(value, decimals);
@@ -418,30 +370,6 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
 
     if (key === ColumnKeys.OpToOpGap) {
         return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : FALLBACK_COLOUR;
-    }
-
-    if (key === ColumnKeys.L1Fullness && typeof keyValue === 'number') {
-        if (keyValue >= L1_FULLNESS_CRITICAL_PERCENT) {
-            return CellColour.Red;
-        }
-
-        if (keyValue >= L1_FULLNESS_WARNING_PERCENT) {
-            return CellColour.Yellow;
-        }
-
-        return DEFAULT_COLOUR;
-    }
-
-    if (key === ColumnKeys.L1LargestFreePercent && typeof keyValue === 'number') {
-        if (keyValue <= L1_LARGEST_FREE_CRITICAL_PERCENT) {
-            return CellColour.Red;
-        }
-
-        if (keyValue <= L1_LARGEST_FREE_WARNING_PERCENT) {
-            return CellColour.Yellow;
-        }
-
-        return DEFAULT_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something

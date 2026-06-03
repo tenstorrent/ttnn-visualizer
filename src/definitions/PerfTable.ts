@@ -161,9 +161,6 @@ export enum ColumnKeys {
     Hash = 'hash',
     CacheHit = 'cache_hit',
     L1Fullness = 'l1_fullness_percent',
-    L1FreeSegments = 'l1_free_segments',
-    L1LargestFree = 'l1_largest_free',
-    L1LargestFreePercent = 'l1_largest_free_percent',
 }
 
 export const Columns: ColumnDefinition[] = [
@@ -194,7 +191,6 @@ export const Columns: ColumnDefinition[] = [
 
 export const L1PressureColumns: ColumnDefinition[] = [
     { name: 'L1 Usage %', key: ColumnKeys.L1Fullness, unit: '%', decimals: 1, sortable: true },
-    // { name: 'L1 max free %', key: ColumnKeys.L1LargestFreePercent, unit: '%', decimals: 1, sortable: true },
 ];
 
 export const comparisonKeys: ColumnKeys[] = [
@@ -210,7 +206,6 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.GlobalCallCount,
     ColumnKeys.HighDispatch,
     ColumnKeys.L1Fullness,
-    ColumnKeys.L1LargestFreePercent,
     ColumnKeys.Layout,
     ColumnKeys.MathFidelity,
     ColumnKeys.OpCode,
