@@ -762,7 +762,7 @@ export default function Styleguide() {
                 />
             </div>
 
-            <div className='container'>
+            <div className='container operation-graph-component'>
                 <h3>Operation graph perf overlay</h3>
 
                 <h4>Legend &mdash; typical range (µs &ndash; ms)</h4>

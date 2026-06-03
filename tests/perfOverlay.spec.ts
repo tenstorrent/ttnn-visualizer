@@ -35,11 +35,12 @@ describe('aggregatePerfByOp', () => {
         expect(Array.from(map.keys())).toEqual([6]);
     });
 
-    it('takes the max device_time across multiple rows per op id', () => {
+    it('takes the max device_time across multiple rows per op id and converts µs → ns', () => {
+        // Wire `device_time` is microseconds; aggregator normalises to ns.
         const map = aggregatePerfByOp([row(7, 1000), row(7, 4000), row(7, 2000)]);
         const agg = map.get(7);
         expect(agg).toBeDefined();
-        expect(agg?.deviceTimeNs).toBe(4000);
+        expect(agg?.deviceTimeNs).toBe(4_000_000);
         expect(agg?.rowCount).toBe(3);
     });
 });
@@ -53,6 +54,7 @@ describe('scoreOps', () => {
     });
 
     it('assigns t=0 and sizeBin=0 to every op when all device times are equal', () => {
+        // Inputs are µs (100 µs); aggregator stores ns (100_000 ns).
         const map = aggregatePerfByOp([row(1, 100), row(2, 100), row(3, 100)]);
         const { scoreByOpId, minNs, maxNs } = scoreOps(map);
         for (const id of [1, 2, 3]) {
@@ -60,8 +62,8 @@ describe('scoreOps', () => {
             expect(score?.t).toBe(0);
             expect(score?.sizeBin).toBe(0);
         }
-        expect(minNs).toBe(100);
-        expect(maxNs).toBe(100);
+        expect(minNs).toBe(100_000);
+        expect(maxNs).toBe(100_000);
     });
 
     it('puts the min at t=0 / sizeBin=0 and the max at t=1 / top sizeBin', () => {

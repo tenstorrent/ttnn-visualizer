@@ -8,11 +8,21 @@ import { PERF_BINS } from '../definitions/GraphColors';
  * Minimal projection of a perf row the overlay needs. Decoupled from the
  * full `TypedPerfTableRow` so `GraphView` can produce rows without pulling
  * the perf-table enrichment pipeline.
+ *
+ * `device_time` matches the wire format: **microseconds**. The overlay
+ * normalises to nanoseconds at aggregation time so `formatDuration` and the
+ * legend labels work in the same unit downstream. Keep the wire-format
+ * semantics on this interface so future modifications can't silently mix
+ * units between the projection and the rest of the perf-table pipeline
+ * (see `PerfDeviceTimeChart` for the same µs → ns conversion).
  */
 export interface PerfOverlaySource {
     id: number | null;
     device_time: number | null;
 }
+
+/** Conversion factor for the wire µs value to the internal ns representation. */
+const US_TO_NS = 1_000;
 
 export interface OpPerfAggregate {
     opId: number;
@@ -34,11 +44,12 @@ export const aggregatePerfByOp = (rows: PerfOverlaySource[]): Map<number, OpPerf
         const { id } = row;
         const dt = row.device_time;
         if (id !== null && dt !== null && Number.isFinite(dt) && dt > 0) {
+            const deviceTimeNs = dt * US_TO_NS;
             const existing = aggregatesByOpId.get(id);
             if (existing === undefined) {
-                aggregatesByOpId.set(id, { opId: id, deviceTimeNs: dt, rowCount: 1 });
+                aggregatesByOpId.set(id, { opId: id, deviceTimeNs, rowCount: 1 });
             } else {
-                existing.deviceTimeNs = Math.max(existing.deviceTimeNs, dt);
+                existing.deviceTimeNs = Math.max(existing.deviceTimeNs, deviceTimeNs);
                 existing.rowCount += 1;
             }
         }
