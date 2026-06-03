@@ -125,8 +125,9 @@ export default function Performance() {
         [rangedData, opIdsMap, l1PressureMap],
     );
     const enrichedComparisonData = useMemo(
-        () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap, l1PressureMap)) || [],
-        [comparisonPerfData, opIdsMap, l1PressureMap],
+        // L1 metrics come from the active memory report only — do not attach the active report's map here.
+        () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap, null)) || [],
+        [comparisonPerfData, opIdsMap],
     );
 
     const selectedOpCodeSet = useMemo(

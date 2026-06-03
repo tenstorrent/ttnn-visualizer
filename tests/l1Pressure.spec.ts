@@ -5,7 +5,7 @@
 import { expect, test } from 'vitest';
 import { BufferType } from '../src/model/BufferType';
 import { Buffer } from '../src/model/APIData';
-import { computeL1PressureForOperation } from '../src/functions/l1Pressure';
+import { L1PressureStatus, buildL1PressureResult, computeL1PressureForOperation } from '../src/functions/l1Pressure';
 
 const L1_START = 0;
 const L1_END = 1000;
@@ -133,4 +133,49 @@ test('computeL1PressureForOperation reports the most-full device across devices'
         largestFreeBytes: 300,
         largestFreePercent: 30,
     });
+});
+
+test('buildL1PressureResult returns unavailable when no memory profiler report is linked', () => {
+    expect(
+        buildL1PressureResult({
+            hasProfilerReport: false,
+            isError: false,
+            isLoading: false,
+            buffersByOperation: undefined,
+            devices: undefined,
+            l1SmallBuffers: undefined,
+            l1Start: L1_START,
+            l1End: L1_END,
+        }),
+    ).toEqual({ status: L1PressureStatus.Unavailable, data: null });
+});
+
+test('buildL1PressureResult returns unavailable when the buffer query is idle with no data', () => {
+    expect(
+        buildL1PressureResult({
+            hasProfilerReport: true,
+            isError: false,
+            isLoading: false,
+            buffersByOperation: undefined,
+            devices: [],
+            l1SmallBuffers: [],
+            l1Start: L1_START,
+            l1End: L1_END,
+        }),
+    ).toEqual({ status: L1PressureStatus.Unavailable, data: null });
+});
+
+test('buildL1PressureResult returns loading while inputs are still fetching', () => {
+    expect(
+        buildL1PressureResult({
+            hasProfilerReport: true,
+            isError: false,
+            isLoading: true,
+            buffersByOperation: undefined,
+            devices: undefined,
+            l1SmallBuffers: undefined,
+            l1Start: L1_START,
+            l1End: L1_END,
+        }),
+    ).toEqual({ status: L1PressureStatus.Loading, data: null });
 });

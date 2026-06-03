@@ -30,12 +30,7 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
-import {
-    L1PressureMetrics,
-    L1PressureResult,
-    L1PressureStatus,
-    computeL1PressureForOperation,
-} from '../functions/l1Pressure';
+import { L1PressureResult, buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
@@ -936,6 +931,7 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
 };
 
 export const useL1PressureByOperation = (): L1PressureResult => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const { data: buffersByOperation, isLoading, isError } = useBuffers(BufferType.L1, false);
     // The markers depend on these two queries; read their load state directly so we don't compute
     // pressure against the default L1 window before the real markers resolve (which would briefly
@@ -945,30 +941,20 @@ export const useL1PressureByOperation = (): L1PressureResult => {
     const l1Start = useGetL1StartMarker();
     const l1End = useGetL1SmallMarker();
 
-    return useMemo(() => {
-        if (isError) {
-            return { status: L1PressureStatus.Unavailable, data: null };
-        }
-
-        const inputsResolved =
-            !isLoading && buffersByOperation !== undefined && devices !== undefined && l1SmallBuffers !== undefined;
-
-        if (!inputsResolved) {
-            return { status: L1PressureStatus.Loading, data: null };
-        }
-
-        if (l1End <= l1Start) {
-            return { status: L1PressureStatus.Unavailable, data: null };
-        }
-
-        const pressureByOperation = new Map<number, L1PressureMetrics>();
-
-        for (const operation of buffersByOperation) {
-            pressureByOperation.set(operation.id, computeL1PressureForOperation(operation.buffers, l1Start, l1End));
-        }
-
-        return { status: L1PressureStatus.Ready, data: pressureByOperation };
-    }, [buffersByOperation, devices, l1SmallBuffers, isError, isLoading, l1End, l1Start]);
+    return useMemo(
+        () =>
+            buildL1PressureResult({
+                hasProfilerReport: activeProfilerReport !== null,
+                isError,
+                isLoading,
+                buffersByOperation,
+                devices,
+                l1SmallBuffers,
+                l1Start,
+                l1End,
+            }),
+        [activeProfilerReport, buffersByOperation, devices, l1SmallBuffers, isError, isLoading, l1End, l1Start],
+    );
 };
 
 export const usePerfMeta = (name?: string | null) => {

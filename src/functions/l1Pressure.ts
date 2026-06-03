@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Buffer } from '../model/APIData';
+import { Buffer, BuffersByOperation, DeviceInfo } from '../model/APIData';
 
 export interface L1PressureMetrics {
     fullnessPercent: number;
@@ -22,6 +22,57 @@ export enum L1PressureStatus {
 export interface L1PressureResult {
     status: L1PressureStatus;
     data: Map<number, L1PressureMetrics> | null;
+}
+
+export interface L1PressureBuildParams {
+    hasProfilerReport: boolean;
+    isError: boolean;
+    isLoading: boolean;
+    buffersByOperation: BuffersByOperation[] | undefined;
+    devices: DeviceInfo[] | undefined;
+    l1SmallBuffers: Buffer[] | undefined;
+    l1Start: number;
+    l1End: number;
+}
+
+export function buildL1PressureResult({
+    hasProfilerReport,
+    isError,
+    isLoading,
+    buffersByOperation,
+    devices,
+    l1SmallBuffers,
+    l1Start,
+    l1End,
+}: L1PressureBuildParams): L1PressureResult {
+    if (!hasProfilerReport || isError) {
+        return { status: L1PressureStatus.Unavailable, data: null };
+    }
+
+    const inputsResolved =
+        !isLoading && buffersByOperation !== undefined && devices !== undefined && l1SmallBuffers !== undefined;
+
+    if (!inputsResolved) {
+        // useBuffers is disabled when no memory report is selected; React Query stays idle with
+        // isLoading false and data undefined — must not report Loading indefinitely.
+        if (!isLoading && buffersByOperation === undefined) {
+            return { status: L1PressureStatus.Unavailable, data: null };
+        }
+
+        return { status: L1PressureStatus.Loading, data: null };
+    }
+
+    if (l1End <= l1Start) {
+        return { status: L1PressureStatus.Unavailable, data: null };
+    }
+
+    const pressureByOperation = new Map<number, L1PressureMetrics>();
+
+    for (const operation of buffersByOperation) {
+        pressureByOperation.set(operation.id, computeL1PressureForOperation(operation.buffers, l1Start, l1End));
+    }
+
+    return { status: L1PressureStatus.Ready, data: pressureByOperation };
 }
 
 interface MemoryChunk {
