@@ -594,6 +594,52 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // with the producer's `outputsMetadata` for the relevant source port —
     // that's the per-port shape/dtype/`__tensor_tag` payload that flows
     // along the wire.
+    //
+    // Index `edges` once per build by source-id and target-id so each
+    // selection change is O(degree of selected node) instead of O(|E|).
+    // MLIR graphs can run into the tens of thousands of edges; without
+    // these indices, every node click would re-walk the whole edge list.
+    const { outgoingEdgesByNodeId, incomingEdgesByNodeId } = useMemo<{
+        outgoingEdgesByNodeId: Map<string, Edge[]>;
+        incomingEdgesByNodeId: Map<string, Edge[]>;
+    }>(() => {
+        const outgoing = new Map<string, Edge[]>();
+        const incoming = new Map<string, Edge[]>();
+        for (const edge of edges) {
+            const fromBucket = outgoing.get(edge.source);
+            if (fromBucket) {
+                fromBucket.push(edge);
+            } else {
+                outgoing.set(edge.source, [edge]);
+            }
+            const toBucket = incoming.get(edge.target);
+            if (toBucket) {
+                toBucket.push(edge);
+            } else {
+                incoming.set(edge.target, [edge]);
+            }
+        }
+        return { outgoingEdgesByNodeId: outgoing, incomingEdgesByNodeId: incoming };
+    }, [edges]);
+
+    // Per-node output-port lookup so incoming-edge enrichment can grab the
+    // producer's port metadata in O(1) instead of `find()`-ing through the
+    // producer's `outputsMetadata` array on every edge.
+    const outputsPortMetadataByNodeIdAndPortId = useMemo<Map<string, Map<string, IndexedPortMetadata>>>(() => {
+        const result = new Map<string, Map<string, IndexedPortMetadata>>();
+        for (const sourceNode of sourceNodes) {
+            if (sourceNode.outputsMetadata.length === 0) {
+                continue;
+            }
+            const portMap = new Map<string, IndexedPortMetadata>();
+            for (const port of sourceNode.outputsMetadata) {
+                portMap.set(port.id, port);
+            }
+            result.set(sourceNode.id, portMap);
+        }
+        return result;
+    }, [sourceNodes]);
+
     const selectedOutgoingEdges = useMemo<OutgoingEdge[]>(() => {
         if (!selectedNodeId) {
             return [];
@@ -602,21 +648,31 @@ const MlGraphInner = ({ data }: ViewProps) => {
         // selecting either side of the (outer op ↔ terminator) pair surfaces
         // the same consumers.
         const partnerNodeId = regionOutputPartnerByNodeId.get(selectedNodeId);
-        const result: OutgoingEdge[] = [];
-        for (const edge of edges) {
-            if (edge.source !== selectedNodeId && edge.source !== partnerNodeId) {
-                continue;
+        const buckets: Edge[][] = [];
+        const selfBucket = outgoingEdgesByNodeId.get(selectedNodeId);
+        if (selfBucket) {
+            buckets.push(selfBucket);
+        }
+        if (partnerNodeId) {
+            const partnerBucket = outgoingEdgesByNodeId.get(partnerNodeId);
+            if (partnerBucket) {
+                buckets.push(partnerBucket);
             }
-            result.push({
-                targetNodeId: edge.target,
-                targetNodeLabel: sourceNodeById.get(edge.target)?.label ?? null,
-                sourceNodeOutputId: edge.sourceHandle ?? '0',
-                targetNodeInputId: edge.targetHandle ?? '0',
-                label: typeof edge.label === 'string' ? edge.label : undefined,
-            });
+        }
+        const result: OutgoingEdge[] = [];
+        for (const bucket of buckets) {
+            for (const edge of bucket) {
+                result.push({
+                    targetNodeId: edge.target,
+                    targetNodeLabel: sourceNodeById.get(edge.target)?.label ?? null,
+                    sourceNodeOutputId: edge.sourceHandle ?? '0',
+                    targetNodeInputId: edge.targetHandle ?? '0',
+                    label: typeof edge.label === 'string' ? edge.label : undefined,
+                });
+            }
         }
         return result;
-    }, [edges, selectedNodeId, regionOutputPartnerByNodeId, sourceNodeById]);
+    }, [outgoingEdgesByNodeId, selectedNodeId, regionOutputPartnerByNodeId, sourceNodeById]);
 
     // Output port metadata for the panel: the selected node's own metadata
     // when present, else the partner's. For a region's terminator (no own
@@ -645,34 +701,58 @@ const MlGraphInner = ({ data }: ViewProps) => {
         // their edges back to the anchor's input port (the index of the
         // arg in `namespaceInputByNamespace[ns]`).
         const argIdxByArgId = inputArgIdxByArgIdByAnchor.get(selectedNodeId);
-        const result: IncomingEdgeView[] = [];
-        for (const edge of edges) {
-            let targetInputId: string | null = null;
-            if (edge.target === selectedNodeId) {
-                targetInputId = edge.targetHandle ?? '0';
-            } else if (argIdxByArgId) {
-                const idx = argIdxByArgId.get(edge.target);
-                if (idx !== undefined) {
-                    targetInputId = String(idx);
-                }
-            }
-            if (targetInputId === null) {
-                continue;
-            }
-            const sourcePortId = edge.sourceHandle ?? '0';
-            const producer = sourceNodeById.get(edge.source);
-            const sourcePortMetadata = producer?.outputsMetadata.find((p) => p.id === sourcePortId) ?? null;
-            result.push({
-                sourceNodeId: edge.source,
-                sourceNodeLabel: producer?.label ?? null,
-                sourceNodeOutputId: sourcePortId,
-                targetNodeInputId: targetInputId,
-                label: typeof edge.label === 'string' ? edge.label : undefined,
-                sourcePortMetadata,
+        // Build the (bucket, targetInputId resolver) pairs we need to walk.
+        // Direct edges hitting the selection use their own targetHandle; arg
+        // edges resolve to the anchor's input-port index via `argIdxByArgId`.
+        const pairs: Array<{ bucket: Edge[]; resolveTargetInputId: (edge: Edge) => string | null }> = [];
+        const selfBucket = incomingEdgesByNodeId.get(selectedNodeId);
+        if (selfBucket) {
+            pairs.push({
+                bucket: selfBucket,
+                resolveTargetInputId: (edge) => edge.targetHandle ?? '0',
             });
         }
+        if (argIdxByArgId) {
+            for (const [argNodeId, portIdx] of argIdxByArgId) {
+                const argBucket = incomingEdgesByNodeId.get(argNodeId);
+                if (argBucket) {
+                    const portIdStr = String(portIdx);
+                    pairs.push({
+                        bucket: argBucket,
+                        resolveTargetInputId: () => portIdStr,
+                    });
+                }
+            }
+        }
+        const result: IncomingEdgeView[] = [];
+        for (const { bucket, resolveTargetInputId } of pairs) {
+            for (const edge of bucket) {
+                const targetInputId = resolveTargetInputId(edge);
+                if (targetInputId === null) {
+                    continue;
+                }
+                const sourcePortId = edge.sourceHandle ?? '0';
+                const producer = sourceNodeById.get(edge.source);
+                const sourcePortMetadata =
+                    outputsPortMetadataByNodeIdAndPortId.get(edge.source)?.get(sourcePortId) ?? null;
+                result.push({
+                    sourceNodeId: edge.source,
+                    sourceNodeLabel: producer?.label ?? null,
+                    sourceNodeOutputId: sourcePortId,
+                    targetNodeInputId: targetInputId,
+                    label: typeof edge.label === 'string' ? edge.label : undefined,
+                    sourcePortMetadata,
+                });
+            }
+        }
         return result;
-    }, [edges, selectedNodeId, sourceNodeById, inputArgIdxByArgIdByAnchor]);
+    }, [
+        incomingEdgesByNodeId,
+        outputsPortMetadataByNodeIdAndPortId,
+        selectedNodeId,
+        sourceNodeById,
+        inputArgIdxByArgIdByAnchor,
+    ]);
 
     const closeDetailsPanel = useCallback(() => {
         setSelectedNodeId(null);
