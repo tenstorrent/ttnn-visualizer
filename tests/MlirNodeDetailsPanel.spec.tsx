@@ -207,6 +207,26 @@ describe('MlirNodeDetailsPanel Inputs section', () => {
         renderPanel({ incomingEdges: incoming });
         expect(screen.getByText('out 2 → in 1')).toBeInTheDocument();
     });
+
+    it('calls onNavigateToNode with the producer id when the row locate button is clicked', () => {
+        const incoming: IncomingEdgeView[] = [
+            {
+                sourceNodeId: 'loc("-":3:8)__0',
+                sourceNodeLabel: 'stablehlo.broadcast_in_dim',
+                sourceNodeOutputId: '0',
+                targetNodeInputId: '0',
+                sourcePortMetadata: null,
+            },
+        ];
+        const onNavigateToNode = vi.fn();
+        const { container } = renderPanel({ incomingEdges: incoming, onNavigateToNode });
+        const inputsBody = container.querySelector(
+            '.mlir-node-details-inputs .mlir-node-details-section-body',
+        ) as HTMLElement;
+        fireEvent.click(within(inputsBody).getByRole('button', { name: 'Locate stablehlo.broadcast_in_dim' }));
+        expect(onNavigateToNode).toHaveBeenCalledTimes(1);
+        expect(onNavigateToNode).toHaveBeenCalledWith('loc("-":3:8)__0');
+    });
 });
 
 describe('MlirNodeDetailsPanel Outputs section', () => {
@@ -270,6 +290,28 @@ describe('MlirNodeDetailsPanel Outputs section', () => {
         expect(screen.getByText('port 0')).toBeInTheDocument();
         const consumerList = container.querySelector('.mlir-node-details-consumer-list');
         expect(within(consumerList as HTMLElement).getByText('stablehlo.reshape')).toBeInTheDocument();
+    });
+
+    it('calls onNavigateToNode with the consumer id when the row locate button is clicked', () => {
+        const outgoing: OutgoingEdge[] = [
+            {
+                targetNodeId: 'loc("-":7:4)__2',
+                targetNodeLabel: 'stablehlo.add',
+                sourceNodeOutputId: '0',
+                targetNodeInputId: '0',
+                label: '[4, 8] f32',
+            },
+        ];
+        const onNavigateToNode = vi.fn();
+        const { container } = renderPanel({
+            outputsMetadata: [SHAPE_DTYPE_PORT],
+            outgoingEdges: outgoing,
+            onNavigateToNode,
+        });
+        const consumerList = container.querySelector('.mlir-node-details-consumer-list') as HTMLElement;
+        fireEvent.click(within(consumerList).getByRole('button', { name: 'Locate stablehlo.add' }));
+        expect(onNavigateToNode).toHaveBeenCalledTimes(1);
+        expect(onNavigateToNode).toHaveBeenCalledWith('loc("-":7:4)__2');
     });
 
     it('renders an explicit port that carries empty attrs as a bare `port X` row with no metadata block', () => {

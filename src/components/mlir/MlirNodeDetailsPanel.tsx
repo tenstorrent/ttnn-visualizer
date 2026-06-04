@@ -29,9 +29,11 @@ interface MlirNodeDetailsPanelProps {
     onRecenter: () => void;
     /**
      * Invoked when the user clicks the "locate" affordance next to a producer
-     * (Inputs) or consumer (Outputs) reference. The view handles selecting
-     * the target, auto-expanding any namespaces it sits inside, and
-     * recentering the canvas on it.
+     * (Inputs) or consumer (Outputs) reference. The view auto-expands any
+     * namespaces the target sits inside and recenters the canvas on it; the
+     * current selection — and therefore the panel itself — is intentionally
+     * left untouched so the user can keep exploring the originating op's
+     * I/O while peeking at where its neighbours live.
      */
     onNavigateToNode: (nodeId: string) => void;
 }

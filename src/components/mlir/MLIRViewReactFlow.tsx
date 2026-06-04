@@ -349,8 +349,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
             // pre-rebuild (collapsed namespace). Now that the rebuilt graph
             // has landed, recenter on it. Skip silently if the target still
             // isn't in the build (e.g. synthetic id that never reaches the
-            // canvas) — selection is harmless and the missing fitView is
-            // preferable to a noisy error.
+            // canvas) — a missing fitView is preferable to a noisy error,
+            // and the surrounding state stays consistent because navigation
+            // never touches selection.
             const pendingFocusId = pendingFocusNodeIdRef.current;
             if (pendingFocusId) {
                 pendingFocusNodeIdRef.current = null;
