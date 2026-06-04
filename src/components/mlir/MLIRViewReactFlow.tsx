@@ -49,6 +49,7 @@ import type {
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
+import { getNamespaceSegments } from './mlirGraphHelpers';
 
 // Re-uses `WorkerNode['data']` (the canonical shape produced by the layout
 // worker) and tacks on `highlight` — a view-layer-only flag. Set when this
@@ -287,6 +288,10 @@ const MlGraphInner = ({ data }: ViewProps) => {
         toNodeId: string;
         fromPosition: { x: number; y: number };
     } | null>(null);
+    // Set by `navigateToNode` when the target lives inside one or more
+    // collapsed namespaces and we have to wait for the worker to rebuild
+    // before we can fitView on it. Consumed once the rebuilt graph lands.
+    const pendingFocusNodeIdRef = useRef<string | null>(null);
     const hasFitInitiallyRef = useRef(false);
 
     // No graph-id reset effect: `MlGraphInner` is keyed by `graph.id` in
@@ -337,6 +342,27 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     );
                 }
                 viewportAnchorRef.current = null;
+            }
+
+            // Locate-from-panel: the user clicked the "locate" button next to
+            // a producer/consumer reference and the target wasn't visible
+            // pre-rebuild (collapsed namespace). Now that the rebuilt graph
+            // has landed, recenter on it. Skip silently if the target still
+            // isn't in the build (e.g. synthetic id that never reaches the
+            // canvas) — selection is harmless and the missing fitView is
+            // preferable to a noisy error.
+            const pendingFocusId = pendingFocusNodeIdRef.current;
+            if (pendingFocusId) {
+                pendingFocusNodeIdRef.current = null;
+                if (rf.nodes.some((n) => n.id === pendingFocusId)) {
+                    requestAnimationFrame(() => {
+                        void fitView({
+                            nodes: [{ id: pendingFocusId }],
+                            padding: 0.3,
+                            duration: 200,
+                        });
+                    });
+                }
             }
 
             if (!hasFitInitiallyRef.current) {
@@ -765,6 +791,51 @@ const MlGraphInner = ({ data }: ViewProps) => {
         void fitView({ nodes: [{ id: selectedNodeId }], padding: 0.3, duration: 200 });
     }, [fitView, selectedNodeId]);
 
+    // Click handler for the "locate" affordance next to each producer /
+    // consumer reference in the details panel. This is a peek — it pans
+    // the viewport to the linked node without changing the current
+    // selection, so the panel stays on the originating op and the
+    // input/output highlighting on the canvas doesn't churn.
+    //
+    // The target may live inside one or more collapsed namespaces, so we:
+    //   1. Look it up in the source-data map. If unknown (e.g. a synthetic
+    //      arg-node id that never appears as a SourceNode), bail.
+    //   2. Walk the namespace chain and queue any ancestor prefixes — and
+    //      the target's own namespace — that aren't already expanded. Every
+    //      level must be expanded for the node to actually be rendered.
+    //   3. If no expansion was needed, fitView straight away. Otherwise
+    //      stash the id in `pendingFocusNodeIdRef` so the post-rebuild path
+    //      in `applyBuiltGraph` recenters once the new nodes land.
+    const navigateToNode = useCallback(
+        (targetNodeId: string) => {
+            const target = sourceNodeById.get(targetNodeId);
+            if (!target) {
+                return;
+            }
+            const segments = getNamespaceSegments(target.namespace);
+            const prefixesToAdd: string[] = [];
+            for (let i = 1; i <= segments.length; i++) {
+                const prefix = segments.slice(0, i).join('/');
+                if (!expandedNamespaces.has(prefix)) {
+                    prefixesToAdd.push(prefix);
+                }
+            }
+            if (prefixesToAdd.length === 0) {
+                void fitView({ nodes: [{ id: targetNodeId }], padding: 0.3, duration: 200 });
+                return;
+            }
+            pendingFocusNodeIdRef.current = targetNodeId;
+            setExpandedNamespaces((prev) => {
+                const next = new Set(prev);
+                for (const prefix of prefixesToAdd) {
+                    next.add(prefix);
+                }
+                return next;
+            });
+        },
+        [expandedNamespaces, fitView, sourceNodeById],
+    );
+
     // Edge display rules:
     // 1. Drop edges where either endpoint is a real-namespace group node.
     //    The worker's internal-edges loop emits these for nested expanded
@@ -1043,6 +1114,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     outputsMetadata={selectedOutputsMetadata}
                     onClose={closeDetailsPanel}
                     onRecenter={recenterOnSelected}
+                    onNavigateToNode={navigateToNode}
                 />
             )}
         </div>

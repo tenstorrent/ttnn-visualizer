@@ -54,6 +54,7 @@ interface RenderPanelOverrides {
     outputsMetadata?: IndexedPortMetadata[];
     onClose?: () => void;
     onRecenter?: () => void;
+    onNavigateToNode?: (nodeId: string) => void;
 }
 
 function renderPanel(overrides: RenderPanelOverrides = {}) {
@@ -67,6 +68,7 @@ function renderPanel(overrides: RenderPanelOverrides = {}) {
                 outputsMetadata={overrides.outputsMetadata ?? node.outputsMetadata}
                 onClose={overrides.onClose ?? (() => {})}
                 onRecenter={overrides.onRecenter ?? (() => {})}
+                onNavigateToNode={overrides.onNavigateToNode ?? (() => {})}
             />
         </TestProviders>,
     );
@@ -89,7 +91,7 @@ describe('MlirNodeDetailsPanel header', () => {
     it('calls onRecenter when the recenter button is clicked', () => {
         const onRecenter = vi.fn();
         renderPanel({ onRecenter });
-        fireEvent.click(screen.getByRole('button', { name: 'Recenter on this node' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Recenter' }));
         expect(onRecenter).toHaveBeenCalledTimes(1);
     });
 });
