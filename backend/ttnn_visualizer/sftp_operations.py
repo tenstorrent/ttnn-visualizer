@@ -429,8 +429,9 @@ def sync_files_and_directories(
             NoValidConnectionsError,
             SSHException,
         ):
-            # Fatal SSH errors must not be swallowed — the decorator maps these to
-            # actionable 422 responses (host key, auth, connectivity).
+            # Fatal SSH errors must not be swallowed — the decorator maps host-key
+            # and auth failures to actionable 422 responses; connectivity
+            # (NoValidConnectionsError) surfaces as a 500.
             raise
         except Exception as e:
             last_download_error = f"{remote_file}: {e}"
@@ -693,7 +694,8 @@ def download_single_file_scp(
         )
         if e.returncode == 255:
             handle_ssh_subprocess_error(e, remote_connection)  # always raises
-        raise RuntimeError(f"Failed to download {remote_file}")
+        detail = (e.stderr or "").strip() or "no stderr"
+        raise RuntimeError(f"Failed to download {remote_file}: {detail}")
     except subprocess.TimeoutExpired:
         logger.error("Timeout downloading file via scp: %s", remote_file)
         raise RuntimeError(f"Timeout downloading {remote_file}")
@@ -748,7 +750,8 @@ def download_single_file_sftp(
         )
         if e.returncode == 255:  # SSH protocol errors
             handle_ssh_subprocess_error(e, remote_connection)  # always raises
-        raise RuntimeError(f"Failed to download {remote_file}")
+        detail = stderr.strip() or "no stderr"
+        raise RuntimeError(f"Failed to download {remote_file}: {detail}")
     except subprocess.TimeoutExpired:
         logger.error("Timeout downloading file: %s", remote_file)
         raise RuntimeError(f"Timeout downloading {remote_file}")
@@ -759,7 +762,7 @@ def download_single_file_sftp(
             type(e).__name__,
             e,
         )
-        raise RuntimeError(f"Failed to download {remote_file}")
+        raise RuntimeError(f"Failed to download {remote_file}: {type(e).__name__}: {e}")
 
 
 def get_remote_profiler_folder_from_config_path(

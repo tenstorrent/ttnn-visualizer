@@ -417,7 +417,7 @@ class TestSyncFilesAndDirectoriesPartialFailure:
 class TestSyncFilesAndDirectoriesSyncMethod:
     """The reported sync method must reflect *this* run's transport, not the
     process-global fallback cache (which is keyed by user@host:port and can hold
-    stale entries from a prior host/port).
+    a stale entry from a prior run against the same endpoint).
     """
 
     @pytest.fixture(autouse=True)
