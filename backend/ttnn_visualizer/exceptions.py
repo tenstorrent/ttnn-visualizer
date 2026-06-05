@@ -54,12 +54,17 @@ class RemoteConnectionException(Exception):
         status: ConnectionTestStates,
         http_status_code: Optional[HTTPStatus] = None,
         detail: Optional[str] = None,
+        sync_method: Optional[str] = None,
     ):
         super().__init__(message)
         self.message = message
         self.status = status
         self.detail = detail
         self._http_status_code = http_status_code
+        # Transport actually used for the failed run, when known (sftp/scp).
+        # Lets callers report the real method instead of re-reading the
+        # process-global fallback cache, which can be stale for this run.
+        self.sync_method = sync_method
 
     @property
     def http_status(self):

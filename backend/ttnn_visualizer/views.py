@@ -1780,7 +1780,7 @@ def sync_remote_folder():
                 e.http_status,
                 e.message,
                 detail=e.detail,
-                sync_method=get_active_sync_method(connection).value,
+                sync_method=e.sync_method or get_active_sync_method(connection).value,
             )
 
     try:
@@ -1811,7 +1811,7 @@ def sync_remote_folder():
             e.http_status,
             e.message,
             detail=e.detail,
-            sync_method=get_active_sync_method(connection).value,
+            sync_method=e.sync_method or get_active_sync_method(connection).value,
         )
 
 

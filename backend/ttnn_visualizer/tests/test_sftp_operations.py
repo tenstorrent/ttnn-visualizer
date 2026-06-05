@@ -504,6 +504,9 @@ class TestSyncFilesAndDirectoriesSyncMethod:
                 )
         assert "via sftp" in excinfo.value.message
         assert "via scp" not in excinfo.value.message
+        # The exception carries the per-run method so callers don't have to
+        # re-read the (poisoned) global cache.
+        assert excinfo.value.sync_method == SyncMethod.SFTP.value
 
 
 class TestGetRemoteFileListWithoutSizes:

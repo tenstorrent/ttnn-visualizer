@@ -480,6 +480,7 @@ def sync_files_and_directories(
             status=ConnectionTestStates.FAILED,
             http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             detail=last_download_error,
+            sync_method=sync_method.value,
         )
 
     # Only stamp success after every queued file downloaded.
