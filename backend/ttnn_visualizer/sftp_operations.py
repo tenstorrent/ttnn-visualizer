@@ -27,12 +27,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.models import Instance, RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
-from ttnn_visualizer.ssh_client import (
-    SSH_AUTH_FAILURE_MESSAGE,
-    SSHClient,
-    is_ssh_host_key_verification_error,
-    ssh_host_key_failure_message,
-)
+from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
 from ttnn_visualizer.utils import (
     PROFILER_CONFIG_BASENAME,
     ranked_profiler_config_basenames,
@@ -41,7 +36,12 @@ from ttnn_visualizer.utils import (
 
 logger = logging.getLogger(__name__)
 
-# Hosts where the SFTP subsystem is unavailable but scp over SSH still works.
+# Hosts where the SFTP subsystem is unavailable but scp over SSH still works,
+# keyed by (username, host, port). Process-global and never evicted: a single
+# subsystem failure pins that endpoint to scp for the rest of the process
+# lifetime (across users under SERVER_MODE). That's an intentional tradeoff —
+# scp is a safe superset fallback, so a stale entry only costs an unnecessary
+# scp where sftp might now work, never a failed sync. A restart clears it.
 _sftp_subsystem_unavailable: set[tuple[str, str, int]] = set()
 
 
@@ -62,10 +62,6 @@ def get_active_sync_method(remote_connection: RemoteConnection) -> SyncMethod:
     if _remote_transfer_key(remote_connection) in _sftp_subsystem_unavailable:
         return SyncMethod.SCP
     return SyncMethod.SFTP
-
-
-# Backwards-compatible private alias.
-_active_sync_method = get_active_sync_method
 
 
 def _ssh_subprocess_timeout_seconds() -> int:
@@ -148,42 +144,11 @@ def handle_ssh_subprocess_error(
     a call to this helper as unreachable, which keeps the call sites tidy
     and prevents accidental fall-through.
     """
-    stderr = (e.stderr or "").lower()
     raw_error = (e.stderr or "").strip() or "No stderr output"
     logger.warning(
         f"SSH error for {remote_connection.username}@{remote_connection.host}: {raw_error}"
     )
-    if is_ssh_host_key_verification_error(stderr):
-        raise HostKeyVerificationException(
-            ssh_host_key_failure_message(remote_connection)
-        )
-
-    if any(
-        auth_err in stderr
-        for auth_err in [
-            "permission denied",
-            "authentication failed",
-            "publickey",
-            "password",
-        ]
-    ):
-        raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
-    if any(
-        conn_err in stderr
-        for conn_err in [
-            "connection refused",
-            "network is unreachable",
-            "no route to host",
-            "name or service not known",
-            "could not resolve hostname",
-            "connection timed out",
-            "nodename nor servname provided",
-        ]
-    ):
-        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
-    if "ssh:" in stderr or "protocol" in stderr:
-        raise SSHException(f"SSH protocol error: {e.stderr}")
-    raise SSHException(f"SSH command failed: {e.stderr}")
+    raise_for_ssh_subprocess_error(e, remote_connection)
 
 
 def start_background_task(task, *args):

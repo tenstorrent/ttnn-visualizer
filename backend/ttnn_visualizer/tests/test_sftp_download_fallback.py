@@ -11,10 +11,10 @@ import pytest
 from ttnn_visualizer.enums import SyncMethod
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
-    _active_sync_method,
     _scp_remote_target,
     _sftp_subsystem_unavailable,
     download_single_file_sftp,
+    get_active_sync_method,
 )
 
 
@@ -97,7 +97,7 @@ def test_subsequent_downloads_skip_sftp_after_subsystem_failure(connection, tmp_
 
 
 def test_active_sync_method_reflects_fallback_state(connection, tmp_path):
-    assert _active_sync_method(connection) == SyncMethod.SFTP
+    assert get_active_sync_method(connection) == SyncMethod.SFTP
     sftp_error = subprocess.CalledProcessError(
         returncode=255,
         cmd=["sftp"],
@@ -109,4 +109,4 @@ def test_active_sync_method_reflects_fallback_state(connection, tmp_path):
         side_effect=[sftp_error, _scp_success()],
     ):
         download_single_file_sftp(connection, "/remote/a.txt", tmp_path / "a.txt")
-    assert _active_sync_method(connection) == SyncMethod.SCP
+    assert get_active_sync_method(connection) == SyncMethod.SCP
