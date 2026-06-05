@@ -22,7 +22,7 @@ import {
 } from '@blueprintjs/core';
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { ColumnKeys, Columns, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { ColumnKeys, Columns, TypedPerfTableRow, getEligiblePerfColumns } from '../../definitions/PerfTable';
 import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
@@ -57,6 +57,8 @@ import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { capitalizeString } from '../../functions/formatting';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
+import { useGetNPEManifest, useOpToPerfIdFiltered } from '../../hooks/useAPI';
+import PerfColumnPicker from './PerfColumnPicker';
 
 enum SignpostSelectType {
     START,
@@ -107,6 +109,19 @@ const PerformanceReport = ({
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
+    );
+    const opIdsMap = useOpToPerfIdFiltered();
+    const { data: npeManifest } = useGetNPEManifest();
+    const eligiblePerfColumns = useMemo(
+        () =>
+            getEligiblePerfColumns({
+                hasOpIds: opIdsMap.length > 0,
+                hasL1PressureData,
+                hiliteHighDispatch,
+                showHashColumn: false,
+                hasNpe: Boolean(npeManifest && npeManifest.length > 0),
+            }),
+        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, npeManifest],
     );
 
     const [filters, setFilters] = useState(
@@ -588,6 +603,8 @@ const PerformanceReport = ({
                                         className='option-switch'
                                     />
                                 </Tooltip>
+
+                                {!isStackedView && <PerfColumnPicker eligibleColumns={eligiblePerfColumns} />}
                             </ButtonGroup>
                         </FormGroup>
                     )}

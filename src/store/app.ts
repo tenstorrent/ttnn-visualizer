@@ -12,7 +12,7 @@ import { ListStates } from '../definitions/VirtualLists';
 import { Signpost } from '../functions/perfFunctions';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
-import { TypedPerfTableRow } from '../definitions/PerfTable';
+import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
@@ -96,6 +96,7 @@ export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
 // so a selection can't leak across reports. Cleared on active-report change (Performance.tsx)
 // and on drawer close / row removal / unsynced reports (PerfTable.tsx).
 export const selectedPerfRowIdAtom = atom<number | null>(null);
+export const userPerfColumnsAtom = atomWithStorage<ColumnKeys[]>('userPerfColumns', []);
 
 // NPE
 export const altCongestionColorsAtom = atomWithStorage('altCongestionColors', false);

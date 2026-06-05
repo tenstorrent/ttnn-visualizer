@@ -193,6 +193,65 @@ export const L1PressureColumns: ColumnDefinition[] = [
     { name: 'L1 Usage %', key: ColumnKeys.L1Fullness, unit: '%', decimals: 1, sortable: true },
 ];
 
+const OP_ID_INSERTION_POINT = 1;
+const L1_PRESSURE_INSERTION_POINT = 2;
+const HIGH_DISPATCH_INSERTION_POINT = 5;
+const CACHE_HIT_INSERTION_POINT = 15;
+
+export const LOCKED_PERF_COLUMN_KEYS: ColumnKeys[] = [ColumnKeys.OpCode];
+
+export interface EligiblePerfColumnsFlags {
+    hasOpIds: boolean;
+    hasL1PressureData: boolean;
+    hiliteHighDispatch: boolean;
+    showHashColumn: boolean;
+    hasNpe: boolean;
+}
+
+export function getEligiblePerfColumns(flags: EligiblePerfColumnsFlags): ColumnDefinition[] {
+    return [
+        ...Columns.slice(0, OP_ID_INSERTION_POINT),
+        ...(flags.hasOpIds ? [{ name: 'OP', key: ColumnKeys.OP, sortable: true }] : []),
+        ...Columns.slice(OP_ID_INSERTION_POINT, L1_PRESSURE_INSERTION_POINT),
+        ...(flags.hasL1PressureData ? L1PressureColumns : []),
+        ...Columns.slice(L1_PRESSURE_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...(flags.hiliteHighDispatch ? [{ name: 'Slow', key: ColumnKeys.HighDispatch }] : []),
+        ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT, CACHE_HIT_INSERTION_POINT),
+        ...(flags.showHashColumn ? [{ name: 'Hash', key: ColumnKeys.Hash }] : []),
+        ...Columns.slice(CACHE_HIT_INSERTION_POINT),
+        ...(flags.hasNpe ? [{ name: 'NPE', key: ColumnKeys.GlobalCallCount }] : []),
+    ];
+}
+
+export function getVisiblePerfColumns(
+    eligibleColumns: ColumnDefinition[],
+    hiddenColumnKeys: ColumnKeys[],
+): ColumnDefinition[] {
+    const hiddenKeys = new Set(hiddenColumnKeys);
+
+    return eligibleColumns.filter(
+        (column) => LOCKED_PERF_COLUMN_KEYS.includes(column.key) || !hiddenKeys.has(column.key),
+    );
+}
+
+export function getFooterColumns(visibleColumns: ColumnDefinition[]): ColumnDefinition[] {
+    const opCodeIndex = visibleColumns.findIndex((column) => column.key === ColumnKeys.OpCode);
+
+    return visibleColumns
+        .filter((column) => column.footerSpan !== 0)
+        .map((column) => {
+            if (column.key === ColumnKeys.OpCode && opCodeIndex >= 0) {
+                const trailingSkippedCount = visibleColumns
+                    .slice(opCodeIndex + 1)
+                    .filter((trailingColumn) => trailingColumn.footerSpan === 0).length;
+
+                return { ...column, footerSpan: 1 + trailingSkippedCount };
+            }
+
+            return column;
+        });
+}
+
 // L1 pressure is computed from the active profiler report's buffers (op-id sync and buffer
 // lookups are both keyed to that report), so it cannot be attributed per comparison report.
 // ColumnKeys.L1Fullness is intentionally excluded here — comparison sub-rows render an empty
