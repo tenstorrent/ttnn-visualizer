@@ -10,11 +10,16 @@ from ttnn_visualizer.enums import ConnectionTestStates
 
 
 def error_response(
-    status: HTTPStatus, message: Optional[str] = None, detail: Optional[str] = None
+    status: HTTPStatus,
+    message: Optional[str] = None,
+    detail: Optional[str] = None,
+    sync_method: Optional[str] = None,
 ):
     payload = {"error": message or status.phrase}
     if detail:
         payload["detail"] = detail
+    if sync_method:
+        payload["syncMethod"] = sync_method
     return jsonify(payload), status
 
 
@@ -49,12 +54,17 @@ class RemoteConnectionException(Exception):
         status: ConnectionTestStates,
         http_status_code: Optional[HTTPStatus] = None,
         detail: Optional[str] = None,
+        sync_method: Optional[str] = None,
     ):
         super().__init__(message)
         self.message = message
         self.status = status
         self.detail = detail
         self._http_status_code = http_status_code
+        # Transport actually used for the failed run, when known (sftp/scp).
+        # Lets callers report the real method instead of re-reading the
+        # process-global fallback cache, which can be stale for this run.
+        self.sync_method = sync_method
 
     @property
     def http_status(self):
@@ -84,6 +94,23 @@ class AuthenticationFailedException(RemoteConnectionException):
             message=message,
             status=status,
             http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,  # 422
+            detail=detail,
+        )
+
+
+class HostKeyVerificationFailedException(RemoteConnectionException):
+    """Exception for untrusted SSH host keys that should return HTTP 422."""
+
+    def __init__(
+        self,
+        message,
+        status: ConnectionTestStates = ConnectionTestStates.FAILED,
+        detail: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            status=status,
+            http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             detail=detail,
         )
 
@@ -144,6 +171,12 @@ class SSHException(Exception):
 
 class AuthenticationException(SSHException):
     """Raised when SSH authentication fails"""
+
+    pass
+
+
+class HostKeyVerificationException(SSHException):
+    """Raised when SSH rejects an unknown host key (BatchMode cannot prompt)."""
 
     pass
 

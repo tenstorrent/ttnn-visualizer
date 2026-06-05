@@ -17,14 +17,18 @@ from http import HTTPStatus
 from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer.enums import SyncMethod
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
+    HostKeyVerificationException,
     NoValidConnectionsError,
     RemoteConnectionException,
 )
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
     _get_remote_file_list_without_sizes,
+    _remote_transfer_key,
+    _sftp_subsystem_unavailable,
     get_remote_directory_list,
     get_remote_file_list,
     sync_files_and_directories,
@@ -203,6 +207,20 @@ class TestGetRemoteFileList:
         with patch("subprocess.run", side_effect=auth_error):
             with pytest.raises(AuthenticationException):
                 get_remote_file_list(connection, "/remote", exclude_patterns=[])
+
+    def test_ssh_unknown_host_key_raises_host_key_exception(self, connection):
+        host_key_error = _called_process_error(
+            returncode=255,
+            stderr=(
+                "No ED25519 host key is known for [example.test]:45985 and you have "
+                "requested strict checking.\nHost key verification failed.\n"
+            ),
+        )
+        with patch("subprocess.run", side_effect=host_key_error):
+            with pytest.raises(HostKeyVerificationException) as excinfo:
+                get_remote_file_list(connection, "/remote", exclude_patterns=[])
+        assert "known_hosts" in str(excinfo.value).lower()
+        assert "example.test" in str(excinfo.value)
 
     def test_ssh_protocol_connection_error_raises_no_valid_connections(
         self, connection
@@ -394,6 +412,101 @@ class TestSyncFilesAndDirectoriesPartialFailure:
         last_synced.assert_called_once_with(tmp_path)
         terminal = emit_status.call_args_list[-1][0][0]
         assert terminal.status == FileStatus.FINISHED
+
+
+class TestSyncFilesAndDirectoriesSyncMethod:
+    """The reported sync method must reflect *this* run's transport, not the
+    process-global fallback cache (which is keyed by user@host:port and can hold
+    a stale entry from a prior run against the same endpoint).
+    """
+
+    @pytest.fixture(autouse=True)
+    def clear_sftp_subsystem_cache(self):
+        _sftp_subsystem_unavailable.clear()
+        yield
+        _sftp_subsystem_unavailable.clear()
+
+    @staticmethod
+    def _patches(connection, files, download_side_effect=None, download_return=None):
+        download_kwargs = {}
+        if download_side_effect is not None:
+            download_kwargs["side_effect"] = download_side_effect
+        else:
+            download_kwargs["return_value"] = download_return
+        return (
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_file_list",
+                return_value=files,
+            ),
+            patch(
+                "ttnn_visualizer.sftp_operations.get_remote_directory_list",
+                return_value=["/remote/reports"],
+            ),
+            patch(
+                "ttnn_visualizer.sftp_operations.download_single_file_sftp",
+                **download_kwargs,
+            ),
+            patch("ttnn_visualizer.sftp_operations.update_last_synced"),
+            patch("ttnn_visualizer.sftp_operations.emit_file_status"),
+        )
+
+    def test_returns_sftp_despite_stale_global_scp_entry_for_other_host(
+        self, app, tmp_path, connection
+    ):
+        # A different host fell back to scp earlier in the process lifetime.
+        _sftp_subsystem_unavailable.add(("user", "other.test", 45985))
+        files = [("/remote/reports/a.txt", 10)]
+        list_patch, dir_patch, dl_patch, _, _ = self._patches(
+            connection, files, download_return=SyncMethod.SFTP
+        )
+        with app.app_context(), list_patch, dir_patch, dl_patch:
+            result = sync_files_and_directories(
+                connection, "/remote/reports", tmp_path, exclude_patterns=[]
+            )
+        assert result == SyncMethod.SFTP
+
+    def test_returns_scp_when_any_file_used_fallback(self, app, tmp_path, connection):
+        files = [("/remote/reports/a.txt", 10), ("/remote/reports/b.txt", 20)]
+
+        def download_side_effect(_conn, remote_file, _local_file):
+            # First file goes over sftp, second triggers the scp fallback.
+            return SyncMethod.SCP if remote_file.endswith("b.txt") else SyncMethod.SFTP
+
+        list_patch, dir_patch, dl_patch, _, _ = self._patches(
+            connection, files, download_side_effect=download_side_effect
+        )
+        with app.app_context(), list_patch, dir_patch, dl_patch:
+            result = sync_files_and_directories(
+                connection, "/remote/reports", tmp_path, exclude_patterns=[]
+            )
+        assert result == SyncMethod.SCP
+
+    def test_incomplete_sync_message_uses_run_method_not_global_cache(
+        self, app, tmp_path, connection
+    ):
+        # Poison the global cache for *this* host so the regression (reading the
+        # global instead of the per-run method) would report "via scp".
+        _sftp_subsystem_unavailable.add(_remote_transfer_key(connection))
+        files = [("/remote/reports/a.txt", 10), ("/remote/reports/b.txt", 20)]
+
+        def download_side_effect(_conn, remote_file, _local_file):
+            if remote_file.endswith("b.txt"):
+                raise RuntimeError("SFTP transient failure")
+            return SyncMethod.SFTP
+
+        list_patch, dir_patch, dl_patch, _, _ = self._patches(
+            connection, files, download_side_effect=download_side_effect
+        )
+        with app.app_context(), list_patch, dir_patch, dl_patch:
+            with pytest.raises(RemoteConnectionException) as excinfo:
+                sync_files_and_directories(
+                    connection, "/remote/reports", tmp_path, exclude_patterns=[]
+                )
+        assert "via sftp" in excinfo.value.message
+        assert "via scp" not in excinfo.value.message
+        # The exception carries the per-run method so callers don't have to
+        # re-read the (poisoned) global cache.
+        assert excinfo.value.sync_method == SyncMethod.SFTP.value
 
 
 class TestGetRemoteFileListWithoutSizes:

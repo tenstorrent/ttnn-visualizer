@@ -16,9 +16,10 @@ from typing import List, NoReturn, Optional
 import yaml
 from flask import current_app
 from ttnn_visualizer.decorators import remote_exception_handler
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.enums import ConnectionTestStates, SyncMethod
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
+    HostKeyVerificationException,
     NoReportsException,
     NoValidConnectionsError,
     RemoteConnectionException,
@@ -26,7 +27,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.models import Instance, RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
-from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE, SSHClient
+from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
 from ttnn_visualizer.utils import (
     PROFILER_CONFIG_BASENAME,
     ranked_profiler_config_basenames,
@@ -34,6 +35,33 @@ from ttnn_visualizer.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Hosts where the SFTP subsystem is unavailable but scp over SSH still works,
+# keyed by (username, host, port). Process-global and never evicted: a single
+# subsystem failure pins that endpoint to scp for the rest of the process
+# lifetime (across users under SERVER_MODE). That's an intentional tradeoff —
+# scp is a safe superset fallback, so a stale entry only costs an unnecessary
+# scp where sftp might now work, never a failed sync. A restart clears it.
+_sftp_subsystem_unavailable: set[tuple[str, str, int]] = set()
+
+
+def _remote_transfer_key(remote_connection: RemoteConnection) -> tuple[str, str, int]:
+    return (
+        remote_connection.username,
+        remote_connection.host,
+        remote_connection.port,
+    )
+
+
+def _is_sftp_subsystem_unavailable(stderr: str) -> bool:
+    return "subsystem request failed" in (stderr or "").lower()
+
+
+def get_active_sync_method(remote_connection: RemoteConnection) -> SyncMethod:
+    """Which transport this host is currently using (scp once SFTP has failed)."""
+    if _remote_transfer_key(remote_connection) in _sftp_subsystem_unavailable:
+        return SyncMethod.SCP
+    return SyncMethod.SFTP
 
 
 def _ssh_subprocess_timeout_seconds() -> int:
@@ -87,6 +115,25 @@ def _sftp_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
     return cmd
 
 
+def _scp_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
+    """Build scp command prefix (never prompts for password). Mirrors ssh/sftp options.
+
+    `-O` forces the legacy SCP/rcp transfer protocol. OpenSSH 9+ defaults scp to
+    the SFTP subsystem, which is exactly the subsystem that's unavailable on the
+    hosts this fallback targets; `-O` transfers over a plain remote exec instead.
+    """
+    cmd = ["scp", "-O"]
+    identity = (getattr(remote_connection, "identityFile", None) or "").strip()
+    if identity:
+        cmd.extend(["-F", os.devnull])
+    cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+    if identity:
+        cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
+    if remote_connection.port != 22:
+        cmd.extend(["-P", str(remote_connection.port)])
+    return cmd
+
+
 def handle_ssh_subprocess_error(
     e: subprocess.CalledProcessError, remote_connection: RemoteConnection
 ) -> NoReturn:
@@ -97,38 +144,11 @@ def handle_ssh_subprocess_error(
     a call to this helper as unreachable, which keeps the call sites tidy
     and prevents accidental fall-through.
     """
-    stderr = (e.stderr or "").lower()
     raw_error = (e.stderr or "").strip() or "No stderr output"
     logger.warning(
         f"SSH error for {remote_connection.username}@{remote_connection.host}: {raw_error}"
     )
-    if any(
-        auth_err in stderr
-        for auth_err in [
-            "permission denied",
-            "authentication failed",
-            "publickey",
-            "password",
-            "host key verification failed",
-        ]
-    ):
-        raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
-    if any(
-        conn_err in stderr
-        for conn_err in [
-            "connection refused",
-            "network is unreachable",
-            "no route to host",
-            "name or service not known",
-            "could not resolve hostname",
-            "connection timed out",
-            "nodename nor servname provided",
-        ]
-    ):
-        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
-    if "ssh:" in stderr or "protocol" in stderr:
-        raise SSHException(f"SSH protocol error: {e.stderr}")
-    raise SSHException(f"SSH command failed: {e.stderr}")
+    raise_for_ssh_subprocess_error(e, remote_connection)
 
 
 def start_background_task(task, *args):
@@ -238,8 +258,12 @@ def sync_files_and_directories(
     destination_dir: Path,
     exclude_patterns=None,
     sid=None,
-):
-    """Download files and directories using SFTP with progress reporting."""
+) -> SyncMethod:
+    """Download files and directories using SFTP with progress reporting.
+
+    Returns the transport actually used (``sftp``, or ``scp`` when the remote
+    SFTP subsystem was unavailable and we fell back).
+    """
     exclude_patterns = exclude_patterns or []
 
     # Ensure the destination directory exists
@@ -319,6 +343,11 @@ def sync_files_and_directories(
     finished_files = 0
     failed_count = 0
     bytes_transferred = 0
+    last_download_error: Optional[str] = None
+    # Track the transport actually used this run rather than reading the
+    # process-global fallback cache, so the reported method reflects *this*
+    # sync (and this port), not a stale guess from a prior host.
+    methods_used: set[SyncMethod] = set()
 
     logger.info(f"Starting download of {total_files} files...")
 
@@ -364,8 +393,10 @@ def sync_files_and_directories(
                     sid,
                 )
 
-            # Download the file using SFTP
-            download_single_file_sftp(remote_connection, remote_file, local_file)
+            # Download the file using SFTP (or scp fallback)
+            methods_used.add(
+                download_single_file_sftp(remote_connection, remote_file, local_file)
+            )
 
             finished_files += 1
             bytes_transferred += remote_file_size
@@ -392,19 +423,38 @@ def sync_files_and_directories(
             # Skip if remote_file is not relative to remote_profiler_folder
             logger.warning(f"Skipping file outside base folder: {remote_file}")
             continue
+        except (
+            HostKeyVerificationException,
+            AuthenticationException,
+            NoValidConnectionsError,
+            SSHException,
+        ):
+            # Fatal SSH errors must not be swallowed — the decorator maps host-key
+            # and auth failures to actionable 422 responses; connectivity
+            # (NoValidConnectionsError) surfaces as a 500.
+            raise
         except Exception as e:
-            logger.error(f"Failed to download {remote_file}: {e}")
+            last_download_error = f"{remote_file}: {e}"
+            logger.error("Failed to download %s: %s", remote_file, e)
             failed_count += 1
             # Best-effort: try remaining files, but do not report success if any fail.
             continue
 
+    # scp wins the label if any file needed the fallback; otherwise sftp.
+    run_sync_method = (
+        SyncMethod.SCP if SyncMethod.SCP in methods_used else SyncMethod.SFTP
+    )
+
     sync_incomplete = total_files > 0 and finished_files < total_files
     if sync_incomplete:
+        sync_method = run_sync_method
         logger.error(
-            "SFTP sync incomplete: downloaded %s/%s files (%s failed).",
+            "%s sync incomplete: downloaded %s/%s files (%s failed). Last error: %s",
+            sync_method.value,
             finished_files,
             total_files,
             failed_count,
+            last_download_error or "unknown",
         )
         if current_app.config["USE_WEBSOCKETS"]:
             emit_file_status(
@@ -420,13 +470,18 @@ def sync_files_and_directories(
                 ),
                 sid,
             )
+        message = (
+            f"Sync incomplete: downloaded {finished_files} of {total_files} "
+            f"file(s) ({failed_count} failed) via {sync_method.value}."
+        )
+        if last_download_error:
+            message = f"{message} Last error: {last_download_error}"
         raise RemoteConnectionException(
-            message=(
-                f"Sync incomplete: downloaded {finished_files} of {total_files} "
-                f"file(s) ({failed_count} failed). Check logs for per-file errors."
-            ),
+            message=message,
             status=ConnectionTestStates.FAILED,
             http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            detail=last_download_error,
+            sync_method=sync_method.value,
         )
 
     # Only stamp success after every queued file downloaded.
@@ -447,8 +502,12 @@ def sync_files_and_directories(
         emit_file_status(final_progress, sid)
 
     logger.info(
-        f"SFTP sync completed. Downloaded {finished_files}/{total_files} files."
+        "%s sync completed. Downloaded %s/%s files.",
+        run_sync_method.value,
+        finished_files,
+        total_files,
     )
+    return run_sync_method
 
 
 def get_remote_file_list(
@@ -604,21 +663,64 @@ def get_remote_directory_list(
         return []
 
 
+def _scp_remote_target(remote_connection: RemoteConnection, remote_file: str) -> str:
+    """Build scp remote target for argv (no shell quoting — subprocess passes it verbatim)."""
+    return f"{remote_connection.username}@{remote_connection.host}:{remote_file}"
+
+
+def download_single_file_scp(
+    remote_connection: RemoteConnection, remote_file: str, local_file: Path
+) -> SyncMethod:
+    """Download a single file using scp (when the remote SFTP subsystem is disabled)."""
+    local_file.parent.mkdir(parents=True, exist_ok=True)
+    remote_spec = _scp_remote_target(remote_connection, remote_file)
+    scp_cmd = _scp_cmd_prefix(remote_connection) + [remote_spec, str(local_file)]
+    try:
+        subprocess.run(
+            scp_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=300,
+        )
+        logger.debug("Downloaded via scp: %s -> %s", remote_file, local_file)
+        return SyncMethod.SCP
+    except subprocess.CalledProcessError as e:
+        logger.error(
+            "scp download failed for %s (rc=%s): %s",
+            remote_file,
+            e.returncode,
+            (e.stderr or "").strip() or "no stderr",
+        )
+        if e.returncode == 255:
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        detail = (e.stderr or "").strip() or "no stderr"
+        raise RuntimeError(f"Failed to download {remote_file}: {detail}")
+    except subprocess.TimeoutExpired:
+        logger.error("Timeout downloading file via scp: %s", remote_file)
+        raise RuntimeError(f"Timeout downloading {remote_file}")
+
+
 def download_single_file_sftp(
     remote_connection: RemoteConnection, remote_file: str, local_file: Path
-):
-    """Download a single file using SFTP."""
-    # Ensure local directory exists
+) -> SyncMethod:
+    """Download a single file using SFTP, falling back to scp when needed.
+
+    Returns the transport actually used for this file.
+    """
+    transfer_key = _remote_transfer_key(remote_connection)
+    if transfer_key in _sftp_subsystem_unavailable:
+        return download_single_file_scp(remote_connection, remote_file, local_file)
+
     local_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Build SFTP command (never prompts for password)
     sftp_cmd = _sftp_cmd_prefix(remote_connection)
-
-    # SFTP commands to execute
-    sftp_commands = f"get '{remote_file}' '{local_file}'\nquit\n"
+    # Batch script is parsed by sftp, not the shell — quote paths for spaces/special chars.
+    sftp_commands = (
+        f"get {shlex.quote(remote_file)} {shlex.quote(str(local_file))}\nquit\n"
+    )
 
     try:
-        result = subprocess.run(
+        subprocess.run(
             sftp_cmd,
             input=sftp_commands,
             capture_output=True,
@@ -626,20 +728,41 @@ def download_single_file_sftp(
             check=True,
             timeout=300,  # 5 minute timeout per file
         )
-
-        logger.debug(f"Downloaded: {remote_file} -> {local_file}")
+        logger.debug("Downloaded via sftp: %s -> %s", remote_file, local_file)
+        return SyncMethod.SFTP
 
     except subprocess.CalledProcessError as e:
+        stderr = e.stderr or ""
+        if _is_sftp_subsystem_unavailable(stderr):
+            logger.warning(
+                "SFTP subsystem unavailable on %s@%s:%s; using scp for remaining files",
+                remote_connection.username,
+                remote_connection.host,
+                remote_connection.port,
+            )
+            _sftp_subsystem_unavailable.add(transfer_key)
+            return download_single_file_scp(remote_connection, remote_file, local_file)
+        logger.error(
+            "Error downloading file %s (rc=%s): %s",
+            remote_file,
+            e.returncode,
+            stderr.strip() or "no stderr",
+        )
         if e.returncode == 255:  # SSH protocol errors
             handle_ssh_subprocess_error(e, remote_connection)  # always raises
-        logger.error(f"Error downloading file {remote_file}: {e.stderr}")
-        raise RuntimeError(f"Failed to download {remote_file}")
+        detail = stderr.strip() or "no stderr"
+        raise RuntimeError(f"Failed to download {remote_file}: {detail}")
     except subprocess.TimeoutExpired:
-        logger.error(f"Timeout downloading file: {remote_file}")
+        logger.error("Timeout downloading file: %s", remote_file)
         raise RuntimeError(f"Timeout downloading {remote_file}")
     except Exception as e:
-        logger.error(f"Error downloading file {remote_file}: {e}")
-        raise RuntimeError(f"Failed to download {remote_file}")
+        logger.error(
+            "Error downloading file %s: %s: %s",
+            remote_file,
+            type(e).__name__,
+            e,
+        )
+        raise RuntimeError(f"Failed to download {remote_file}: {type(e).__name__}: {e}")
 
 
 def get_remote_profiler_folder_from_config_path(
@@ -1040,7 +1163,7 @@ def sync_remote_profiler_folders(
     path_prefix: str,
     exclude_patterns: Optional[List[str]] = None,
     sid=None,
-):
+) -> SyncMethod:
     """Main function to sync test folders, handles both compressed and individual syncs."""
     profiler_folder = Path(remote_folder_path).name
     destination_dir = Path(
@@ -1052,7 +1175,7 @@ def sync_remote_profiler_folders(
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
 
-    sync_files_and_directories(
+    return sync_files_and_directories(
         remote_connection, remote_folder_path, destination_dir, exclude_patterns, sid
     )
 
@@ -1064,7 +1187,7 @@ def sync_remote_performance_folders(
     performance: RemoteReportFolder,
     exclude_patterns: Optional[List[str]] = None,
     sid=None,
-):
+) -> SyncMethod:
     remote_folder_path = performance.remotePath
     profile_folder = Path(remote_folder_path).name
     destination_dir = Path(
@@ -1075,6 +1198,6 @@ def sync_remote_performance_folders(
         profile_folder,
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
-    sync_files_and_directories(
+    return sync_files_and_directories(
         remote_connection, remote_folder_path, destination_dir, exclude_patterns, sid
     )
