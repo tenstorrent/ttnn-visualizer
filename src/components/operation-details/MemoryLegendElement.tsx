@@ -76,7 +76,9 @@ export const MemoryLegendElement = ({
     );
 
     const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
-    const numCoresLabel = numCores && numCores > 1 ? ` x ${numCores} cores` : '';
+    const isPerCoreBuffer = bufferType !== StringBufferType.DRAM && bufferType !== StringBufferType.SYSTEM_MEMORY;
+    const numCoresLabel =
+        isPerCoreBuffer && numCores && numCores > 0 ? ` x ${numCores} ${numCores === 1 ? 'core' : 'cores'}` : '';
 
     const memorySquare = {
         ...(!chunk.empty &&
