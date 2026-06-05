@@ -11,6 +11,8 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
+    HostKeyVerificationException,
+    HostKeyVerificationFailedException,
     NoReportsException,
     NoValidConnectionsError,
     RemoteConnectionException,
@@ -73,6 +75,17 @@ def remote_exception_handler(func):
             connection = args[0]
         try:
             return func(*args, **kwargs)
+        except HostKeyVerificationException as err:
+            current_app.logger.warning(
+                "SSH host key not trusted for %s@%s:%s",
+                connection.username,
+                connection.host,
+                connection.port,
+            )
+            raise HostKeyVerificationFailedException(
+                message=str(err),
+                status=ConnectionTestStates.FAILED,
+            )
         except AuthenticationException as err:
             current_app.logger.warning(
                 f"SSH authentication failed for {connection.username}@{connection.host}: SSH key authentication required"

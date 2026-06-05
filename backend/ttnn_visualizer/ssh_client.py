@@ -14,6 +14,7 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
+    HostKeyVerificationException,
     NoValidConnectionsError,
     RemoteConnectionException,
     RemoteFileReadException,
@@ -30,6 +31,28 @@ SSH_AUTH_FAILURE_MESSAGE = (
     "Password authentication is not supported. "
     "If your key has a passphrase, add it to ssh-agent once (e.g. ssh-add) so you are not prompted."
 )
+
+
+def is_ssh_host_key_verification_error(stderr: str) -> bool:
+    """True when OpenSSH rejected an unknown/untrusted host key."""
+    lowered = (stderr or "").lower()
+    if "host key verification failed" in lowered:
+        return True
+    # e.g. "No ED25519 host key is known for [host]:port and you have requested strict checking."
+    return "host key is known" in lowered and "no " in lowered
+
+
+def ssh_host_key_failure_message(connection: RemoteConnection) -> str:
+    user_host = f"{connection.username}@{connection.host}"
+    if connection.port != 22:
+        ssh_example = f"ssh -p {connection.port} {user_host}"
+    else:
+        ssh_example = f"ssh {user_host}"
+    return (
+        f"SSH host key for {connection.host} (port {connection.port}) is not in "
+        "~/.ssh/known_hosts. Remote sync cannot prompt to accept new keys. "
+        f"Run {ssh_example} once in a terminal, accept the host key, then retry."
+    )
 
 
 class SSHClient:
@@ -96,6 +119,11 @@ class SSHClient:
         # Store raw error for exceptions that need it
         self._last_raw_error = raw_error
 
+        if is_ssh_host_key_verification_error(stderr):
+            raise HostKeyVerificationException(
+                ssh_host_key_failure_message(self.connection)
+            )
+
         # Check for authentication failures
         if any(
             auth_err in stderr
@@ -104,7 +132,6 @@ class SSHClient:
                 "authentication failed",
                 "publickey",
                 "password",
-                "host key verification failed",
             ]
         ):
             raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)

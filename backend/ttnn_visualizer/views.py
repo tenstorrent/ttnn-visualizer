@@ -72,6 +72,7 @@ from ttnn_visualizer.serializers import (
 from ttnn_visualizer.sftp_operations import (
     check_remote_path_exists,
     check_remote_path_for_reports,
+    get_active_sync_method,
     get_cluster_desc,
     get_remote_performance_folders,
     get_remote_profiler_folders,
@@ -1760,7 +1761,7 @@ def sync_remote_folder():
             performance, strict=False
         )
         try:
-            sync_remote_performance_folders(
+            sync_method = sync_remote_performance_folders(
                 connection,
                 remote_dir,
                 performance=performance_folder,
@@ -1770,17 +1771,24 @@ def sync_remote_folder():
 
             performance_folder.lastSynced = int(time.time())
 
-            return performance_folder.model_dump()
+            response_body = performance_folder.model_dump()
+            response_body["syncMethod"] = sync_method.value
+            return response_body
 
         except RemoteConnectionException as e:
-            return error_response(e.http_status, e.message)
+            return error_response(
+                e.http_status,
+                e.message,
+                detail=e.detail,
+                sync_method=get_active_sync_method(connection).value,
+            )
 
     try:
         remote_profiler_folder = RemoteReportFolder.model_validate(
             profiler, strict=False
         )
 
-        sync_remote_profiler_folders(
+        sync_method = sync_remote_profiler_folders(
             connection,
             remote_profiler_folder.remotePath,
             remote_dir,
@@ -1790,13 +1798,21 @@ def sync_remote_folder():
 
         remote_profiler_folder.lastSynced = int(time.time())
 
+        response_body = remote_profiler_folder.model_dump()
+        response_body["syncMethod"] = sync_method.value
+
         return Response(
-            orjson.dumps(remote_profiler_folder.model_dump()),
+            orjson.dumps(response_body),
             mimetype="application/json",
         )
 
     except RemoteConnectionException as e:
-        return error_response(e.http_status, e.message)
+        return error_response(
+            e.http_status,
+            e.message,
+            detail=e.detail,
+            sync_method=get_active_sync_method(connection).value,
+        )
 
 
 @api.route("/remote/use", methods=["POST"])

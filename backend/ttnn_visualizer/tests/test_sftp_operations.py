@@ -19,6 +19,7 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
+    HostKeyVerificationException,
     NoValidConnectionsError,
     RemoteConnectionException,
 )
@@ -203,6 +204,20 @@ class TestGetRemoteFileList:
         with patch("subprocess.run", side_effect=auth_error):
             with pytest.raises(AuthenticationException):
                 get_remote_file_list(connection, "/remote", exclude_patterns=[])
+
+    def test_ssh_unknown_host_key_raises_host_key_exception(self, connection):
+        host_key_error = _called_process_error(
+            returncode=255,
+            stderr=(
+                "No ED25519 host key is known for [example.test]:45985 and you have "
+                "requested strict checking.\nHost key verification failed.\n"
+            ),
+        )
+        with patch("subprocess.run", side_effect=host_key_error):
+            with pytest.raises(HostKeyVerificationException) as excinfo:
+                get_remote_file_list(connection, "/remote", exclude_patterns=[])
+        assert "known_hosts" in str(excinfo.value).lower()
+        assert "example.test" in str(excinfo.value)
 
     def test_ssh_protocol_connection_error_raises_no_valid_connections(
         self, connection
