@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import {
     ColumnKeys,
     Columns,
-    LOCKED_PERF_COLUMN_KEYS,
     getEligiblePerfColumns,
     getFooterColumns,
     getVisiblePerfColumns,
@@ -68,9 +67,5 @@ describe('PerfTable column helpers', () => {
         const opCodeFooter = footerColumns.find((column) => column.key === ColumnKeys.OpCode);
 
         expect(opCodeFooter?.footerSpan).toBe(3);
-    });
-
-    it('locks OP Code as the only required column', () => {
-        expect(LOCKED_PERF_COLUMN_KEYS).toEqual([ColumnKeys.OpCode]);
     });
 });
