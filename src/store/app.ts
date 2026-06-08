@@ -96,6 +96,7 @@ export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
 // so a selection can't leak across reports. Cleared on active-report change (Performance.tsx)
 // and on drawer close / row removal / unsynced reports (PerfTable.tsx).
 export const selectedPerfRowIdAtom = atom<number | null>(null);
+// Persisted globally (atomWithStorage) by design: a user's preferred column layout follows them across reports
 export const hiddenPerfTableColumnsAtom = atomWithStorage<ColumnKeys[]>('hiddenPerfTableColumns', []);
 
 // NPE
