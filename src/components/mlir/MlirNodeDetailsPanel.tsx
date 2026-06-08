@@ -168,7 +168,7 @@ const MlirNodeDetailsPanel = ({
     outputsMetadata,
     onClose,
     onRecenter,
-    onNavigateToNode,
+    onNavigateToNode: handleNavigateToNode,
 }: MlirNodeDetailsPanelProps) => {
     const [collapsed, setCollapsed] = useAtom(mlirNodeDetailsCollapsedAtom);
 
@@ -293,7 +293,7 @@ const MlirNodeDetailsPanel = ({
                             <LinkedNodeRef
                                 label={edge.sourceNodeLabel}
                                 id={edge.sourceNodeId}
-                                onNavigate={onNavigateToNode}
+                                onNavigate={handleNavigateToNode}
                             />
                             <span className='mlir-node-details-io-port'>
                                 out {edge.sourceNodeOutputId} → in {edge.targetNodeInputId}
@@ -343,7 +343,7 @@ const MlirNodeDetailsPanel = ({
                                             <LinkedNodeRef
                                                 label={consumer.targetNodeLabel}
                                                 id={consumer.targetNodeId}
-                                                onNavigate={onNavigateToNode}
+                                                onNavigate={handleNavigateToNode}
                                             />
                                             <span className='mlir-node-details-io-port'>
                                                 in {consumer.targetNodeInputId}
