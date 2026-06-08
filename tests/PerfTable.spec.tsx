@@ -264,6 +264,75 @@ describe('PerfTable tensor-drawer trigger column', () => {
     });
 });
 
+describe('PerfTable loading state', () => {
+    beforeEach(() => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
+    });
+
+    it('renders the skeleton instead of data rows while loading', () => {
+        render(
+            <TestProviders>
+                <PerfTable
+                    data={[matmulRow]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                    isLoading
+                />
+            </TestProviders>,
+        );
+
+        const skeleton = screen.getByTestId(TEST_IDS.PERF_TABLE_SKELETON);
+        expect(skeleton).toBeInTheDocument();
+        expect(skeleton).toHaveAttribute('aria-busy', 'true');
+        // No real data rows or footer totals leak through while loading
+        expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON)).toBeNull();
+    });
+
+    it('keeps the device-architecture strip mounted while loading (scoped skeleton)', () => {
+        render(
+            <TestProviders>
+                <PerfTable
+                    data={[]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                    isLoading
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeInTheDocument();
+        expect(screen.getByText('Arch:')).toBeInTheDocument();
+    });
+
+    it('shows the empty state rather than the skeleton when not loading and there are no rows', () => {
+        render(
+            <TestProviders>
+                <PerfTable
+                    data={[]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeNull();
+        expect(screen.getByText('No data to display')).toBeInTheDocument();
+    });
+});
+
 function SelectedRowProbe() {
     const selected = useAtomValue(selectedPerfRowIdAtom);
 

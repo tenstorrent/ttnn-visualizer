@@ -29,6 +29,7 @@ export const TEST_IDS = Object.freeze({
     PERFORMANCE_TABLE: 'performance-table',
     PERF_TENSOR_DRAWER: 'perf-tensor-drawer',
     PERF_TENSOR_DRAWER_OPEN_BUTTON: 'perf-tensor-drawer-open-button',
+    PERF_TABLE_SKELETON: 'perf-table-skeleton',
 
     // General UI
     LOADING_SPINNER: 'loading-spinner',

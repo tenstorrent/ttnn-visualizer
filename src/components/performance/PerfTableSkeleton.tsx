@@ -4,6 +4,7 @@
 
 import { Classes } from '@blueprintjs/core';
 import classNames from 'classnames';
+import { TEST_IDS } from '../../definitions/TestIds';
 
 const SKELETON_ROW_COUNT = 12;
 
@@ -23,6 +24,7 @@ function PerfTableSkeleton({
             className='perf-table monospace'
             aria-busy='true'
             aria-label='Loading performance data'
+            data-testid={TEST_IDS.PERF_TABLE_SKELETON}
         >
             <thead className='table-header'>
                 <tr>
