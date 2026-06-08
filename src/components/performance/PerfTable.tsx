@@ -33,6 +33,7 @@ import LoadingSpinner from '../LoadingSpinner';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTensorDrawer from './PerfTensorDrawer';
+import PerfTableToolbar from './PerfTableToolbar';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -255,6 +256,8 @@ const PerformanceTable = ({
             />
 
             {mergeDevices && <PerfMultiDeviceNotice />}
+
+            <PerfTableToolbar eligibleColumns={eligibleColumns} />
 
             {data?.length > 0 ? (
                 <table className='perf-table monospace'>

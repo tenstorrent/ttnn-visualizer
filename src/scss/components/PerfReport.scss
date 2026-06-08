@@ -250,22 +250,5 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         color: colours.$tt-yellow-tint-1;
     }
 
-    .perf-column-picker {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        padding: 8px;
-        max-height: 420px;
-        overflow-y: auto;
-    }
-
-    .perf-column-picker-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        margin-bottom: 4px;
-    }
-
     @include perf.perf-report-colours;
 }

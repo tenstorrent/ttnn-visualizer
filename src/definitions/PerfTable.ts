@@ -198,7 +198,7 @@ const L1_PRESSURE_INSERTION_POINT = 2;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
 const CACHE_HIT_INSERTION_POINT = 15;
 
-export const LOCKED_PERF_COLUMN_KEYS: ColumnKeys[] = [ColumnKeys.OpCode];
+export const LOCKED_PERF_COLUMN_KEYS: ColumnKeys[] = [ColumnKeys.Id, ColumnKeys.OpCode];
 
 export interface EligiblePerfColumnsFlags {
     hasOpIds: boolean;

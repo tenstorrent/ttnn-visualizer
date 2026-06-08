@@ -6,7 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useAtomValue } from 'jotai';
 import { afterEach, describe, expect, it } from 'vitest';
-import PerfColumnPicker from '../src/components/performance/PerfColumnPicker';
+import PerfTableToolbar from '../src/components/performance/PerfTableToolbar';
 import { ColumnKeys, Columns } from '../src/definitions/PerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { userPerfColumnsAtom } from '../src/store/app';
@@ -20,11 +20,11 @@ function HiddenColumnsProbe() {
 
 afterEach(cleanup);
 
-describe('PerfColumnPicker', () => {
+describe('PerfTableToolbar', () => {
     it('toggles a column into userPerfColumnsAtom', () => {
         render(
             <TestProviders initialAtomValues={[[userPerfColumnsAtom, []]]}>
-                <PerfColumnPicker eligibleColumns={Columns} />
+                <PerfTableToolbar eligibleColumns={Columns} />
                 <HiddenColumnsProbe />
             </TestProviders>,
         );
@@ -44,7 +44,7 @@ describe('PerfColumnPicker', () => {
     it('does not hide locked columns', () => {
         render(
             <TestProviders initialAtomValues={[[userPerfColumnsAtom, []]]}>
-                <PerfColumnPicker eligibleColumns={Columns} />
+                <PerfTableToolbar eligibleColumns={Columns} />
                 <HiddenColumnsProbe />
             </TestProviders>,
         );
@@ -67,7 +67,7 @@ describe('PerfColumnPicker', () => {
     it('clears hidden columns when Show all is clicked', () => {
         render(
             <TestProviders initialAtomValues={[[userPerfColumnsAtom, [ColumnKeys.DeviceTime, ColumnKeys.Dram]]]}>
-                <PerfColumnPicker eligibleColumns={Columns} />
+                <PerfTableToolbar eligibleColumns={Columns} />
                 <HiddenColumnsProbe />
             </TestProviders>,
         );
