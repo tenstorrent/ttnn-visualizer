@@ -61,7 +61,7 @@ from ttnn_visualizer.report_source_file import (
 )
 from ttnn_visualizer.serializers import (
     serialize_buffer,
-    serialize_buffer_pages,
+    serialize_buffer_chunks,
     serialize_devices,
     serialize_operation,
     serialize_operation_buffers,
@@ -734,21 +734,19 @@ def buffer_pages(instance: Instance):
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
             return rejected
-        page_filters = {
+
+        source_table = db.buffer_chunks_source_table()
+        chunk_filters = {
             "operation_id": operation_id,
             "device_id": device_id,
             "address": addresses,
             "buffer_type": buffer_type,
         }
-        buffers = list(
-            list(
-                db.query_buffer_pages(
-                    db.merge_rank_filter("buffer_pages", page_filters, rank)
-                )
-            )
-        )
+        if source_table is not None:
+            chunk_filters = db.merge_rank_filter(source_table, chunk_filters, rank)
+        chunks = list(db.query_buffer_chunks(chunk_filters))
         return Response(
-            orjson.dumps(serialize_buffer_pages(buffers)),
+            orjson.dumps(serialize_buffer_chunks(chunks)),
             mimetype="application/json",
         )
 

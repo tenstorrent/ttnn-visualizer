@@ -26,6 +26,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.models import (
     Buffer,
+    BufferChunk,
     BufferPage,
     Device,
     DeviceOperation,
@@ -390,6 +391,100 @@ class DatabaseQueries:
         rows = self._query_table("buffer_pages", filters, select_clause=select_clause)
         for row in rows:
             yield BufferPage(*row)
+
+    def buffer_chunks_source_table(self) -> Optional[str]:
+        """
+        Pick the source table for per-(op, addr, bank, core) chunk reads.
+
+        Returns ``"buffer_chunks"`` when the new pre-aggregated table is
+        present, ``"buffer_pages"`` when only the legacy table exists, and
+        ``None`` when neither is available.
+        """
+        if self._check_table_exists("buffer_chunks"):
+            return "buffer_chunks"
+        if self._check_table_exists("buffer_pages"):
+            return "buffer_pages"
+        return None
+
+    def query_buffer_chunks(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[BufferChunk, None, None]:
+        """
+        Yield ``BufferChunk`` rows from whichever source table is available.
+
+        Prefers a pre-aggregated ``buffer_chunks`` table; falls back to a
+        ``GROUP BY`` aggregation over the legacy ``buffer_pages`` table.
+        """
+        source = self.buffer_chunks_source_table()
+        if source == "buffer_chunks":
+            select_clause = self._dataclass_select_clause("buffer_chunks", BufferChunk)
+            rows = self._query_table(
+                "buffer_chunks", filters, select_clause=select_clause
+            )
+            for row in rows:
+                yield BufferChunk(*row)
+            return
+        if source == "buffer_pages":
+            yield from self._aggregate_buffer_pages_to_chunks(filters)
+
+    def _aggregate_buffer_pages_to_chunks(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[BufferChunk, None, None]:
+        """
+        Group ``buffer_pages`` rows into ``BufferChunk`` rows on the fly.
+
+        Matches the historical FE collapse in ``pageDataToChunkArray``:
+        ``chunk_address = MIN(page_address)`` and
+        ``chunk_size = MAX(page_address + page_size) - MIN(page_address)``
+        per ``(operation_id, device_id, address, bank_id, core_x, core_y)``.
+        """
+        page_columns = set(self._get_table_columns("buffer_pages"))
+        has_rank = "rank" in page_columns
+
+        where_parts: List[str] = ["1=1"]
+        params: List[Any] = []
+        if filters:
+            for column, value in filters.items():
+                if value is None:
+                    continue
+                if isinstance(value, list):
+                    if not value:
+                        continue
+                    placeholders = ", ".join(["?"] * len(value))
+                    where_parts.append(f"{column} IN ({placeholders})")
+                    params.extend(value)
+                else:
+                    where_parts.append(f"{column} = ?")
+                    params.append(value)
+        where_clause = " AND ".join(where_parts)
+
+        rank_select = "rank" if has_rank else "0"
+        rank_group = ", rank" if has_rank else ""
+
+        query = f"""
+            SELECT
+                operation_id,
+                device_id,
+                address,
+                bank_id,
+                core_x,
+                core_y,
+                MIN(page_address) AS chunk_address,
+                MAX(page_address + page_size) - MIN(page_address) AS chunk_size,
+                MAX(page_size) AS page_size,
+                COUNT(*) AS num_pages,
+                buffer_type,
+                {rank_select} AS rank
+            FROM buffer_pages
+            WHERE {where_clause}
+            GROUP BY
+                operation_id, device_id, address,
+                bank_id, core_x, core_y, buffer_type{rank_group}
+        """
+
+        rows = self.query_runner.execute_query(query, params)
+        for row in rows:
+            yield BufferChunk(*row)
 
     def query_tensors(
         self, filters: Optional[Dict[str, Any]] = None

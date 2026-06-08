@@ -98,6 +98,29 @@ class BufferPage(SerializeableDataclass):
 
 
 @dataclasses.dataclass
+class BufferChunk(SerializeableDataclass):
+    """
+    Per-(operation, device, address, bank, core) collapsed view of buffer pages.
+
+    Sourced either from a pre-aggregated ``buffer_chunks`` table or by
+    aggregating the legacy ``buffer_pages`` table on the fly.
+    """
+
+    operation_id: int
+    device_id: int
+    address: int
+    bank_id: int
+    core_x: int
+    core_y: int
+    chunk_address: int
+    chunk_size: int
+    page_size: int
+    num_pages: int
+    buffer_type: BufferType
+    rank: int = 0
+
+
+@dataclasses.dataclass
 class ProducersConsumers(SerializeableDataclass):
     tensor_id: int
     producers: list[int]

@@ -186,6 +186,24 @@ def serialize_buffer_pages(buffer_pages):
     return buffer_pages_list
 
 
+def serialize_buffer_chunks(buffer_chunks):
+    """
+    Serialize ``BufferChunk`` rows for the ``/api/buffer-pages`` response.
+
+    The synthetic ``id`` field combines the grouping key so each row stays
+    stable across re-fetches even though ``page_index`` no longer exists.
+    """
+    result = [chunk.to_dict() for chunk in buffer_chunks]
+    for chunk in result:
+        chunk["id"] = (
+            f"{chunk['operation_id']}_{chunk['address']}_{chunk['bank_id']}_"
+            f"{chunk['core_x']}_{chunk['core_y']}"
+        )
+        if "buffer_type" in chunk and isinstance(chunk["buffer_type"], BufferType):
+            chunk["buffer_type"] = chunk["buffer_type"].value
+    return result
+
+
 def comparisons_by_tensor_id(
     local_comparisons: List[TensorComparisonRecord],
     global_comparisons: List[TensorComparisonRecord],
