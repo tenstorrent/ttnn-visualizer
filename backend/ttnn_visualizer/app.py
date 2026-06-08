@@ -23,6 +23,7 @@ import flask
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify
 from flask_cors import CORS
+from gunicorn.app.wsgiapp import WSGIApplication
 from ttnn_visualizer.database_migrations import run_alembic_migrations
 from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
@@ -33,7 +34,6 @@ from ttnn_visualizer.exceptions import (
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
 from ttnn_visualizer.utils import (
-    find_gunicorn_path,
     get_app_data_directory,
     get_report_data_directory,
     migrate_old_data_directory,
@@ -43,6 +43,22 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
+
+
+class StandaloneGunicornApplication(WSGIApplication):
+    def __init__(self, app_uri: str, options=None):
+        self.options = options or {}
+        self.app_uri = app_uri
+        super().__init__()
+
+    def load_config(self):
+        config = {
+            key: value
+            for key, value in self.options.items()
+            if key in self.cfg.settings and value is not None
+        }
+        for key, value in config.items():
+            self.cfg.set(key.lower(), value)
 
 
 def create_app(settings_override=None):
@@ -465,29 +481,18 @@ def main():
             "Found gunicorn.conf.py in current directory - this may override environment settings"
         )
 
-    gunicorn_cmd, gunicorn_warning = find_gunicorn_path()
-
-    if gunicorn_warning:
-        print(gunicorn_warning)
-
-    gunicorn_args = [
-        gunicorn_cmd,
-        "-t",
-        config.GUNICORN_TIMEOUT,
-        "-k",
-        config.GUNICORN_WORKER_CLASS,
-        "-w",
-        config.GUNICORN_WORKERS,
-        "-b",
-        config.GUNICORN_BIND,
-        config.GUNICORN_APP_MODULE,
-    ]
+    gunicorn_options = {
+        "timeout": config.GUNICORN_TIMEOUT,
+        "worker_class": config.GUNICORN_WORKER_CLASS,
+        "workers": config.GUNICORN_WORKERS,
+        "bind": config.GUNICORN_BIND,
+    }
 
     if debug_mode:
-        gunicorn_args.insert(1, "--reload")
+        gunicorn_options["reload"] = True
 
     if args.daemon:
-        gunicorn_args.insert(1, "--daemon")
+        gunicorn_options["daemon"] = True
 
     # When not daemon, check that we can bind before starting gunicorn (and possibly
     # the browser). If we can't bind, exit with a clear message and do not open browser.
@@ -514,7 +519,9 @@ def main():
     run_alembic_migrations(config.SQLALCHEMY_DATABASE_URI)
 
     try:
-        subprocess.run(gunicorn_args)
+        StandaloneGunicornApplication(
+            config.GUNICORN_APP_MODULE, gunicorn_options
+        ).run()
     except KeyboardInterrupt:
         print("\nServer stopped by user (Ctrl+C)")
 

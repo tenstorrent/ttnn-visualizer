@@ -302,7 +302,9 @@ CREATE INDEX idx_stack_traces_source_file_id ON stack_traces (source_file_id);
 # API responses"). Once a TTNN release ships ``tensor_lifetime``, regenerate
 # this constant from a real report the same way as ``SCHEMA_V2`` above and
 # fold it into a versioned ``SCHEMA_V2_2``.
-SCHEMA_V2_WITH_LIFETIME = SCHEMA_V2 + """
+SCHEMA_V2_WITH_LIFETIME = (
+    SCHEMA_V2
+    + """
 CREATE TABLE tensor_lifetime (
     tensor_id int UNIQUE,
     producer_operation_id int,
@@ -314,3 +316,4 @@ CREATE TABLE tensor_lifetime (
     last_use_source_line int
 );
 """
+)

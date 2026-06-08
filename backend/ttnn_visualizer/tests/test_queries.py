@@ -309,27 +309,31 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(results[0].stack_trace, "trace_data")
 
     def test_query_source_files(self):
-        self.connection.executescript("""
+        self.connection.executescript(
+            """
             CREATE TABLE source_files (
                 id int PRIMARY KEY,
                 path text,
                 contents text
             );
             INSERT INTO source_files VALUES (1, '/a.py', 'contents');
-            """)
+            """
+        )
         results = list(self.db_queries.query_source_files())
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].contents, "contents")
 
     def test_get_source_file_by_id_and_path(self):
-        self.connection.executescript("""
+        self.connection.executescript(
+            """
             CREATE TABLE source_files (
                 id int PRIMARY KEY,
                 path text,
                 contents text
             );
             INSERT INTO source_files VALUES (5, '/b.py', 'body');
-            """)
+            """
+        )
         by_id = self.db_queries.get_source_file_by_id(5)
         self.assertIsNotNone(by_id)
         self.assertEqual(by_id.path, "/b.py")
@@ -337,7 +341,8 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(by_path.id, 5)
 
     def test_get_source_file_path_if_present(self):
-        self.connection.executescript("""
+        self.connection.executescript(
+            """
             CREATE TABLE source_files (
                 id int PRIMARY KEY,
                 path text,
@@ -346,7 +351,8 @@ class TestDatabaseQueries(unittest.TestCase):
             INSERT INTO source_files VALUES (1, '/has.py', 'body');
             INSERT INTO source_files VALUES (2, '/empty.py', '');
             INSERT INTO source_files VALUES (3, '/null.py', NULL);
-            """)
+            """
+        )
         self.assertEqual(
             self.db_queries.get_source_file_path_if_present(source_file_id=1),
             "/has.py",
@@ -375,11 +381,13 @@ class TestDatabaseQueries(unittest.TestCase):
         )
 
     def test_query_tensor_comparisons(self):
-        self.connection.execute("""
+        self.connection.execute(
+            """
             INSERT INTO local_tensor_comparison_records
             (tensor_id, golden_tensor_id, matches, desired_pcc, actual_pcc)
             VALUES (1, 10, 1, 0.9, 0.8)
-            """)
+            """
+        )
         results = list(
             self.db_queries.query_tensor_comparisons(local=True, filters={"matches": 1})
         )
