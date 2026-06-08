@@ -108,7 +108,6 @@ const PerformanceReport = ({
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
     );
-
     const [filters, setFilters] = useState(
         Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [ColumnKeys, string])) as Record<
             ColumnKeys,
@@ -368,7 +367,7 @@ const PerformanceReport = ({
 
                 <div className='option-row'>
                     <FormGroup
-                        subLabel='Input data options'
+                        subLabel='Input data'
                         className='form-group'
                     >
                         <ButtonGroup className='select-group'>
@@ -591,14 +590,6 @@ const PerformanceReport = ({
                             </ButtonGroup>
                         </FormGroup>
                     )}
-
-                    {/* May keep this or remove it - undecided as yet */}
-                    {/* <Switch
-                        label='Show Hash Column'
-                        onChange={() => setShowHashColumn(!showHashColumn)}
-                        checked={showHashColumn}
-                        className='option-switch'
-                    /> */}
                 </div>
 
                 <Tabs

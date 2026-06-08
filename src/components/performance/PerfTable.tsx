@@ -13,11 +13,12 @@ import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
 import {
     ColumnDefinition,
     ColumnKeys,
-    Columns,
-    L1PressureColumns,
     PerfTableFilters,
     TypedPerfTableRow,
     comparisonKeys,
+    getEligiblePerfColumns,
+    getFooterColumns,
+    getVisiblePerfColumns,
 } from '../../definitions/PerfTable';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
@@ -27,11 +28,12 @@ import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
-import { hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
+import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTensorDrawer from './PerfTensorDrawer';
+import PerfTableToolbar from './PerfTableToolbar';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -50,11 +52,6 @@ interface PerformanceTableProps {
     activeReportComparisonIndex?: number | null;
 }
 
-const OP_ID_INSERTION_POINT = 1;
-const L1_PRESSURE_INSERTION_POINT = 2;
-const HIGH_DISPATCH_INSERTION_POINT = 5;
-const CACHE_HIT_INSERTION_POINT = 15;
-
 const PerformanceTable = ({
     data,
     comparisonData,
@@ -67,6 +64,7 @@ const PerformanceTable = ({
     activeReportComparisonIndex = null,
 }: PerformanceTableProps) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
+    const hiddenColumns = useAtomValue(hiddenPerfTableColumnsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
     const selectedPerfRowId = useAtomValue(selectedPerfRowIdAtom);
     const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
@@ -115,20 +113,24 @@ const PerformanceTable = ({
         return firstRows;
     }, [tableFields]);
 
-    const visibleColumns = [
-        ...Columns.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ name: 'OP', key: ColumnKeys.OP, sortable: true }] : []),
-        ...Columns.slice(OP_ID_INSERTION_POINT, L1_PRESSURE_INSERTION_POINT),
-        // L1 metrics only available for the active profiler report; comparison sub-rows render an
-        // empty L1 cell because ColumnKeys.L1Fullness is excluded from `comparisonKeys`.
-        ...(hasL1PressureData ? L1PressureColumns : []),
-        ...Columns.slice(L1_PRESSURE_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ name: 'Slow', key: ColumnKeys.HighDispatch }] : []),
-        ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT, CACHE_HIT_INSERTION_POINT),
-        ...(showHashColumn ? [{ name: 'Hash', key: ColumnKeys.Hash }] : []),
-        ...Columns.slice(CACHE_HIT_INSERTION_POINT),
-        ...(npeManifest && npeManifest.length > 0 ? [{ name: 'NPE', key: ColumnKeys.GlobalCallCount }] : []),
-    ];
+    const eligibleColumns = useMemo(
+        () =>
+            getEligiblePerfColumns({
+                hasOpIds: opIdsMap.length > 0,
+                hasL1PressureData,
+                hiliteHighDispatch,
+                showHashColumn,
+                hasNpe: Boolean(npeManifest && npeManifest.length > 0),
+            }),
+        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, showHashColumn, npeManifest],
+    );
+
+    const visibleColumns = useMemo(
+        () => getVisiblePerfColumns(eligibleColumns, hiddenColumns),
+        [eligibleColumns, hiddenColumns],
+    );
+
+    const footerColumns = useMemo(() => getFooterColumns(visibleColumns), [visibleColumns]);
 
     const isReportsSynced = opIdsMap.length > 0;
     const isPrimaryActiveReport = activeReportComparisonIndex === null;
@@ -254,6 +256,8 @@ const PerformanceTable = ({
             />
 
             {mergeDevices && <PerfMultiDeviceNotice />}
+
+            <PerfTableToolbar eligibleColumns={eligibleColumns} />
 
             {data?.length > 0 ? (
                 <table className='perf-table monospace'>
@@ -428,19 +432,17 @@ const PerformanceTable = ({
                             <td />
                             {visibleColumns.length > 0 &&
                                 data?.length > 0 &&
-                                visibleColumns
-                                    .filter((header) => header?.footerSpan !== 0)
-                                    .map((header) => (
-                                        <td
-                                            key={header.key}
-                                            className={classNames({
-                                                'pre-wrap': header.key === ColumnKeys.OpCode,
-                                            })}
-                                            colSpan={header.footerSpan ?? undefined}
-                                        >
-                                            {getTotalsForFooter(header, data, hideHostOps)}
-                                        </td>
-                                    ))}
+                                footerColumns.map((header) => (
+                                    <td
+                                        key={header.key}
+                                        className={classNames({
+                                            'pre-wrap': header.key === ColumnKeys.OpCode,
+                                        })}
+                                        colSpan={header.footerSpan ?? undefined}
+                                    >
+                                        {getTotalsForFooter(header, data, hideHostOps)}
+                                    </td>
+                                ))}
                         </tr>
                     </tfoot>
                 </table>
