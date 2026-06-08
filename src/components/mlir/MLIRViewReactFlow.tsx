@@ -686,14 +686,30 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 buckets.push(partnerBucket);
             }
         }
+        // De-dupe on the tuple the user actually reads off the row
+        // (target node + source output port + target input port). The
+        // self and partner buckets can both surface the same logical
+        // wire when the worker's `addEdgeSafe` keeps two edge ids that
+        // share an endpoint tuple (its id-dedup only blocks exact id
+        // collisions, and pair-dedup is bypassed for non-top-level
+        // endpoints). Without this guard the Outputs section renders
+        // duplicated consumer rows for region-pair selections.
         const result: OutgoingEdge[] = [];
+        const seenKeys = new Set<string>();
         for (const bucket of buckets) {
             for (const edge of bucket) {
+                const sourceOutputId = edge.sourceHandle ?? '0';
+                const targetInputId = edge.targetHandle ?? '0';
+                const key = `${edge.target}|${sourceOutputId}|${targetInputId}`;
+                if (seenKeys.has(key)) {
+                    continue;
+                }
+                seenKeys.add(key);
                 result.push({
                     targetNodeId: edge.target,
                     targetNodeLabel: sourceNodeById.get(edge.target)?.label ?? null,
-                    sourceNodeOutputId: edge.sourceHandle ?? '0',
-                    targetNodeInputId: edge.targetHandle ?? '0',
+                    sourceNodeOutputId: sourceOutputId,
+                    targetNodeInputId: targetInputId,
                     label: typeof edge.label === 'string' ? edge.label : undefined,
                 });
             }
@@ -751,7 +767,14 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 }
             }
         }
+        // De-dupe on the tuple the user actually reads off the row
+        // (producer + source output port + target input port). Distinct
+        // worker edge ids can share this tuple — see the matching
+        // comment on `selectedOutgoingEdges` — which otherwise surfaces
+        // as duplicated rows in the Inputs section and an inflated
+        // section count.
         const result: IncomingEdgeView[] = [];
+        const seenKeys = new Set<string>();
         for (const { bucket, resolveTargetInputId } of pairs) {
             for (const edge of bucket) {
                 const targetInputId = resolveTargetInputId(edge);
@@ -759,6 +782,11 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     continue;
                 }
                 const sourcePortId = edge.sourceHandle ?? '0';
+                const key = `${edge.source}|${sourcePortId}|${targetInputId}`;
+                if (seenKeys.has(key)) {
+                    continue;
+                }
+                seenKeys.add(key);
                 const producer = sourceNodeById.get(edge.source);
                 const sourcePortMetadata =
                     outputsPortMetadataByNodeIdAndPortId.get(edge.source)?.get(sourcePortId) ?? null;
