@@ -27,6 +27,15 @@ interface MlirNodeDetailsPanelProps {
     outputsMetadata: IndexedPortMetadata[];
     onClose: () => void;
     onRecenter: () => void;
+    /**
+     * Invoked when the user clicks the "locate" affordance next to a producer
+     * (Inputs) or consumer (Outputs) reference. The view auto-expands any
+     * namespaces the target sits inside and recenters the canvas on it; the
+     * current selection — and therefore the panel itself — is intentionally
+     * left untouched so the user can keep exploring the originating op's
+     * I/O while peeking at where its neighbours live.
+     */
+    onNavigateToNode: (nodeId: string) => void;
 }
 
 interface OutputPortView {
@@ -68,6 +77,41 @@ const NodeRef = ({ label, id }: NodeRefProps) => {
     }
     return <span className='mlir-node-details-io-id'>{id}</span>;
 };
+
+interface LinkedNodeRefProps {
+    label: string | null;
+    id: string;
+    onNavigate: (nodeId: string) => void;
+}
+
+// Pairs a NodeRef with a small "locate" icon button. The button is the click
+// target — keeping it discrete (vs. making the whole label clickable) keeps
+// drag-to-select on the label text working and matches the recenter icon
+// already in the panel header so the affordance reads as the same gesture
+// scoped to a single linked node.
+const LinkedNodeRef = ({ label, id, onNavigate }: LinkedNodeRefProps) => (
+    <div className='mlir-node-details-io-ref'>
+        <div className='mlir-node-details-io-names'>
+            <NodeRef
+                label={label}
+                id={id}
+            />
+        </div>
+        <Tooltip
+            content='Locate'
+            compact
+        >
+            <Button
+                className='mlir-node-details-io-locate'
+                size={Size.SMALL}
+                variant={ButtonVariant.MINIMAL}
+                icon={IconNames.LOCATE}
+                aria-label={`Locate ${label ?? id}`}
+                onClick={() => onNavigate(id)}
+            />
+        </Tooltip>
+    </div>
+);
 
 interface DetailsSectionProps {
     title: string;
@@ -124,6 +168,7 @@ const MlirNodeDetailsPanel = ({
     outputsMetadata,
     onClose,
     onRecenter,
+    onNavigateToNode: handleNavigateToNode,
 }: MlirNodeDetailsPanelProps) => {
     const [collapsed, setCollapsed] = useAtom(mlirNodeDetailsCollapsedAtom);
 
@@ -183,12 +228,12 @@ const MlirNodeDetailsPanel = ({
                     </p>
                 </div>
                 <div className='mlir-node-details-actions'>
-                    <Tooltip content='Recenter on this node'>
+                    <Tooltip content='Recenter'>
                         <Button
                             size={Size.SMALL}
                             variant={ButtonVariant.MINIMAL}
                             icon={IconNames.LOCATE}
-                            aria-label='Recenter on this node'
+                            aria-label='Recenter'
                             onClick={onRecenter}
                         />
                     </Tooltip>
@@ -245,9 +290,10 @@ const MlirNodeDetailsPanel = ({
                             key={`${edge.sourceNodeId}:${edge.sourceNodeOutputId}->${edge.targetNodeInputId}:${idx}`}
                             className='mlir-node-details-io-row'
                         >
-                            <NodeRef
+                            <LinkedNodeRef
                                 label={edge.sourceNodeLabel}
                                 id={edge.sourceNodeId}
+                                onNavigate={handleNavigateToNode}
                             />
                             <span className='mlir-node-details-io-port'>
                                 out {edge.sourceNodeOutputId} → in {edge.targetNodeInputId}
@@ -294,9 +340,10 @@ const MlirNodeDetailsPanel = ({
                                             key={`${consumer.targetNodeId}:${consumer.targetNodeInputId}:${idx}`}
                                             className='mlir-node-details-consumer-row'
                                         >
-                                            <NodeRef
+                                            <LinkedNodeRef
                                                 label={consumer.targetNodeLabel}
                                                 id={consumer.targetNodeId}
+                                                onNavigate={handleNavigateToNode}
                                             />
                                             <span className='mlir-node-details-io-port'>
                                                 in {consumer.targetNodeInputId}
