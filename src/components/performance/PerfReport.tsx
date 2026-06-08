@@ -70,6 +70,7 @@ interface PerformanceReportProps {
     comparisonStackedData: TypedStackedPerfRow[][];
     signposts?: Signpost[];
     hasL1PressureData?: boolean;
+    isLoading?: boolean;
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -82,6 +83,7 @@ const PerformanceReport = ({
     comparisonStackedData,
     signposts,
     hasL1PressureData = false,
+    isLoading = false,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -621,6 +623,7 @@ const PerformanceReport = ({
                                     filters={filters}
                                     stackedComparisonData={filteredComparisonStackedRowsList}
                                     reportName={activePerformanceReport?.reportName || null}
+                                    isLoading={isLoading}
                                 />
                             ) : (
                                 <PerfTable
@@ -632,6 +635,7 @@ const PerformanceReport = ({
                                     reportName={activePerformanceReport?.reportName || null}
                                     showHashColumn={false}
                                     hasL1PressureData={hasL1PressureData}
+                                    isLoading={isLoading}
                                 />
                             )
                         }
@@ -670,6 +674,7 @@ const PerformanceReport = ({
                                         ]}
                                         filters={filters}
                                         reportName={report}
+                                        isLoading={isLoading}
                                     />
                                 ) : (
                                     <PerfTable
@@ -685,6 +690,7 @@ const PerformanceReport = ({
                                         showHashColumn={false}
                                         hasL1PressureData={hasL1PressureData}
                                         activeReportComparisonIndex={0}
+                                        isLoading={isLoading}
                                     />
                                 )
                             }

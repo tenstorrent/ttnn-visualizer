@@ -208,10 +208,6 @@ export default function Performance() {
         }
     }, [appliedOpCodeOptionsKey, opCodeOptionsKey, opCodeOptions]);
 
-    if (isLoadingPerformance && !perfDataError) {
-        return <LoadingSpinner />;
-    }
-
     if (perfDataError?.status === HttpStatusCode.UnprocessableEntity) {
         return (
             <>
@@ -274,6 +270,7 @@ export default function Performance() {
                             comparisonStackedData={enrichedComparisonStackedData}
                             signposts={data?.signposts}
                             hasL1PressureData={hasL1PressureData}
+                            isLoading={isLoadingPerformance}
                         />
                     }
                 />
