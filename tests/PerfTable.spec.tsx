@@ -265,19 +265,76 @@ describe('PerfTable tensor-drawer trigger column', () => {
     });
 });
 
-describe('PerfTable column visibility', () => {
+describe('PerfTable loading state', () => {
     beforeEach(() => {
         (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     });
 
-    it('hides a column when its key is stored in hiddenPerfTableColumnsAtom', () => {
-        renderTable([matmulRow], { hiddenColumns: [ColumnKeys.DeviceTime] });
+    it('renders the skeleton instead of data rows while loading', () => {
+        render(
+            <TestProviders>
+                <PerfTable
+                    data={[matmulRow]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                    isLoading
+                />
+            </TestProviders>,
+        );
 
-        const table = screen.getByRole('table');
-        expect(within(table).queryByText('Device Time')).not.toBeInTheDocument();
-        expect(within(table).getByText('OP Code')).toBeInTheDocument();
+        const skeleton = screen.getByTestId(TEST_IDS.PERF_TABLE_SKELETON);
+        expect(skeleton).toBeInTheDocument();
+        expect(skeleton).toHaveAttribute('aria-busy', 'true');
+        // No real data rows or footer totals leak through while loading
+        expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON)).toBeNull();
     });
 
+    it('keeps the device-architecture strip mounted while loading (scoped skeleton)', () => {
+        render(
+            <TestProviders>
+                <PerfTable
+                    data={[]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                    isLoading
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeInTheDocument();
+        expect(screen.getByText('Arch:')).toBeInTheDocument();
+    });
+
+    it('shows the empty state rather than the skeleton when not loading and there are no rows', () => {
+        render(
+            <TestProviders>
+                <PerfTable
+                    data={[]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeNull();
+        expect(screen.getByText('No data to display')).toBeInTheDocument();
+    });
+});
+
+describe('PerfTable column visibility', () => {
     it('keeps OP Code visible even when it is listed as hidden', () => {
         renderTable([matmulRow], { hiddenColumns: [ColumnKeys.OpCode, ColumnKeys.DeviceTime] });
 

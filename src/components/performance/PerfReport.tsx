@@ -70,6 +70,8 @@ interface PerformanceReportProps {
     comparisonStackedData: TypedStackedPerfRow[][];
     signposts?: Signpost[];
     hasL1PressureData?: boolean;
+    isLoading?: boolean;
+    isComparisonLoading?: boolean;
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -82,6 +84,8 @@ const PerformanceReport = ({
     comparisonStackedData,
     signposts,
     hasL1PressureData = false,
+    isLoading = false,
+    isComparisonLoading = false,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -119,6 +123,7 @@ const PerformanceReport = ({
     );
 
     const isSignpostsDisabled = !signposts || signposts.length === 0;
+    const isTableLoading = isLoading || isComparisonLoading;
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
     const isGroupedByMemory = stackedGroupBy === StackedGroupBy.MEMORY;
     const filterScopeHelperText =
@@ -612,6 +617,7 @@ const PerformanceReport = ({
                                     filters={filters}
                                     stackedComparisonData={filteredComparisonStackedRowsList}
                                     reportName={activePerformanceReport?.reportName || null}
+                                    isLoading={isTableLoading}
                                 />
                             ) : (
                                 <PerfTable
@@ -623,6 +629,7 @@ const PerformanceReport = ({
                                     reportName={activePerformanceReport?.reportName || null}
                                     showHashColumn={false}
                                     hasL1PressureData={hasL1PressureData}
+                                    isLoading={isTableLoading}
                                 />
                             )
                         }
@@ -661,6 +668,7 @@ const PerformanceReport = ({
                                         ]}
                                         filters={filters}
                                         reportName={report}
+                                        isLoading={isTableLoading}
                                     />
                                 ) : (
                                     <PerfTable
@@ -676,6 +684,7 @@ const PerformanceReport = ({
                                         showHashColumn={false}
                                         hasL1PressureData={hasL1PressureData}
                                         activeReportComparisonIndex={0}
+                                        isLoading={isTableLoading}
                                     />
                                 )
                             }
