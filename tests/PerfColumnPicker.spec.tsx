@@ -9,21 +9,21 @@ import { afterEach, describe, expect, it } from 'vitest';
 import PerfTableToolbar from '../src/components/performance/PerfTableToolbar';
 import { ColumnKeys, Columns } from '../src/definitions/PerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { userPerfColumnsAtom } from '../src/store/app';
+import { hiddenPerfTableColumnsAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 
 function HiddenColumnsProbe() {
-    const userColumns = useAtomValue(userPerfColumnsAtom);
+    const hiddenColumns = useAtomValue(hiddenPerfTableColumnsAtom);
 
-    return <span data-testid='hidden-columns-probe'>{userColumns.join(',')}</span>;
+    return <span data-testid='hidden-columns-probe'>{hiddenColumns.join(',')}</span>;
 }
 
 afterEach(cleanup);
 
 describe('PerfTableToolbar', () => {
-    it('toggles a column into userPerfColumnsAtom', () => {
+    it('toggles a column into hiddenPerfTableColumnsAtom', () => {
         render(
-            <TestProviders initialAtomValues={[[userPerfColumnsAtom, []]]}>
+            <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, []]]}>
                 <PerfTableToolbar eligibleColumns={Columns} />
                 <HiddenColumnsProbe />
             </TestProviders>,
@@ -43,7 +43,7 @@ describe('PerfTableToolbar', () => {
 
     it('does not hide locked columns', () => {
         render(
-            <TestProviders initialAtomValues={[[userPerfColumnsAtom, []]]}>
+            <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, []]]}>
                 <PerfTableToolbar eligibleColumns={Columns} />
                 <HiddenColumnsProbe />
             </TestProviders>,
@@ -66,7 +66,7 @@ describe('PerfTableToolbar', () => {
 
     it('clears hidden columns when Show all is clicked', () => {
         render(
-            <TestProviders initialAtomValues={[[userPerfColumnsAtom, [ColumnKeys.DeviceTime, ColumnKeys.Dram]]]}>
+            <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, [ColumnKeys.DeviceTime, ColumnKeys.Dram]]]}>
                 <PerfTableToolbar eligibleColumns={Columns} />
                 <HiddenColumnsProbe />
             </TestProviders>,

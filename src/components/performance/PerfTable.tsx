@@ -28,7 +28,7 @@ import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
-import { hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom, userPerfColumnsAtom } from '../../store/app';
+import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
@@ -64,7 +64,7 @@ const PerformanceTable = ({
     activeReportComparisonIndex = null,
 }: PerformanceTableProps) => {
     const hideHostOps = useAtomValue(hideHostOpsAtom);
-    const userColumns = useAtomValue(userPerfColumnsAtom);
+    const hiddenColumns = useAtomValue(hiddenPerfTableColumnsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
     const selectedPerfRowId = useAtomValue(selectedPerfRowIdAtom);
     const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
@@ -126,8 +126,8 @@ const PerformanceTable = ({
     );
 
     const visibleColumns = useMemo(
-        () => getVisiblePerfColumns(eligibleColumns, userColumns),
-        [eligibleColumns, userColumns],
+        () => getVisiblePerfColumns(eligibleColumns, hiddenColumns),
+        [eligibleColumns, hiddenColumns],
     );
 
     const footerColumns = useMemo(() => getFooterColumns(visibleColumns), [visibleColumns]);

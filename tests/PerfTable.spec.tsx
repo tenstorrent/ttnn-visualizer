@@ -11,7 +11,7 @@ import { ColumnKeys, TypedPerfTableRow, signpostRowDefaults } from '../src/defin
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
-import { selectedPerfRowIdAtom, userPerfColumnsAtom } from '../src/store/app';
+import { hiddenPerfTableColumnsAtom, selectedPerfRowIdAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
@@ -56,7 +56,7 @@ function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}
     const { comparisonData = [], activeReportComparisonIndex = null, hiddenColumns = [] } = options;
 
     return render(
-        <TestProviders initialAtomValues={[[userPerfColumnsAtom, hiddenColumns]]}>
+        <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, hiddenColumns]]}>
             <PerfTable
                 data={rows}
                 comparisonData={comparisonData}
@@ -270,7 +270,7 @@ describe('PerfTable column visibility', () => {
         (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     });
 
-    it('hides a column when its key is stored in userPerfColumnsAtom', () => {
+    it('hides a column when its key is stored in hiddenPerfTableColumnsAtom', () => {
         renderTable([matmulRow], { hiddenColumns: [ColumnKeys.DeviceTime] });
 
         const table = screen.getByRole('table');

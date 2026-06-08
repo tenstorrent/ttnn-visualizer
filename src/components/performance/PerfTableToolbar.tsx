@@ -9,37 +9,37 @@ import { useMemo } from 'react';
 import 'styles/components/PerfTableToolbar.scss';
 import { ColumnDefinition, ColumnKeys, LOCKED_PERF_COLUMN_KEYS } from '../../definitions/PerfTable';
 import { TEST_IDS } from '../../definitions/TestIds';
-import { userPerfColumnsAtom } from '../../store/app';
+import { hiddenPerfTableColumnsAtom } from '../../store/app';
 
 interface PerfTableToolbarProps {
     eligibleColumns: ColumnDefinition[];
 }
 
 function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
-    const [userColumns, setUserColumns] = useAtom(userPerfColumnsAtom);
+    const [hiddenColumns, setHiddenColumns] = useAtom(hiddenPerfTableColumnsAtom);
 
-    const hiddenColumnKeys = useMemo(() => new Set(userColumns), [userColumns]);
+    const hiddenColumnKeys = useMemo(() => new Set(hiddenColumns), [hiddenColumns]);
 
     const handleColumnToggle = (columnKey: ColumnKeys, isVisible: boolean) => {
         if (LOCKED_PERF_COLUMN_KEYS.includes(columnKey)) {
             return;
         }
 
-        setUserColumns((previousUserColumns) => {
+        setHiddenColumns((previousHiddenColumns) => {
             if (isVisible) {
-                return previousUserColumns.filter((key) => key !== columnKey);
+                return previousHiddenColumns.filter((key) => key !== columnKey);
             }
 
-            if (previousUserColumns.includes(columnKey)) {
-                return previousUserColumns;
+            if (previousHiddenColumns.includes(columnKey)) {
+                return previousHiddenColumns;
             }
 
-            return [...previousUserColumns, columnKey];
+            return [...previousHiddenColumns, columnKey];
         });
     };
 
     const handleResetColumns = () => {
-        setUserColumns([]);
+        setHiddenColumns([]);
     };
 
     const popoverContent = (
@@ -53,7 +53,7 @@ function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
                     variant={ButtonVariant.MINIMAL}
                     size='small'
                     onClick={handleResetColumns}
-                    disabled={userColumns.length === 0}
+                    disabled={hiddenColumns.length === 0}
                     data-testid={TEST_IDS.PERF_COLUMN_PICKER_RESET}
                 >
                     Show all
