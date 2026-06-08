@@ -59,7 +59,7 @@ export default function Performance() {
         isLoading: isLoadingPerformance,
         error: perfDataError,
     } = usePerformanceReport(activePerformanceReport?.reportName || null);
-    const { data: comparisonData } = usePerformanceComparisonReport();
+    const { data: comparisonData, isLoading: isLoadingComparison } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
@@ -271,6 +271,7 @@ export default function Performance() {
                             signposts={data?.signposts}
                             hasL1PressureData={hasL1PressureData}
                             isLoading={isLoadingPerformance}
+                            isComparisonLoading={isLoadingComparison}
                         />
                     }
                 />

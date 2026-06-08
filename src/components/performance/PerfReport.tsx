@@ -71,6 +71,7 @@ interface PerformanceReportProps {
     signposts?: Signpost[];
     hasL1PressureData?: boolean;
     isLoading?: boolean;
+    isComparisonLoading?: boolean;
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -84,6 +85,7 @@ const PerformanceReport = ({
     signposts,
     hasL1PressureData = false,
     isLoading = false,
+    isComparisonLoading = false,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -674,7 +676,7 @@ const PerformanceReport = ({
                                         ]}
                                         filters={filters}
                                         reportName={report}
-                                        isLoading={isLoading}
+                                        isLoading={isComparisonLoading}
                                     />
                                 ) : (
                                     <PerfTable
@@ -690,7 +692,7 @@ const PerformanceReport = ({
                                         showHashColumn={false}
                                         hasL1PressureData={hasL1PressureData}
                                         activeReportComparisonIndex={0}
-                                        isLoading={isLoading}
+                                        isLoading={isComparisonLoading}
                                     />
                                 )
                             }
