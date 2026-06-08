@@ -26,7 +26,7 @@ const SVGBufferRenderer = ({ height, data, memoryStart, memoryEnd }: SVGBufferRe
 
                     return (
                         <rect
-                            key={chunk.address}
+                            key={chunk.id}
                             x={`${xPercent}%`}
                             y={0}
                             width={`${widthPercent}%`}

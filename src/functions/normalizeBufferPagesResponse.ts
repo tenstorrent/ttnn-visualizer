@@ -65,7 +65,7 @@ export const aggregatePagesToChunks = (pages: LegacyBufferPage[]): BufferChunk[]
                     core_y: page.core_y,
                     buffer_type: page.buffer_type,
                     rank,
-                    id: `${page.operation_id}_${page.address}_${page.bank_id}_${page.core_x}_${page.core_y}`,
+                    id: `${page.operation_id}_${page.device_id}_${page.address}_${page.bank_id}_${page.core_x}_${page.core_y}_${page.buffer_type}_${rank}`,
                 },
                 start: page.page_address,
                 end: pageEnd,

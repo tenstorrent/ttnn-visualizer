@@ -42,7 +42,7 @@ function chunk(overrides: Partial<BufferChunk> = {}): BufferChunk {
         num_pages: 2,
         buffer_type: BufferType.L1,
         rank: 0,
-        id: '1_100_1_0_0',
+        id: '1_0_100_1_0_0_1_0',
         ...overrides,
     };
 }
@@ -111,11 +111,25 @@ describe('aggregatePagesToChunks', () => {
         expect(result[0].rank).toBe(0);
     });
 
-    it('synthesizes the chunk id as op_addr_bank_x_y', () => {
+    it('synthesizes the chunk id from the full grouping tuple', () => {
         const result = aggregatePagesToChunks([
             page({ operation_id: 5, address: 200, bank_id: 3, core_x: 2, core_y: 4 }),
         ]);
-        expect(result[0].id).toBe('5_200_3_2_4');
+        // op_device_addr_bank_x_y_buffer-type_rank — page() defaults give
+        // device_id=0, buffer_type=L1(1), rank=0 (the omitted-rank default).
+        expect(result[0].id).toBe(`5_0_200_3_2_4_${BufferType.L1}_0`);
+    });
+
+    it('emits distinct ids for groups that only differ on device, rank, or buffer_type', () => {
+        const result = aggregatePagesToChunks([
+            page({ device_id: 0, buffer_type: BufferType.DRAM, rank: 0 }),
+            page({ device_id: 1, buffer_type: BufferType.DRAM, rank: 0 }),
+            page({ device_id: 0, buffer_type: BufferType.L1, rank: 0 }),
+            page({ device_id: 0, buffer_type: BufferType.DRAM, rank: 1 }),
+        ]);
+
+        const ids = new Set(result.map((c) => c.id));
+        expect(ids.size).toBe(4);
     });
 
     it('takes the max page_size when sizes vary within a group', () => {
@@ -133,7 +147,7 @@ describe('aggregatePagesToChunks', () => {
 
 describe('normalizeBufferPagesResponse', () => {
     it('returns chunks unchanged when the backend already aggregated', () => {
-        const chunks = [chunk({ address: 100 }), chunk({ address: 200, id: '1_200_1_0_0' })];
+        const chunks = [chunk({ address: 100 }), chunk({ address: 200, id: '1_0_200_1_0_0_1_0' })];
         expect(normalizeBufferPagesResponse(chunks)).toEqual(chunks);
     });
 

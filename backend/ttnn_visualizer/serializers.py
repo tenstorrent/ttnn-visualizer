@@ -190,17 +190,20 @@ def serialize_buffer_chunks(buffer_chunks):
     """
     Serialize ``BufferChunk`` rows for the ``/api/buffer-pages`` response.
 
-    The synthetic ``id`` field combines the grouping key so each row stays
-    stable across re-fetches even though ``page_index`` no longer exists.
+    The synthetic ``id`` encodes the full GROUP BY tuple — ``operation_id``,
+    ``device_id``, ``address``, ``bank_id``, ``core_x``, ``core_y``,
+    ``buffer_type``, ``rank`` — so rows from multi-device / mixed-rank /
+    mixed-type responses cannot collide on the same id. ``BufferChunk.to_dict``
+    already unwraps the ``buffer_type`` enum to its int value, so the f-string
+    embeds the same scalar the client sees.
     """
     result = [chunk.to_dict() for chunk in buffer_chunks]
     for chunk in result:
         chunk["id"] = (
-            f"{chunk['operation_id']}_{chunk['address']}_{chunk['bank_id']}_"
-            f"{chunk['core_x']}_{chunk['core_y']}"
+            f"{chunk['operation_id']}_{chunk['device_id']}_{chunk['address']}_"
+            f"{chunk['bank_id']}_{chunk['core_x']}_{chunk['core_y']}_"
+            f"{chunk['buffer_type']}_{chunk['rank']}"
         )
-        if "buffer_type" in chunk and isinstance(chunk["buffer_type"], BufferType):
-            chunk["buffer_type"] = chunk["buffer_type"].value
     return result
 
 

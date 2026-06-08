@@ -433,10 +433,12 @@ class DatabaseQueries:
         """
         Group ``buffer_pages`` rows into ``BufferChunk`` rows on the fly.
 
-        Matches the historical FE collapse in ``pageDataToChunkArray``:
-        ``chunk_address = MIN(page_address)`` and
+        Mirrors the client-side ``aggregatePagesToChunks`` fallback in
+        ``src/functions/normalizeBufferPagesResponse.ts`` so both paths emit
+        identical chunks: ``chunk_address = MIN(page_address)`` and
         ``chunk_size = MAX(page_address + page_size) - MIN(page_address)``
-        per ``(operation_id, device_id, address, bank_id, core_x, core_y)``.
+        per ``(operation_id, device_id, address, bank_id, core_x, core_y,
+        buffer_type[, rank])``.
         """
         page_columns = set(self._get_table_columns("buffer_pages"))
         has_rank = "rank" in page_columns

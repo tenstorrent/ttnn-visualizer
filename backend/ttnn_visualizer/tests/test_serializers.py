@@ -586,15 +586,43 @@ class TestSerializers(unittest.TestCase):
         result = serialize_buffer_chunks(chunks)
 
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["id"], "1_100_1_0_0")
+        self.assertEqual(result[0]["id"], "1_0_100_1_0_0_0_0")
         self.assertEqual(result[0]["buffer_type"], BufferType.DRAM.value)
         self.assertEqual(result[0]["chunk_size"], 48)
         self.assertEqual(result[0]["num_pages"], 2)
         self.assertEqual(result[0]["rank"], 0)
-        self.assertEqual(result[1]["id"], "1_200_2_1_0")
+        self.assertEqual(result[1]["id"], "1_0_200_2_1_0_1_0")
         self.assertEqual(result[1]["buffer_type"], BufferType.L1.value)
-        # The synthetic id must round-trip through orjson cleanly.
-        self.assertEqual(orjson.loads(orjson.dumps(result))[0]["id"], "1_100_1_0_0")
+        self.assertEqual(
+            orjson.loads(orjson.dumps(result))[0]["id"], "1_0_100_1_0_0_0_0"
+        )
+
+    def test_serialize_buffer_chunks_id_disambiguates_device_rank_and_buffer_type(self):
+        # Two chunks that share (op, addr, bank, core_x, core_y) but differ on
+        # device, rank, or buffer_type must produce distinct ids. Regression
+        # check for the legacy id format which only encoded the first five
+        # fields and would collide across devices.
+        base = dict(
+            operation_id=7,
+            address=2048,
+            bank_id=3,
+            core_x=4,
+            core_y=5,
+            chunk_address=2048,
+            chunk_size=64,
+            page_size=32,
+            num_pages=2,
+        )
+        chunks = [
+            BufferChunk(device_id=0, buffer_type=BufferType.DRAM, rank=0, **base),
+            BufferChunk(device_id=1, buffer_type=BufferType.DRAM, rank=0, **base),
+            BufferChunk(device_id=0, buffer_type=BufferType.L1, rank=0, **base),
+            BufferChunk(device_id=0, buffer_type=BufferType.DRAM, rank=1, **base),
+        ]
+
+        ids = [row["id"] for row in serialize_buffer_chunks(chunks)]
+
+        self.assertEqual(len(set(ids)), 4)
 
     def test_serialize_buffer_pages(self):
         buffer_pages = [

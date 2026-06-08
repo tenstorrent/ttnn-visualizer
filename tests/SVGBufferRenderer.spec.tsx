@@ -10,7 +10,7 @@ import { BufferChunk } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
 
 function chunk(overrides: Partial<BufferChunk> = {}): BufferChunk {
-    return {
+    const merged = {
         operation_id: 1,
         device_id: 0,
         address: 1000,
@@ -23,9 +23,14 @@ function chunk(overrides: Partial<BufferChunk> = {}): BufferChunk {
         num_pages: 8,
         buffer_type: BufferType.L1,
         rank: 0,
-        id: '1_1000_1_0_0',
         color: '#ff0000',
         ...overrides,
+    };
+    // Derive id from the grouping tuple so chunks that differ on any
+    // collision-relevant field also get distinct React keys.
+    return {
+        ...merged,
+        id: `${merged.operation_id}_${merged.device_id}_${merged.address}_${merged.bank_id}_${merged.core_x}_${merged.core_y}_${merged.buffer_type}_${merged.rank}`,
     };
 }
 
