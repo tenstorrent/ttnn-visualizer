@@ -16,7 +16,7 @@ dependencies = [
     "gevent==25.9.1",
     "gunicorn~=23.0.0",
     "orjson>=3.9.0",
-    "pandas>=2.0.0,<3.0",
+    "pandas>=2.2.0,<3.0",
     "pydantic_core==2.41.5",
     "pydantic==2.12.5",
     "python-dotenv==1.2.2",
