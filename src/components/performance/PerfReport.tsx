@@ -70,6 +70,8 @@ interface PerformanceReportProps {
     comparisonStackedData: TypedStackedPerfRow[][];
     signposts?: Signpost[];
     hasL1PressureData?: boolean;
+    isLoading?: boolean;
+    isComparisonLoading?: boolean;
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -82,6 +84,8 @@ const PerformanceReport = ({
     comparisonStackedData,
     signposts,
     hasL1PressureData = false,
+    isLoading = false,
+    isComparisonLoading = false,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -108,7 +112,6 @@ const PerformanceReport = ({
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
     );
-
     const [filters, setFilters] = useState(
         Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [ColumnKeys, string])) as Record<
             ColumnKeys,
@@ -120,6 +123,7 @@ const PerformanceReport = ({
     );
 
     const isSignpostsDisabled = !signposts || signposts.length === 0;
+    const isTableLoading = isLoading || isComparisonLoading;
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
     const isGroupedByMemory = stackedGroupBy === StackedGroupBy.MEMORY;
     const filterScopeHelperText =
@@ -368,7 +372,7 @@ const PerformanceReport = ({
 
                 <div className='option-row'>
                     <FormGroup
-                        subLabel='Input data options'
+                        subLabel='Input data'
                         className='form-group'
                     >
                         <ButtonGroup className='select-group'>
@@ -591,14 +595,6 @@ const PerformanceReport = ({
                             </ButtonGroup>
                         </FormGroup>
                     )}
-
-                    {/* May keep this or remove it - undecided as yet */}
-                    {/* <Switch
-                        label='Show Hash Column'
-                        onChange={() => setShowHashColumn(!showHashColumn)}
-                        checked={showHashColumn}
-                        className='option-switch'
-                    /> */}
                 </div>
 
                 <Tabs
@@ -621,6 +617,7 @@ const PerformanceReport = ({
                                     filters={filters}
                                     stackedComparisonData={filteredComparisonStackedRowsList}
                                     reportName={activePerformanceReport?.reportName || null}
+                                    isLoading={isTableLoading}
                                 />
                             ) : (
                                 <PerfTable
@@ -632,6 +629,7 @@ const PerformanceReport = ({
                                     reportName={activePerformanceReport?.reportName || null}
                                     showHashColumn={false}
                                     hasL1PressureData={hasL1PressureData}
+                                    isLoading={isTableLoading}
                                 />
                             )
                         }
@@ -670,6 +668,7 @@ const PerformanceReport = ({
                                         ]}
                                         filters={filters}
                                         reportName={report}
+                                        isLoading={isTableLoading}
                                     />
                                 ) : (
                                     <PerfTable
@@ -685,6 +684,7 @@ const PerformanceReport = ({
                                         showHashColumn={false}
                                         hasL1PressureData={hasL1PressureData}
                                         activeReportComparisonIndex={0}
+                                        isLoading={isTableLoading}
                                     />
                                 )
                             }
