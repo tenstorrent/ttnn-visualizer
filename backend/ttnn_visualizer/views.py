@@ -1610,7 +1610,10 @@ def list_remote_reports_performance():
 @api.route("/cluster-descriptor", methods=["GET"])
 @with_instance
 def get_cluster_descriptor(instance: Instance):
-    report_dir = Path(str(instance.profiler_path)).parent
+    if not instance.profiler_path:
+        return response_not_found("cluster_descriptor.yaml not found")
+
+    report_dir = Path(instance.profiler_path).parent
     rank_param = _optional_rank_query_param()
     logical_rank = 0 if rank_param is None else rank_param
 
@@ -1642,7 +1645,12 @@ def get_cluster_descriptor(instance: Instance):
 @api.route("/mesh-descriptor", methods=["GET"])
 @with_instance
 def get_mesh_descriptor(instance: Instance):
-    report_dir = Path(str(instance.profiler_path)).parent
+    if not instance.profiler_path:
+        return response_not_found(
+            "physical_chip_mesh_coordinate_mapping.yaml not found"
+        )
+
+    report_dir = Path(instance.profiler_path).parent
     rank_param = _optional_rank_query_param()
     logical_rank = 0 if rank_param is None else rank_param
 
