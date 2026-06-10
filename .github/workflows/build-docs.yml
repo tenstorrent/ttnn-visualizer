@@ -28,16 +28,14 @@ jobs:
         enable-cache: true
 
     - name: Install documentation dependencies
-      run: |
-        uv lock --check
-        uv sync --extra docs --frozen
+      run: uv sync --extra docs --frozen
 
     - name: Setup Pages
       id: pages
       uses: actions/configure-pages@v5
 
     - name: Build Docs
-      run: uv run --extra docs sphinx-build docs docs/output
+      run: uv run --frozen --extra docs sphinx-build docs docs/output
 
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
