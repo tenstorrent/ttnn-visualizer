@@ -28,7 +28,9 @@ jobs:
         enable-cache: true
 
     - name: Install documentation dependencies
-      run: uv sync --extra docs --locked
+      run: |
+        uv lock --check
+        uv sync --extra docs --frozen
 
     - name: Setup Pages
       id: pages
