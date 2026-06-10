@@ -5,6 +5,11 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
+// Sticky source-path header padding; the negative top margin pulls it over the
+// container's top padding while leaving the 1px top border visible.
+$source-path-vertical-padding: 20px;
+$container-border-width: 1px;
+
 .stack-trace {
     margin-top: 0;
 
@@ -15,12 +20,11 @@
 
     .formatted-code {
         display: flex;
-        flex-wrap: nowrap;
+        align-items: flex-start;
+        gap: 10px;
         padding: 10px;
         padding-left: 0;
         background-color: $tt-black;
-        align-items: flex-start;
-        gap: 10px;
         margin-top: 0;
 
         &.is-inline {
@@ -51,8 +55,16 @@
 
     .stack-trace-path {
         color: $tt-grey-5;
-        margin-bottom: 20px;
+        position: sticky;
+        top: 0;
+        left: 0;
+        background-color: $tt-source-overlay-background;
+        z-index: variables.$z-index-2-interactive;
+        padding-top: $source-path-vertical-padding;
+        padding-bottom: $source-path-vertical-padding;
+        margin-top: -($source-path-vertical-padding - $container-border-width);
         margin-right: 30px; // Avoids overlapping with source-file-controls
+        margin-bottom: 0;
     }
 
     .code-wrapper {

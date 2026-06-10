@@ -960,6 +960,7 @@ export default function Styleguide() {
                         outputsMetadata={MLIR_RICH_NODE.outputsMetadata}
                         onClose={() => {}}
                         onRecenter={() => {}}
+                        onNavigateToNode={() => {}}
                     />
                 </div>
 
@@ -972,6 +973,7 @@ export default function Styleguide() {
                         outputsMetadata={MLIR_TERMINATOR_NODE.outputsMetadata}
                         onClose={() => {}}
                         onRecenter={() => {}}
+                        onNavigateToNode={() => {}}
                     />
                 </div>
 
@@ -984,6 +986,7 @@ export default function Styleguide() {
                         outputsMetadata={[]}
                         onClose={() => {}}
                         onRecenter={() => {}}
+                        onNavigateToNode={() => {}}
                     />
                 </div>
             </div>

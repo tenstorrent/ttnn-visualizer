@@ -15,12 +15,10 @@ import {
     Size,
     Tooltip,
 } from '@blueprintjs/core';
-import cpp from 'highlight.js/lib/languages/cpp';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import classNames from 'classnames';
-import hljs from 'highlight.js/lib/core';
-import 'highlight.js/styles/a11y-dark.css';
+import hljs from '../../functions/highlightSource';
 import { BufferNode, DeviceOperationNode, Node, NodeType, Tensor, TensorNode } from '../../model/APIData';
 import 'styles/components/DeviceOperationFullRender.scss';
 import 'styles/components/DeviceOperationArgumentsComponent.scss';
@@ -486,7 +484,6 @@ interface DeviceOperationsFullRenderProps {
 }
 
 const DeviceOperationsFullRender = ({ deviceOperations, details, onLegendClick }: DeviceOperationsFullRenderProps) => {
-    hljs.registerLanguage('cpp', cpp);
     const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);
     const [deviceOperationsArgsNode, setDeviceOperationsArgsNode] = useState<DeviceOperationNode | null>(null);
     const { peakMemoryLoad, renderOperations } = useDeviceOperationsFullRenderModel({

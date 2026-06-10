@@ -11,8 +11,8 @@ import Ajv from 'ajv';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
+    BufferChunk,
     BufferData,
-    BufferPage,
     BuffersByOperation,
     DeviceInfo,
     DeviceOperationParams,
@@ -33,6 +33,7 @@ import { PerfTableRow } from '../definitions/PerfTable';
 import { L1PressureResult, buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
+import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
 import {
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
@@ -116,12 +117,12 @@ export const updateInstance = async (payload: Partial<Instance>): Promise<Instan
     return response?.data ?? null;
 };
 
-export const fetchBufferPages = async (
+export const fetchBufferChunks = async (
     operationId: number,
     address?: number | string,
     bufferType?: BufferType,
-): Promise<BufferPage[]> => {
-    const response = await axiosInstance.get<BufferPage[]>(Endpoints.BUFFER_PAGES, {
+): Promise<BufferChunk[]> => {
+    const response = await axiosInstance.get<unknown[]>(Endpoints.BUFFER_PAGES, {
         params: {
             operation_id: operationId,
             address,
@@ -129,7 +130,7 @@ export const fetchBufferPages = async (
         },
     });
 
-    return response.data;
+    return normalizeBufferPagesResponse(response.data ?? []);
 };
 
 const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
@@ -806,10 +807,10 @@ export const useReportMetadata = () => {
     });
 };
 
-export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
-    return useQuery<BufferPage[], AxiosError>({
-        queryKey: ['get-buffer-pages', operationId, address, bufferType],
-        queryFn: () => fetchBufferPages(operationId, address, bufferType),
+export const useBufferChunks = (operationId: number, address?: number | string, bufferType?: BufferType) => {
+    return useQuery<BufferChunk[], AxiosError>({
+        queryKey: ['get-buffer-chunks', operationId, address, bufferType],
+        queryFn: () => fetchBufferChunks(operationId, address, bufferType),
         staleTime: Infinity,
     });
 };

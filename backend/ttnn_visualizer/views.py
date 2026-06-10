@@ -61,7 +61,7 @@ from ttnn_visualizer.report_source_file import (
 )
 from ttnn_visualizer.serializers import (
     serialize_buffer,
-    serialize_buffer_pages,
+    serialize_buffer_chunks,
     serialize_devices,
     serialize_operation,
     serialize_operation_buffers,
@@ -72,7 +72,7 @@ from ttnn_visualizer.serializers import (
 from ttnn_visualizer.sftp_operations import (
     check_remote_path_exists,
     check_remote_path_for_reports,
-    get_cluster_desc,
+    get_active_sync_method,
     get_remote_performance_folders,
     get_remote_profiler_folders,
     sync_remote_performance_folders,
@@ -88,7 +88,8 @@ from ttnn_visualizer.stack_trace_source import (
 )
 from ttnn_visualizer.utils import (
     create_path_resolver,
-    get_mesh_descriptor_paths,
+    pick_cluster_descriptor_path,
+    pick_mesh_descriptor_path,
     pick_profiler_config_paths,
     read_last_synced_file,
     read_profiler_config_api_payload,
@@ -733,21 +734,19 @@ def buffer_pages(instance: Instance):
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
             return rejected
-        page_filters = {
+
+        source_table = db.buffer_chunks_source_table()
+        chunk_filters = {
             "operation_id": operation_id,
             "device_id": device_id,
             "address": addresses,
             "buffer_type": buffer_type,
         }
-        buffers = list(
-            list(
-                db.query_buffer_pages(
-                    db.merge_rank_filter("buffer_pages", page_filters, rank)
-                )
-            )
-        )
+        if source_table is not None:
+            chunk_filters = db.merge_rank_filter(source_table, chunk_filters, rank)
+        chunks = list(db.query_buffer_chunks(chunk_filters))
         return Response(
-            orjson.dumps(serialize_buffer_pages(buffers)),
+            orjson.dumps(serialize_buffer_chunks(chunks)),
             mimetype="application/json",
         )
 
@@ -1609,12 +1608,29 @@ def list_remote_reports_performance():
 @api.route("/cluster-descriptor", methods=["GET"])
 @with_instance
 def get_cluster_descriptor(instance: Instance):
+    if not instance.profiler_path:
+        return response_not_found("cluster_descriptor.yaml not found")
+
+    report_dir = Path(instance.profiler_path).parent
+    rank_param = _optional_rank_query_param()
+    logical_rank = 0 if rank_param is None else rank_param
+
+    path, err = pick_cluster_descriptor_path(report_dir, logical_rank)
+    if err == "rank_out_of_range":
+        return response_bad_request(
+            f"Invalid rank for this report: {logical_rank}. "
+            "Rank must be within the world size for this report's cluster descriptor files."
+        )
+    if err == "missing_rank_file":
+        return response_not_found(
+            f"No cluster descriptor file for rank {logical_rank}."
+        )
+    if path is None:
+        return response_not_found("cluster_descriptor.yaml not found")
+
     try:
-        cluster_desc = get_cluster_desc(instance)
-
-        if not cluster_desc:
-            return response_not_found("cluster_descriptor.yaml not found")
-
+        with open(path, "r", encoding="utf-8") as cluster_desc_file:
+            cluster_desc = yaml.safe_load(cluster_desc_file)
         return jsonify(cluster_desc), HTTPStatus.OK
 
     except yaml.YAMLError as e:
@@ -1627,15 +1643,30 @@ def get_cluster_descriptor(instance: Instance):
 @api.route("/mesh-descriptor", methods=["GET"])
 @with_instance
 def get_mesh_descriptor(instance: Instance):
-    paths = get_mesh_descriptor_paths(instance)
-
-    if not paths:
+    if not instance.profiler_path:
         return response_not_found(
-            "physical_chip_mesh_coordinate_mapping_1_of_1.yaml not found"
+            "physical_chip_mesh_coordinate_mapping.yaml not found"
+        )
+
+    report_dir = Path(instance.profiler_path).parent
+    rank_param = _optional_rank_query_param()
+    logical_rank = 0 if rank_param is None else rank_param
+
+    path, err = pick_mesh_descriptor_path(report_dir, logical_rank)
+    if err == "rank_out_of_range":
+        return response_bad_request(
+            f"Invalid rank for this report: {logical_rank}. "
+            "Rank must be within the world size for this report's mesh descriptor files."
+        )
+    if err == "missing_rank_file":
+        return response_not_found(f"No mesh descriptor file for rank {logical_rank}.")
+    if path is None:
+        return response_not_found(
+            "physical_chip_mesh_coordinate_mapping.yaml not found"
         )
 
     try:
-        with open(paths[0], "r", encoding="utf-8") as mesh_descriptor_path:
+        with open(path, "r", encoding="utf-8") as mesh_descriptor_path:
             yaml_data = yaml.safe_load(mesh_descriptor_path)
             return jsonify(yaml_data)  # yaml_data is not compatible with orjson
     except yaml.YAMLError as e:
@@ -1760,7 +1791,7 @@ def sync_remote_folder():
             performance, strict=False
         )
         try:
-            sync_remote_performance_folders(
+            sync_method = sync_remote_performance_folders(
                 connection,
                 remote_dir,
                 performance=performance_folder,
@@ -1770,17 +1801,24 @@ def sync_remote_folder():
 
             performance_folder.lastSynced = int(time.time())
 
-            return performance_folder.model_dump()
+            response_body = performance_folder.model_dump()
+            response_body["syncMethod"] = sync_method.value
+            return response_body
 
         except RemoteConnectionException as e:
-            return error_response(e.http_status, e.message)
+            return error_response(
+                e.http_status,
+                e.message,
+                detail=e.detail,
+                sync_method=e.sync_method or get_active_sync_method(connection).value,
+            )
 
     try:
         remote_profiler_folder = RemoteReportFolder.model_validate(
             profiler, strict=False
         )
 
-        sync_remote_profiler_folders(
+        sync_method = sync_remote_profiler_folders(
             connection,
             remote_profiler_folder.remotePath,
             remote_dir,
@@ -1790,13 +1828,21 @@ def sync_remote_folder():
 
         remote_profiler_folder.lastSynced = int(time.time())
 
+        response_body = remote_profiler_folder.model_dump()
+        response_body["syncMethod"] = sync_method.value
+
         return Response(
-            orjson.dumps(remote_profiler_folder.model_dump()),
+            orjson.dumps(response_body),
             mimetype="application/json",
         )
 
     except RemoteConnectionException as e:
-        return error_response(e.http_status, e.message)
+        return error_response(
+            e.http_status,
+            e.message,
+            detail=e.detail,
+            sync_method=e.sync_method or get_active_sync_method(connection).value,
+        )
 
 
 @api.route("/remote/use", methods=["POST"])

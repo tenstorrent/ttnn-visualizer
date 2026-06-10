@@ -5,6 +5,7 @@
 import { DeviceOperationNode, Node, NodeType } from '../model/APIData';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
 import { StringBufferType } from '../model/BufferType';
+import { getCoresInRangeList } from './math';
 
 export type AllocationDetails = {
     id: number;
@@ -26,26 +27,24 @@ export function processMemoryAllocations(
     let peakMemoryLoad = 0;
     const memoryAllocationList: AllocationDetails[] = [];
     const curOpList: { name: string; id: number; deviceId?: string | number }[] = [];
-    let totalCb = 0;
+    const cbBytesByCore = new Map<string, number>();
     let totalBuffer = 0;
+
+    const maxCbPerCore = (): number => {
+        let m = 0;
+        for (const v of cbBytesByCore.values()) {
+            if (v > m) {
+                m = v;
+            }
+        }
+        return m;
+    };
 
     let i = 1;
     while (i < graph.length) {
         const node = graph[i];
         i += 1;
         if (node.node_type === NodeType.function_start) {
-            // logic below calculates inputs sizes. its is deemed unnecessary for now
-            // keeping for a while
-            // if (node.inputs?.length > 0) {
-            //     // eslint-disable-next-line no-loop-func
-            //     node.inputs.forEach((tensor) => {
-            //         const size = inputs.find((x) => x.id === parseInt(String(tensor.params.tensor_id), 10))?.size;
-            //         if (size !== null && size !== undefined) {
-            //             totalBuffer += size;
-            //         }
-            //     });
-            // }
-
             const { name } = node.params;
             curOpList.push({ name, id: node.id, deviceId: node.params.device_id });
         }
@@ -56,16 +55,25 @@ export function processMemoryAllocations(
         }
 
         if (node.node_type === NodeType.circular_buffer_allocate) {
-            // this is the only sane way to track allocation op for color variance. not a fan
+            // tracks allocation op for color variance downstream
             if (currentOp) {
                 node.params.allocateOperationId = currentOp.id;
                 node.params.allocateOperationName = currentOp.name;
             }
-            totalCb += parseInt(node.params.size, 10);
+            const size = parseInt(node.params.size, 10);
+            const cores = getCoresInRangeList(node.params.core_range_set);
+            if (cores.length === 0) {
+                cbBytesByCore.set('?', (cbBytesByCore.get('?') ?? 0) + size);
+            } else {
+                for (const { x, y } of cores) {
+                    const k = `${x},${y}`;
+                    cbBytesByCore.set(k, (cbBytesByCore.get(k) ?? 0) + size);
+                }
+            }
         }
 
         if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-            totalCb = 0;
+            cbBytesByCore.clear();
         }
 
         if (node.node_type === NodeType.buffer_allocate && node.params.type === StringBufferType.L1) {
@@ -86,20 +94,22 @@ export function processMemoryAllocations(
             }
         }
 
+        const cbPeak = maxCbPerCore();
+
         if (curOpList.length > 0) {
             const obj: AllocationDetails = {
                 name: curOpList[curOpList.length - 1].name,
                 deviceId: curOpList[curOpList.length - 1].deviceId as number,
                 id: node.id,
                 type: node.node_type,
-                total_cb: totalCb,
+                total_cb: cbPeak,
                 total_buffer: totalBuffer,
-                total_memory: totalCb + totalBuffer,
+                total_memory: cbPeak + totalBuffer,
             };
             memoryAllocationList.push(obj);
         }
 
-        peakMemoryLoad = Math.max(peakMemoryLoad, totalCb + totalBuffer);
+        peakMemoryLoad = Math.max(peakMemoryLoad, cbPeak + totalBuffer);
     }
 
     return { peakMemoryLoad, memoryAllocationList };

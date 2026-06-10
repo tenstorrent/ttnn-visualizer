@@ -20,6 +20,14 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useOperationsList: vi.fn(),
 }));
 
+vi.mock('../src/hooks/useRemote', () => ({
+    default: () => ({
+        readRemoteFile: vi.fn().mockResolvedValue({ data: '', error: null, resolvedPath: null }),
+        isSourceFileAvailable: vi.fn().mockResolvedValue({ available: false, source: null }),
+        persistentState: { selectedConnection: null },
+    }),
+}));
+
 const tensor: Tensor = {
     id: 100,
     address: 4096,
@@ -43,8 +51,8 @@ const matmulOp: OperationDescription = {
     name: 'matmul_op',
     inputs: [tensor],
     outputs: [{ ...tensor, id: 101, io: 'output', producers: [11], consumers: [] }],
-    stack_trace: '',
-    stack_trace_source_file_id: null,
+    stack_trace: 'File "/models/matmul.py", line 10, in forward\n    return ttnn.matmul(a, b)',
+    stack_trace_source_file_id: 3,
     device_operations: [],
     operationFileIdentifier: 'matmul.cpp',
     error: null,
@@ -87,6 +95,7 @@ describe('PerfTensorDrawer', () => {
         expect(screen.getByRole('heading', { name: /11\s+matmul_op/ })).toBeInTheDocument();
 
         expect(screen.getByRole('button', { name: 'Memory Details' })).toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.SHOW_OPERATION_SOURCE_BUTTON)).toBeInTheDocument();
 
         const opLink = screen.getByRole('link', { name: /11 matmul_op \(matmul\.cpp\)/i });
         expect(opLink).toHaveAttribute('href', `${ROUTES.OPERATIONS}/11`);

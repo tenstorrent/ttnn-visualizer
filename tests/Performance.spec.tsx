@@ -32,6 +32,13 @@ vi.mock('../src/functions/getServerConfig', () => ({
     default: () => ({ SERVER_MODE: true }),
 }));
 
+// Stub the report shell so these tests exercise only the route's own
+// active-report effects, not PerfTable's selection cleanup effect (which would
+// otherwise clear selectedPerfRowIdAtom while the skeleton is mounted).
+vi.mock('../src/components/performance/PerfReport', () => ({
+    default: () => <div data-testid='perf-report-stub' />,
+}));
+
 const REPORT_A = { path: '/reports/a', reportName: 'report-a' };
 const REPORT_B = { path: '/reports/b', reportName: 'report-b' };
 const SELECTED_ROW_ID = 100;
@@ -39,9 +46,8 @@ const SELECTED_ROW_ID = 100;
 afterEach(cleanup);
 
 beforeEach(() => {
-    // Keep Performance in its loading-spinner early-return path so the test does
-    // not have to mount the full table/chart subtree. Effects still run after
-    // commit, which is exactly what we want to exercise.
+    // Loading state: the route keeps its shell mounted (no full-page spinner) and the
+    // report shell is stubbed, so only the route's active-report effects run here.
     (usePerformanceReport as Mock).mockReturnValue({ data: undefined, isLoading: true, error: null });
     (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined });
     (usePerfFolderList as Mock).mockReturnValue({ data: undefined });

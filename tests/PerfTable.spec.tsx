@@ -7,11 +7,11 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { useAtomValue } from 'jotai';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerfTable from '../src/components/performance/PerfTable';
-import { TypedPerfTableRow, signpostRowDefaults } from '../src/definitions/PerfTable';
+import { ColumnKeys, TypedPerfTableRow, signpostRowDefaults } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
-import { selectedPerfRowIdAtom } from '../src/store/app';
+import { hiddenPerfTableColumnsAtom, selectedPerfRowIdAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
@@ -49,13 +49,14 @@ const signpost = signpostRow(4);
 interface RenderTableOptions {
     comparisonData?: TypedPerfTableRow[][];
     activeReportComparisonIndex?: number | null;
+    hiddenColumns?: ColumnKeys[];
 }
 
 function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}) {
-    const { comparisonData = [], activeReportComparisonIndex = null } = options;
+    const { comparisonData = [], activeReportComparisonIndex = null, hiddenColumns = [] } = options;
 
     return render(
-        <TestProviders>
+        <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, hiddenColumns]]}>
             <PerfTable
                 data={rows}
                 comparisonData={comparisonData}
@@ -261,6 +262,98 @@ describe('PerfTable tensor-drawer trigger column', () => {
         const tableBody = screen.getByRole('table').querySelector('tbody')!;
         expect(within(tableBody).queryByText('Matmul')).not.toBeInTheDocument();
         expect(screen.getByTestId('selected-row-probe')).toHaveTextContent('null');
+    });
+});
+
+describe('PerfTable loading state', () => {
+    beforeEach(() => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
+    });
+
+    it('renders the skeleton instead of data rows while loading', () => {
+        render(
+            <TestProviders>
+                <PerfTable
+                    data={[matmulRow]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                    isLoading
+                />
+            </TestProviders>,
+        );
+
+        const skeleton = screen.getByTestId(TEST_IDS.PERF_TABLE_SKELETON);
+        expect(skeleton).toBeInTheDocument();
+        expect(skeleton).toHaveAttribute('aria-busy', 'true');
+        // No real data rows or footer totals leak through while loading
+        expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON)).toBeNull();
+    });
+
+    it('keeps the device-architecture strip mounted while loading (scoped skeleton)', () => {
+        render(
+            <TestProviders>
+                <PerfTable
+                    data={[]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                    isLoading
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeInTheDocument();
+        expect(screen.getByText('Arch:')).toBeInTheDocument();
+    });
+
+    it('shows the empty state rather than the skeleton when not loading and there are no rows', () => {
+        render(
+            <TestProviders>
+                <PerfTable
+                    data={[]}
+                    comparisonData={[]}
+                    filters={null}
+                    provideMatmulAdvice={false}
+                    hiliteHighDispatch={false}
+                    reportName='unit-test'
+                    showHashColumn={false}
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeNull();
+        expect(screen.getByText('No data to display')).toBeInTheDocument();
+    });
+});
+
+describe('PerfTable column visibility', () => {
+    it('keeps OP Code visible even when it is listed as hidden', () => {
+        renderTable([matmulRow], { hiddenColumns: [ColumnKeys.OpCode, ColumnKeys.DeviceTime] });
+
+        const table = screen.getByRole('table');
+        expect(within(table).getByText('OP Code')).toBeInTheDocument();
+        expect(within(table).queryByText('Device Time')).not.toBeInTheDocument();
+    });
+
+    it('keeps footer cells aligned when Device and Type are hidden', () => {
+        renderTable([matmulRow], { hiddenColumns: [ColumnKeys.Device, ColumnKeys.BufferType] });
+
+        const footerCells = screen.getByRole('table').querySelectorAll('tfoot td');
+        const visibleHeaderCount = screen.getByRole('table').querySelectorAll('thead th').length;
+        const footerSpanTotal =
+            Array.from(footerCells)
+                .slice(1)
+                .reduce((total, cell) => total + Number(cell.getAttribute('colspan') ?? 1), 0) ?? 0;
+
+        expect(footerSpanTotal).toBe(visibleHeaderCount - 1);
     });
 });
 

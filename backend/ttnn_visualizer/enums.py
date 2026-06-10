@@ -17,3 +17,8 @@ class StackSourceOrigin(str, enum.Enum):
     DATABASE = "database"
     PATH = "path"
     REMAPPED = "remapped"
+
+
+class SyncMethod(str, enum.Enum):
+    SFTP = "sftp"
+    SCP = "scp"

@@ -7,6 +7,7 @@ import unittest
 import orjson
 from ttnn_visualizer.models import (
     Buffer,
+    BufferChunk,
     BufferPage,
     BufferType,
     Device,
@@ -20,6 +21,7 @@ from ttnn_visualizer.models import (
     Tensor,
 )
 from ttnn_visualizer.serializers import (
+    serialize_buffer_chunks,
     serialize_buffer_pages,
     serialize_devices,
     serialize_inputs_outputs,
@@ -550,6 +552,77 @@ class TestSerializers(unittest.TestCase):
         )
         self.assertEqual(result["stack_trace"], "trace text")
         self.assertEqual(result["stack_trace_source_file_id"], 7)
+
+    def test_serialize_buffer_chunks(self):
+        chunks = [
+            BufferChunk(
+                operation_id=1,
+                device_id=0,
+                address=100,
+                bank_id=1,
+                core_x=0,
+                core_y=0,
+                chunk_address=1000,
+                chunk_size=48,
+                page_size=24,
+                num_pages=2,
+                buffer_type=BufferType.DRAM,
+            ),
+            BufferChunk(
+                operation_id=1,
+                device_id=0,
+                address=200,
+                bank_id=2,
+                core_x=1,
+                core_y=0,
+                chunk_address=2000,
+                chunk_size=16,
+                page_size=16,
+                num_pages=1,
+                buffer_type=BufferType.L1,
+            ),
+        ]
+
+        result = serialize_buffer_chunks(chunks)
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["id"], "1_0_100_1_0_0_0_0")
+        self.assertEqual(result[0]["buffer_type"], BufferType.DRAM.value)
+        self.assertEqual(result[0]["chunk_size"], 48)
+        self.assertEqual(result[0]["num_pages"], 2)
+        self.assertEqual(result[0]["rank"], 0)
+        self.assertEqual(result[1]["id"], "1_0_200_2_1_0_1_0")
+        self.assertEqual(result[1]["buffer_type"], BufferType.L1.value)
+        self.assertEqual(
+            orjson.loads(orjson.dumps(result))[0]["id"], "1_0_100_1_0_0_0_0"
+        )
+
+    def test_serialize_buffer_chunks_id_disambiguates_device_rank_and_buffer_type(self):
+        # Two chunks that share (op, addr, bank, core_x, core_y) but differ on
+        # device, rank, or buffer_type must produce distinct ids. Regression
+        # check for the legacy id format which only encoded the first five
+        # fields and would collide across devices.
+        base = dict(
+            operation_id=7,
+            address=2048,
+            bank_id=3,
+            core_x=4,
+            core_y=5,
+            chunk_address=2048,
+            chunk_size=64,
+            page_size=32,
+            num_pages=2,
+        )
+        chunks = [
+            BufferChunk(device_id=0, buffer_type=BufferType.DRAM, rank=0, **base),
+            BufferChunk(device_id=1, buffer_type=BufferType.DRAM, rank=0, **base),
+            BufferChunk(device_id=0, buffer_type=BufferType.L1, rank=0, **base),
+            BufferChunk(device_id=0, buffer_type=BufferType.DRAM, rank=1, **base),
+        ]
+
+        ids = [row["id"] for row in serialize_buffer_chunks(chunks)]
+
+        self.assertEqual(len(set(ids)), 4)
 
     def test_serialize_buffer_pages(self):
         buffer_pages = [

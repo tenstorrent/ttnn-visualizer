@@ -14,6 +14,7 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
+    HostKeyVerificationException,
     NoValidConnectionsError,
     RemoteConnectionException,
     RemoteFileReadException,
@@ -30,6 +31,66 @@ SSH_AUTH_FAILURE_MESSAGE = (
     "Password authentication is not supported. "
     "If your key has a passphrase, add it to ssh-agent once (e.g. ssh-add) so you are not prompted."
 )
+
+
+# stderr fragments (lowercase) that classify an SSH/SFTP subprocess failure.
+_SSH_AUTH_ERROR_FRAGMENTS = (
+    "permission denied",
+    "authentication failed",
+    "publickey",
+    "password",
+)
+_SSH_CONNECTION_ERROR_FRAGMENTS = (
+    "connection refused",
+    "network is unreachable",
+    "no route to host",
+    "name or service not known",
+    "could not resolve hostname",
+    "connection timed out",
+    "nodename nor servname provided",
+)
+
+
+def is_ssh_host_key_verification_error(stderr: str) -> bool:
+    """True when OpenSSH rejected an unknown/untrusted host key."""
+    lowered = (stderr or "").lower()
+    if "host key verification failed" in lowered:
+        return True
+    # e.g. "No ED25519 host key is known for [host]:port and you have requested strict checking."
+    return "host key is known" in lowered and "strict checking" in lowered
+
+
+def ssh_host_key_failure_message(connection: RemoteConnection) -> str:
+    user_host = f"{connection.username}@{connection.host}"
+    if connection.port != 22:
+        ssh_example = f"ssh -p {connection.port} {user_host}"
+    else:
+        ssh_example = f"ssh {user_host}"
+    return (
+        f"SSH host key for {connection.host} (port {connection.port}) is not in "
+        "~/.ssh/known_hosts. Remote sync cannot prompt to accept new keys. "
+        f"Run {ssh_example} once in a terminal, accept the host key, then retry."
+    )
+
+
+def raise_for_ssh_subprocess_error(
+    e: subprocess.CalledProcessError, connection: RemoteConnection
+) -> NoReturn:
+    """Classify an SSH/SFTP subprocess failure and raise the matching exception.
+
+    Shared by both the SFTP/scp subprocess path and ``SSHClient`` so the two
+    stay in lockstep. Always raises (``NoReturn``).
+    """
+    stderr = (e.stderr or "").lower()
+    if is_ssh_host_key_verification_error(stderr):
+        raise HostKeyVerificationException(ssh_host_key_failure_message(connection))
+    if any(auth_err in stderr for auth_err in _SSH_AUTH_ERROR_FRAGMENTS):
+        raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
+    if any(conn_err in stderr for conn_err in _SSH_CONNECTION_ERROR_FRAGMENTS):
+        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+    if "ssh:" in stderr or "protocol" in stderr:
+        raise SSHException(f"SSH protocol error: {e.stderr}")
+    raise SSHException(f"SSH command failed: {e.stderr}")
 
 
 class SSHClient:
@@ -85,7 +146,6 @@ class SSHClient:
         :param e: The subprocess.CalledProcessError
         :raises: SSHException, AuthenticationException, or NoValidConnectionsError
         """
-        stderr = e.stderr.lower() if e.stderr else ""
         raw_error = e.stderr.strip() if e.stderr else "No stderr output"
 
         # Log the raw SSH error for debugging
@@ -96,41 +156,7 @@ class SSHClient:
         # Store raw error for exceptions that need it
         self._last_raw_error = raw_error
 
-        # Check for authentication failures
-        if any(
-            auth_err in stderr
-            for auth_err in [
-                "permission denied",
-                "authentication failed",
-                "publickey",
-                "password",
-                "host key verification failed",
-            ]
-        ):
-            raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
-
-        # Check for connection failures (including DNS resolution failures)
-        elif any(
-            conn_err in stderr
-            for conn_err in [
-                "connection refused",
-                "network is unreachable",
-                "no route to host",
-                "name or service not known",
-                "could not resolve hostname",
-                "connection timed out",
-                "nodename nor servname provided",
-            ]
-        ):
-            raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
-
-        # Check for general SSH protocol errors
-        elif "ssh:" in stderr or "protocol" in stderr:
-            raise SSHException(f"SSH protocol error: {e.stderr}")
-
-        # Default to generic SSH exception
-        else:
-            raise SSHException(f"SSH command failed: {e.stderr}")
+        raise_for_ssh_subprocess_error(e, self.connection)
 
     def execute_command(self, command: str, timeout: int = 30) -> str:
         """

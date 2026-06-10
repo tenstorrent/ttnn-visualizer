@@ -31,6 +31,8 @@ import Collapsible from './Collapsible';
 import ListItem from './ListItem';
 import LoadingSpinner from './LoadingSpinner';
 import StackTrace from './operation-details/StackTrace';
+import SourceFileButton from './operation-details/SourceFileButton';
+import { extractOperationSourceData } from '../functions/stackTraceSource';
 import OperationArguments from './OperationArguments';
 import OperationListPerfData from './OperationListPerfData';
 import SearchField from './SearchField';
@@ -434,6 +436,7 @@ const OperationList = () => {
                         {filteredOperationsList?.length ? (
                             virtualItems.map((virtualRow) => {
                                 const operation = filteredOperationsList[virtualRow.index];
+                                const operationSourceData = extractOperationSourceData(operation);
 
                                 return (
                                     <li
@@ -446,6 +449,7 @@ const OperationList = () => {
                                         data-index={virtualRow.index}
                                     >
                                         <Collapsible
+                                            collapseClassName='list-collapsible'
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
@@ -462,15 +466,27 @@ const OperationList = () => {
                                                 </Tooltip>
                                             }
                                             additionalElements={
-                                                <Button
-                                                    className='buffer-view'
-                                                    onClick={() => navigate(`${ROUTES.OPERATIONS}/${operation.id}`)}
-                                                    text='Memory details'
-                                                    intent={Intent.PRIMARY}
-                                                    endIcon={IconNames.SEGMENTED_CONTROL}
-                                                    size={Size.SMALL}
-                                                    variant={ButtonVariant.OUTLINED}
-                                                />
+                                                <>
+                                                    <Button
+                                                        className='buffer-view'
+                                                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${operation.id}`)}
+                                                        text='Memory details'
+                                                        intent={Intent.PRIMARY}
+                                                        endIcon={IconNames.SEGMENTED_CONTROL}
+                                                        size={Size.SMALL}
+                                                    />
+                                                    {operationSourceData && (
+                                                        <SourceFileButton
+                                                            filePath={operationSourceData.filePath}
+                                                            sourceFileId={operation.stack_trace_source_file_id}
+                                                            lineNumber={operationSourceData.lineNumber}
+                                                            language={StackTraceLanguage.PYTHON}
+                                                            size={Size.SMALL}
+                                                            variant={ButtonVariant.OUTLINED}
+                                                            ariaLabel={`View source for operation ${operation.id} ${operation.name}`}
+                                                        />
+                                                    )}
+                                                </>
                                             }
                                             isOpen={!!expandedItems?.includes(operation.id)}
                                             keepChildrenMounted

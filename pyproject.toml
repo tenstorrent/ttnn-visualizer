@@ -1,29 +1,28 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.88.0"
+version = "0.89.0"
 description = "TT-NN Visualizer"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "alembic~=1.18.0",
     "build",
-    "Flask-Cors==6.0.0",
-    "flask-socketio==5.6.1",
+    "Flask-Cors>=6.0.0,<7.0",
+    "flask-socketio>=5.6.0,<6.0",
     "flask-sqlalchemy==3.1.1",
     "Flask-Static-Digest==0.4.1",
-    "Flask==3.1.3",
+    "Flask>=3.1.0,<4.0",
     "gevent==25.9.1",
     "gunicorn~=23.0.0",
     "orjson>=3.9.0",
-    "pandas==2.2.3",
+    "pandas>=2.2.0,<3.0",
     "pydantic_core==2.41.5",
     "pydantic==2.12.5",
     "python-dotenv==1.2.2",
-    "PyYAML==6.0.2",
+    "PyYAML>=6.0.0,<7.0",
     "tt-perf-report==1.2.4",
-    "uvicorn==0.30.1",
-    "zstd==1.5.7.0"
+    "zstd>=1.5.7,<2.0"
 ]
 
 classifiers = [
@@ -60,7 +59,7 @@ where = ["backend"]
 ttnn_visualizer = ["alembic.ini", "alembic/**/*.py"]
 
 [build-system]
-requires = ["setuptools==78.1.1", "wheel"]
+requires = ["setuptools>=78.1.1,<81.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]

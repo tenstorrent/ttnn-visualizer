@@ -9,12 +9,12 @@ import { PlotData } from 'plotly.js';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
 import { BufferType } from '../../model/BufferType';
-import { useBufferPages, useDevices } from '../../hooks/useAPI';
+import { useBufferChunks, useDevices } from '../../hooks/useAPI';
 import 'styles/components/TensorVisualizationComponent.scss';
-import { BufferPage, Tensor } from '../../model/APIData';
+import { BufferChunk, Tensor } from '../../model/APIData';
 import SVGBufferRenderer from './SVGBufferRenderer';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import getChartData, { pageDataToChunkArray } from '../../functions/getChartData';
+import getChartData, { bufferChunksToColoredChunks } from '../../functions/getChartData';
 import { L1RenderConfiguration } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
@@ -43,7 +43,7 @@ const TensorVisualisationComponent = ({
     plotZoomRange,
     tensorId,
 }: TensorVisualisationComponentProps) => {
-    const { data } = useBufferPages(operationId, address, bufferType);
+    const { data } = useBufferChunks(operationId, address, bufferType);
     const { data: devices } = useDevices();
     const showHex = useAtomValue(showHexAtom);
 
@@ -80,28 +80,28 @@ const TensorVisualisationComponent = ({
     const tensixSize = 120;
     const tensixHeight = tensixSize / 3;
 
-    const buffersByBankId: BufferPage[][] = [];
+    const buffersByBankId: BufferChunk[][] = [];
     const coordsByBankId: { x: number; y: number }[] = [];
 
-    data.forEach((page: BufferPage) => {
-        if (!buffersByBankId[page.bank_id]) {
-            buffersByBankId[page.bank_id] = [];
+    data.forEach((chunk: BufferChunk) => {
+        if (!buffersByBankId[chunk.bank_id]) {
+            buffersByBankId[chunk.bank_id] = [];
         }
 
         if (tensorByAddress) {
-            const tensor = tensorByAddress?.get(page.address);
-            page.tensor_id = tensor?.id;
-            page.color = getTensorColor(tensor?.id);
+            const tensor = tensorByAddress?.get(chunk.address);
+            chunk.tensor_id = tensor?.id;
+            chunk.color = getTensorColor(tensor?.id);
         } else if (tensorId) {
-            page.tensor_id = tensorId;
-            page.color = getTensorColor(tensorId);
+            chunk.tensor_id = tensorId;
+            chunk.color = getTensorColor(tensorId);
         }
-        if (page.tensor_id === undefined) {
-            page.color = getBufferColor(page.address);
+        if (chunk.tensor_id === undefined) {
+            chunk.color = getBufferColor(chunk.address);
         }
 
-        buffersByBankId[page.bank_id].push(page);
-        coordsByBankId[page.bank_id] = { x: page.core_x, y: page.core_y };
+        buffersByBankId[chunk.bank_id].push(chunk);
+        coordsByBankId[chunk.bank_id] = { x: chunk.core_x, y: chunk.core_y };
     });
 
     return (
@@ -158,7 +158,7 @@ const TensorVisualisationComponent = ({
                                         setSelectedTensix(matchIndex);
                                         setChartData(
                                             getChartData(
-                                                pageDataToChunkArray(buffersByBankId[matchIndex]),
+                                                bufferChunksToColoredChunks(buffersByBankId[matchIndex]),
                                                 (id) => tensorByAddress?.get(id) || null,
                                                 undefined,
                                                 { showHex },
