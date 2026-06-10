@@ -370,21 +370,44 @@ export interface TensorBuffer extends Chunk {
     type: StringBufferType;
 }
 
-export interface BufferPage {
+export interface BufferChunk {
+    operation_id: number;
+    device_id: number;
     address: number;
     bank_id: number;
-    buffer_type: BufferType;
     core_x: number;
     core_y: number;
-    device_id: number;
-    operation_id: number;
-    page_address: number;
-    page_index: number;
+    chunk_address: number;
+    chunk_size: number;
     page_size: number;
+    num_pages: number;
+    buffer_type: BufferType;
+    rank?: number;
     id: string;
 
     tensor_id?: number;
     color?: string;
+}
+
+/**
+ * Legacy raw row from a backend that has not yet been updated to return
+ * pre-aggregated chunks. The FE adapter in ``fetchBufferChunks`` collapses
+ * an array of these into ``BufferChunk[]`` so downstream code never sees
+ * the old shape.
+ */
+export interface LegacyBufferPage {
+    operation_id: number;
+    device_id: number;
+    address: number;
+    bank_id: number;
+    core_x: number;
+    core_y: number;
+    page_index: number;
+    page_address: number;
+    page_size: number;
+    buffer_type: BufferType;
+    rank?: number;
+    id?: string;
 }
 
 export interface BuffersByOperation {

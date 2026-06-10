@@ -5,7 +5,7 @@
 import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatMemorySize, getMemoryAddress } from './math';
 import { toReadableShape, toReadableType } from './formatting';
-import { BufferPage, Chunk, ColoredChunk, Tensor } from '../model/APIData';
+import { BufferChunk, Chunk, ColoredChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
 import { TensorMemoryLayout } from './parseMemoryConfig';
 
@@ -118,25 +118,17 @@ export default function getChartData(
     });
 }
 
-export const pageDataToChunkArray = (data: BufferPage[]): ColoredChunk[] => {
-    const mergedRangeByAddress: Map<number, { start: number; end: number; color: string | undefined }> = new Map();
-
-    data.forEach((page: BufferPage) => {
-        const { address } = page;
-        const defaultRange = { start: Infinity, end: 0, color: page.color };
-        const currentRange = mergedRangeByAddress.get(address) || defaultRange;
-        currentRange.start = Math.min(currentRange.start, page.page_address);
-        currentRange.end = Math.max(currentRange.end, page.page_address + page.page_size);
-        mergedRangeByAddress.set(address, currentRange);
-    });
-    return Array.from(mergedRangeByAddress.entries()).map(([address, range]) => {
-        return {
-            address,
-            size: range.end - range.start,
-            color: range.color,
-        };
-    });
-};
+/**
+ * Project pre-aggregated buffer chunks onto the renderer-friendly
+ * ``{address, size, color}`` shape. Aggregation already happened on the
+ * backend (or in the legacy GROUP BY adapter), so this is a trivial map.
+ */
+export const bufferChunksToColoredChunks = (data: BufferChunk[]): ColoredChunk[] =>
+    data.map((chunk) => ({
+        address: chunk.address,
+        size: chunk.chunk_size,
+        color: chunk.color,
+    }));
 
 const createHoverTemplate = (
     address: number,
