@@ -73,7 +73,6 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_exists,
     check_remote_path_for_reports,
     get_active_sync_method,
-    get_cluster_desc,
     get_remote_performance_folders,
     get_remote_profiler_folders,
     sync_remote_performance_folders,
@@ -89,7 +88,8 @@ from ttnn_visualizer.stack_trace_source import (
 )
 from ttnn_visualizer.utils import (
     create_path_resolver,
-    get_mesh_descriptor_paths,
+    pick_cluster_descriptor_path,
+    pick_mesh_descriptor_path,
     pick_profiler_config_paths,
     read_last_synced_file,
     read_profiler_config_api_payload,
@@ -1610,12 +1610,26 @@ def list_remote_reports_performance():
 @api.route("/cluster-descriptor", methods=["GET"])
 @with_instance
 def get_cluster_descriptor(instance: Instance):
+    report_dir = Path(str(instance.profiler_path)).parent
+    rank_param = _optional_rank_query_param()
+    logical_rank = 0 if rank_param is None else rank_param
+
+    path, err = pick_cluster_descriptor_path(report_dir, logical_rank)
+    if err == "rank_out_of_range":
+        return response_bad_request(
+            f"Invalid rank for this report: {logical_rank}. "
+            "Rank must be within the world size for this report's cluster descriptor files."
+        )
+    if err == "missing_rank_file":
+        return response_not_found(
+            f"No cluster descriptor file for rank {logical_rank}."
+        )
+    if path is None:
+        return response_not_found("cluster_descriptor.yaml not found")
+
     try:
-        cluster_desc = get_cluster_desc(instance)
-
-        if not cluster_desc:
-            return response_not_found("cluster_descriptor.yaml not found")
-
+        with open(path, "r", encoding="utf-8") as cluster_desc_file:
+            cluster_desc = yaml.safe_load(cluster_desc_file)
         return jsonify(cluster_desc), HTTPStatus.OK
 
     except yaml.YAMLError as e:
@@ -1628,15 +1642,25 @@ def get_cluster_descriptor(instance: Instance):
 @api.route("/mesh-descriptor", methods=["GET"])
 @with_instance
 def get_mesh_descriptor(instance: Instance):
-    paths = get_mesh_descriptor_paths(instance)
+    report_dir = Path(str(instance.profiler_path)).parent
+    rank_param = _optional_rank_query_param()
+    logical_rank = 0 if rank_param is None else rank_param
 
-    if not paths:
+    path, err = pick_mesh_descriptor_path(report_dir, logical_rank)
+    if err == "rank_out_of_range":
+        return response_bad_request(
+            f"Invalid rank for this report: {logical_rank}. "
+            "Rank must be within the world size for this report's mesh descriptor files."
+        )
+    if err == "missing_rank_file":
+        return response_not_found(f"No mesh descriptor file for rank {logical_rank}.")
+    if path is None:
         return response_not_found(
-            "physical_chip_mesh_coordinate_mapping_1_of_1.yaml not found"
+            "physical_chip_mesh_coordinate_mapping.yaml not found"
         )
 
     try:
-        with open(paths[0], "r", encoding="utf-8") as mesh_descriptor_path:
+        with open(path, "r", encoding="utf-8") as mesh_descriptor_path:
             yaml_data = yaml.safe_load(mesh_descriptor_path)
             return jsonify(yaml_data)  # yaml_data is not compatible with orjson
     except yaml.YAMLError as e:

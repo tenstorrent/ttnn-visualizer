@@ -16,7 +16,7 @@ from collections import Counter
 from functools import wraps
 from pathlib import Path
 from timeit import default_timer
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Pattern, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -28,20 +28,67 @@ LAST_SYNCED_FILE_NAME = ".last-synced"
 PROFILER_CONFIG_BASENAME = "config.json"
 PROFILER_CONFIG_RANKED_RE = re.compile(r"^config_(\d+)_of_(\d+)\.json$")
 
+MESH_DESCRIPTOR_BASENAME = "physical_chip_mesh_coordinate_mapping.yaml"
+MESH_DESCRIPTOR_RANKED_RE = re.compile(
+    r"^physical_chip_mesh_coordinate_mapping_(\d+)_of_(\d+)\.yaml$"
+)
 
-def parse_ranked_profiler_config_basename(
-    filename: str,
+CLUSTER_DESCRIPTOR_BASENAME = "cluster_descriptor.yaml"
+CLUSTER_DESCRIPTOR_RANKED_RE = re.compile(r"^cluster_descriptor_(\d+)_of_(\d+)\.yaml$")
+
+
+def parse_ranked_basename(
+    filename: str, ranked_re: Pattern[str]
 ) -> Optional[Tuple[int, int]]:
-    """If filename matches config_<n>_of_<world>.json, return (n, world)."""
-    match = PROFILER_CONFIG_RANKED_RE.match(filename)
+    """If filename matches <prefix>_<n>_of_<world>.<ext>, return (n, world)."""
+    match = ranked_re.match(filename)
     if not match:
         return None
     return int(match.group(1)), int(match.group(2))
 
 
+def parse_ranked_profiler_config_basename(
+    filename: str,
+) -> Optional[Tuple[int, int]]:
+    """If filename matches config_<n>_of_<world>.json, return (n, world)."""
+    return parse_ranked_basename(filename, PROFILER_CONFIG_RANKED_RE)
+
+
 def is_valid_profiler_ranked_entry(index_one_based: int, world: int) -> bool:
     """True when the filename indices match TTNN output (1..world inclusive)."""
     return 1 <= index_one_based <= world
+
+
+def ranked_report_basenames(
+    file_names: Iterable[str],
+    ranked_re: Pattern[str],
+    malformed_label: str,
+) -> List[str]:
+    """
+    Select per-rank report files that share the same world_size (majority wins).
+
+    Only filenames whose first number is in 1..world (inclusive) are considered.
+    Returns basenames sorted by ascending 1-based index.
+    """
+    meta: List[Tuple[int, int, str]] = []
+    for name in file_names:
+        parsed = parse_ranked_basename(name, ranked_re)
+        if parsed:
+            index_one_based, world = parsed
+            if not is_valid_profiler_ranked_entry(index_one_based, world):
+                logger.warning(
+                    "Skipping malformed report filename %s (expected %s)",
+                    name,
+                    malformed_label,
+                )
+                continue
+            meta.append((world, index_one_based, name))
+    if not meta:
+        return []
+    common_world = Counter(w for w, _, _ in meta).most_common(1)[0][0]
+    filtered = [(idx, n) for w, idx, n in meta if w == common_world]
+    filtered.sort(key=lambda x: x[0])
+    return [n for _, n in filtered]
 
 
 def ranked_profiler_config_basenames(file_names: Iterable[str]) -> List[str]:
@@ -52,25 +99,53 @@ def ranked_profiler_config_basenames(file_names: Iterable[str]) -> List[str]:
     Returns basenames sorted by ascending 1-based index (config_1_of_*, then
     config_2_of_*, ...).
     """
-    meta: List[Tuple[int, int, str]] = []
-    for name in file_names:
-        parsed = parse_ranked_profiler_config_basename(name)
-        if parsed:
-            index_one_based, world = parsed
-            if not is_valid_profiler_ranked_entry(index_one_based, world):
-                logger.warning(
-                    "Skipping malformed profiler config filename %s "
-                    "(expected config_<n>_of_<world>.json with 1 <= n <= world)",
-                    name,
-                )
-                continue
-            meta.append((world, index_one_based, name))
-    if not meta:
-        return []
-    common_world = Counter(w for w, _, _ in meta).most_common(1)[0][0]
-    filtered = [(idx, n) for w, idx, n in meta if w == common_world]
-    filtered.sort(key=lambda x: x[0])
-    return [n for _, n in filtered]
+    return ranked_report_basenames(
+        file_names,
+        PROFILER_CONFIG_RANKED_RE,
+        "config_<n>_of_<world>.json with 1 <= n <= world",
+    )
+
+
+def _pick_single_or_ranked_report_path(
+    report_dir: Path,
+    *,
+    single_basename: str,
+    ranked_re: Pattern[str],
+    ranked_basename_for: Callable[[int, int], str],
+    malformed_label: str,
+    logical_rank: int = 0,
+) -> tuple[Optional[Path], Optional[str]]:
+    """
+    Prefer ``single_basename`` when present; otherwise pick the ranked file for
+    ``logical_rank``. Returns ``(path, None)`` or ``(None, error)`` where error
+    is ``rank_out_of_range``, ``missing_rank_file``, or ``None`` when absent.
+    """
+    if not report_dir.is_dir():
+        return None, None
+    single = report_dir / single_basename
+    if single.is_file():
+        return single, None
+
+    ranked_names = ranked_report_basenames(
+        (p.name for p in report_dir.iterdir() if p.is_file()),
+        ranked_re,
+        malformed_label,
+    )
+    if not ranked_names:
+        return None, None
+
+    parsed0 = parse_ranked_basename(ranked_names[0], ranked_re)
+    if not parsed0:
+        return None, None
+    _, world_size = parsed0
+
+    if logical_rank < 0 or logical_rank >= world_size:
+        return None, "rank_out_of_range"
+
+    path = report_dir / ranked_basename_for(logical_rank + 1, world_size)
+    if not path.is_file():
+        return None, "missing_rank_file"
+    return path, None
 
 
 def pick_profiler_config_paths(report_dir: Path) -> List[Path]:
@@ -829,28 +904,65 @@ def get_mlir_path(mlir_name, current_app, **_kwargs):
     return str(mlir_path)
 
 
-def get_cluster_descriptor_path(instance):
+def pick_cluster_descriptor_path(
+    report_dir: Path, logical_rank: int = 0
+) -> tuple[Optional[Path], Optional[str]]:
+    """Resolve cluster_descriptor.yaml or cluster_descriptor_<n>_of_<world>.yaml."""
+    return _pick_single_or_ranked_report_path(
+        report_dir,
+        single_basename=CLUSTER_DESCRIPTOR_BASENAME,
+        ranked_re=CLUSTER_DESCRIPTOR_RANKED_RE,
+        ranked_basename_for=lambda index, world: (
+            f"cluster_descriptor_{index}_of_{world}.yaml"
+        ),
+        malformed_label="cluster_descriptor_<n>_of_<world>.yaml with 1 <= n <= world",
+        logical_rank=logical_rank,
+    )
+
+
+def pick_mesh_descriptor_path(
+    report_dir: Path, logical_rank: int = 0
+) -> tuple[Optional[Path], Optional[str]]:
+    """Resolve mesh mapping YAML with or without per-rank suffix."""
+    return _pick_single_or_ranked_report_path(
+        report_dir,
+        single_basename=MESH_DESCRIPTOR_BASENAME,
+        ranked_re=MESH_DESCRIPTOR_RANKED_RE,
+        ranked_basename_for=lambda index, world: (
+            f"physical_chip_mesh_coordinate_mapping_{index}_of_{world}.yaml"
+        ),
+        malformed_label=(
+            "physical_chip_mesh_coordinate_mapping_<n>_of_<world>.yaml "
+            "with 1 <= n <= world"
+        ),
+        logical_rank=logical_rank,
+    )
+
+
+def get_cluster_descriptor_path(instance, logical_rank: int = 0):
     if not instance.profiler_path:
         return None
 
-    cluster_descriptor_path = Path(instance.profiler_path).parent / Path(
-        "cluster_descriptor.yaml"
+    path, _err = pick_cluster_descriptor_path(
+        Path(instance.profiler_path).parent, logical_rank
     )
-
-    if not cluster_descriptor_path.exists():
+    if path is None:
         return None
 
-    return str(cluster_descriptor_path)
+    return str(path)
 
 
-def get_mesh_descriptor_paths(instance):
+def get_mesh_descriptor_paths(instance, logical_rank: int = 0):
     if not instance.profiler_path:
         return []
 
-    parent = Path(instance.profiler_path).parent
-    glob_pattern = "physical_chip_mesh_coordinate_mapping_[0-9]_of_[0-9].yaml"
+    path, _err = pick_mesh_descriptor_path(
+        Path(instance.profiler_path).parent, logical_rank
+    )
+    if path is None:
+        return []
 
-    return sorted(str(path) for path in parent.glob(glob_pattern) if path.is_file())
+    return [str(path)]
 
 
 def read_last_synced_file(directory: str) -> Optional[int]:

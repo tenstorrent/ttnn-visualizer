@@ -30,6 +30,7 @@ from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
 from ttnn_visualizer.utils import (
     PROFILER_CONFIG_BASENAME,
+    pick_cluster_descriptor_path,
     ranked_profiler_config_basenames,
     update_last_synced,
 )
@@ -212,17 +213,16 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     return file_path
 
 
-def get_cluster_desc(instance: Instance):
+def get_cluster_desc(instance: Instance, logical_rank: int = 0):
     if not instance.profiler_path:
         return None
     report_path = Path(instance.profiler_path).parent
-    cluster_path = report_path / "cluster_descriptor.yaml"
-
-    if cluster_path.exists():
-        with open(cluster_path, "r", encoding="utf-8") as cluster_desc_file:
-            return yaml.safe_load(cluster_desc_file)
-    else:
+    cluster_path, _err = pick_cluster_descriptor_path(report_path, logical_rank)
+    if cluster_path is None:
         return None
+
+    with open(cluster_path, "r", encoding="utf-8") as cluster_desc_file:
+        return yaml.safe_load(cluster_desc_file)
 
 
 def is_excluded(file_path, exclude_patterns):
