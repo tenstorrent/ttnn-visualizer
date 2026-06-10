@@ -219,10 +219,11 @@ const StackedPerformanceTable = ({
 };
 
 const computeFooterTotals = (data: TypedStackedPerfRow[]): Partial<Record<StackedColumnKeys, string>> => {
+    const rows = data ?? [];
     let deviceTimeSum = 0;
     let opsCountSum = 0;
 
-    for (const row of data) {
+    for (const row of rows) {
         deviceTimeSum += row[StackedColumnKeys.DeviceTimeSumUs] || 0;
         opsCountSum += row[StackedColumnKeys.OpsCount] || 0;
     }
@@ -230,7 +231,7 @@ const computeFooterTotals = (data: TypedStackedPerfRow[]): Partial<Record<Stacke
     return {
         [StackedColumnKeys.Percent]: '100%',
         [StackedColumnKeys.DeviceTimeSumUs]: `${formatSize(deviceTimeSum, 2)} µs`,
-        [StackedColumnKeys.OpCode]: `${data.length} op types`,
+        [StackedColumnKeys.OpCode]: `${rows.length} op types`,
         [StackedColumnKeys.OpsCount]: `${opsCountSum}`,
     };
 };

@@ -474,13 +474,14 @@ const PerformanceTable = ({
 };
 
 const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): Partial<Record<ColumnKeys, string>> => {
+    const rows = data ?? [];
     let deviceTimeSum = 0;
     let opToOpGapSum = 0;
     let hostOpsCount = 0;
     let nonUniqueOpsCount = 0;
     let cacheHits = 0;
 
-    for (const row of data) {
+    for (const row of rows) {
         deviceTimeSum += row.device_time || 0;
         opToOpGapSum += row.op_to_op_gap || 0;
 
@@ -497,7 +498,7 @@ const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): P
         }
     }
 
-    const deviceOpsCount = data.length - hostOpsCount;
+    const deviceOpsCount = rows.length - hostOpsCount;
     const cacheHitPercent = nonUniqueOpsCount > 0 ? (cacheHits / nonUniqueOpsCount) * 100 : 0;
 
     return {
@@ -505,7 +506,7 @@ const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): P
         [ColumnKeys.DeviceTime]: `${formatSize(deviceTimeSum, 2)} µs`,
         [ColumnKeys.OpCode]: hideHostOps
             ? `${deviceOpsCount} device ops`
-            : `${data.length} ops\n(${deviceOpsCount} device ops + ${hostOpsCount} host ops)`,
+            : `${rows.length} ops\n(${deviceOpsCount} device ops + ${hostOpsCount} host ops)`,
         [ColumnKeys.OpToOpGap]: `${formatSize(opToOpGapSum, 2)} µs`,
         [ColumnKeys.CacheHit]: `${formatPercentage(cacheHitPercent).toString()} expected cache hits`,
     };
