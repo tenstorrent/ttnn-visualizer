@@ -71,3 +71,91 @@ jobs:
 
       - name: Run Backend Tests
         run: PYTHONPATH=backend uv run --frozen --extra dev pytest backend/ttnn_visualizer
+
+  # Informational only: does not block merge. Backend CI installs with --frozen and
+  # does not re-resolve; this job detects when uv.lock should be refreshed after
+  # pyproject.toml changes (checked on Linux to match hosted CI).
+  uv-lockfile-drift:
+    name: UV lockfile drift (informational)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Check lockfile freshness
+        id: lock_check
+        run: uv lock --check
+
+      - name: Comment when lockfile is stale
+        if: steps.lock_check.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- uv-lockfile-drift -->';
+            const body = [
+              marker,
+              '### `uv.lock` is out of date',
+              '',
+              'This check ran on **Linux** with the uv version from `[tool.uv]` in `pyproject.toml`.',
+              '`pyproject.toml` and `uv.lock` disagree — refresh the lockfile and commit it:',
+              '',
+              '```shell',
+              'uv lock --refresh',
+              '```',
+              '',
+              'Backend CI installs with `uv sync --frozen` and will not update the lock for you.',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Remove drift comment when lockfile is current
+        if: steps.lock_check.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- uv-lockfile-drift -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+              });
+            }
