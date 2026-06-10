@@ -1107,6 +1107,7 @@ const OperationGraphInfoComponent = ({
                         lineNumber={operationSourceData.lineNumber}
                         language={StackTraceLanguage.PYTHON}
                         variant={ButtonVariant.OUTLINED}
+                        eagerProbe
                     />
                 )}
             </div>

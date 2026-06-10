@@ -75,6 +75,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
                                     lineNumber={matchedOperationSourceData.lineNumber}
                                     language={StackTraceLanguage.PYTHON}
                                     testId={TEST_IDS.SHOW_OPERATION_SOURCE_BUTTON}
+                                    eagerProbe
                                 />
                             )}
                         </p>
