@@ -134,6 +134,8 @@ const PerformanceTable = ({
 
     const footerColumns = useMemo(() => getFooterColumns(visibleColumns), [visibleColumns]);
 
+    const footerTotals = useMemo(() => computeFooterTotals(data, hideHostOps), [data, hideHostOps]);
+
     const isReportsSynced = opIdsMap.length > 0;
     const isPrimaryActiveReport = activeReportComparisonIndex === null;
     const activeReportRows = useMemo<TypedPerfTableRow[]>(
@@ -433,7 +435,7 @@ const PerformanceTable = ({
                                         })}
                                         colSpan={header.footerSpan ?? undefined}
                                     >
-                                        {getTotalsForFooter(header, data, hideHostOps)}
+                                        {footerTotals[header.key] ?? ''}
                                     </td>
                                 ))}
                     </tr>
@@ -471,43 +473,43 @@ const PerformanceTable = ({
     );
 };
 
-const getTotalsForFooter = (column: ColumnDefinition, data: TypedPerfTableRow[], hideHostOps: boolean): string => {
-    if (column.key === ColumnKeys.TotalPercent) {
-        return `100%`;
+const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): Partial<Record<ColumnKeys, string>> => {
+    const rows = data ?? [];
+    let deviceTimeSum = 0;
+    let opToOpGapSum = 0;
+    let hostOpsCount = 0;
+    let nonUniqueOpsCount = 0;
+    let cacheHits = 0;
+
+    for (const row of rows) {
+        deviceTimeSum += row.device_time || 0;
+        opToOpGapSum += row.op_to_op_gap || 0;
+
+        if (isHostOp(row.bound)) {
+            hostOpsCount++;
+        }
+
+        if (!row.isFirstHashOccurrence) {
+            nonUniqueOpsCount++;
+
+            if (row.cache_hit) {
+                cacheHits++;
+            }
+        }
     }
 
-    if (column.key === ColumnKeys.DeviceTime) {
-        return `${formatSize(
-            data?.reduce((acc, curr) => acc + (curr.device_time || 0), 0),
-            2,
-        )} µs`;
-    }
+    const deviceOpsCount = rows.length - hostOpsCount;
+    const cacheHitPercent = nonUniqueOpsCount > 0 ? (cacheHits / nonUniqueOpsCount) * 100 : 0;
 
-    if (column.key === ColumnKeys.OpCode) {
-        const hostOpsCount = data.filter((row) => isHostOp(row.bound)).length;
-        const deviceOpsCount = data.length - hostOpsCount;
-
-        return hideHostOps
+    return {
+        [ColumnKeys.TotalPercent]: '100%',
+        [ColumnKeys.DeviceTime]: `${formatSize(deviceTimeSum, 2)} µs`,
+        [ColumnKeys.OpCode]: hideHostOps
             ? `${deviceOpsCount} device ops`
-            : `${data.length} ops\n(${deviceOpsCount} device ops + ${hostOpsCount} host ops)`;
-    }
-
-    if (column.key === ColumnKeys.OpToOpGap) {
-        return `${formatSize(
-            data?.reduce((acc, curr) => acc + (curr.op_to_op_gap || 0), 0),
-            2,
-        )} µs`;
-    }
-
-    if (column.key === ColumnKeys.CacheHit) {
-        const nonUniqueOps = data.filter((row) => !row.isFirstHashOccurrence);
-        const cacheHits = nonUniqueOps.filter((row) => row.cache_hit).length;
-        const cacheHitPercent = nonUniqueOps.length > 0 ? (cacheHits / nonUniqueOps.length) * 100 : 0;
-
-        return `${formatPercentage(cacheHitPercent).toString()} expected cache hits`;
-    }
-
-    return '';
+            : `${rows.length} ops\n(${deviceOpsCount} device ops + ${hostOpsCount} host ops)`,
+        [ColumnKeys.OpToOpGap]: `${formatSize(opToOpGapSum, 2)} µs`,
+        [ColumnKeys.CacheHit]: `${formatPercentage(cacheHitPercent).toString()} expected cache hits`,
+    };
 };
 
 export default PerformanceTable;
