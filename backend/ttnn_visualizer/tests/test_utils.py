@@ -10,6 +10,8 @@ from ttnn_visualizer.utils import (
     get_app_data_directory,
     get_report_data_directory,
     is_running_in_container,
+    pick_cluster_descriptor_path,
+    pick_mesh_descriptor_path,
     pick_profiler_config_paths,
     ranked_profiler_config_basenames,
     read_profiler_config_api_payload,
@@ -550,3 +552,68 @@ def test_read_profiler_config_api_payload_missing_directory(tmp_path):
     payload, err = read_profiler_config_api_payload(missing)
     assert payload is None
     assert err is None
+
+
+# Mesh / cluster descriptor YAML with and without _<n>_of_<world> suffix
+
+
+def test_pick_mesh_descriptor_prefers_unsuffixed_file(tmp_path):
+    (tmp_path / "physical_chip_mesh_coordinate_mapping.yaml").write_text(
+        "chips: []\n", encoding="utf-8"
+    )
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=1)
+    assert err is None
+    assert path is not None
+    assert path.name == "physical_chip_mesh_coordinate_mapping.yaml"
+
+
+def test_pick_mesh_descriptor_ranked_files(tmp_path):
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_2_of_2.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None
+    assert path.name == "physical_chip_mesh_coordinate_mapping_1_of_2.yaml"
+
+
+def test_pick_mesh_descriptor_rank_out_of_range(tmp_path):
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_2_of_2.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=2)
+    assert path is None
+    assert err == "rank_out_of_range"
+
+
+def test_pick_cluster_descriptor_prefers_unsuffixed_file(tmp_path):
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+    (tmp_path / "cluster_descriptor_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor.yaml"
+
+
+def test_pick_cluster_descriptor_ranked_files(tmp_path):
+    (tmp_path / "cluster_descriptor_2_of_2.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+    (tmp_path / "cluster_descriptor_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor_2_of_2.yaml"
