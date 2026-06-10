@@ -2,10 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, Intent, Size } from '@blueprintjs/core';
+import { Button, ButtonVariant, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { SourceFileStatus, StackTraceLanguage } from '../../definitions/StackTrace';
+import getServerConfig from '../../functions/getServerConfig';
 import { useSourceFile } from '../../hooks/useSourceFile';
 import SourceFileOverlay from './SourceFileOverlay';
 
@@ -14,7 +15,6 @@ interface SourceFileButtonProps {
     sourceFileId: number | null;
     lineNumber: number | null;
     language: StackTraceLanguage;
-    text?: string;
     ariaLabel?: string;
     testId?: string;
     className?: string;
@@ -31,7 +31,6 @@ function SourceFileButton({
     sourceFileId,
     lineNumber,
     language,
-    text = 'Source',
     ariaLabel,
     testId,
     className,
@@ -56,6 +55,7 @@ function SourceFileButton({
 
     const isUnavailable = !canProbeSource || status === SourceFileStatus.Unavailable;
     const isChecking = status === SourceFileStatus.Pending || isFetching;
+    const tooltipContent = getSourceTooltipContents(!!getServerConfig()?.SERVER_MODE, canProbeSource, status);
 
     const handleClick = async () => {
         const available = await probe();
@@ -70,21 +70,26 @@ function SourceFileButton({
 
     return (
         <>
-            <Button
-                className={className}
-                variant={variant}
-                intent={intent}
-                size={size}
-                endIcon={endIcon}
-                text={text}
-                aria-label={ariaLabel}
-                data-testid={testId}
-                disabled={isUnavailable}
-                loading={isChecking}
-                onClick={handleClick}
-                onMouseEnter={() => probe()}
-                onFocus={() => probe()}
-            />
+            <Tooltip
+                content={isUnavailable ? tooltipContent : undefined}
+                placement={PopoverPosition.TOP}
+            >
+                <Button
+                    className={className}
+                    variant={variant}
+                    intent={intent}
+                    size={size}
+                    endIcon={endIcon}
+                    text='Source'
+                    aria-label={ariaLabel}
+                    data-testid={testId}
+                    disabled={isUnavailable}
+                    loading={isChecking}
+                    onClick={handleClick}
+                    onMouseEnter={() => probe()}
+                    onFocus={() => probe()}
+                />
+            </Tooltip>
 
             <SourceFileOverlay
                 isOpen={isViewingSourceFile}
@@ -100,6 +105,30 @@ function SourceFileButton({
             />
         </>
     );
+}
+
+/**
+ * Source button tooltip. Intentionally generic for all ``StackSourceOrigin`` values
+ * (database, path, remapped); only availability state affects the message.
+ */
+function getSourceTooltipContents(serverMode: boolean, canProbeSource: boolean, status: SourceFileStatus): string {
+    if (!canProbeSource) {
+        return 'No file path found for this stack trace';
+    }
+
+    if (serverMode && status === SourceFileStatus.Unavailable) {
+        return 'Source file is not available in this report';
+    }
+
+    if (status === SourceFileStatus.Pending) {
+        return 'Checking whether source file is available…';
+    }
+
+    if (status === SourceFileStatus.Unavailable) {
+        return 'Source file is not available';
+    }
+
+    return 'View source file';
 }
 
 export default SourceFileButton;
