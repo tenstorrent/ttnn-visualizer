@@ -59,7 +59,7 @@ export default function Performance() {
         isLoading: isLoadingPerformance,
         error: perfDataError,
     } = usePerformanceReport(activePerformanceReport?.reportName || null);
-    const { data: comparisonData } = usePerformanceComparisonReport();
+    const { data: comparisonData, isLoading: isLoadingComparison } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
@@ -208,10 +208,6 @@ export default function Performance() {
         }
     }, [appliedOpCodeOptionsKey, opCodeOptionsKey, opCodeOptions]);
 
-    if (isLoadingPerformance && !perfDataError) {
-        return <LoadingSpinner />;
-    }
-
     if (perfDataError?.status === HttpStatusCode.UnprocessableEntity) {
         return (
             <>
@@ -274,6 +270,8 @@ export default function Performance() {
                             comparisonStackedData={enrichedComparisonStackedData}
                             signposts={data?.signposts}
                             hasL1PressureData={hasL1PressureData}
+                            isLoading={isLoadingPerformance}
+                            isComparisonLoading={isLoadingComparison}
                         />
                     }
                 />

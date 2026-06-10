@@ -46,6 +46,12 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     .perf-table {
         border-collapse: collapse;
         width: 100%;
+
+        .skeleton-cell {
+            display: block;
+            height: 14px;
+            min-width: 40px;
+        }
     }
 
     .header-aside {

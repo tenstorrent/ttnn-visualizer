@@ -240,6 +240,41 @@
     }
 }
 
+// Horizontal pairing of a producer/consumer name block with its "locate"
+// icon button. The names stack vertically (label over raw id) inside
+// `.mlir-node-details-io-names`; the button is vertically centred against
+// that block so single- and two-line refs both look aligned.
+.mlir-node-details-io-ref {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.mlir-node-details-io-names {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+// Per-row "locate" icon. Blueprint's MINIMAL/SMALL Button still ships with
+// padding sized for body buttons; trim it down so the icon sits inline with
+// the name block without inflating the row height.
+.mlir-node-details-io-locate {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 2px;
+
+    .bp6-icon {
+        color: $tt-grey-7;
+    }
+
+    &:hover .bp6-icon {
+        color: $tt-white;
+    }
+}
+
 .mlir-node-details-io-id {
     font-family: monospace;
     font-size: 11px;

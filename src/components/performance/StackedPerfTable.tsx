@@ -20,7 +20,7 @@ import { formatStackedCell } from '../../functions/stackedPerfFunctions';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
-import LoadingSpinner from '../LoadingSpinner';
+import PerfTableSkeleton from './PerfTableSkeleton';
 import { PATTERN_COUNT } from '../../definitions/Performance';
 import { mergeDevicesAtom } from '../../store/app';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
@@ -31,6 +31,7 @@ interface StackedPerformanceTableProps {
     stackedComparisonData: TypedStackedPerfRow[][];
     filters: Record<string, string> | null;
     reportName: string | null;
+    isLoading?: boolean;
 }
 
 const StackedPerformanceTable = ({
@@ -39,6 +40,7 @@ const StackedPerformanceTable = ({
     stackedComparisonData,
     filters,
     reportName,
+    isLoading = false,
 }: StackedPerformanceTableProps) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
@@ -56,9 +58,138 @@ const StackedPerformanceTable = ({
         [mergeDevices],
     );
 
-    if (!data) {
-        return <LoadingSpinner />;
-    }
+    const renderTable = () => {
+        if (isLoading) {
+            return <PerfTableSkeleton headers={computedTableColumns.map((column) => column.label)} />;
+        }
+
+        if (!stackedData?.length) {
+            return (
+                <p>
+                    <em>No data to display</em>
+                </p>
+            );
+        }
+
+        return (
+            <table className='perf-table monospace'>
+                <thead className='table-header'>
+                    <tr>
+                        {computedTableColumns.map((column) => {
+                            const targetSortDirection =
+                                // eslint-disable-next-line no-nested-ternary
+                                sortingColumn === column.key
+                                    ? sortDirection === SortingDirection.ASC
+                                        ? SortingDirection.DESC
+                                        : SortingDirection.ASC
+                                    : sortDirection;
+
+                            return (
+                                <th
+                                    key={column.key}
+                                    className='cell-header'
+                                >
+                                    {column.sortable ? (
+                                        <Button
+                                            onClick={() => changeSorting(column.key)(targetSortDirection)}
+                                            variant={ButtonVariant.MINIMAL}
+                                            size={Size.SMALL}
+                                        >
+                                            <span className='header-label'>{column.label}</span>
+                                            {sortingColumn === column.key ? (
+                                                <Icon
+                                                    className={classNames(
+                                                        {
+                                                            'is-active': sortingColumn === column.key,
+                                                        },
+                                                        'sort-icon',
+                                                    )}
+                                                    icon={
+                                                        sortDirection === SortingDirection.ASC
+                                                            ? IconNames.CARET_UP
+                                                            : IconNames.CARET_DOWN
+                                                    }
+                                                />
+                                            ) : (
+                                                <Icon
+                                                    className={classNames('sort-icon')}
+                                                    icon={IconNames.CARET_DOWN}
+                                                />
+                                            )}
+                                        </Button>
+                                    ) : (
+                                        <span className='header-label no-button'>{column.label}</span>
+                                    )}
+                                </th>
+                            );
+                        })}
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {tableFields?.map((row, i) => (
+                        <Fragment key={`row-${i}`}>
+                            <tr>
+                                {computedTableColumns.map((column: StackedTableColumn) => (
+                                    <td
+                                        key={column.key}
+                                        className={classNames('cell')}
+                                    >
+                                        {formatStackedCell(row, column, filters?.[column.key])}
+                                    </td>
+                                ))}
+                            </tr>
+
+                            {stackedComparisonData.map((comparisonDataset, datasetIndex) => {
+                                const matchingRow = comparisonDataset.find(
+                                    (stackedRow) =>
+                                        stackedRow[StackedColumnKeys.OpCode] === row[StackedColumnKeys.OpCode],
+                                );
+
+                                return (
+                                    <tr
+                                        key={`comparison-${i}-${datasetIndex}`}
+                                        className={classNames(
+                                            'comparison-row',
+                                            `pattern-${datasetIndex >= PATTERN_COUNT ? datasetIndex - PATTERN_COUNT : datasetIndex}`,
+                                        )}
+                                    >
+                                        {computedTableColumns.map((column: StackedTableColumn) => (
+                                            <td
+                                                key={`comparison-${column.key}`}
+                                                className='cell'
+                                            >
+                                                {matchingRow
+                                                    ? formatStackedCell(matchingRow, column, filters?.[column.key])
+                                                    : ''}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                );
+                            })}
+                        </Fragment>
+                    ))}
+                </tbody>
+
+                <tfoot className='table-footer'>
+                    <tr>
+                        {stackedData &&
+                            stackedData?.length > 0 &&
+                            computedTableColumns.map((column) => (
+                                <td
+                                    key={`footer-${column.key}`}
+                                    className={classNames({
+                                        'no-wrap': column.key === StackedColumnKeys.OpCode,
+                                    })}
+                                >
+                                    {getTotalsForFooter(column, stackedData)}
+                                </td>
+                            ))}
+                    </tr>
+                </tfoot>
+            </table>
+        );
+    };
 
     return (
         <>
@@ -80,128 +211,7 @@ const StackedPerformanceTable = ({
 
             {mergeDevices && <PerfMultiDeviceNotice />}
 
-            {stackedData && stackedData?.length > 0 ? (
-                <table className='perf-table monospace'>
-                    <thead className='table-header'>
-                        <tr>
-                            {computedTableColumns.map((column) => {
-                                const targetSortDirection =
-                                    // eslint-disable-next-line no-nested-ternary
-                                    sortingColumn === column.key
-                                        ? sortDirection === SortingDirection.ASC
-                                            ? SortingDirection.DESC
-                                            : SortingDirection.ASC
-                                        : sortDirection;
-
-                                return (
-                                    <th
-                                        key={column.key}
-                                        className='cell-header'
-                                    >
-                                        {column.sortable ? (
-                                            <Button
-                                                onClick={() => changeSorting(column.key)(targetSortDirection)}
-                                                variant={ButtonVariant.MINIMAL}
-                                                size={Size.SMALL}
-                                            >
-                                                <span className='header-label'>{column.label}</span>
-                                                {sortingColumn === column.key ? (
-                                                    <Icon
-                                                        className={classNames(
-                                                            {
-                                                                'is-active': sortingColumn === column.key,
-                                                            },
-                                                            'sort-icon',
-                                                        )}
-                                                        icon={
-                                                            sortDirection === SortingDirection.ASC
-                                                                ? IconNames.CARET_UP
-                                                                : IconNames.CARET_DOWN
-                                                        }
-                                                    />
-                                                ) : (
-                                                    <Icon
-                                                        className={classNames('sort-icon')}
-                                                        icon={IconNames.CARET_DOWN}
-                                                    />
-                                                )}
-                                            </Button>
-                                        ) : (
-                                            <span className='header-label no-button'>{column.label}</span>
-                                        )}
-                                    </th>
-                                );
-                            })}
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        {tableFields?.map((row, i) => (
-                            <Fragment key={`row-${i}`}>
-                                <tr>
-                                    {computedTableColumns.map((column: StackedTableColumn) => (
-                                        <td
-                                            key={column.key}
-                                            className={classNames('cell')}
-                                        >
-                                            {formatStackedCell(row, column, filters?.[column.key])}
-                                        </td>
-                                    ))}
-                                </tr>
-
-                                {stackedComparisonData.map((comparisonDataset, datasetIndex) => {
-                                    const matchingRow = comparisonDataset.find(
-                                        (stackedRow) =>
-                                            stackedRow[StackedColumnKeys.OpCode] === row[StackedColumnKeys.OpCode],
-                                    );
-
-                                    return (
-                                        <tr
-                                            key={`comparison-${i}-${datasetIndex}`}
-                                            className={classNames(
-                                                'comparison-row',
-                                                `pattern-${datasetIndex >= PATTERN_COUNT ? datasetIndex - PATTERN_COUNT : datasetIndex}`,
-                                            )}
-                                        >
-                                            {computedTableColumns.map((column: StackedTableColumn) => (
-                                                <td
-                                                    key={`comparison-${column.key}`}
-                                                    className='cell'
-                                                >
-                                                    {matchingRow
-                                                        ? formatStackedCell(matchingRow, column, filters?.[column.key])
-                                                        : ''}
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    );
-                                })}
-                            </Fragment>
-                        ))}
-                    </tbody>
-
-                    <tfoot className='table-footer'>
-                        <tr>
-                            {stackedData &&
-                                stackedData?.length > 0 &&
-                                computedTableColumns.map((column) => (
-                                    <td
-                                        key={`footer-${column.key}`}
-                                        className={classNames({
-                                            'no-wrap': column.key === StackedColumnKeys.OpCode,
-                                        })}
-                                    >
-                                        {getTotalsForFooter(column, stackedData)}
-                                    </td>
-                                ))}
-                        </tr>
-                    </tfoot>
-                </table>
-            ) : (
-                <p>
-                    <em>No data to display</em>
-                </p>
-            )}
+            {renderTable()}
         </>
     );
 };
