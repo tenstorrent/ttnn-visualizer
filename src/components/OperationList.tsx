@@ -449,6 +449,7 @@ const OperationList = () => {
                                         data-index={virtualRow.index}
                                     >
                                         <Collapsible
+                                            collapseClassName='list-collapsible'
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
@@ -473,7 +474,6 @@ const OperationList = () => {
                                                         intent={Intent.PRIMARY}
                                                         endIcon={IconNames.SEGMENTED_CONTROL}
                                                         size={Size.SMALL}
-                                                        variant={ButtonVariant.OUTLINED}
                                                     />
                                                     {operationSourceData && (
                                                         <SourceFileButton

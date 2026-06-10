@@ -76,6 +76,13 @@
             margin-top: 20px;
             margin-right: 40px;
         }
+
+        .list-collapsible {
+            .collapsible-controls {
+                display: flex;
+                gap: 5px;
+            }
+        }
     }
 
     .high-number-consumers {

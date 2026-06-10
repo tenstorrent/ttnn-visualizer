@@ -14,8 +14,7 @@
     }
 
     .formatted-code {
-        display: flex;
-        flex-wrap: nowrap;
+        z-index: variables.$z-index-2-interactive;
         padding: 10px;
         padding-left: 0;
         background-color: $tt-black;
@@ -51,8 +50,16 @@
 
     .stack-trace-path {
         color: $tt-grey-5;
-        margin-bottom: 20px;
+        position: sticky;
+        top: 0;
+        left: 0;
+        background-color: #252a31;
+        z-index: 1;
+        padding-top: 20px;
+        padding-bottom: 20px;
+        margin-top: -19px; // -19px instead of -20px to avoid overlapping the 1px border at the top of the container
         margin-right: 30px; // Avoids overlapping with source-file-controls
+        margin-bottom: 0;
     }
 
     .code-wrapper {
