@@ -158,6 +158,9 @@ $tt-zone-color: $tt-red;
 // Highlight colour for when a tensor is focussed
 $tt-bg-highlight: $tt-slate-accent;
 
+// Sticky source-path header background in the source-file overlay (matches the Blueprint dark overlay)
+$tt-source-overlay-background: $dark-gray2;
+
 // core colors
 $c-dram: #7abdcc;
 $hc-core: #f996ff;

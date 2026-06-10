@@ -483,6 +483,7 @@ const OperationList = () => {
                                                             language={StackTraceLanguage.PYTHON}
                                                             size={Size.SMALL}
                                                             variant={ButtonVariant.OUTLINED}
+                                                            ariaLabel={`View source for operation ${operation.id} ${operation.name}`}
                                                         />
                                                     )}
                                                 </>

@@ -55,7 +55,7 @@ function SourceFileButton({
 
     const isUnavailable = !canProbeSource || status === SourceFileStatus.Unavailable;
     const isChecking = status === SourceFileStatus.Pending || isFetching;
-    const tooltipContent = getSourceTooltipContents(!!getServerConfig()?.SERVER_MODE, canProbeSource, status);
+    const tooltipContent = getSourceTooltipContents(!!getServerConfig()?.SERVER_MODE, canProbeSource);
 
     const handleClick = async () => {
         const available = await probe();
@@ -108,27 +108,16 @@ function SourceFileButton({
 }
 
 /**
- * Source button tooltip. Intentionally generic for all ``StackSourceOrigin`` values
- * (database, path, remapped); only availability state affects the message.
+ * Disabled-source button tooltip. Only rendered when the source is unavailable, so it
+ * only needs to explain the two unavailable cases. Intentionally generic for all
+ * ``StackSourceOrigin`` values (database, path, remapped).
  */
-function getSourceTooltipContents(serverMode: boolean, canProbeSource: boolean, status: SourceFileStatus): string {
+function getSourceTooltipContents(serverMode: boolean, canProbeSource: boolean): string {
     if (!canProbeSource) {
         return 'No file path found for this stack trace';
     }
 
-    if (serverMode && status === SourceFileStatus.Unavailable) {
-        return 'Source file is not available in this report';
-    }
-
-    if (status === SourceFileStatus.Pending) {
-        return 'Checking whether source file is available…';
-    }
-
-    if (status === SourceFileStatus.Unavailable) {
-        return 'Source file is not available';
-    }
-
-    return 'View source file';
+    return serverMode ? 'Source file is not available in this report' : 'Source file is not available';
 }
 
 export default SourceFileButton;

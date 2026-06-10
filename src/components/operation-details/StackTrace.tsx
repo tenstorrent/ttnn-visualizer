@@ -111,6 +111,7 @@ function StackTrace({
                             language={language}
                             variant={ButtonVariant.MINIMAL}
                             intent={Intent.SUCCESS}
+                            ariaLabel={title ? `View source for ${title}` : 'View source file'}
                             eagerProbe
                         />
                     )}

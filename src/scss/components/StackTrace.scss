@@ -5,6 +5,11 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
+// Sticky source-path header padding; the negative top margin pulls it over the
+// container's top padding while leaving the 1px top border visible.
+$source-path-vertical-padding: 20px;
+$container-border-width: 1px;
+
 .stack-trace {
     margin-top: 0;
 
@@ -53,11 +58,11 @@
         position: sticky;
         top: 0;
         left: 0;
-        background-color: #252a31;
-        z-index: 1;
-        padding-top: 20px;
-        padding-bottom: 20px;
-        margin-top: -19px; // -19px instead of -20px to avoid overlapping the 1px border at the top of the container
+        background-color: $tt-source-overlay-background;
+        z-index: variables.$z-index-2-interactive;
+        padding-top: $source-path-vertical-padding;
+        padding-bottom: $source-path-vertical-padding;
+        margin-top: -($source-path-vertical-padding - $container-border-width);
         margin-right: 30px; // Avoids overlapping with source-file-controls
         margin-bottom: 0;
     }
