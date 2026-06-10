@@ -17,22 +17,12 @@ pnpm run dev
 (back-end)=
 ## Back end
 
-create env
+We use [uv](https://docs.astral.sh/uv/) to manage Python dependencies and lock versions via `uv.lock`.
+
+Install uv (see [uv installation](https://docs.astral.sh/uv/getting-started/installation/)), then sync dependencies:
 
 ```shell
-python3 -m venv myenv
-```
-
-activate env
-
-```shell
-source myenv/bin/activate
-```
-
-install dependencies
-
-```shell
-pip install '.[dev]'
+uv sync --extra dev
 ```
 
 Starting the server
@@ -45,6 +35,14 @@ Starting with hot reload:
 
 ``` shell
 pnpm run flask:start-debug
+```
+
+Alternatively, you can use a manual virtual environment:
+
+```shell
+python3 -m venv myenv
+source myenv/bin/activate
+pip install '.[dev]'
 ```
 
 When both the frontend and backend are running you can access the app on [http://localhost:5173](http://localhost:5173), but an alternative local URI may be provided in the terminal when running `pnpm run dev`.

@@ -22,25 +22,20 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
       with:
-        python-version: '3.10.16'
+        enable-cache: true
 
     - name: Install documentation dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install ".[docs]"
+      run: uv sync --extra docs --locked
 
     - name: Setup Pages
       id: pages
       uses: actions/configure-pages@v5
 
     - name: Build Docs
-      run: |
-        cd docs
-        sphinx-build . output
-        cd ..
+      run: uv run sphinx-build docs docs/output
 
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3

@@ -56,19 +56,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.10.16'
+          enable-cache: true
 
       - name: Install dependencies
-        run: pip install .[dev]
+        run: uv sync --extra dev --locked
 
       - name: Run Black
-        run: black --check backend/ttnn_visualizer
+        run: uv run black --check backend/ttnn_visualizer
 
       - name: Run Mypy
-        run: PYTHONPATH=backend mypy backend/ttnn_visualizer
+        run: PYTHONPATH=backend uv run mypy backend/ttnn_visualizer
 
       - name: Run Backend Tests
-        run: pytest backend/ttnn_visualizer
+        run: PYTHONPATH=backend uv run pytest backend/ttnn_visualizer

@@ -19,7 +19,7 @@
   },
   "scripts": {
     "build:docs": "sphinx-build ./docs ./docs/output",
-    "build:wheel": "pnpm run build && python -m build --wheel",
+    "build:wheel": "pnpm run build && uv build --wheel",
     "build": "vite build",
     "dev:server": "VITE_SERVER_MODE=1 vite",
     "dev": "vite",
