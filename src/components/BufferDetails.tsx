@@ -12,11 +12,15 @@ import ROUTES from '../definitions/Routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
-import { getLastConsumerLink, getOperationLink } from '../functions/getOperationLink';
+import { getOperationLink } from '../functions/getOperationLink';
+import { getOperationStackTraceFields } from '../functions/getOperationStackTraceFields';
 import isValidNumber from '../functions/isValidNumber';
 import { ShardSpec } from '../functions/parseMemoryConfig';
+import { StackTraceLanguage } from '../definitions/StackTrace';
 import MemoryConfigRow from './MemoryConfigRow';
 import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
+import SourceFileButton from './operation-details/SourceFileButton';
+import { extractOperationSourceData } from '../functions/stackTraceSource';
 import { showHexAtom } from '../store/app';
 
 interface BufferDetailsProps {
@@ -30,11 +34,43 @@ interface BufferDetailsProps {
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, dtype, layout, shape } = tensor;
     const firstOperationId = tensor.producers[0];
-    const lastOperationId = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperationId = getDeallocationOperation(tensor, operations)?.id;
     const nextAllocationOperationId = getNextAllocationOperation(tensor, operations)?.id;
 
     const showHex = useAtomValue(showHexAtom);
+
+    const renderOperationLinkWithSource = (operationId: number) => {
+        const stackTraceFields = getOperationStackTraceFields(operations, operationId);
+        const sourceData = stackTraceFields ? extractOperationSourceData(stackTraceFields) : null;
+
+        return (
+            <>
+                {getOperationLink(operationId, operations)}
+                {sourceData ? (
+                    <SourceFileButton
+                        filePath={sourceData.filePath}
+                        sourceFileId={stackTraceFields?.stack_trace_source_file_id ?? null}
+                        lineNumber={sourceData.lineNumber}
+                        language={StackTraceLanguage.PYTHON}
+                        text={sourceData.label}
+                    />
+                ) : null}
+            </>
+        );
+    };
+
+    const getResolvedLastConsumerOperationId = () => {
+        const resolvedLastOperationId = tensor.consumers[tensor.consumers.length - 1];
+        let operation = operations.find((entry) => entry.id === resolvedLastOperationId);
+
+        if (operation?.name.includes('deallocate') && tensor.consumers.length > 1) {
+            operation = operations.find((entry) => entry.id === tensor.consumers[tensor.consumers.length - 2]);
+        }
+
+        return operation?.id;
+    };
+
+    const resolvedLastConsumerOperationId = getResolvedLastConsumerOperationId();
 
     return (
         <>
@@ -49,7 +85,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <th>Producer</th>
                         <td>
                             {isValidNumber(firstOperationId)
-                                ? getOperationLink(firstOperationId, operations)
+                                ? renderOperationLinkWithSource(firstOperationId)
                                 : 'No producer for this tensor'}
                         </td>
                     </tr>
@@ -57,8 +93,8 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     <tr>
                         <th>Last consumer</th>
                         <td>
-                            {isValidNumber(lastOperationId)
-                                ? getLastConsumerLink(tensor, operations)
+                            {isValidNumber(resolvedLastConsumerOperationId)
+                                ? renderOperationLinkWithSource(resolvedLastConsumerOperationId)
                                 : 'No consumers for this tensor'}
                         </td>
                     </tr>

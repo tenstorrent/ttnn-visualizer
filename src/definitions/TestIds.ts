@@ -23,6 +23,7 @@ export const TEST_IDS = Object.freeze({
     ADD_NEW_CONNECTION: 'add-new-connection',
     NO_CONNECTION: 'no-connection',
     FETCH_REMOTE_FOLDERS: 'fetch-remote-folders-list',
+    SHOW_OPERATION_SOURCE_BUTTON: 'show-operation-source-button',
 
     // Performance components
     PERFORMANCE_CHART: 'performance-chart',

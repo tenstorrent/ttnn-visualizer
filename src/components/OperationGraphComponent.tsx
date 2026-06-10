@@ -16,6 +16,9 @@ import { useAtomValue } from 'jotai';
 import { OperationDescription, Tensor } from '../model/APIData';
 import 'styles/components/OperationGraphComponent.scss';
 import LoadingSpinner from './LoadingSpinner';
+import SourceFileButton from './operation-details/SourceFileButton';
+import { extractOperationSourceData } from '../functions/stackTraceSource';
+import { StackTraceLanguage } from '../definitions/StackTrace';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
@@ -1056,6 +1059,7 @@ const OperationGraphInfoComponent = ({
     perfColor,
 }: OperationGraphInfoComponentProps) => {
     const operation = operationList.find((op) => op.id === currentOperationId);
+    const operationSourceData = operation ? extractOperationSourceData(operation) : null;
 
     const inputGroups = useMemo(
         () => groupTensorsByConnectedOp(operation?.inputs, NodeRelation.Input, operationNamesById),
@@ -1095,6 +1099,16 @@ const OperationGraphInfoComponent = ({
                 >
                     Locate {currentOperationId}
                 </Button>
+
+                {operationSourceData && operation && (
+                    <SourceFileButton
+                        filePath={operationSourceData.filePath}
+                        sourceFileId={operation.stack_trace_source_file_id}
+                        lineNumber={operationSourceData.lineNumber}
+                        language={StackTraceLanguage.PYTHON}
+                        variant={ButtonVariant.OUTLINED}
+                    />
+                )}
             </div>
 
             {perfOverlayActive && (

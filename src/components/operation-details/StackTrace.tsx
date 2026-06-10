@@ -2,27 +2,21 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, Callout, Classes, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import hljs from 'highlight.js/lib/core';
 import cpp from 'highlight.js/lib/languages/cpp';
 import python from 'highlight.js/lib/languages/python';
 import 'highlight.js/styles/a11y-dark.css';
-import { useAtomValue } from 'jotai';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import 'styles/components/StackTrace.scss';
-import { ReportLocation } from '../../definitions/Reports';
-import { SourceFileStatus, StackSourceOrigin, StackTraceLanguage } from '../../definitions/StackTrace';
-import useRemoteConnection from '../../hooks/useRemote';
-import { profilerReportLocationAtom } from '../../store/app';
-import Overlay from '../Overlay';
+import { StackTraceLanguage } from '../../definitions/StackTrace';
+import { getStackTraceFilePath, getStackTraceLineNumber } from '../../functions/stackTraceSource';
+import SourceFileButton from './SourceFileButton';
 
 hljs.registerLanguage(StackTraceLanguage.PYTHON, python);
 hljs.registerLanguage(StackTraceLanguage.CPP, cpp);
-
-const FILE_PATH_REGEX = /File "(.*)"/m;
-const LINE_NUMBER_REGEX = /line (\d*),/m;
 
 interface StackTraceProps {
     title?: string;
@@ -50,23 +44,10 @@ function StackTrace({
     className,
     intent = Intent.NONE,
 }: StackTraceProps) {
-    const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
-
     const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded || false);
-    const filePath = useMemo(() => FILE_PATH_REGEX.exec(stackTrace)?.[1] ?? '', [stackTrace]);
-    const [isFetchingFile, setIsFetchingFile] = useState(false);
-    const [fileContents, setFileContents] = useState('');
-    const [errorDetails, setErrorDetails] = useState('');
-    const [resolvedSourcePath, setResolvedSourcePath] = useState<string | null>(null);
-    const [sourceFileStatus, setSourceFileStatus] = useState<SourceFileStatus>(SourceFileStatus.Unavailable);
-    const [sourceMatchedViaRemap, setSourceMatchedViaRemap] = useState(false);
-    const [isViewingSourceFile, setIsViewingSourceFile] = useState(false);
-    const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
-    const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
-
-    const { readRemoteFile, isSourceFileAvailable, persistentState } = useRemoteConnection();
+    const filePath = useMemo(() => getStackTraceFilePath(stackTrace), [stackTrace]);
+    const lineNumber = useMemo(() => getStackTraceLineNumber(stackTrace), [stackTrace]);
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
-    const sourceControlsRef = useRef<null | HTMLDivElement>(null);
 
     const stackTraceWithHighlights = useMemo(() => {
         let highlightedFileContents = hljs.highlight(stackTrace, { language }).value;
@@ -84,67 +65,6 @@ function StackTrace({
         return highlightedFileContents;
     }, [stackTrace, language]);
 
-    const fileWithHighlights = useMemo(() => {
-        const lineNumberMatches = LINE_NUMBER_REGEX.exec(stackTrace);
-
-        if (fileContents && lineNumberMatches?.[1]) {
-            let highlightedFileContents = hljs.highlight(fileContents, { language }).value;
-
-            let line = 1;
-            highlightedFileContents = highlightedFileContents.replace(/^/gm, () => {
-                const classes =
-                    line === parseInt(lineNumberMatches?.[1], 10) ? 'ttnn-line highlighted-line' : 'ttnn-line';
-                return `<div class="${classes}"><span class="line-number">${line++}</span>`;
-            });
-            highlightedFileContents = highlightedFileContents.replace(
-                /<div class="ttnn-line">|<div class="ttnn-line highlighted-line">/gm,
-                (match) => `</div>${match}`,
-            );
-
-            return highlightedFileContents;
-        }
-
-        return '';
-    }, [fileContents, stackTrace, language]);
-
-    const toggleViewingFile = useCallback(() => setIsViewingSourceFile((open) => !open), [setIsViewingSourceFile]);
-
-    const hasReportSourceFileId = stackTraceSourceFileId != null;
-    const canProbeSource = !!filePath || hasReportSourceFileId;
-
-    const shouldShowSourceControls = !hideSourceButton;
-    const sourceTooltip = useMemo(
-        () => getSourceTooltipContents(canProbeSource, sourceFileStatus),
-        [canProbeSource, sourceFileStatus],
-    );
-
-    const handleReadSource = async () => {
-        if (!canProbeSource || sourceFileStatus !== SourceFileStatus.Available) {
-            return;
-        }
-
-        if (fileContents) {
-            setIsViewingSourceFile(true);
-            return;
-        }
-
-        setIsFetchingFile(true);
-
-        const { data, error, resolvedPath } = await readRemoteFile(filePath, stackTraceSourceFileId);
-
-        setErrorDetails('');
-        setResolvedSourcePath(resolvedPath);
-
-        if (error) {
-            setErrorDetails(error);
-        } else if (data) {
-            setFileContents(data);
-        }
-
-        setIsFetchingFile(false);
-        setIsViewingSourceFile(true);
-    };
-
     const handleToggleStackTrace = () => {
         setIsExpanded(!isExpanded);
 
@@ -157,117 +77,6 @@ function StackTrace({
         }
     };
 
-    const scrollToTop = () => {
-        if (scrollContainerEl) {
-            scrollContainerEl.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-    };
-
-    const scrollToBottom = () => {
-        if (scrollContainerEl) {
-            scrollContainerEl.scrollTo({ top: scrollContainerEl.scrollHeight, behavior: 'smooth' });
-        }
-    };
-
-    const displaySourcePath = useMemo(() => {
-        const path = (resolvedSourcePath || filePath).trim();
-
-        if (isRemote && persistentState.selectedConnection) {
-            const { selectedConnection: remoteConnection } = persistentState;
-            const connectionLabel = `${remoteConnection.username || 'user'}@${remoteConnection.host || 'host'}`;
-            return `[${connectionLabel}] ${path}`;
-        }
-
-        return path;
-    }, [isRemote, persistentState, resolvedSourcePath, filePath]);
-    const isCheckingStackTraceAvailability =
-        isFetchingFile || (sourceFileStatus === SourceFileStatus.Pending && canProbeSource);
-    const isStackTraceUnavailable = !canProbeSource || sourceFileStatus !== SourceFileStatus.Available;
-
-    useEffect(() => {
-        if (!scrollContainerEl) {
-            if (sourceControlsRef?.current) {
-                const scrollEl = sourceControlsRef.current.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`);
-                const overlayEl = scrollEl?.querySelector(`.${Classes.OVERLAY_CONTENT}`);
-
-                setScrollContainerEl(scrollEl || null);
-
-                if (overlayEl) {
-                    const overlayStyles = window.getComputedStyle(overlayEl);
-                    setOverlayTopOffset(parseInt(overlayStyles.marginTop, 10) || 0);
-                }
-            }
-        }
-
-        const handleScroll = () => {
-            const controlsEl = sourceControlsRef.current;
-
-            if (!controlsEl || !scrollContainerEl || Number.isNaN(overlayTopOffset)) {
-                return;
-            }
-
-            const { scrollTop } = scrollContainerEl;
-
-            if (scrollTop > overlayTopOffset) {
-                controlsEl.style.transform = `translateY(${scrollTop - overlayTopOffset}px)`;
-            } else {
-                controlsEl.style.transform = '';
-            }
-        };
-
-        scrollContainerEl?.addEventListener('scroll', handleScroll);
-
-        return () => scrollContainerEl?.removeEventListener('scroll', handleScroll);
-    }, [scrollContainerEl, overlayTopOffset, isViewingSourceFile]);
-
-    useEffect(() => {
-        queueMicrotask(() => {
-            setFileContents('');
-            setErrorDetails('');
-            setSourceFileStatus(SourceFileStatus.Unavailable);
-            setResolvedSourcePath(null);
-            setSourceMatchedViaRemap(false);
-        });
-    }, [filePath, stackTraceSourceFileId]);
-
-    // Check stack trace file is available
-    useEffect(() => {
-        if (!shouldShowSourceControls || !canProbeSource) {
-            queueMicrotask(() => {
-                setSourceFileStatus(SourceFileStatus.Unavailable);
-                setSourceMatchedViaRemap(false);
-            });
-            return undefined;
-        }
-
-        const controller = new AbortController();
-        let fetchCancelled = false;
-        queueMicrotask(() => {
-            setSourceFileStatus(SourceFileStatus.Pending);
-            setSourceMatchedViaRemap(false);
-        });
-
-        (async () => {
-            try {
-                const result = await isSourceFileAvailable(filePath, controller.signal, stackTraceSourceFileId);
-                if (!fetchCancelled) {
-                    setSourceFileStatus(result.available ? SourceFileStatus.Available : SourceFileStatus.Unavailable);
-                    setSourceMatchedViaRemap(result.available && result.source === StackSourceOrigin.Remapped);
-                }
-            } catch {
-                if (!fetchCancelled) {
-                    setSourceFileStatus(SourceFileStatus.Unavailable);
-                    setSourceMatchedViaRemap(false);
-                }
-            }
-        })();
-
-        return () => {
-            fetchCancelled = true;
-            controller.abort();
-        };
-    }, [shouldShowSourceControls, canProbeSource, filePath, stackTraceSourceFileId, isSourceFileAvailable]);
-
     return (
         <div className={classNames('stack-trace', className)}>
             {title && <p className='stack-trace-title'>{title}</p>}
@@ -278,27 +87,18 @@ function StackTrace({
                 })}
                 ref={scrollElementRef}
             >
-                {isExpanded ? (
-                    <div className='code-wrapper'>
-                        <code
-                            className={`language-${language} code-output`}
-                            // HTML tags are escaped by hljs
-                            // eslint-disable-next-line react/no-danger
-                            dangerouslySetInnerHTML={{ __html: stackTraceWithHighlights }}
-                        />
-                    </div>
-                ) : (
-                    <div className='code-wrapper'>
-                        <code
-                            className={`language-${language} code-output`}
-                            // HTML tags are escaped by hljs
-                            // eslint-disable-next-line react/no-danger
-                            dangerouslySetInnerHTML={{
-                                __html: getStackTracePreview(stackTraceWithHighlights),
-                            }}
-                        />
-                    </div>
-                )}
+                <div className='code-wrapper'>
+                    <code
+                        className={`language-${language} code-output`}
+                        // HTML tags are escaped by hljs
+                        // eslint-disable-next-line react/no-danger
+                        dangerouslySetInnerHTML={{
+                            __html: isExpanded
+                                ? stackTraceWithHighlights
+                                : getStackTracePreview(stackTraceWithHighlights),
+                        }}
+                    />
+                </div>
 
                 <div className={classNames('stack-trace-buttons is-sticky')}>
                     <Button
@@ -310,92 +110,17 @@ function StackTrace({
                     />
 
                     {!hideSourceButton && (
-                        <Tooltip
-                            content={sourceTooltip}
-                            placement={PopoverPosition.TOP}
-                        >
-                            <Button
-                                variant={ButtonVariant.MINIMAL}
-                                intent={Intent.SUCCESS}
-                                onClick={handleReadSource}
-                                endIcon={IconNames.DOCUMENT_OPEN}
-                                text='Source'
-                                disabled={isStackTraceUnavailable}
-                                loading={isCheckingStackTraceAvailability}
-                            />
-                        </Tooltip>
+                        <SourceFileButton
+                            filePath={filePath}
+                            sourceFileId={stackTraceSourceFileId}
+                            lineNumber={lineNumber}
+                            language={language}
+                            variant={ButtonVariant.MINIMAL}
+                            intent={Intent.SUCCESS}
+                            eagerProbe
+                        />
                     )}
                 </div>
-
-                <Overlay
-                    isOpen={isViewingSourceFile}
-                    onClose={toggleViewingFile}
-                    lazy={false}
-                >
-                    <>
-                        {!errorDetails ? (
-                            <div
-                                className='source-file-controls'
-                                ref={sourceControlsRef}
-                            >
-                                <div className='buttons'>
-                                    <Tooltip content='Scroll to top'>
-                                        <Button
-                                            icon={IconNames.DOUBLE_CHEVRON_UP}
-                                            onClick={() => scrollToTop()}
-                                        />
-                                    </Tooltip>
-
-                                    <Tooltip content='Scroll to highlighted line'>
-                                        <Button
-                                            icon={IconNames.LOCATE}
-                                            onClick={() => scrollToLineNumberInFile()}
-                                        />
-                                    </Tooltip>
-
-                                    <Tooltip content='Scroll to bottom'>
-                                        <Button
-                                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                                            onClick={() => scrollToBottom()}
-                                        />
-                                    </Tooltip>
-                                </div>
-                            </div>
-                        ) : null}
-                        {errorDetails ? (
-                            <div className='stack-trace-error'>
-                                <p className='stack-trace-path monospace'>{displaySourcePath}</p>
-                                <div className='error-details'>
-                                    <pre>{errorDetails}</pre>
-                                </div>
-                            </div>
-                        ) : null}
-
-                        {fileWithHighlights && !errorDetails ? (
-                            <div className='stack-trace'>
-                                <p className='stack-trace-path monospace'>{displaySourcePath}</p>
-                                {sourceMatchedViaRemap ? (
-                                    <Callout
-                                        className='stack-trace-source-remap-notice'
-                                        intent={Intent.WARNING}
-                                        title='Approximate source match'
-                                    >
-                                        This file was opened using a remapped path which may not reflect the same file
-                                        or revision that produced the trace.
-                                    </Callout>
-                                ) : null}
-                                <code
-                                    className={`language-${language} code-output`}
-                                    // HTML tags are escaped by hljs
-                                    // eslint-disable-next-line react/no-danger
-                                    dangerouslySetInnerHTML={{
-                                        __html: fileWithHighlights,
-                                    }}
-                                />
-                            </div>
-                        ) : null}
-                    </>
-                </Overlay>
             </pre>
         </div>
     );
@@ -414,34 +139,6 @@ function isTopOfElementInViewport(element: HTMLElement, scrollContainer?: React.
         : window.scrollY;
 
     return elementPosition.top > comparisonElementPosition;
-}
-
-const scrollToLineNumberInFile = () => {
-    const lineElement = document.querySelector(`.highlighted-line .line-number`);
-
-    if (lineElement) {
-        lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-};
-
-/**
- * Source button tooltip. Intentionally generic for all ``StackSourceOrigin`` values
- * (database, path, remapped); only availability state affects the message.
- */
-function getSourceTooltipContents(canProbeSource: boolean, sourceFileStatus: SourceFileStatus): string {
-    if (!canProbeSource) {
-        return 'No file path found for this stack trace';
-    }
-
-    if (sourceFileStatus === SourceFileStatus.Pending) {
-        return 'Checking whether source file is available…';
-    }
-
-    if (sourceFileStatus === SourceFileStatus.Unavailable) {
-        return 'Source file is not available';
-    }
-
-    return 'View source file';
 }
 
 export default StackTrace;
