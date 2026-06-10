@@ -16,7 +16,6 @@ jobs:
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
-          version: 11
           run_install: false
 
       -   name: Read .nvmrc
@@ -65,10 +64,10 @@ jobs:
         run: uv sync --extra dev --locked
 
       - name: Run Black
-        run: uv run black --check backend/ttnn_visualizer
+        run: uv run --extra dev black --check backend/ttnn_visualizer
 
       - name: Run Mypy
-        run: PYTHONPATH=backend uv run mypy backend/ttnn_visualizer
+        run: PYTHONPATH=backend uv run --extra dev mypy backend/ttnn_visualizer
 
       - name: Run Backend Tests
-        run: PYTHONPATH=backend uv run pytest backend/ttnn_visualizer
+        run: PYTHONPATH=backend uv run --extra dev pytest backend/ttnn_visualizer

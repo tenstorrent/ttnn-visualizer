@@ -19,10 +19,11 @@ pnpm run dev
 
 We use [uv](https://docs.astral.sh/uv/) to manage Python dependencies and lock versions via `uv.lock`.
 
-Install uv (see [uv installation](https://docs.astral.sh/uv/getting-started/installation/)), then sync dependencies:
+Install uv (see [uv installation](https://docs.astral.sh/uv/getting-started/installation/)), then sync dependencies and activate the virtual environment uv creates:
 
 ```shell
 uv sync --extra dev
+source .venv/bin/activate
 ```
 
 Starting the server
