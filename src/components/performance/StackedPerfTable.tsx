@@ -58,6 +58,8 @@ const StackedPerformanceTable = ({
         [mergeDevices],
     );
 
+    const footerTotals = useMemo(() => computeFooterTotals(stackedData), [stackedData]);
+
     const renderTable = () => {
         if (isLoading) {
             return <PerfTableSkeleton headers={computedTableColumns.map((column) => column.label)} />;
@@ -182,7 +184,7 @@ const StackedPerformanceTable = ({
                                         'no-wrap': column.key === StackedColumnKeys.OpCode,
                                     })}
                                 >
-                                    {getTotalsForFooter(column, stackedData)}
+                                    {footerTotals[column.key] ?? ''}
                                 </td>
                             ))}
                     </tr>
@@ -216,27 +218,21 @@ const StackedPerformanceTable = ({
     );
 };
 
-const getTotalsForFooter = (column: StackedTableColumn, data: TypedStackedPerfRow[]): string => {
-    if (column.key === StackedColumnKeys.Percent) {
-        return `100%`;
+const computeFooterTotals = (data: TypedStackedPerfRow[]): Partial<Record<StackedColumnKeys, string>> => {
+    let deviceTimeSum = 0;
+    let opsCountSum = 0;
+
+    for (const row of data) {
+        deviceTimeSum += row[StackedColumnKeys.DeviceTimeSumUs] || 0;
+        opsCountSum += row[StackedColumnKeys.OpsCount] || 0;
     }
 
-    if (column.key === StackedColumnKeys.DeviceTimeSumUs) {
-        return `${formatSize(
-            data?.reduce((acc, curr) => acc + (curr[StackedColumnKeys.DeviceTimeSumUs] || 0), 0),
-            2,
-        )} µs`;
-    }
-
-    if (column.key === StackedColumnKeys.OpCode) {
-        return `${data.length} op types`;
-    }
-
-    if (column.key === StackedColumnKeys.OpsCount) {
-        return `${data?.reduce((acc, curr) => acc + (curr[StackedColumnKeys.OpsCount] || 0), 0)}`;
-    }
-
-    return '';
+    return {
+        [StackedColumnKeys.Percent]: '100%',
+        [StackedColumnKeys.DeviceTimeSumUs]: `${formatSize(deviceTimeSum, 2)} µs`,
+        [StackedColumnKeys.OpCode]: `${data.length} op types`,
+        [StackedColumnKeys.OpsCount]: `${opsCountSum}`,
+    };
 };
 
 export default StackedPerformanceTable;
