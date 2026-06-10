@@ -7,6 +7,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryLegendElement } from '../src/components/operation-details/MemoryLegendElement';
 import { MarkerType } from '../src/model/APIData';
+import { StringBufferType } from '../src/model/BufferType';
 import { OperationDetails } from '../src/model/OperationDetails';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -16,7 +17,9 @@ const operationDetails = {
     getTensorForAddress: () => undefined,
 } as unknown as OperationDetails;
 
-function renderLegendElement(chunk: Parameters<typeof MemoryLegendElement>[0]['chunk']) {
+type LegendProps = Parameters<typeof MemoryLegendElement>[0];
+
+function renderLegendElement(chunk: LegendProps['chunk'], extraProps: Partial<LegendProps> = {}) {
     const { container } = render(
         <TestProviders>
             <MemoryLegendElement
@@ -25,6 +28,7 @@ function renderLegendElement(chunk: Parameters<typeof MemoryLegendElement>[0]['c
                 selectedTensorAddress={null}
                 operationDetails={operationDetails}
                 onLegendClick={onLegendClick}
+                {...extraProps}
             />
         </TestProviders>,
     );
@@ -72,5 +76,45 @@ describe('MemoryLegendElement legend swatches', () => {
         expect(container.querySelector('.memory-color-block')).toBeInTheDocument();
         expect(container.querySelector('.legend-marker-swatch')).not.toBeInTheDocument();
         expect(container.querySelector('.legend-empty-swatch')).not.toBeInTheDocument();
+    });
+});
+
+describe('MemoryLegendElement core count label', () => {
+    const chunk = { address: 0x4000, size: 1024 };
+
+    it('renders "x 1 core" for a single-core CB (no bufferType)', () => {
+        renderLegendElement(chunk, { numCores: 1 });
+        expect(screen.getByText(/x 1 core(?!s)/)).toBeInTheDocument();
+    });
+
+    it('renders "x 64 cores" for a multi-core L1 allocation', () => {
+        renderLegendElement(chunk, { numCores: 64, bufferType: StringBufferType.L1 });
+        expect(screen.getByText(/x 64 cores/)).toBeInTheDocument();
+    });
+
+    it('renders "x 1 core" for a single-core L1 allocation', () => {
+        renderLegendElement(chunk, { numCores: 1, bufferType: StringBufferType.L1 });
+        expect(screen.getByText(/x 1 core(?!s)/)).toBeInTheDocument();
+    });
+
+    it('omits the label for DRAM allocations even when numCores is provided', () => {
+        renderLegendElement(chunk, { numCores: 1, bufferType: StringBufferType.DRAM });
+        expect(screen.queryByText(/x 1 core/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/cores?/)).not.toBeInTheDocument();
+    });
+
+    it('omits the label for SYSTEM_MEMORY allocations', () => {
+        renderLegendElement(chunk, { numCores: 8, bufferType: StringBufferType.SYSTEM_MEMORY });
+        expect(screen.queryByText(/cores?/)).not.toBeInTheDocument();
+    });
+
+    it('omits the label when numCores is unset', () => {
+        renderLegendElement(chunk);
+        expect(screen.queryByText(/cores?/)).not.toBeInTheDocument();
+    });
+
+    it('omits the label when numCores is zero', () => {
+        renderLegendElement(chunk, { numCores: 0 });
+        expect(screen.queryByText(/cores?/)).not.toBeInTheDocument();
     });
 });
