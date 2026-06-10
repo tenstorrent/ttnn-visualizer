@@ -55,7 +55,7 @@ function SourceFileButton({
 
     const isUnavailable = !canProbeSource || status === SourceFileStatus.Unavailable;
     const isChecking = status === SourceFileStatus.Pending || isFetching;
-    const tooltipContent = getSourceTooltipContents(!!getServerConfig()?.SERVER_MODE, canProbeSource);
+    const tooltipContent = getSourceTooltipContents(!!getServerConfig()?.SERVER_MODE, canProbeSource, status);
 
     const handleClick = async () => {
         const available = await probe();
@@ -71,7 +71,7 @@ function SourceFileButton({
     return (
         <>
             <Tooltip
-                content={isUnavailable ? tooltipContent : undefined}
+                content={tooltipContent}
                 placement={PopoverPosition.TOP}
             >
                 <Button
@@ -108,16 +108,24 @@ function SourceFileButton({
 }
 
 /**
- * Disabled-source button tooltip. Only rendered when the source is unavailable, so it
- * only needs to explain the two unavailable cases. Intentionally generic for all
- * ``StackSourceOrigin`` values (database, path, remapped).
+ * Source button tooltip. Always rendered so it appears on the first hover even while the
+ * availability probe is still resolving (the message updates live as `status` settles).
+ * Intentionally generic for all ``StackSourceOrigin`` values (database, path, remapped).
  */
-function getSourceTooltipContents(serverMode: boolean, canProbeSource: boolean): string {
+function getSourceTooltipContents(serverMode: boolean, canProbeSource: boolean, status: SourceFileStatus): string {
     if (!canProbeSource) {
         return 'No file path found for this stack trace';
     }
 
-    return serverMode ? 'Source file is not available in this report' : 'Source file is not available';
+    if (status === SourceFileStatus.Pending) {
+        return 'Checking whether source file is available…';
+    }
+
+    if (status === SourceFileStatus.Unavailable) {
+        return serverMode ? 'Source file is not available in this report' : 'Source file is not available';
+    }
+
+    return 'View source file';
 }
 
 export default SourceFileButton;

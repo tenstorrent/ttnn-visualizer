@@ -84,6 +84,14 @@ export function useSourceFile(
                     setMatchedViaRemap(false);
                 }
                 return false;
+            } finally {
+                // Release the cached promise once settled so later interactions can
+                // re-probe (e.g. after a transient failure) while still deduplicating
+                // concurrent in-flight callers. Guard on the controller so a newer
+                // probe's cached promise isn't cleared.
+                if (probeAbortRef.current === controller) {
+                    probePromiseRef.current = null;
+                }
             }
         })();
 

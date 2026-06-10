@@ -19,12 +19,12 @@ $container-border-width: 1px;
     }
 
     .formatted-code {
-        z-index: variables.$z-index-2-interactive;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
         padding: 10px;
         padding-left: 0;
         background-color: $tt-black;
-        align-items: flex-start;
-        gap: 10px;
         margin-top: 0;
 
         &.is-inline {
