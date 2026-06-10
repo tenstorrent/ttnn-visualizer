@@ -10,10 +10,13 @@ import 'styles/components/PerfTensorDrawer.scss';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
+import { StackTraceLanguage } from '../../definitions/StackTrace';
 import isValidNumber from '../../functions/isValidNumber';
 import { useOperationsList } from '../../hooks/useAPI';
 import { selectedPerfRowIdAtom } from '../../store/app';
 import PerfTensorPanel from './PerfTensorPanel';
+import SourceFileButton from '../operation-details/SourceFileButton';
+import { extractOperationSourceData } from '../../functions/stackTraceSource';
 
 interface PerfTensorDrawerProps {
     rows: TypedPerfTableRow[];
@@ -28,6 +31,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
     const matchedOperation = isValidNumber(selectedRow?.op)
         ? (operations.find((operation) => operation.id === selectedRow.op) ?? null)
         : null;
+    const matchedOperationSourceData = matchedOperation ? extractOperationSourceData(matchedOperation) : null;
 
     const handleClose = () => {
         setSelectedPerfRowId(null);
@@ -64,6 +68,17 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
                             >
                                 Memory Details
                             </Button>
+                            {matchedOperationSourceData && (
+                                <SourceFileButton
+                                    filePath={matchedOperationSourceData.filePath}
+                                    sourceFileId={matchedOperation?.stack_trace_source_file_id ?? null}
+                                    lineNumber={matchedOperationSourceData.lineNumber}
+                                    language={StackTraceLanguage.PYTHON}
+                                    testId={TEST_IDS.SHOW_OPERATION_SOURCE_BUTTON}
+                                    ariaLabel={`View source for operation ${matchedOperation?.id} ${matchedOperation?.name}`}
+                                    eagerProbe
+                                />
+                            )}
                         </p>
 
                         <PerfTensorPanel

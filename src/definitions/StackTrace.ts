@@ -8,6 +8,7 @@ export enum StackTraceLanguage {
 }
 
 export enum SourceFileStatus {
+    Unknown = 'unknown',
     Unavailable = 'unavailable',
     Pending = 'pending',
     Available = 'available',

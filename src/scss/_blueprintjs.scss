@@ -111,7 +111,9 @@ $pt-intent-text-colors: (
             &.bp6-intent-primary {
                 &:hover,
                 &:active {
-                    color: $tt-purple-tint-2;
+                    &:not(:disabled) {
+                        color: $tt-purple-tint-2;
+                    }
                 }
 
                 &.bp6-active {
@@ -124,7 +126,9 @@ $pt-intent-text-colors: (
             &.bp6-intent-primary {
                 &:hover,
                 &:active {
-                    color: $dark-primary-intent-color;
+                    &:not(:disabled) {
+                        color: $dark-primary-intent-color;
+                    }
                 }
 
                 &.bp6-active {
