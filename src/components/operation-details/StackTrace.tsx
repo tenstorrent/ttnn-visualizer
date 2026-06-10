@@ -5,18 +5,12 @@
 import { Button, ButtonVariant, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
-import hljs from 'highlight.js/lib/core';
-import cpp from 'highlight.js/lib/languages/cpp';
-import python from 'highlight.js/lib/languages/python';
-import 'highlight.js/styles/a11y-dark.css';
 import React, { useMemo, useRef, useState } from 'react';
 import 'styles/components/StackTrace.scss';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
+import hljs from '../../functions/highlightSource';
 import { getStackTraceFilePath, getStackTraceLineNumber } from '../../functions/stackTraceSource';
 import SourceFileButton from './SourceFileButton';
-
-hljs.registerLanguage(StackTraceLanguage.PYTHON, python);
-hljs.registerLanguage(StackTraceLanguage.CPP, cpp);
 
 interface StackTraceProps {
     title?: string;

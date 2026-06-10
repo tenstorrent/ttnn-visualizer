@@ -4,21 +4,15 @@
 
 import { Button, Callout, Classes, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import hljs from 'highlight.js/lib/core';
-import cpp from 'highlight.js/lib/languages/cpp';
-import python from 'highlight.js/lib/languages/python';
-import 'highlight.js/styles/a11y-dark.css';
 import { useAtomValue } from 'jotai';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import 'styles/components/StackTrace.scss';
 import { ReportLocation } from '../../definitions/Reports';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
+import hljs from '../../functions/highlightSource';
 import useRemoteConnection from '../../hooks/useRemote';
 import { profilerReportLocationAtom } from '../../store/app';
 import Overlay from '../Overlay';
-
-hljs.registerLanguage(StackTraceLanguage.PYTHON, python);
-hljs.registerLanguage(StackTraceLanguage.CPP, cpp);
 
 interface SourceFileOverlayProps {
     isOpen: boolean;
