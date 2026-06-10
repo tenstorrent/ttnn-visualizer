@@ -53,7 +53,13 @@ function SourceFileButton({
         readSource,
     } = useSourceFile(filePath, sourceFileId, { eager: eagerProbe });
 
-    const isUnavailable = !canProbeSource || status === SourceFileStatus.Unavailable;
+    // When eagerly probing, keep the button disabled until the probe confirms the source is
+    // available — the answer arrives on mount, so there's no reason to offer a click that will
+    // just resolve to "unavailable".
+    const isUnavailable =
+        !canProbeSource ||
+        status === SourceFileStatus.Unavailable ||
+        (eagerProbe && status !== SourceFileStatus.Available);
     const isChecking = status === SourceFileStatus.Pending || isFetching;
     const tooltipContent = getSourceTooltipContents(!!getServerConfig()?.SERVER_MODE, canProbeSource, status);
 
