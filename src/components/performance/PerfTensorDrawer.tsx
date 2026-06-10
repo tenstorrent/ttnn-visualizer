@@ -71,7 +71,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
                             {matchedOperationSourceData && (
                                 <SourceFileButton
                                     filePath={matchedOperationSourceData.filePath}
-                                    sourceFileId={matchedOperation?.stack_trace_source_file_id}
+                                    sourceFileId={matchedOperation?.stack_trace_source_file_id ?? null}
                                     lineNumber={matchedOperationSourceData.lineNumber}
                                     language={StackTraceLanguage.PYTHON}
                                     testId={TEST_IDS.SHOW_OPERATION_SOURCE_BUTTON}

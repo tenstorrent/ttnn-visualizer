@@ -48,7 +48,7 @@ function SourceFileOverlay({
     const didAutoScrollRef = useRef(false);
 
     const fileWithHighlights = useMemo(() => {
-        if (!fileContents || lineNumber == null) {
+        if (!fileContents) {
             return '';
         }
 
