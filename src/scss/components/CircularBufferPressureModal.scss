@@ -1,0 +1,403 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use 'styles/definitions/colours' as *;
+
+.cb-pressure-overlay {
+    .bp6-overlay {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+    }
+
+    .loading-container {
+        background-color: transparent;
+    }
+
+    .cb-pressure {
+        background-color: $tt-grey-4;
+        max-width: 90vw;
+        max-height: 90vh;
+        overflow: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+
+        .header {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+
+            .title {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin: 0;
+
+                .title-text {
+                    font-size: 1.1rem;
+                }
+
+                svg {
+                    fill: $tt-white;
+                }
+            }
+
+            .summary {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .controls {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+            }
+        }
+
+        .chip-and-legend {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 280px;
+            gap: 16px;
+
+            .chip {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+
+                .axis-caption {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    font-size: 10px;
+                    color: rgba($tt-white, 0.6);
+                    padding: 0 2px;
+
+                    .axis-range {
+                        opacity: 0.5;
+                    }
+                }
+
+                .tensix-grid {
+                    display: grid;
+                    gap: 4px;
+
+                    .tensix {
+                        // Heatmap intensity is driven by inline --cb-intensity
+                        // (0..1) and renders as a thin saturated bar at the top
+                        // of the cell via a ::before pseudo-element. Cell body
+                        // stays neutral so the CB strip remains the dominant
+                        // visual signal.
+                        --cb-intensity: 0;
+
+                        position: relative;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: space-between;
+                        align-items: stretch;
+                        gap: 2px;
+                        padding: 5px 3px 2px;
+                        border: 1px solid $tt-black;
+                        background-color: $tt-grey-2;
+                        color: $tt-white;
+                        cursor: pointer;
+                        font-size: 9px;
+                        line-height: 1;
+                        overflow: hidden;
+
+                        // Top-of-cell intensity bar. Painted at full saturation
+                        // because it's small and competes with no other colour
+                        // in the slim 3px region.
+                        &::before {
+                            content: '';
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            right: 0;
+                            height: 3px;
+                            background-color: rgba($tt-red-accent, var(--cb-intensity));
+                            pointer-events: none;
+                        }
+
+                        &:not(.has-bytes) {
+                            background-color: rgba($tt-grey-2, 0.5);
+                            color: rgba($tt-white, 0.35);
+                            cursor: default;
+                        }
+
+                        &:hover.has-bytes {
+                            border-color: $tt-yellow-tint-2;
+                        }
+
+                        &.active {
+                            border-color: $tt-tensix-active;
+                            box-shadow: 0 0 0 1px $tt-tensix-active inset;
+                        }
+
+                        &.highlighted {
+                            border-color: $tt-yellow;
+                            box-shadow: 0 0 0 2px $tt-yellow inset;
+                        }
+
+                        &.over-budget {
+                            outline: 1px dashed $tt-red;
+                            outline-offset: -1px;
+                        }
+
+                        .tensix-meta {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: baseline;
+                            gap: 4px;
+                            min-width: 0;
+
+                            .coord {
+                                opacity: 0.7;
+                            }
+
+                            .value {
+                                font-weight: 600;
+                                text-align: right;
+                                white-space: nowrap;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
+                            }
+                        }
+
+                        .cb-strip {
+                            display: block;
+
+                            // Inline rects are pixel-stable; subtle stroke
+                            // separates touching CBs without faking gaps.
+                            .cb-strip-chunk {
+                                stroke: rgba($tt-black, 0.6);
+                                stroke-width: 0.5;
+                            }
+
+                            .cb-strip-chunk.selected {
+                                stroke: $tt-yellow;
+                                stroke-width: 2;
+                            }
+                        }
+                    }
+                }
+            }
+
+            .legend {
+                background-color: $tt-grey-2;
+                padding: 8px 10px;
+                border-radius: 2px;
+
+                h4 {
+                    margin: 0 0 6px;
+                }
+
+                .empty-message {
+                    color: rgba($tt-white, 0.6);
+                    margin: 0;
+                }
+
+                .cb-list {
+                    list-style: none;
+                    padding: 0;
+                    margin: 0;
+                    max-height: 420px;
+                    overflow-y: auto;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+
+                    li {
+                        margin: 0;
+                    }
+
+                    .cb-row {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        width: 100%;
+                        padding: 4px 6px;
+                        background: transparent;
+                        border: 1px solid transparent;
+                        color: $tt-white;
+                        cursor: pointer;
+                        text-align: left;
+
+                        &:hover {
+                            background-color: rgba($tt-white, 0.08);
+                        }
+
+                        &.active {
+                            border-color: $tt-yellow;
+                            background-color: rgba($tt-yellow, 0.15);
+                        }
+
+                        .swatch {
+                            display: inline-block;
+                            width: 12px;
+                            height: 12px;
+                            border: 1px solid $tt-black;
+                            flex: 0 0 auto;
+                        }
+
+                        .cb-row-body {
+                            display: grid;
+                            grid-template-columns: 1fr auto auto;
+                            gap: 8px;
+                            flex: 1;
+                            font-size: 12px;
+
+                            .addr {
+                                opacity: 0.85;
+                            }
+
+                            .size {
+                                font-weight: 600;
+                            }
+
+                            .cores {
+                                opacity: 0.7;
+                            }
+                        }
+                    }
+
+                    &.compact {
+                        max-height: 200px;
+                    }
+                }
+
+                .cb-list-totals {
+                    margin-top: 4px;
+                    border-top: 1px solid rgba($tt-white, 0.15);
+                    padding-top: 2px;
+
+                    .cb-list-total {
+                        display: flex;
+                        align-items: baseline;
+                        gap: 8px;
+                        padding: 4px 6px;
+                        font-size: 12px;
+
+                        // Pseudo-element occupies the same slot as the row
+                        // swatch above (12px swatch + 8px gap implied by the
+                        // outer flex), so the label lines up under the first
+                        // address column instead of floating in the middle.
+                        &::before {
+                            content: '';
+                            flex: 0 0 12px;
+                        }
+
+                        .label {
+                            opacity: 0.7;
+                        }
+
+                        .value {
+                            font-weight: 600;
+                        }
+
+                        // The Sum row only renders when it diverges from peak,
+                        // which is the interesting/diagnostic case. Warning
+                        // tint signals "this number is not the L1 budget you
+                        // think it is" without pulling attention from Peak.
+                        &.row-sum {
+                            color: $tt-yellow-tint-1;
+
+                            .label {
+                                opacity: 0.85;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        .tensix-details {
+            background-color: $tt-grey-2;
+            padding: 8px 10px;
+            border-radius: 2px;
+
+            .tensix-details-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 6px;
+
+                h4 {
+                    margin: 0;
+
+                    .subtle {
+                        opacity: 0.6;
+                        font-weight: 400;
+                    }
+                }
+
+                svg {
+                    fill: $tt-white;
+                }
+            }
+
+            .zoomed-core-plot {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+
+                .zoomed-core-svg {
+                    display: block;
+                    background-color: rgba($tt-black, 0.35);
+                    border: 1px solid rgba($tt-black, 0.7);
+                    border-radius: 1px;
+
+                    .zoomed-chunk {
+                        cursor: pointer;
+
+                        .zoomed-chunk-rect {
+                            stroke: rgba($tt-black, 0.7);
+                            stroke-width: 0.75;
+                        }
+
+                        .zoomed-chunk-label {
+                            font-family: monospace;
+                            font-size: 11px;
+                            fill: $tt-black;
+                            pointer-events: none;
+                            user-select: none;
+                        }
+
+                        &:hover .zoomed-chunk-rect {
+                            stroke: $tt-yellow-tint-2;
+                            stroke-width: 1.5;
+                        }
+
+                        &.selected .zoomed-chunk-rect {
+                            stroke: $tt-yellow;
+                            stroke-width: 2;
+                        }
+                    }
+                }
+
+                .zoomed-axis {
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 10px;
+                    color: rgba($tt-white, 0.6);
+                    padding: 0 2px;
+                }
+            }
+        }
+    }
+}
+
+// Inline button next to the "CBs" heading inside the DeviceOp render.
+.cbs-heading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    h4 {
+        margin: 0;
+    }
+}
