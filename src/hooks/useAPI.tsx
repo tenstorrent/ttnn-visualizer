@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError, HttpStatusCode } from 'axios';
+import { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -49,7 +49,6 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { GraphBundle } from '../model/MLIRJsonModel';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
@@ -497,45 +496,6 @@ export const useNpe = (fileName: string | null) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNpeOpTrace(),
         queryKey: ['fetch-npe', fileName],
-        retry: false,
-        staleTime: 30000,
-        enabled: fileName !== null,
-    });
-};
-
-const fetchMLIRJson = async (): Promise<GraphBundle> => {
-    // Fetch as raw text and parse client-side. The backend deliberately
-    // streams the uploaded file bytes without parsing them — large MLIR
-    // payloads avoid the double-parse / double-stream cost on the server.
-    // If the file contents are malformed JSON, surface a synthetic 422 so
-    // the existing UI mapping in `routes/MLIR.tsx`
-    // (422 → MLIRValidationError.INVALID_JSON) handles it without changes.
-    const response = await axiosInstance.get<string>(Endpoints.MLIR, {
-        responseType: 'text',
-        transformResponse: [(data) => data],
-    });
-    try {
-        return JSON.parse(response.data) as GraphBundle;
-    } catch {
-        throw new AxiosError(
-            'MLIR file is not valid JSON',
-            AxiosError.ERR_BAD_RESPONSE,
-            response.config,
-            response.request,
-            { ...response, status: HttpStatusCode.UnprocessableEntity },
-        );
-    }
-};
-
-// The `/mlir` endpoint resolves the file path server-side from
-// `instance.mlir_path` (set when the user uploaded the JSON), so the request
-// itself is parameter-less. `fileName` is kept on the hook to gate `enabled`
-// (no fetch until an active file is selected) and to discriminate the
-// queryKey so cache state doesn't bleed across files. This mirrors `useNpe`.
-export const useMLIR = (fileName: string | null) => {
-    return useQuery<GraphBundle, AxiosError>({
-        queryFn: () => fetchMLIRJson(),
-        queryKey: ['fetch-mlir-json', fileName],
         retry: false,
         staleTime: 30000,
         enabled: fileName !== null,

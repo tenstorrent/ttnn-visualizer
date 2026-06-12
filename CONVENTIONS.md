@@ -448,9 +448,9 @@ When a query depends on another query's result (e.g. only fetch detail when a li
 
 ```ts
 return useQuery({
-    queryFn: () => fetchMLIRJson(),
-    queryKey: ['fetch-mlir-json', fileName],
-    enabled: fileName !== null,
+    queryFn: () => fetchOperationDetails(operationId),
+    queryKey: ['get-operation-detail', operationId],
+    enabled: operationId !== null,
 });
 ```
 
@@ -552,7 +552,7 @@ New routes add an entry to `routeObjectList` and (if they require an active repo
 
 | Prefix | Purpose | Example |
 |---|---|---|
-| `use*` | React hook (must follow rules of hooks) | `useReportMetadata`, `useMLIR` |
+| `use*` | React hook (must follow rules of hooks) | `useReportMetadata`, `useNpe` |
 | `handle*` | Event handler bound to a UI event | `handleFileChange`, `handleNodeClick` |
 | `get*` | Pure accessor or formatter | `getResponseError`, `getNodeRelationToFocused` |
 | `is*`, `has*` | Boolean predicate | `isDeviceOperation`, `hasClusterDescriptionAtom` |
@@ -826,7 +826,7 @@ If the user uploads a file the app parses as JSON, validate it on the frontend b
 
 ### Convert client-side validation failures into a synthetic `AxiosError` with a real `HttpStatusCode`
 
-Downstream route components key off `error?.status === HttpStatusCode.UnprocessableEntity` to drive validation-error UI. When the failure is a client-side `JSON.parse` (the backend streams uploaded bytes without parsing them — see `useAPI.tsx::fetchMLIRJson`), throw a synthetic `AxiosError` with the right status so existing call sites still work:
+Downstream route components key off `error?.status === HttpStatusCode.UnprocessableEntity` to drive validation-error UI. When the failure is a client-side `JSON.parse` of a fetched payload (e.g. the backend streams uploaded bytes without parsing them), throw a synthetic `AxiosError` with the right status so existing call sites still work:
 
 ```tsx
 throw new AxiosError(

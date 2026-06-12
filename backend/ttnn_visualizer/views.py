@@ -47,6 +47,11 @@ from ttnn_visualizer.file_uploads import (
     validate_files,
 )
 from ttnn_visualizer.instances import get_instances, update_instance
+from ttnn_visualizer.mlir_server import (
+    DEFAULT_SSH_PORT,
+    test_mlir_server_connection,
+    upload_and_convert_mlir,
+)
 from ttnn_visualizer.models import (
     Instance,
     RemoteConnection,
@@ -1478,57 +1483,6 @@ def create_npe_files():
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
 
-@api.route("/local/upload/mlir", methods=["POST"])
-def create_mlir_file():
-    # Disable MLIR uploads in server mode for security reasons - it's a local-only feature.
-    if current_app.config["SERVER_MODE"]:
-        return response_forbidden(
-            "MLIR file upload is not available in the hosted application.",
-        )
-
-    files = request.files.getlist("files")
-
-    # Empty list means the caller didn't attach a `files` part (or attached
-    # an empty one). Without this guard, the for-loop is a no-op and
-    # `paths[0]` later raises `IndexError`, surfacing as a 500.
-    if not files:
-        return response_bad_request("No files provided")
-
-    data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
-
-    for file in files:
-        # `FileStorage.filename` is typed `str | None`; calling `.endswith`
-        # on `None` raises `AttributeError` → 500. Treat missing/empty
-        # filenames the same as the wrong-extension case so the user gets
-        # the friendly StatusMessage instead.
-        if not file.filename or not file.filename.endswith(".json"):
-            return StatusMessage(
-                status=ConnectionTestStates.FAILED,
-                message="MLIR requires a valid .json file",
-            ).model_dump()
-
-    mlir_name = extract_npe_name(files)
-    target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
-    target_directory.mkdir(parents=True, exist_ok=True)
-
-    try:
-        paths = save_uploaded_files(files, target_directory)
-    except DataFormatError:
-        return response_unprocessable_entity()
-
-    instance_id = request.args.get("instanceId")
-    mlir_path = str(paths[0])
-    update_instance(
-        instance_id=instance_id,
-        mlir_name=mlir_name,
-        mlir_location=ReportLocation.LOCAL.value,
-        clear_remote=True,
-        mlir_path=mlir_path,
-    )
-
-    return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
-
-
 @api.route("/remote/profiler-reports", methods=["POST"])
 def list_remote_reports_profiler():
     connection_data = request.get_json()
@@ -1748,6 +1702,117 @@ def test_remote_folder():
 
     return Response(
         orjson.dumps([status.model_dump() for status in statuses]),
+        mimetype="application/json",
+    )
+
+
+def _build_mlir_remote_connection(
+    name, username, host, ssh_port, identity_file
+) -> RemoteConnection:
+    """Build the SSH connection for an MLIR server.
+
+    Reuses ``RemoteConnection`` so ``SSHClient`` handles it identically to remote
+    report connections. ``profilerPath`` is unused for MLIR (the upload target is
+    an HTTP endpoint, not a folder) so it is left blank.
+    """
+    return RemoteConnection(
+        name=name or host,
+        username=username,
+        host=host,
+        port=ssh_port,
+        profilerPath="",
+        identityFile=identity_file or None,
+    )
+
+
+@api.route("/remote/mlir/test", methods=["POST"])
+@local_only
+def test_mlir_server():
+    connection_data = request.json
+
+    if not connection_data:
+        return response_bad_request("Missing connection data")
+
+    host = (connection_data.get("host") or "").strip()
+    username = (connection_data.get("username") or "").strip()
+    port = connection_data.get("port")
+    ssh_port = connection_data.get("sshPort") or DEFAULT_SSH_PORT
+
+    if (
+        not host
+        or not username
+        or not isinstance(port, int)
+        or not isinstance(ssh_port, int)
+    ):
+        return response_bad_request(
+            "MLIR server requires a host, username, port, and SSH port"
+        )
+
+    connection = _build_mlir_remote_connection(
+        connection_data.get("name"),
+        username,
+        host,
+        ssh_port,
+        connection_data.get("identityFile"),
+    )
+    statuses = test_mlir_server_connection(connection, port)
+
+    return Response(
+        orjson.dumps([status.model_dump() for status in statuses]),
+        mimetype="application/json",
+    )
+
+
+@api.route("/remote/mlir/upload", methods=["POST"])
+@local_only
+def upload_mlir_server():
+    files = request.files.getlist("files")
+
+    if not files:
+        return response_bad_request("No files provided")
+
+    port = request.form.get("port", type=int)
+    if not port:
+        return response_bad_request("MLIR server requires a port")
+
+    file = files[0]
+    result = upload_and_convert_mlir(port, file.read(), file.filename or "")
+
+    if (
+        result.status.status != ConnectionTestStates.OK.value
+        or result.graph_json is None
+    ):
+        return result.status.model_dump()
+
+    # Persist the converted graph JSON so the existing `/mlir` viewer (which
+    # streams `instance.mlir_path`) can render it with no extra plumbing.
+    data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+    target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
+    target_directory.mkdir(parents=True, exist_ok=True)
+
+    mlir_name = Path(Path(file.filename or "model").name).stem
+    mlir_path = target_directory / f"{mlir_name}.json"
+    mlir_path.write_text(result.graph_json, encoding="utf-8")
+
+    update_instance(
+        instance_id=request.args.get("instanceId"),
+        mlir_name=mlir_name,
+        mlir_location=ReportLocation.LOCAL.value,
+        clear_remote=True,
+        mlir_path=str(mlir_path),
+    )
+
+    # Return the converted graph alongside the status so callers can render it
+    # without a follow-up `/mlir` fetch. `graph_json` is already a JSON string,
+    # so embed it verbatim rather than re-serialising.
+    return Response(
+        orjson.dumps(
+            {
+                **result.status.model_dump(),
+                "name": mlir_name,
+                "graph": orjson.Fragment(result.graph_json.encode("utf-8")),
+            }
+        ),
         mimetype="application/json",
     )
 

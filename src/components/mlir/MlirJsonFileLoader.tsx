@@ -3,12 +3,14 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { activeMlirJsonAtom } from '../../store/app';
+import { MLIR_SERVER_ACCEPTED_EXTENSIONS, MlirServerConnection } from '../../definitions/MlirServer';
+import { activeMLIRDataAtom, activeMlirJsonAtom } from '../../store/app';
+import { GraphBundle } from '../../model/MLIRJsonModel';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
@@ -30,10 +32,15 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.WARNING]: Intent.WARNING,
 };
 
-const MlirJsonFileLoader = () => {
+interface MlirJsonFileLoaderProps {
+    server?: MlirServerConnection | null;
+}
+
+const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const { uploadMlirFile } = useLocalConnection();
+    const { uploadMlirFileToServer } = useLocalConnection();
     const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);
+    const setActiveMLIRData = useSetAtom(activeMLIRDataAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,35 +51,50 @@ const MlirJsonFileLoader = () => {
             return;
         }
 
-        setErrorMessage('Uploading...');
+        setErrorMessage(server ? 'Uploading...' : 'Loading...');
         setUploadStatus(ConnectionTestStates.PROGRESS);
 
         const file = event.target.files[0];
 
         try {
-            const response = await uploadMlirFile(event.target.files);
+            let graph: GraphBundle | null;
 
-            if (response?.data?.status !== ConnectionTestStates.OK) {
-                setUploadStatus(ConnectionTestStates.FAILED);
-                setErrorMessage(response?.data?.message ?? 'Upload failed');
+            if (server) {
+                const response = await uploadMlirFileToServer(event.target.files, server);
+
+                if (response?.data?.status !== ConnectionTestStates.OK) {
+                    setUploadStatus(ConnectionTestStates.FAILED);
+                    setErrorMessage(response?.data?.message ?? 'Upload failed');
+                    return;
+                }
+
+                graph = (response.data as { graph?: GraphBundle }).graph ?? null;
             } else {
-                const fileName = file.name;
-                setMlirJsonFileName(sanitiseFileName(fileName));
-                createToastNotification('MLIR', fileName, ToastType.SUCCESS);
-                setUploadStatus(ConnectionTestStates.OK);
-                setErrorMessage(`${fileName} uploaded successfully`);
+                // Dev-only: load an already-processed MLIR JSON straight into the
+                // viewer, bypassing the Model Explorer conversion backend.
+                graph = JSON.parse(await file.text()) as GraphBundle;
             }
+
+            setActiveMLIRData(graph);
+            setMlirJsonFileName(sanitiseFileName(file.name));
+            createToastNotification('MLIR', file.name, ToastType.SUCCESS);
+            setUploadStatus(ConnectionTestStates.OK);
+            setErrorMessage(`${file.name} ${server ? 'uploaded' : 'loaded'} successfully`);
         } catch (err: unknown) {
             setUploadStatus(ConnectionTestStates.FAILED);
-            setErrorMessage(getResponseError(err, 'Unable to upload MLIR file'));
+            setErrorMessage(getResponseError(err, 'Unable to load MLIR file'));
         }
     };
+
+    const acceptedExtensions = server ? MLIR_SERVER_ACCEPTED_EXTENSIONS.join(',') : '.json';
+    const placeholder = server ? 'Upload a model file' : 'Upload an MLIR JSON';
 
     return (
         <div className='file-loader'>
             <FileInput
-                text={mlirJsonFileName ?? 'Upload an MLIR JSON'}
+                text={mlirJsonFileName ?? placeholder}
                 onInputChange={handleFileChange}
+                inputProps={{ accept: acceptedExtensions }}
             />
 
             <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>

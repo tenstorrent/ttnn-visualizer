@@ -25,7 +25,7 @@ const FolderFieldset = ({ title, icon, isFeatureDisabled = false, children }: Fo
             <Icon
                 className='legend-icon'
                 icon={icon}
-                size={150}
+                size={90}
             />
 
             <div className='folder-picker-wrapper'>{children}</div>
