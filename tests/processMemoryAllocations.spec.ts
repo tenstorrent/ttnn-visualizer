@@ -183,13 +183,21 @@ describe('processMemoryAllocations - CB per-core accounting', () => {
         expect(peakMemoryLoad).toBe(size);
     });
 
-    it('accounts for size even when core_range_set is empty', () => {
+    it('keeps unattributed-only CBs out of the per-core peak but still tracks their bytes', () => {
+        // CBs with an empty core_range_set land in the "?" bucket - they
+        // have no core attribution, so they must not inflate peakMemoryLoad
+        // (which is a per-core quantity). The snapshot still surfaces them
+        // through unattributedBytes so the UI can flag them.
         const size = 4096;
-        const graph = [captureStart(), functionStart('op'), cbAllocate('{}', size), functionEnd('op')];
+        const opStart = functionStart('op');
+        const graph = [captureStart(), opStart, cbAllocate('{}', size), functionEnd('op')];
 
-        const { peakMemoryLoad } = processMemoryAllocations(graph);
+        const { peakMemoryLoad, cbPressureByOpId } = processMemoryAllocations(graph);
 
-        expect(peakMemoryLoad).toBe(size);
+        expect(peakMemoryLoad).toBe(0);
+        const snap = cbPressureByOpId.get(opStart.id);
+        expect(snap?.unattributedBytes).toBe(size);
+        expect(snap?.maxBytes).toBe(0);
     });
 
     it('annotates CB allocations with the enclosing function for color variance', () => {

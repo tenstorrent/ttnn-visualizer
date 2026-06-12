@@ -103,8 +103,11 @@ export function processMemoryAllocations(
 
     const maxCbPerCore = (): number => {
         let m = 0;
-        for (const v of cbBytesByCore.values()) {
-            if (v > m) {
+        // Skip the '?' bucket — those bytes have no core attribution so
+        // they don't belong in a per-core peak. Mirrors the same exclusion
+        // in snapshotCBPressure() so cbPeak and snapshot.maxBytes agree.
+        for (const [k, v] of cbBytesByCore.entries()) {
+            if (k !== '?' && v > m) {
                 m = v;
             }
         }

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Button,
     ButtonGroup,
@@ -185,6 +185,17 @@ const CircularBufferPressureModal = ({ isOpen, onClose, title, snapshot }: Circu
     const [selectedCBNodeId, setSelectedCBNodeId] = useState<number | null>(null);
     const [normalisation, setNormalisation] = useState<Normalisation>('local');
     const [showAbsolute, setShowAbsolute] = useState<boolean>(true);
+
+    // We render null on close instead of unmounting, so useState slots
+    // persist across open/close cycles. Drop the per-snapshot selections
+    // whenever a new snapshot arrives — they'd otherwise point at stale
+    // nodeIds / cores from the previously-inspected DeviceOp. Normalisation
+    // and the byte-overlay toggle are user preferences, so they're kept.
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelectedCore(null);
+        setSelectedCBNodeId(null);
+    }, [snapshot]);
 
     if (!isOpen) {
         return null;
@@ -504,7 +515,7 @@ const CircularBufferPressureBody = ({
                     <ul className='cb-list'>
                         {snapshot.allocations.map((cb) => {
                             const isSelected = selectedCBNodeId === cb.nodeId;
-                            const swatchColor = getBufferColor(cb.address + (cb.allocateOperationId ?? 0));
+                            const swatchColor = cbColor(cb);
                             return (
                                 <li key={cb.nodeId}>
                                     <button

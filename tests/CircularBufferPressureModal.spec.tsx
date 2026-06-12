@@ -233,6 +233,58 @@ describe('CircularBufferPressureModal - selection flows', () => {
         // (1,0) carries a different CB so it must NOT be highlighted by this row.
         expect(getTensix(1, 0)).not.toHaveClass('highlighted');
     });
+
+    it('clears core / CB selection when the snapshot prop changes', () => {
+        // Stale selections would otherwise leak across DeviceOps because the
+        // modal renders null on close instead of unmounting.
+        const first = buildSnapshot();
+        const { rerender } = render(
+            <TestProviders>
+                <CircularBufferPressureModal
+                    isOpen
+                    onClose={ON_CLOSE}
+                    title='op A'
+                    snapshot={first}
+                />
+            </TestProviders>,
+        );
+        fireEvent.click(getTensix(0, 0));
+        fireEvent.click(document.querySelectorAll('button.cb-row')[0]);
+        expect(document.querySelector('.tensix-details')).toBeInTheDocument();
+        expect(getTensix(0, 0)).toHaveClass('highlighted');
+
+        // Swap in a different snapshot - say a single CB on (1,1) - and the
+        // previous core/CB selection must drop.
+        const second: CBPressureSnapshot = {
+            byCore: { '1,1': 2048 },
+            maxBytes: 2048,
+            unattributedBytes: 0,
+            allocations: [
+                {
+                    nodeId: 99,
+                    address: 0x9000,
+                    size: 2048,
+                    numCores: 1,
+                    coreRangeSet: '{[(x=1,y=1) - (x=1,y=1)]}',
+                    cores: [{ x: 1, y: 1 }],
+                },
+            ],
+        };
+        rerender(
+            <TestProviders>
+                <CircularBufferPressureModal
+                    isOpen
+                    onClose={ON_CLOSE}
+                    title='op B'
+                    snapshot={second}
+                />
+            </TestProviders>,
+        );
+
+        expect(document.querySelector('.tensix-details')).not.toBeInTheDocument();
+        // No cell should carry the highlighted class anymore.
+        expect(document.querySelectorAll('button.tensix.highlighted')).toHaveLength(0);
+    });
 });
 
 describe('CircularBufferPressureModal - legend totals', () => {
