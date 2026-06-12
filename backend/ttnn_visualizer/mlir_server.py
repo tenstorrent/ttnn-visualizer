@@ -9,9 +9,10 @@ access to (e.g. ``aus-wh-05``) and listens on that machine's loopback interface.
 The connection test SSHes to the host and runs ``curl`` against the endpoint on
 the remote's ``localhost``.
 
-Uploads/conversions are proxied through this backend to ``http://localhost:<port>``
-on the machine running the visualizer (the user's local SSH tunnel), avoiding
-browser CORS when the SPA POSTs to a different origin. The flow is:
+Uploads/conversions are proxied through this backend over SSH: the file is copied
+to the remote host, then ``curl`` runs *on the remote* against that machine's
+``http://127.0.0.1:<port>`` (same path as the connection test), avoiding browser
+CORS when the SPA POSTs to a different origin. The flow is:
 
 1. POST the model file to ``/apipost/v1/upload`` → server stores it in a temp dir
    and returns ``{"path": <server_path>}``.
@@ -23,9 +24,10 @@ browser CORS when the SPA POSTs to a different origin. The flow is:
 
 import json
 import logging
+import os
 import shlex
-import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -55,6 +57,9 @@ DEFAULT_SSH_PORT = 22
 # Model formats the MLIR server (Model Explorer) accepts:
 # TF (.pb/.pbtxt/.graphdef), TFLite (.tflite), TFJS/JAX (.json/.pb),
 # PyTorch ExportedProgram (.pt2), MLIR (.mlir/.mlirbc).
+# Keep in sync with `MLIR_SERVER_ACCEPTED_EXTENSIONS` in
+# `src/definitions/MlirServer.ts` (frontend `accept` filter) and the upload-path
+# constant there — the two stacks validate against the same list independently.
 MLIR_SERVER_ACCEPTED_EXTENSIONS = (
     ".pb",
     ".pbtxt",
@@ -68,7 +73,9 @@ MLIR_SERVER_ACCEPTED_EXTENSIONS = (
 
 _CURL_CONNECT_TIMEOUT_SECONDS = 5
 _ENDPOINT_TEST_TIMEOUT_SECONDS = 30
-_UPLOAD_TIMEOUT_SECONDS = 300
+# A model-file upload to the local tunnel is near-instant; if it hasn't completed
+# in a minute the server/tunnel is wedged, so fail fast rather than block 5 min.
+_UPLOAD_TIMEOUT_SECONDS = 60
 _CONVERT_TIMEOUT_SECONDS = 300
 # Let curl's own ``--max-time`` fire first; the subprocess timeout is a backstop.
 _CURL_TIMEOUT_GRACE_SECONDS = 10
@@ -88,16 +95,12 @@ def is_supported_mlir_server_file(filename: str) -> bool:
     return bool(filename) and filename.lower().endswith(MLIR_SERVER_ACCEPTED_EXTENSIONS)
 
 
-def _remote_url(port: int) -> str:
+def _remote_upload_url(port: int) -> str:
     return f"http://127.0.0.1:{port}{MLIR_UPLOAD_PATH}"
 
 
-def _local_upload_url(port: int) -> str:
-    return f"http://localhost:{port}{MLIR_UPLOAD_PATH}"
-
-
-def _local_send_command_url(port: int) -> str:
-    return f"http://localhost:{port}{MLIR_SEND_COMMAND_PATH}"
+def _remote_send_command_url(port: int) -> str:
+    return f"http://127.0.0.1:{port}{MLIR_SEND_COMMAND_PATH}"
 
 
 def _endpoint_unreachable_message(connection: RemoteConnection, port: int) -> str:
@@ -120,9 +123,13 @@ def test_mlir_server_connection(
     def add_status(status, message, detail=None):
         statuses.append(StatusMessage(status=status, message=message, detail=detail))
 
+    # One client for both the SSH test and the curl probe — the base ssh command
+    # is built once and reused (each call still spawns its own ssh subprocess).
+    client = SSHClient(connection)
+
     # Reuse the remote-connection SSH test for identical auth/host-key handling.
     try:
-        SSHClient(connection).test_connection()
+        client.test_connection()
         add_status(
             ConnectionTestStates.OK,
             f"SSH connection to {connection.host} established",
@@ -136,11 +143,11 @@ def test_mlir_server_connection(
 
     curl_cmd = (
         "curl -s -o /dev/null -w '%{http_code}' "
-        f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} {shlex.quote(_remote_url(port))}"
+        f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} {shlex.quote(_remote_upload_url(port))}"
     )
 
     try:
-        output = SSHClient(connection).execute_command(
+        output = client.execute_command(
             curl_cmd, timeout=_ENDPOINT_TEST_TIMEOUT_SECONDS
         )
     except SSHException as e:
@@ -172,62 +179,81 @@ def _fail(message: str, detail: Optional[str] = None) -> MlirConversionResult:
 
 
 def _upload_file_to_server(
-    port: int, file_bytes: bytes, safe_filename: str
+    client: SSHClient,
+    connection: RemoteConnection,
+    port: int,
+    file_bytes: bytes,
+    safe_filename: str,
 ) -> Tuple[Optional[str], Optional[MlirConversionResult]]:
-    """Upload the file and return the server-side temp path it was stored at.
+    """SCP the file to the remote host and POST it to the MLIR upload endpoint.
 
     On failure returns ``(None, MlirConversionResult)`` carrying the error.
     """
-    upload_url = _local_upload_url(port)
-    logger.info("Proxying upload of %s to %s", safe_filename, upload_url)
+    upload_url = _remote_upload_url(port)
+    logger.info(
+        "Uploading %s to MLIR server on %s (%s)",
+        safe_filename,
+        connection.host,
+        upload_url,
+    )
 
     with tempfile.NamedTemporaryFile(
         suffix=Path(safe_filename).suffix, delete=False
     ) as tmp:
         tmp.write(file_bytes)
-        tmp_path = tmp.name
+        local_path = tmp.name
 
+    remote_path = f"/tmp/ttnn_viz_upload_{os.getpid()}_{safe_filename}"
+    curl_cmd = (
+        "curl -sS -H 'Expect:' -w '\\n%{http_code}' "
+        f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} "
+        f"--max-time {_UPLOAD_TIMEOUT_SECONDS} "
+        f"-F '{MLIR_UPLOAD_FIELD}=@{shlex.quote(remote_path)}' "
+        f"{shlex.quote(upload_url)}"
+    )
+
+    started = time.perf_counter()
     try:
-        result = subprocess.run(
-            [
-                "curl",
-                "-s",
-                "-w",
-                "\n%{http_code}",
-                "--connect-timeout",
-                str(_CURL_CONNECT_TIMEOUT_SECONDS),
-                "--max-time",
-                str(_UPLOAD_TIMEOUT_SECONDS),
-                "-F",
-                f"{MLIR_UPLOAD_FIELD}=@{tmp_path}",
-                upload_url,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=_UPLOAD_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS,
-            check=False,
+        client.upload_file(local_path, remote_path, timeout=_UPLOAD_TIMEOUT_SECONDS)
+        stdout = client.execute_command(
+            curl_cmd, timeout=_UPLOAD_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS
         )
-    except subprocess.TimeoutExpired:
-        return None, _fail(f"Upload to localhost:{port} timed out")
+    except SSHException as e:
+        elapsed = time.perf_counter() - started
+        return None, _fail(
+            f"Could not upload to MLIR server on {connection.host} "
+            f"(failed after {elapsed:.0f}s)",
+            detail=str(e),
+        )
     finally:
-        Path(tmp_path).unlink(missing_ok=True)
+        Path(local_path).unlink(missing_ok=True)
+        try:
+            client.execute_command(
+                f"rm -f {shlex.quote(remote_path)}",
+                timeout=_CURL_CONNECT_TIMEOUT_SECONDS,
+            )
+        except SSHException:
+            pass
 
-    stdout = (result.stdout or "").strip()
-    stderr = (result.stderr or "").strip()
+    elapsed = time.perf_counter() - started
+    logger.info("MLIR upload of %s took %.2fs", safe_filename, elapsed)
+
+    stdout = (stdout or "").strip()
     body, _, http_code = stdout.rpartition("\n")
     http_code = http_code.strip()
 
-    if not http_code.isdigit():
+    if not http_code.isdigit() or http_code == _CURL_NO_RESPONSE_CODE:
         return None, _fail(
-            f"Could not reach MLIR server at localhost:{port}",
-            detail=stderr or stdout or None,
+            f"Could not reach MLIR server on {connection.host} "
+            f"(no response after {elapsed:.0f}s)",
+            detail=body or None,
         )
 
     http_code_int = int(http_code)
     if not 200 <= http_code_int < 300:
         return None, _fail(
             f"MLIR server rejected the upload (HTTP {http_code_int})",
-            detail=(body.strip() or stderr) or None,
+            detail=body.strip() or None,
         )
 
     try:
@@ -284,9 +310,13 @@ def _is_extension_missing(error: str) -> bool:
 
 
 def _convert_with_extension(
-    port: int, server_path: str, extension_id: str
+    client: SSHClient,
+    connection: RemoteConnection,
+    port: int,
+    server_path: str,
+    extension_id: str,
 ) -> Tuple[Optional[str], Optional[str]]:
-    """POST a single ``convert`` command. Returns ``(graph_json, error)``."""
+    """POST a single ``convert`` command on the remote host. Returns ``(graph_json, error)``."""
     payload = json.dumps(
         {
             "cmdId": MLIR_CONVERT_CMD_ID,
@@ -296,44 +326,36 @@ def _convert_with_extension(
             "deleteAfterConversion": True,
         }
     )
+    convert_url = _remote_send_command_url(port)
+    curl_cmd = (
+        "curl -sS -X POST -H 'Content-Type: application/json' "
+        f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} "
+        f"--max-time {_CONVERT_TIMEOUT_SECONDS} "
+        f"-d {shlex.quote(payload)} {shlex.quote(convert_url)}"
+    )
 
-    logger.info("Converting %s via %s", server_path, extension_id)
+    logger.info(
+        "Converting %s via %s on %s", server_path, extension_id, connection.host
+    )
 
+    started = time.perf_counter()
     try:
-        result = subprocess.run(
-            [
-                "curl",
-                "-sS",
-                "-X",
-                "POST",
-                "-H",
-                "Content-Type: application/json",
-                "--connect-timeout",
-                str(_CURL_CONNECT_TIMEOUT_SECONDS),
-                "--max-time",
-                str(_CONVERT_TIMEOUT_SECONDS),
-                "--data-binary",
-                "@-",
-                _local_send_command_url(port),
-            ],
-            input=payload,
-            capture_output=True,
-            text=True,
-            timeout=_CONVERT_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS,
-            check=False,
+        stdout = client.execute_command(
+            curl_cmd, timeout=_CONVERT_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS
         )
-    except subprocess.TimeoutExpired:
-        return None, f"Conversion on localhost:{port} timed out"
+    except SSHException as e:
+        return None, str(e)
 
-    if result.returncode != 0:
-        return None, (result.stderr or "").strip() or (
-            f"Could not reach MLIR server at localhost:{port}"
-        )
+    logger.info(
+        "MLIR convert via %s took %.2fs", extension_id, time.perf_counter() - started
+    )
 
-    return _normalise_convert_response(result.stdout or "")
+    return _normalise_convert_response(stdout or "")
 
 
-def _convert_model_on_server(port: int, server_path: str) -> MlirConversionResult:
+def _convert_model_on_server(
+    client: SSHClient, connection: RemoteConnection, port: int, server_path: str
+) -> MlirConversionResult:
     """Convert the uploaded model, trying each known adapter id in turn.
 
     Model Explorer adapter ids vary by deployment: Tenstorrent's TT-Explorer
@@ -345,7 +367,9 @@ def _convert_model_on_server(port: int, server_path: str) -> MlirConversionResul
     last_error: Optional[str] = None
 
     for extension_id in MLIR_CONVERT_EXTENSION_IDS:
-        graph_json, error = _convert_with_extension(port, server_path, extension_id)
+        graph_json, error = _convert_with_extension(
+            client, connection, port, server_path, extension_id
+        )
         if error is None:
             return MlirConversionResult(
                 status=StatusMessage(status=ConnectionTestStates.OK, message="Success"),
@@ -361,9 +385,12 @@ def _convert_model_on_server(port: int, server_path: str) -> MlirConversionResul
 
 
 def upload_and_convert_mlir(
-    port: int, file_bytes: bytes, filename: str
+    connection: RemoteConnection,
+    port: int,
+    file_bytes: bytes,
+    filename: str,
 ) -> MlirConversionResult:
-    """Upload ``file_bytes`` to the MLIR server and convert it to graph JSON."""
+    """Upload ``file_bytes`` to the MLIR server on ``connection`` and convert to graph JSON."""
     safe_filename = Path(filename).name
     if not is_supported_mlir_server_file(safe_filename):
         return _fail(
@@ -371,9 +398,12 @@ def upload_and_convert_mlir(
             + ", ".join(MLIR_SERVER_ACCEPTED_EXTENSIONS)
         )
 
-    server_path, upload_error = _upload_file_to_server(port, file_bytes, safe_filename)
+    client = SSHClient(connection)
+    server_path, upload_error = _upload_file_to_server(
+        client, connection, port, file_bytes, safe_filename
+    )
     if upload_error is not None:
         return upload_error
 
     assert server_path is not None
-    return _convert_model_on_server(port, server_path)
+    return _convert_model_on_server(client, connection, port, server_path)

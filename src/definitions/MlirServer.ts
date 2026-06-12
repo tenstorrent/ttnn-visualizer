@@ -18,6 +18,9 @@ export const DEFAULT_SSH_PORT = 22;
 // Model formats the MLIR server (Model Explorer) accepts:
 // TF (.pb/.pbtxt/.graphdef), TFLite (.tflite), TFJS/JAX (.json/.pb),
 // PyTorch ExportedProgram (.pt2), MLIR (.mlir/.mlirbc).
+// Keep in sync with `MLIR_SERVER_ACCEPTED_EXTENSIONS` and `MLIR_UPLOAD_PATH` in
+// `backend/ttnn_visualizer/mlir_server.py` — the backend validates the upload
+// against the same list independently of this client-side `accept` filter.
 export const MLIR_SERVER_ACCEPTED_EXTENSIONS = [
     '.pb',
     '.pbtxt',

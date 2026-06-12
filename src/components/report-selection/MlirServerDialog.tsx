@@ -42,7 +42,8 @@ const formatMlirTestPreview = (connection: MlirServerConnection) =>
     `→ curl http://127.0.0.1:${connection.port}${MLIR_UPLOAD_PATH} on remote`;
 
 const formatMlirUploadPreview = (connection: MlirServerConnection) =>
-    `Upload: app → http://localhost:${connection.port}${MLIR_UPLOAD_PATH} (via your SSH tunnel)`;
+    `Upload: ssh -p ${connection.sshPort} ${connection.username}@${connection.host} ` +
+    `→ curl http://127.0.0.1:${connection.port}${MLIR_UPLOAD_PATH} on remote`;
 
 const MlirServerDialog = ({
     open,

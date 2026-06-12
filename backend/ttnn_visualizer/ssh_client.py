@@ -364,6 +364,62 @@ class SSHClient:
             )
             raise SSHException(f"Timeout downloading {remote_path}")
 
+    def upload_file(
+        self,
+        local_path: Union[str, Path],
+        remote_path: Union[str, Path],
+        timeout: int = 120,
+    ) -> None:
+        """Upload a local file to the remote host via scp (``-O`` legacy protocol).
+
+        Mirrors the scp options used in ``sftp_operations`` so hosts without an
+        SFTP subsystem still accept uploads.
+        """
+        local_path = Path(local_path)
+        remote_path = Path(remote_path)
+        scp_cmd = ["scp", "-O"]
+        identity = (getattr(self.connection, "identityFile", None) or "").strip()
+        if identity:
+            scp_cmd.extend(["-F", os.devnull])
+        scp_cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+        if identity:
+            scp_cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
+        if self.connection.port != 22:
+            scp_cmd.extend(["-P", str(self.connection.port)])
+        scp_cmd.extend(
+            [
+                str(local_path),
+                f"{self.connection.username}@{self.connection.host}:{remote_path}",
+            ]
+        )
+
+        logger.debug("Uploading via scp: %s -> %s", local_path, remote_path)
+
+        try:
+            subprocess.run(
+                scp_cmd, capture_output=True, text=True, check=True, timeout=timeout
+            )
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 255:
+                self._handle_subprocess_error(e)
+            logger.error(
+                "scp upload failed for %s@%s:%s (rc=%s): %s",
+                self.connection.username,
+                self.connection.host,
+                remote_path,
+                e.returncode,
+                e.stderr,
+            )
+            raise SSHException(f"Failed to upload {local_path.name}")
+        except subprocess.TimeoutExpired:
+            logger.error(
+                "scp upload timed out for %s@%s:%s",
+                self.connection.username,
+                self.connection.host,
+                remote_path,
+            )
+            raise SSHException(f"Timeout uploading {local_path.name}")
+
     def get_file_stat(
         self, remote_path: Union[str, Path], timeout: int = 10
     ) -> Optional[dict]:

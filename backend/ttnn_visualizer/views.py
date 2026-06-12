@@ -1771,12 +1771,26 @@ def upload_mlir_server():
     if not files:
         return response_bad_request("No files provided")
 
+    host = (request.form.get("host") or "").strip()
+    username = (request.form.get("username") or "").strip()
+    ssh_port = request.form.get("sshPort", type=int) or DEFAULT_SSH_PORT
     port = request.form.get("port", type=int)
-    if not port:
-        return response_bad_request("MLIR server requires a port")
+
+    if not host or not username or not port:
+        return response_bad_request(
+            "MLIR server requires a host, username, and MLIR port"
+        )
+
+    connection = _build_mlir_remote_connection(
+        request.form.get("name"),
+        username,
+        host,
+        ssh_port,
+        request.form.get("identityFile"),
+    )
 
     file = files[0]
-    result = upload_and_convert_mlir(port, file.read(), file.filename or "")
+    result = upload_and_convert_mlir(connection, port, file.read(), file.filename or "")
 
     if (
         result.status.status != ConnectionTestStates.OK.value
@@ -1784,8 +1798,6 @@ def upload_mlir_server():
     ):
         return result.status.model_dump()
 
-    # Persist the converted graph JSON so the existing `/mlir` viewer (which
-    # streams `instance.mlir_path`) can render it with no extra plumbing.
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
     target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)

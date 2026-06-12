@@ -183,26 +183,33 @@ const useLocalConnection = () => {
 
     const uploadNpeFile = (files: FileList) => uploadFileList(files, '/upload/npe');
 
-    // Proxied through the backend to localhost on the MLIR port (user's SSH tunnel),
-    // avoiding browser CORS on a cross-origin POST to the MLIR server.
+    // Proxied through the backend over SSH (same path as the connection test):
+    // the file is scp'd to the remote host and curl runs against that machine's
+    // loopback MLIR port, avoiding browser CORS on a cross-origin POST.
+    //
+    // Deliberately does NOT drive the global `fileTransferProgressAtom` overlay:
+    // the browser→backend transfer is near-instant, but upload+conversion on the
+    // remote MLIR server can take minutes with no progress to report.
     const uploadMlirFileToServer = async (files: FileList, server: MlirServerConnection) => {
         const formData = new FormData();
 
         Array.from(files).forEach((f) => {
             formData.append('files', f);
         });
+        formData.append('host', server.host);
+        formData.append('username', server.username);
+        formData.append('sshPort', server.sshPort.toString());
         formData.append('port', server.port.toString());
-
-        try {
-            return await axiosInstance.post(`${Endpoints.REMOTE}/mlir/upload`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-                onUploadProgress: (event) => handleUploadProgress(event, files.length),
-            });
-        } finally {
-            resetTransferProgress();
+        formData.append('name', server.name);
+        if (server.identityFile) {
+            formData.append('identityFile', server.identityFile);
         }
+
+        return axiosInstance.post(`${Endpoints.REMOTE}/mlir/upload`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
     };
 
     // The MLIR server listens on the remote host's loopback, so reachability can only be

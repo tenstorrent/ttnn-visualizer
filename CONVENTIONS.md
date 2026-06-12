@@ -732,19 +732,19 @@ The Flask test client (`app.test_client()`) is exposed as the `client` fixture i
 
 Two `conftest.app` defaults that bite local-upload tests in particular:
 
-- **`SERVER_MODE=True`** (`conftest.py`) — local-only handlers like `/api/local/upload/mlir` return `403 Forbidden` until you override it.
+- **`SERVER_MODE=True`** (`conftest.py`) — `@local_only` handlers like `/api/remote/mlir/upload` return `403 Forbidden` until you override it.
 - **`LOCAL_DATA_DIRECTORY` is a `str`** (`conftest.py`) but production `settings.py` initialises it as a `Path` and handlers do `data_directory / config["MLIR_DIRECTORY_NAME"]`. Cast it to `Path` in the test so you exercise the same operand types as the deployed app.
 
 Both overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py`. A runnable example:
 
 ```python
-def test_local_upload_rejects_non_json(app, client, make_report):
+def test_local_upload_rejects_invalid_extension(app, client, make_report):
     instance_id = make_report()
     app.config["SERVER_MODE"] = False
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
 
     response = client.post(
-        "/api/local/upload/mlir",
+        "/api/local/upload/npe",
         query_string={"instanceId": instance_id},
         data={"files": (BytesIO(b"hello"), "evil.exe")},
         content_type="multipart/form-data",
