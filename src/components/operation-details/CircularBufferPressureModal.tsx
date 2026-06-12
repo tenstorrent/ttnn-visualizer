@@ -110,10 +110,13 @@ const ZoomedCorePlot = ({
     const memoryRange = Math.max(1, memoryEnd - memoryStart);
     const memoryMid = memoryStart + memoryRange / 2;
     const plotHeight = 64;
-    // Pixel threshold above which we surface the inline `addr · size`
-    // label. Below this the rect collapses to colour-only and we lean
-    // on the tooltip / legend for identity.
-    const MIN_PX_FOR_LABEL = 70;
+    // Width threshold for the inline `addr · size` label, expressed as a
+    // percentage of the address window. The `prettyPrintAddress · size`
+    // string needs ~70px in our monospace font, and the zoomed panel sits
+    // in a ~600px column, so anything narrower than ~12% of the window
+    // can't fit the label without clipping. Below this we drop the label
+    // and lean on the tooltip / legend for identity.
+    const MIN_WIDTH_PERCENT_FOR_LABEL = 12;
 
     return (
         <div className='zoomed-core-plot'>
@@ -129,7 +132,7 @@ const ZoomedCorePlot = ({
                     const isSelected = selectedCBNodeId === cb.nodeId;
                     // Width-as-fraction-of-window is enough to decide whether
                     // there's room for a label without forcing a layout pass.
-                    const labelFits = widthPercent > MIN_PX_FOR_LABEL / 6;
+                    const labelFits = widthPercent > MIN_WIDTH_PERCENT_FOR_LABEL;
                     return (
                         <g
                             key={cb.nodeId}
@@ -498,7 +501,7 @@ const CircularBufferPressureBody = ({
                     {snapshot.allocations.length === 0 && (
                         <p className='empty-message'>No live CBs in this DeviceOp.</p>
                     )}
-                    <ul className='cb-list with-total'>
+                    <ul className='cb-list'>
                         {snapshot.allocations.map((cb) => {
                             const isSelected = selectedCBNodeId === cb.nodeId;
                             const swatchColor = getBufferColor(cb.address + (cb.allocateOperationId ?? 0));
