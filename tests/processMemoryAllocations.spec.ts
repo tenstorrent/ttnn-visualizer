@@ -41,10 +41,14 @@ function functionEnd(name: string): Node {
     } as unknown as Partial<Node>);
 }
 
-function cbAllocate(coreRangeSet: string, size: number): Node {
+function cbAllocate(coreRangeSet: string, size: number, address?: number): Node {
     return mkNode({
         node_type: NodeType.circular_buffer_allocate,
-        params: { core_range_set: coreRangeSet, size: String(size) },
+        params: {
+            core_range_set: coreRangeSet,
+            size: String(size),
+            ...(address !== undefined && { address: String(address) }),
+        },
     } as unknown as Partial<Node>);
 }
 
@@ -240,5 +244,244 @@ describe('processMemoryAllocations - L1 buffer accounting', () => {
         const { peakMemoryLoad } = processMemoryAllocations(graph);
 
         expect(peakMemoryLoad).toBe(cbSize);
+    });
+});
+
+describe('processMemoryAllocations - cbPressureByOpId snapshots', () => {
+    beforeEach(() => {
+        nextId = 0;
+    });
+
+    it('emits no snapshot for ops that never allocate a CB', () => {
+        const graph = [captureStart(), functionStart('op'), functionEnd('op')];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        expect(cbPressureByOpId.size).toBe(0);
+    });
+
+    it('snapshots on circular_buffer_deallocate_all keyed by the innermost function_start id', () => {
+        const cb1 = 1024 * 1024;
+        const cb2 = 750 * 1024;
+        const opStart = functionStart('memory_repro');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[0-0 - 0-0]}', cb1, 0x1000),
+            cbAllocate('{[1-0 - 1-0]}', cb2, 0x2000),
+            cbDeallocateAll(),
+            functionEnd('memory_repro'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const snap = cbPressureByOpId.get(opStart.id);
+        expect(snap).toBeDefined();
+        // Disjoint cores: each carries its own CB only - no summation across them.
+        expect(snap!.byCore).toEqual({ '0,0': cb1, '1,0': cb2 });
+        // Peak is per-core, so it should equal the larger of the two CBs.
+        expect(snap!.maxBytes).toBe(cb1);
+        expect(snap!.unattributedBytes).toBe(0);
+        expect(snap!.allocations).toHaveLength(2);
+        expect(snap!.allocations.map((a) => a.size)).toEqual([cb1, cb2]);
+        expect(snap!.allocations.map((a) => a.address)).toEqual([0x1000, 0x2000]);
+    });
+
+    it('sums sizes for CBs that share a core', () => {
+        const cb1 = 1024 * 1024;
+        const cb2 = 256 * 1024;
+        const opStart = functionStart('op');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', cb1),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', cb2),
+            cbDeallocateAll(),
+            functionEnd('op'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const snap = cbPressureByOpId.get(opStart.id)!;
+        expect(snap.byCore).toEqual({ '0,0': cb1 + cb2 });
+        expect(snap.maxBytes).toBe(cb1 + cb2);
+    });
+
+    it('routes empty core_range_set into the "?" bucket and keeps it out of maxBytes', () => {
+        const attributed = 1024 * 1024;
+        const unattributed = 200 * 1024;
+        const opStart = functionStart('op');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', attributed),
+            cbAllocate('{}', unattributed),
+            cbDeallocateAll(),
+            functionEnd('op'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const snap = cbPressureByOpId.get(opStart.id)!;
+        expect(snap.byCore['0,0']).toBe(attributed);
+        expect(snap.byCore['?']).toBe(unattributed);
+        expect(snap.unattributedBytes).toBe(unattributed);
+        // The "?" bucket would dwarf the per-core peak if it leaked in.
+        expect(snap.maxBytes).toBe(attributed);
+    });
+
+    it('expands a multi-rect CB across every covered core', () => {
+        const size = 128;
+        const opStart = functionStart('op');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[(x=0,y=0) - (x=2,y=2)]}', size),
+            cbDeallocateAll(),
+            functionEnd('op'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const snap = cbPressureByOpId.get(opStart.id)!;
+        const entries = Object.entries(snap.byCore);
+        expect(entries).toHaveLength(9);
+        expect(entries.every(([, v]) => v === size)).toBe(true);
+        expect(snap.allocations[0].numCores).toBe(9);
+        expect(snap.allocations[0].cores).toHaveLength(9);
+        expect(snap.maxBytes).toBe(size);
+    });
+
+    it('does not double-count overlapping rectangles inside a single CB', () => {
+        const size = 100;
+        const opStart = functionStart('op');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[(x=0,y=0) - (x=2,y=2)], [(x=1,y=1) - (x=3,y=3)]}', size),
+            cbDeallocateAll(),
+            functionEnd('op'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const snap = cbPressureByOpId.get(opStart.id)!;
+        // Every covered core counts the CB exactly once, even where the
+        // rectangles overlap - otherwise byCore would stack 2x size.
+        expect(Object.values(snap.byCore).every((v) => v === size)).toBe(true);
+        expect(snap.maxBytes).toBe(size);
+    });
+
+    it('produces a snapshot at function_end when CBs are still live', () => {
+        // Safety net for kernels that never emit circular_buffer_deallocate_all.
+        const size = 4096;
+        const opStart = functionStart('op');
+        const graph = [captureStart(), opStart, cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', size), functionEnd('op')];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const snap = cbPressureByOpId.get(opStart.id);
+        expect(snap).toBeDefined();
+        expect(snap!.byCore['0,0']).toBe(size);
+        expect(snap!.allocations).toHaveLength(1);
+    });
+
+    it('prefers the deallocate_all snapshot over the function_end safety net', () => {
+        // First CB is captured by dealloc_all; the second batch survives past
+        // function_end but the explicit snapshot should not be overwritten.
+        const cb1 = 1024;
+        const cb2 = 2048;
+        const opStart = functionStart('op');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', cb1),
+            cbDeallocateAll(),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', cb2),
+            functionEnd('op'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const snap = cbPressureByOpId.get(opStart.id)!;
+        expect(snap.allocations).toHaveLength(1);
+        expect(snap.allocations[0].size).toBe(cb1);
+    });
+
+    it('attributes nested CBs to the innermost open function_start', () => {
+        const outerStart = functionStart('outer');
+        const innerStart = functionStart('inner');
+        const size = 512;
+        const graph = [
+            captureStart(),
+            outerStart,
+            innerStart,
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', size),
+            cbDeallocateAll(),
+            functionEnd('inner'),
+            functionEnd('outer'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        expect(cbPressureByOpId.has(innerStart.id)).toBe(true);
+        expect(cbPressureByOpId.has(outerStart.id)).toBe(false);
+    });
+
+    it('preserves allocation order in the snapshot', () => {
+        const opStart = functionStart('op');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', 100),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', 200),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', 300),
+            cbDeallocateAll(),
+            functionEnd('op'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const sizes = cbPressureByOpId.get(opStart.id)!.allocations.map((a) => a.size);
+        expect(sizes).toEqual([100, 200, 300]);
+    });
+
+    it('carries the enclosing op id and name on each allocation summary', () => {
+        const opStart = functionStart('demo_op');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', 1024),
+            cbDeallocateAll(),
+            functionEnd('demo_op'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const [alloc] = cbPressureByOpId.get(opStart.id)!.allocations;
+        expect(alloc.allocateOperationId).toBe(opStart.id);
+        expect(alloc.allocateOperationName).toBe('demo_op');
+    });
+
+    it('emits an independent snapshot per DeviceOp', () => {
+        const op1Start = functionStart('op1');
+        const op2Start = functionStart('op2');
+        const graph = [
+            captureStart(),
+            op1Start,
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', 1024),
+            cbDeallocateAll(),
+            functionEnd('op1'),
+            op2Start,
+            cbAllocate('{[(x=1,y=1) - (x=1,y=1)]}', 4096),
+            cbDeallocateAll(),
+            functionEnd('op2'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        expect(cbPressureByOpId.size).toBe(2);
+        expect(cbPressureByOpId.get(op1Start.id)!.byCore).toEqual({ '0,0': 1024 });
+        expect(cbPressureByOpId.get(op2Start.id)!.byCore).toEqual({ '1,1': 4096 });
     });
 });
