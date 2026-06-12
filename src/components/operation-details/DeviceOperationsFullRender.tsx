@@ -448,25 +448,31 @@ function useDeviceOperationsFullRenderModel(args: {
                                     <div className='cbs-heading'>
                                         <h4>CBs</h4>
                                         {cbSnapshot && currentDeviceOp && (
-                                            <Tooltip
-                                                content='Show per-core CB pressure for this DeviceOp'
-                                                position={PopoverPosition.TOP}
-                                            >
-                                                <Button
-                                                    icon={IconNames.HEAT_GRID}
-                                                    size={Size.SMALL}
-                                                    variant={ButtonVariant.OUTLINED}
-                                                    intent={Intent.PRIMARY}
-                                                    onClick={() =>
-                                                        setCbPressureModal({
-                                                            title: `${currentDeviceOp.name} · per-core CB pressure`,
-                                                            snapshot: cbSnapshot,
-                                                        })
-                                                    }
+                                            <>
+                                                <span
+                                                    className='cbs-heading-separator'
+                                                    aria-hidden='true'
                                                 >
-                                                    Per-core pressure
-                                                </Button>
-                                            </Tooltip>
+                                                    ·
+                                                </span>
+                                                <Tooltip
+                                                    content='Show per-core CB allocations for this DeviceOp'
+                                                    position={PopoverPosition.TOP}
+                                                >
+                                                    <button
+                                                        type='button'
+                                                        className='cbs-heading-link'
+                                                        onClick={() =>
+                                                            setCbPressureModal({
+                                                                title: `${currentDeviceOp.name} · per-core CB allocations`,
+                                                                snapshot: cbSnapshot,
+                                                            })
+                                                        }
+                                                    >
+                                                        View per-core allocations
+                                                    </button>
+                                                </Tooltip>
+                                            </>
                                         )}
                                     </div>
                                 </>

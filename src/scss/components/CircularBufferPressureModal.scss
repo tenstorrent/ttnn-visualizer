@@ -391,13 +391,45 @@
     }
 }
 
-// Inline button next to the "CBs" heading inside the DeviceOp render.
+// Inline affordance next to the "CBs" heading inside the DeviceOp render.
+// Plain anchor-style button — no chrome, just colored text + hover-underline.
+// Heavier button chrome (outlined/primary) felt out of place next to the
+// small <h4>; the minimal icon-only variant was too easy to miss. Link text
+// reads as interactive without competing with the heading.
 .cbs-heading {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 10px;
 
     h4 {
         margin: 0;
+    }
+
+    .cbs-heading-separator {
+        opacity: 0.5;
+        user-select: none;
+    }
+
+    .cbs-heading-link {
+        background: none;
+        border: none;
+        padding: 0;
+        margin: 0;
+        font: inherit;
+        color: $tt-yellow;
+        cursor: pointer;
+        text-decoration: none;
+
+        &:hover {
+            color: $tt-yellow-tint-1;
+            text-decoration: underline;
+        }
+
+        &:focus-visible {
+            outline: 1px dotted $tt-yellow;
+            outline-offset: 2px;
+            text-decoration: underline;
+        }
     }
 }
