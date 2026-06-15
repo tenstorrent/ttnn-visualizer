@@ -20,6 +20,7 @@ import { BufferType, StringBufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
+import { calculateCondensed } from '../functions/calculateCondensed';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../definitions/L1MemorySize';
 import { TensorDeallocationReport } from './BufferSummary';
 
@@ -478,9 +479,9 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             }
         });
 
-        const condensed: Chunk = this.calculateCondensed(memory);
-        const cbCondensed: Chunk = this.calculateCondensed(cbMemory);
-        const bufferCondensed: Chunk = this.calculateCondensed(bufferMemory);
+        const condensed: Chunk = calculateCondensed(memory);
+        const cbCondensed: Chunk = calculateCondensed(cbMemory);
+        const bufferCondensed: Chunk = calculateCondensed(bufferMemory);
 
         const chartData = this.getChartData(memory);
         const cbColor = '#e2defc';
@@ -615,24 +616,6 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
         }
 
         return tensorsByBufferAddress;
-    }
-
-    // eslint-disable-next-line class-methods-use-this
-    private calculateCondensed(mem: Chunk[]): Chunk {
-        if (!mem || mem.length === 0) {
-            return {
-                address: 0,
-                size: 0,
-            };
-        }
-        let rangeEnd = 0;
-        mem.forEach((chunk) => {
-            rangeEnd = Math.max(rangeEnd, chunk.address + chunk.size);
-        });
-        return {
-            address: mem[0].address || 0,
-            size: rangeEnd - mem[0].address,
-        };
     }
 
     // eslint-disable-next-line class-methods-use-this
