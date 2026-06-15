@@ -91,4 +91,48 @@
         border: 1px dashed $tt-grey-5;
         box-sizing: border-box;
     }
+
+    // Outline-only swatch for `globally_allocated=1` CBs (#1651). The fill is
+    // dropped via the inline `background-color: transparent` style; the colour
+    // comes through on the border via the inline `borderColor` style. We just
+    // bump the border to 2px here so the colour read survives the smaller
+    // 15px swatch footprint.
+    .memory-color-block.memory-color-block-outline {
+        border-width: 2px;
+        border-style: solid;
+        box-sizing: border-box;
+    }
+
+    // Inline "aliased" marker. Sits at the end of the size column next to the
+    // CB size + cores label and reads as `[link icon] Globally allocated` on
+    // wider rows. The label collapses to icon-only via the parent column's
+    // natural width so we keep the existing row geometry intact.
+    .globally-allocated-marker {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 6px;
+        padding: 0 6px;
+        border: 1px solid rgba($tt-white, 0.35);
+        border-radius: 8px;
+        font-size: 0.7rem;
+        font-style: italic;
+        opacity: 0.85;
+        white-space: nowrap;
+        vertical-align: middle;
+
+        svg {
+            fill: currentcolor;
+        }
+    }
+}
+
+.legend-item.globally-allocated {
+    // Subtle dotted underline on the address column hints that the row links
+    // back to an existing tensor allocation. Cheaper visual cost than tinting
+    // the whole row, which would compete with `.active` (yellow) highlighting.
+    > .format-numbers:nth-child(2) {
+        text-decoration: underline dotted rgba($tt-white, 0.4);
+        text-underline-offset: 2px;
+    }
 }

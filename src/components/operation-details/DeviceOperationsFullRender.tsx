@@ -438,6 +438,14 @@ function useDeviceOperationsFullRenderModel(args: {
                     const numCores = parseInt(cb.num_cores, 10) || 1;
 
                     const variance = cb.allocateOperationId;
+                    // `globally_allocated='1'` CBs alias an existing L1
+                    // sharded buffer rather than allocating fresh memory.
+                    // Drive the outline-only swatch + marker treatment off
+                    // this flag so the row reads as a view, not a new
+                    // allocation. Accepts both string and numeric forms for
+                    // forward-compat with future tt-metal emit changes. #1651
+                    const rawGlobalFlag = cb.globally_allocated as unknown;
+                    const isGloballyAllocated = rawGlobalFlag === '1' || rawGlobalFlag === 1;
                     const currentDeviceOp = deviceOpIdStack[deviceOpIdStack.length - 1];
                     const cbSnapshot = currentDeviceOp ? cbPressureByOpId.get(currentDeviceOp.id) : undefined;
                     operationContent = (
@@ -485,6 +493,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                 operationDetails={details}
                                 onLegendClick={onLegendClick}
                                 colorVariance={variance}
+                                isGloballyAllocated={isGloballyAllocated}
                             />
                             {memoryInfo}
                             <br />

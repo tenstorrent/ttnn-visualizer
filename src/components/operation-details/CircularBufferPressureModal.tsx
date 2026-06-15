@@ -2,12 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Button,
     ButtonGroup,
     ButtonVariant,
     Card,
+    Icon,
     Overlay2,
     PopoverPosition,
     Size,
@@ -54,6 +55,12 @@ interface MiniCBStripProps {
  * space. Inline SVG (rather than reusing SVGBufferRenderer) because we work
  * with CBAllocationSummary, not BufferChunk, and we want a hover/selection
  * outline that the existing primitive doesn't expose.
+ *
+ * Aliased CBs (`globallyAllocated`) render outline-only — same colour family,
+ * no fill — to communicate "this is a view into an existing buffer, not a
+ * new allocation". They keep their slot in the strip so the address position
+ * still matches the legend, but visually subordinate the anonymous CBs that
+ * are actually contributing pressure on this core. See #1651.
  */
 const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBStripProps) => {
     const memoryRange = Math.max(1, memoryEnd - memoryStart);
@@ -68,6 +75,8 @@ const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBSt
                 const xPercent = ((cb.address - memoryStart) / memoryRange) * 100;
                 const widthPercent = (cb.size / memoryRange) * 100;
                 const isSelected = selectedCBNodeId === cb.nodeId;
+                const colour = cbColor(cb);
+                const isAliased = cb.globallyAllocated;
                 return (
                     <rect
                         key={cb.nodeId}
@@ -75,8 +84,16 @@ const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBSt
                         y={0}
                         width={`${widthPercent}%`}
                         height={STRIP_HEIGHT}
-                        fill={cbColor(cb)}
-                        className={classNames('cb-strip-chunk', { selected: isSelected })}
+                        fill={isAliased ? 'none' : colour}
+                        // SVG `stroke` attribute would be clobbered by CSS rules
+                        // on `.cb-strip-chunk`, so we surface the per-chunk colour
+                        // through a CSS custom property and let the `.aliased`
+                        // selector pick it up at the right specificity.
+                        style={isAliased ? ({ '--cb-color': colour } as React.CSSProperties) : undefined}
+                        className={classNames('cb-strip-chunk', {
+                            selected: isSelected,
+                            aliased: isAliased,
+                        })}
                     />
                 );
             })}
@@ -133,19 +150,29 @@ const ZoomedCorePlot = ({
                     // Width-as-fraction-of-window is enough to decide whether
                     // there's room for a label without forcing a layout pass.
                     const labelFits = widthPercent > MIN_WIDTH_PERCENT_FOR_LABEL;
+                    const colour = cbColor(cb);
+                    const isAliased = cb.globallyAllocated;
+                    const titleText = isAliased
+                        ? `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)} · Aliased to tensor @ ${prettyPrintAddress(cb.address, l1Budget)} — no new allocation`
+                        : `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)}`;
                     return (
                         <g
                             key={cb.nodeId}
-                            className={classNames('zoomed-chunk', { selected: isSelected })}
+                            className={classNames('zoomed-chunk', { selected: isSelected, aliased: isAliased })}
+                            // CSS variable lets the `.aliased` rule provide the
+                            // outline colour at higher specificity than the base
+                            // `.zoomed-chunk-rect` stroke. Same pattern as the
+                            // per-core strip above.
+                            style={isAliased ? ({ '--cb-color': colour } as React.CSSProperties) : undefined}
                             onClick={() => onSelectCB(isSelected ? null : cb.nodeId)}
                         >
-                            <title>{`${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)}`}</title>
+                            <title>{titleText}</title>
                             <rect
                                 x={`${xPercent}%`}
                                 y={0}
                                 width={`${widthPercent}%`}
                                 height={plotHeight}
-                                fill={cbColor(cb)}
+                                fill={isAliased ? 'none' : colour}
                                 className='zoomed-chunk-rect'
                             />
                             {labelFits && (
@@ -516,25 +543,64 @@ const CircularBufferPressureBody = ({
                         {snapshot.allocations.map((cb) => {
                             const isSelected = selectedCBNodeId === cb.nodeId;
                             const swatchColor = cbColor(cb);
+                            const isAliased = cb.globallyAllocated;
+                            // Outline-only fill for aliased CBs ("border" instead of "background")
+                            // mirrors the in-cell strip treatment and keeps the colour signal
+                            // tied to the tensor they alias. See #1651.
+                            const swatchStyle = isAliased
+                                ? { borderColor: swatchColor, backgroundColor: 'transparent' }
+                                : { backgroundColor: swatchColor, borderColor: swatchColor };
+                            const aliasedTooltip = (
+                                <span>
+                                    Aliased to tensor @ {prettyPrintAddress(cb.address, l1Budget)} &mdash; no new
+                                    allocation
+                                </span>
+                            );
+                            const row = (
+                                <button
+                                    type='button'
+                                    className={classNames('cb-row', { active: isSelected, aliased: isAliased })}
+                                    onClick={() => setSelectedCBNodeId(isSelected ? null : cb.nodeId)}
+                                >
+                                    <span
+                                        className={classNames('swatch', { 'swatch-outline': isAliased })}
+                                        style={swatchStyle}
+                                    />
+                                    <span className='cb-row-body monospace'>
+                                        <span className='addr'>{prettyPrintAddress(cb.address, l1Budget)}</span>
+                                        <span className='size'>{formatMemorySize(cb.size, 2)}</span>
+                                        <span className='cores'>
+                                            {cb.numCores > 0 ? `× ${cb.numCores} cores` : 'unattributed'}
+                                        </span>
+                                    </span>
+                                    {isAliased && (
+                                        <span
+                                            className='aliased-marker'
+                                            // Inline aria-label keeps the row a single tab-stop
+                                            // while still surfacing the "aliased" semantic to AT.
+                                            aria-label='Globally allocated — aliased to tensor at this address'
+                                        >
+                                            <Icon
+                                                icon={IconNames.LINK}
+                                                size={11}
+                                            />
+                                            <span className='aliased-label'>Globally allocated</span>
+                                        </span>
+                                    )}
+                                </button>
+                            );
                             return (
                                 <li key={cb.nodeId}>
-                                    <button
-                                        type='button'
-                                        className={classNames('cb-row', { active: isSelected })}
-                                        onClick={() => setSelectedCBNodeId(isSelected ? null : cb.nodeId)}
-                                    >
-                                        <span
-                                            className='swatch'
-                                            style={{ backgroundColor: swatchColor }}
-                                        />
-                                        <span className='cb-row-body monospace'>
-                                            <span className='addr'>{prettyPrintAddress(cb.address, l1Budget)}</span>
-                                            <span className='size'>{formatMemorySize(cb.size, 2)}</span>
-                                            <span className='cores'>
-                                                {cb.numCores > 0 ? `× ${cb.numCores} cores` : 'unattributed'}
-                                            </span>
-                                        </span>
-                                    </button>
+                                    {isAliased ? (
+                                        <Tooltip
+                                            content={aliasedTooltip}
+                                            position={PopoverPosition.LEFT}
+                                        >
+                                            {row}
+                                        </Tooltip>
+                                    ) : (
+                                        row
+                                    )}
                                 </li>
                             );
                         })}

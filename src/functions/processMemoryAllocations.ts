@@ -37,6 +37,15 @@ export type CBAllocationSummary = {
     /** Op id/name that created the CB, used downstream for color-variance/highlighting. */
     allocateOperationId?: number;
     allocateOperationName?: string;
+    /**
+     * `true` when the source node had `globally_allocated=1`. These CBs are
+     * kernel-side views bound to an existing L1 sharded buffer (the tensor at
+     * the same address) rather than fresh allocations. They are intentionally
+     * omitted from per-core pressure totals (`byCore`, `maxBytes`,
+     * `peakMemoryLoad`) but still surfaced in `allocations` so the renderer
+     * can mark them as aliased instead of dropping them entirely. See #1651.
+     */
+    globallyAllocated: boolean;
 };
 
 /**
@@ -136,12 +145,24 @@ export function processMemoryAllocations(
             }
             const size = parseInt(node.params.size, 10);
             const cores = getCoresInRangeList(node.params.core_range_set);
-            if (cores.length === 0) {
-                cbBytesByCore.set('?', (cbBytesByCore.get('?') ?? 0) + size);
-            } else {
-                for (const { x, y } of cores) {
-                    const k = `${x},${y}`;
-                    cbBytesByCore.set(k, (cbBytesByCore.get(k) ?? 0) + size);
+            // `globally_allocated='1'` CBs are views into an existing L1
+            // sharded buffer (the tensor at the same address), not fresh
+            // allocations. Their bytes are already counted in `totalBuffer`;
+            // folding them into `cbBytesByCore` would double-count them in
+            // both `peakMemoryLoad` and the per-DeviceOp snapshot. Keep the
+            // row in `liveCBs` so the modal can still surface and label them.
+            // Accepts both the on-wire string form and a numeric form for
+            // forward-compat with future tt-metal emit changes. #1651
+            const rawGlobalFlag = node.params.globally_allocated as unknown;
+            const globallyAllocated = rawGlobalFlag === '1' || rawGlobalFlag === 1;
+            if (!globallyAllocated) {
+                if (cores.length === 0) {
+                    cbBytesByCore.set('?', (cbBytesByCore.get('?') ?? 0) + size);
+                } else {
+                    for (const { x, y } of cores) {
+                        const k = `${x},${y}`;
+                        cbBytesByCore.set(k, (cbBytesByCore.get(k) ?? 0) + size);
+                    }
                 }
             }
             liveCBs.push({
@@ -153,6 +174,7 @@ export function processMemoryAllocations(
                 cores,
                 allocateOperationId: currentOp?.id,
                 allocateOperationName: currentOp?.name,
+                globallyAllocated,
             });
         }
 

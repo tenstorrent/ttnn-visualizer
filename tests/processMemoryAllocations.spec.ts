@@ -41,13 +41,20 @@ function functionEnd(name: string): Node {
     } as unknown as Partial<Node>);
 }
 
-function cbAllocate(coreRangeSet: string, size: number, address?: number): Node {
+function cbAllocate(
+    coreRangeSet: string,
+    size: number,
+    address?: number,
+    options: { globallyAllocated?: boolean } = {},
+): Node {
     return mkNode({
         node_type: NodeType.circular_buffer_allocate,
         params: {
             core_range_set: coreRangeSet,
             size: String(size),
             ...(address !== undefined && { address: String(address) }),
+            // Matches the on-wire string form emitted by tt-metal.
+            globally_allocated: options.globallyAllocated ? '1' : '0',
         },
     } as unknown as Partial<Node>);
 }
@@ -211,8 +218,8 @@ describe('processMemoryAllocations - CB per-core accounting', () => {
 
         processMemoryAllocations(graph);
 
-        expect((cbNode.params as Record<string, unknown>).allocateOperationName).toBe('demo_op');
-        expect((cbNode.params as Record<string, unknown>).allocateOperationId).toBe(graph[1].id);
+        expect((cbNode.params as unknown as Record<string, unknown>).allocateOperationName).toBe('demo_op');
+        expect((cbNode.params as unknown as Record<string, unknown>).allocateOperationId).toBe(graph[1].id);
     });
 });
 
@@ -491,5 +498,112 @@ describe('processMemoryAllocations - cbPressureByOpId snapshots', () => {
         expect(cbPressureByOpId.size).toBe(2);
         expect(cbPressureByOpId.get(op1Start.id)!.byCore).toEqual({ '0,0': 1024 });
         expect(cbPressureByOpId.get(op2Start.id)!.byCore).toEqual({ '1,1': 4096 });
+    });
+});
+
+describe('processMemoryAllocations - globally_allocated CBs (#1651)', () => {
+    beforeEach(() => {
+        nextId = 0;
+    });
+
+    it('does not advance peakMemoryLoad for a lone globally-allocated CB', () => {
+        // Aliased CBs are views into existing L1 sharded buffers, so the
+        // bytes are already counted in `total_buffer`. Folding them into the
+        // CB pool would double-count and inflate peak.
+        const size = 100_000;
+        const graph = [
+            captureStart(),
+            functionStart('halo'),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', size, 0x1000, { globallyAllocated: true }),
+            functionEnd('halo'),
+        ];
+
+        const { peakMemoryLoad } = processMemoryAllocations(graph);
+
+        expect(peakMemoryLoad).toBe(0);
+    });
+
+    it('counts only the anonymous CB toward peak when both are present', () => {
+        const aliasedSize = 100_000;
+        const anonymousSize = 32;
+        const graph = [
+            captureStart(),
+            functionStart('halo'),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', aliasedSize, 0x1000, { globallyAllocated: true }),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', anonymousSize, 0x2000),
+            functionEnd('halo'),
+        ];
+
+        const { peakMemoryLoad } = processMemoryAllocations(graph);
+
+        expect(peakMemoryLoad).toBe(anonymousSize);
+    });
+
+    it('keeps aliased CBs in the snapshot with the globallyAllocated flag set', () => {
+        // The modal needs the row to render it as an outline-only legend
+        // entry; only the per-core pressure totals should ignore it.
+        const aliasedSize = 100_000;
+        const anonymousSize = 32;
+        const opStart = functionStart('halo');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', aliasedSize, 0x1000, { globallyAllocated: true }),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', anonymousSize, 0x2000),
+            cbDeallocateAll(),
+            functionEnd('halo'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const snap = cbPressureByOpId.get(opStart.id)!;
+        expect(snap.allocations).toHaveLength(2);
+        const aliased = snap.allocations.find((a) => a.address === 0x1000)!;
+        const anonymous = snap.allocations.find((a) => a.address === 0x2000)!;
+        expect(aliased.globallyAllocated).toBe(true);
+        expect(anonymous.globallyAllocated).toBe(false);
+    });
+
+    it('keeps the aliased CB out of byCore but counts the anonymous CB', () => {
+        const aliasedSize = 100_000;
+        const anonymousSize = 32;
+        const opStart = functionStart('halo');
+        const graph = [
+            captureStart(),
+            opStart,
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', aliasedSize, 0x1000, { globallyAllocated: true }),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', anonymousSize, 0x2000),
+            cbDeallocateAll(),
+            functionEnd('halo'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const snap = cbPressureByOpId.get(opStart.id)!;
+        expect(snap.byCore).toEqual({ '0,0': anonymousSize });
+        expect(snap.maxBytes).toBe(anonymousSize);
+    });
+
+    it('treats a missing globally_allocated field as anonymous for back-compat', () => {
+        // Older reports captured before the field was added still need to
+        // produce the pre-#1651 behaviour - we can't assume the flag is set.
+        const size = 1024;
+        const opStart = functionStart('op');
+        const cbNode = mkNode({
+            node_type: NodeType.circular_buffer_allocate,
+            params: {
+                core_range_set: '{[(x=0,y=0) - (x=0,y=0)]}',
+                size: String(size),
+                address: String(0x4000),
+            },
+        } as unknown as Partial<Node>);
+        const graph = [captureStart(), opStart, cbNode, cbDeallocateAll(), functionEnd('op')];
+
+        const { peakMemoryLoad, cbPressureByOpId } = processMemoryAllocations(graph);
+
+        expect(peakMemoryLoad).toBe(size);
+        const snap = cbPressureByOpId.get(opStart.id)!;
+        expect(snap.maxBytes).toBe(size);
+        expect(snap.allocations[0].globallyAllocated).toBe(false);
     });
 });
