@@ -103,27 +103,40 @@
         box-sizing: border-box;
     }
 
-    // Inline "aliased" marker. Sits at the end of the size column next to the
-    // CB size + cores label and reads as `[link icon] Globally allocated` on
-    // wider rows. The label collapses to icon-only via the parent column's
-    // natural width so we keep the existing row geometry intact.
+    // Inline "aliased" marker. Renders icon-only in the per-DeviceOp row to
+    // preserve the existing grid template (`15px 0.5fr 2fr 13fr 3fr`) - the
+    // full "Globally allocated" text label only fits in the wider modal
+    // legend. Tooltip + aria-label still carry the semantic payload here so
+    // mouse and AT users get the same information.
     .globally-allocated-marker {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
         margin-left: 6px;
-        padding: 0 6px;
+        padding: 1px 3px;
         border: 1px solid rgba($tt-white, 0.35);
-        border-radius: 8px;
-        font-size: 0.7rem;
-        font-style: italic;
+        border-radius: 4px;
         opacity: 0.85;
-        white-space: nowrap;
         vertical-align: middle;
 
         svg {
             fill: currentcolor;
         }
+    }
+
+    // Visually hide the text label inline; aria-label on the parent surfaces
+    // the same content for AT, and the Tooltip is the sighted-user equivalent.
+    // Standard sr-only pattern - keeps it in the DOM for tests/AT but takes
+    // it out of the visual flow so it can't push neighbouring columns around.
+    .globally-allocated-marker-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
     }
 }
 
