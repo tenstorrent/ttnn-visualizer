@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { PlotData } from 'plotly.js';
@@ -11,7 +11,7 @@ import { useAtomValue } from 'jotai';
 import { BufferType } from '../../model/BufferType';
 import { useBufferChunks, useDevices } from '../../hooks/useAPI';
 import 'styles/components/TensorVisualizationComponent.scss';
-import { BufferChunk, Tensor } from '../../model/APIData';
+import { DecoratedBufferChunk, Tensor } from '../../model/APIData';
 import SVGBufferRenderer from './SVGBufferRenderer';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import getChartData, { bufferChunksToColoredChunks } from '../../functions/getChartData';
@@ -50,6 +50,44 @@ const TensorVisualisationComponent = ({
     const [selectedTensix, setSelectedTensix] = useState<number | null>(null);
     const [chartData, setChartData] = useState<Partial<PlotData>[]>([]);
 
+    // Project each cached BufferChunk into a DecoratedBufferChunk that
+    // carries the resolved tensor association and the palette colour for
+    // this render. Done off the React Query cache so the cached objects
+    // stay untouched and a future second consumer of useBufferChunks can't
+    // see fields populated by our `tensorByAddress` map. Computed in a
+    // useMemo because both downstream readers (the per-bank grid and the
+    // tensix-detail click handler) need the same shape, and the
+    // address-keyed colour lookups are stable across re-renders.
+    const { buffersByBankId, coordsByBankId } = useMemo(() => {
+        const buckets: DecoratedBufferChunk[][] = [];
+        const coords: { x: number; y: number }[] = [];
+        if (!data) {
+            return { buffersByBankId: buckets, coordsByBankId: coords };
+        }
+        for (const chunk of data) {
+            // Match the original branching exactly: when `tensorByAddress` is
+            // provided we use it (even if it doesn't contain the address —
+            // the `tensorId` prop is then ignored); otherwise fall back to
+            // the explicit `tensorId` prop, treating 0 / undefined as
+            // "no association" the same way the legacy code did.
+            const tensor = tensorByAddress?.get(chunk.address);
+            const resolvedTensorId = tensorByAddress ? tensor?.id : tensorId || undefined;
+            const tensorColor = resolvedTensorId !== undefined ? getTensorColor(resolvedTensorId) : undefined;
+            // 'red' mirrors the SVGBufferRenderer's old `|| 'red'` fallback;
+            // keeping it lets us narrow DecoratedBufferChunk.color to a
+            // required string while preserving the pre-fix render.
+            const color = tensorColor ?? getBufferColor(chunk.address) ?? 'red';
+            const decorated: DecoratedBufferChunk = { ...chunk, tensor_id: resolvedTensorId, color };
+
+            if (!buckets[chunk.bank_id]) {
+                buckets[chunk.bank_id] = [];
+            }
+            buckets[chunk.bank_id].push(decorated);
+            coords[chunk.bank_id] = { x: chunk.core_x, y: chunk.core_y };
+        }
+        return { buffersByBankId: buckets, coordsByBankId: coords };
+    }, [data, tensorByAddress, tensorId]);
+
     if (!data || !devices) {
         return (
             <Overlay2
@@ -79,30 +117,6 @@ const TensorVisualisationComponent = ({
     const [memStart, memEnd] = plotZoomRange;
     const tensixSize = 120;
     const tensixHeight = tensixSize / 3;
-
-    const buffersByBankId: BufferChunk[][] = [];
-    const coordsByBankId: { x: number; y: number }[] = [];
-
-    data.forEach((chunk: BufferChunk) => {
-        if (!buffersByBankId[chunk.bank_id]) {
-            buffersByBankId[chunk.bank_id] = [];
-        }
-
-        if (tensorByAddress) {
-            const tensor = tensorByAddress?.get(chunk.address);
-            chunk.tensor_id = tensor?.id;
-            chunk.color = getTensorColor(tensor?.id);
-        } else if (tensorId) {
-            chunk.tensor_id = tensorId;
-            chunk.color = getTensorColor(tensorId);
-        }
-        if (chunk.tensor_id === undefined) {
-            chunk.color = getBufferColor(chunk.address);
-        }
-
-        buffersByBankId[chunk.bank_id].push(chunk);
-        coordsByBankId[chunk.bank_id] = { x: chunk.core_x, y: chunk.core_y };
-    });
 
     return (
         <Overlay2
