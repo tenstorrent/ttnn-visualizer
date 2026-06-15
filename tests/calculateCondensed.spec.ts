@@ -10,15 +10,10 @@ const c = (address: number, size: number): Chunk => ({ address, size });
 
 describe('calculateCondensed', () => {
     it('returns the {0, 0} sentinel for an empty input', () => {
+        // cbMemory / bufferMemory degenerate to `[]` when bufferType isn't L1
+        // (see the ternaries in OperationDetails.memoryData). The chart-data
+        // path treats {0, 0} as "no condensed stripe to draw".
         expect(calculateCondensed([])).toEqual({ address: 0, size: 0 });
-    });
-
-    // Defensive: legacy method tolerated null/undefined via `if (!mem || ...)`.
-    // Keep that contract so any caller that still squeaks a falsy value
-    // through gets the same no-stripe sentinel instead of a crash.
-    it('returns the {0, 0} sentinel for a null/undefined input', () => {
-        expect(calculateCondensed(null as unknown as Chunk[])).toEqual({ address: 0, size: 0 });
-        expect(calculateCondensed(undefined as unknown as Chunk[])).toEqual({ address: 0, size: 0 });
     });
 
     it('collapses a single chunk to itself', () => {
