@@ -307,10 +307,12 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // `pendingFocusNodeIdRef` is a one-shot baton armed by `navigateToNode`
     // when the locate target lives in a collapsed namespace and consumed by
     // `applyBuiltGraph` after the worker rebuild. If the user changes the
-    // selection in the meantime (clicks another node, clicks empty space,
-    // clicks a different "Locate"), the user's intent has moved on — drop
-    // the baton so the rebuild doesn't jerk the viewport to a stale target.
-    // Safe because `navigateToNode` never touches selection itself.
+    // selection in the meantime (clicks another node, clicks empty space),
+    // the user's intent has moved on — drop the baton so the rebuild
+    // doesn't jerk the viewport to a stale target. Back-to-back "Locate"
+    // clicks don't go through here: `navigateToNode` overwrites the ref
+    // directly and doesn't touch selection, so the latest target wins
+    // without any effect firing.
     useEffect(() => {
         pendingFocusNodeIdRef.current = null;
     }, [selectedNodeId]);
