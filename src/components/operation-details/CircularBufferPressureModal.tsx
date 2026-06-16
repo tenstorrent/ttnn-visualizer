@@ -607,7 +607,17 @@ const CircularBufferPressureBody = ({
                     </ul>
                     {snapshot.allocations.length > 0 &&
                         (() => {
-                            const cbSum = snapshot.allocations.reduce((sum, cb) => sum + cb.size, 0);
+                            // Filter out globally-allocated (aliased) CBs so this
+                            // sum matches snapshot.maxBytes' semantics - aliased
+                            // CBs are views into existing tensors, intentionally
+                            // excluded from per-core pressure totals (#1651). If
+                            // we left them in, `cbSum > maxBytes` would fire any
+                            // time the snapshot has aliased CBs even when all
+                            // anonymous CBs share the same cores, mis-firing the
+                            // tooltip's "disjoint core sets" explanation.
+                            const cbSum = snapshot.allocations
+                                .filter((cb) => !cb.globallyAllocated)
+                                .reduce((sum, cb) => sum + cb.size, 0);
                             // Sum only diverges from peak when CBs span disjoint
                             // core sets (no single core carries the full sum).
                             // Hiding it in the common case keeps the legend

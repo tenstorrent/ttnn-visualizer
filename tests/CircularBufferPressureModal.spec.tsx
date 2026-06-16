@@ -345,6 +345,50 @@ describe('CircularBufferPressureModal - legend totals', () => {
         // No totals row when there's nothing to total.
         expect(screen.queryByText('Peak per core')).not.toBeInTheDocument();
     });
+
+    it('does not count aliased CBs toward the "Total CBs" sum (#1651 / Copilot review on #1656)', () => {
+        // Regression for the legend-totals interaction with #1651: aliased
+        // CBs are intentionally excluded from `snapshot.maxBytes`, so they
+        // must also be excluded from `cbSum`. Otherwise `cbSum > maxBytes`
+        // fires even when the anonymous CBs share cores, surfacing the
+        // tooltip's "disjoint core sets" explanation for the wrong reason.
+        const anonymous = 32;
+        const aliased = 100_000;
+        const snapshot: CBPressureSnapshot = {
+            // Anonymous CB lives on (0,0); aliased CB is a view into an
+            // upstream tensor and contributes no per-core pressure.
+            byCore: { '0,0': anonymous },
+            maxBytes: anonymous,
+            unattributedBytes: 0,
+            allocations: [
+                {
+                    nodeId: 1,
+                    address: 0x1000,
+                    size: aliased,
+                    numCores: 1,
+                    coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
+                    cores: [{ x: 0, y: 0 }],
+                    globallyAllocated: true,
+                },
+                {
+                    nodeId: 2,
+                    address: 0x2000,
+                    size: anonymous,
+                    numCores: 1,
+                    coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
+                    cores: [{ x: 0, y: 0 }],
+                    globallyAllocated: false,
+                },
+            ],
+        };
+        renderModal(snapshot);
+
+        // Anonymous CB sum (32 B) == maxBytes (32 B), so "Total CBs" must be
+        // hidden. Pre-fix this would have fired because cbSum = 32 + 100_000
+        // > maxBytes = 32.
+        expect(screen.getByText('Peak per core')).toBeInTheDocument();
+        expect(screen.queryByText('Total CBs')).not.toBeInTheDocument();
+    });
 });
 
 describe('CircularBufferPressureModal - globally_allocated CBs (#1651)', () => {
