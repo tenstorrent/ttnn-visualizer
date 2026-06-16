@@ -29,6 +29,7 @@ package-lock.json
 *.sw?
 
 # Backend
+.venv
 myenv
 ttnn_env
 **.sqlite
