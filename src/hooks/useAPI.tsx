@@ -50,6 +50,7 @@ import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
+import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
@@ -498,6 +499,21 @@ export const useNpe = (fileName: string | null) => {
         queryKey: ['fetch-npe', fileName],
         retry: false,
         staleTime: 30000,
+        enabled: fileName !== null,
+    });
+};
+
+const fetchMLIRJson = async (): Promise<GraphBundle> => {
+    const { data } = await axiosInstance.get<GraphBundle>(Endpoints.MLIR);
+    return data;
+};
+
+export const useMLIR = (fileName: string | null) => {
+    return useQuery<GraphBundle, AxiosError>({
+        queryFn: () => fetchMLIRJson(),
+        queryKey: ['fetch-mlir', fileName],
+        retry: false,
+        staleTime: Infinity,
         enabled: fileName !== null,
     });
 };

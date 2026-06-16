@@ -94,6 +94,8 @@ export interface ActiveReport {
     performance_location?: ReportLocation;
     npe_name?: string;
     npe_location?: ReportLocation;
+    mlir_name?: string;
+    mlir_location?: ReportLocation;
 }
 
 export interface Instance {

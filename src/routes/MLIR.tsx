@@ -9,10 +9,17 @@ import { MLIRValidationError } from '../definitions/MLIRData';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
 import MlGraph from '../components/mlir/MLIRViewReactFlow';
 import MlirProcessingStatus from '../components/MlirProcessingStatus';
+import { useMLIR } from '../hooks/useAPI';
 
 const MLIR = () => {
-    const mlirData = useAtomValue(activeMLIRDataAtom);
+    const activeMlirData = useAtomValue(activeMLIRDataAtom);
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
+
+    // On a fresh page load the in-memory graph is gone but the instance may
+    // still reference a persisted MLIR report — fetch it back by name. Skip the
+    // fetch when the graph is already in memory (e.g. just uploaded).
+    const { data: restoredMlirData, isLoading } = useMLIR(activeMlirData ? null : mlirJsonFilename);
+    const mlirData = activeMlirData ?? restoredMlirData ?? null;
 
     return (
         <>
@@ -38,7 +45,7 @@ const MLIR = () => {
             ) : (
                 <MlirProcessingStatus
                     errorCode={MLIRValidationError.OK}
-                    isLoading={false}
+                    isLoading={isLoading}
                     hasUploadedFile={!!mlirJsonFilename}
                 />
             )}

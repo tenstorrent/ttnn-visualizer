@@ -58,6 +58,10 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
 
         try {
             let graph: GraphBundle | null;
+            // Persisted report name the backend stored in the instance, so a
+            // reload restores the same name. Falls back to the local filename
+            // for the dev-only client-side load (no backend round-trip).
+            let reportName: string;
 
             if (server) {
                 const response = await uploadMlirFileToServer(event.target.files, server);
@@ -69,14 +73,16 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 }
 
                 graph = (response.data as { graph?: GraphBundle }).graph ?? null;
+                reportName = (response.data as { name?: string }).name ?? sanitiseFileName(file.name);
             } else {
                 // Dev-only: load an already-processed MLIR JSON straight into the
                 // viewer, bypassing the Model Explorer conversion backend.
                 graph = JSON.parse(await file.text()) as GraphBundle;
+                reportName = sanitiseFileName(file.name);
             }
 
             setActiveMLIRData(graph);
-            setMlirJsonFileName(sanitiseFileName(file.name));
+            setMlirJsonFileName(reportName);
             createToastNotification('MLIR', file.name, ToastType.SUCCESS);
             setUploadStatus(ConnectionTestStates.OK);
             setErrorMessage(`${file.name} ${server ? 'uploaded' : 'loaded'} successfully`);

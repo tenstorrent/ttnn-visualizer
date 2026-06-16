@@ -11,6 +11,7 @@ import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import getServerConfig from '../functions/getServerConfig';
 import InitialMessage from '../components/InitialMessage';
 import FolderFieldset from '../components/report-selection/FolderFieldset';
+import { TEST_IDS } from '../definitions/TestIds';
 
 function Home() {
     useClearSelectedBuffer();
@@ -40,6 +41,7 @@ function Home() {
                     title='MLIR'
                     icon={IconNames.DIAGRAM_TREE}
                     isFeatureDisabled={isServerMode}
+                    disabledTestId={TEST_IDS.MLIR_DISABLED}
                 >
                     <MLIRFileSelector />
                 </FolderFieldset>

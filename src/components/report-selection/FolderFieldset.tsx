@@ -12,10 +12,17 @@ interface FolderFieldsetProps {
     title: string;
     icon: IconName;
     isFeatureDisabled?: boolean;
+    disabledTestId?: string;
     children: React.ReactNode;
 }
 
-const FolderFieldset = ({ title, icon, isFeatureDisabled = false, children }: FolderFieldsetProps) => {
+const FolderFieldset = ({
+    title,
+    icon,
+    isFeatureDisabled = false,
+    disabledTestId = TEST_IDS.REMOTE_SYNC_DISABLED,
+    children,
+}: FolderFieldsetProps) => {
     return (
         <fieldset className='folder-fieldset'>
             <legend>
@@ -33,7 +40,7 @@ const FolderFieldset = ({ title, icon, isFeatureDisabled = false, children }: Fo
             {isFeatureDisabled ? (
                 <div
                     className='feature-disabled'
-                    data-testid={TEST_IDS.REMOTE_SYNC_DISABLED}
+                    data-testid={disabledTestId}
                 >
                     <Callout
                         className='callout'
