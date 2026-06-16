@@ -1806,8 +1806,12 @@ def upload_mlir_server():
     mlir_path = target_directory / f"{mlir_name}.json"
     mlir_path.write_text(result.graph_json, encoding="utf-8")
 
+    instance_id = request.args.get("instanceId")
+    if not instance_id:
+        return response_bad_request("Missing required query parameter: instanceId")
+
     update_instance(
-        instance_id=request.args.get("instanceId"),
+        instance_id=instance_id,
         mlir_name=mlir_name,
         mlir_location=ReportLocation.LOCAL.value,
         mlir_path=str(mlir_path),
