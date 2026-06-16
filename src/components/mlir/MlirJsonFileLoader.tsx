@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_SERVER_ACCEPTED_EXTENSIONS, MlirServerConnection } from '../../definitions/MlirServer';
-import { activeMLIRDataAtom, activeMlirJsonAtom } from '../../store/app';
+import { activeMlirDataAtom, activeMlirJsonAtom } from '../../store/app';
 import { GraphBundle } from '../../model/MLIRJsonModel';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
@@ -40,7 +40,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { uploadMlirFileToServer } = useLocalConnection();
     const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);
-    const setActiveMLIRData = useSetAtom(activeMLIRDataAtom);
+    const setActiveMlirData = useSetAtom(activeMlirDataAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,7 +81,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 reportName = sanitiseFileName(file.name);
             }
 
-            setActiveMLIRData(graph);
+            setActiveMlirData(graph);
             setMlirJsonFileName(reportName);
             createToastNotification('MLIR', file.name, ToastType.SUCCESS);
             setUploadStatus(ConnectionTestStates.OK);

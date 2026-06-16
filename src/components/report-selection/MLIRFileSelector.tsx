@@ -7,7 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { useAtom } from 'jotai';
 import { useState } from 'react';
-import { MlirServerConnection, isSameMlirServer } from '../../definitions/MlirServer';
+import { MlirServerConnection, isSameMlirServer, mlirServerKey } from '../../definitions/MlirServer';
 import { mlirServersAtom, selectedMlirServerAtom } from '../../store/app';
 import MlirJsonFileLoader from '../mlir/MlirJsonFileLoader';
 import MlirServerDialog from './MlirServerDialog';
@@ -38,7 +38,7 @@ const MLIRFileSelector = () => {
 
         return (
             <MenuItem
-                key={formatServerString(server)}
+                key={mlirServerKey(server)}
                 text={formatServerString(server)}
                 active={isSameMlirServer(server, activeServer)}
                 onClick={handleClick}

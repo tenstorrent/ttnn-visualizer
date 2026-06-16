@@ -29,6 +29,7 @@ import re
 import shlex
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -204,12 +205,13 @@ def _upload_file_to_server(
         tmp.write(file_bytes)
         local_path = tmp.name
 
-    remote_path = f"/tmp/ttnn_viz_upload_{os.getpid()}_{safe_filename}"
+    remote_path = f"/tmp/ttnn_viz_upload_{os.getpid()}_{uuid.uuid4().hex}{Path(safe_filename).suffix}"
+    upload_form_arg = shlex.quote(f"{MLIR_UPLOAD_FIELD}=@{remote_path}")
     curl_cmd = (
         "curl -sS -H 'Expect:' -w '\\n%{http_code}' "
         f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} "
         f"--max-time {_UPLOAD_TIMEOUT_SECONDS} "
-        f"-F '{MLIR_UPLOAD_FIELD}=@{shlex.quote(remote_path)}' "
+        f"-F {upload_form_arg} "
         f"{shlex.quote(upload_url)}"
     )
 

@@ -32,6 +32,10 @@ export const MLIR_SERVER_ACCEPTED_EXTENSIONS = [
     '.mlirbc',
 ] as const;
 
+/** Stable React list key from connection fields (not display formatting). */
+export const mlirServerKey = (server: MlirServerConnection): string =>
+    `${server.host}|${server.sshPort}|${server.username}|${server.port}|${server.name}|${server.identityFile ?? ''}`;
+
 export const isSameMlirServer = (a?: MlirServerConnection | null, b?: MlirServerConnection | null): boolean =>
     !!a &&
     !!b &&
@@ -39,4 +43,5 @@ export const isSameMlirServer = (a?: MlirServerConnection | null, b?: MlirServer
     a.username === b.username &&
     a.host === b.host &&
     a.sshPort === b.sshPort &&
-    a.port === b.port;
+    a.port === b.port &&
+    (a.identityFile ?? '') === (b.identityFile ?? '');

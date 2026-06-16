@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 import { Navigate } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
-import { activeMLIRDataAtom, activeMlirJsonAtom } from '../store/app';
+import { activeMlirDataAtom, activeMlirJsonAtom } from '../store/app';
 import { MLIRValidationError } from '../definitions/MLIRData';
 import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
@@ -18,7 +18,7 @@ import getServerConfig from '../functions/getServerConfig';
 
 const MLIR = () => {
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
-    const activeMlirData = useAtomValue(activeMLIRDataAtom);
+    const activeMlirData = useAtomValue(activeMlirDataAtom);
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
 
     // On a fresh page load the in-memory graph is gone but the instance may
