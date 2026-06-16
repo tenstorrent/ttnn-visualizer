@@ -13,7 +13,7 @@ import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
 import MlGraph from '../components/mlir/MLIRViewReactFlow';
 import MlirProcessingStatus from '../components/MlirProcessingStatus';
-import { useMLIR } from '../hooks/useAPI';
+import { useMlir } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
 
 const MLIR = () => {
@@ -28,7 +28,7 @@ const MLIR = () => {
         data: restoredMlirData,
         isLoading,
         error: httpError,
-    } = useMLIR(isServerMode || activeMlirData ? null : mlirJsonFilename);
+    } = useMlir(isServerMode || activeMlirData ? null : mlirJsonFilename);
     const mlirData = activeMlirData ?? restoredMlirData ?? null;
 
     const errorCode = useMemo(() => {

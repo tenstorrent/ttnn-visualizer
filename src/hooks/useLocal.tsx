@@ -221,8 +221,8 @@ const useLocalConnection = () => {
         } catch (err: unknown) {
             const axiosError = err as AxiosError;
 
-            if (axiosError.response?.data) {
-                return axiosError.response.data as ConnectionStatus[];
+            if (Array.isArray(axiosError.response?.data)) {
+                return axiosError.response.data;
             }
 
             return [{ status: ConnectionTestStates.FAILED, message: getResponseError(err, 'Connection test failed') }];

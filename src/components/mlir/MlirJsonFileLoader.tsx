@@ -88,7 +88,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
             setErrorMessage(`${file.name} ${server ? 'uploaded' : 'loaded'} successfully`);
         } catch (err: unknown) {
             setUploadStatus(ConnectionTestStates.FAILED);
-            setErrorMessage(getResponseError(err, 'Unable to load MLIR file'));
+            setErrorMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));
         }
     };
 

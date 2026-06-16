@@ -504,14 +504,14 @@ export const useNpe = (fileName: string | null) => {
     });
 };
 
-const fetchMLIRJson = async (): Promise<GraphBundle> => {
+const fetchMlirJson = async (): Promise<GraphBundle> => {
     const { data } = await axiosInstance.get<GraphBundle>(Endpoints.MLIR);
     return data;
 };
 
-export const useMLIR = (fileName: string | null) => {
+export const useMlir = (fileName: string | null) => {
     return useQuery<GraphBundle, AxiosError>({
-        queryFn: () => fetchMLIRJson(),
+        queryFn: () => fetchMlirJson(),
         queryKey: ['fetch-mlir', fileName],
         retry: false,
         staleTime: Infinity,
