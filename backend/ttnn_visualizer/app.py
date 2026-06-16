@@ -2,6 +2,8 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+from __future__ import annotations
+
 import argparse
 import json
 import logging
@@ -15,14 +17,11 @@ import webbrowser
 from http import HTTPStatus
 from os import environ
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from urllib.error import URLError
 from urllib.request import urlopen
 
-import flask
 from dotenv import load_dotenv
-from flask import Flask, abort, jsonify
-from flask_cors import CORS
 from gunicorn.app.wsgiapp import WSGIApplication
 from ttnn_visualizer.database_migrations import run_alembic_migrations
 from ttnn_visualizer.exceptions import (
@@ -38,9 +37,9 @@ from ttnn_visualizer.utils import (
     get_report_data_directory,
     migrate_old_data_directory,
 )
-from werkzeug.debug import DebuggedApplication
-from werkzeug.exceptions import HTTPException
-from werkzeug.middleware.proxy_fix import ProxyFix
+
+if TYPE_CHECKING:
+    import flask
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +65,9 @@ class StandaloneGunicornApplication(WSGIApplication):
 
 
 def create_app(settings_override=None):
+    import flask
+    from flask import Flask, abort
+
     from ttnn_visualizer.views import api
 
     """
@@ -186,6 +188,12 @@ def extensions(app: flask.Flask):
 
 
 def middleware(app: flask.Flask):
+    from flask import jsonify
+    from flask_cors import CORS
+    from werkzeug.debug import DebuggedApplication
+    from werkzeug.exceptions import HTTPException
+    from werkzeug.middleware.proxy_fix import ProxyFix
+
     """
     Register 0 or more middleware (mutates the app passed in).
 
