@@ -52,6 +52,10 @@ class StandaloneGunicornApplication(WSGIApplication):
         super().__init__()
 
     def load_config(self):
+        gunicorn_config_file = Path("gunicorn.conf.py")
+        if gunicorn_config_file.exists():
+            self.load_config_from_file(str(gunicorn_config_file))
+
         config = {
             key: value
             for key, value in self.options.items()
