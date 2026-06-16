@@ -25,6 +25,7 @@ CORS when the SPA POSTs to a different origin. The flow is:
 import json
 import logging
 import os
+import re
 import shlex
 import tempfile
 import time
@@ -74,11 +75,13 @@ MLIR_SERVER_ACCEPTED_EXTENSIONS = (
 _CURL_CONNECT_TIMEOUT_SECONDS = 5
 _ENDPOINT_TEST_TIMEOUT_SECONDS = 30
 _UPLOAD_TIMEOUT_SECONDS = 60
-_CONVERT_TIMEOUT_SECONDS = 60
+_CONVERT_TIMEOUT_SECONDS = 60  # TODO: Ensure this is sufficient with larger models
 # Let curl's own ``--max-time`` fire first; the subprocess timeout is a backstop.
 _CURL_TIMEOUT_GRACE_SECONDS = 10
 # curl prints this when it never received an HTTP response (e.g. connection refused).
 _CURL_NO_RESPONSE_CODE = "000"
+# Model Explorer rejects unknown adapter ids with ``Extension "<id>" not found``.
+_EXTENSION_NOT_FOUND_RE = re.compile(r'Extension\s+"[^"]+"\s+not found', re.IGNORECASE)
 
 
 @dataclass
@@ -304,7 +307,7 @@ def _normalise_convert_response(
 
 def _is_extension_missing(error: str) -> bool:
     """True when ``send_command`` rejected the adapter id (so we try the next)."""
-    return "not found" in error.lower()
+    return _EXTENSION_NOT_FOUND_RE.search(error) is not None
 
 
 def _convert_with_extension(

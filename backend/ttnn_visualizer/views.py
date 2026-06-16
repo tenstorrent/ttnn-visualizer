@@ -1810,7 +1810,6 @@ def upload_mlir_server():
         instance_id=request.args.get("instanceId"),
         mlir_name=mlir_name,
         mlir_location=ReportLocation.LOCAL.value,
-        clear_remote=True,
         mlir_path=str(mlir_path),
     )
 

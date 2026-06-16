@@ -35,6 +35,7 @@ import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable'
 import { isDeviceOperation } from '../functions/filterOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
 import {
+    activeMlirJsonAtom,
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -1036,10 +1037,17 @@ export const useInstance = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeNpe = useAtomValue(activeNpeOpTraceAtom);
+    const activeMlirJson = useAtomValue(activeMlirJsonAtom);
 
     return useQuery({
         queryFn: () => fetchInstance(),
-        queryKey: ['fetch-instance', activeProfilerReport?.path, activePerformanceReport?.path, activeNpe],
+        queryKey: [
+            'fetch-instance',
+            activeProfilerReport?.path,
+            activePerformanceReport?.path,
+            activeNpe,
+            activeMlirJson,
+        ],
     });
 };
 

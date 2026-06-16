@@ -63,6 +63,10 @@ def test_is_extension_missing_ignores_real_errors():
     assert not _is_extension_missing("Conversion failed: invalid MLIR module")
 
 
+def test_is_extension_missing_ignores_unrelated_not_found():
+    assert not _is_extension_missing("model file not found on disk")
+
+
 # ---- _normalise_convert_response ------------------------------------------
 
 
