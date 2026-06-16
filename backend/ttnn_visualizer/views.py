@@ -2073,6 +2073,7 @@ def get_npe_data(instance: Instance):
 
 @api.route("/mlir", methods=["GET"])
 @with_instance
+@local_only
 @timer
 def get_mlir_json(instance: Instance):
     if not instance.mlir_path:

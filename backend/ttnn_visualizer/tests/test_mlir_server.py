@@ -193,6 +193,16 @@ def test_upload_endpoint_forbidden_when_server_mode(app, client, make_report):
     assert response.status_code == HTTPStatus.FORBIDDEN
 
 
+def test_get_mlir_endpoint_forbidden_when_server_mode(app, client, make_report):
+    """Persisted MLIR JSON is @local_only and must 403 in hosted SERVER_MODE."""
+    instance_id = make_report()
+    assert app.config["SERVER_MODE"] is True
+
+    response = client.get("/api/mlir", query_string={"instanceId": instance_id})
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
 def _mlir_upload_form_data(file_data=b"{}", filename="model.mlir", **overrides):
     data = {
         "files": (BytesIO(file_data), filename),

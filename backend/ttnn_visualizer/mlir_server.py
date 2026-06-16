@@ -73,10 +73,8 @@ MLIR_SERVER_ACCEPTED_EXTENSIONS = (
 
 _CURL_CONNECT_TIMEOUT_SECONDS = 5
 _ENDPOINT_TEST_TIMEOUT_SECONDS = 30
-# A model-file upload to the local tunnel is near-instant; if it hasn't completed
-# in a minute the server/tunnel is wedged, so fail fast rather than block 5 min.
 _UPLOAD_TIMEOUT_SECONDS = 60
-_CONVERT_TIMEOUT_SECONDS = 300
+_CONVERT_TIMEOUT_SECONDS = 60
 # Let curl's own ``--max-time`` fire first; the subprocess timeout is a backstop.
 _CURL_TIMEOUT_GRACE_SECONDS = 10
 # curl prints this when it never received an HTTP response (e.g. connection refused).
@@ -361,7 +359,7 @@ def _convert_model_on_server(
     Model Explorer adapter ids vary by deployment: Tenstorrent's TT-Explorer
     fork registers ``tt_adapter``, while the upstream native MLIR adapter is
     ``builtin_mlir``. We can't list them reliably (``get_extensions`` hangs on
-    some tunnelled servers), so we POST ``convert`` with each candidate and fall
+    some deployments), so we POST ``convert`` with each candidate and fall
     through only on an "extension not found" rejection.
     """
     last_error: Optional[str] = None
