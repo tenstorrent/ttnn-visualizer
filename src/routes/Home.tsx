@@ -40,6 +40,7 @@ function Home() {
                     <FolderFieldset
                         title='MLIR'
                         icon={IconNames.LAYOUT}
+                        isBeta
                     >
                         <MLIRFileSelector />
                     </FolderFieldset>

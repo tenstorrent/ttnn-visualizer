@@ -11,6 +11,7 @@ import { TEST_IDS } from '../../definitions/TestIds';
 interface FolderFieldsetProps {
     title: string;
     icon: IconName;
+    isBeta?: boolean;
     isFeatureDisabled?: boolean;
     disabledTestId?: string;
     children: React.ReactNode;
@@ -19,6 +20,7 @@ interface FolderFieldsetProps {
 const FolderFieldset = ({
     title,
     icon,
+    isBeta = false,
     isFeatureDisabled = false,
     disabledTestId = TEST_IDS.REMOTE_SYNC_DISABLED,
     children,
@@ -26,7 +28,10 @@ const FolderFieldset = ({
     return (
         <fieldset className='folder-fieldset'>
             <legend>
-                <h2 className='legend-title'>{title}</h2>
+                <h2 className='legend-title'>
+                    {title}
+                    {isBeta ? <small className='legend-beta'>beta</small> : null}
+                </h2>
             </legend>
 
             <Icon

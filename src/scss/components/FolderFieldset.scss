@@ -23,6 +23,15 @@
         font-weight: 400;
         padding: 0 10px;
         margin: 0;
+        display: flex;
+        align-items: baseline;
+
+        .legend-beta {
+            font-size: 11px;
+            border-radius: 4px;
+            padding: 0 4px;
+            background-color: $tt-grey-2;
+        }
     }
 
     .legend-icon {
