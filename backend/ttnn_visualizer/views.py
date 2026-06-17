@@ -19,6 +19,7 @@ import orjson
 import yaml
 import zstd
 from flask import Blueprint, Response, abort, current_app, jsonify, request, session
+from pydantic import ValidationError
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     NPEQueries,
@@ -47,13 +48,13 @@ from ttnn_visualizer.file_uploads import (
     validate_files,
 )
 from ttnn_visualizer.instances import get_instances, update_instance
-from ttnn_visualizer.mlir_server import (
-    DEFAULT_SSH_PORT,
+from ttnn_visualizer.mlir import (
     test_mlir_server_connection,
     upload_and_convert_mlir,
 )
 from ttnn_visualizer.models import (
     Instance,
+    MlirServerConnection,
     RemoteConnection,
     RemoteReportFolder,
     ReportLocation,
@@ -1706,25 +1707,6 @@ def test_remote_folder():
     )
 
 
-def _build_mlir_remote_connection(
-    name, username, host, ssh_port, identity_file
-) -> RemoteConnection:
-    """Build the SSH connection for an MLIR server.
-
-    Reuses ``RemoteConnection`` so ``SSHClient`` handles it identically to remote
-    report connections. ``profilerPath`` is unused for MLIR (the upload target is
-    an HTTP endpoint, not a folder) so it is left blank.
-    """
-    return RemoteConnection(
-        name=name or host,
-        username=username,
-        host=host,
-        port=ssh_port,
-        profilerPath="",
-        identityFile=identity_file or None,
-    )
-
-
 @api.route("/remote/mlir/test", methods=["POST"])
 @local_only
 def test_mlir_server():
@@ -1733,29 +1715,14 @@ def test_mlir_server():
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    host = (connection_data.get("host") or "").strip()
-    username = (connection_data.get("username") or "").strip()
-    port = connection_data.get("port")
-    ssh_port = connection_data.get("sshPort") or DEFAULT_SSH_PORT
-
-    if (
-        not host
-        or not username
-        or not isinstance(port, int)
-        or not isinstance(ssh_port, int)
-    ):
+    try:
+        mlir_connection = MlirServerConnection.model_validate(connection_data)
+    except ValidationError:
         return response_bad_request(
             "MLIR server requires a host, username, port, and SSH port"
         )
 
-    connection = _build_mlir_remote_connection(
-        connection_data.get("name"),
-        username,
-        host,
-        ssh_port,
-        connection_data.get("identityFile"),
-    )
-    statuses = test_mlir_server_connection(connection, port)
+    statuses = test_mlir_server_connection(mlir_connection)
 
     return Response(
         orjson.dumps([status.model_dump() for status in statuses]),
@@ -1771,26 +1738,24 @@ def upload_mlir_server():
     if not files:
         return response_bad_request("No files provided")
 
-    host = (request.form.get("host") or "").strip()
-    username = (request.form.get("username") or "").strip()
-    ssh_port = request.form.get("sshPort", type=int) or DEFAULT_SSH_PORT
-    port = request.form.get("port", type=int)
-
-    if not host or not username or not port:
+    try:
+        mlir_connection = MlirServerConnection.model_validate(
+            {
+                "name": request.form.get("name", ""),
+                "username": request.form.get("username", ""),
+                "host": request.form.get("host", ""),
+                "sshPort": request.form.get("sshPort", type=int) or 22,
+                "port": request.form.get("port", type=int),
+                "identityFile": request.form.get("identityFile") or None,
+            }
+        )
+    except ValidationError:
         return response_bad_request(
             "MLIR server requires a host, username, and MLIR port"
         )
 
-    connection = _build_mlir_remote_connection(
-        request.form.get("name"),
-        username,
-        host,
-        ssh_port,
-        request.form.get("identityFile"),
-    )
-
     file = files[0]
-    result = upload_and_convert_mlir(connection, port, file.read(), file.filename or "")
+    result = upload_and_convert_mlir(mlir_connection, file.read(), file.filename or "")
 
     if (
         result.status.status != ConnectionTestStates.OK.value

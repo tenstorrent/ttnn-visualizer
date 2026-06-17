@@ -2,9 +2,9 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Tests for the MLIR server upload/convert proxy.
+"""Tests for the MLIR upload/convert proxy.
 
-Covers the pure helpers in ``mlir_server`` (response normalisation, adapter
+Covers the pure helpers in ``mlir`` (response normalisation, adapter
 fallback, file-type guard) and the ``/api/remote/mlir/upload`` endpoint,
 including the path-traversal regression mandated for upload handlers.
 """
@@ -15,8 +15,10 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+from pydantic import ValidationError
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.mlir_server import (
+from ttnn_visualizer.mlir import (
     MlirConversionResult,
     _convert_model_on_server,
     _is_extension_missing,
@@ -24,15 +26,68 @@ from ttnn_visualizer.mlir_server import (
     is_supported_mlir_server_file,
     upload_and_convert_mlir,
 )
-from ttnn_visualizer.models import RemoteConnection, StatusMessage
+from ttnn_visualizer.models import MlirServerConnection, RemoteConnection, StatusMessage
 
-_MLIR_CONNECTION = RemoteConnection(
-    name="test",
-    username="user",
-    host="remote.test",
-    port=22,
-    profilerPath="",
-)
+# Model Explorer HTTP port on the remote host's loopback — not SSH (see ``mlir_http_port``).
+MLIR_HTTP_PORT = 8080
+
+
+@pytest.fixture
+def mlir_server_connection() -> MlirServerConnection:
+    return MlirServerConnection(
+        name="test",
+        username="user",
+        host="remote.test",
+        sshPort=22,
+        port=MLIR_HTTP_PORT,
+    )
+
+
+@pytest.fixture
+def mlir_connection(mlir_server_connection: MlirServerConnection) -> RemoteConnection:
+    return mlir_server_connection.to_remote_connection()
+
+
+@pytest.fixture
+def mlir_http_port(mlir_server_connection: MlirServerConnection) -> int:
+    return mlir_server_connection.port
+
+
+# ---- MlirServerConnection --------------------------------------------------
+
+
+def test_mlir_server_connection_model_validate():
+    connection = MlirServerConnection.model_validate(
+        {
+            "name": "lab",
+            "username": "user",
+            "host": "remote.test",
+            "sshPort": 2222,
+            "port": 8080,
+            "identityFile": "/home/user/.ssh/id_ed25519",
+        }
+    )
+    remote = connection.to_remote_connection()
+    assert remote.port == 2222
+    assert remote.profilerPath == ""
+    assert remote.identityFile == "/home/user/.ssh/id_ed25519"
+    assert connection.port == 8080
+
+
+def test_mlir_server_connection_strips_whitespace():
+    connection = MlirServerConnection.model_validate(
+        {"username": "  user  ", "host": " remote.test ", "port": 8080}
+    )
+    assert connection.username == "user"
+    assert connection.host == "remote.test"
+
+
+def test_mlir_server_connection_rejects_empty_host():
+    with pytest.raises(ValidationError):
+        MlirServerConnection.model_validate(
+            {"username": "user", "host": "  ", "port": 8080}
+        )
+
 
 # ---- is_supported_mlir_server_file ----------------------------------------
 
@@ -115,7 +170,9 @@ def test_normalise_rejects_response_without_graphs():
 # ---- _convert_model_on_server: adapter fallback ---------------------------
 
 
-def test_convert_falls_through_to_next_adapter_on_not_found():
+def test_convert_falls_through_to_next_adapter_on_not_found(
+    mlir_connection, mlir_http_port
+):
     """First adapter ("tt_adapter") missing → retry with "builtin_mlir"."""
     calls = []
 
@@ -126,10 +183,10 @@ def test_convert_falls_through_to_next_adapter_on_not_found():
         return json.dumps({"graphs": []}), None
 
     with patch(
-        "ttnn_visualizer.mlir_server._convert_with_extension", side_effect=fake_convert
+        "ttnn_visualizer.mlir._convert_with_extension", side_effect=fake_convert
     ):
         result = _convert_model_on_server(
-            None, _MLIR_CONNECTION, 8080, "/tmp/model.mlir"
+            None, mlir_connection, mlir_http_port, "/tmp/model.mlir"
         )
 
     # `StatusMessage` coerces the enum to its int value, so compare against
@@ -139,7 +196,9 @@ def test_convert_falls_through_to_next_adapter_on_not_found():
     assert calls == ["tt_adapter", "builtin_mlir"]
 
 
-def test_convert_does_not_mask_real_error_with_fallback():
+def test_convert_does_not_mask_real_error_with_fallback(
+    mlir_connection, mlir_http_port
+):
     """A genuine conversion error must short-circuit, not try other adapters."""
     calls = []
 
@@ -148,10 +207,10 @@ def test_convert_does_not_mask_real_error_with_fallback():
         return None, "Conversion failed: invalid MLIR module"
 
     with patch(
-        "ttnn_visualizer.mlir_server._convert_with_extension", side_effect=fake_convert
+        "ttnn_visualizer.mlir._convert_with_extension", side_effect=fake_convert
     ):
         result = _convert_model_on_server(
-            None, _MLIR_CONNECTION, 8080, "/tmp/model.mlir"
+            None, mlir_connection, mlir_http_port, "/tmp/model.mlir"
         )
 
     assert result.status.status == ConnectionTestStates.FAILED.value
@@ -163,9 +222,11 @@ def test_convert_does_not_mask_real_error_with_fallback():
 # ---- upload_and_convert_mlir: guards --------------------------------------
 
 
-def test_upload_and_convert_rejects_unsupported_file_before_upload():
-    with patch("ttnn_visualizer.mlir_server._upload_file_to_server") as mock_upload:
-        result = upload_and_convert_mlir(_MLIR_CONNECTION, 8080, b"data", "notes.txt")
+def test_upload_and_convert_rejects_unsupported_file_before_upload(
+    mlir_server_connection,
+):
+    with patch("ttnn_visualizer.mlir._upload_file_to_server") as mock_upload:
+        result = upload_and_convert_mlir(mlir_server_connection, b"data", "notes.txt")
 
     assert result.status.status == ConnectionTestStates.FAILED.value
     assert "Unsupported file type" in result.status.message

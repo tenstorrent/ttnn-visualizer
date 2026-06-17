@@ -40,7 +40,7 @@ from ttnn_visualizer.exceptions import (
     RemoteConnectionException,
     SSHException,
 )
-from ttnn_visualizer.models import RemoteConnection, StatusMessage
+from ttnn_visualizer.models import MlirServerConnection, RemoteConnection, StatusMessage
 from ttnn_visualizer.ssh_client import SSHClient
 
 logger = logging.getLogger(__name__)
@@ -54,9 +54,6 @@ MLIR_CONVERT_CMD_ID = "convert"
 # Adapter ids to try, in priority order. Tenstorrent's TT-Explorer fork uses
 # ``tt_adapter``; ``builtin_mlir`` is the upstream native MLIR adapter.
 MLIR_CONVERT_EXTENSION_IDS = ("tt_adapter", "builtin_mlir")
-DEFAULT_SSH_PORT = 22
-
-# Model formats the MLIR server (Model Explorer) accepts:
 # TF (.pb/.pbtxt/.graphdef), TFLite (.tflite), TFJS/JAX (.json/.pb),
 # PyTorch ExportedProgram (.pt2), MLIR (.mlir/.mlirbc).
 # Keep in sync with `MLIR_SERVER_ACCEPTED_EXTENSIONS` in
@@ -113,13 +110,15 @@ def _endpoint_unreachable_message(connection: RemoteConnection, port: int) -> st
 
 
 def test_mlir_server_connection(
-    connection: RemoteConnection, port: int
+    connection: MlirServerConnection,
 ) -> List[StatusMessage]:
     """Probe the MLIR upload endpoint on ``connection`` over SSH.
 
     Returns a list of ``StatusMessage`` mirroring ``/remote/test`` so the
     frontend can render the SSH and endpoint checks the same way.
     """
+    remote = connection.to_remote_connection()
+    http_port = connection.port
     statuses: List[StatusMessage] = []
 
     def add_status(status, message, detail=None):
@@ -127,14 +126,14 @@ def test_mlir_server_connection(
 
     # One client for both the SSH test and the curl probe — the base ssh command
     # is built once and reused (each call still spawns its own ssh subprocess).
-    client = SSHClient(connection)
+    client = SSHClient(remote)
 
     # Reuse the remote-connection SSH test for identical auth/host-key handling.
     try:
         client.test_connection()
         add_status(
             ConnectionTestStates.OK,
-            f"SSH connection to {connection.host} established",
+            f"SSH connection to {remote.host} established",
         )
     except AuthenticationFailedException as e:
         add_status(ConnectionTestStates.FAILED, e.message, getattr(e, "detail", None))
@@ -145,7 +144,7 @@ def test_mlir_server_connection(
 
     curl_cmd = (
         "curl -s -o /dev/null -w '%{http_code}' "
-        f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} {shlex.quote(_remote_upload_url(port))}"
+        f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} {shlex.quote(_remote_upload_url(http_port))}"
     )
 
     try:
@@ -156,7 +155,7 @@ def test_mlir_server_connection(
         # curl exits non-zero (e.g. connection refused) when the server is down.
         add_status(
             ConnectionTestStates.FAILED,
-            _endpoint_unreachable_message(connection, port),
+            _endpoint_unreachable_message(remote, http_port),
             detail=str(e),
         )
         return statuses
@@ -164,7 +163,8 @@ def test_mlir_server_connection(
     http_code = (output or "").strip()
     if not http_code or http_code == _CURL_NO_RESPONSE_CODE:
         add_status(
-            ConnectionTestStates.FAILED, _endpoint_unreachable_message(connection, port)
+            ConnectionTestStates.FAILED,
+            _endpoint_unreachable_message(remote, http_port),
         )
     else:
         add_status(ConnectionTestStates.OK, f"MLIR server reachable (HTTP {http_code})")
@@ -388,8 +388,7 @@ def _convert_model_on_server(
 
 
 def upload_and_convert_mlir(
-    connection: RemoteConnection,
-    port: int,
+    connection: MlirServerConnection,
     file_bytes: bytes,
     filename: str,
 ) -> MlirConversionResult:
@@ -401,12 +400,14 @@ def upload_and_convert_mlir(
             + ", ".join(MLIR_SERVER_ACCEPTED_EXTENSIONS)
         )
 
-    client = SSHClient(connection)
+    remote = connection.to_remote_connection()
+    http_port = connection.port
+    client = SSHClient(remote)
     server_path, upload_error = _upload_file_to_server(
-        client, connection, port, file_bytes, safe_filename
+        client, remote, http_port, file_bytes, safe_filename
     )
     if upload_error is not None:
         return upload_error
 
     assert server_path is not None
-    return _convert_model_on_server(client, connection, port, server_path)
+    return _convert_model_on_server(client, remote, http_port, server_path)
