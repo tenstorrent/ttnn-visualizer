@@ -91,7 +91,8 @@ profile = "black"
 line_length = 88
 
 [tool.uv]
-# Single source of truth for the uv version across local dev and CI.
-# astral-sh/setup-uv reads this when no explicit `version:` input is set,
-# and uv itself enforces it on every local invocation.
-required-version = "==0.11.20"
+# Minimum uv version for local dev and CI (astral-sh/setup-uv reads this when no
+# explicit `version:` input is set). Use a lower bound rather than an exact pin so
+# package managers like Homebrew can ship newer patch releases without blocking
+# contributors.
+required-version = ">=0.11.0"
