@@ -8,6 +8,12 @@ import { Node, NodeType } from '../src/model/APIData';
 import { StringBufferType } from '../src/model/BufferType';
 
 let nextId = 0;
+// Monotonic CB address counter so every cbAllocate() call carries a real numeric
+// address — matches the captured-graph wire format (real `circular_buffer_allocate`
+// nodes always include `address`) and surfaces any future regression in code that
+// assumes a numeric address rather than silently producing NaN. Reset alongside
+// `nextId` in `beforeEach`.
+let nextCbAddress = 0x1000;
 function mkNode<T extends Partial<Node>>(node: T): Node {
     nextId += 1;
     return {
@@ -42,12 +48,17 @@ function functionEnd(name: string): Node {
 }
 
 function cbAllocate(coreRangeSet: string, size: number, address?: number): Node {
+    // Default to the next slot in our monotonic CB address counter so every node
+    // round-trips through `processMemoryAllocations()` with a real numeric address.
+    // Bump after read so the next CB starts past this one's end.
+    const resolvedAddress = address ?? nextCbAddress;
+    nextCbAddress = Math.max(nextCbAddress, resolvedAddress + size);
     return mkNode({
         node_type: NodeType.circular_buffer_allocate,
         params: {
             core_range_set: coreRangeSet,
             size: String(size),
-            ...(address !== undefined && { address: String(address) }),
+            address: String(resolvedAddress),
         },
     } as unknown as Partial<Node>);
 }
@@ -76,6 +87,7 @@ function bufferDeallocate(type: StringBufferType, size: number, numCores: number
 describe('processMemoryAllocations - CB per-core accounting', () => {
     beforeEach(() => {
         nextId = 0;
+        nextCbAddress = 0x1000;
     });
 
     it('returns zero peak for a graph with no allocations', () => {
@@ -211,14 +223,17 @@ describe('processMemoryAllocations - CB per-core accounting', () => {
 
         processMemoryAllocations(graph);
 
-        expect((cbNode.params as Record<string, unknown>).allocateOperationName).toBe('demo_op');
-        expect((cbNode.params as Record<string, unknown>).allocateOperationId).toBe(graph[1].id);
+        // Cast via `unknown` first — the discriminated-union narrowing on
+        // `Node.params` rejects a direct `Record<string, unknown>` cast.
+        expect((cbNode.params as unknown as Record<string, unknown>).allocateOperationName).toBe('demo_op');
+        expect((cbNode.params as unknown as Record<string, unknown>).allocateOperationId).toBe(graph[1].id);
     });
 });
 
 describe('processMemoryAllocations - L1 buffer accounting', () => {
     beforeEach(() => {
         nextId = 0;
+        nextCbAddress = 0x1000;
     });
 
     it('amortizes L1 buffer_allocate over num_cores and reverses on deallocate', () => {
@@ -258,6 +273,7 @@ describe('processMemoryAllocations - L1 buffer accounting', () => {
 describe('processMemoryAllocations - cbPressureByOpId snapshots', () => {
     beforeEach(() => {
         nextId = 0;
+        nextCbAddress = 0x1000;
     });
 
     it('emits no snapshot for ops that never allocate a CB', () => {
