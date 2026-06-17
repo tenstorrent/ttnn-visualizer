@@ -158,14 +158,12 @@ module.exports = defineConfig([
                 },
                 {
                     selector: "TSTypeReference[typeName.name='FunctionComponent']",
-                    message:
-                        'Type props directly: function Foo({…}: FooProps). Do not use FunctionComponent.',
+                    message: 'Type props directly: function Foo({…}: FooProps). Do not use FunctionComponent.',
                 },
                 {
                     selector:
                         "TSTypeReference[typeName.type='TSQualifiedName'][typeName.left.name='React'][typeName.right.name='FunctionComponent']",
-                    message:
-                        'Type props directly: function Foo({…}: FooProps). Do not use React.FunctionComponent.',
+                    message: 'Type props directly: function Foo({…}: FooProps). Do not use React.FunctionComponent.',
                 },
             ],
             'no-shadow': 'off',

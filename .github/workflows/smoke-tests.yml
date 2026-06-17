@@ -83,14 +83,15 @@ jobs:
 
       - name: Install wheel and dependencies
         run: |
-          uv pip install dist/*.whl
-          uv pip install playwright
-          uv run playwright install --with-deps chromium
+          # Isolated venv so we test the wheel artifact, not the editable checkout.
+          uv venv /tmp/smoke-venv
+          uv pip install --python /tmp/smoke-venv dist/*.whl playwright
+          /tmp/smoke-venv/bin/playwright install --with-deps chromium
 
       - name: Start ttnn-visualizer server in background
         run: |
           # Start the server in the background
-          uv run ttnn-visualizer &
+          /tmp/smoke-venv/bin/ttnn-visualizer &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
 
@@ -117,7 +118,7 @@ jobs:
 
       - name: Run Playwright smoke test
         run: |
-          uv run python scripts/smoke_test.py
+          /tmp/smoke-venv/bin/python scripts/smoke_test.py
 
       - name: Cleanup
         if: always()
