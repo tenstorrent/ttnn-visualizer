@@ -72,12 +72,9 @@ const MLIR = () => {
 
             <h1 className='page-title'>MLIR model viewer</h1>
 
-            {/* Dev-only loader for already-processed MLIR JSON, bypassing the Model Explorer backend. */}
-            {import.meta.env.DEV && (
-                <div className='inline-loaders'>
-                    <MlirJsonFileLoader />
-                </div>
-            )}
+            <div className='inline-loaders'>
+                <MlirJsonFileLoader />
+            </div>
 
             {mlirData && errorCode === MLIRValidationError.OK ? (
                 <MlGraph data={mlirData} />

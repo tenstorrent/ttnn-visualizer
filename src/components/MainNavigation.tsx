@@ -216,7 +216,7 @@ function MainNavigation() {
                         className='cluster-button modal'
                     />
                 </Tooltip>
-                {import.meta.env.DEV && !serverMode && (
+                {!serverMode && (
                     <Button
                         text='MLIR'
                         aria-label='MLIR'

@@ -36,7 +36,7 @@ function Home() {
                     <RemoteSyncConfigurator />
                 </FolderFieldset>
 
-                {import.meta.env.DEV && !isServerMode && (
+                {!isServerMode && (
                     <FolderFieldset
                         title='MLIR'
                         icon={IconNames.LAYOUT}
