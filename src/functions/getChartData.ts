@@ -5,7 +5,7 @@
 import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatMemorySize, getMemoryAddress } from './math';
 import { toReadableShape, toReadableType } from './formatting';
-import { BufferChunk, Chunk, ColoredChunk, Tensor } from '../model/APIData';
+import { Chunk, ColoredChunk, DecoratedBufferChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
 import { TensorMemoryLayout } from './parseMemoryConfig';
 
@@ -119,11 +119,15 @@ export default function getChartData(
 }
 
 /**
- * Project pre-aggregated buffer chunks onto the renderer-friendly
+ * Project decorated buffer chunks onto the renderer-friendly
  * ``{address, size, color}`` shape. Aggregation already happened on the
  * backend (or in the legacy GROUP BY adapter), so this is a trivial map.
+ *
+ * Takes ``DecoratedBufferChunk`` rather than ``BufferChunk`` so the
+ * colour-resolution step is forced to happen upstream (in the caller's
+ * own ``useMemo``), never on cached API rows.
  */
-export const bufferChunksToColoredChunks = (data: BufferChunk[]): ColoredChunk[] =>
+export const bufferChunksToColoredChunks = (data: DecoratedBufferChunk[]): ColoredChunk[] =>
     data.map((chunk) => ({
         address: chunk.address,
         size: chunk.chunk_size,

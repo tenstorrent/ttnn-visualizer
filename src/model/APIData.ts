@@ -387,9 +387,22 @@ export interface BufferChunk {
     buffer_type: BufferType;
     rank?: number;
     id: string;
+}
 
+/**
+ * Render-side projection of a ``BufferChunk`` with the tensor association
+ * and palette colour resolved by the consuming component.
+ *
+ * Lives outside the API/cache shape on purpose: ``tensor_id`` and ``color``
+ * are derived from the caller's ``tensorByAddress`` map (or fallback hues),
+ * so they're per-render concerns and don't belong on the React Query cache
+ * entry. Keeping them off ``BufferChunk`` also prevents accidental in-place
+ * mutation of cached objects when more than one consumer of
+ * ``useBufferChunks`` shows up later.
+ */
+export interface DecoratedBufferChunk extends BufferChunk {
     tensor_id?: number;
-    color?: string;
+    color: string;
 }
 
 /**

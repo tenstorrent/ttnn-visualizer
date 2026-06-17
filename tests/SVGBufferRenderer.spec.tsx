@@ -6,10 +6,10 @@ import { cleanup, render } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it } from 'vitest';
 import SVGBufferRenderer from '../src/components/tensor-sharding-visualization/SVGBufferRenderer';
-import { BufferChunk } from '../src/model/APIData';
+import { DecoratedBufferChunk } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
 
-function chunk(overrides: Partial<BufferChunk> = {}): BufferChunk {
+function chunk(overrides: Partial<DecoratedBufferChunk> = {}): DecoratedBufferChunk {
     const merged = {
         operation_id: 1,
         device_id: 0,
@@ -71,19 +71,6 @@ describe('SVGBufferRenderer (pre-aggregated chunks)', () => {
         // 1000 / 4000 = 0.25 → "25%"
         expect(rect!.getAttribute('width')).toBe('25%');
         expect(rect!.getAttribute('fill')).toBe('#00ff00');
-    });
-
-    it('falls back to red when a chunk has no color', () => {
-        const { container } = render(
-            <SVGBufferRenderer
-                height={10}
-                memoryStart={0}
-                memoryEnd={1024}
-                data={[chunk({ address: 0, chunk_size: 1024, color: undefined })]}
-            />,
-        );
-
-        expect(container.querySelector('rect')!.getAttribute('fill')).toBe('red');
     });
 
     it('renders an empty group when there are no chunks', () => {
