@@ -212,6 +212,11 @@ const CircularBufferPressureModal = ({ isOpen, onClose, title, snapshot }: Circu
     const [selectedCBNodeId, setSelectedCBNodeId] = useState<number | null>(null);
     const [normalisation, setNormalisation] = useState<Normalisation>('local');
     const [showAbsolute, setShowAbsolute] = useState<boolean>(true);
+    // Default-on per the #1655 spec: aliased CBs are visible until the user
+    // explicitly hides them. Sticky across snapshot changes (same as
+    // showAbsolute / normalisation) - it's a viewing preference, not a
+    // per-DeviceOp selection.
+    const [showAliasedCBs, setShowAliasedCBs] = useState<boolean>(true);
 
     // We render null on close instead of unmounting, so useState slots
     // persist across open/close cycles. Drop the per-snapshot selections
@@ -279,6 +284,8 @@ const CircularBufferPressureModal = ({ isOpen, onClose, title, snapshot }: Circu
                     setNormalisation={setNormalisation}
                     showAbsolute={showAbsolute}
                     setShowAbsolute={setShowAbsolute}
+                    showAliasedCBs={showAliasedCBs}
+                    setShowAliasedCBs={setShowAliasedCBs}
                     onClose={onClose}
                 />
             </Card>
@@ -300,6 +307,8 @@ interface BodyProps {
     setNormalisation: (v: Normalisation) => void;
     showAbsolute: boolean;
     setShowAbsolute: (v: boolean) => void;
+    showAliasedCBs: boolean;
+    setShowAliasedCBs: (v: boolean) => void;
     onClose: () => void;
 }
 
@@ -317,26 +326,50 @@ const CircularBufferPressureBody = ({
     setNormalisation,
     showAbsolute,
     setShowAbsolute,
+    showAliasedCBs,
+    setShowAliasedCBs,
     onClose,
 }: BodyProps) => {
-    // Quick lookup for "is core part of selected CB" highlighting.
+    // #1655: Aliased (`globallyAllocated`) CBs can flood dense ops where most
+    // CBs are tensor views. The toggle filters them out at render time only -
+    // the data layer (snapshot.maxBytes, byCore, etc.) already excludes them
+    // from pressure totals per #1651, so peak / total numbers stay anchored
+    // to the anonymous bytes regardless of toggle state.
+    const aliasedCount = useMemo(
+        () => snapshot.allocations.reduce((n, cb) => n + (cb.globallyAllocated ? 1 : 0), 0),
+        [snapshot.allocations],
+    );
+
+    const visibleAllocations: CBAllocationSummary[] = useMemo(() => {
+        if (showAliasedCBs) {
+            return snapshot.allocations;
+        }
+        return snapshot.allocations.filter((cb) => !cb.globallyAllocated);
+    }, [snapshot.allocations, showAliasedCBs]);
+
+    const hiddenAliasedCount = showAliasedCBs ? 0 : aliasedCount;
+
+    // Quick lookup for "is core part of selected CB" highlighting. Looking
+    // up against `visibleAllocations` means a selected aliased CB stops
+    // highlighting when its row is filtered out, then comes back when the
+    // toggle is flipped on again (the nodeId itself is preserved).
     const selectedCBCores: Set<string> | null = useMemo(() => {
         if (selectedCBNodeId === null) {
             return null;
         }
-        const cb = snapshot.allocations.find((a) => a.nodeId === selectedCBNodeId);
+        const cb = visibleAllocations.find((a) => a.nodeId === selectedCBNodeId);
         if (!cb) {
             return null;
         }
         return new Set(cb.cores.map((c) => CORE_KEY(c.x, c.y)));
-    }, [snapshot.allocations, selectedCBNodeId]);
+    }, [visibleAllocations, selectedCBNodeId]);
 
     // Pre-build a per-core CB list so the grid doesn't filter allocations
     // for every cell on every render (cells × allocations gets expensive on
     // big chips). Only cores that actually have a CB get an entry.
     const cbsByCore: Map<string, CBAllocationSummary[]> = useMemo(() => {
         const map = new Map<string, CBAllocationSummary[]>();
-        for (const cb of snapshot.allocations) {
+        for (const cb of visibleAllocations) {
             for (const c of cb.cores) {
                 const key = CORE_KEY(c.x, c.y);
                 const list = map.get(key);
@@ -348,7 +381,7 @@ const CircularBufferPressureBody = ({
             }
         }
         return map;
-    }, [snapshot.allocations]);
+    }, [visibleAllocations]);
 
     // CBs that contribute to the currently focused core; powers the "core
     // selected" detail panel without re-walking allocations on every render.
@@ -361,12 +394,15 @@ const CircularBufferPressureBody = ({
 
     // Global address-axis clip. Cells share one [memStart, memEnd] so a
     // CB at the same address lines up across cores at the same x-offset.
+    // Derives from `visibleAllocations` so that hiding aliased CBs tightens
+    // the address window around the anonymous (pressure-contributing) CBs
+    // instead of leaving a sparsely-populated strip.
     const [memStart, memEnd] = useMemo(() => {
         let lo = Number.POSITIVE_INFINITY;
         let hi = Number.NEGATIVE_INFINITY;
         // '?' bucket (numCores === 0) is excluded — it doesn't have a
         // meaningful position on the per-core address axis.
-        for (const cb of snapshot.allocations) {
+        for (const cb of visibleAllocations) {
             if (cb.numCores > 0) {
                 if (cb.address < lo) {
                     lo = cb.address;
@@ -381,7 +417,7 @@ const CircularBufferPressureBody = ({
             return [0, 1];
         }
         return [lo, hi];
-    }, [snapshot.allocations]);
+    }, [visibleAllocations]);
 
     const norm = normalisation === 'budget' ? l1Budget : snapshot.maxBytes || 1;
 
@@ -415,7 +451,7 @@ const CircularBufferPressureBody = ({
                         minimal
                         large
                     >
-                        CBs: {snapshot.allocations.length}
+                        CBs: {visibleAllocations.length}
                     </Tag>
                     {snapshot.unattributedBytes > 0 && (
                         <Tooltip
@@ -458,6 +494,23 @@ const CircularBufferPressureBody = ({
                         label='Show bytes on cells'
                         onChange={(e) => setShowAbsolute(e.currentTarget.checked)}
                     />
+                    {/* The aliased-CB toggle only renders when this snapshot
+                        has aliased CBs to hide - otherwise it's a no-op
+                        affordance that just adds noise to the control row.
+                        See #1655 for the design rationale (default-on,
+                        per-snapshot opt-out, sibling to "Show bytes"). */}
+                    {aliasedCount > 0 && (
+                        <div className='aliased-toggle'>
+                            <Switch
+                                checked={showAliasedCBs}
+                                label='Show globally allocated CBs'
+                                onChange={(e) => setShowAliasedCBs(e.currentTarget.checked)}
+                            />
+                            {hiddenAliasedCount > 0 && (
+                                <span className='aliased-hidden-hint monospace'>({hiddenAliasedCount} hidden)</span>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -544,7 +597,7 @@ const CircularBufferPressureBody = ({
                         <p className='empty-message'>No live CBs in this DeviceOp.</p>
                     )}
                     <ul className='cb-list'>
-                        {snapshot.allocations.map((cb) => {
+                        {visibleAllocations.map((cb) => {
                             const isSelected = selectedCBNodeId === cb.nodeId;
                             const swatchColor = cbColor(cb);
                             const isAliased = cb.globallyAllocated;

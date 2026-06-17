@@ -64,6 +64,21 @@
                 .bp6-control {
                     margin-bottom: 0;
                 }
+
+                // Grouped switch + "(N hidden)" hint for the aliased CB toggle
+                // (#1655). The 8px gap inside this group is tighter than the
+                // surrounding 16px so the hint reads as belonging to the
+                // toggle rather than as a standalone control row item.
+                .aliased-toggle {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+
+                    .aliased-hidden-hint {
+                        font-size: 11px;
+                        color: rgba($tt-white, 0.6);
+                    }
+                }
             }
         }
 
