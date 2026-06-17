@@ -4,6 +4,7 @@
 
 import { IconNames } from '@blueprintjs/icons';
 import LocalFolderSelector from '../components/report-selection/LocalFolderSelector';
+import MLIRFileSelector from '../components/report-selection/MLIRFileSelector';
 import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
 import 'styles/routes/Home.scss';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
@@ -34,6 +35,15 @@ function Home() {
                 >
                     <RemoteSyncConfigurator />
                 </FolderFieldset>
+
+                {!isServerMode && (
+                    <FolderFieldset
+                        title='MLIR'
+                        icon={IconNames.LAYOUT}
+                    >
+                        <MLIRFileSelector />
+                    </FolderFieldset>
+                )}
             </div>
 
             {isServerMode && <InitialMessage />}

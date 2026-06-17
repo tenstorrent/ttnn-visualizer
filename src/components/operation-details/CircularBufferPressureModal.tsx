@@ -467,7 +467,11 @@ const CircularBufferPressureBody = ({
                         <div className='axis-caption monospace'>
                             <span>{prettyPrintAddress(memStart, l1Budget)}</span>
                             <span className='axis-range'>
-                                L1 address window · {formatMemorySize(memEnd - memStart, 2)}
+                                {/* "Address range" rather than "L1 address window" so the
+                                    chart-window size doesn't get conflated with the per-core
+                                    L1 capacity shown in the header's `L1 budget` tag — they
+                                    are different quantities measured in different bytes. */}
+                                Address range · {formatMemorySize(memEnd - memStart, 2)}
                             </span>
                             <span>{prettyPrintAddress(memEnd, l1Budget)}</span>
                         </div>

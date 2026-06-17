@@ -448,9 +448,9 @@ When a query depends on another query's result (e.g. only fetch detail when a li
 
 ```ts
 return useQuery({
-    queryFn: () => fetchMLIRJson(),
-    queryKey: ['fetch-mlir-json', fileName],
-    enabled: fileName !== null,
+    queryFn: () => fetchOperationDetails(operationId),
+    queryKey: ['get-operation-detail', operationId],
+    enabled: operationId !== null,
 });
 ```
 
@@ -552,7 +552,7 @@ New routes add an entry to `routeObjectList` and (if they require an active repo
 
 | Prefix | Purpose | Example |
 |---|---|---|
-| `use*` | React hook (must follow rules of hooks) | `useReportMetadata`, `useMLIR` |
+| `use*` | React hook (must follow rules of hooks) | `useReportMetadata`, `useNpe` |
 | `handle*` | Event handler bound to a UI event | `handleFileChange`, `handleNodeClick` |
 | `get*` | Pure accessor or formatter | `getResponseError`, `getNodeRelationToFocused` |
 | `is*`, `has*` | Boolean predicate | `isDeviceOperation`, `hasClusterDescriptionAtom` |
@@ -732,19 +732,19 @@ The Flask test client (`app.test_client()`) is exposed as the `client` fixture i
 
 Two `conftest.app` defaults that bite local-upload tests in particular:
 
-- **`SERVER_MODE=True`** (`conftest.py`) — local-only handlers like `/api/local/upload/mlir` return `403 Forbidden` until you override it.
+- **`SERVER_MODE=True`** (`conftest.py`) — `@local_only` handlers like `/api/remote/mlir/upload` return `403 Forbidden` until you override it.
 - **`LOCAL_DATA_DIRECTORY` is a `str`** (`conftest.py`) but production `settings.py` initialises it as a `Path` and handlers do `data_directory / config["MLIR_DIRECTORY_NAME"]`. Cast it to `Path` in the test so you exercise the same operand types as the deployed app.
 
 Both overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py`. A runnable example:
 
 ```python
-def test_local_upload_rejects_non_json(app, client, make_report):
+def test_local_upload_rejects_invalid_extension(app, client, make_report):
     instance_id = make_report()
     app.config["SERVER_MODE"] = False
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
 
     response = client.post(
-        "/api/local/upload/mlir",
+        "/api/local/upload/npe",
         query_string={"instanceId": instance_id},
         data={"files": (BytesIO(b"hello"), "evil.exe")},
         content_type="multipart/form-data",
@@ -826,7 +826,7 @@ If the user uploads a file the app parses as JSON, validate it on the frontend b
 
 ### Convert client-side validation failures into a synthetic `AxiosError` with a real `HttpStatusCode`
 
-Downstream route components key off `error?.status === HttpStatusCode.UnprocessableEntity` to drive validation-error UI. When the failure is a client-side `JSON.parse` (the backend streams uploaded bytes without parsing them — see `useAPI.tsx::fetchMLIRJson`), throw a synthetic `AxiosError` with the right status so existing call sites still work:
+Downstream route components key off `error?.status === HttpStatusCode.UnprocessableEntity` to drive validation-error UI. When the failure is a client-side `JSON.parse` of a fetched payload (e.g. the backend streams uploaded bytes without parsing them), throw a synthetic `AxiosError` with the right status so existing call sites still work:
 
 ```tsx
 throw new AxiosError(

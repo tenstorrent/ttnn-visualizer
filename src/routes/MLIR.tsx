@@ -2,24 +2,34 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { HttpStatusCode } from 'axios';
+import { useMemo } from 'react';
+import { Navigate } from 'react-router';
 import { useAtomValue } from 'jotai';
-import { useParams } from 'react-router';
-import { useMLIR } from '../hooks/useAPI';
-import { activeMlirJsonAtom } from '../store/app';
+import { HttpStatusCode } from 'axios';
+import { activeMlirDataAtom, activeMlirJsonAtom } from '../store/app';
 import { MLIRValidationError } from '../definitions/MLIRData';
+import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
 import MlGraph from '../components/mlir/MLIRViewReactFlow';
 import MlirProcessingStatus from '../components/MlirProcessingStatus';
+import { useMlir } from '../hooks/useAPI';
+import getServerConfig from '../functions/getServerConfig';
 
 const MLIR = () => {
-    const { filepath } = useParams<{ filepath?: string }>();
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    const activeMlirData = useAtomValue(activeMlirDataAtom);
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
-    const { data: mlirData, isLoading, error: httpError } = useMLIR(filepath ? null : mlirJsonFilename);
 
-    const hasUploadedFile = !!mlirJsonFilename || !!filepath;
+    // On a fresh page load the in-memory graph is gone but the instance may
+    // still reference a persisted MLIR report — fetch it back by name. Skip the
+    // fetch when the graph is already in memory (e.g. just uploaded).
+    const {
+        data: restoredMlirData,
+        isLoading,
+        error: httpError,
+    } = useMlir(isServerMode || activeMlirData ? null : mlirJsonFilename);
+    const mlirData = activeMlirData ?? restoredMlirData ?? null;
 
     const errorCode = useMemo(() => {
         if (isLoading) {
@@ -30,12 +40,25 @@ const MLIR = () => {
             return MLIRValidationError.INVALID_JSON;
         }
 
-        if (httpError?.status !== undefined && httpError?.status >= HttpStatusCode.BadRequest) {
+        if (httpError?.status !== undefined && httpError.status >= HttpStatusCode.BadRequest) {
+            return MLIRValidationError.DEFAULT;
+        }
+
+        if (mlirJsonFilename && !mlirData) {
             return MLIRValidationError.DEFAULT;
         }
 
         return MLIRValidationError.OK;
-    }, [isLoading, httpError?.status]);
+    }, [isLoading, httpError?.status, mlirJsonFilename, mlirData]);
+
+    if (isServerMode) {
+        return (
+            <Navigate
+                to={ROUTES.HOME}
+                replace
+            />
+        );
+    }
 
     return (
         <>
@@ -48,16 +71,19 @@ const MLIR = () => {
             </Helmet>
 
             <h1 className='page-title'>MLIR model viewer</h1>
-            <div className='inline-loaders'>{!filepath && <MlirJsonFileLoader />}</div>
 
-            {errorCode !== MLIRValidationError.OK ? (
+            <div className='inline-loaders'>
+                <MlirJsonFileLoader />
+            </div>
+
+            {mlirData && errorCode === MLIRValidationError.OK ? (
+                <MlGraph data={mlirData} />
+            ) : (
                 <MlirProcessingStatus
                     errorCode={errorCode}
                     isLoading={isLoading}
-                    hasUploadedFile={hasUploadedFile}
+                    hasUploadedFile={!!mlirJsonFilename}
                 />
-            ) : (
-                mlirData && <MlGraph data={mlirData} />
             )}
         </>
     );

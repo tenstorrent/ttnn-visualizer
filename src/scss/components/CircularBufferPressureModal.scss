@@ -56,6 +56,14 @@
                 display: flex;
                 align-items: center;
                 gap: 16px;
+
+                // Blueprint switches carry a default `.bp6-control { margin-bottom: 10px }`
+                // which makes `align-items: center` pull the visible toggle upward
+                // relative to the neighbouring button group. Same workaround already
+                // used in OperationGraphComponent / OperationDetailsComponent control rows.
+                .bp6-control {
+                    margin-bottom: 0;
+                }
             }
         }
 

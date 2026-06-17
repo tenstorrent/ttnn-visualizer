@@ -5,6 +5,7 @@
 import enum
 
 
+# Keep in sync with src/definitions/ConnectionStatus.ts
 class ConnectionTestStates(enum.Enum):
     IDLE = 0
     PROGRESS = 1
