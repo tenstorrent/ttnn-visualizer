@@ -16,6 +16,11 @@ dist-ssr
 
 # We use PNPM
 package-lock.json
+# Local pnpm content-addressed store, created by `pnpm install` when the user's
+# global store path resolves inside the workspace (e.g. when `store-dir` is
+# overridden or when running pnpm from a context without a home-dir store).
+# Hundreds-of-thousands of cache files; must never be committed.
+.pnpm-store/
 
 # Editor directories and files
 .vscode/*
