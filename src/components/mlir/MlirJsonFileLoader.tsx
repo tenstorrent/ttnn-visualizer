@@ -4,11 +4,13 @@
 
 import React, { useState } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_SERVER_ACCEPTED_EXTENSIONS, MlirServerConnection } from '../../definitions/MlirServer';
+import ROUTES from '../../definitions/Routes';
 import { activeMlirDataAtom, activeMlirJsonAtom } from '../../store/app';
 import { GraphBundle } from '../../model/MLIRJsonModel';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
@@ -39,6 +41,8 @@ interface MlirJsonFileLoaderProps {
 const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { uploadMlirFileToServer } = useLocalConnection();
+    const navigate = useNavigate();
+    const location = useLocation();
     const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);
     const setActiveMlirData = useSetAtom(activeMlirDataAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
@@ -86,6 +90,10 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
             createToastNotification('MLIR', file.name, ToastType.SUCCESS);
             setUploadStatus(ConnectionTestStates.OK);
             setErrorMessage(`${file.name} ${server ? 'uploaded' : 'loaded'} successfully`);
+
+            if (graph && location.pathname !== ROUTES.MLIR) {
+                navigate(ROUTES.MLIR);
+            }
         } catch (err: unknown) {
             setUploadStatus(ConnectionTestStates.FAILED);
             setErrorMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));

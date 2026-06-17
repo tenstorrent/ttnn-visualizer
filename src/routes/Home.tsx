@@ -39,7 +39,7 @@ function Home() {
                 {import.meta.env.DEV && (
                     <FolderFieldset
                         title='MLIR'
-                        icon={IconNames.DIAGRAM_TREE}
+                        icon={IconNames.LAYOUT}
                     >
                         <MLIRFileSelector />
                     </FolderFieldset>
