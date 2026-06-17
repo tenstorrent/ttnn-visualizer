@@ -27,10 +27,11 @@ Treat the hosted deployment as **multi-user and untrusted-input**: requests can 
 
 ## Python environment
 
-- Use a **Python virtual environment** when running or developing the backend.
-- Supported versions are Python 3.10–3.14.
+- Use **[uv](https://docs.astral.sh/uv/)** to manage Python versions and dependencies. The pinned version is in [`.python-version`](.python-version) (currently 3.10.16); run `uv python install` to install it, then `uv sync` to create `.venv` and install the project editable.
+- Supported versions are Python 3.10–3.14 (`requires-python` in `pyproject.toml`).
+- Run backend commands via **`uv run`** (e.g. `uv run python -m ttnn_visualizer.app` or `pnpm run flask:start`).
 
-Backend package layout lives under `backend/` (e.g. `python -m ttnn_visualizer.app` with `PYTHONPATH=backend`).
+Backend package layout lives under `backend/`; `uv sync` makes `ttnn_visualizer` importable without `PYTHONPATH`.
 
 ## Architecture (high level)
 

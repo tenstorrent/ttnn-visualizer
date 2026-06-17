@@ -25,7 +25,7 @@ A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 
 TT-NN Visualizer can be installed from PyPI:
 
-`pip install ttnn-visualizer`
+`uv tool install ttnn-visualizer`
 
 After installation run `ttnn-visualizer` to start the application.
 

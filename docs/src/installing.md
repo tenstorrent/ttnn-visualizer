@@ -71,35 +71,12 @@ Refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe/blob/m
 
 TT-NN Visualizer can be installed from [PyPI](https://pypi.org/project/ttnn-visualizer/):
 
+e.g.
 `pip install ttnn-visualizer`
+`uv tool install ttnn-visualizer`
 
-After installation run `ttnn-visualizer` to start the application. It is recommended to do this within a virtual environment.
+The minimum supported version of Python is **3.10**.  We recommend `uv` to manage Python versions and to set up the virtual environment. See [uv installation](https://docs.astral.sh/uv/getting-started/installation/) if `uv` is not already on your PATH.
 
-The minimum supported version of Python is **3.10**. Pyenv can be used to ensure the application runs with a supported version of Python:
+After installation run `ttnn-visualizer` to start the application.
 
-```bash
-mkdir ttnn-visualizer
-cd ttnn-visualizer
-pyenv local 3.10 # Optional step if using pyenv to manage versions
-python -m venv .env
-source .env/bin/activate
-pip install ttnn-visualizer
-ttnn-visualizer
-```
-
-See [pyenv](https://github.com/pyenv/pyenv) for installation instructions.
-
-### pipx
-
-If you have `pipx` installed on your system, it can be used to simplify the above steps.
-
-```bash
-pipx install --include-deps ttnn-visualizer
-ttnn-visualizer
-```
-
-See [pipx installation](https://pipx.pypa.io/stable/installation/) for further help with setting up `pipx`.
-
-When installing `ttnn-visualizer` in a virtual environment, ensure that it is not also installed with the system Python. Having the package installed at the system level and in a virtual environment at the same time can lead to version mismatches.
-
-If you run into any issue with an unexpected TT-NN Visualizer version appearing in the browser ensure you have uninstalled the system package by running `pip uninstall ttnn-visualizer` outside of the virtual env.
+If you choose not to use `uv`, ensure `ttnn-visualizer` is installed in a virtual environment and not with the system Python. Having the package installed at the system level and in a virtual environment at the same time can lead to version mismatches. If you run into any issue with an unexpected TT-NN Visualizer version appearing in the browser ensure you have uninstalled the system package.
