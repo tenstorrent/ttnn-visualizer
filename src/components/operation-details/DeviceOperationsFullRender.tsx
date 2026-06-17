@@ -26,8 +26,13 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
-import { AllocationDetails, processMemoryAllocations } from '../../functions/processMemoryAllocations';
+import {
+    AllocationDetails,
+    CBPressureSnapshot,
+    processMemoryAllocations,
+} from '../../functions/processMemoryAllocations';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
+import CircularBufferPressureModal from './CircularBufferPressureModal';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1MemorySize';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
@@ -213,18 +218,28 @@ const renderMemoryInfo = (
     );
 };
 
+type CBPressureModalState = { title: string; snapshot: CBPressureSnapshot } | null;
+
 function useDeviceOperationsFullRenderModel(args: {
     deviceOperations: Node[];
     details: OperationDetails;
     onLegendClick: (address: number, tensorId?: number) => void;
     setDeviceOperationsArgsNode: React.Dispatch<React.SetStateAction<DeviceOperationNode | null>>;
     setDeviceOperationsArgsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    setCbPressureModal: React.Dispatch<React.SetStateAction<CBPressureModalState>>;
     colorVariance?: number;
 }) {
-    const { deviceOperations, details, onLegendClick, setDeviceOperationsArgsOpen, setDeviceOperationsArgsNode } = args;
+    const {
+        deviceOperations,
+        details,
+        onLegendClick,
+        setDeviceOperationsArgsOpen,
+        setDeviceOperationsArgsNode,
+        setCbPressureModal,
+    } = args;
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
+    const { memoryAllocationList, peakMemoryLoad, cbPressureByOpId } = processMemoryAllocations(deviceOperations);
 
     const formatTensor = useCallback((node: Node) => formatTensorRendering(node, details), [details]);
 
@@ -232,6 +247,10 @@ function useDeviceOperationsFullRenderModel(args: {
         (nodes: Node[]) => {
             const deviceOpList: Node[] = [];
             const stack: JSX.Element[][] = [];
+            // Tracks the innermost open DeviceOp (matching the JSX stack) so
+            // the CB-pressure button rendered at the "<h4>CBs</h4>" heading
+            // knows which DeviceOp snapshot to surface.
+            const deviceOpIdStack: { id: number; name: string }[] = [];
             const output: JSX.Element[] = [];
             let consecutiveCBsOutput = false;
 
@@ -243,11 +262,13 @@ function useDeviceOperationsFullRenderModel(args: {
                 if (nodeType === NodeType.function_start) {
                     deviceOpList.push(node);
                     stack.push([]);
+                    deviceOpIdStack.push({ id: node.id, name: node.params.name });
                     return;
                 }
 
                 if (nodeType === NodeType.function_end) {
                     const innerContent = stack.pop();
+                    deviceOpIdStack.pop();
                     const opName = node.params.name;
 
                     const opArgs = node.operation?.arguments;
@@ -417,12 +438,43 @@ function useDeviceOperationsFullRenderModel(args: {
                     const numCores = parseInt(cb.num_cores, 10) || 1;
 
                     const variance = cb.allocateOperationId;
+                    const currentDeviceOp = deviceOpIdStack[deviceOpIdStack.length - 1];
+                    const cbSnapshot = currentDeviceOp ? cbPressureByOpId.get(currentDeviceOp.id) : undefined;
                     operationContent = (
                         <Fragment key={`${cb.address}-${index}`}>
                             {!consecutiveCBsOutput && (
                                 <>
                                     <hr />
-                                    <h4>CBs</h4>
+                                    <div className='cbs-heading'>
+                                        <h4>CBs</h4>
+                                        {cbSnapshot && currentDeviceOp && (
+                                            <>
+                                                <span
+                                                    className='cbs-heading-separator'
+                                                    aria-hidden='true'
+                                                >
+                                                    ·
+                                                </span>
+                                                <Tooltip
+                                                    content='Show per-core CB allocations for this DeviceOp'
+                                                    position={PopoverPosition.TOP}
+                                                >
+                                                    <button
+                                                        type='button'
+                                                        className='cbs-heading-link'
+                                                        onClick={() =>
+                                                            setCbPressureModal({
+                                                                title: `${currentDeviceOp.name} · per-core CB allocations`,
+                                                                snapshot: cbSnapshot,
+                                                            })
+                                                        }
+                                                    >
+                                                        View per-core allocations
+                                                    </button>
+                                                </Tooltip>
+                                            </>
+                                        )}
+                                    </div>
                                 </>
                             )}
                             <MemoryLegendElement
@@ -458,12 +510,14 @@ function useDeviceOperationsFullRenderModel(args: {
             return output;
         },
         [
+            cbPressureByOpId,
             details,
             formatTensor,
             memoryAllocationList,
             onLegendClick,
             peakMemoryLoad,
             selectedAddress,
+            setCbPressureModal,
             setDeviceOperationsArgsNode,
             setDeviceOperationsArgsOpen,
         ],
@@ -486,12 +540,14 @@ interface DeviceOperationsFullRenderProps {
 const DeviceOperationsFullRender = ({ deviceOperations, details, onLegendClick }: DeviceOperationsFullRenderProps) => {
     const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);
     const [deviceOperationsArgsNode, setDeviceOperationsArgsNode] = useState<DeviceOperationNode | null>(null);
+    const [cbPressureModal, setCbPressureModal] = useState<CBPressureModalState>(null);
     const { peakMemoryLoad, renderOperations } = useDeviceOperationsFullRenderModel({
         deviceOperations,
         details,
         onLegendClick,
         setDeviceOperationsArgsNode,
         setDeviceOperationsArgsOpen,
+        setCbPressureModal,
     });
     return (
         <div className='device-operations-full-render-wrap'>
@@ -499,6 +555,12 @@ const DeviceOperationsFullRender = ({ deviceOperations, details, onLegendClick }
                 node={deviceOperationsArgsNode}
                 open={deviceOperationsArgsOpen}
                 onClose={() => setDeviceOperationsArgsOpen(false)}
+            />
+            <CircularBufferPressureModal
+                isOpen={cbPressureModal !== null}
+                title={cbPressureModal?.title ?? ''}
+                snapshot={cbPressureModal?.snapshot ?? null}
+                onClose={() => setCbPressureModal(null)}
             />
             <h3 className='peak-load monospace'>
                 Peak L1 memory load per core:{' '}

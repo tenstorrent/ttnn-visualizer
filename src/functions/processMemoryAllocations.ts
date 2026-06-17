@@ -5,7 +5,7 @@
 import { DeviceOperationNode, Node, NodeType } from '../model/APIData';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
 import { StringBufferType } from '../model/BufferType';
-import { getCoresInRangeList } from './math';
+import { CoreCoord, getCoresInRangeList } from './math';
 
 export type AllocationDetails = {
     id: number;
@@ -17,23 +17,97 @@ export type AllocationDetails = {
     deviceId: number;
 };
 
+/**
+ * One circular-buffer allocation summarised at the moment it landed, so the
+ * pressure modal can replay "which CBs contributed to this core" without
+ * re-walking the graph.
+ */
+export type CBAllocationSummary = {
+    /** Node id of the originating `circular_buffer_allocate` event. */
+    nodeId: number;
+    address: number;
+    /** Per-core size in bytes (matches the raw `size` field on the node). */
+    size: number;
+    /** Number of distinct cores the allocation covers (0 if unattributed). */
+    numCores: number;
+    /** Raw `core_range_set` string from the graph node (for display + reproducibility). */
+    coreRangeSet: string;
+    /** Expanded cores; empty when the allocation falls into the `'?'` bucket. */
+    cores: CoreCoord[];
+    /** Op id/name that created the CB, used downstream for color-variance/highlighting. */
+    allocateOperationId?: number;
+    allocateOperationName?: string;
+};
+
+/**
+ * Snapshot of CB pressure for one DeviceOp. Keyed by the innermost open
+ * `function_start.id` at the time the snapshot was taken (either at a
+ * `circular_buffer_deallocate_all` or, as a fallback, at `function_end` when
+ * CBs are still live).
+ */
+export type CBPressureSnapshot = {
+    /** Bytes-per-core, keyed by `"x,y"`. The `'?'` bucket captures unattributed CBs. */
+    byCore: Record<string, number>;
+    /** Convenience: largest attributed (x,y) value in `byCore`. Excludes `'?'`. */
+    maxBytes: number;
+    /** Bucket for CB allocations whose `core_range_set` resolved to zero cores. */
+    unattributedBytes: number;
+    /** Ordered list of CBs that were live when the snapshot was taken. */
+    allocations: CBAllocationSummary[];
+};
+
 export function processMemoryAllocations(
     graph: Node[],
     // _inputs: { id: number; size: number | null }[],
 ): {
     peakMemoryLoad: number;
     memoryAllocationList: AllocationDetails[];
+    cbPressureByOpId: Map<number, CBPressureSnapshot>;
 } {
     let peakMemoryLoad = 0;
     const memoryAllocationList: AllocationDetails[] = [];
     const curOpList: { name: string; id: number; deviceId?: string | number }[] = [];
     const cbBytesByCore = new Map<string, number>();
+    // Live CB allocations since the last `circular_buffer_deallocate_all` (or
+    // since the DeviceOp started, whichever came last). Mirrors `cbBytesByCore`
+    // so the snapshot can attribute pressure back to specific CB events.
+    let liveCBs: CBAllocationSummary[] = [];
+    const cbPressureByOpId = new Map<number, CBPressureSnapshot>();
+
+    const snapshotCBPressure = (opId: number) => {
+        if (liveCBs.length === 0 && cbBytesByCore.size === 0) {
+            return;
+        }
+        const byCore: Record<string, number> = {};
+        let maxBytes = 0;
+        let unattributedBytes = 0;
+        for (const [k, v] of cbBytesByCore.entries()) {
+            byCore[k] = v;
+            if (k === '?') {
+                unattributedBytes = v;
+            } else if (v > maxBytes) {
+                maxBytes = v;
+            }
+        }
+        // Last writer wins if a DeviceOp triggers multiple snapshots. v1
+        // assumption: one `circular_buffer_deallocate_all` per DeviceOp.
+        cbPressureByOpId.set(opId, {
+            byCore,
+            maxBytes,
+            unattributedBytes,
+            allocations: liveCBs.slice(),
+        });
+    };
+
     let totalBuffer = 0;
 
     const maxCbPerCore = (): number => {
         let m = 0;
-        for (const v of cbBytesByCore.values()) {
-            if (v > m) {
+        // Skip the '?' bucket — those bytes have no core attribution so
+        // they don't belong in a per-core peak. Mirrors the same exclusion
+        // in snapshotCBPressure() so cbPeak and snapshot.maxBytes agree.
+        for (const [k, v] of cbBytesByCore.entries()) {
+            if (k !== '?' && v > m) {
                 m = v;
             }
         }
@@ -70,10 +144,28 @@ export function processMemoryAllocations(
                     cbBytesByCore.set(k, (cbBytesByCore.get(k) ?? 0) + size);
                 }
             }
+            liveCBs.push({
+                nodeId: node.id,
+                address: parseInt(node.params.address, 10),
+                size,
+                numCores: cores.length,
+                coreRangeSet: node.params.core_range_set,
+                cores,
+                allocateOperationId: currentOp?.id,
+                allocateOperationName: currentOp?.name,
+            });
         }
 
         if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+            // Snapshot before clearing so the modal can recreate the pressure
+            // state seen by the just-completed kernel. Attribute to the
+            // innermost open function_start — that's the DeviceOp whose CBs
+            // are being released.
+            if (currentOp) {
+                snapshotCBPressure(currentOp.id);
+            }
             cbBytesByCore.clear();
+            liveCBs = [];
         }
 
         if (node.node_type === NodeType.buffer_allocate && node.params.type === StringBufferType.L1) {
@@ -83,6 +175,14 @@ export function processMemoryAllocations(
         }
 
         if (node.node_type === NodeType.function_end) {
+            // Safety net: well-behaved DeviceOps end with
+            // `circular_buffer_deallocate_all`, but if a kernel exits with CBs
+            // still live, attribute the lingering pressure to the closing op
+            // before unwinding the stack.
+            const ending = curOpList[curOpList.length - 1];
+            if (ending && liveCBs.length > 0 && !cbPressureByOpId.has(ending.id)) {
+                snapshotCBPressure(ending.id);
+            }
             curOpList.pop();
         }
 
@@ -112,7 +212,7 @@ export function processMemoryAllocations(
         peakMemoryLoad = Math.max(peakMemoryLoad, cbPeak + totalBuffer);
     }
 
-    return { peakMemoryLoad, memoryAllocationList };
+    return { peakMemoryLoad, memoryAllocationList, cbPressureByOpId };
 }
 
 export const processInputsOutputs = (graph: Node[]): DeviceOperationNode[] => {
