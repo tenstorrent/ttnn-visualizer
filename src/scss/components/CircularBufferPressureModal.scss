@@ -186,6 +186,17 @@
                                 stroke-width: 0.5;
                             }
 
+                            // Aliased CBs render with `fill="none"` and surface
+                            // their colour through the inline `--cb-color`
+                            // custom property. The doubled-up class selector
+                            // beats the base `.cb-strip-chunk { stroke: ...; }`
+                            // specificity so the outline picks up the palette
+                            // colour instead of the translucent-black default.
+                            .cb-strip-chunk.aliased {
+                                stroke: var(--cb-color, #{$tt-yellow});
+                                stroke-width: 1.5;
+                            }
+
                             .cb-strip-chunk.selected {
                                 stroke: $tt-yellow;
                                 stroke-width: 2;
@@ -252,6 +263,43 @@
                             flex: 0 0 auto;
                         }
 
+                        // Outline-only treatment for aliased CBs: keep the
+                        // colour signal on the border but drop the fill so the
+                        // row reads as "view, not allocation" at a glance. The
+                        // border colour comes from the inline style on the
+                        // swatch element (set in the React render based on the
+                        // CB palette colour).
+                        .swatch.swatch-outline {
+                            border-width: 2px;
+                            background-color: transparent;
+                        }
+
+                        // The aliased marker sits at the end of the row,
+                        // visually grouping the icon and the label so the row
+                        // reads as `[swatch] addr  size  cores  [link icon]
+                        // Globally allocated`. Push it to the right edge with
+                        // `margin-left: auto` rather than a dedicated grid
+                        // column so the layout still degrades gracefully in
+                        // narrower viewports.
+                        .aliased-marker {
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 4px;
+                            margin-left: auto;
+                            padding: 1px 6px;
+                            border: 1px solid rgba($tt-white, 0.35);
+                            border-radius: 8px;
+                            font-size: 10px;
+                            font-style: italic;
+                            opacity: 0.85;
+                            color: rgba($tt-white, 0.85);
+                            white-space: nowrap;
+
+                            svg {
+                                fill: rgba($tt-white, 0.85);
+                            }
+                        }
+
                         .cb-row-body {
                             display: grid;
                             grid-template-columns: 1fr auto auto;
@@ -270,6 +318,16 @@
                             .cores {
                                 opacity: 0.7;
                             }
+                        }
+
+                        // Aliased CBs get a subtle dotted underline on the
+                        // address column so the row reads as a link back to
+                        // the tensor allocation. Cheaper than tinting the
+                        // whole row, which would compete with the .active
+                        // (yellow) selection state below.
+                        &.aliased .cb-row-body .addr {
+                            text-decoration: underline dotted rgba($tt-white, 0.4);
+                            text-underline-offset: 2px;
                         }
                     }
                 }
@@ -369,6 +427,15 @@
                             fill: $tt-black;
                             pointer-events: none;
                             user-select: none;
+                        }
+
+                        // Aliased rects in the zoom plot mirror the per-core
+                        // strip: `fill="none"` + a coloured stroke via the
+                        // inline `--cb-color` variable. Higher specificity than
+                        // the base rule above keeps the colour signal intact.
+                        &.aliased .zoomed-chunk-rect {
+                            stroke: var(--cb-color, #{$tt-yellow});
+                            stroke-width: 1.5;
                         }
 
                         &:hover .zoomed-chunk-rect {

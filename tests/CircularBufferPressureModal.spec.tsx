@@ -267,6 +267,7 @@ describe('CircularBufferPressureModal - selection flows', () => {
                     numCores: 1,
                     coreRangeSet: '{[(x=1,y=1) - (x=1,y=1)]}',
                     cores: [{ x: 1, y: 1 }],
+                    globallyAllocated: false,
                 },
             ],
         };
@@ -304,6 +305,7 @@ describe('CircularBufferPressureModal - legend totals', () => {
                     numCores: 1,
                     coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
                     cores: [{ x: 0, y: 0 }],
+                    globallyAllocated: false,
                 },
                 {
                     nodeId: 12,
@@ -312,6 +314,7 @@ describe('CircularBufferPressureModal - legend totals', () => {
                     numCores: 1,
                     coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
                     cores: [{ x: 0, y: 0 }],
+                    globallyAllocated: false,
                 },
             ],
         };
@@ -342,7 +345,178 @@ describe('CircularBufferPressureModal - legend totals', () => {
         // No totals row when there's nothing to total.
         expect(screen.queryByText('Peak per core')).not.toBeInTheDocument();
     });
+
+    it('does not count aliased CBs toward the "Total CBs" sum (#1651 / Copilot review on #1656)', () => {
+        // Regression for the legend-totals interaction with #1651: aliased
+        // CBs are intentionally excluded from `snapshot.maxBytes`, so they
+        // must also be excluded from `cbSum`. Otherwise `cbSum > maxBytes`
+        // fires even when the anonymous CBs share cores, surfacing the
+        // tooltip's "disjoint core sets" explanation for the wrong reason.
+        const anonymous = 32;
+        const aliased = 100_000;
+        const snapshot: CBPressureSnapshot = {
+            // Anonymous CB lives on (0,0); aliased CB is a view into an
+            // upstream tensor and contributes no per-core pressure.
+            byCore: { '0,0': anonymous },
+            maxBytes: anonymous,
+            unattributedBytes: 0,
+            allocations: [
+                {
+                    nodeId: 1,
+                    address: 0x1000,
+                    size: aliased,
+                    numCores: 1,
+                    coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
+                    cores: [{ x: 0, y: 0 }],
+                    globallyAllocated: true,
+                },
+                {
+                    nodeId: 2,
+                    address: 0x2000,
+                    size: anonymous,
+                    numCores: 1,
+                    coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
+                    cores: [{ x: 0, y: 0 }],
+                    globallyAllocated: false,
+                },
+            ],
+        };
+        renderModal(snapshot);
+
+        // Anonymous CB sum (32 B) == maxBytes (32 B), so "Total CBs" must be
+        // hidden. Pre-fix this would have fired because cbSum = 32 + 100_000
+        // > maxBytes = 32.
+        expect(screen.getByText('Peak per core')).toBeInTheDocument();
+        expect(screen.queryByText('Total CBs')).not.toBeInTheDocument();
+    });
 });
+
+describe('CircularBufferPressureModal - globally_allocated CBs (#1651)', () => {
+    it('renders aliased CB rows with the outline-only swatch and Globally allocated marker', () => {
+        renderModal(buildAliasedSnapshot());
+
+        const rows = document.querySelectorAll('button.cb-row');
+        expect(rows).toHaveLength(2);
+
+        const aliasedRow = rows[0];
+        const anonymousRow = rows[1];
+
+        expect(aliasedRow).toHaveClass('aliased');
+        expect(anonymousRow).not.toHaveClass('aliased');
+
+        const aliasedSwatch = aliasedRow.querySelector('.swatch');
+        const anonymousSwatch = anonymousRow.querySelector('.swatch');
+        expect(aliasedSwatch).toHaveClass('swatch-outline');
+        expect(anonymousSwatch).not.toHaveClass('swatch-outline');
+        // Outline-only swatches drop the fill explicitly so the row reads as
+        // "view, not allocation".
+        expect((aliasedSwatch as HTMLElement).style.backgroundColor).toBe('transparent');
+        expect((anonymousSwatch as HTMLElement).style.backgroundColor).not.toBe('transparent');
+
+        expect(within(aliasedRow as HTMLElement).getByText('Globally allocated')).toBeInTheDocument();
+        expect(within(anonymousRow as HTMLElement).queryByText('Globally allocated')).not.toBeInTheDocument();
+    });
+
+    it('exposes the aliased-to-tensor address through the row aria-label', () => {
+        // Tooltip text on the row itself is hard to assert without hover
+        // simulation; the marker's `aria-label` gives us the same semantic
+        // payload synchronously and is what assistive tech reads anyway.
+        renderModal(buildAliasedSnapshot());
+
+        const marker = document.querySelector('.cb-row.aliased .aliased-marker');
+        expect(marker).not.toBeNull();
+        expect(marker).toHaveAttribute('aria-label', expect.stringMatching(/Globally allocated.*aliased to tensor/i));
+    });
+
+    it('keeps aliased and anonymous CBs in a single list (no section split)', () => {
+        // AC explicitly forbids splitting aliased CBs into their own
+        // sub-heading; the kernel-side audience expects all CBs interleaved
+        // in their natural (address) order.
+        renderModal(buildAliasedSnapshot());
+
+        const legend = document.querySelector('.legend .cb-list');
+        expect(legend).not.toBeNull();
+        const rows = (legend as HTMLElement).querySelectorAll('button.cb-row');
+        expect(rows).toHaveLength(2);
+        // Only one Circular buffers heading - no "Globally allocated" sub-heading
+        // sneaking into the legend layout.
+        expect(document.querySelectorAll('.legend h4')).toHaveLength(1);
+    });
+
+    it('marks the per-core strip rect for an aliased CB as aliased', () => {
+        renderModal(buildAliasedSnapshot());
+
+        // The aliased CB lands on (0,0); its rect should carry the .aliased
+        // class so SCSS can render it as outline-only.
+        const cellRects = getTensix(0, 0).querySelectorAll('.cb-strip-chunk');
+        const aliasedRects = Array.from(cellRects).filter((r) => r.classList.contains('aliased'));
+        const filledRects = Array.from(cellRects).filter((r) => !r.classList.contains('aliased'));
+        expect(aliasedRects.length).toBeGreaterThan(0);
+        // The anonymous CB sits on (1,0), not (0,0), so (0,0) should carry
+        // only the aliased rect in this fixture.
+        expect(filledRects).toHaveLength(0);
+        // Aliased rects render with `fill="none"` so the outline-only treatment
+        // applied via SCSS is visible at the SVG layer too.
+        expect(aliasedRects[0]).toHaveAttribute('fill', 'none');
+    });
+
+    it('opens the zoomed plot with an aliased rect when an aliased-only core is selected', () => {
+        renderModal(buildAliasedSnapshot());
+
+        fireEvent.click(getTensix(0, 0));
+        const details = document.querySelector('.tensix-details') as HTMLElement | null;
+        expect(details).not.toBeNull();
+
+        // Zoomed plot mirrors the strip: aliased CBs render outline-only.
+        const zoomedChunks = details!.querySelectorAll('.zoomed-chunk');
+        const aliasedChunks = Array.from(zoomedChunks).filter((c) => c.classList.contains('aliased'));
+        expect(aliasedChunks.length).toBeGreaterThan(0);
+        const aliasedRect = aliasedChunks[0].querySelector('.zoomed-chunk-rect');
+        expect(aliasedRect).toHaveAttribute('fill', 'none');
+
+        // Tooltip <title> for the aliased zoomed chunk surfaces the "aliased
+        // to tensor" framing the issue asks for.
+        const title = aliasedChunks[0].querySelector('title');
+        expect(title?.textContent).toMatch(/Aliased to tensor @/);
+        expect(title?.textContent).toMatch(/no new allocation/);
+    });
+});
+
+// Two CBs, one aliased (globally_allocated=1) on (0,0), one anonymous on (1,0).
+// Matches the resnet50 op-8 pattern where the aliased CB at the tensor's
+// address must not advance the per-core peak.
+function buildAliasedSnapshot(): CBPressureSnapshot {
+    const anonymousSize = 32;
+    return {
+        byCore: { '1,0': anonymousSize },
+        maxBytes: anonymousSize,
+        unattributedBytes: 0,
+        allocations: [
+            {
+                nodeId: 1,
+                address: 0x1000,
+                size: 100_000,
+                numCores: 1,
+                coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
+                cores: [{ x: 0, y: 0 }],
+                allocateOperationId: 100,
+                allocateOperationName: 'halo',
+                globallyAllocated: true,
+            },
+            {
+                nodeId: 2,
+                address: 0x2000,
+                size: anonymousSize,
+                numCores: 1,
+                coreRangeSet: '{[(x=1,y=0) - (x=1,y=0)]}',
+                cores: [{ x: 1, y: 0 }],
+                allocateOperationId: 100,
+                allocateOperationName: 'halo',
+                globallyAllocated: false,
+            },
+        ],
+    };
+}
 
 // Default fixture: two disjoint CBs (1 MiB on (0,0), 256 KiB on (1,0)).
 // Peak is the per-core max, which equals the bigger CB; sum > peak so the
@@ -364,6 +538,7 @@ function buildSnapshot(overrides: Partial<CBPressureSnapshot> = {}): CBPressureS
                 cores: [{ x: 0, y: 0 }],
                 allocateOperationId: 100,
                 allocateOperationName: 'demo_op',
+                globallyAllocated: false,
             },
             {
                 nodeId: 2,
@@ -374,6 +549,7 @@ function buildSnapshot(overrides: Partial<CBPressureSnapshot> = {}): CBPressureS
                 cores: [{ x: 1, y: 0 }],
                 allocateOperationId: 100,
                 allocateOperationName: 'demo_op',
+                globallyAllocated: false,
             },
         ],
         ...overrides,

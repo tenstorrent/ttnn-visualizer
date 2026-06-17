@@ -13,6 +13,7 @@ dist-ssr
 *.local
 .env
 *.tsbuildinfo
+.vite
 
 # We use PNPM
 package-lock.json

@@ -299,7 +299,16 @@ interface BufferAllocateParams extends BaseMemoryParams {
 
 interface CircularBufferAllocateParams extends BaseMemoryParams {
     core_range_set: string;
-    globally_allocated: string; // 'false';
+    // tt-metal emits this as a JSON string `'0'` / `'1'` in the captured-graph
+    // blob (verified against the `resnet50_main_jun10_2110` raw
+    // `graph_capture.json`, not just the DB round-trip). The stale `'false'`
+    // comment on this field was misleading: the values are integer-valued
+    // strings, not boolean strings. `'1'` means the CB is a kernel-side view
+    // bound to an existing L1 sharded buffer (the tensor) rather than a fresh
+    // allocation. Optional because older reports captured before the field was
+    // added won't include it; the renderer falls back to treating the CB as a
+    // standalone allocation in that case. See #1651.
+    globally_allocated?: '0' | '1';
     allocateOperationId: number;
     allocateOperationName: string;
 }
