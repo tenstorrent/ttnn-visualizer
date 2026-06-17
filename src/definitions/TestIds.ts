@@ -16,6 +16,9 @@ export const TEST_IDS = Object.freeze({
     REMOTE_SYNC_DISABLED: 'remote-sync-disabled',
     REMOTE_SYNC_BUTTON: 'remote-sync-button',
 
+    // MLIR
+    MLIR_DISABLED: 'mlir-disabled',
+
     // Comparison components
     COMPARISON_REPORT_SELECTOR: 'comparison-report-selector',
 

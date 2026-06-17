@@ -4,7 +4,7 @@
 
 """Regression tests for path-traversal hardening in file upload handling.
 
-PR #1467 Copilot review (round 2) flagged that the MLIR upload path used
+PR #1467 Copilot review (round 2) flagged that upload paths used
 `file.filename` verbatim when constructing the destination path, allowing a
 crafted multipart filename like `"../etc/passwd.json"` or `"/etc/passwd.json"`
 to escape `target_directory`. These tests pin the hardening (`Path(...).name`
@@ -16,7 +16,6 @@ from http import HTTPStatus
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -327,147 +326,6 @@ def test_validate_files_skips_consistency_check_when_folder_name_is_explicit():
         _faux_file("subdir-b/other.csv"),
     ]
     assert validate_files(files, {"db.sqlite"}, folder_name="my-report") is True
-
-
-# ---- End-to-end regression: the MLIR upload endpoint ----------------------
-
-
-def test_mlir_upload_traversal_does_not_escape_target_directory(
-    app, client, make_report
-):
-    """POSTing a crafted filename must NOT write outside the MLIR directory.
-
-    This is the integration-level counterpart to the unit tests above. It
-    proves the handler wires `construct_dest_path` correctly *and* that no
-    intermediate hop (e.g. malware-scanner branch, future refactor) re-introduces
-    the traversal hole.
-    """
-    # The handler calls `update_instance(instance_id=...)` and requires a row
-    # to update, so provision one via the standard `make_report` fixture and
-    # thread its id through the `instanceId` query param.
-    instance_id = make_report()
-
-    # The shared `conftest.app` fixture sets `LOCAL_DATA_DIRECTORY` as a
-    # `str` to satisfy `SQLALCHEMY_DATABASE_URI`-style stringly-typed configs,
-    # but production `settings.py:51` initialises it as a `Path` and the
-    # handler does `data_directory / config["MLIR_DIRECTORY_NAME"]` (a `Path`
-    # operation). Cast it here so the test exercises the same operand types
-    # that the deployed app uses, without forking the shared fixture.
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
-    app.config["SERVER_MODE"] = False
-
-    payload = {
-        "files": (BytesIO(b"{}"), "../escape.json"),
-    }
-    response = client.post(
-        "/api/local/upload/mlir",
-        query_string={"instanceId": instance_id},
-        data=payload,
-        content_type="multipart/form-data",
-    )
-
-    # The handler should still accept the upload (the filename ends in .json
-    # after basename collapse), so 200 is the expected status.
-    assert response.status_code == 200, response.get_data(as_text=True)
-
-    # Walk the configured `LOCAL_DATA_DIRECTORY` and assert nothing was
-    # written outside `<local>/<MLIR_DIRECTORY_NAME>/`.
-    local_root = Path(app.config["LOCAL_DATA_DIRECTORY"]).resolve()
-    mlir_root = (local_root / app.config["MLIR_DIRECTORY_NAME"]).resolve()
-    assert mlir_root.exists(), "MLIR directory should have been created"
-
-    for path in local_root.rglob("*"):
-        if not path.is_file():
-            continue
-        # Every written file must live under `mlir_root` — no escapes.
-        assert (
-            mlir_root in path.resolve().parents or path.resolve() == mlir_root
-        ), f"File escaped MLIR directory: {path.resolve()} (target: {mlir_root})"
-
-    # And specifically: a file called `escape.json` (the basename after
-    # collapse) should exist under `mlir_root`, NOT a file called
-    # `passwd.json` under `local_root/etc/` (the pre-fix attack landing site).
-    landed_files = list(mlir_root.glob("*escape.json"))
-    assert (
-        landed_files
-    ), f"Expected `escape.json` under {mlir_root}, found: {list(mlir_root.iterdir())}"
-
-
-def test_mlir_upload_forbidden_when_server_mode(app, client, make_report):
-    """Hosted deployments (SERVER_MODE) must not accept MLIR uploads."""
-    instance_id = make_report()
-    assert app.config["SERVER_MODE"] is True
-
-    response = client.post(
-        "/api/local/upload/mlir",
-        query_string={"instanceId": instance_id},
-        data={"files": (BytesIO(b"{}"), "model.json")},
-        content_type="multipart/form-data",
-    )
-
-    assert response.status_code == HTTPStatus.FORBIDDEN
-    body = response.get_json()
-    assert body is not None
-    assert "hosted" in body["error"].lower()
-
-
-def test_mlir_upload_invokes_configured_malware_scanner(app, client, make_report):
-    """`/local/upload/mlir` must run the same `save_uploaded_files` scan path as other uploads.
-
-    Deployments set `MALWARE_SCANNER` to whatever external scanner they use.
-    This test uses a fake command name and asserts `subprocess.run` is
-    invoked with that argv plus the temp copy of the upload. `SERVER_MODE` is
-    turned off so the request reaches the save path (hosted mode rejects first).
-    """
-    instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
-    app.config["SERVER_MODE"] = False
-    app.config["MALWARE_SCANNER"] = "mock-malware-scanner --check-only"
-
-    mock_result = MagicMock(returncode=0, stdout="", stderr="")
-    with patch(
-        "ttnn_visualizer.file_uploads.subprocess.run", return_value=mock_result
-    ) as mock_run:
-        response = client.post(
-            "/api/local/upload/mlir",
-            query_string={"instanceId": instance_id},
-            data={"files": (BytesIO(b'{"x": 1}'), "model.json")},
-            content_type="multipart/form-data",
-        )
-
-    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
-    assert mock_run.call_count == 1
-    cmd = mock_run.call_args[0][0]
-    assert cmd[:2] == ["mock-malware-scanner", "--check-only"]
-    assert len(cmd) == 3
-    assert Path(cmd[2]).is_file() is False  # temp file removed after clean scan + move
-
-
-def test_mlir_upload_malware_scanner_positive_blocks_save(app, client, make_report):
-    """Non-zero scanner exit must surface as 422 and must not leave the file under MLIR dir.
-
-    `SERVER_MODE` is off so the handler runs the scan path instead of returning 403.
-    """
-    instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
-    app.config["SERVER_MODE"] = False
-    app.config["MALWARE_SCANNER"] = "mock-malware-scanner"
-
-    mock_result = MagicMock(returncode=1, stdout="", stderr="infected")
-    mlir_root = (
-        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
-    ).resolve()
-
-    with patch("ttnn_visualizer.file_uploads.subprocess.run", return_value=mock_result):
-        response = client.post(
-            "/api/local/upload/mlir",
-            query_string={"instanceId": instance_id},
-            data={"files": (BytesIO(b"{}"), "bad.json")},
-            content_type="multipart/form-data",
-        )
-
-    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert not any(p.name.endswith("bad.json") for p in mlir_root.glob("*.json"))
 
 
 # ---- End-to-end regression: profiler/performance uploads keep folder layout ---

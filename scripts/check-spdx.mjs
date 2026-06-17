@@ -34,16 +34,17 @@ const IGNORED_DIRS = [
     '.git',
     '.github',
     '.idea',
+    '.venv',
     '.vscode',
-    'dist',
-    'build',
     'backend/data/',
     'backend/ttnn_visualizer/data',
     'backend/ttnn_visualizer/static',
-    'node_modules',
-    'ttnn_env',
+    'build',
+    'dist',
     'docs/output',
     'myenv',
+    'node_modules',
+    'ttnn_env',
 ];
 
 const isFileType = (filePath, extensions) => extensions.includes(path.extname(filePath).toLowerCase());

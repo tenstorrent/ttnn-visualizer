@@ -94,6 +94,8 @@ export interface ActiveReport {
     performance_location?: ReportLocation;
     npe_name?: string;
     npe_location?: ReportLocation;
+    mlir_name?: string;
+    mlir_location?: ReportLocation;
 }
 
 export interface Instance {
@@ -101,6 +103,7 @@ export interface Instance {
     profiler_path: string | null;
     performance_path: string | null;
     npe_path: string | null;
+    mlir_path: string | null;
     active_report: ActiveReport | null;
     remote_connection: RemoteConnection | null;
     remote_profiler_folder: RemoteFolder | null;

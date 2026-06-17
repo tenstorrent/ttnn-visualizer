@@ -6,7 +6,7 @@ import dataclasses
 import enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.ext.mutable import MutableDict
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -245,6 +245,48 @@ class RemoteConnection(SerializeableModel):
     profilerPath: str
     performancePath: Optional[str] = None
     identityFile: Optional[str] = None
+
+
+class MlirServerConnection(SerializeableModel):
+    """SSH target plus Model Explorer HTTP port on the remote host's loopback.
+
+    Wire format matches ``MlirServerConnection`` in ``src/definitions/MlirServer.ts``.
+    ``port`` is the MLIR HTTP port; ``sshPort`` is SSH (maps to ``RemoteConnection.port``).
+    """
+
+    name: str = ""
+    username: str
+    host: str
+    sshPort: int = Field(default=22, ge=1, le=65535)
+    port: int = Field(ge=1, le=65535)
+    identityFile: Optional[str] = None
+
+    @field_validator("host", "username", mode="before")
+    @classmethod
+    def _strip_required_strings(cls, value: object) -> str:
+        if not isinstance(value, str):
+            return value  # type: ignore[return-value]
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be empty")
+        return stripped
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, value: object) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        return ""
+
+    def to_remote_connection(self) -> RemoteConnection:
+        return RemoteConnection(
+            name=self.name or self.host,
+            username=self.username,
+            host=self.host,
+            port=self.sshPort,
+            profilerPath="",
+            identityFile=self.identityFile,
+        )
 
 
 class StatusMessage(SerializeableModel):
