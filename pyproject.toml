@@ -1,7 +1,7 @@
 [project]
 name = "ttnn_visualizer"
-authors = [{ name = "Tenstorrent AI ULC" }]
-version = "0.89.0"
+authors = []
+version = "0.90.0"
 description = "TT-NN Visualizer"
 readme = "README.md"
 license = "Apache-2.0"

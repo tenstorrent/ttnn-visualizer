@@ -118,3 +118,33 @@ describe('MemoryLegendElement core count label', () => {
         expect(screen.queryByText(/cores?/)).not.toBeInTheDocument();
     });
 });
+
+describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
+    const chunk = { address: 0x4000, size: 1024 };
+
+    it('does not render the marker by default', () => {
+        renderLegendElement(chunk);
+
+        expect(screen.queryByText('Globally allocated')).not.toBeInTheDocument();
+        expect(document.querySelector('.globally-allocated-marker')).not.toBeInTheDocument();
+        expect(document.querySelector('.memory-color-block-outline')).not.toBeInTheDocument();
+    });
+
+    it('renders the outline-only swatch and marker when isGloballyAllocated is true', () => {
+        const container = renderLegendElement(chunk, { isGloballyAllocated: true });
+
+        const swatch = container.querySelector('.memory-color-block') as HTMLElement | null;
+        expect(swatch).not.toBeNull();
+        expect(swatch).toHaveClass('memory-color-block-outline');
+        // Outline-only swatches drop the fill so the colour signal sits on the
+        // border instead. The inline style is the source of truth for both.
+        expect(swatch!.style.backgroundColor).toBe('transparent');
+
+        expect(screen.getByText('Globally allocated')).toBeInTheDocument();
+        const marker = container.querySelector('.globally-allocated-marker');
+        expect(marker).toHaveAttribute('aria-label', expect.stringMatching(/Globally allocated.*aliased to tensor/i));
+
+        const row = container.querySelector('.legend-item');
+        expect(row).toHaveClass('globally-allocated');
+    });
+});

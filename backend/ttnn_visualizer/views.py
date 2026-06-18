@@ -19,6 +19,7 @@ import orjson
 import yaml
 import zstd
 from flask import Blueprint, Response, abort, current_app, jsonify, request, session
+from pydantic import ValidationError
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     NPEQueries,
@@ -47,8 +48,13 @@ from ttnn_visualizer.file_uploads import (
     validate_files,
 )
 from ttnn_visualizer.instances import get_instances, update_instance
+from ttnn_visualizer.mlir import (
+    test_mlir_server_connection,
+    upload_and_convert_mlir,
+)
 from ttnn_visualizer.models import (
     Instance,
+    MlirServerConnection,
     RemoteConnection,
     RemoteReportFolder,
     ReportLocation,
@@ -1478,57 +1484,6 @@ def create_npe_files():
     return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
 
 
-@api.route("/local/upload/mlir", methods=["POST"])
-def create_mlir_file():
-    # Disable MLIR uploads in server mode for security reasons - it's a local-only feature.
-    if current_app.config["SERVER_MODE"]:
-        return response_forbidden(
-            "MLIR file upload is not available in the hosted application.",
-        )
-
-    files = request.files.getlist("files")
-
-    # Empty list means the caller didn't attach a `files` part (or attached
-    # an empty one). Without this guard, the for-loop is a no-op and
-    # `paths[0]` later raises `IndexError`, surfacing as a 500.
-    if not files:
-        return response_bad_request("No files provided")
-
-    data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
-
-    for file in files:
-        # `FileStorage.filename` is typed `str | None`; calling `.endswith`
-        # on `None` raises `AttributeError` → 500. Treat missing/empty
-        # filenames the same as the wrong-extension case so the user gets
-        # the friendly StatusMessage instead.
-        if not file.filename or not file.filename.endswith(".json"):
-            return StatusMessage(
-                status=ConnectionTestStates.FAILED,
-                message="MLIR requires a valid .json file",
-            ).model_dump()
-
-    mlir_name = extract_npe_name(files)
-    target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
-    target_directory.mkdir(parents=True, exist_ok=True)
-
-    try:
-        paths = save_uploaded_files(files, target_directory)
-    except DataFormatError:
-        return response_unprocessable_entity()
-
-    instance_id = request.args.get("instanceId")
-    mlir_path = str(paths[0])
-    update_instance(
-        instance_id=instance_id,
-        mlir_name=mlir_name,
-        mlir_location=ReportLocation.LOCAL.value,
-        clear_remote=True,
-        mlir_path=mlir_path,
-    )
-
-    return StatusMessage(status=ConnectionTestStates.OK, message="Success").model_dump()
-
-
 @api.route("/remote/profiler-reports", methods=["POST"])
 def list_remote_reports_profiler():
     connection_data = request.get_json()
@@ -1748,6 +1703,96 @@ def test_remote_folder():
 
     return Response(
         orjson.dumps([status.model_dump() for status in statuses]),
+        mimetype="application/json",
+    )
+
+
+@api.route("/remote/mlir/test", methods=["POST"])
+@local_only
+def test_mlir_server():
+    connection_data = request.json
+
+    if not connection_data:
+        return response_bad_request("Missing connection data")
+
+    try:
+        mlir_connection = MlirServerConnection.model_validate(connection_data)
+    except ValidationError:
+        return response_bad_request(
+            "MLIR server requires a host, username, port, and SSH port"
+        )
+
+    statuses = test_mlir_server_connection(mlir_connection)
+
+    return Response(
+        orjson.dumps([status.model_dump() for status in statuses]),
+        mimetype="application/json",
+    )
+
+
+@api.route("/remote/mlir/upload", methods=["POST"])
+@local_only
+def upload_mlir_server():
+    files = request.files.getlist("files")
+
+    if not files:
+        return response_bad_request("No files provided")
+
+    try:
+        mlir_connection = MlirServerConnection.model_validate(
+            {
+                "name": request.form.get("name", ""),
+                "username": request.form.get("username", ""),
+                "host": request.form.get("host", ""),
+                "sshPort": request.form.get("sshPort", type=int) or 22,
+                "port": request.form.get("port", type=int),
+                "identityFile": request.form.get("identityFile") or None,
+            }
+        )
+    except ValidationError:
+        return response_bad_request(
+            "MLIR server requires a host, username, and MLIR port"
+        )
+
+    file = files[0]
+    result = upload_and_convert_mlir(mlir_connection, file.read(), file.filename or "")
+
+    if (
+        result.status.status != ConnectionTestStates.OK.value
+        or result.graph_json is None
+    ):
+        return result.status.model_dump()
+
+    data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+    target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
+    target_directory.mkdir(parents=True, exist_ok=True)
+
+    mlir_name = Path(Path(file.filename or "model").name).stem
+    mlir_path = target_directory / f"{mlir_name}.json"
+    mlir_path.write_text(result.graph_json, encoding="utf-8")
+
+    instance_id = request.args.get("instanceId")
+    if not instance_id:
+        return response_bad_request("Missing required query parameter: instanceId")
+
+    update_instance(
+        instance_id=instance_id,
+        mlir_name=mlir_name,
+        mlir_location=ReportLocation.LOCAL.value,
+        mlir_path=str(mlir_path),
+    )
+
+    # Return the converted graph alongside the status so callers can render it
+    # without a follow-up `/mlir` fetch. `graph_json` is already a JSON string,
+    # so embed it verbatim rather than re-serialising.
+    return Response(
+        orjson.dumps(
+            {
+                **result.status.model_dump(),
+                "name": mlir_name,
+                "graph": orjson.Fragment(result.graph_json.encode("utf-8")),
+            }
+        ),
         mimetype="application/json",
     )
 
@@ -1996,6 +2041,7 @@ def get_npe_data(instance: Instance):
 
 @api.route("/mlir", methods=["GET"])
 @with_instance
+@local_only
 @timer
 def get_mlir_json(instance: Instance):
     if not instance.mlir_path:
