@@ -54,6 +54,9 @@ def run_alembic_migrations(database_uri: str) -> None:
 
     cfg = AlembicConfig(str(alembic_ini))
     cfg.set_main_option("sqlalchemy.url", database_uri)
+    # Don't let Alembic's env.py reconfigure logging — the app already did, and
+    # fileConfig would disable the app's loggers (see env.py for details).
+    cfg.attributes["configure_logging"] = False
     logger.debug("Running Alembic migrations against configured database.")
     command.upgrade(cfg, "head")
 

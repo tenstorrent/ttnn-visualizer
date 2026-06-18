@@ -94,6 +94,8 @@ export interface ActiveReport {
     performance_location?: ReportLocation;
     npe_name?: string;
     npe_location?: ReportLocation;
+    mlir_name?: string;
+    mlir_location?: ReportLocation;
 }
 
 export interface Instance {
@@ -101,6 +103,7 @@ export interface Instance {
     profiler_path: string | null;
     performance_path: string | null;
     npe_path: string | null;
+    mlir_path: string | null;
     active_report: ActiveReport | null;
     remote_connection: RemoteConnection | null;
     remote_profiler_folder: RemoteFolder | null;
@@ -296,7 +299,16 @@ interface BufferAllocateParams extends BaseMemoryParams {
 
 interface CircularBufferAllocateParams extends BaseMemoryParams {
     core_range_set: string;
-    globally_allocated: string; // 'false';
+    // tt-metal emits this as a JSON string `'0'` / `'1'` in the captured-graph
+    // blob (verified against the `resnet50_main_jun10_2110` raw
+    // `graph_capture.json`, not just the DB round-trip). The stale `'false'`
+    // comment on this field was misleading: the values are integer-valued
+    // strings, not boolean strings. `'1'` means the CB is a kernel-side view
+    // bound to an existing L1 sharded buffer (the tensor) rather than a fresh
+    // allocation. Optional because older reports captured before the field was
+    // added won't include it; the renderer falls back to treating the CB as a
+    // standalone allocation in that case. See #1651.
+    globally_allocated?: '0' | '1';
     allocateOperationId: number;
     allocateOperationName: string;
 }
@@ -384,9 +396,22 @@ export interface BufferChunk {
     buffer_type: BufferType;
     rank?: number;
     id: string;
+}
 
+/**
+ * Render-side projection of a ``BufferChunk`` with the tensor association
+ * and palette colour resolved by the consuming component.
+ *
+ * Lives outside the API/cache shape on purpose: ``tensor_id`` and ``color``
+ * are derived from the caller's ``tensorByAddress`` map (or fallback hues),
+ * so they're per-render concerns and don't belong on the React Query cache
+ * entry. Keeping them off ``BufferChunk`` also prevents accidental in-place
+ * mutation of cached objects when more than one consumer of
+ * ``useBufferChunks`` shows up later.
+ */
+export interface DecoratedBufferChunk extends BufferChunk {
     tensor_id?: number;
-    color?: string;
+    color: string;
 }
 
 /**

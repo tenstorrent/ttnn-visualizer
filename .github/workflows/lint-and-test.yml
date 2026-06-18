@@ -16,7 +16,6 @@ jobs:
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
-          version: 11
           run_install: false
 
       -   name: Read .nvmrc
@@ -54,21 +53,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.10.16'
+          enable-cache: true
 
       - name: Install dependencies
-        run: pip install .[dev]
+        run: uv sync --extra dev --frozen
 
       - name: Run Black
-        run: black --check backend/ttnn_visualizer
+        run: uv run --frozen --extra dev black --check backend/ttnn_visualizer
 
       - name: Run Mypy
-        run: PYTHONPATH=backend mypy backend/ttnn_visualizer
+        run: PYTHONPATH=backend uv run --frozen --extra dev mypy backend/ttnn_visualizer
 
       - name: Run Backend Tests
-        run: pytest backend/ttnn_visualizer
+        run: PYTHONPATH=backend uv run --frozen --extra dev pytest backend/ttnn_visualizer

@@ -2,11 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { BufferChunk } from '../../model/APIData';
+import { DecoratedBufferChunk } from '../../model/APIData';
 
 interface SVGBufferRendererProps {
     height: number;
-    data: BufferChunk[];
+    data: DecoratedBufferChunk[];
     memoryStart: number;
     memoryEnd: number;
 }
@@ -31,7 +31,7 @@ const SVGBufferRenderer = ({ height, data, memoryStart, memoryEnd }: SVGBufferRe
                             y={0}
                             width={`${widthPercent}%`}
                             height={height}
-                            fill={chunk.color || 'red'}
+                            fill={chunk.color}
                         />
                     );
                 })}
