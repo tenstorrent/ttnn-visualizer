@@ -69,14 +69,20 @@ Refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe/blob/m
 (installing-from-pypi)=
 ## Installing from PyPI
 
-TT-NN Visualizer can be installed from [PyPI](https://pypi.org/project/ttnn-visualizer/):
+TT-NN Visualizer is a standard Python package and can be installed from [PyPI](https://pypi.org/project/ttnn-visualizer/) with whichever tool you already use.
 
-e.g.
+Using `pip` (within a virtual environment):
+
 `pip install ttnn-visualizer`
+
+Using `pipx`, which installs the app in an isolated environment for you:
+
+`pipx install ttnn-visualizer`
+
+Or, if you already use `uv`:
+
 `uv tool install ttnn-visualizer`
 
-The minimum supported version of Python is **3.10**.  We recommend `uv` to manage Python versions and to set up the virtual environment. See [uv installation](https://docs.astral.sh/uv/getting-started/installation/) if `uv` is not already on your PATH.
+The minimum supported version of Python is **3.10**. After installation run `ttnn-visualizer` to start the application.
 
-After installation run `ttnn-visualizer` to start the application.
-
-If you choose not to use `uv`, ensure `ttnn-visualizer` is installed in a virtual environment and not with the system Python. Having the package installed at the system level and in a virtual environment at the same time can lead to version mismatches. If you run into any issue with an unexpected TT-NN Visualizer version appearing in the browser ensure you have uninstalled the system package.
+Whichever tool you choose, ensure `ttnn-visualizer` is installed in an isolated/virtual environment and not with the system Python. Having the package installed at the system level and in a virtual environment at the same time can lead to version mismatches. If you run into any issue with an unexpected TT-NN Visualizer version appearing in the browser ensure you have uninstalled the system package.

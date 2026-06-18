@@ -98,10 +98,14 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
 
                                 <p>
                                     Use {NPE_REPO_URL} to generate new NPE dataset or install an older version of the
-                                    visualizer{' '}
+                                    visualizer, e.g.{' '}
                                     <code className='formatted-code'>
-                                        uv tool install ttnn-visualizer=={LEGACY_VISUALIZER_VERSION}
-                                    </code>
+                                        pip install ttnn-visualizer=={LEGACY_VISUALIZER_VERSION}
+                                    </code>{' '}
+                                    or see{' '}
+                                    <a href='https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html#installing-from-pypi'>
+                                        Installing from PyPI
+                                    </a>
                                 </p>
                             </>
                         );
