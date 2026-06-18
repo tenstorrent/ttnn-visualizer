@@ -331,16 +331,22 @@ const CircularBufferPressureBody = ({
     onClose,
 }: BodyProps) => {
     // #1655: Aliased (`globallyAllocated`) CBs can flood dense ops where most
-    // CBs are tensor views. The toggle filters them out at render time only -
-    // the data layer (snapshot.maxBytes, byCore, etc.) already excludes them
-    // from pressure totals per #1651, so peak / total numbers stay anchored
-    // to the anonymous bytes regardless of toggle state.
+    // CBs are tensor views. The toggle relieves grid-density only - the
+    // legend keeps all rows always so the right panel stays informationally
+    // complete; aliased rows just dim when the toggle is off. The data
+    // layer (snapshot.maxBytes, byCore, etc.) already excludes aliased
+    // bytes from pressure totals per #1651, so peak / total numbers stay
+    // anchored to the anonymous bytes regardless of toggle state.
     const aliasedCount = useMemo(
         () => snapshot.allocations.reduce((n, cb) => n + (cb.globallyAllocated ? 1 : 0), 0),
         [snapshot.allocations],
     );
 
-    const visibleAllocations: CBAllocationSummary[] = useMemo(() => {
+    // `gridVisibleAllocations` powers the per-core grid strip, zoomed
+    // plot, and address-axis window - the surfaces where rendering aliased
+    // CBs clutters the dense kernel-side view. The legend deliberately
+    // does NOT consume this; it always renders the full list.
+    const gridVisibleAllocations: CBAllocationSummary[] = useMemo(() => {
         if (showAliasedCBs) {
             return snapshot.allocations;
         }
@@ -349,27 +355,27 @@ const CircularBufferPressureBody = ({
 
     const hiddenAliasedCount = showAliasedCBs ? 0 : aliasedCount;
 
-    // Quick lookup for "is core part of selected CB" highlighting. Looking
-    // up against `visibleAllocations` means a selected aliased CB stops
-    // highlighting when its row is filtered out, then comes back when the
-    // toggle is flipped on again (the nodeId itself is preserved).
+    // Quick lookup for "is core part of selected CB" highlighting. Uses
+    // the full snapshot so clicking a dimmed aliased row still lights up
+    // the cores it touches in the grid - the row stays interactive even
+    // when its strip rect is hidden.
     const selectedCBCores: Set<string> | null = useMemo(() => {
         if (selectedCBNodeId === null) {
             return null;
         }
-        const cb = visibleAllocations.find((a) => a.nodeId === selectedCBNodeId);
+        const cb = snapshot.allocations.find((a) => a.nodeId === selectedCBNodeId);
         if (!cb) {
             return null;
         }
         return new Set(cb.cores.map((c) => CORE_KEY(c.x, c.y)));
-    }, [visibleAllocations, selectedCBNodeId]);
+    }, [snapshot.allocations, selectedCBNodeId]);
 
     // Pre-build a per-core CB list so the grid doesn't filter allocations
     // for every cell on every render (cells × allocations gets expensive on
     // big chips). Only cores that actually have a CB get an entry.
     const cbsByCore: Map<string, CBAllocationSummary[]> = useMemo(() => {
         const map = new Map<string, CBAllocationSummary[]>();
-        for (const cb of visibleAllocations) {
+        for (const cb of gridVisibleAllocations) {
             for (const c of cb.cores) {
                 const key = CORE_KEY(c.x, c.y);
                 const list = map.get(key);
@@ -381,7 +387,7 @@ const CircularBufferPressureBody = ({
             }
         }
         return map;
-    }, [visibleAllocations]);
+    }, [gridVisibleAllocations]);
 
     // CBs that contribute to the currently focused core; powers the "core
     // selected" detail panel without re-walking allocations on every render.
@@ -394,15 +400,15 @@ const CircularBufferPressureBody = ({
 
     // Global address-axis clip. Cells share one [memStart, memEnd] so a
     // CB at the same address lines up across cores at the same x-offset.
-    // Derives from `visibleAllocations` so that hiding aliased CBs tightens
-    // the address window around the anonymous (pressure-contributing) CBs
-    // instead of leaving a sparsely-populated strip.
+    // Derives from `gridVisibleAllocations` so that hiding aliased CBs
+    // tightens the address window around the anonymous (pressure-
+    // contributing) CBs instead of leaving a sparsely-populated strip.
     const [memStart, memEnd] = useMemo(() => {
         let lo = Number.POSITIVE_INFINITY;
         let hi = Number.NEGATIVE_INFINITY;
         // '?' bucket (numCores === 0) is excluded — it doesn't have a
         // meaningful position on the per-core address axis.
-        for (const cb of visibleAllocations) {
+        for (const cb of gridVisibleAllocations) {
             if (cb.numCores > 0) {
                 if (cb.address < lo) {
                     lo = cb.address;
@@ -417,7 +423,7 @@ const CircularBufferPressureBody = ({
             return [0, 1];
         }
         return [lo, hi];
-    }, [visibleAllocations]);
+    }, [gridVisibleAllocations]);
 
     const norm = normalisation === 'budget' ? l1Budget : snapshot.maxBytes || 1;
 
@@ -451,7 +457,7 @@ const CircularBufferPressureBody = ({
                         minimal
                         large
                     >
-                        CBs: {visibleAllocations.length}
+                        CBs: {snapshot.allocations.length}
                     </Tag>
                     {snapshot.unattributedBytes > 0 && (
                         <Tooltip
@@ -597,10 +603,16 @@ const CircularBufferPressureBody = ({
                         <p className='empty-message'>No live CBs in this DeviceOp.</p>
                     )}
                     <ul className='cb-list'>
-                        {visibleAllocations.map((cb) => {
+                        {snapshot.allocations.map((cb) => {
                             const isSelected = selectedCBNodeId === cb.nodeId;
                             const swatchColor = cbColor(cb);
                             const isAliased = cb.globallyAllocated;
+                            // Dim aliased rows when the toggle is off.
+                            // Visual demotion only - the row stays clickable
+                            // (selection still highlights cores in the grid),
+                            // it just reads as secondary to the anonymous CBs
+                            // the user is currently focused on.
+                            const isDimmed = isAliased && !showAliasedCBs;
                             // Outline-only fill for aliased CBs ("border" instead of "background")
                             // mirrors the in-cell strip treatment and keeps the colour signal
                             // tied to the tensor they alias. See #1651.
@@ -616,7 +628,11 @@ const CircularBufferPressureBody = ({
                             const row = (
                                 <button
                                     type='button'
-                                    className={classNames('cb-row', { active: isSelected, aliased: isAliased })}
+                                    className={classNames('cb-row', {
+                                        active: isSelected,
+                                        aliased: isAliased,
+                                        'aliased-dimmed': isDimmed,
+                                    })}
                                     onClick={() => setSelectedCBNodeId(isSelected ? null : cb.nodeId)}
                                 >
                                     <span
