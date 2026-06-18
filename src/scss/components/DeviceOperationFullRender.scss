@@ -10,6 +10,7 @@
         justify-content: space-between;
         border-bottom: 1px solid $tt-grey-4;
         font-weight: normal;
+        margin-bottom: 10px;
     }
 }
 
@@ -92,10 +93,11 @@
         .title {
             &.node-type-buffer_allocate,
             &.node-type-buffer_deallocate {
+                display: flex;
                 margin-bottom: 10px;
+                justify-content: space-between;
             }
         }
-
         /* stylelint-enable selector-class-pattern */
 
         .collapsible-controls {
@@ -139,11 +141,11 @@
 
     .memory-info {
         width: 320px;
-        display: inline-grid;
+        display: grid;
         gap: 10px;
         font-weight: lighter;
-        position: absolute;
-        right: 0;
+        margin-left: auto;
+        margin-bottom: 10px;
         grid-template-columns: 1fr 1fr 1fr;
         padding: 0 5px;
 
