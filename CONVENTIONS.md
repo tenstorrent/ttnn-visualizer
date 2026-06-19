@@ -898,9 +898,9 @@ Without the guard, downstream `files[0]` indexing or empty-collection iteration 
 
 Use `nvm use` from the repo root. On Node 16+, `corepack` handles pnpm shimming automatically; if `pnpm` isn't available after a fresh `nvm install`, run `corepack prepare pnpm@<version> --activate`.
 
-### Python: managed via a `venv` at the repo root
+### Python: managed via uv at the repo root
 
-Backend tooling (`black`, `isort`, `mypy`, `pytest`, `alembic`) is run from the project's Python environment. Don't install globally.
+The Python version is pinned in [`.python-version`](.python-version). Run `uv python install` (or let `uv sync` install it automatically), then `uv sync` to create `.venv` and install dev dependencies. Use `uv run` (or `pnpm run flask:*`) for backend tooling (`black`, `isort`, `mypy`, `pytest`, `alembic`). Don't install globally.
 
 ---
 
