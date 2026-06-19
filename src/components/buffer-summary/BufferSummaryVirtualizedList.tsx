@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { CSSProperties, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Tooltip } from '@blueprintjs/core';
@@ -18,6 +18,8 @@ import useBufferNavigation from '../../hooks/useBufferNavigation';
 import BufferSummaryPlotControls from './BufferSummaryPlotControls';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { CHART_DATA, OPERATION_EL_HEIGHT, TOTAL_SHADE_HEIGHT } from '../../definitions/BufferSummary';
+import { RankedAnnotation, TOP_N_MODE_LABEL, TopNAnnotationMode } from '../../functions/topNAnnotations';
+import { perfColorScale } from '../../functions/perfOverlay';
 
 interface BufferSummaryVirtualizedListProps {
     operations: BuffersByOperation[];
@@ -31,6 +33,16 @@ interface BufferSummaryVirtualizedListProps {
     memoryPadding: number;
     axisConfiguration: PlotConfiguration;
     markers?: PlotMarker[];
+    /**
+     * Top-N op annotations (#1517). When non-empty, the matching rows get a
+     * coloured rank badge in the y-tick gutter and a clickable dot on the
+     * right-side minimap rail. The map is keyed by op id and is restricted to
+     * ops present in the rendered `operations` slice — see
+     * `selectTopNAnnotations`.
+     */
+    topNAnnotationsByOpId?: Map<number, RankedAnnotation>;
+    /** Mode the annotations were computed for. Drives tooltip wording. */
+    topNAnnotationMode?: TopNAnnotationMode;
     getTensorDeallocationReport?: (operationId: number) => TensorDeallocationReport[];
     getOperationTooltipContent: (operation: BuffersByOperation) => string;
     renderOperationLink: (operation: BuffersByOperation) => React.ReactNode;
@@ -38,6 +50,14 @@ interface BufferSummaryVirtualizedListProps {
 
 const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
 const DEFAULT_GET_TENSOR_DEALLOCATION_REPORT = () => EMPTY_TENSOR_DEALLOCATION_REPORT;
+const EMPTY_ANNOTATIONS = new Map<number, RankedAnnotation>();
+
+interface TopNCssProperties extends CSSProperties {
+    '--top-n-color': string;
+}
+
+const getRankTooltipText = (annotation: RankedAnnotation, mode: TopNAnnotationMode): string =>
+    `#${annotation.rank} by ${TOP_N_MODE_LABEL[mode]} — ${annotation.valueLabel}`;
 
 function BufferSummaryVirtualizedList({
     operations,
@@ -51,6 +71,8 @@ function BufferSummaryVirtualizedList({
     memoryPadding,
     axisConfiguration,
     markers,
+    topNAnnotationsByOpId = EMPTY_ANNOTATIONS,
+    topNAnnotationMode = TopNAnnotationMode.PERF_TIME,
     getTensorDeallocationReport = DEFAULT_GET_TENSOR_DEALLOCATION_REPORT,
     getOperationTooltipContent,
     renderOperationLink,
@@ -138,6 +160,23 @@ function BufferSummaryVirtualizedList({
         };
     }, [operations, updateListState]);
 
+    const handleRailDotClick = useCallback(
+        (rowIndex: number) => {
+            // Double-call mirrors useBufferNavigation: a single scrollToIndex can be a no-op
+            // when measurements aren't ready yet, so re-fire on the next frame to actually land.
+            virtualizer.scrollToIndex(rowIndex, { align: 'center' });
+            window.requestAnimationFrame(() => {
+                virtualizer.scrollToIndex(rowIndex, { align: 'center' });
+            });
+        },
+        [virtualizer],
+    );
+
+    const sortedTopNAnnotations = useMemo(
+        () => [...topNAnnotationsByOpId.values()].sort((a, b) => a.rank - b.rank),
+        [topNAnnotationsByOpId],
+    );
+
     return (
         <div className='buffer-summary-chart'>
             <BufferSummaryPlotControls />
@@ -156,62 +195,127 @@ function BufferSummaryVirtualizedList({
                 />
             </div>
 
-            <div
-                className={classNames('scrollable-element', {
-                    [shadeClasses.top]: hasScrolledFromTop,
-                    [shadeClasses.bottom]: !hasScrolledToBottom && operations.length > virtualItems.length,
-                })}
-                onScroll={handleUserScrolling}
-                ref={scrollElementRef}
-            >
+            <div className='scrollable-with-rail'>
                 <div
-                    style={{
-                        // Div is sized to the maximum required to render all list items minus our shade element heights
-                        height: virtualHeight,
-                    }}
+                    className={classNames('scrollable-element', {
+                        [shadeClasses.top]: hasScrolledFromTop,
+                        [shadeClasses.bottom]: !hasScrolledToBottom && operations.length > virtualItems.length,
+                    })}
+                    onScroll={handleUserScrolling}
+                    ref={scrollElementRef}
                 >
                     <div
-                        className='list-container'
                         style={{
-                            // Tracks scroll position
-                            transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
+                            // Div is sized to the maximum required to render all list items minus our shade element heights
+                            height: virtualHeight,
                         }}
                     >
-                        {virtualItems.map((virtualRow) => {
-                            const operation = operations[virtualRow.index];
+                        <div
+                            className='list-container'
+                            style={{
+                                // Tracks scroll position
+                                transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
+                            }}
+                        >
+                            {virtualItems.map((virtualRow) => {
+                                const operation = operations[virtualRow.index];
+                                if (!operation) {
+                                    return null;
+                                }
 
-                            return operation ? (
-                                <div
-                                    className='buffer-summary-plot-container'
-                                    key={virtualRow.key}
-                                    data-index={virtualRow.index}
-                                >
-                                    <BufferSummaryRow
-                                        buffers={operation.buffers}
-                                        memoryStart={rowMemoryStart}
-                                        memoryEnd={rowMemoryEnd}
-                                        memoryPadding={memoryPadding}
-                                        tensorList={tensorListByOperation.get(operation.id)}
-                                        tensorDeallocationReport={getTensorDeallocationReport(operation.id)}
-                                        showMemoryLayout={showMemoryLayout}
-                                        isScrolling={isVirtualizerScrolling}
-                                    />
+                                const annotation = topNAnnotationsByOpId.get(operation.id);
+                                const badgeStyle: TopNCssProperties | undefined = annotation
+                                    ? { '--top-n-color': perfColorScale(annotation.t) }
+                                    : undefined;
+                                const badge = annotation ? (
+                                    <Tooltip
+                                        content={getRankTooltipText(annotation, topNAnnotationMode)}
+                                        placement='left'
+                                    >
+                                        <span
+                                            className='top-n-badge'
+                                            style={badgeStyle}
+                                            data-rank={annotation.rank}
+                                            data-testid={`top-n-badge-${operation.id}`}
+                                        >
+                                            #{annotation.rank}
+                                        </span>
+                                    </Tooltip>
+                                ) : null;
 
-                                    {isVirtualizerScrolling ? (
-                                        <span className='y-axis-tick'>{renderOperationLink(operation)}</span>
-                                    ) : (
+                                return (
+                                    <div
+                                        className={classNames('buffer-summary-plot-container', {
+                                            'has-top-n': annotation !== undefined,
+                                        })}
+                                        key={virtualRow.key}
+                                        data-index={virtualRow.index}
+                                    >
+                                        <BufferSummaryRow
+                                            buffers={operation.buffers}
+                                            memoryStart={rowMemoryStart}
+                                            memoryEnd={rowMemoryEnd}
+                                            memoryPadding={memoryPadding}
+                                            tensorList={tensorListByOperation.get(operation.id)}
+                                            tensorDeallocationReport={getTensorDeallocationReport(operation.id)}
+                                            showMemoryLayout={showMemoryLayout}
+                                            isScrolling={isVirtualizerScrolling}
+                                        />
+
+                                        {/* Blueprint's Tooltip clones only the FIRST child it
+                                            receives (Children.toArray(children)[0]). A Fragment
+                                            with link + badge would silently drop the badge, and
+                                            swapping wrappers per `isScrolling` made the badge
+                                            flicker on/off as the virtualizer debounced. Wrap both
+                                            in one stable span and disable the tooltip during
+                                            scroll for perf parity with the old plain-span branch. */}
                                         <Tooltip
                                             content={getOperationTooltipContent(operation)}
-                                            className='y-axis-tick'
+                                            disabled={isVirtualizerScrolling}
                                         >
-                                            {renderOperationLink(operation)}
+                                            <span className='y-axis-tick'>
+                                                {renderOperationLink(operation)}
+                                                {badge}
+                                            </span>
                                         </Tooltip>
-                                    )}
-                                </div>
-                            ) : null;
-                        })}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
+
+                {sortedTopNAnnotations.length > 0 && operations.length > 0 ? (
+                    <div
+                        className='top-n-rail'
+                        role='list'
+                        aria-label='Top-ranked operations'
+                        data-testid='top-n-rail'
+                    >
+                        {sortedTopNAnnotations.map((annotation) => {
+                            const dotStyle: TopNCssProperties = {
+                                '--top-n-color': perfColorScale(annotation.t),
+                                top: `${(annotation.rowIndex / operations.length) * 100}%`,
+                            };
+                            return (
+                                <Tooltip
+                                    key={annotation.opId}
+                                    content={getRankTooltipText(annotation, topNAnnotationMode)}
+                                    placement='left'
+                                >
+                                    <button
+                                        type='button'
+                                        className='top-n-rail-dot'
+                                        style={dotStyle}
+                                        onClick={() => handleRailDotClick(annotation.rowIndex)}
+                                        aria-label={`Jump to ${getRankTooltipText(annotation, topNAnnotationMode)}`}
+                                        data-testid={`top-n-rail-dot-${annotation.opId}`}
+                                    />
+                                </Tooltip>
+                            );
+                        })}
+                    </div>
+                ) : null}
             </div>
         </div>
     );

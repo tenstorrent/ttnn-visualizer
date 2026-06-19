@@ -7,4 +7,45 @@
     flex-direction: column;
     margin-bottom: 0;
     align-items: flex-start;
+
+    .top-n-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+
+        // Blueprint 6 ships `.bp6-…` classes; the previous `.bp5-…` rules
+        // here matched nothing, so the Switch kept its default
+        // `margin-bottom: 10px` (knocking it out of vertical alignment
+        // with the NumericInput / HTMLSelect) and the stepper size
+        // overrides never applied.
+        > .bp6-control {
+            margin-bottom: 0;
+
+            // Children of `.bp6-control` (the indicator + label) need a
+            // shared baseline so the toggle visually centres against the
+            // larger NumericInput and HTMLSelect to its right.
+            display: inline-flex;
+            align-items: center;
+        }
+
+        // Three-digit ceiling (TOP_N_COUNT_MAX = 50; bumping into the
+        // low hundreds at most). The stock 80px / 60px sizing dwarfed
+        // the value next to it; tighten so the input reads as a pill
+        // rather than a giant text field.
+        .bp6-numeric-input {
+            width: 64px;
+
+            .bp6-input {
+                width: 44px;
+            }
+        }
+
+        .top-n-by {
+            font-size: 12px;
+            color: inherit;
+            opacity: 0.85;
+        }
+    }
 }

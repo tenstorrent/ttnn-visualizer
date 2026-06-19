@@ -16,6 +16,7 @@ import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
+import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../functions/topNAnnotations';
 
 // App state
 export const activeToastAtom = atom<Id | null>(null);
@@ -78,6 +79,18 @@ export const shouldSortBySizeAtom = atom<SortingOptions>(SortingOptions.OFF);
 // Buffers route
 export const selectedBufferSummaryTabAtom = atom<TAB_IDS>(TAB_IDS.L1);
 export const showBufferSummaryZoomedAtom = atomWithStorage('showBufferSummary', false);
+// Top-N op annotation on the buffer summary chart (#1517). Mode and N persist
+// across sessions because they're stable user preferences; the on/off toggle
+// stays in-memory and persists for the lifetime of the loaded session — the
+// tri-state availability machinery in the controls grays the switch out when
+// the active mode goes UNAVAILABLE / UNLINKED on report change, so a
+// previously-enabled toggle never produces ghost annotations.
+export const topNAnnotationEnabledAtom = atom<boolean>(false);
+export const topNAnnotationModeAtom = atomWithStorage<TopNAnnotationMode>(
+    'topNAnnotationMode',
+    TopNAnnotationMode.PERF_TIME,
+);
+export const topNAnnotationCountAtom = atomWithStorage<number>('topNAnnotationCount', DEFAULT_TOP_N_COUNT);
 
 // Performance route
 export const comparisonPerformanceReportListAtom = atom<string[] | null>(null);

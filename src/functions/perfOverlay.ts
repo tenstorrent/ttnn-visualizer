@@ -15,10 +15,18 @@ import { PERF_BINS } from '../definitions/GraphColors';
  * semantics on this interface so future modifications can't silently mix
  * units between the projection and the rest of the perf-table pipeline
  * (see `PerfDeviceTimeChart` for the same µs → ns conversion).
+ *
+ * `op_to_op_gap`, `dram_percent`, and `flops_percent` are optional richer
+ * fields consumed by the top-N annotation feature on the Buffer Summary
+ * view. The graph perf overlay ignores them; callers that don't have them
+ * available can leave them unset.
  */
 export interface PerfOverlaySource {
     id: number | null;
     device_time: number | null;
+    op_to_op_gap?: number | null;
+    dram_percent?: number | null;
+    flops_percent?: number | null;
 }
 
 /** Conversion factor for the wire µs value to the internal ns representation. */
@@ -28,12 +36,33 @@ export interface OpPerfAggregate {
     opId: number;
     deviceTimeNs: number;
     rowCount: number;
+    /** Max op-to-op gap (ns) across contributing rows, or `null` if no row supplied a finite value. */
+    opToOpGapNs: number | null;
+    /** Max DRAM utilisation (%) across contributing rows, or `null` if no row supplied a finite value. */
+    dramPercent: number | null;
+    /** Max FLOPS utilisation (%) across contributing rows, or `null` if no row supplied a finite value. */
+    flopsPercent: number | null;
 }
+
+// Take `Math.max(existing, candidate)` while letting `null` represent "no
+// data yet" — first finite candidate wins, subsequent ones override only
+// when strictly larger. Keeps the same "worst case across rows" semantics
+// we already use for `deviceTimeNs`.
+const updateMaxOptional = (existing: number | null, candidate: number | null | undefined): number | null => {
+    if (candidate === null || candidate === undefined || !Number.isFinite(candidate) || candidate <= 0) {
+        return existing;
+    }
+    if (existing === null) {
+        return candidate;
+    }
+    return Math.max(existing, candidate);
+};
 
 /**
  * Collapse per-op perf rows down to a single value per `op.id`, taking the
  * max kernel duration across rows (a single graph op may appear multiple times
- * in a perf report — multi-device, repeated calls).
+ * in a perf report — multi-device, repeated calls). Optional richer metrics
+ * are aggregated with the same "worst case" rule when present.
  *
  * Rows with a null `id`, null/non-finite `device_time`, or non-positive
  * `device_time` are skipped — they can't contribute to a log-scale ramp.
@@ -43,15 +72,31 @@ export const aggregatePerfByOp = (rows: PerfOverlaySource[]): Map<number, OpPerf
     for (const row of rows) {
         const { id } = row;
         const dt = row.device_time;
-        if (id !== null && dt !== null && Number.isFinite(dt) && dt > 0) {
-            const deviceTimeNs = dt * US_TO_NS;
-            const existing = aggregatesByOpId.get(id);
-            if (existing === undefined) {
-                aggregatesByOpId.set(id, { opId: id, deviceTimeNs, rowCount: 1 });
-            } else {
-                existing.deviceTimeNs = Math.max(existing.deviceTimeNs, deviceTimeNs);
-                existing.rowCount += 1;
-            }
+        if (id === null || dt === null || !Number.isFinite(dt) || dt <= 0) {
+            // eslint-disable-next-line no-continue -- early-skip keeps the aggregation
+            continue;
+        }
+        const deviceTimeNs = dt * US_TO_NS;
+        const opToOpGapNs =
+            row.op_to_op_gap !== undefined && row.op_to_op_gap !== null && Number.isFinite(row.op_to_op_gap)
+                ? row.op_to_op_gap * US_TO_NS
+                : null;
+        const existing = aggregatesByOpId.get(id);
+        if (existing === undefined) {
+            aggregatesByOpId.set(id, {
+                opId: id,
+                deviceTimeNs,
+                rowCount: 1,
+                opToOpGapNs: updateMaxOptional(null, opToOpGapNs),
+                dramPercent: updateMaxOptional(null, row.dram_percent),
+                flopsPercent: updateMaxOptional(null, row.flops_percent),
+            });
+        } else {
+            existing.deviceTimeNs = Math.max(existing.deviceTimeNs, deviceTimeNs);
+            existing.rowCount += 1;
+            existing.opToOpGapNs = updateMaxOptional(existing.opToOpGapNs, opToOpGapNs);
+            existing.dramPercent = updateMaxOptional(existing.dramPercent, row.dram_percent);
+            existing.flopsPercent = updateMaxOptional(existing.flopsPercent, row.flops_percent);
         }
     }
     return aggregatesByOpId;

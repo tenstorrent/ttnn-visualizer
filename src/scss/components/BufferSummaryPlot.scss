@@ -6,11 +6,24 @@
 @use '../mixins/scrollShade' as scrollShade;
 
 $label-width: 160px;
-$label-margin: 10px;
+$label-margin: 20px;
 $width-offset: $label-width;
 $height-offset: 15px;
 
+// Right-edge clearance for the fixed Feedback button (`.feedback-button`
+// sits at `right: -3px` with a rotated label extending ~35px into the
+// viewport). Pad the whole chart away from it so the rail dots and op
+// names don't sit under the button.
+$feedback-button-clearance: 40px;
+
 .buffer-summary-chart {
+    // Use padding (not margin) + border-box so the clearance is taken
+    // from the chart's own content area. `margin-right` widens the outer
+    // box and pushes the chart past the parent, triggering horizontal
+    // page scroll; padding shrinks the inner box, leaving the parent
+    // layout intact.
+    box-sizing: border-box;
+    padding-right: $feedback-button-clearance;
     margin-bottom: $height-offset * 2;
 
     .chart-position {
@@ -34,6 +47,13 @@ $height-offset: 15px;
         text-align: center;
     }
 
+    // Rail lives in a fixed gutter to the right of the scrollable list so
+    // dots never sit on top of the browser scrollbar. The list itself uses
+    // `width: 100%`, which resolves against the parent's content-box and
+    // therefore shrinks by `padding-right`, leaving the gutter free for
+    // the rail dots.
+    $rail-gutter: 18px;
+
     .buffer-summary-plot-container {
         display: grid;
         grid-template-columns: 1fr $label-width;
@@ -46,13 +66,31 @@ $height-offset: 15px;
         }
 
         .y-axis-tick {
+            // Block-level flex (not `inline-flex`) so the tick fills its
+            // fixed-width grid cell instead of sizing to content. With
+            // `inline-flex` + the top-N badge, long op names like
+            // `298 ttnn.to_memory_config` extended past the 160px column,
+            // and because grid cells don't clip overflow that pushed the
+            // page wider than the viewport (horizontal scrollbar).
+            // `min-width: 0` is required so the flex container itself can
+            // shrink below its content's intrinsic width.
+            display: flex;
+            min-width: 0;
+            align-items: center;
+            gap: 6px;
             padding-left: $label-margin;
             margin-bottom: 0;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            overflow: hidden;
 
             > a {
+                // Ellipsis has to live on the flex *item* — `text-overflow`
+                // only applies to text directly inside the styled element,
+                // so putting it on `.y-axis-tick` (whose text lives in a
+                // child `<a>`) had no effect. `min-width: 0` lets the link
+                // shrink below its intrinsic content width.
+                min-width: 0;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
                 color: $tt-white;
                 text-decoration: none;
 
@@ -63,6 +101,28 @@ $height-offset: 15px;
         }
     }
 
+    .top-n-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 8px;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: monospace;
+        background-color: var(--top-n-color, #ff3b1f);
+        color: $tt-white;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+
+    .scrollable-with-rail {
+        position: relative;
+        padding-right: $rail-gutter;
+    }
+
     .scrollable-element {
         height: 600px;
         width: 100%;
@@ -71,6 +131,38 @@ $height-offset: 15px;
         top: $height-offset;
 
         @include scrollShade.scroll-shade(10px);
+    }
+
+    .top-n-rail {
+        position: absolute;
+        right: 0;
+        top: $height-offset;
+        bottom: 0;
+        width: $rail-gutter;
+        pointer-events: none;
+        z-index: 2;
+    }
+
+    .top-n-rail-dot {
+        position: absolute;
+        right: 4px;
+        width: 10px;
+        height: 10px;
+        margin: 0;
+        padding: 0;
+        border: 1px solid rgb(0 0 0 / 30%);
+        border-radius: 50%;
+        background-color: var(--top-n-color, #ff3b1f);
+        pointer-events: auto;
+        transform: translateY(-50%);
+        cursor: pointer;
+        transition: transform 80ms ease;
+
+        &:hover,
+        &:focus-visible {
+            transform: translateY(-50%) scale(1.4);
+            outline: none;
+        }
     }
 
     .list-container {
