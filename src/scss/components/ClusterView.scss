@@ -8,11 +8,16 @@
 $eth-colour: colours.$tt-blue-tint-1;
 $eth-line: colours.$tt-blue;
 $mmio-colour: colours.$tt-yellow;
+$mmio-glow-swatch: rgba(colours.$tt-yellow, 0.6);
+$mmio-glow-chip: rgba(colours.$tt-yellow, 0.35);
+$mmio-fill: rgba(colours.$tt-yellow, 0.18);
 
 .cluster-view-renderer {
     position: absolute;
     top: 80px;
     left: 0;
+    display: flex;
+    flex-direction: column;
     background: radial-gradient(circle at 30% 20%, rgb(117 132 230 / 12%), transparent 60%), rgb(0 0 0 / 92%);
     width: 100%;
     height: calc(100% - 80px);
@@ -71,7 +76,7 @@ $mmio-colour: colours.$tt-yellow;
     .swatch-mmio {
         background: linear-gradient(160deg, colours.$tt-grey-4, colours.$tt-grey-2);
         border: 1px solid $mmio-colour;
-        box-shadow: 0 0 4px rgb(246 188 66 / 60%);
+        box-shadow: 0 0 4px $mmio-glow-swatch;
     }
 
     .swatch-eth {
@@ -88,8 +93,9 @@ $mmio-colour: colours.$tt-yellow;
 }
 
 .cluster-view-wrap {
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: calc(100vh - 240px);
     overflow: auto;
     scrollbar-gutter: stable;
     margin-top: 8px;
@@ -158,7 +164,7 @@ $mmio-colour: colours.$tt-yellow;
                 outline-color: $mmio-colour;
                 box-shadow:
                     0 2px 6px rgb(0 0 0 / 45%),
-                    0 0 10px rgb(246 188 66 / 35%),
+                    0 0 10px $mmio-glow-chip,
                     inset 0 1px 0 rgb(255 255 255 / 6%);
             }
 
@@ -223,7 +229,7 @@ $mmio-colour: colours.$tt-yellow;
                 padding: 1px 5px;
                 border: 1px solid $mmio-colour;
                 border-radius: 3px;
-                background-color: rgb(246 188 66 / 18%);
+                background-color: $mmio-fill;
                 font-size: 10px;
                 font-weight: 600;
                 line-height: 1.3;
