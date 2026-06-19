@@ -7,7 +7,7 @@ import { useAtom, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import useMlir from '../../hooks/useMlir';
+import useMlirUpload from '../../hooks/useMlirUpload';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_SERVER_ACCEPTED_EXTENSIONS, MlirServerConnection } from '../../definitions/MlirServer';
 import ROUTES from '../../definitions/Routes';
@@ -36,11 +36,12 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 
 interface MlirJsonFileLoaderProps {
     server?: MlirServerConnection | null;
+    disabled?: boolean;
 }
 
-const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
+const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoaderProps) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const { uploadMlirFileToServer } = useMlir();
+    const { uploadMlirFileToServer } = useMlirUpload();
     const navigate = useNavigate();
     const location = useLocation();
     const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);
@@ -122,6 +123,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 text={mlirJsonFileName ?? placeholder}
                 onInputChange={handleFileChange}
                 inputProps={{ accept: acceptedExtensions }}
+                disabled={disabled}
             />
 
             <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>

@@ -159,7 +159,7 @@ const FileStatusOverlay = () => {
                 // Indeterminate (no value) while processing, since the backend
                 // reports no progress for that stage.
                 progress={isProcessing ? undefined : overallPercent / 100}
-                ariaLabel='File transfer progress'
+                ariaLabel={isProcessing ? PROCESSING_META.heading : 'File transfer progress'}
             />
         </Overlay>
     );

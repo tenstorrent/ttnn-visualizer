@@ -7,7 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { DEFAULT_SSH_PORT, MLIR_UPLOAD_PATH, MlirServerConnection } from '../../definitions/MlirServer';
-import useMlir from '../../hooks/useMlir';
+import useMlirUpload from '../../hooks/useMlirUpload';
 import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
 
@@ -53,7 +53,7 @@ const MlirServerDialog = ({
     onAddServer,
     onClose,
 }: MlirServerDialogProps) => {
-    const { testMlirServerConnection } = useMlir();
+    const { testMlirServerConnection } = useMlirUpload();
     const [connection, setConnection] = useState<MlirServerConnection>(server ?? DEFAULT_SERVER);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [isTestingConnection, setIsTestingConnection] = useState(false);

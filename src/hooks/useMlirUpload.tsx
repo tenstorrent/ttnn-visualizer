@@ -12,7 +12,7 @@ import { ConnectionStatus, ConnectionTestStates } from '../definitions/Connectio
 import { MlirServerConnection } from '../definitions/MlirServer';
 import getResponseError from '../functions/getResponseError';
 
-const useMlir = () => {
+const useMlirUpload = () => {
     const resetTransferProgress = () => {
         getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
     };
@@ -105,4 +105,4 @@ const useMlir = () => {
     };
 };
 
-export default useMlir;
+export default useMlirUpload;
