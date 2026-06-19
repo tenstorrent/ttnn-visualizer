@@ -103,7 +103,11 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
                                         pip install ttnn-visualizer=={LEGACY_VISUALIZER_VERSION}
                                     </code>{' '}
                                     or see{' '}
-                                    <a href='https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html#installing-from-pypi'>
+                                    <a
+                                        href='https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html#installing-from-pypi'
+                                        target='_blank'
+                                        rel='noreferrer'
+                                    >
                                         Installing from PyPI
                                     </a>
                                 </p>
