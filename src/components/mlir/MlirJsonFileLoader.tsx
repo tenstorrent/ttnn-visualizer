@@ -7,7 +7,7 @@ import { useAtom, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import useLocalConnection from '../../hooks/useLocal';
+import useMlir from '../../hooks/useMlir';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_SERVER_ACCEPTED_EXTENSIONS, MlirServerConnection } from '../../definitions/MlirServer';
 import ROUTES from '../../definitions/Routes';
@@ -40,7 +40,7 @@ interface MlirJsonFileLoaderProps {
 
 const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const { uploadMlirFileToServer } = useLocalConnection();
+    const { uploadMlirFileToServer } = useMlir();
     const navigate = useNavigate();
     const location = useLocation();
     const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);
@@ -55,8 +55,16 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
             return;
         }
 
-        setErrorMessage(server ? 'Uploading...' : 'Loading...');
-        setUploadStatus(ConnectionTestStates.PROGRESS);
+        // Server uploads report progress through the shared FileStatusOverlay
+        // and success through a toast, so the inline status is only used for
+        // local JSON loads (no overlay) and for surfacing upload failures.
+        if (server) {
+            setUploadStatus(ConnectionTestStates.IDLE);
+            setErrorMessage(null);
+        } else {
+            setErrorMessage('Loading...');
+            setUploadStatus(ConnectionTestStates.PROGRESS);
+        }
 
         const file = event.target.files[0];
 
@@ -88,8 +96,13 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
             setActiveMlirData(graph);
             setMlirJsonFileName(reportName);
             createToastNotification('MLIR', file.name, ToastType.SUCCESS);
-            setUploadStatus(ConnectionTestStates.OK);
-            setErrorMessage(`${file.name} ${server ? 'uploaded' : 'loaded'} successfully`);
+
+            // Uploads surface success via the toast above; only the local-load
+            // path shows it inline.
+            if (!server) {
+                setUploadStatus(ConnectionTestStates.OK);
+                setErrorMessage(`${file.name} loaded successfully`);
+            }
 
             if (graph && location.pathname !== ROUTES.MLIR) {
                 navigate(ROUTES.MLIR);

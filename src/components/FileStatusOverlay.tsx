@@ -34,8 +34,12 @@ const SYNC_META = {
     heading: 'Syncing remote report',
     icon: IconNames.CLOUD_DOWNLOAD,
 } as const;
+const PROCESSING_META = {
+    heading: 'Processing report',
+    icon: IconNames.COG,
+} as const;
 
-type DisplayMeta = typeof UPLOAD_META | typeof SYNC_META;
+type DisplayMeta = typeof UPLOAD_META | typeof SYNC_META | typeof PROCESSING_META;
 
 const FileStatusOverlay = () => {
     const [progress] = useAtom(fileTransferProgressAtom);
@@ -51,10 +55,20 @@ const FileStatusOverlay = () => {
     const overallPercent = getOverallFileTransferPercent(progress);
     const isActive = isActiveTransferStatus(status);
     const isUpload = status === FileStatus.UPLOADING;
-    const displayMeta: DisplayMeta = isUpload ? UPLOAD_META : SYNC_META;
+    // Bytes are sent; the backend is now working (e.g. remote MLIR conversion)
+    // with no further progress to report — show an indeterminate stage.
+    const isProcessing = status === FileStatus.PROCESSING;
+    let displayMeta: DisplayMeta = SYNC_META;
+    if (isUpload) {
+        displayMeta = UPLOAD_META;
+    } else if (isProcessing) {
+        displayMeta = PROCESSING_META;
+    }
     const showByteTotals = bytesTotal !== undefined && bytesTotal > 0;
     const showCurrentFileSize = currentFileSize !== undefined && currentFileSize > 0;
-    const showFileCount = numberOfFiles > 0;
+    // During processing there's no transfer to quantify, so suppress the
+    // file-count / byte-totals line and the percent readout.
+    const showFileCount = numberOfFiles > 0 && !isProcessing;
     // Uploads stream as a single multipart request, so the backend never
     // reports per-file completion (finishedFiles stays 0). Hide the `0/N`
     // prefix in that case to avoid showing misleading progress.
@@ -108,10 +122,12 @@ const FileStatusOverlay = () => {
                     </p>
                 )}
 
-                {(currentFileName || status === FileStatus.STARTED) && (
+                {(currentFileName || status === FileStatus.STARTED || isProcessing) && (
                     <p>
                         {getFileStatusLabel(status)}
-                        {currentFileName && (
+                        {/* While processing the file name is shown on the
+                            elapsed-time line below instead. */}
+                        {currentFileName && !isProcessing && (
                             <>
                                 {' '}
                                 <u>{currentFileName}</u>
@@ -121,15 +137,28 @@ const FileStatusOverlay = () => {
                     </p>
                 )}
                 <p>
-                    {formatPercentage(overallPercent, 0)} complete
+                    {/* No quantifiable progress while the backend processes the
+                        upload \u2014 show elapsed time only. */}
+                    {!isProcessing && `${formatPercentage(overallPercent, 0)} complete`}
                     {/* Show elapsed from the moment the transfer becomes active
                         so sub-second transfers don't appear time-less. */}
-                    {startedAt !== null && ` \u2014 ${formatElapsed(elapsedSeconds)}`}
+                    {startedAt !== null && `${isProcessing ? '' : ' \u2014 '}${formatElapsed(elapsedSeconds)}`}
+                    {/* During processing show the file being processed next to
+                        the elapsed time. */}
+                    {isProcessing && currentFileName && (
+                        <>
+                            {' \u2014 '}
+                            <u>{currentFileName}</u>
+                            {showCurrentFileSize && <> ({formatMemorySize(currentFileSize, 1)})</>}
+                        </>
+                    )}
                 </p>
             </div>
 
             <ProgressBar
-                progress={overallPercent / 100}
+                // Indeterminate (no value) while processing, since the backend
+                // reports no progress for that stage.
+                progress={isProcessing ? undefined : overallPercent / 100}
                 ariaLabel='File transfer progress'
             />
         </Overlay>

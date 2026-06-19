@@ -105,7 +105,7 @@ def _remote_send_command_url(port: int) -> str:
 def _endpoint_unreachable_message(connection: RemoteConnection, port: int) -> str:
     return (
         f"MLIR server not reachable at "
-        f"http://localhost:{port}{MLIR_UPLOAD_PATH} on {connection.host}"
+        f"http://localhost:{port}{MLIR_UPLOAD_PATH} on {connection.host} - check MLIR is running on host"
     )
 
 
@@ -167,7 +167,7 @@ def test_mlir_server_connection(
             _endpoint_unreachable_message(remote, http_port),
         )
     else:
-        add_status(ConnectionTestStates.OK, f"MLIR server reachable (HTTP {http_code})")
+        add_status(ConnectionTestStates.OK, f"MLIR server reachable")
 
     return statuses
 
