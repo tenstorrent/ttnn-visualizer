@@ -169,10 +169,12 @@ function buildClusterTopology(data: ClusterModel, chipDesign: ChipDesign): Clust
     const contentHeight = totalRows * clusterChipSize + Math.max(0, totalRows - 1) * CHIP_GAP;
 
     const internalGap = CHIP_GAP;
-    const cellSize = (clusterChipSize - (CLUSTER_NODE_GRID_SIZE - 1) * internalGap) / CLUSTER_NODE_GRID_SIZE;
+    const chipPadding = 2; // keep in sync with ClusterView.scss `.chip { padding: 2px; }`
+    const cellSize =
+        (clusterChipSize - chipPadding * 2 - (CLUSTER_NODE_GRID_SIZE - 1) * internalGap) / CLUSTER_NODE_GRID_SIZE;
     const portPixel = (coords: ClusterCoordinates, gx: number, gy: number): PortPixel => {
-        const chipLeft = coords[CLUSTER_COORDS.X] * stride;
-        const chipTop = coords[CLUSTER_COORDS.Y] * stride;
+        const chipLeft = coords[CLUSTER_COORDS.X] * stride + chipPadding;
+        const chipTop = coords[CLUSTER_COORDS.Y] * stride + chipPadding;
         return {
             x: chipLeft + (gx - 1) * (cellSize + internalGap) + cellSize / 2,
             y: chipTop + (gy - 1) * (cellSize + internalGap) + cellSize / 2,
