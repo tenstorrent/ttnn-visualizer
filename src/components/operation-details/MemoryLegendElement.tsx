@@ -37,6 +37,12 @@ interface MemoryLegendElementProps {
     className?: string;
     numCores?: number;
     userL1ZoomRange?: [number, number];
+    /**
+     * `true` for `globally_allocated=1` CBs (#1651). Renders the swatch as
+     * outline-only and tags the row with a "Globally allocated" marker so it
+     * reads as a tensor view rather than a fresh allocation.
+     */
+    isGloballyAllocated?: boolean;
 }
 
 export const MemoryLegendElement = ({
@@ -53,6 +59,7 @@ export const MemoryLegendElement = ({
     className,
     numCores,
     userL1ZoomRange,
+    isGloballyAllocated = false,
 }: MemoryLegendElementProps) => {
     const showHex = useAtomValue(showHexAtom);
     const selectedBufferColour = useAtomValue(selectedBufferColourAtom);
@@ -80,18 +87,26 @@ export const MemoryLegendElement = ({
     const numCoresLabel =
         isPerCoreBuffer && numCores && numCores > 0 ? ` x ${numCores} ${numCores === 1 ? 'core' : 'cores'}` : '';
 
+    const resolvedColour =
+        chunk.tensorId || derivedTensor
+            ? getTensorColor(chunk.tensorId) || getTensorColor(derivedTensor?.id)
+            : getBufferColor(chunk.address + (colorVariance || 0));
+    // Aliased CBs (#1651) swap fill for border so the row still carries the
+    // colour signal but reads as a tensor view rather than a fresh allocation.
+    // We keep the original `memorySquare` shape for the non-aliased path so
+    // the `isMatchingBufferColour` comparison downstream stays unchanged.
     const memorySquare = {
         ...(!chunk.empty &&
             !isLegendMarker && {
-                backgroundColor:
-                    chunk.tensorId || derivedTensor
-                        ? getTensorColor(chunk.tensorId) || getTensorColor(derivedTensor?.id)
-                        : getBufferColor(chunk.address + (colorVariance || 0)),
+                backgroundColor: isGloballyAllocated ? 'transparent' : resolvedColour,
+                ...(isGloballyAllocated && resolvedColour ? { borderColor: resolvedColour } : {}),
             }),
         ...(Number.isNaN(chunk.address) && { backgroundColor: 'white' }),
     };
 
-    const isMatchingBufferColour = memorySquare.backgroundColor === selectedBufferColour;
+    const isMatchingBufferColour = isGloballyAllocated
+        ? resolvedColour === selectedBufferColour
+        : memorySquare.backgroundColor === selectedBufferColour;
     const chunkSize = chunk.size ?? 0;
     const isOutOfL1ZoomRange =
         !isLegendMarker &&
@@ -112,7 +127,7 @@ export const MemoryLegendElement = ({
     } else {
         legendSwatch = (
             <div
-                className='memory-color-block'
+                className={classNames('memory-color-block', { 'memory-color-block-outline': isGloballyAllocated })}
                 style={memorySquare}
             />
         );
@@ -132,6 +147,7 @@ export const MemoryLegendElement = ({
                             selectedTensorAddress !== null &&
                             (selectedTensorAddress !== chunk.address || !isMatchingBufferColour)),
                     'extra-info': bufferType || layout,
+                    'globally-allocated': isGloballyAllocated,
                 },
                 className,
             )}
@@ -153,6 +169,30 @@ export const MemoryLegendElement = ({
                     <>
                         {formatMemorySize(chunk.size, 2)}
                         {numCoresLabel}
+                        {isGloballyAllocated && (
+                            <Tooltip
+                                content={
+                                    <span>
+                                        Aliased to tensor @ {prettyPrintAddress(chunk.address, memSize, showHex)}{' '}
+                                        &mdash; no new allocation
+                                    </span>
+                                }
+                            >
+                                <span
+                                    className='globally-allocated-marker'
+                                    // aria-label keeps the row a single tab-stop
+                                    // while still surfacing the "aliased" semantic
+                                    // to assistive tech users.
+                                    aria-label='Globally allocated — aliased to tensor at this address'
+                                >
+                                    <Icon
+                                        icon={IconNames.LINK}
+                                        size={11}
+                                    />
+                                    <span className='globally-allocated-marker-label'>Globally allocated</span>
+                                </span>
+                            </Tooltip>
+                        )}
                     </>
                 )}
             </div>

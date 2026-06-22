@@ -1,13 +1,13 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.89.0"
+version = "0.90.0"
 description = "TT-NN Visualizer"
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
     "alembic~=1.18.0",
-    "build",
     "Flask-Cors>=6.0.0,<7.0",
     "flask-socketio>=5.6.0,<6.0",
     "flask-sqlalchemy==3.1.1",
@@ -22,16 +22,15 @@ dependencies = [
     "python-dotenv==1.2.2",
     "PyYAML>=6.0.0,<7.0",
     "tt-perf-report==1.2.4",
-    "zstd>=1.5.7,<2.0"
+    "zstd>=1.5.7,<2.0",
 ]
 
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "black==26.3.1",
     "isort==6.0.1",
@@ -90,8 +89,20 @@ exclude = '''
 profile = "black"
 line_length = 88
 
+[tool.mypy]
+ignore_missing_imports = true
+follow_imports = "skip"
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = "flask_static_digest"
+ignore_missing_imports = true
+
 [tool.uv]
-# Single source of truth for the uv version across local dev and CI.
-# astral-sh/setup-uv reads this when no explicit `version:` input is set,
-# and uv itself enforces it on every local invocation.
-required-version = "==0.11.20"
+# Minimum uv version for local dev and CI (astral-sh/setup-uv reads this when no
+# explicit `version:` input is set). Use a lower bound rather than an exact pin so
+# package managers like Homebrew can ship newer patch releases without blocking
+# contributors.
+required-version = ">=0.11.0"
+# Use uv-managed Python from .python-version; do not fall back to system Python.
+python-preference = "only-managed"

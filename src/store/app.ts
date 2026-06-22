@@ -17,6 +17,8 @@ import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../functions/topNAnnotations';
+import { MlirServerConnection } from '../definitions/MlirServer';
+import { GraphBundle } from '../model/MLIRJsonModel';
 
 // App state
 export const activeToastAtom = atom<Id | null>(null);
@@ -52,6 +54,9 @@ export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const activeMlirJsonAtom = atom<string | null>(null);
+export const activeMlirDataAtom = atom<GraphBundle | null>(null);
+export const mlirServersAtom = atomWithStorage<MlirServerConnection[]>('mlirServers', []);
+export const selectedMlirServerAtom = atomWithStorage<MlirServerConnection | null>('selectedMlirServer', null);
 export const mlirNodeDetailsCollapsedAtom = atomWithStorage<{ attrs: boolean; inputs: boolean; outputs: boolean }>(
     'mlirNodeDetailsCollapsed',
     { attrs: false, inputs: true, outputs: true },

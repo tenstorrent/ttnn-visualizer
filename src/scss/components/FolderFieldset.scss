@@ -8,21 +8,30 @@
     position: relative;
     border: solid 1px $tt-grey-5;
     border-radius: 5px;
-    padding: 5px 20px 20px;
+    padding: 5px 16px 10px;
     display: flex;
-    gap: 20px;
+    gap: 16px;
     align-items: start;
     justify-content: stretch;
     min-height: fit-content;
-    flex-basis: 45%;
+    flex-basis: 30%;
     flex-grow: 1;
-    max-width: 550px;
+    max-width: 500px;
 
     .legend-title {
         font-size: 30px;
         font-weight: 400;
         padding: 0 10px;
         margin: 0;
+        display: flex;
+        align-items: baseline;
+
+        .legend-beta {
+            font-size: 11px;
+            border-radius: 4px;
+            padding: 0 4px;
+            background-color: $tt-grey-2;
+        }
     }
 
     .legend-icon {

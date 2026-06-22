@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
+    activeMlirJsonAtom,
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -28,6 +29,7 @@ const useRestoreInstance = () => {
     const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
     const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
+    const setActiveMlirJson = useSetAtom(activeMlirJsonAtom);
     const setProfilerReportLocation = useSetAtom(profilerReportLocationAtom);
     const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
 
@@ -69,6 +71,7 @@ const useRestoreInstance = () => {
             performance: activePerfReport,
             performanceLocation: activePerfLocation,
             npe: instance?.active_report?.npe_name ?? null,
+            mlir: instance?.active_report?.mlir_name ?? null,
         };
 
         // Executed at a safe time prior to control returning to the browser's event loop
@@ -82,6 +85,7 @@ const useRestoreInstance = () => {
             setPerformanceReportLocation(activeReports.performanceLocation);
 
             setActiveNpe(activeReports.npe);
+            setActiveMlirJson(activeReports.mlir);
         });
     }, [
         setActiveProfilerReport,
@@ -89,6 +93,7 @@ const useRestoreInstance = () => {
         setActivePerformanceReport,
         setPerformanceReportLocation,
         setActiveNpe,
+        setActiveMlirJson,
         instance,
         hasRestoredInstance,
         reports,

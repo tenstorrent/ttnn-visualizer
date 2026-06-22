@@ -21,7 +21,15 @@ from ttnn_visualizer.extensions import db  # noqa: E402
 
 config = context.config
 
-if config.config_file_name is not None:
+# When invoked embedded in the running app, the app has already configured
+# logging; ``fileConfig`` would reset the root logger to WARN and (with its
+# default ``disable_existing_loggers=True``) silence every ``ttnn_visualizer.*``
+# logger for the rest of the process. ``run_alembic_migrations`` sets this flag
+# to skip that; the standalone ``alembic`` CLI leaves it unset so logging is
+# still configured from ``alembic.ini``.
+if config.config_file_name is not None and config.attributes.get(
+    "configure_logging", True
+):
     fileConfig(config.config_file_name)
 
 target_metadata = db.metadata

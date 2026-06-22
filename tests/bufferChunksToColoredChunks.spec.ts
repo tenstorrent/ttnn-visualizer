@@ -4,10 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { bufferChunksToColoredChunks } from '../src/functions/getChartData';
-import { BufferChunk } from '../src/model/APIData';
+import { DecoratedBufferChunk } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
 
-function chunk(overrides: Partial<BufferChunk> = {}): BufferChunk {
+function chunk(overrides: Partial<DecoratedBufferChunk> = {}): DecoratedBufferChunk {
     return {
         operation_id: 1,
         device_id: 0,
@@ -22,6 +22,7 @@ function chunk(overrides: Partial<BufferChunk> = {}): BufferChunk {
         buffer_type: BufferType.L1,
         rank: 0,
         id: '1_0_100_1_0_0_1_0',
+        color: '#000000',
         ...overrides,
     };
 }
@@ -49,13 +50,13 @@ describe('bufferChunksToColoredChunks', () => {
         expect(result[0].size).toBe(4096);
     });
 
-    it('passes color through unchanged including undefined', () => {
+    it('passes color through unchanged', () => {
         const result = bufferChunksToColoredChunks([
-            chunk({ address: 100, color: undefined }),
+            chunk({ address: 100, color: '#abcdef' }),
             chunk({ address: 200, color: 'rgb(1, 2, 3)' }),
         ]);
 
-        expect(result[0].color).toBeUndefined();
+        expect(result[0].color).toBe('#abcdef');
         expect(result[1].color).toBe('rgb(1, 2, 3)');
     });
 
