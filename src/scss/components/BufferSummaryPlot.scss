@@ -16,6 +16,11 @@ $height-offset: 15px;
 // names don't sit under the button.
 $feedback-button-clearance: 40px;
 
+// Bottom clearance for the fixed `.app-footer` (closed `min-height: 34px`)
+// so the last rail dots and list rows aren't covered by the status bar /
+// Range pill at the viewport bottom. Add a few extra px of breathing room.
+$footer-clearance: 44px;
+
 .buffer-summary-chart {
     // Use padding (not margin) + border-box so the clearance is taken
     // from the chart's own content area. `margin-right` widens the outer
@@ -24,7 +29,12 @@ $feedback-button-clearance: 40px;
     // layout intact.
     box-sizing: border-box;
     padding-right: $feedback-button-clearance;
-    margin-bottom: $height-offset * 2;
+
+    // Bumped from `$height-offset * 2` (30px) so the chart bottom edge
+    // clears the fixed `.app-footer` (closed min-height 34px) instead of
+    // sitting underneath it — without this the bottom rail dots and the
+    // last list rows render behind the Range pill / status bar.
+    margin-bottom: $footer-clearance;
 
     .chart-position {
         position: relative;
