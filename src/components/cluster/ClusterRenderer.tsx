@@ -400,7 +400,10 @@ function ClusterRenderer() {
         }
         event.preventDefault();
         const direction = event.deltaY > 0 ? -1 : 1;
-        setUserZoom(clampZoom(zoom + direction * ZOOM_STEP));
+        setUserZoom((prevZoom) => {
+            const baseZoom = prevZoom ?? fitZoom;
+            return clampZoom(baseZoom + direction * ZOOM_STEP);
+        });
     };
 
     const header = (
