@@ -183,7 +183,14 @@ const ZoomedCorePlot = ({
                                 y={RECT_STROKE_INSET}
                                 width={`${widthPercent}%`}
                                 height={plotHeight - RECT_STROKE_INSET * 2}
-                                fill={isAliased ? 'none' : colour}
+                                // `transparent` (rgba(0,0,0,0)) keeps the
+                                // visual identical to `none` but counts as
+                                // "painted" under the default `pointer-events:
+                                // visiblePainted`, so the whole interior of
+                                // outline-only (aliased) rects routes clicks
+                                // up to the `<g>` onClick handler instead of
+                                // only the 1.5px stroke being hit-testable.
+                                fill={isAliased ? 'transparent' : colour}
                                 className='zoomed-chunk-rect'
                             />
                             {labelFits && (

@@ -467,12 +467,17 @@ describe('CircularBufferPressureModal - globally_allocated CBs (#1651)', () => {
         const details = document.querySelector('.tensix-details') as HTMLElement | null;
         expect(details).not.toBeNull();
 
-        // Zoomed plot mirrors the strip: aliased CBs render outline-only.
+        // Zoomed plot mirrors the strip: aliased CBs render outline-only. Per
+        // #1665 the aliased rect uses `fill="transparent"` rather than
+        // `fill="none"` so the whole interior is hit-testable under the
+        // default `pointer-events: visiblePainted` — without this the only
+        // clickable surface is the 1.5px stroke. Visually identical because
+        // `transparent` is `rgba(0,0,0,0)`.
         const zoomedChunks = details!.querySelectorAll('.zoomed-chunk');
         const aliasedChunks = Array.from(zoomedChunks).filter((c) => c.classList.contains('aliased'));
         expect(aliasedChunks.length).toBeGreaterThan(0);
         const aliasedRect = aliasedChunks[0].querySelector('.zoomed-chunk-rect');
-        expect(aliasedRect).toHaveAttribute('fill', 'none');
+        expect(aliasedRect).toHaveAttribute('fill', 'transparent');
 
         // Tooltip <title> for the aliased zoomed chunk surfaces the "aliased
         // to tensor" framing the issue asks for.
