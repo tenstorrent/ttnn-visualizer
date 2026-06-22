@@ -35,6 +35,17 @@ const TENSIX_WIDTH = 120;
 const TENSIX_HEIGHT = TENSIX_WIDTH / 3;
 const STRIP_HEIGHT = 16;
 
+// SVG strokes are centered on the geometric edge of the rect by default, so a
+// rect at `y=0, height=H` with a 1.5px stroke would have its bottom 0.75px
+// rendered *outside* the SVG viewport and clipped. That's invisible on the
+// strip but obvious on the zoomed plot, where the dark `border: 1px solid` on
+// `.zoomed-core-svg` visually merges with the clipped stroke and makes the
+// bottom edge of outline-only (aliased) rects look cut off. Insetting by 1px
+// on each side keeps the geometric edge 1px inside the SVG, which fully
+// contains the max 2px stroke (selected state) — sized to the worst case so
+// the rect placement is stroke-state-agnostic.
+const RECT_STROKE_INSET = 1;
+
 // Fallback grey for the rare case where the palette generator returns
 // undefined (e.g. address falls outside its known bands); keeps the rect
 // visible instead of letting SVG default to black.
@@ -81,9 +92,9 @@ const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBSt
                     <rect
                         key={cb.nodeId}
                         x={`${xPercent}%`}
-                        y={0}
+                        y={RECT_STROKE_INSET}
                         width={`${widthPercent}%`}
-                        height={STRIP_HEIGHT}
+                        height={STRIP_HEIGHT - RECT_STROKE_INSET * 2}
                         fill={isAliased ? 'none' : colour}
                         // SVG `stroke` attribute would be clobbered by CSS rules
                         // on `.cb-strip-chunk`, so we surface the per-chunk colour
@@ -169,9 +180,9 @@ const ZoomedCorePlot = ({
                             <title>{titleText}</title>
                             <rect
                                 x={`${xPercent}%`}
-                                y={0}
+                                y={RECT_STROKE_INSET}
                                 width={`${widthPercent}%`}
-                                height={plotHeight}
+                                height={plotHeight - RECT_STROKE_INSET * 2}
                                 fill={isAliased ? 'none' : colour}
                                 className='zoomed-chunk-rect'
                             />
