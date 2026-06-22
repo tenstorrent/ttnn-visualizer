@@ -11,9 +11,11 @@ import { formatDuration } from './formatting';
  * String-valued because the selected mode persists to `localStorage` through
  * `atomWithStorage` and crosses the JSON-serialisation boundary.
  *
- * All `PERF_*` modes share a single tri-state availability (they're sourced
- * from the same perf report). `L1_FULLNESS` is independently keyed against
- * the L1 pressure pipeline.
+ * All `PERF_*` modes share a single underlying source (the perf report) and
+ * resolve their availability against it, but each mode now resolves its own
+ * status independently — the perf report can populate `device_time` while
+ * leaving `op_to_op_gap` empty, so per-metric `NO_DATA` is a real outcome.
+ * `L1_FULLNESS` is independently keyed against the L1 pressure pipeline.
  */
 export enum TopNAnnotationMode {
     PERF_TIME = 'perfTime',

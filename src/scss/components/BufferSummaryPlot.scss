@@ -149,8 +149,23 @@ $footer-clearance: 44px;
         top: $height-offset;
         bottom: 0;
         width: $rail-gutter;
+        // Semantic `<ul>` — neutralise the UA list defaults so the rail
+        // dimensions stay identical to the previous `<div>` version. The
+        // dots position absolutely against this element regardless of the
+        // tag, so this is the only visual change.
+        list-style: none;
+        margin: 0;
+        padding: 0;
         pointer-events: none;
         z-index: 2;
+    }
+
+    // `<li>` wrappers exist purely for screen-reader list semantics
+    // (`role='listitem'` is implicit on `<li>` inside `<ul>`). `display:
+    // contents` keeps them out of layout so the absolutely-positioned dots
+    // still resolve against `.top-n-rail`.
+    .top-n-rail-item {
+        display: contents;
     }
 
     .top-n-rail-dot {

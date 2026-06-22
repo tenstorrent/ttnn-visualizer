@@ -27,9 +27,9 @@ import {
 import { useTopNAnnotationAvailability } from '../../hooks/useTopNAnnotations';
 import 'styles/components/BufferSummaryControls.scss';
 
-// Static copy for the disabled-toggle tooltip per mode + tri-state. Mirrors the
-// PERF_OVERLAY_TOOLTIP map in OperationGraphComponent so the two surfaces use
-// the same vocabulary for the same problem.
+// Static copy for the disabled-toggle tooltip, keyed by (mode, availability
+// state). Mirrors the PERF_OVERLAY_TOOLTIP map in OperationGraphComponent so
+// the two surfaces use the same vocabulary for the same problem.
 //
 // All perf-derived modes share the same source (the perf report), so they
 // share UNLINKED copy and differ only on the per-metric READY / UNAVAILABLE

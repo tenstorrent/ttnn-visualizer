@@ -87,9 +87,9 @@ export const showBufferSummaryZoomedAtom = atomWithStorage('showBufferSummary', 
 // Top-N op annotation on the buffer summary chart (#1517). Mode and N persist
 // across sessions because they're stable user preferences; the on/off toggle
 // stays in-memory and persists for the lifetime of the loaded session — the
-// tri-state availability machinery in the controls grays the switch out when
-// the active mode goes UNAVAILABLE / UNLINKED on report change, so a
-// previously-enabled toggle never produces ghost annotations.
+// per-mode availability machinery in the controls grays the switch out when
+// the active mode goes UNAVAILABLE / UNLINKED / NO_DATA on report change, so
+// a previously-enabled toggle never produces ghost annotations.
 export const topNAnnotationEnabledAtom = atom<boolean>(false);
 export const topNAnnotationModeAtom = atomWithStorage<TopNAnnotationMode>(
     'topNAnnotationMode',

@@ -42,9 +42,9 @@ const parseFiniteOrNull = (raw: string | null | undefined): number | null => {
 
 export interface UseTopNAnnotationAvailabilityResult {
     /**
-     * Per-mode tri-state availability. Each mode is resolved against its own
-     * source pipeline — perf modes share a perf-report-loaded / linked check
-     * but resolve `NO_DATA` independently when the underlying column is empty
+     * Per-mode availability. Each mode is resolved against its own source
+     * pipeline — perf modes share a perf-report-loaded / linked check but
+     * resolve `NO_DATA` independently when the underlying column is empty
      * (e.g. perf report has `device_time` but no `op_to_op_gap` values).
      */
     statusByMode: Record<TopNAnnotationMode, TopNAnnotationStatus>;
@@ -53,14 +53,14 @@ export interface UseTopNAnnotationAvailabilityResult {
 }
 
 /**
- * Resolves the tri-state availability of each top-N mode plus the underlying
+ * Resolves the per-mode availability of each top-N mode plus the underlying
  * data maps.
  *
  * The toggle state persists for the lifetime of the loaded session — we
- * intentionally do not reset on report change. The control's tri-state
+ * intentionally do not reset on report change. The control's availability
  * machinery already grays out the switch when the active mode goes
- * `UNAVAILABLE` / `UNLINKED`, so a stale-but-on toggle never renders ghost
- * annotations.
+ * `UNAVAILABLE` / `UNLINKED` / `NO_DATA`, so a stale-but-on toggle never
+ * renders ghost annotations.
  */
 export const useTopNAnnotationAvailability = ({
     forceL1Unavailable = false,

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -216,6 +216,27 @@ describe('BufferSummaryVirtualizedList', () => {
             // Both dots should be addressable by their op id for downstream wiring.
             expect(screen.getByTestId('top-n-rail-dot-1')).toBeInTheDocument();
             expect(screen.getByTestId('top-n-rail-dot-2')).toBeInTheDocument();
+        });
+
+        it('uses semantic <ul>/<li> markup so screen readers announce the rail as a list with item count', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 2 })],
+                [2, buildAnnotation({ opId: 2, rowIndex: 1, rank: 1 })],
+            ]);
+            renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
+
+            // The rail is the `<ul>` element; querying by ARIA role surfaces
+            // the implicit role=list/listitem semantics we care about for
+            // screen-reader output.
+            const rail = screen.getByRole('list', { name: 'Top-ranked operations' });
+            expect(rail.tagName).toBe('UL');
+            expect(rail).toHaveAttribute('data-testid', 'top-n-rail');
+            // One `<li>` per annotation; each contains the dot button.
+            const items = within(rail).getAllByRole('listitem');
+            expect(items).toHaveLength(2);
+            expect(items.every((item) => item.tagName === 'LI')).toBe(true);
+            expect(items[0].querySelector('button.top-n-rail-dot')).not.toBeNull();
+            expect(items[1].querySelector('button.top-n-rail-dot')).not.toBeNull();
         });
 
         it('positions rail dots by rowIndex / operations.length', () => {

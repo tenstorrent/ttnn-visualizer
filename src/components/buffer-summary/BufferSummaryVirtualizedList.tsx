@@ -286,9 +286,14 @@ function BufferSummaryVirtualizedList({
                 </div>
 
                 {sortedTopNAnnotations.length > 0 && operations.length > 0 ? (
-                    <div
+                    // Semantic `<ul>` / `<li>` so screen readers announce the
+                    // rail as a list with item count instead of a flat group
+                    // of unrelated buttons. The `<li>` wrappers use
+                    // `display: contents` so they don't add layout boxes and
+                    // the buttons keep positioning absolutely against the
+                    // `.top-n-rail` ancestor exactly as before.
+                    <ul
                         className='top-n-rail'
-                        role='list'
                         aria-label='Top-ranked operations'
                         data-testid='top-n-rail'
                     >
@@ -298,23 +303,27 @@ function BufferSummaryVirtualizedList({
                                 top: `${(annotation.rowIndex / operations.length) * 100}%`,
                             };
                             return (
-                                <Tooltip
+                                <li
                                     key={annotation.opId}
-                                    content={getRankTooltipText(annotation, topNAnnotationMode)}
-                                    placement='left'
+                                    className='top-n-rail-item'
                                 >
-                                    <button
-                                        type='button'
-                                        className='top-n-rail-dot'
-                                        style={dotStyle}
-                                        onClick={() => handleRailDotClick(annotation.rowIndex)}
-                                        aria-label={`Jump to ${getRankTooltipText(annotation, topNAnnotationMode)}`}
-                                        data-testid={`top-n-rail-dot-${annotation.opId}`}
-                                    />
-                                </Tooltip>
+                                    <Tooltip
+                                        content={getRankTooltipText(annotation, topNAnnotationMode)}
+                                        placement='left'
+                                    >
+                                        <button
+                                            type='button'
+                                            className='top-n-rail-dot'
+                                            style={dotStyle}
+                                            onClick={() => handleRailDotClick(annotation.rowIndex)}
+                                            aria-label={`Jump to ${getRankTooltipText(annotation, topNAnnotationMode)}`}
+                                            data-testid={`top-n-rail-dot-${annotation.opId}`}
+                                        />
+                                    </Tooltip>
+                                </li>
                             );
                         })}
-                    </div>
+                    </ul>
                 ) : null}
             </div>
         </div>
