@@ -141,16 +141,36 @@
 
     .memory-info {
         width: 320px;
-        display: grid;
         gap: 10px;
         font-weight: lighter;
-        margin-left: auto;
-        margin-bottom: 10px;
+        right: 0;
         grid-template-columns: 1fr 1fr 1fr;
         padding: 0 5px;
+        position: static;
+        display: grid;
+        margin-left: auto;
+        margin-bottom: 10px;
 
         &.peak {
             border: 1px solid rgb(207 255 90 / 50%);
+        }
+    }
+
+    // Avoids impacting the legend used below the plots at the top of the page
+    .cb-legend-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+
+        .legend-item {
+            flex: 1 1 auto;
+            min-width: 0;
+            grid-template-columns: 15px 0.5fr 2fr 10fr 3fr;
+        }
+
+        .memory-info {
+            flex: 0 0 320px;
+            margin-bottom: 5px;
         }
     }
 }
