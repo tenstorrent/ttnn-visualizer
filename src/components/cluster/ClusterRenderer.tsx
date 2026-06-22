@@ -537,6 +537,7 @@ style={{
                                         gridRow: clusterChip.coords[CLUSTER_COORDS.Y] + 1,
                                         gridTemplateColumns: `repeat(${CLUSTER_NODE_GRID_SIZE}, 1fr)`,
                                         gridTemplateRows: `repeat(${CLUSTER_NODE_GRID_SIZE}, 1fr)`,
+                                        gap: `${CHIP_GAP}px`,
                                     }}
                                 >
                                     <span
