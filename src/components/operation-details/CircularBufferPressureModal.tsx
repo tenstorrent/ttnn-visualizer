@@ -37,14 +37,12 @@ const STRIP_HEIGHT = 16;
 
 // SVG strokes are centered on the geometric edge of the rect by default, so a
 // rect at `y=0, height=H` with a 1.5px stroke would have its bottom 0.75px
-// rendered *outside* the SVG viewport and clipped. That's invisible on the
-// strip but obvious on the zoomed plot, where the dark `border: 1px solid` on
-// `.zoomed-core-svg` visually merges with the clipped stroke and makes the
-// bottom edge of outline-only (aliased) rects look cut off. Insetting by 1px
-// on each side keeps the geometric edge 1px inside the SVG, which fully
-// contains the max 2px stroke (selected state) — sized to the worst case so
-// the rect placement is stroke-state-agnostic.
-const RECT_STROKE_INSET = 1;
+// rendered *outside* the SVG viewport and clipped. Insetting by 1px on each
+// side keeps the geometric edge 1px inside the SVG, fully containing the max
+// 2px stroke (selected state). Only applies to the per-core strip — the
+// zoomed plot uses a frame-wrapper + `overflow="visible"` approach instead
+// (see `ZoomedCorePlot`) so its rects don't need a y-inset.
+const STRIP_STROKE_INSET = 1;
 
 // Fallback grey for the rare case where the palette generator returns
 // undefined (e.g. address falls outside its known bands); keeps the rect
@@ -92,9 +90,9 @@ const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBSt
                     <rect
                         key={cb.nodeId}
                         x={`${xPercent}%`}
-                        y={RECT_STROKE_INSET}
+                        y={STRIP_STROKE_INSET}
                         width={`${widthPercent}%`}
-                        height={STRIP_HEIGHT - RECT_STROKE_INSET * 2}
+                        height={STRIP_HEIGHT - STRIP_STROKE_INSET * 2}
                         fill={isAliased ? 'none' : colour}
                         // SVG `stroke` attribute would be clobbered by CSS rules
                         // on `.cb-strip-chunk`, so we surface the per-chunk colour
@@ -148,66 +146,82 @@ const ZoomedCorePlot = ({
 
     return (
         <div className='zoomed-core-plot'>
-            <svg
-                className='zoomed-core-svg'
-                width='100%'
-                height={plotHeight}
-                preserveAspectRatio='none'
-            >
-                {cbs.map((cb) => {
-                    const xPercent = ((cb.address - memoryStart) / memoryRange) * 100;
-                    const widthPercent = (cb.size / memoryRange) * 100;
-                    const isSelected = selectedCBNodeId === cb.nodeId;
-                    // Width-as-fraction-of-window is enough to decide whether
-                    // there's room for a label without forcing a layout pass.
-                    const labelFits = widthPercent > MIN_WIDTH_PERCENT_FOR_LABEL;
-                    const colour = cbColor(cb);
-                    const isAliased = cb.globallyAllocated;
-                    const titleText = isAliased
-                        ? `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)} · Aliased to tensor @ ${prettyPrintAddress(cb.address, l1Budget)} — no new allocation`
-                        : `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)}`;
-                    return (
-                        <g
-                            key={cb.nodeId}
-                            className={classNames('zoomed-chunk', { selected: isSelected, aliased: isAliased })}
-                            // CSS variable lets the `.aliased` rule provide the
-                            // outline colour at higher specificity than the base
-                            // `.zoomed-chunk-rect` stroke. Same pattern as the
-                            // per-core strip above.
-                            style={isAliased ? ({ '--cb-color': colour } as React.CSSProperties) : undefined}
-                            onClick={() => onSelectCB(isSelected ? null : cb.nodeId)}
-                        >
-                            <title>{titleText}</title>
-                            <rect
-                                x={`${xPercent}%`}
-                                y={RECT_STROKE_INSET}
-                                width={`${widthPercent}%`}
-                                height={plotHeight - RECT_STROKE_INSET * 2}
-                                // `transparent` (rgba(0,0,0,0)) keeps the
-                                // visual identical to `none` but counts as
-                                // "painted" under the default `pointer-events:
-                                // visiblePainted`, so the whole interior of
-                                // outline-only (aliased) rects routes clicks
-                                // up to the `<g>` onClick handler instead of
-                                // only the 1.5px stroke being hit-testable.
-                                fill={isAliased ? 'transparent' : colour}
-                                className='zoomed-chunk-rect'
-                            />
-                            {labelFits && (
-                                <text
-                                    x={`${xPercent + widthPercent / 2}%`}
-                                    y={plotHeight / 2}
-                                    textAnchor='middle'
-                                    dominantBaseline='central'
-                                    className='zoomed-chunk-label'
-                                >
-                                    {prettyPrintAddress(cb.address, l1Budget)} · {formatMemorySize(cb.size, 2)}
-                                </text>
-                            )}
-                        </g>
-                    );
-                })}
-            </svg>
+            {/* Frame wrapper owns the border + background + a 2px inner
+                padding. Rect strokes that spill past the SVG viewport (top,
+                bottom, *and* the left/right edges where x/width are in `%`
+                and we can't easily inset in pixels) render into that padding
+                area instead of being clipped — combined with the SVG's
+                `overflow="visible"` below. Without this, Firefox in
+                particular clips the bottom/right strokes of outline-only
+                (aliased) rects that land flush against the SVG bounds,
+                leaving the border looking cut off. */}
+            <div className='zoomed-core-svg-frame'>
+                <svg
+                    className='zoomed-core-svg'
+                    width='100%'
+                    height={plotHeight}
+                    preserveAspectRatio='none'
+                    overflow='visible'
+                >
+                    {cbs.map((cb) => {
+                        const xPercent = ((cb.address - memoryStart) / memoryRange) * 100;
+                        const widthPercent = (cb.size / memoryRange) * 100;
+                        const isSelected = selectedCBNodeId === cb.nodeId;
+                        // Width-as-fraction-of-window is enough to decide
+                        // whether there's room for a label without forcing
+                        // a layout pass.
+                        const labelFits = widthPercent > MIN_WIDTH_PERCENT_FOR_LABEL;
+                        const colour = cbColor(cb);
+                        const isAliased = cb.globallyAllocated;
+                        const titleText = isAliased
+                            ? `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)} · Aliased to tensor @ ${prettyPrintAddress(cb.address, l1Budget)} — no new allocation`
+                            : `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)}`;
+                        return (
+                            <g
+                                key={cb.nodeId}
+                                className={classNames('zoomed-chunk', { selected: isSelected, aliased: isAliased })}
+                                // CSS variable lets the `.aliased` rule
+                                // provide the outline colour at higher
+                                // specificity than the base
+                                // `.zoomed-chunk-rect` stroke. Same pattern
+                                // as the per-core strip above.
+                                style={isAliased ? ({ '--cb-color': colour } as React.CSSProperties) : undefined}
+                                onClick={() => onSelectCB(isSelected ? null : cb.nodeId)}
+                            >
+                                <title>{titleText}</title>
+                                <rect
+                                    x={`${xPercent}%`}
+                                    y={0}
+                                    width={`${widthPercent}%`}
+                                    height={plotHeight}
+                                    // `transparent` (rgba(0,0,0,0)) keeps
+                                    // the visual identical to `none` but
+                                    // counts as "painted" under the default
+                                    // `pointer-events: visiblePainted`, so
+                                    // the whole interior of outline-only
+                                    // (aliased) rects routes clicks up to
+                                    // the `<g>` onClick handler instead of
+                                    // only the 1.5px stroke being
+                                    // hit-testable.
+                                    fill={isAliased ? 'transparent' : colour}
+                                    className='zoomed-chunk-rect'
+                                />
+                                {labelFits && (
+                                    <text
+                                        x={`${xPercent + widthPercent / 2}%`}
+                                        y={plotHeight / 2}
+                                        textAnchor='middle'
+                                        dominantBaseline='central'
+                                        className='zoomed-chunk-label'
+                                    >
+                                        {prettyPrintAddress(cb.address, l1Budget)} · {formatMemorySize(cb.size, 2)}
+                                    </text>
+                                )}
+                            </g>
+                        );
+                    })}
+                </svg>
+            </div>
             <div className='zoomed-axis monospace'>
                 <span>{prettyPrintAddress(memoryStart, l1Budget)}</span>
                 <span>{prettyPrintAddress(memoryMid, l1Budget)}</span>
