@@ -478,14 +478,15 @@ function ClusterRenderer() {
                 >
                     <div
                         className={`cluster ${dimmed ? 'is-dimmed' : ''}`}
-                        style={{
-                            width: `${contentWidth}px`,
-                            height: `${contentHeight}px`,
-                            transform: `scale(${zoom})`,
-                            transformOrigin: 'top left',
-                            gridTemplateColumns: `repeat(${totalCols || 0}, ${clusterChipSize}px)`,
-                            gridTemplateRows: `repeat(${totalRows || 0}, ${clusterChipSize}px)`,
-                        }}
+style={{
+    width: `${contentWidth}px`,
+    height: `${contentHeight}px`,
+    transform: `scale(${zoom})`,
+    transformOrigin: 'top left',
+    gap: `${CHIP_GAP}px`,
+    gridTemplateColumns: `repeat(${totalCols || 0}, ${clusterChipSize}px)`,
+    gridTemplateRows: `repeat(${totalRows || 0}, ${clusterChipSize}px)`,
+}}
                         // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
                         tabIndex={0}
                     >
