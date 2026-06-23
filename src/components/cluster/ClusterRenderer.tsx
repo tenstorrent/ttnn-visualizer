@@ -47,10 +47,12 @@ const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value
 // deeper packing can come with a proper mesh-aware layout once the
 // mesh-descriptor multi-doc YAML quirk (see plan doc) is resolved upstream.
 const FALLBACK_PER_HOST_COLS = 4;
-// Two empty grid rows between hosts gives long inter-host swoosh curves room
-// to fit inside the gutter instead of arcing well past the chip boundary on
-// either side.
-const FALLBACK_HOST_GUTTER_ROWS = 2;
+const FALLBACK_HOST_GUTTER_ROWS = 1;
+// Empty grid rows above the topmost host so any curves that exit through the
+// TOP edge of that host's top row (long-haul intra-host loops, inter-host
+// links routed via the outward-edge rule) have somewhere to arc instead of
+// running into the cluster panel chrome.
+const FALLBACK_TOP_PAD_ROWS = 2;
 
 interface PortPixel {
     x: number;
@@ -164,7 +166,7 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     const useMeshCoords = hosts.every(hostHasTwoDimensionalMesh);
 
     const renderChips: RenderChip[] = [];
-    let nextHostOffsetY = 0;
+    let nextHostOffsetY = useMeshCoords ? 0 : FALLBACK_TOP_PAD_ROWS;
     let totalCols = 0;
     let totalRows = 0;
 
