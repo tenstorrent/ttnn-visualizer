@@ -109,7 +109,6 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
     .cluster {
         position: relative;
         display: grid;
-        gap: 5px;
         align-items: start;
         align-content: start;
 
@@ -148,7 +147,6 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
             display: grid;
             gap: 5px;
             border-radius: 8px;
-            padding: 2px;
             background: linear-gradient(160deg, colours.$tt-grey-4 0%, colours.$tt-grey-2 100%);
             outline: 1px solid colours.$tt-grey-5;
             box-shadow:

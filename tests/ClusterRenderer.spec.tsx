@@ -3,16 +3,16 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { calculatePciePixelPosition } from '../src/functions/clusterPositioning';
-
-// Constants from ClusterRenderer.tsx used to compute expected values in assertions.
-// These mirror the module-level constants so assertions can reference the same geometry
-// without reimplementing the logic under test.
-const CLUSTER_NODE_GRID_SIZE = 6;
-const CHIP_PADDING = 2;
-const CHIP_GAP = 5;
-const PCIE_BADGE_SIZE = 26;
-const PCIE_INSET_RATIO = 1.125;
+import {
+    CHIP_GAP,
+    CHIP_PADDING,
+    CLUSTER_NODE_GRID_SIZE,
+    PCIE_BADGE_SIZE,
+    PCIE_INSET_RATIO,
+    ZOOM_PIXEL_SCALE,
+    ZOOM_STEP,
+    calculatePciePixelPosition,
+} from '../src/functions/clusterPositioning';
 
 describe('calculatePciePixelPosition', () => {
     it('maps left-edge coordinate to column 0', () => {
@@ -111,9 +111,6 @@ describe('calculatePciePixelPosition', () => {
 });
 
 describe('zoom step scaling', () => {
-    const ZOOM_PIXEL_SCALE = 0.004;
-    const ZOOM_STEP = 0.15;
-
     it('proportional pinch scaling is clamped to ZOOM_STEP', () => {
         // deltaY=50 → unclamped 0.2, clamped to ZOOM_STEP
         const unclamped = Math.abs(50) * ZOOM_PIXEL_SCALE;

@@ -23,21 +23,17 @@ import {
     CHIP_GAP,
     CHIP_PADDING,
     CLUSTER_NODE_GRID_SIZE,
+    ZOOM_MAX,
+    ZOOM_MIN,
+    ZOOM_PIXEL_SCALE,
+    ZOOM_STEP,
     calculatePciePixelPosition,
+    clampZoom,
 } from '../../functions/clusterPositioning';
 
 const CLUSTER_CHIP_SIZE_LARGE = 350;
 const CLUSTER_CHIP_SIZE_MEDIUM = 250;
 const CLUSTER_CHIP_SIZE_SMALL = 150;
-
-const ZOOM_MIN = 0.25;
-const ZOOM_MAX = 2.5;
-const ZOOM_STEP = 0.15;
-// Scale factor for pixel-mode wheel events (trackpad/pinch). Keeps pinch
-// proportional to gesture size rather than firing a fixed step per frame.
-const ZOOM_PIXEL_SCALE = 0.004;
-
-const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 
 interface PortPixel {
     x: number;
@@ -582,6 +578,7 @@ function ClusterRenderer() {
                                         gridTemplateColumns: `repeat(${CLUSTER_NODE_GRID_SIZE}, 1fr)`,
                                         gridTemplateRows: `repeat(${CLUSTER_NODE_GRID_SIZE}, 1fr)`,
                                         gap: `${CHIP_GAP}px`,
+                                        padding: `${CHIP_PADDING}px`,
                                     }}
                                 >
                                     <span

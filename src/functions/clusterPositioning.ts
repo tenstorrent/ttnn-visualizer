@@ -6,7 +6,17 @@ export const CLUSTER_NODE_GRID_SIZE = 6;
 export const CHIP_PADDING = 2; // keep in sync with ClusterView.scss `.chip { padding: 2px; }`
 export const CHIP_GAP = 5;
 export const PCIE_BADGE_SIZE = 26; // Not too large but readable
+
+// Inset factor for PCIe badge positioning: multiplied by cellSize to place badges
+// ~1.125 cells inward from grid corners. Balances visibility and avoids overlaps.
 export const PCIE_INSET_RATIO = 1.125;
+
+export const ZOOM_MIN = 0.25;
+export const ZOOM_MAX = 2.5;
+export const ZOOM_STEP = 0.15;
+export const ZOOM_PIXEL_SCALE = 0.004;
+
+export const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 
 /**
  * Maps a physical PCIe coordinate ("x-y" from the arch JSON) to pixel offsets
