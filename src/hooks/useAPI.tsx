@@ -52,8 +52,13 @@ import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
-import { ChipDesign, ClusterModel, ClusterTopology, MeshData } from '../model/ClusterModel';
-import { PerRankInput, looksLikeRankedDescriptor, stitchClusterTopology } from '../functions/clusterTopology';
+import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
+import {
+    PerRankInput,
+    looksLikeRankedDescriptor,
+    pickMeshDocForRank,
+    stitchClusterTopology,
+} from '../functions/clusterTopology';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
@@ -482,10 +487,12 @@ const fetchClusterDescriptorForRank = async (rank: number): Promise<ClusterModel
 
 const fetchMeshDescriptorForRank = async (rank: number): Promise<MeshData | null> => {
     try {
-        const { data } = await axiosInstance.get<MeshData>(Endpoints.MESH_DESCRIPTOR, {
+        const { data } = await axiosInstance.get<MeshDescriptorResponse>(Endpoints.MESH_DESCRIPTOR, {
             params: { rank },
         });
-        return data;
+        // Backend returns either a single-doc shape ({ chips: {...} }) or a
+        // multi-doc envelope ({ docs: [...] }); resolve to a single doc here.
+        return pickMeshDocForRank(data, rank);
     } catch (err) {
         // mesh-descriptor is optional in some reports
         // eslint-disable-next-line no-console

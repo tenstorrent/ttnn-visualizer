@@ -78,6 +78,16 @@ export interface MeshData {
     };
 }
 
+// Multi-doc YAML mesh-descriptor envelope. Backend returns this when a
+// `physical_chip_mesh_coordinate_mapping_*.yaml` file contains multiple
+// `chips:` documents (one per rank). The FE resolves which doc belongs
+// to the requested rank — see `pickMeshDocForRank` in `clusterTopology.ts`.
+export interface MeshDataDocs {
+    docs: MeshData[];
+}
+
+export type MeshDescriptorResponse = MeshData | MeshDataDocs;
+
 type EthernetConnections = [{ chip: ChipId; chan: EthChannel }, { chip: ChipId; chan: EthChannel }][];
 
 // One host's slice of a stitched multi-host topology. For single-host reports the topology

@@ -3,8 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { PerRankInput, looksLikeRankedDescriptor, stitchClusterTopology } from '../src/functions/clusterTopology';
-import { ClusterModel } from '../src/model/ClusterModel';
+import {
+    PerRankInput,
+    looksLikeRankedDescriptor,
+    pickMeshDocForRank,
+    stitchClusterTopology,
+} from '../src/functions/clusterTopology';
+import { ClusterModel, MeshData, MeshDataDocs } from '../src/model/ClusterModel';
 
 // Minimal ClusterModel factory; fills in defaults so tests can override only what they care about.
 const makeDescriptor = (overrides: Partial<ClusterModel>): ClusterModel => ({
@@ -290,6 +295,40 @@ describe('stitchClusterTopology', () => {
         for (const link of topology.interHostLinks) {
             expect(new Set([link.a.rank, link.b.rank])).toEqual(new Set([0, 1]));
         }
+    });
+});
+
+describe('pickMeshDocForRank', () => {
+    it('passes through a legacy single-doc response unchanged', () => {
+        const single: MeshData = { chips: { 0: [0, 0, 0, 0], 1: [0, 1, 0, 0] } };
+        expect(pickMeshDocForRank(single, 0)).toBe(single);
+        expect(pickMeshDocForRank(single, 5)).toBe(single);
+    });
+
+    it('selects the doc with the lowest min-y for rank 0', () => {
+        // doc[0] in source order has higher y values (rank 1's chips); doc[1] has lower
+        // y values (rank 0's chips). Reflects the actual ordering in
+        // multihost_poc_jun19_2043 where the backend's safe_load only returned
+        // the first (rank 1's) doc.
+        const response: MeshDataDocs = {
+            docs: [{ chips: { 0: [0, 12, 0, 0], 5: [0, 8, 0, 0] } }, { chips: { 0: [0, 6, 0, 0], 5: [0, 2, 0, 0] } }],
+        };
+        expect(pickMeshDocForRank(response, 0)).toBe(response.docs[1]);
+        expect(pickMeshDocForRank(response, 1)).toBe(response.docs[0]);
+    });
+
+    it('falls back to the first sorted doc when rank is out of bounds', () => {
+        const response: MeshDataDocs = {
+            docs: [{ chips: { 0: [0, 5, 0, 0] } }, { chips: { 0: [0, 0, 0, 0] } }],
+        };
+        // No exact match for rank 5; return the first sorted doc (lowest min-y)
+        // so the renderer can still produce *something* visible.
+        expect(pickMeshDocForRank(response, 5)).toBe(response.docs[1]);
+    });
+
+    it('treats an empty docs array as missing mesh data', () => {
+        const fallback = pickMeshDocForRank({ docs: [] }, 0);
+        expect(fallback).toEqual({ chips: {} });
     });
 });
 

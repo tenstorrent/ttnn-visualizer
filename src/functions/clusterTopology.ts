@@ -8,6 +8,8 @@ import {
     ClusterTopology,
     InterHostEthernetLink,
     IntraHostEthernetLink,
+    MeshData,
+    MeshDescriptorResponse,
     RemoteEthernetConnectionRaw,
 } from '../model/ClusterModel';
 
@@ -131,4 +133,37 @@ const canonicalInterHostLinkKey = (a: Endpoint, b: Endpoint): string => {
  */
 export const looksLikeRankedDescriptor = (descriptor: ClusterModel): boolean => {
     return descriptor.ethernet_connections_to_remote_devices !== undefined;
+};
+
+const isMeshDocsEnvelope = (response: MeshDescriptorResponse): response is { docs: MeshData[] } => {
+    return Array.isArray((response as { docs?: unknown }).docs);
+};
+
+const minMeshY = (doc: MeshData): number => {
+    const coords = Object.values(doc.chips ?? {});
+    if (coords.length === 0) {
+        return Number.POSITIVE_INFINITY;
+    }
+    return coords.reduce((acc, coord) => Math.min(acc, coord[1] ?? 0), Number.POSITIVE_INFINITY);
+};
+
+/**
+ * Resolve a mesh-descriptor response to the single `MeshData` doc that
+ * corresponds to `rank`. Handles both legacy single-doc responses and the
+ * multi-doc envelope (`{ docs: [...] }`) the backend uses for multi-host
+ * reports.
+ *
+ * For multi-doc envelopes, the convention is "lower ranks occupy lower mesh-y
+ * values" — we sort docs by their minimum y-coordinate ascending and index by
+ * rank. This is a heuristic forced by the fact that mesh-descriptor files do
+ * not currently embed an explicit per-doc rank marker; once tt-metal-side
+ * tagging lands we can switch to the explicit marker without breaking the
+ * envelope contract.
+ */
+export const pickMeshDocForRank = (response: MeshDescriptorResponse, rank: number): MeshData => {
+    if (!isMeshDocsEnvelope(response)) {
+        return response;
+    }
+    const sorted = [...response.docs].sort((a, b) => minMeshY(a) - minMeshY(b));
+    return sorted[rank] ?? sorted[0] ?? { chips: {} };
 };
