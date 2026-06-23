@@ -485,18 +485,19 @@ function useDeviceOperationsFullRenderModel(args: {
                                     </div>
                                 </>
                             )}
-                            <MemoryLegendElement
-                                numCores={numCores}
-                                chunk={{ address: parseInt(cb.address, 10), size: parseInt(cb.size, 10) }}
-                                memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
-                                selectedTensorAddress={selectedAddress}
-                                operationDetails={details}
-                                onLegendClick={onLegendClick}
-                                colorVariance={variance}
-                                isGloballyAllocated={isGloballyAllocated}
-                            />
-                            {memoryInfo}
-                            <br />
+                            <div className='cb-legend-row'>
+                                <MemoryLegendElement
+                                    numCores={numCores}
+                                    chunk={{ address: parseInt(cb.address, 10), size: parseInt(cb.size, 10) }}
+                                    memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
+                                    selectedTensorAddress={selectedAddress}
+                                    operationDetails={details}
+                                    onLegendClick={onLegendClick}
+                                    colorVariance={variance}
+                                    isGloballyAllocated={isGloballyAllocated}
+                                />
+                                {memoryInfo}
+                            </div>
                         </Fragment>
                     );
 
