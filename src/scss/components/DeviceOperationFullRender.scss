@@ -166,7 +166,7 @@
     // column-for-column across buffer and CB rows. Scoped under
     // `.device-operations-full-render` so it doesn't bleed into the L1 /
     // DRAM plot legends.
-    .cb-legend-row {
+    .memory-legend-row {
         display: flex;
         align-items: flex-start;
         gap: 10px;

@@ -383,7 +383,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                 computed against the same width as the CB legend.
                                 The running totals live in the h4 above, so we
                                 use an invisible spacer instead of `memoryInfo`. */}
-                            <div className='cb-legend-row'>
+                            <div className='memory-legend-row'>
                                 <MemoryLegendElement
                                     chunk={{
                                         address: parseInt(buffer.address, 10),
@@ -419,7 +419,7 @@ function useDeviceOperationsFullRenderModel(args: {
                             key={index}
                             title='Buffer deallocate'
                         >
-                            <div className='cb-legend-row'>
+                            <div className='memory-legend-row'>
                                 <MemoryLegendElement
                                     chunk={{
                                         address: buffer.address !== undefined ? parseInt(buffer.address, 10) : NaN,
@@ -502,7 +502,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     </div>
                                 </>
                             )}
-                            <div className='cb-legend-row'>
+                            <div className='memory-legend-row'>
                                 <MemoryLegendElement
                                     numCores={numCores}
                                     chunk={{ address: parseInt(cb.address, 10), size: parseInt(cb.size, 10) }}
