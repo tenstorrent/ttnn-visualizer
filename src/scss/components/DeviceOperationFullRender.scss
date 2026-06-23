@@ -149,7 +149,6 @@
         position: static;
         display: grid;
         margin-left: auto;
-        margin-bottom: 10px;
 
         &.peak {
             border: 1px solid rgb(207 255 90 / 50%);
@@ -165,12 +164,11 @@
         .legend-item {
             flex: 1 1 auto;
             min-width: 0;
-            grid-template-columns: 15px 0.5fr 2fr 10fr 3fr;
+            grid-template-columns: 15px 0.5fr 2fr 10fr 5fr;
         }
 
         .memory-info {
             flex: 0 0 320px;
-            margin-bottom: 5px;
         }
     }
 }
