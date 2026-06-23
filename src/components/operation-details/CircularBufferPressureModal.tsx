@@ -52,6 +52,29 @@ const CB_FALLBACK_COLOR = '#888';
 const cbColor = (cb: CBAllocationSummary): string =>
     getBufferColor(cb.address + (cb.allocateOperationId ?? 0)) ?? CB_FALLBACK_COLOR;
 
+/**
+ * SVG paints siblings in document order, so the *last* rect in a sibling group
+ * wins at shared boundaries. The selected rect wears a thicker, brighter
+ * (2px yellow) stroke that must not be covered by an adjacent rect's stroke
+ * at a shared address edge — otherwise the selection outline drops on the
+ * shared side and the user sees only three of four edges. Pulling the
+ * selected rect to the end of the list guarantees its outline survives on
+ * every side. No-op when nothing is selected or the rect isn't in the list.
+ */
+const reorderSelectedLast = (cbs: CBAllocationSummary[], selectedNodeId: number | null): CBAllocationSummary[] => {
+    if (selectedNodeId === null) {
+        return cbs;
+    }
+    const idx = cbs.findIndex((c) => c.nodeId === selectedNodeId);
+    if (idx === -1 || idx === cbs.length - 1) {
+        return cbs;
+    }
+    const next = cbs.slice();
+    const [selected] = next.splice(idx, 1);
+    next.push(selected);
+    return next;
+};
+
 interface MiniCBStripProps {
     cbs: CBAllocationSummary[];
     memoryStart: number;
@@ -73,6 +96,7 @@ interface MiniCBStripProps {
  */
 const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBStripProps) => {
     const memoryRange = Math.max(1, memoryEnd - memoryStart);
+    const orderedCbs = useMemo(() => reorderSelectedLast(cbs, selectedCBNodeId), [cbs, selectedCBNodeId]);
     return (
         <svg
             className='cb-strip'
@@ -80,7 +104,7 @@ const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBSt
             width='100%'
             preserveAspectRatio='none'
         >
-            {cbs.map((cb) => {
+            {orderedCbs.map((cb) => {
                 const xPercent = ((cb.address - memoryStart) / memoryRange) * 100;
                 const widthPercent = (cb.size / memoryRange) * 100;
                 const isSelected = selectedCBNodeId === cb.nodeId;
@@ -143,6 +167,7 @@ const ZoomedCorePlot = ({
     // can't fit the label without clipping. Below this we drop the label
     // and lean on the tooltip / legend for identity.
     const MIN_WIDTH_PERCENT_FOR_LABEL = 12;
+    const orderedCbs = useMemo(() => reorderSelectedLast(cbs, selectedCBNodeId), [cbs, selectedCBNodeId]);
 
     return (
         <div className='zoomed-core-plot'>
@@ -163,7 +188,7 @@ const ZoomedCorePlot = ({
                     preserveAspectRatio='none'
                     overflow='visible'
                 >
-                    {cbs.map((cb) => {
+                    {orderedCbs.map((cb) => {
                         const xPercent = ((cb.address - memoryStart) / memoryRange) * 100;
                         const widthPercent = (cb.size / memoryRange) * 100;
                         const isSelected = selectedCBNodeId === cb.nodeId;
