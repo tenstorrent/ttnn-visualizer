@@ -127,8 +127,28 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     }
 
     // Step 1: place every chip on a global virtual grid. Prefer mesh coordinates
-    // when the host provides them; otherwise fall back to a per-host 4-wide grid
-    // tiled horizontally across hosts.
+    // when *every* host has a true 2D arrangement (both x and y axes vary);
+    // otherwise fall back to a per-host 4-wide grid tiled horizontally. A
+    // degenerate 1D mesh (e.g. `physical_chip_mesh_coordinate_mapping_*.yaml`
+    // in multihost_poc_jun19_2043 packs all chips into mesh_x=0) collapses
+    // every chip into a single column, which forces the eth-port placement
+    // logic (relative-neighbour-direction below) to cluster all ports on the
+    // TOP/BOTTOM edges and doesn't match the physical chip board geometry.
+    const hostHasTwoDimensionalMesh = (host: ClusterTopology['hosts'][number]) => {
+        const coords = Object.values(host.meshChips);
+        if (coords.length === 0) {
+            return false;
+        }
+        const xs = new Set<number>();
+        const ys = new Set<number>();
+        for (const coord of coords) {
+            xs.add(coord[0]);
+            ys.add(coord[1]);
+        }
+        return xs.size > 1 && ys.size > 1;
+    };
+    const useMeshCoords = hosts.every(hostHasTwoDimensionalMesh);
+
     const renderChips: RenderChip[] = [];
     let nextHostOffsetX = 0;
     let totalCols = 0;
@@ -137,7 +157,7 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     for (const host of hosts) {
         const meshChipIds = Object.keys(host.meshChips).map(Number);
         const uidChipIds = Object.keys(host.descriptor.chip_unique_ids ?? {}).map(Number);
-        const chipIdsForHost = (meshChipIds.length > 0 ? meshChipIds : uidChipIds).sort((a, b) => a - b);
+        const chipIdsForHost = (useMeshCoords ? meshChipIds : uidChipIds).sort((a, b) => a - b);
 
         const mmioChipIds = new Set(
             (host.descriptor.chips_with_mmio ?? []).map((obj) => Object.values(obj)[0] as number),
@@ -149,7 +169,7 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
         // counters (eslint `no-loop-func`).
         for (let localIndex = 0; localIndex < chipIdsForHost.length; localIndex += 1) {
             const chipId = chipIdsForHost[localIndex];
-            const meshCoord = host.meshChips[chipId];
+            const meshCoord = useMeshCoords ? host.meshChips[chipId] : undefined;
             let x: number;
             let y: number;
             if (meshCoord) {
