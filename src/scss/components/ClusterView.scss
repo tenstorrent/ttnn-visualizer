@@ -34,8 +34,8 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         margin: 0;
 
         .cluster-view-zoom {
-            .bp5-button {
-                min-width: 44px;
+            .zoom-percentage-button {
+                width: 54px;
             }
         }
     }

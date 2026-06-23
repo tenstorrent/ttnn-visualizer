@@ -442,6 +442,7 @@ function ClusterRenderer() {
                 </Tooltip>
                 <Tooltip content='Fit to screen'>
                     <Button
+                        className='zoom-percentage-button'
                         text={`${Math.round(zoom * 100)}%`}
                         onClick={() => setUserZoom(null)}
                         aria-label='Fit topology to screen'
