@@ -174,11 +174,11 @@ describe('ClusterRenderer positioning logic', () => {
             const ZOOM_STEP = 0.15;
 
             const deltaY = 50;
-            const step = Math.min(Math.abs(deltaY) * ZOOM_PIXEL_SCALE, ZOOM_STEP);
-
-            expect(step).toBeLessThanOrEqual(ZOOM_STEP);
-            expect(step).toBeCloseTo(0.2, 5); // 50 * 0.004 = 0.2, but clamped to ZOOM_STEP=0.15
-            expect(step).toBe(ZOOM_STEP); // Actually clamped to 0.15
+const unclamped = Math.abs(deltaY) * ZOOM_PIXEL_SCALE;
+const step = Math.min(unclamped, ZOOM_STEP);
+expect(unclamped).toBeCloseTo(0.2, 5);
+expect(step).toBeLessThanOrEqual(ZOOM_STEP);
+expect(step).toBe(ZOOM_STEP);
         });
 
         it('fixed step for mouse wheel (DOM_DELTA_LINE)', () => {
