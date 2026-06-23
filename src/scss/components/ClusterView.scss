@@ -225,6 +225,7 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 display: flex;
                 justify-content: center;
                 align-items: center;
+                box-sizing: border-box;
                 padding: 1px 5px;
                 border: 1px solid $mmio-colour;
                 border-radius: 3px;

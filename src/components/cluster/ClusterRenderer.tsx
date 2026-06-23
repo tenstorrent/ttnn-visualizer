@@ -25,7 +25,8 @@ const CLUSTER_CHIP_SIZE_LARGE = 350;
 const CLUSTER_CHIP_SIZE_MEDIUM = 250;
 const CLUSTER_CHIP_SIZE_SMALL = 150;
 const CHIP_GAP = 5;
-const PCIE_BADGE_SIZE = 26;
+const PCIE_BADGE_SIZE = 26; // Not too large but readable
+const PCIE_INSET_RATIO = 1.125;
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 2.5;
@@ -108,20 +109,21 @@ const calculatePciePixelPosition = (
         col = clamp(Math.round((physX / (xSize - 1)) * (CLUSTER_NODE_GRID_SIZE - 1)), CLUSTER_NODE_GRID_SIZE - 1);
         row = CLUSTER_NODE_GRID_SIZE - 1;
     } else {
+        // Interior coordinate (shouldn't occur in practice): center as fallback.
         col = Math.round(CLUSTER_NODE_GRID_SIZE / 2);
         row = Math.round(CLUSTER_NODE_GRID_SIZE / 2);
     }
 
     // Inset the PCIe badge significantly toward the center to avoid overlapping
     // with edge-positioned ETH ports (which occupy the perimeter cells).
-    const insetAmount = cellSize * 1.125;
+    const insetAmount = cellSize * PCIE_INSET_RATIO;
     const left = CHIP_PADDING + col * stride + insetAmount;
     const top = CHIP_PADDING + row * stride + insetAmount;
 
     return { left, top, size: PCIE_BADGE_SIZE };
 };
 
-const calculateEthPosition = (ethPosition: CLUSTER_ETH_POSITION, index: number) => {
+const getEthGridPosition = (ethPosition: CLUSTER_ETH_POSITION, index: number) => {
     let x = 0;
     let y = 0;
     switch (ethPosition) {
@@ -201,9 +203,16 @@ function buildClusterTopology(data: ClusterModel, chipDesign: ChipDesign): Clust
     connections.forEach((connection) => {
         const chip0 = chipsById.get(connection[0].chip);
         const chip1 = chipsById.get(connection[1].chip);
-        if (chip0 && chip1) {
-            chip0.connectedChipsByEthId.set(chip0.eth[connection[0].chan] ?? '', chip1);
-            chip1.connectedChipsByEthId.set(chip1.eth[connection[1].chan] ?? '', chip0);
+        if (!chip0 || !chip1) {
+            return;
+        }
+        const uid0 = chip0.eth[connection[0].chan];
+        const uid1 = chip1.eth[connection[1].chan];
+        // Skip connection if either UID is undefined to prevent silently storing
+        // under empty-string keys, which would be lost on later lookups.
+        if (uid0 !== undefined && uid1 !== undefined) {
+            chip0.connectedChipsByEthId.set(uid0, chip1);
+            chip1.connectedChipsByEthId.set(uid1, chip0);
         }
     });
 
@@ -275,7 +284,7 @@ function buildClusterTopology(data: ClusterModel, chipDesign: ChipDesign): Clust
 
         ethPosition.forEach((uids, position) => {
             uids.forEach((uid, index) => {
-                const { x, y } = calculateEthPosition(position, index);
+                const { x, y } = getEthGridPosition(position, index);
                 portPixelByUid.set(uid, portPixel(clusterChip.coords, x, y));
             });
         });
@@ -638,7 +647,7 @@ function ClusterRenderer() {
 
                                     {[...ethPosition.entries()].map(([position, value]) => {
                                         return value.map((uid: string, index: number) => {
-                                            const { x, y } = calculateEthPosition(position, index);
+                                            const { x, y } = getEthGridPosition(position, index);
                                             const size = clusterChipSize / CLUSTER_NODE_GRID_SIZE - CHIP_GAP;
                                             // scale the label with the port so it doesn't overflow on dense meshes
                                             const ethFontSize = Math.max(4, Math.round(size / 4));
