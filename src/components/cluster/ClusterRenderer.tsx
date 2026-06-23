@@ -47,7 +47,10 @@ const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value
 // deeper packing can come with a proper mesh-aware layout once the
 // mesh-descriptor multi-doc YAML quirk (see plan doc) is resolved upstream.
 const FALLBACK_PER_HOST_COLS = 4;
-const FALLBACK_HOST_GUTTER_ROWS = 1;
+// Two empty grid rows between hosts gives long inter-host swoosh curves room
+// to fit inside the gutter instead of arcing well past the chip boundary on
+// either side.
+const FALLBACK_HOST_GUTTER_ROWS = 2;
 
 interface PortPixel {
     x: number;
@@ -556,9 +559,10 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     //         outNormal(LEFT)   = (-1, 0)
     //         outNormal(RIGHT)  = (+1, 0)
     //
-    // Control distance = max(stride * 0.65, dist * 0.4). The stride floor
+    // Control distance = max(stride * 0.4, dist * 0.22). The stride floor
     // keeps short hops visibly bowed; the distance term lets long hops swing
-    // wider. This guarantees the curve *leaves the source chip going outward*
+    // wider — but tuned modest enough that inter-host curves don't arc far
+    // past the gutter region. This guarantees the curve *leaves the source chip going outward*
     // and *enters the destination chip from outside*, regardless of how the
     // two endpoints are aligned, which fixes the previous degenerate case
     // where two ports stacked on parallel edges with nearly the same x (e.g.
@@ -581,7 +585,7 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const ctrl = Math.max(stride * 0.65, dist * 0.4);
+        const ctrl = Math.max(stride * 0.4, dist * 0.22);
         const na = outwardNormal(a.edge);
         const nb = outwardNormal(b.edge);
         const cax = a.x + na.x * ctrl;
