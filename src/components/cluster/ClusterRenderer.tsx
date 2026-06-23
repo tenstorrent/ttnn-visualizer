@@ -322,11 +322,25 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     const portPixel = (coords: ClusterCoordinates, gx: number, gy: number, edge: CLUSTER_ETH_POSITION): PortPixel => {
         const chipLeft = coords[CLUSTER_COORDS.X] * stride + CHIP_PADDING;
         const chipTop = coords[CLUSTER_COORDS.Y] * stride + CHIP_PADDING;
-        return {
-            x: chipLeft + (gx - 1) * (cellSize + CHIP_GAP) + cellSize / 2,
-            y: chipTop + (gy - 1) * (cellSize + CHIP_GAP) + cellSize / 2,
-            edge,
-        };
+        const cellX = chipLeft + (gx - 1) * (cellSize + CHIP_GAP);
+        const cellY = chipTop + (gy - 1) * (cellSize + CHIP_GAP);
+        // Anchor the line endpoint to the OUTER side of the eth-port tile (the
+        // side closest to the chip's edge) instead of the tile centre. This
+        // makes the connection visibly exit/enter the chip at its boundary
+        // rather than appearing to start mid-port. Using the cell midpoint
+        // along the parallel axis keeps the line centred on the tile.
+        let px = cellX + cellSize / 2;
+        let py = cellY + cellSize / 2;
+        if (edge === CLUSTER_ETH_POSITION.TOP) {
+            py = cellY;
+        } else if (edge === CLUSTER_ETH_POSITION.BOTTOM) {
+            py = cellY + cellSize;
+        } else if (edge === CLUSTER_ETH_POSITION.LEFT) {
+            px = cellX;
+        } else {
+            px = cellX + cellSize;
+        }
+        return { x: px, y: py, edge };
     };
 
     const ethPositionsByChip = new Map<string, Map<CLUSTER_ETH_POSITION, string[]>>();
