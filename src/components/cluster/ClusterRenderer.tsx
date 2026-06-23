@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
@@ -29,6 +29,8 @@ const CHIP_GAP = 5; // gap between chips in the outer grid (and inside each chip
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.15;
+
+const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 
 interface PortPixel {
     x: number;
@@ -304,19 +306,60 @@ function ClusterRenderer() {
 
     // observe the scroll container so we can fit the topology to its size
     const observerRef = useRef<ResizeObserver | null>(null);
-    const setWrapRef = useCallback((node: HTMLDivElement | null) => {
-        observerRef.current?.disconnect();
-        if (node) {
-            const observer = new ResizeObserver((entries) => {
-                const entry = entries[0];
-                if (entry) {
-                    setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
-                }
-            });
-            observer.observe(node);
-            observerRef.current = observer;
+    const wrapNodeRef = useRef<HTMLDivElement | null>(null);
+    const fitZoomRef = useRef(1);
+
+    // ctrl/⌘ + wheel zooms the topology. This must be a native, non-passive listener:
+    // React attaches `wheel` to the root as a passive listener, so `preventDefault()`
+    // inside an `onWheel` prop is ignored and the browser zooms the whole page instead.
+    const handleWheelNative = useCallback((event: WheelEvent) => {
+        if (!event.ctrlKey && !event.metaKey) {
+            return; // let the container scroll/pan normally
         }
+        event.preventDefault();
+        const direction = event.deltaY > 0 ? -1 : 1;
+        setUserZoom((prevZoom) => clampZoom((prevZoom ?? fitZoomRef.current) + direction * ZOOM_STEP));
     }, []);
+
+    const setWrapRef = useCallback(
+        (node: HTMLDivElement | null) => {
+            observerRef.current?.disconnect();
+            wrapNodeRef.current?.removeEventListener('wheel', handleWheelNative);
+            wrapNodeRef.current = node;
+            if (node) {
+                const observer = new ResizeObserver((entries) => {
+                    const entry = entries[0];
+                    if (entry) {
+                        setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+                    }
+                });
+                observer.observe(node);
+                observerRef.current = observer;
+                node.addEventListener('wheel', handleWheelNative, { passive: false });
+            }
+        },
+        [handleWheelNative],
+    );
+
+    const topology = topologyResult?.status === 'ready' ? topologyResult.topology : null;
+
+    const fitZoom =
+        containerSize && topology
+            ? Math.max(
+                  ZOOM_MIN,
+                  Math.min(
+                      containerSize.width / topology.contentWidth,
+                      containerSize.height / topology.contentHeight,
+                      1,
+                  ),
+              )
+            : 1;
+    const zoom = userZoom ?? fitZoom;
+
+    // keep the native wheel handler's fit-zoom up to date without re-registering it.
+    useEffect(() => {
+        fitZoomRef.current = fitZoom;
+    }, [fitZoom]);
 
     const closeButton = (
         <div className='cluster-view-header'>
@@ -386,26 +429,6 @@ function ClusterRenderer() {
         return chipId === hoveredChip || !!neighboursByChip.get(hoveredChip)?.has(chipId);
     };
 
-    // zoom that makes the whole topology fit inside the scroll container (never upscales
-    // past 1:1); used as the default until the user explicitly zooms.
-    const fitZoom = containerSize
-        ? Math.max(ZOOM_MIN, Math.min(containerSize.width / contentWidth, containerSize.height / contentHeight, 1))
-        : 1;
-    const zoom = userZoom ?? fitZoom;
-    const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
-
-    const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
-        if (!event.ctrlKey && !event.metaKey) {
-            return; // let the container scroll/pan normally
-        }
-        event.preventDefault();
-        const direction = event.deltaY > 0 ? -1 : 1;
-        setUserZoom((prevZoom) => {
-            const baseZoom = prevZoom ?? fitZoom;
-            return clampZoom(baseZoom + direction * ZOOM_STEP);
-        });
-    };
-
     const header = (
         <div className='cluster-view-header'>
             <ButtonGroup className='cluster-view-zoom'>
@@ -467,7 +490,6 @@ function ClusterRenderer() {
             <div
                 className='cluster-view-wrap'
                 ref={setWrapRef}
-                onWheel={handleWheel}
             >
                 <div
                     className='cluster-stage'
