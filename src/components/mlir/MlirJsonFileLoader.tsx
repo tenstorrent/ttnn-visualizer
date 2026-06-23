@@ -36,10 +36,9 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 
 interface MlirJsonFileLoaderProps {
     server?: MlirServerConnection | null;
-    disabled?: boolean;
 }
 
-const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoaderProps) => {
+const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { uploadMlirFileToServer } = useMlirUpload();
     const navigate = useNavigate();
@@ -123,7 +122,6 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                 text={mlirJsonFileName ?? placeholder}
                 onInputChange={handleFileChange}
                 inputProps={{ accept: acceptedExtensions }}
-                disabled={disabled}
             />
 
             <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>

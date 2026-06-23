@@ -59,7 +59,7 @@ const useMlirUpload = () => {
                     'Content-Type': 'multipart/form-data',
                 },
                 onUploadProgress: (event) => {
-                    if (!event || event.total === null || event.total === undefined) {
+                    if (!event || event.total === null || event.total === undefined || event.total <= 0) {
                         return;
                     }
                     const uploadComplete = event.loaded >= event.total;
