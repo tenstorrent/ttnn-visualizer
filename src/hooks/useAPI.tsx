@@ -506,7 +506,16 @@ const fetchRankSlice = async (rank: number): Promise<PerRankInput> => {
         fetchClusterDescriptorForRank(rank),
         fetchMeshDescriptorForRank(rank),
     ]);
-    return { rank, descriptor, meshDescriptor: mesh?.chips ?? null };
+    // Chip coordinates come from one of two places:
+    //   1. The dedicated `physical_chip_mesh_coordinate_mapping_*.yaml` file
+    //      (mesh descriptor) — preferred when present (multi-host reports).
+    //   2. The `chips:` field on `cluster_descriptor.yaml` itself — the only
+    //      source for galaxy-style single-host reports that don't ship a
+    //      separate mesh file.
+    // Mesh-descriptor wins when both are available, mirroring the legacy
+    // single-host `fetchClusterDescription` behaviour.
+    const meshChips = mesh?.chips ?? descriptor.chips ?? null;
+    return { rank, descriptor, meshDescriptor: meshChips };
 };
 
 const fetchClusterTopology = async (): Promise<ClusterTopology> => {

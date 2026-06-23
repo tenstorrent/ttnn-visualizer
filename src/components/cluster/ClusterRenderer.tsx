@@ -40,16 +40,19 @@ const ZOOM_PIXEL_SCALE = 0.004;
 const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 
 // Per-host fallback layout when mesh coordinates are missing. Hosts are tiled
-// horizontally; each host arranges its chips in a 4-column grid stacked into
-// rows. Chosen because most current reports are 1- or 2-host with ≤ 8 chips
-// per host; deeper packing can come with a proper mesh-aware layout once the
+// *vertically* with the highest rank at the top and rank 0 at the bottom — the
+// arrangement that reads as "remote → local" top-down for a multi-host run.
+// Each host arranges its chips in a 4-column grid stacked into rows.
+// Chosen because most current reports are 1- or 2-host with ≤ 8 chips per host;
+// deeper packing can come with a proper mesh-aware layout once the
 // mesh-descriptor multi-doc YAML quirk (see plan doc) is resolved upstream.
 const FALLBACK_PER_HOST_COLS = 4;
-const FALLBACK_HOST_GUTTER_COLS = 1;
+const FALLBACK_HOST_GUTTER_ROWS = 1;
 
 interface PortPixel {
     x: number;
     y: number;
+    edge: CLUSTER_ETH_POSITION;
 }
 
 interface LinkSegment {
@@ -61,6 +64,9 @@ interface LinkSegment {
     chipKeyA: string;
     chipKeyB: string;
     interHost: boolean;
+    // SVG `d` attribute for inter-host cubic-Bezier curves. Intra-host links
+    // are rendered as a straight `<line>`, so this is undefined for them.
+    pathD?: string;
 }
 
 interface RenderChip extends ClusterChip {
@@ -83,6 +89,10 @@ interface ClusterRenderModel {
     idFontSize: number;
     isMultiHost: boolean;
     worldSize: number;
+    // Extra pixels added to each side of the SVG link layer so outward-bowing
+    // curves aren't clipped by the bounding box. Sized in `buildClusterRenderModel`
+    // from the chip stride.
+    svgPad: number;
 }
 
 type ClusterRenderResult = { status: 'ready'; model: ClusterRenderModel } | { status: 'unsupported' };
@@ -128,11 +138,12 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
 
     // Step 1: place every chip on a global virtual grid. Prefer mesh coordinates
     // when *every* host has a true 2D arrangement (both x and y axes vary);
-    // otherwise fall back to a per-host 4-wide grid tiled horizontally. A
-    // degenerate 1D mesh (e.g. `physical_chip_mesh_coordinate_mapping_*.yaml`
-    // in multihost_poc_jun19_2043 packs all chips into mesh_x=0) collapses
-    // every chip into a single column, which forces the eth-port placement
-    // logic (relative-neighbour-direction below) to cluster all ports on the
+    // otherwise fall back to a per-host 4-wide grid tiled *vertically* with the
+    // highest rank at the top and rank 0 at the bottom. A degenerate 1D mesh
+    // (e.g. `physical_chip_mesh_coordinate_mapping_*.yaml` in
+    // multihost_poc_jun19_2043 packs all chips into mesh_x=0) collapses every
+    // chip into a single column, which forces the eth-port placement logic
+    // (relative-neighbour-direction below) to cluster all ports on the
     // TOP/BOTTOM edges and doesn't match the physical chip board geometry.
     const hostHasTwoDimensionalMesh = (host: ClusterTopology['hosts'][number]) => {
         const coords = Object.values(host.meshChips);
@@ -150,11 +161,53 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     const useMeshCoords = hosts.every(hostHasTwoDimensionalMesh);
 
     const renderChips: RenderChip[] = [];
-    let nextHostOffsetX = 0;
+    let nextHostOffsetY = 0;
     let totalCols = 0;
     let totalRows = 0;
 
+    // Stacking order is driven by where each host's inter-host connection
+    // chips sit in its local fallback grid (row 0 = top, row 1 = bottom of a
+    // 2-row tile). The host whose connecting chips cluster near its BOTTOM
+    // row is placed FIRST (top of the stack) so that bottom row faces the
+    // gutter; the host whose connecting chips cluster near its TOP row is
+    // placed last so its top row faces the gutter from below. Ties (and the
+    // single-host case) fall back to rank-descending. Mesh-aware mode keeps
+    // the report's coordinates unchanged.
+    const fallbackLocalGridYForChip = new Map<string, number>();
     for (const host of hosts) {
+        const uidChipIds = Object.keys(host.descriptor.chip_unique_ids ?? {})
+            .map(Number)
+            .sort((a, b) => a - b);
+        uidChipIds.forEach((chipId, idx) => {
+            fallbackLocalGridYForChip.set(`${host.rank}-${chipId}`, Math.floor(idx / FALLBACK_PER_HOST_COLS));
+        });
+    }
+    const meanLocalYByRank = new Map<number, number>();
+    const accumByRank = new Map<number, { sum: number; count: number }>();
+    for (const link of interHostLinks) {
+        for (const endpoint of [link.a, link.b] as const) {
+            const localY = fallbackLocalGridYForChip.get(`${endpoint.rank}-${endpoint.chip}`);
+            if (localY !== undefined) {
+                const acc = accumByRank.get(endpoint.rank) ?? { sum: 0, count: 0 };
+                acc.sum += localY;
+                acc.count += 1;
+                accumByRank.set(endpoint.rank, acc);
+            }
+        }
+    }
+    accumByRank.forEach((acc, rank) => meanLocalYByRank.set(rank, acc.sum / acc.count));
+    const hostsByRenderOrder = useMeshCoords
+        ? hosts
+        : [...hosts].sort((a, b) => {
+              const ya = meanLocalYByRank.get(a.rank);
+              const yb = meanLocalYByRank.get(b.rank);
+              if (ya !== undefined && yb !== undefined && ya !== yb) {
+                  return yb - ya;
+              }
+              return b.rank - a.rank;
+          });
+
+    for (const host of hostsByRenderOrder) {
         const meshChipIds = Object.keys(host.meshChips).map(Number);
         const uidChipIds = Object.keys(host.descriptor.chip_unique_ids ?? {}).map(Number);
         const chipIdsForHost = (useMeshCoords ? meshChipIds : uidChipIds).sort((a, b) => a - b);
@@ -176,8 +229,8 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
                 [x, y] = meshCoord;
             } else {
                 usedFallback = true;
-                x = nextHostOffsetX + (localIndex % FALLBACK_PER_HOST_COLS);
-                y = Math.floor(localIndex / FALLBACK_PER_HOST_COLS);
+                x = localIndex % FALLBACK_PER_HOST_COLS;
+                y = nextHostOffsetY + Math.floor(localIndex / FALLBACK_PER_HOST_COLS);
             }
             totalCols = Math.max(totalCols, x + 1);
             totalRows = Math.max(totalRows, y + 1);
@@ -196,8 +249,8 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
         }
 
         if (usedFallback) {
-            const hostCols = Math.min(chipIdsForHost.length, FALLBACK_PER_HOST_COLS);
-            nextHostOffsetX += hostCols + FALLBACK_HOST_GUTTER_COLS;
+            const hostRows = Math.ceil(chipIdsForHost.length / FALLBACK_PER_HOST_COLS);
+            nextHostOffsetY += hostRows + FALLBACK_HOST_GUTTER_ROWS;
         }
     }
 
@@ -250,61 +303,235 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     const contentHeight = totalRows * clusterChipSize + Math.max(0, totalRows - 1) * CHIP_GAP;
     const cellSize =
         (clusterChipSize - CHIP_PADDING * 2 - (CLUSTER_NODE_GRID_SIZE - 1) * CHIP_GAP) / CLUSTER_NODE_GRID_SIZE;
-    const portPixel = (coords: ClusterCoordinates, gx: number, gy: number): PortPixel => {
+    const portPixel = (coords: ClusterCoordinates, gx: number, gy: number, edge: CLUSTER_ETH_POSITION): PortPixel => {
         const chipLeft = coords[CLUSTER_COORDS.X] * stride + CHIP_PADDING;
         const chipTop = coords[CLUSTER_COORDS.Y] * stride + CHIP_PADDING;
         return {
             x: chipLeft + (gx - 1) * (cellSize + CHIP_GAP) + cellSize / 2,
             y: chipTop + (gy - 1) * (cellSize + CHIP_GAP) + cellSize / 2,
+            edge,
         };
     };
 
     const ethPositionsByChip = new Map<string, Map<CLUSTER_ETH_POSITION, string[]>>();
     const portPixelByUid = new Map<string, PortPixel>();
+    // UIDs whose connection skips over one or more chips (intra-host non-adjacent,
+    // e.g. chip 5 ↔ chip 7 with chip 6 between them) — these are placed on a
+    // perpendicular empty edge in pass 2 and rendered as curves rather than
+    // straight lines so they don't visually overlap the chord they fly above.
+    const longHaulUids = new Set<string>();
+
+    // ETH port placement is *adjacency*-based, not hardware-based:
+    //
+    //   - The chip-design JSON enumerates 16 ethernet cores per chip with their
+    //     physical NoC-grid coordinates (e.g. wormhole has 8 cores at y=0 and
+    //     8 at y=6). Those coordinates are encoded in the eth port label
+    //     (e.g. `0-20-7-6` = rank 0, chip 20, core at chip-grid x=7, y=6) but
+    //     are NOT used to decide which edge of the rendered chip a port sits on.
+    //
+    //   - Instead, each port is positioned on the edge that *faces the chip
+    //     it connects to*: neighbour to my west → port on my LEFT edge,
+    //     neighbour above me → TOP, etc. Disconnected channels are not rendered.
+    //
+    //   - Within an edge, ports are slotted in the discovery order of channels
+    //     (the `index` argument to `getEthGridPosition`), so the relative
+    //     ordering reflects the channel numbering in `ethernet_connections`.
+    //
+    //   - **Long-haul intra-host links** (same rank, mesh distance > 1, e.g.
+    //     chip 5 ↔ chip 7 with chip 6 in between) bypass the direct-neighbour
+    //     edge and are placed on a *perpendicular* empty edge so they don't
+    //     stack with the direct connection that already occupies the chord
+    //     edge. They're paired with a Bezier curve in step 4 so they visibly
+    //     fly over/under the intermediate chip(s) instead of overlapping
+    //     adjacent ports.
+    //
+    // This means a hardware "top-row" core can render on the chip's LEFT edge
+    // (or any other) — its physical NoC location is informational only.
+    const meshDistance = (a: ClusterCoordinates, b: ClusterCoordinates): number =>
+        Math.abs(a[CLUSTER_COORDS.X] - b[CLUSTER_COORDS.X]) + Math.abs(a[CLUSTER_COORDS.Y] - b[CLUSTER_COORDS.Y]);
+
+    const perpendicularEdges = (edge: CLUSTER_ETH_POSITION): CLUSTER_ETH_POSITION[] => {
+        if (edge === CLUSTER_ETH_POSITION.LEFT || edge === CLUSTER_ETH_POSITION.RIGHT) {
+            return [CLUSTER_ETH_POSITION.TOP, CLUSTER_ETH_POSITION.BOTTOM];
+        }
+        return [CLUSTER_ETH_POSITION.LEFT, CLUSTER_ETH_POSITION.RIGHT];
+    };
+
+    const chordDirection = (from: ClusterCoordinates, to: ClusterCoordinates): CLUSTER_ETH_POSITION | null => {
+        const dx = to[CLUSTER_COORDS.X] - from[CLUSTER_COORDS.X];
+        const dy = to[CLUSTER_COORDS.Y] - from[CLUSTER_COORDS.Y];
+        if (dx === 0 && dy === 0) {
+            return null;
+        }
+        if (Math.abs(dx) >= Math.abs(dy)) {
+            return dx > 0 ? CLUSTER_ETH_POSITION.RIGHT : CLUSTER_ETH_POSITION.LEFT;
+        }
+        return dy > 0 ? CLUSTER_ETH_POSITION.BOTTOM : CLUSTER_ETH_POSITION.TOP;
+    };
+
+    // Outward-edge lookup: an edge is "outward" for a chip if no other chip on
+    // the rendered grid sits immediately on that side. Long-haul intra-host
+    // and inter-host ports (deferred from pass 1) prefer outward edges so the
+    // bezier curve can leave the host cluster through open space instead of
+    // overlapping intermediate chips.
+    const chipKeyByGridCoord = new Map<string, string>();
+    for (const chip of renderChips) {
+        chipKeyByGridCoord.set(`${chip.coords[CLUSTER_COORDS.X]},${chip.coords[CLUSTER_COORDS.Y]}`, chip.key);
+    }
+    const isOutwardEdge = (chip: RenderChip, edge: CLUSTER_ETH_POSITION): boolean => {
+        const cx = chip.coords[CLUSTER_COORDS.X];
+        const cy = chip.coords[CLUSTER_COORDS.Y];
+        if (edge === CLUSTER_ETH_POSITION.TOP) {
+            return !chipKeyByGridCoord.has(`${cx},${cy - 1}`);
+        }
+        if (edge === CLUSTER_ETH_POSITION.BOTTOM) {
+            return !chipKeyByGridCoord.has(`${cx},${cy + 1}`);
+        }
+        if (edge === CLUSTER_ETH_POSITION.LEFT) {
+            return !chipKeyByGridCoord.has(`${cx - 1},${cy}`);
+        }
+        return !chipKeyByGridCoord.has(`${cx + 1},${cy}`);
+    };
 
     renderChips.forEach((clusterChip) => {
         const ethPosition = new Map<CLUSTER_ETH_POSITION, string[]>();
+        // Edges occupied by direct cardinal-neighbour connections — pass 2
+        // will avoid these when placing long-haul ports.
+        const directNeighbourEdges = new Set<CLUSTER_ETH_POSITION>();
+        // Long-haul placements deferred until after pass 1 so we know which
+        // edges the direct-neighbour connections claimed.
+        const deferred: { uid: string; chord: CLUSTER_ETH_POSITION }[] = [];
 
+        // Pass 1: place direct cardinal neighbours on their facing edge; defer
+        // everything else (diagonals, non-adjacent same-rank, inter-host).
         clusterChip.design?.eth.forEach((coreId) => {
             const uid = ethUid(clusterChip.rank, clusterChip.id, coreId);
             const connectedChip = clusterChip.connectedChipsByEthId.get(uid);
-            let position: CLUSTER_ETH_POSITION | null = null;
-            if (connectedChip) {
-                if (connectedChip.coords[CLUSTER_COORDS.X] < clusterChip.coords[CLUSTER_COORDS.X]) {
-                    position = CLUSTER_ETH_POSITION.LEFT;
-                }
-                if (connectedChip.coords[CLUSTER_COORDS.X] > clusterChip.coords[CLUSTER_COORDS.X]) {
-                    position = CLUSTER_ETH_POSITION.RIGHT;
-                }
-                if (connectedChip.coords[CLUSTER_COORDS.Y] < clusterChip.coords[CLUSTER_COORDS.Y]) {
-                    position = CLUSTER_ETH_POSITION.TOP;
-                }
-                if (connectedChip.coords[CLUSTER_COORDS.Y] > clusterChip.coords[CLUSTER_COORDS.Y]) {
-                    position = CLUSTER_ETH_POSITION.BOTTOM;
-                }
+            if (!connectedChip) {
+                return;
             }
-            if (position) {
-                if (ethPosition.has(position)) {
-                    ethPosition.get(position)?.push(uid);
-                } else {
-                    ethPosition.set(position, [uid]);
+            const chord = chordDirection(clusterChip.coords, connectedChip.coords);
+            if (!chord) {
+                return;
+            }
+            const dist = meshDistance(clusterChip.coords, connectedChip.coords);
+            const sameRank = clusterChip.rank === connectedChip.rank;
+            const isDirectCardinal =
+                dist === 1 &&
+                sameRank &&
+                (clusterChip.coords[CLUSTER_COORDS.X] === connectedChip.coords[CLUSTER_COORDS.X] ||
+                    clusterChip.coords[CLUSTER_COORDS.Y] === connectedChip.coords[CLUSTER_COORDS.Y]);
+
+            if (isDirectCardinal) {
+                if (!ethPosition.has(chord)) {
+                    ethPosition.set(chord, []);
+                }
+                ethPosition.get(chord)!.push(uid);
+                directNeighbourEdges.add(chord);
+            } else {
+                // Long-haul or inter-host: defer placement until we know which
+                // edges the direct-neighbour connections claimed.
+                deferred.push({ uid, chord });
+                if (sameRank) {
+                    longHaulUids.add(uid);
                 }
             }
         });
 
+        // Pass 2: prefer the chip's outward edges so curves can leave the host
+        // cluster through open space:
+        //   a) chord edge if it's outward (partner lies in that direction and
+        //      nothing blocks it on this chip's side)
+        //   b) any other outward edge — perpendicular first (cleaner from a
+        //      chord-edge-already-occupied-by-direct-cardinal standpoint),
+        //      otherwise the remaining outward edge (e.g. opposite of chord)
+        //   c) interior-chip fallback: the legacy "first empty perpendicular"
+        //      behaviour for chips that have no outward edges at all.
+        const ALL_EDGES: CLUSTER_ETH_POSITION[] = [
+            CLUSTER_ETH_POSITION.TOP,
+            CLUSTER_ETH_POSITION.BOTTOM,
+            CLUSTER_ETH_POSITION.LEFT,
+            CLUSTER_ETH_POSITION.RIGHT,
+        ];
+        for (const { uid, chord } of deferred) {
+            const outward = ALL_EDGES.filter((edge) => isOutwardEdge(clusterChip, edge));
+            const perp = perpendicularEdges(chord);
+            let chosen: CLUSTER_ETH_POSITION;
+            if (outward.length === 0) {
+                const emptyPerp = perp.find((e) => !directNeighbourEdges.has(e) && !ethPosition.has(e));
+                const fallbackPerp = perp.find((e) => !directNeighbourEdges.has(e));
+                chosen = emptyPerp ?? fallbackPerp ?? chord;
+            } else if (outward.includes(chord)) {
+                chosen = chord;
+            } else {
+                chosen = perp.find((e) => outward.includes(e)) ?? outward[0];
+            }
+            if (!ethPosition.has(chosen)) {
+                ethPosition.set(chosen, []);
+            }
+            ethPosition.get(chosen)!.push(uid);
+        }
+
         ethPosition.forEach((uids, position) => {
             uids.forEach((uid, index) => {
                 const { x, y } = getEthGridPosition(position, index);
-                portPixelByUid.set(uid, portPixel(clusterChip.coords, x, y));
+                portPixelByUid.set(uid, portPixel(clusterChip.coords, x, y, position));
             });
         });
 
         ethPositionsByChip.set(clusterChip.key, ethPosition);
     });
 
-    // Step 4: derive link segments (positioned line endpoints) for the SVG layer,
-    // tagging each segment as intra- or inter-host so styling can differentiate.
+    // Step 4: derive link segments (positioned line endpoints) for the SVG layer.
+    // Three flavours:
+    //   - direct intra-host (mesh distance 1): straight `<line>`
+    //   - long-haul intra-host (skips ≥1 chip in between): cubic-Bezier curve
+    //     so the link visibly flies over/under the intermediate chip(s)
+    //   - inter-host: cubic-Bezier curve with dashed-teal styling
     const linkSegments: LinkSegment[] = [];
+
+    // Cubic-Bezier curve whose control points are projected outward from each
+    // endpoint along the port edge's outward normal:
+    //
+    //         outNormal(TOP)    = ( 0,-1)
+    //         outNormal(BOTTOM) = ( 0,+1)
+    //         outNormal(LEFT)   = (-1, 0)
+    //         outNormal(RIGHT)  = (+1, 0)
+    //
+    // Control distance = max(stride * 0.65, dist * 0.4). The stride floor
+    // keeps short hops visibly bowed; the distance term lets long hops swing
+    // wider. This guarantees the curve *leaves the source chip going outward*
+    // and *enters the destination chip from outside*, regardless of how the
+    // two endpoints are aligned, which fixes the previous degenerate case
+    // where two ports stacked on parallel edges with nearly the same x (e.g.
+    // inter-host straight below) collapsed into a line passing through every
+    // chip in between.
+    const outwardNormal = (edge: CLUSTER_ETH_POSITION): { x: number; y: number } => {
+        switch (edge) {
+            case CLUSTER_ETH_POSITION.TOP:
+                return { x: 0, y: -1 };
+            case CLUSTER_ETH_POSITION.BOTTOM:
+                return { x: 0, y: 1 };
+            case CLUSTER_ETH_POSITION.LEFT:
+                return { x: -1, y: 0 };
+            case CLUSTER_ETH_POSITION.RIGHT:
+            default:
+                return { x: 1, y: 0 };
+        }
+    };
+    const swooshPath = (a: PortPixel, b: PortPixel): string => {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const ctrl = Math.max(stride * 0.65, dist * 0.4);
+        const na = outwardNormal(a.edge);
+        const nb = outwardNormal(b.edge);
+        const cax = a.x + na.x * ctrl;
+        const cay = a.y + na.y * ctrl;
+        const cbx = b.x + nb.x * ctrl;
+        const cby = b.y + nb.y * ctrl;
+        return `M ${a.x} ${a.y} C ${cax} ${cay}, ${cbx} ${cby}, ${b.x} ${b.y}`;
+    };
 
     const pushSegment = (
         a: RenderChip,
@@ -320,6 +547,10 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
         if (!portA || !portB) {
             return;
         }
+        // Inter-host always curves. Intra-host curves only when long-haul
+        // (port was displaced to a perpendicular empty edge in pass 2 above).
+        const longHaul = !interHost && (longHaulUids.has(uidA ?? '') || longHaulUids.has(uidB ?? ''));
+        const useCurve = interHost || longHaul;
         linkSegments.push({
             key: `${prefix}__${uidA}__${uidB}__${index}`,
             x1: portA.x,
@@ -329,6 +560,7 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
             chipKeyA: a.key,
             chipKeyB: b.key,
             interHost,
+            pathD: useCurve ? swooshPath(portA, portB) : undefined,
         });
     };
 
@@ -378,6 +610,7 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
             idFontSize,
             isMultiHost,
             worldSize,
+            svgPad: Math.round(stride),
         },
     };
 }
@@ -540,6 +773,11 @@ function ClusterRenderer() {
         ethPositionsByChip,
         linkSegments,
         idFontSize,
+        // Extend the SVG canvas beyond the chip grid so outward-bowing curves
+        // (long-haul intra-host, inter-host) aren't clipped by the bounding
+        // box. The grid itself stays the same size — only the link layer is
+        // oversized via negative `left`/`top` and an expanded viewBox.
+        svgPad,
         isMultiHost,
         worldSize,
     } = renderResult.model;
@@ -650,23 +888,38 @@ function ClusterRenderer() {
                     >
                         <svg
                             className='cluster-links'
-                            width={contentWidth}
-                            height={contentHeight}
-                            viewBox={`0 0 ${contentWidth} ${contentHeight}`}
+                            width={contentWidth + svgPad * 2}
+                            height={contentHeight + svgPad * 2}
+                            viewBox={`${-svgPad} ${-svgPad} ${contentWidth + svgPad * 2} ${contentHeight + svgPad * 2}`}
+                            style={{ left: -svgPad, top: -svgPad }}
                         >
                             {linkSegments.map((segment) => {
                                 const active = isChipActive(segment.chipKeyA) && isChipActive(segment.chipKeyB);
                                 const highlighted =
                                     hoveredChip !== null &&
                                     (segment.chipKeyA === hoveredChip || segment.chipKeyB === hoveredChip);
+                                const linkClass = classNames('cluster-link', {
+                                    'is-highlighted': highlighted,
+                                    'is-dimmed': dimmed && !active,
+                                    'is-inter-host': segment.interHost,
+                                });
+                                if (segment.pathD) {
+                                    // Inter-host links use a cubic-Bezier path so a bundle of
+                                    // parallel cross-host connections fans out visibly instead
+                                    // of stacking into a single straight bar.
+                                    return (
+                                        <path
+                                            key={segment.key}
+                                            className={linkClass}
+                                            d={segment.pathD}
+                                            fill='none'
+                                        />
+                                    );
+                                }
                                 return (
                                     <line
                                         key={segment.key}
-                                        className={classNames('cluster-link', {
-                                            'is-highlighted': highlighted,
-                                            'is-dimmed': dimmed && !active,
-                                            'is-inter-host': segment.interHost,
-                                        })}
+                                        className={linkClass}
                                         x1={segment.x1}
                                         y1={segment.y1}
                                         x2={segment.x2}

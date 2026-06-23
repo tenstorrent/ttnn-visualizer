@@ -333,34 +333,68 @@ describe('pickMeshDocForRank', () => {
 });
 
 describe('looksLikeRankedDescriptor', () => {
-    it('returns true when ethernet_connections_to_remote_devices is present (even if empty)', () => {
-        const desc = {
-            arch: [],
-            chips: {},
-            ethernet_connections: [],
-            chips_with_mmio: [],
-            ethernet_connections_to_remote_devices: [],
-            chip_to_boardtype: {},
-            chip_to_bus_id: {},
-            chip_unique_ids: {},
-            boards: [],
-        } as ClusterModel;
+    const baseDescriptor = {
+        arch: [],
+        chips: {},
+        ethernet_connections: [],
+        chips_with_mmio: [],
+        chip_to_boardtype: {},
+        chip_to_bus_id: {},
+        chip_unique_ids: {},
+        boards: [],
+    };
 
-        expect(looksLikeRankedDescriptor(desc)).toBe(true);
+    it('returns true only when remote-eth AND chip-unique-ids are populated', () => {
+        const ranked = {
+            ...baseDescriptor,
+            ethernet_connections_to_remote_devices: [
+                [
+                    { chip: 0, chan: 9 },
+                    { remote_chip_id: 42, chan: 10 },
+                ],
+            ],
+            chip_unique_ids: { 0: 1234 },
+        } as unknown as ClusterModel;
+
+        expect(looksLikeRankedDescriptor(ranked)).toBe(true);
     });
 
     it('returns false for legacy single-host descriptors lacking the remote field', () => {
-        const desc = {
-            arch: [],
-            chips: {},
-            ethernet_connections: [],
-            chips_with_mmio: [],
-            chip_to_boardtype: {},
-            chip_to_bus_id: {},
-            chip_unique_ids: {},
-            boards: [],
-        } as ClusterModel;
+        expect(looksLikeRankedDescriptor(baseDescriptor as ClusterModel)).toBe(false);
+    });
 
+    it('returns false when the remote-eth field is present but empty', () => {
+        const desc = {
+            ...baseDescriptor,
+            ethernet_connections_to_remote_devices: [],
+            chip_unique_ids: { 0: 1234 },
+        } as unknown as ClusterModel;
+        // An empty remote-connections array means there are no cross-host links,
+        // which we treat as single-host (galaxy can't trigger a 32-rank probe).
+        expect(looksLikeRankedDescriptor(desc)).toBe(false);
+    });
+
+    it('returns false when chip_unique_ids is missing or empty', () => {
+        const desc = {
+            ...baseDescriptor,
+            ethernet_connections_to_remote_devices: [
+                [
+                    { chip: 0, chan: 9 },
+                    { remote_chip_id: 42, chan: 10 },
+                ],
+            ],
+            chip_unique_ids: {},
+        } as unknown as ClusterModel;
+        expect(looksLikeRankedDescriptor(desc)).toBe(false);
+    });
+
+    it('returns false when the remote-eth field is null instead of undefined', () => {
+        // Some backend serialisers emit null for missing YAML keys; guard
+        // against that since `!== undefined` would let it through.
+        const desc = {
+            ...baseDescriptor,
+            ethernet_connections_to_remote_devices: null,
+        } as unknown as ClusterModel;
         expect(looksLikeRankedDescriptor(desc)).toBe(false);
     });
 });

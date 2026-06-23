@@ -130,12 +130,23 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         align-items: start;
         align-content: start;
 
+        // Let the oversized link-layer SVG bleed outside the grid bounds so
+        // outward-bowing curves (long-haul intra-host, inter-host) can use the
+        // gutter around the chips. The chip grid itself remains sized by the
+        // explicit `width`/`height` inline styles.
+        overflow: visible;
+
         .cluster-links {
             position: absolute;
-            inset: 0;
+
+            // Sit above chip bodies (z-index 1), chip border overlays (z-index 2),
+            // and per-chip eth-port tiles so cubic-Bezier long-haul and inter-host
+            // curves visibly fly *over* the intermediate chips they route past
+            // instead of getting clipped behind them. `pointer-events: none` keeps
+            // chips, eth ports, and badges fully hoverable through the SVG layer.
+            z-index: 4;
             pointer-events: none;
             overflow: visible;
-            z-index: 0;
         }
 
         .cluster-link {

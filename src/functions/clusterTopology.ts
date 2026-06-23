@@ -128,11 +128,33 @@ const canonicalInterHostLinkKey = (a: Endpoint, b: Endpoint): string => {
 
 /**
  * Heuristic for detecting that a per-rank cluster descriptor is part of a
- * multi-host report. If `ethernet_connections_to_remote_devices` is present
- * (even if empty), we know the backend served us a ranked descriptor.
+ * multi-host report. A ranked descriptor must have BOTH:
+ *
+ *   - a non-empty `ethernet_connections_to_remote_devices` array (cross-host
+ *     ethernet links — single-host reports don't have any), AND
+ *   - a populated `chip_unique_ids` map (used to resolve remote chip ids
+ *     against other ranks).
+ *
+ * Requiring both guards against:
+ *   - galaxy / legacy single-host reports that omit these fields entirely
+ *     (`undefined`) and would otherwise pass a more permissive check
+ *   - backends that serialise the missing field as `null` / `[]` rather
+ *     than dropping it from the JSON
+ *
+ * Without this, a single-host report can falsely look ranked and trigger
+ * the world-size probe up to `MAX_PROBE_RANKS`, since the backend serves
+ * the unranked `cluster_descriptor.yaml` for any `?rank=N`.
  */
 export const looksLikeRankedDescriptor = (descriptor: ClusterModel): boolean => {
-    return descriptor.ethernet_connections_to_remote_devices !== undefined;
+    const remoteConnections = descriptor.ethernet_connections_to_remote_devices;
+    if (!Array.isArray(remoteConnections) || remoteConnections.length === 0) {
+        return false;
+    }
+    const chipUniqueIds = descriptor.chip_unique_ids;
+    if (!chipUniqueIds || Object.keys(chipUniqueIds).length === 0) {
+        return false;
+    }
+    return true;
 };
 
 const isMeshDocsEnvelope = (response: MeshDescriptorResponse): response is { docs: MeshData[] } => {
