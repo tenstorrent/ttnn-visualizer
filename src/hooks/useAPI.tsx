@@ -52,7 +52,8 @@ import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
-import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
+import { ChipDesign, ClusterModel, ClusterTopology, MeshData } from '../model/ClusterModel';
+import { PerRankInput, looksLikeRankedDescriptor, stitchClusterTopology } from '../functions/clusterTopology';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
@@ -463,6 +464,78 @@ export const useGetClusterDescription = () => {
     return useQuery({
         queryFn: () => fetchClusterDescription(),
         queryKey: ['get-cluster-description', activeProfilerReport?.path],
+        initialData: null,
+        retry: false,
+    });
+};
+
+// Cap iterative-probe rank scanning to avoid runaway requests if the backend
+// ever stops returning rank_out_of_range / missing_rank_file at world boundary.
+const MAX_PROBE_RANKS = 32;
+
+const fetchClusterDescriptorForRank = async (rank: number): Promise<ClusterModel> => {
+    const { data } = await axiosInstance.get<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, {
+        params: { rank },
+    });
+    return data;
+};
+
+const fetchMeshDescriptorForRank = async (rank: number): Promise<MeshData | null> => {
+    try {
+        const { data } = await axiosInstance.get<MeshData>(Endpoints.MESH_DESCRIPTOR, {
+            params: { rank },
+        });
+        return data;
+    } catch (err) {
+        // mesh-descriptor is optional in some reports
+        // eslint-disable-next-line no-console
+        console.warn(`mesh-descriptor for rank ${rank} not available`, err);
+        return null;
+    }
+};
+
+const fetchRankSlice = async (rank: number): Promise<PerRankInput> => {
+    const [descriptor, mesh] = await Promise.all([
+        fetchClusterDescriptorForRank(rank),
+        fetchMeshDescriptorForRank(rank),
+    ]);
+    return { rank, descriptor, meshDescriptor: mesh?.chips ?? null };
+};
+
+const fetchClusterTopology = async (): Promise<ClusterTopology> => {
+    // Rank 0 anchors detection: the backend resolves either `cluster_descriptor.yaml`
+    // (legacy single-host) or `cluster_descriptor_1_of_<world>.yaml` (multi-host).
+    const rank0Slice = await fetchRankSlice(0);
+
+    if (!looksLikeRankedDescriptor(rank0Slice.descriptor)) {
+        // Legacy single-host report: short-circuit to one host with rank 0.
+        return stitchClusterTopology([rank0Slice]);
+    }
+
+    // Multi-host: iteratively probe upward until the backend rejects the next rank.
+    // TODO(#1241): swap to the dedicated rank-metadata endpoint once it ships so we
+    //   can fan out all per-rank fetches in parallel instead of serially probing.
+    const perRankInputs: PerRankInput[] = [rank0Slice];
+    for (let nextRank = 1; nextRank < MAX_PROBE_RANKS; nextRank += 1) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            const slice = await fetchRankSlice(nextRank);
+            perRankInputs.push(slice);
+        } catch {
+            // 400 rank_out_of_range or 404 missing_rank_file → end of world.
+            break;
+        }
+    }
+
+    return stitchClusterTopology(perRankInputs);
+};
+
+export const useGetClusterTopology = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery({
+        queryFn: () => fetchClusterTopology(),
+        queryKey: ['get-cluster-topology', activeProfilerReport?.path],
         initialData: null,
         retry: false,
     });

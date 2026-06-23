@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { Button, ButtonGroup, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -9,14 +9,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import 'styles/components/ClusterView.scss';
 import { stringToArchitecture } from '../../definitions/DeviceArchitecture';
-import { useArchitecture, useGetClusterDescription } from '../../hooks/useAPI';
+import { useArchitecture, useGetClusterTopology } from '../../hooks/useAPI';
 import {
     CLUSTER_COORDS,
     CLUSTER_ETH_POSITION,
     ChipDesign,
     ClusterChip,
     ClusterCoordinates,
-    ClusterModel,
+    ClusterTopology,
     DEFAULT_ARCHITECTURE,
 } from '../../model/ClusterModel';
 import {
@@ -39,6 +39,14 @@ const ZOOM_PIXEL_SCALE = 0.004;
 
 const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 
+// Per-host fallback layout when mesh coordinates are missing. Hosts are tiled
+// horizontally; each host arranges its chips in a 4-column grid stacked into
+// rows. Chosen because most current reports are 1- or 2-host with ≤ 8 chips
+// per host; deeper packing can come with a proper mesh-aware layout once the
+// mesh-descriptor multi-doc YAML quirk (see plan doc) is resolved upstream.
+const FALLBACK_PER_HOST_COLS = 4;
+const FALLBACK_HOST_GUTTER_COLS = 1;
+
 interface PortPixel {
     x: number;
     y: number;
@@ -50,25 +58,37 @@ interface LinkSegment {
     y1: number;
     x2: number;
     y2: number;
-    chipA: number;
-    chipB: number;
+    chipKeyA: string;
+    chipKeyB: string;
+    interHost: boolean;
 }
 
-interface ClusterTopology {
-    chips: ClusterChip[];
-    chipsById: Map<number, ClusterChip>;
-    neighboursByChip: Map<number, Set<number>>;
+interface RenderChip extends ClusterChip {
+    key: string;
+    rank: number;
+    chipUniqueId?: number;
+}
+
+interface ClusterRenderModel {
+    chips: RenderChip[];
+    chipsByKey: Map<string, RenderChip>;
+    neighboursByChip: Map<string, Set<string>>;
     clusterChipSize: number;
     totalCols: number;
     totalRows: number;
     contentWidth: number;
     contentHeight: number;
-    ethPositionsByChip: Map<number, Map<CLUSTER_ETH_POSITION, string[]>>;
+    ethPositionsByChip: Map<string, Map<CLUSTER_ETH_POSITION, string[]>>;
     linkSegments: LinkSegment[];
     idFontSize: number;
+    isMultiHost: boolean;
+    worldSize: number;
 }
 
-type ClusterTopologyResult = { status: 'ready'; topology: ClusterTopology } | { status: 'unsupported' };
+type ClusterRenderResult = { status: 'ready'; model: ClusterRenderModel } | { status: 'unsupported' };
+
+const chipKey = (rank: number, id: number) => `${rank}-${id}`;
+const ethUid = (rank: number, chipId: number, coreId: string) => `${rank}-${chipId}-${coreId}`;
 
 const getEthGridPosition = (ethPosition: CLUSTER_ETH_POSITION, index: number) => {
     let x = 0;
@@ -96,114 +116,137 @@ const getEthGridPosition = (ethPosition: CLUSTER_ETH_POSITION, index: number) =>
     return { x, y };
 };
 
-function buildClusterTopology(data: ClusterModel, chipDesign: ChipDesign): ClusterTopologyResult {
-    const mmioChips = data.chips_with_mmio.map((obj) => {
-        return Object.values(obj)[0];
-    });
-
-    const connections = data.ethernet_connections;
-    let chipsObject = data.chips;
-    if ((!chipsObject || Object.keys(chipsObject).length === 0) && mmioChips.length) {
-        if (mmioChips.length <= 2) {
-            chipsObject = mmioChips.reduce(
-                (acc, chipId: number, index: number) => {
-                    acc[chipId] = [index, 0, 0, 0];
-                    return acc;
-                },
-                {} as { [p: number]: ClusterCoordinates },
-            );
-        } else {
-            return { status: 'unsupported' };
-        }
+function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesign): ClusterRenderResult {
+    if (!chipDesign?.eth) {
+        return { status: 'unsupported' };
     }
 
+    const { hosts, isMultiHost, worldSize, intraHostLinks, interHostLinks } = topology;
+    if (hosts.length === 0) {
+        return { status: 'unsupported' };
+    }
+
+    // Step 1: place every chip on a global virtual grid. Prefer mesh coordinates
+    // when the host provides them; otherwise fall back to a per-host 4-wide grid
+    // tiled horizontally across hosts.
+    const renderChips: RenderChip[] = [];
+    let nextHostOffsetX = 0;
     let totalCols = 0;
     let totalRows = 0;
 
-    const chips = Object.entries(chipsObject).map(([ClusterChipId, coords]) => {
-        const chipId = parseInt(ClusterChipId, 10);
-        totalCols = Math.max(totalCols, coords[CLUSTER_COORDS.X] + 1);
-        totalRows = Math.max(totalRows, coords[CLUSTER_COORDS.Y] + 1);
+    for (const host of hosts) {
+        const meshChipIds = Object.keys(host.meshChips).map(Number);
+        const uidChipIds = Object.keys(host.descriptor.chip_unique_ids ?? {}).map(Number);
+        const chipIdsForHost = (meshChipIds.length > 0 ? meshChipIds : uidChipIds).sort((a, b) => a - b);
 
-        const chip: ClusterChip = {
-            id: chipId,
-            coords,
-            mmio: mmioChips.includes(chipId),
-            connectedChipsByEthId: new Map(),
-            eth: chipDesign.eth.map((coreId) => `${ClusterChipId}-${coreId}`),
-        };
+        const mmioChipIds = new Set(
+            (host.descriptor.chips_with_mmio ?? []).map((obj) => Object.values(obj)[0] as number),
+        );
 
-        chip.design = chipDesign;
-        return chip;
-    });
+        let usedFallback = false;
 
-    const chipsById = new Map<number, ClusterChip>(chips.map((chip) => [chip.id, chip]));
+        // Plain `for` to avoid a closure that captures mutable outer-scope
+        // counters (eslint `no-loop-func`).
+        for (let localIndex = 0; localIndex < chipIdsForHost.length; localIndex += 1) {
+            const chipId = chipIdsForHost[localIndex];
+            const meshCoord = host.meshChips[chipId];
+            let x: number;
+            let y: number;
+            if (meshCoord) {
+                [x, y] = meshCoord;
+            } else {
+                usedFallback = true;
+                x = nextHostOffsetX + (localIndex % FALLBACK_PER_HOST_COLS);
+                y = Math.floor(localIndex / FALLBACK_PER_HOST_COLS);
+            }
+            totalCols = Math.max(totalCols, x + 1);
+            totalRows = Math.max(totalRows, y + 1);
 
+            renderChips.push({
+                key: chipKey(host.rank, chipId),
+                rank: host.rank,
+                id: chipId,
+                chipUniqueId: host.descriptor.chip_unique_ids?.[chipId],
+                coords: [x, y, 0, 0] satisfies ClusterCoordinates,
+                mmio: mmioChipIds.has(chipId),
+                eth: chipDesign.eth.map((coreId) => ethUid(host.rank, chipId, coreId)),
+                connectedChipsByEthId: new Map(),
+                design: chipDesign,
+            });
+        }
+
+        if (usedFallback) {
+            const hostCols = Math.min(chipIdsForHost.length, FALLBACK_PER_HOST_COLS);
+            nextHostOffsetX += hostCols + FALLBACK_HOST_GUTTER_COLS;
+        }
+    }
+
+    const chipsByKey = new Map<string, RenderChip>(renderChips.map((c) => [c.key, c]));
+
+    // Step 2: wire intra-host and inter-host eth connections into each chip's
+    // `connectedChipsByEthId` map so the port-positioning step below can compute
+    // edges relative to neighbours.
+    const recordConnection = (
+        chipA: RenderChip,
+        chipB: RenderChip,
+        uidA: string | undefined,
+        uidB: string | undefined,
+    ) => {
+        if (uidA === undefined || uidB === undefined) {
+            return;
+        }
+        chipA.connectedChipsByEthId.set(uidA, chipB);
+        chipB.connectedChipsByEthId.set(uidB, chipA);
+    };
+
+    for (const link of intraHostLinks) {
+        const a = chipsByKey.get(chipKey(link.rank, link.a.chip));
+        const b = chipsByKey.get(chipKey(link.rank, link.b.chip));
+        if (a && b) {
+            recordConnection(a, b, a.eth[link.a.chan], b.eth[link.b.chan]);
+        }
+    }
+
+    for (const link of interHostLinks) {
+        const a = chipsByKey.get(chipKey(link.a.rank, link.a.chip));
+        const b = chipsByKey.get(chipKey(link.b.rank, link.b.chip));
+        if (a && b) {
+            recordConnection(a, b, a.eth[link.a.chan], b.eth[link.b.chan]);
+        }
+    }
+
+    // Step 3: figure out which edge of each chip its ETH ports live on, based
+    // on the relative coordinates of the neighbour they connect to.
     let clusterChipSize = CLUSTER_CHIP_SIZE_LARGE;
-    if (chips.length >= 8) {
+    if (renderChips.length >= 8) {
         clusterChipSize = CLUSTER_CHIP_SIZE_MEDIUM;
     }
-    if (chips.length >= 32) {
+    if (renderChips.length >= 32) {
         clusterChipSize = CLUSTER_CHIP_SIZE_SMALL;
     }
-
-    connections.forEach((connection) => {
-        const chip0 = chipsById.get(connection[0].chip);
-        const chip1 = chipsById.get(connection[1].chip);
-        if (!chip0 || !chip1) {
-            return;
-        }
-        const uid0 = chip0.eth[connection[0].chan];
-        const uid1 = chip1.eth[connection[1].chan];
-        // Skip connection if either UID is undefined to prevent silently storing
-        // under empty-string keys, which would be lost on later lookups.
-        if (uid0 !== undefined && uid1 !== undefined) {
-            chip0.connectedChipsByEthId.set(uid0, chip1);
-            chip1.connectedChipsByEthId.set(uid1, chip0);
-        }
-    });
-
-    const neighboursByChip = new Map<number, Set<number>>();
-    connections.forEach((connection) => {
-        const a = connection[0].chip;
-        const b = connection[1].chip;
-        if (!chipsById.has(a) || !chipsById.has(b)) {
-            return;
-        }
-        if (!neighboursByChip.has(a)) {
-            neighboursByChip.set(a, new Set());
-        }
-        if (!neighboursByChip.has(b)) {
-            neighboursByChip.set(b, new Set());
-        }
-        neighboursByChip.get(a)?.add(b);
-        neighboursByChip.get(b)?.add(a);
-    });
 
     const stride = clusterChipSize + CHIP_GAP;
     const contentWidth = totalCols * clusterChipSize + Math.max(0, totalCols - 1) * CHIP_GAP;
     const contentHeight = totalRows * clusterChipSize + Math.max(0, totalRows - 1) * CHIP_GAP;
-
-    const internalGap = CHIP_GAP;
     const cellSize =
-        (clusterChipSize - CHIP_PADDING * 2 - (CLUSTER_NODE_GRID_SIZE - 1) * internalGap) / CLUSTER_NODE_GRID_SIZE;
+        (clusterChipSize - CHIP_PADDING * 2 - (CLUSTER_NODE_GRID_SIZE - 1) * CHIP_GAP) / CLUSTER_NODE_GRID_SIZE;
     const portPixel = (coords: ClusterCoordinates, gx: number, gy: number): PortPixel => {
         const chipLeft = coords[CLUSTER_COORDS.X] * stride + CHIP_PADDING;
         const chipTop = coords[CLUSTER_COORDS.Y] * stride + CHIP_PADDING;
         return {
-            x: chipLeft + (gx - 1) * (cellSize + internalGap) + cellSize / 2,
-            y: chipTop + (gy - 1) * (cellSize + internalGap) + cellSize / 2,
+            x: chipLeft + (gx - 1) * (cellSize + CHIP_GAP) + cellSize / 2,
+            y: chipTop + (gy - 1) * (cellSize + CHIP_GAP) + cellSize / 2,
         };
     };
 
-    const ethPositionsByChip = new Map<number, Map<CLUSTER_ETH_POSITION, string[]>>();
+    const ethPositionsByChip = new Map<string, Map<CLUSTER_ETH_POSITION, string[]>>();
     const portPixelByUid = new Map<string, PortPixel>();
 
-    chips.forEach((clusterChip) => {
+    renderChips.forEach((clusterChip) => {
         const ethPosition = new Map<CLUSTER_ETH_POSITION, string[]>();
 
         clusterChip.design?.eth.forEach((coreId) => {
-            const uid = `${clusterChip.id}-${coreId}`;
+            const uid = ethUid(clusterChip.rank, clusterChip.id, coreId);
             const connectedChip = clusterChip.connectedChipsByEthId.get(uid);
             let position: CLUSTER_ETH_POSITION | null = null;
             if (connectedChip) {
@@ -236,41 +279,74 @@ function buildClusterTopology(data: ClusterModel, chipDesign: ChipDesign): Clust
             });
         });
 
-        ethPositionsByChip.set(clusterChip.id, ethPosition);
+        ethPositionsByChip.set(clusterChip.key, ethPosition);
     });
 
+    // Step 4: derive link segments (positioned line endpoints) for the SVG layer,
+    // tagging each segment as intra- or inter-host so styling can differentiate.
     const linkSegments: LinkSegment[] = [];
-    connections.forEach((connection, connectionIndex) => {
-        const chipA = chipsById.get(connection[0].chip);
-        const chipB = chipsById.get(connection[1].chip);
-        if (!chipA || !chipB) {
-            return;
-        }
-        const uidA = chipA.eth[connection[0].chan];
-        const uidB = chipB.eth[connection[1].chan];
+
+    const pushSegment = (
+        a: RenderChip,
+        b: RenderChip,
+        uidA: string | undefined,
+        uidB: string | undefined,
+        interHost: boolean,
+        prefix: string,
+        index: number,
+    ) => {
         const portA = uidA ? portPixelByUid.get(uidA) : undefined;
         const portB = uidB ? portPixelByUid.get(uidB) : undefined;
         if (!portA || !portB) {
             return;
         }
         linkSegments.push({
-            key: `${uidA}__${uidB}__${connectionIndex}`,
+            key: `${prefix}__${uidA}__${uidB}__${index}`,
             x1: portA.x,
             y1: portA.y,
             x2: portB.x,
             y2: portB.y,
-            chipA: chipA.id,
-            chipB: chipB.id,
+            chipKeyA: a.key,
+            chipKeyB: b.key,
+            interHost,
         });
+    };
+
+    intraHostLinks.forEach((link, index) => {
+        const a = chipsByKey.get(chipKey(link.rank, link.a.chip));
+        const b = chipsByKey.get(chipKey(link.rank, link.b.chip));
+        if (a && b) {
+            pushSegment(a, b, a.eth[link.a.chan], b.eth[link.b.chan], false, 'intra', index);
+        }
+    });
+
+    interHostLinks.forEach((link, index) => {
+        const a = chipsByKey.get(chipKey(link.a.rank, link.a.chip));
+        const b = chipsByKey.get(chipKey(link.b.rank, link.b.chip));
+        if (a && b) {
+            pushSegment(a, b, a.eth[link.a.chan], b.eth[link.b.chan], true, 'inter', index);
+        }
+    });
+
+    const neighboursByChip = new Map<string, Set<string>>();
+    const noteNeighbour = (a: string, b: string) => {
+        if (!neighboursByChip.has(a)) {
+            neighboursByChip.set(a, new Set());
+        }
+        neighboursByChip.get(a)?.add(b);
+    };
+    linkSegments.forEach((segment) => {
+        noteNeighbour(segment.chipKeyA, segment.chipKeyB);
+        noteNeighbour(segment.chipKeyB, segment.chipKeyA);
     });
 
     const idFontSize = clusterChipSize >= CLUSTER_CHIP_SIZE_MEDIUM ? 30 : 20;
 
     return {
         status: 'ready',
-        topology: {
-            chips,
-            chipsById,
+        model: {
+            chips: renderChips,
+            chipsByKey,
             neighboursByChip,
             clusterChipSize,
             totalCols,
@@ -280,31 +356,34 @@ function buildClusterTopology(data: ClusterModel, chipDesign: ChipDesign): Clust
             ethPositionsByChip,
             linkSegments,
             idFontSize,
+            isMultiHost,
+            worldSize,
         },
     };
 }
 
 function ClusterRenderer() {
     const navigate = useNavigate();
-    const { data } = useGetClusterDescription();
+    const { data: topology } = useGetClusterTopology();
 
     // `userZoom === null` means "auto-fit to the available space"; any number is an
     // explicit zoom the user has dialled in.
     const [userZoom, setUserZoom] = useState<number | null>(null);
     const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
-    const [hoveredChip, setHoveredChip] = useState<number | null>(null);
+    const [hoveredChip, setHoveredChip] = useState<string | null>(null);
 
-    // we don't support mixed architecture for now
-    // we will default to wormhole
-    const arch = stringToArchitecture((data?.arch.length && data.arch[0]) || DEFAULT_ARCHITECTURE);
+    // we don't support mixed architecture for now (see issue #1510 follow-ups)
+    // we will default to wormhole and use the first host's arch when present
+    const firstHostArch = topology?.hosts[0]?.descriptor.arch ?? [];
+    const arch = stringToArchitecture((firstHostArch.length && firstHostArch[0]) || DEFAULT_ARCHITECTURE);
     const chipDesign = useArchitecture(arch);
 
-    const topologyResult = useMemo(() => {
-        if (!data) {
+    const renderResult = useMemo(() => {
+        if (!topology) {
             return null;
         }
-        return buildClusterTopology(data, chipDesign);
-    }, [data, chipDesign]);
+        return buildClusterRenderModel(topology, chipDesign);
+    }, [topology, chipDesign]);
 
     // close the topology overlay when Escape is pressed
     useEffect(() => {
@@ -362,15 +441,15 @@ function ClusterRenderer() {
         [handleWheelNative],
     );
 
-    const topology = topologyResult?.status === 'ready' ? topologyResult.topology : null;
+    const renderModel = renderResult?.status === 'ready' ? renderResult.model : null;
 
     const fitZoom =
-        containerSize && topology
+        containerSize && renderModel
             ? Math.max(
                   ZOOM_MIN,
                   Math.min(
-                      containerSize.width / topology.contentWidth,
-                      containerSize.height / topology.contentHeight,
+                      containerSize.width / renderModel.contentWidth,
+                      containerSize.height / renderModel.contentHeight,
                       1,
                   ),
               )
@@ -394,7 +473,7 @@ function ClusterRenderer() {
         </div>
     );
 
-    if (!data) {
+    if (!topology) {
         return (
             <div className='cluster-view-renderer'>
                 {closeButton}
@@ -405,7 +484,7 @@ function ClusterRenderer() {
         );
     }
 
-    if (topologyResult?.status === 'unsupported') {
+    if (renderResult?.status === 'unsupported') {
         return (
             <div className='cluster-view-renderer'>
                 {closeButton}
@@ -419,7 +498,7 @@ function ClusterRenderer() {
         );
     }
 
-    if (topologyResult?.status !== 'ready') {
+    if (renderResult?.status !== 'ready') {
         return (
             <div className='cluster-view-renderer'>
                 {closeButton}
@@ -441,13 +520,15 @@ function ClusterRenderer() {
         ethPositionsByChip,
         linkSegments,
         idFontSize,
-    } = topologyResult.topology;
+        isMultiHost,
+        worldSize,
+    } = renderResult.model;
 
-    const isChipActive = (chipId: number) => {
+    const isChipActive = (key: string) => {
         if (hoveredChip === null) {
             return true;
         }
-        return chipId === hoveredChip || !!neighboursByChip.get(hoveredChip)?.has(chipId);
+        return key === hoveredChip || !!neighboursByChip.get(hoveredChip)?.has(key);
     };
 
     const header = (
@@ -507,6 +588,19 @@ function ClusterRenderer() {
                 <span className='legend-item'>
                     <span className='legend-line' /> Ethernet link
                 </span>
+                {isMultiHost && (
+                    <>
+                        <span className='legend-item'>
+                            <span className='legend-line legend-line-inter-host' /> Cross-host link
+                        </span>
+                        <span
+                            className='legend-item legend-multihost-tag'
+                            aria-label={`Multi-host report with ${worldSize} ranks`}
+                        >
+                            multi-host · {worldSize} ranks
+                        </span>
+                    </>
+                )}
             </div>
 
             <div
@@ -521,7 +615,7 @@ function ClusterRenderer() {
                     }}
                 >
                     <div
-                        className={classNames('cluster', { 'is-dimmed': dimmed })}
+                        className={classNames('cluster', { 'is-dimmed': dimmed, 'is-multihost': isMultiHost })}
                         style={{
                             width: `${contentWidth}px`,
                             height: `${contentHeight}px`,
@@ -541,16 +635,18 @@ function ClusterRenderer() {
                             viewBox={`0 0 ${contentWidth} ${contentHeight}`}
                         >
                             {linkSegments.map((segment) => {
-                                const active = isChipActive(segment.chipA) && isChipActive(segment.chipB);
+                                const active = isChipActive(segment.chipKeyA) && isChipActive(segment.chipKeyB);
                                 const highlighted =
                                     hoveredChip !== null &&
-                                    (segment.chipA === hoveredChip || segment.chipB === hoveredChip);
+                                    (segment.chipKeyA === hoveredChip || segment.chipKeyB === hoveredChip);
                                 return (
                                     <line
                                         key={segment.key}
-                                        className={`cluster-link ${highlighted ? 'is-highlighted' : ''} ${
-                                            dimmed && !active ? 'is-dimmed' : ''
-                                        }`}
+                                        className={classNames('cluster-link', {
+                                            'is-highlighted': highlighted,
+                                            'is-dimmed': dimmed && !active,
+                                            'is-inter-host': segment.interHost,
+                                        })}
                                         x1={segment.x1}
                                         y1={segment.y1}
                                         x2={segment.x2}
@@ -562,16 +658,28 @@ function ClusterRenderer() {
 
                         {chips.map((clusterChip) => {
                             const ethPosition =
-                                ethPositionsByChip.get(clusterChip.id) ?? new Map<CLUSTER_ETH_POSITION, string[]>();
-                            const active = isChipActive(clusterChip.id);
+                                ethPositionsByChip.get(clusterChip.key) ?? new Map<CLUSTER_ETH_POSITION, string[]>();
+                            const active = isChipActive(clusterChip.key);
+                            const titleParts = [`Device ${clusterChip.id}`];
+                            if (isMultiHost) {
+                                titleParts.unshift(`Rank ${clusterChip.rank}`);
+                            }
+                            if (clusterChip.chipUniqueId !== undefined) {
+                                titleParts.push(`uid ${clusterChip.chipUniqueId}`);
+                            }
+                            const chipTitle = titleParts.join(' · ');
 
                             return (
                                 <div
-                                    className={`chip ${clusterChip.mmio ? 'is-mmio' : ''} ${
-                                        clusterChip.id === hoveredChip ? 'is-hovered' : ''
-                                    } ${dimmed && !active ? 'is-dimmed' : ''}`}
-                                    key={clusterChip.id}
-                                    onMouseEnter={() => setHoveredChip(clusterChip.id)}
+                                    className={classNames('chip', {
+                                        'is-mmio': clusterChip.mmio,
+                                        'is-hovered': clusterChip.key === hoveredChip,
+                                        'is-dimmed': dimmed && !active,
+                                    })}
+                                    key={clusterChip.key}
+                                    title={chipTitle}
+                                    data-rank={clusterChip.rank}
+                                    onMouseEnter={() => setHoveredChip(clusterChip.key)}
                                     onMouseLeave={() => setHoveredChip(null)}
                                     style={{
                                         display: 'grid',
@@ -591,6 +699,15 @@ function ClusterRenderer() {
                                         {clusterChipSize >= CLUSTER_CHIP_SIZE_MEDIUM && 'Device '}
                                         {clusterChip.id}
                                     </span>
+
+                                    {isMultiHost && (
+                                        <span
+                                            className='chip-rank-badge'
+                                            aria-label={`Host rank ${clusterChip.rank}`}
+                                        >
+                                            R{clusterChip.rank}
+                                        </span>
+                                    )}
 
                                     {[...ethPosition.entries()].map(([position, value]) => {
                                         return value.map((uid: string, index: number) => {
