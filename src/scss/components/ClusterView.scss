@@ -214,18 +214,17 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
             }
 
-            // PCIe / host-connected badge. Sits in the centre cell of the chip's core
-            // grid (its original position) and is z-raised above the dim veil so it stays
-            // legible when other devices are hovered.
+            // PCIe / host-connected badge. Absolutely positioned so it never
+            // participates in grid-track sizing and cannot displace eth elements.
+            // top/left/width/height are set inline from the physical PCIe coordinate
+            // projected onto the chip's cell geometry, so the badge lands at the
+            // correct edge position. z-raised above the dim veil.
             .mmio {
-                position: relative;
+                position: absolute;
                 z-index: 3;
-                grid-column: 3;
-                grid-row: 3;
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                gap: 5px;
                 padding: 1px 5px;
                 border: 1px solid $mmio-colour;
                 border-radius: 3px;
@@ -234,6 +233,7 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 font-weight: 600;
                 line-height: 1.3;
                 white-space: nowrap;
+                overflow: hidden;
                 color: $mmio-colour;
             }
         }

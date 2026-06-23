@@ -2,14 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import classNames from 'classnames';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useArchitecture, useGetClusterDescription } from '../../hooks/useAPI';
-import { stringToArchitecture } from '../../definitions/DeviceArchitecture';
-
 import 'styles/components/ClusterView.scss';
+import { stringToArchitecture } from '../../definitions/DeviceArchitecture';
+import { useArchitecture, useGetClusterDescription } from '../../hooks/useAPI';
 import {
     CLUSTER_COORDS,
     CLUSTER_ETH_POSITION,
@@ -20,15 +20,19 @@ import {
     DEFAULT_ARCHITECTURE,
 } from '../../model/ClusterModel';
 
-const CLUSTER_NODE_GRID_SIZE = 6; // number of cores in a col/row per chip
+const CLUSTER_NODE_GRID_SIZE = 6;
 const CLUSTER_CHIP_SIZE_LARGE = 350;
 const CLUSTER_CHIP_SIZE_MEDIUM = 250;
 const CLUSTER_CHIP_SIZE_SMALL = 150;
-const CHIP_GAP = 5; // gap between chips in the outer grid (and inside each chip)
+const CHIP_GAP = 5;
+const PCIE_BADGE_SIZE = 28;
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.15;
+// Scale factor for pixel-mode wheel events (trackpad/pinch). Keeps pinch
+// proportional to gesture size rather than firing a fixed step per frame.
+const ZOOM_PIXEL_SCALE = 0.004;
 
 const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 
@@ -62,6 +66,60 @@ interface ClusterTopology {
 }
 
 type ClusterTopologyResult = { status: 'ready'; topology: ClusterTopology } | { status: 'unsupported' };
+
+const CHIP_PADDING = 2; // keep in sync with ClusterView.scss `.chip { padding: 2px; }`
+
+/**
+ * Maps a physical PCIe coordinate ("x-y" from the arch JSON) to pixel offsets
+ * within the chip container. Uses the same cell geometry as the ETH grid so
+ * the badge lands at the equivalent visual position without participating in
+ * grid layout (which would risk displacing ETH elements).
+ * PCIe is inset toward the chip center to avoid overlapping edge-positioned ETH ports.
+ */
+const calculatePciePixelPosition = (
+    coord: string,
+    grid: { x_size: number; y_size: number },
+    chipSize: number,
+): { left: number; top: number; size: number } => {
+    const [xStr, yStr] = coord.split('-');
+    const physX = parseInt(xStr, 10);
+    const physY = parseInt(yStr, 10);
+    const xSize = grid.x_size;
+    const ySize = grid.y_size;
+    const cellSize = (chipSize - CHIP_PADDING * 2 - (CLUSTER_NODE_GRID_SIZE - 1) * CHIP_GAP) / CLUSTER_NODE_GRID_SIZE;
+    const stride = cellSize + CHIP_GAP;
+    const clamp = (val: number, max: number) => Math.max(0, Math.min(max, val));
+
+    // Determine which edge and map the along-edge physical coord to a 0-based
+    // grid index within CLUSTER_NODE_GRID_SIZE cells.
+    let col: number;
+    let row: number;
+
+    if (physX === 0) {
+        col = 0;
+        row = clamp(Math.round((physY / (ySize - 1)) * (CLUSTER_NODE_GRID_SIZE - 1)), CLUSTER_NODE_GRID_SIZE - 1);
+    } else if (physX === xSize - 1) {
+        col = CLUSTER_NODE_GRID_SIZE - 1;
+        row = clamp(Math.round((physY / (ySize - 1)) * (CLUSTER_NODE_GRID_SIZE - 1)), CLUSTER_NODE_GRID_SIZE - 1);
+    } else if (physY === 0) {
+        col = clamp(Math.round((physX / (xSize - 1)) * (CLUSTER_NODE_GRID_SIZE - 1)), CLUSTER_NODE_GRID_SIZE - 1);
+        row = 0;
+    } else if (physY === ySize - 1) {
+        col = clamp(Math.round((physX / (xSize - 1)) * (CLUSTER_NODE_GRID_SIZE - 1)), CLUSTER_NODE_GRID_SIZE - 1);
+        row = CLUSTER_NODE_GRID_SIZE - 1;
+    } else {
+        col = Math.round(CLUSTER_NODE_GRID_SIZE / 2);
+        row = Math.round(CLUSTER_NODE_GRID_SIZE / 2);
+    }
+
+    // Inset the PCIe badge significantly toward the center to avoid overlapping
+    // with edge-positioned ETH ports (which occupy the perimeter cells).
+    const insetAmount = cellSize * 1.125;
+    const left = CHIP_PADDING + col * stride + insetAmount;
+    const top = CHIP_PADDING + row * stride + insetAmount;
+
+    return { left, top, size: PCIE_BADGE_SIZE };
+};
 
 const calculateEthPosition = (ethPosition: CLUSTER_ETH_POSITION, index: number) => {
     let x = 0;
@@ -171,12 +229,11 @@ function buildClusterTopology(data: ClusterModel, chipDesign: ChipDesign): Clust
     const contentHeight = totalRows * clusterChipSize + Math.max(0, totalRows - 1) * CHIP_GAP;
 
     const internalGap = CHIP_GAP;
-    const chipPadding = 2; // keep in sync with ClusterView.scss `.chip { padding: 2px; }`
     const cellSize =
-        (clusterChipSize - chipPadding * 2 - (CLUSTER_NODE_GRID_SIZE - 1) * internalGap) / CLUSTER_NODE_GRID_SIZE;
+        (clusterChipSize - CHIP_PADDING * 2 - (CLUSTER_NODE_GRID_SIZE - 1) * internalGap) / CLUSTER_NODE_GRID_SIZE;
     const portPixel = (coords: ClusterCoordinates, gx: number, gy: number): PortPixel => {
-        const chipLeft = coords[CLUSTER_COORDS.X] * stride + chipPadding;
-        const chipTop = coords[CLUSTER_COORDS.Y] * stride + chipPadding;
+        const chipLeft = coords[CLUSTER_COORDS.X] * stride + CHIP_PADDING;
+        const chipTop = coords[CLUSTER_COORDS.Y] * stride + CHIP_PADDING;
         return {
             x: chipLeft + (gx - 1) * (cellSize + internalGap) + cellSize / 2,
             y: chipTop + (gy - 1) * (cellSize + internalGap) + cellSize / 2,
@@ -317,8 +374,16 @@ function ClusterRenderer() {
             return; // let the container scroll/pan normally
         }
         event.preventDefault();
+        // Pixel-mode events come from trackpad/pinch and have small per-frame deltaY
+        // values. Scale them proportionally so the gesture feels natural instead of
+        // jumping by a fixed step on every frame. Line-mode events (mouse wheel) keep
+        // the fixed step.
+        const step =
+            event.deltaMode === WheelEvent.DOM_DELTA_PIXEL
+                ? Math.min(Math.abs(event.deltaY) * ZOOM_PIXEL_SCALE, ZOOM_STEP)
+                : ZOOM_STEP;
         const direction = event.deltaY > 0 ? -1 : 1;
-        setUserZoom((prevZoom) => clampZoom((prevZoom ?? fitZoomRef.current) + direction * ZOOM_STEP));
+        setUserZoom((prevZoom) => clampZoom((prevZoom ?? fitZoomRef.current) + direction * step));
     }, []);
 
     const setWrapRef = useCallback(
@@ -500,7 +565,7 @@ function ClusterRenderer() {
                     }}
                 >
                     <div
-                        className={`cluster ${dimmed ? 'is-dimmed' : ''}`}
+                        className={classNames('cluster', { 'is-dimmed': dimmed })}
                         style={{
                             width: `${contentWidth}px`,
                             height: `${contentHeight}px`,
@@ -596,7 +661,28 @@ function ClusterRenderer() {
                                         });
                                     })}
 
-                                    {clusterChip.mmio && <div className='mmio'>PCIe</div>}
+                                    {clusterChip.mmio &&
+                                        chipDesign.pcie?.map((coord, pcieIndex) => {
+                                            const { left, top, size } = calculatePciePixelPosition(
+                                                coord,
+                                                chipDesign.grid,
+                                                clusterChipSize,
+                                            );
+                                            return (
+                                                <div
+                                                    key={`pcie-${pcieIndex}`}
+                                                    className='mmio'
+                                                    style={{
+                                                        left: `${left}px`,
+                                                        top: `${top}px`,
+                                                        width: `${size}px`,
+                                                        height: `${size}px`,
+                                                    }}
+                                                >
+                                                    PCIe
+                                                </div>
+                                            );
+                                        })}
                                 </div>
                             );
                         })}
