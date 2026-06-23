@@ -272,11 +272,26 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
         chipB.connectedChipsByEthId.set(uidB, chipA);
     };
 
+    // Canonical link key: the lexicographic min of the two endpoint uids.
+    // Both ends of a link share the same key, so when each edge sorts its
+    // ports by this key the two facing edges end up with matching orderings
+    // — connection lines no longer cross when they shouldn't.
+    const canonicalLinkKeyByUid = new Map<string, string>();
+    const rememberLinkKey = (uidA: string | undefined, uidB: string | undefined) => {
+        if (uidA === undefined || uidB === undefined) {
+            return;
+        }
+        const key = uidA < uidB ? uidA : uidB;
+        canonicalLinkKeyByUid.set(uidA, key);
+        canonicalLinkKeyByUid.set(uidB, key);
+    };
+
     for (const link of intraHostLinks) {
         const a = chipsByKey.get(chipKey(link.rank, link.a.chip));
         const b = chipsByKey.get(chipKey(link.rank, link.b.chip));
         if (a && b) {
             recordConnection(a, b, a.eth[link.a.chan], b.eth[link.b.chan]);
+            rememberLinkKey(a.eth[link.a.chan], b.eth[link.b.chan]);
         }
     }
 
@@ -285,6 +300,7 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
         const b = chipsByKey.get(chipKey(link.b.rank, link.b.chip));
         if (a && b) {
             recordConnection(a, b, a.eth[link.a.chan], b.eth[link.b.chan]);
+            rememberLinkKey(a.eth[link.a.chan], b.eth[link.b.chan]);
         }
     }
 
@@ -472,11 +488,39 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
             ethPosition.get(chosen)!.push(uid);
         }
 
+        // Order ports along each edge so connection lines don't cross when
+        // they don't need to. Sort key:
+        //   1) partner chip's perpendicular-axis grid coord
+        //      - TOP/BOTTOM edge (horizontal): partner.X (left-to-right)
+        //      - LEFT/RIGHT edge (vertical):   partner.Y (top-to-bottom)
+        //     This puts ports going to leftmost partners on the left of a
+        //     horizontal edge, ports going to topmost partners at the top of
+        //     a vertical edge, etc.
+        //   2) canonical link key (lexicographic min of the two endpoint
+        //      uids). Both ends of a link share this key, so multiple ports
+        //      between the same partner chip pair land in identical relative
+        //      positions on both facing edges.
         ethPosition.forEach((uids, position) => {
-            uids.forEach((uid, index) => {
+            const isVerticalEdge = position === CLUSTER_ETH_POSITION.LEFT || position === CLUSTER_ETH_POSITION.RIGHT;
+            const partnerAxis = isVerticalEdge ? CLUSTER_COORDS.Y : CLUSTER_COORDS.X;
+            const sorted = [...uids].sort((uidA, uidB) => {
+                const partnerA = clusterChip.connectedChipsByEthId.get(uidA);
+                const partnerB = clusterChip.connectedChipsByEthId.get(uidB);
+                if (partnerA && partnerB) {
+                    const delta = partnerA.coords[partnerAxis] - partnerB.coords[partnerAxis];
+                    if (delta !== 0) {
+                        return delta;
+                    }
+                }
+                const keyA = canonicalLinkKeyByUid.get(uidA) ?? uidA;
+                const keyB = canonicalLinkKeyByUid.get(uidB) ?? uidB;
+                return keyA.localeCompare(keyB);
+            });
+            sorted.forEach((uid, index) => {
                 const { x, y } = getEthGridPosition(position, index);
                 portPixelByUid.set(uid, portPixel(clusterChip.coords, x, y, position));
             });
+            ethPosition.set(position, sorted);
         });
 
         ethPositionsByChip.set(clusterChip.key, ethPosition);
