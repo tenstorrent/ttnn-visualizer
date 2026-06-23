@@ -378,20 +378,31 @@ function useDeviceOperationsFullRenderModel(args: {
                             key={index}
                             title='Buffer allocate'
                         >
-                            <MemoryLegendElement
-                                chunk={{
-                                    address: parseInt(buffer.address, 10),
-                                    size: bufferSize,
-                                }}
-                                numCores={cores}
-                                key={buffer.address}
-                                memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
-                                selectedTensorAddress={selectedAddress}
-                                operationDetails={details}
-                                onLegendClick={onLegendClick}
-                                bufferType={buffer.type}
-                                layout={buffer.layout}
-                            />
+                            {/* Same flex wrapper as CB rows below: pairs the legend
+                                with a 320px placeholder so its grid columns are
+                                computed against the same width as the CB legend.
+                                The running totals live in the h4 above, so we
+                                use an invisible spacer instead of `memoryInfo`. */}
+                            <div className='cb-legend-row'>
+                                <MemoryLegendElement
+                                    chunk={{
+                                        address: parseInt(buffer.address, 10),
+                                        size: bufferSize,
+                                    }}
+                                    numCores={cores}
+                                    key={buffer.address}
+                                    memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
+                                    selectedTensorAddress={selectedAddress}
+                                    operationDetails={details}
+                                    onLegendClick={onLegendClick}
+                                    bufferType={buffer.type}
+                                    layout={buffer.layout}
+                                />
+                                <div
+                                    className='memory-info-placeholder'
+                                    aria-hidden='true'
+                                />
+                            </div>
                         </DeviceOperationNodeComponent>
                     );
                 } else if (nodeType === NodeType.buffer_deallocate) {
@@ -408,19 +419,25 @@ function useDeviceOperationsFullRenderModel(args: {
                             key={index}
                             title='Buffer deallocate'
                         >
-                            <MemoryLegendElement
-                                chunk={{
-                                    address: buffer.address !== undefined ? parseInt(buffer.address, 10) : NaN,
-                                    size: bufferSize,
-                                }}
-                                numCores={cores}
-                                key={buffer.address}
-                                memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
-                                selectedTensorAddress={selectedAddress}
-                                operationDetails={details}
-                                onLegendClick={onLegendClick}
-                                bufferType={buffer.type}
-                            />
+                            <div className='cb-legend-row'>
+                                <MemoryLegendElement
+                                    chunk={{
+                                        address: buffer.address !== undefined ? parseInt(buffer.address, 10) : NaN,
+                                        size: bufferSize,
+                                    }}
+                                    numCores={cores}
+                                    key={buffer.address}
+                                    memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
+                                    selectedTensorAddress={selectedAddress}
+                                    operationDetails={details}
+                                    onLegendClick={onLegendClick}
+                                    bufferType={buffer.type}
+                                />
+                                <div
+                                    className='memory-info-placeholder'
+                                    aria-hidden='true'
+                                />
+                            </div>
                             <hr />
                         </DeviceOperationNodeComponent>
                     );
