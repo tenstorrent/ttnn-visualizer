@@ -3,12 +3,22 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/variables' as variables;
+@use '../definitions/colours' as colours;
+
+$eth-colour: colours.$tt-blue-tint-1;
+$eth-line: colours.$tt-blue;
+$mmio-colour: colours.$tt-yellow;
+$mmio-glow-swatch: rgba(colours.$tt-yellow, 0.6);
+$mmio-glow-chip: rgba(colours.$tt-yellow, 0.35);
+$mmio-fill: rgba(colours.$tt-yellow, 0.18);
 
 .cluster-view-renderer {
     position: absolute;
     top: 80px;
     left: 0;
-    background-color: #000a;
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(circle at 30% 20%, rgb(117 132 230 / 12%), transparent 60%), rgb(0 0 0 / 92%);
     width: 100%;
     height: calc(100% - 80px);
     bottom: 0;
@@ -19,71 +29,238 @@
         display: flex;
         flex-direction: row;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: space-between;
+        gap: 10px;
         margin: 0;
+
+        .cluster-view-zoom {
+            .zoom-percentage-button {
+                width: 54px;
+            }
+        }
+    }
+}
+
+.cluster-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: center;
+    margin: 12px 0 4px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    background-color: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(255 255 255 / 8%);
+    color: colours.$tt-grey-6;
+    font-size: 12px;
+    width: fit-content;
+
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .legend-swatch {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+    }
+
+    .swatch-chip {
+        background: linear-gradient(160deg, colours.$tt-grey-4, colours.$tt-grey-2);
+        border: 1px solid colours.$tt-grey-5;
+    }
+
+    .swatch-mmio {
+        background: linear-gradient(160deg, colours.$tt-grey-4, colours.$tt-grey-2);
+        border: 1px solid $mmio-colour;
+        box-shadow: 0 0 4px $mmio-glow-swatch;
+    }
+
+    .swatch-eth {
+        background-color: rgb(117 132 230 / 25%);
+        border: 1px solid $eth-colour;
+    }
+
+    .legend-line {
+        display: inline-block;
+        width: 18px;
+        height: 0;
+        border-top: 2px solid $eth-line;
     }
 }
 
 .cluster-view-wrap {
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: calc(100vh - 200px);
-    display: flex;
-    place-items: flex-start center;
-    justify-content: center;
-    margin-top: 20px;
+    overflow: auto;
+    scrollbar-gutter: stable;
+    margin-top: 8px;
+    padding: 10px;
+
+    .cluster-stage {
+        position: relative;
+        margin: 0 auto;
+    }
 
     .cluster {
-        overflow-y: auto;
-        max-height: calc(100vh - 200px);
-        scrollbar-gutter: stable;
-        padding-right: 15px;
+        position: relative;
+        display: grid;
         align-items: start;
         align-content: start;
-        display: grid;
-        gap: 5px;
+
+        .cluster-links {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 0;
+        }
+
+        .cluster-link {
+            stroke: $eth-line;
+            stroke-width: 2;
+            stroke-linecap: round;
+            opacity: 0.55;
+            transition:
+                opacity 0.12s ease,
+                stroke 0.12s ease,
+                stroke-width 0.12s ease;
+
+            &.is-highlighted {
+                stroke: colours.$tt-teal;
+                stroke-width: 3.5;
+                opacity: 1;
+            }
+
+            &.is-dimmed {
+                opacity: 0.08;
+            }
+        }
 
         .chip {
-            background-color: #646464;
+            position: relative;
+            z-index: 1;
             display: grid;
             gap: 5px;
-            position: relative;
+            border-radius: 8px;
+            background: linear-gradient(160deg, colours.$tt-grey-4 0%, colours.$tt-grey-2 100%);
+            outline: 1px solid colours.$tt-grey-5;
+            box-shadow:
+                0 2px 6px rgb(0 0 0 / 45%),
+                inset 0 1px 0 rgb(255 255 255 / 6%);
+            transition:
+                opacity 0.12s ease,
+                box-shadow 0.12s ease,
+                transform 0.12s ease,
+                border-color 0.12s ease;
+
+            &.is-mmio {
+                outline-color: $mmio-colour;
+                box-shadow:
+                    0 2px 6px rgb(0 0 0 / 45%),
+                    0 0 10px $mmio-glow-chip,
+                    inset 0 1px 0 rgb(255 255 255 / 6%);
+            }
+
+            &.is-hovered {
+                outline-color: colours.$tt-teal;
+                outline-width: 2px;
+                box-shadow:
+                    0 4px 14px rgb(0 0 0 / 60%),
+                    0 0 0 2px rgb(116 197 223 / 50%);
+
+                &.is-mmio {
+                    outline-color: $mmio-colour;
+                }
+            }
+
+            // Dim unrelated chips with a darkening veil rather than `opacity`, so the
+            // PCIe marker (raised above the veil) stays fully legible while hovering.
+            // The veil is always present at opacity 0 so it can fade in/out smoothly.
+            &::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                border-radius: 8px;
+                background-color: rgb(0 0 0 / 70%);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.5s ease;
+                z-index: 2;
+            }
+
+            &.is-dimmed::after {
+                opacity: 1;
+            }
 
             .chip-id {
                 position: absolute;
-                top: 0;
-                right: 0;
-                width: 100%;
-                height: 100%;
-                font-size: 25px;
-                text-align: right;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 6px 10px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+                color: colours.$tt-grey-7;
+                text-align: center;
                 pointer-events: none;
+                text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
             }
 
+            // PCIe / host-connected badge. Absolutely positioned so it never
+            // participates in grid-track sizing and cannot displace eth elements.
+            // top/left/width/height are set inline from the physical PCIe coordinate
+            // projected onto the chip's cell geometry, so the badge lands at the
+            // correct edge position. z-raised above the dim veil.
             .mmio {
-                grid-column: 3;
-                grid-row: 3;
-                border: 1px solid #f80;
-                font-size: 10px;
-                color: #fff;
-                text-align: center;
+                position: absolute;
+                z-index: 3;
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                gap: 5px;
+                box-sizing: border-box;
+                padding: 1px 5px;
+                border: 1px solid $mmio-colour;
+                border-radius: 3px;
+                background-color: $mmio-fill;
+                font-size: 9px;
+                font-weight: 700;
+                line-height: 1.3;
+                white-space: nowrap;
+                overflow: hidden;
+                color: $mmio-colour;
             }
         }
     }
 
     .eth {
-        border-color: #99c4ff;
+        position: relative;
+        z-index: 2;
+        border-color: $eth-colour;
         border-width: 1px;
         border-style: solid;
-        font-size: 10px;
-        color: #fff;
+        border-radius: 2px;
+        background-color: rgb(117 132 230 / 18%);
+
+        // font-size is set inline so the label scales with the port size
+        line-height: 1.1;
+        color: colours.$tt-white;
         text-align: center;
         display: flex;
         justify-content: center;
         align-items: center;
+        overflow: hidden;
+
+        span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: break-all;
+        }
 
         &.eth-position-top {
             border-top-color: transparent;
