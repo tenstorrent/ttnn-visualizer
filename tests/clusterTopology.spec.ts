@@ -7,9 +7,10 @@ import {
     PerRankInput,
     looksLikeRankedDescriptor,
     pickMeshDocForRank,
+    sortHostsByConnectionProximity,
     stitchClusterTopology,
 } from '../src/functions/clusterTopology';
-import { ClusterModel, MeshData, MeshDataDocs } from '../src/model/ClusterModel';
+import { ClusterHost, ClusterModel, InterHostEthernetLink, MeshData, MeshDataDocs } from '../src/model/ClusterModel';
 
 // Minimal ClusterModel factory; fills in defaults so tests can override only what they care about.
 const makeDescriptor = (overrides: Partial<ClusterModel>): ClusterModel => ({
@@ -396,5 +397,58 @@ describe('looksLikeRankedDescriptor', () => {
             ethernet_connections_to_remote_devices: null,
         } as unknown as ClusterModel;
         expect(looksLikeRankedDescriptor(desc)).toBe(false);
+    });
+});
+
+describe('sortHostsByConnectionProximity', () => {
+    // 8-chip host with cross-host links rooted in `bottomRow` (true) → rank's
+    // mean local-y skews toward 1; `false` → skews toward 0 (chips 0-3, top
+    // row in the 4-wide × 2-row local grid).
+    const makeHost = (rank: number, chipUniqueIds: Record<number, number>): ClusterHost => ({
+        rank,
+        descriptor: {
+            arch: [],
+            chips: {},
+            ethernet_connections: [],
+            chips_with_mmio: [],
+            chip_to_boardtype: {},
+            chip_to_bus_id: {},
+            chip_unique_ids: chipUniqueIds,
+            boards: [],
+        } as unknown as ClusterModel,
+        meshChips: {},
+    });
+    const eightChips = (offset: number) => Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7].map((id) => [id, offset + id]));
+
+    const link = (rankA: number, chipA: number, rankB: number, chipB: number): InterHostEthernetLink => ({
+        a: { rank: rankA, chip: chipA, chan: 0, chipUniqueId: 0 },
+        b: { rank: rankB, chip: chipB, chan: 0, chipUniqueId: 0 },
+    });
+
+    it('places the host whose connection chips sit in its BOTTOM row on top', () => {
+        // Rank 1's connecting chips are 4–7 (local_y = 1, bottom row); rank 0's
+        // are 0–3 (local_y = 0, top row). Rank 1 should sort first.
+        const hosts = [makeHost(0, eightChips(0)), makeHost(1, eightChips(100))];
+        const interHostLinks = [link(0, 0, 1, 4), link(0, 1, 1, 5), link(0, 2, 1, 6), link(0, 3, 1, 7)];
+
+        const ordered = sortHostsByConnectionProximity(hosts, interHostLinks);
+
+        expect(ordered.map((h) => h.rank)).toEqual([1, 0]);
+    });
+
+    it('flips the order when the connection-chip rows swap', () => {
+        // Symmetric case: now rank 0's chips 4-7 connect to rank 1's chips 0-3.
+        const hosts = [makeHost(0, eightChips(0)), makeHost(1, eightChips(100))];
+        const interHostLinks = [link(0, 4, 1, 0), link(0, 5, 1, 1), link(0, 6, 1, 2), link(0, 7, 1, 3)];
+
+        const ordered = sortHostsByConnectionProximity(hosts, interHostLinks);
+
+        expect(ordered.map((h) => h.rank)).toEqual([0, 1]);
+    });
+
+    it('falls back to rank-descending when there are no inter-host links', () => {
+        const hosts = [makeHost(0, eightChips(0)), makeHost(1, eightChips(100)), makeHost(2, eightChips(200))];
+        const ordered = sortHostsByConnectionProximity(hosts, []);
+        expect(ordered.map((h) => h.rank)).toEqual([2, 1, 0]);
     });
 });

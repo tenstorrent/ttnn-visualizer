@@ -13,6 +13,11 @@ import {
     RemoteEthernetConnectionRaw,
 } from '../model/ClusterModel';
 
+// Per-host fallback layout's column width. The host-ordering heuristic below
+// uses the same number to compute each chip's local-row, so any change here
+// must stay in sync with `FALLBACK_PER_HOST_COLS` in `ClusterRenderer.tsx`.
+const FALLBACK_PER_HOST_COLS = 4;
+
 /**
  * Stitch per-rank cluster descriptors and mesh-coordinate mappings into a unified
  * topology. Pure: no React, no fetch — designed to be testable in isolation.
@@ -188,4 +193,56 @@ export const pickMeshDocForRank = (response: MeshDescriptorResponse, rank: numbe
     }
     const sorted = [...response.docs].sort((a, b) => minMeshY(a) - minMeshY(b));
     return sorted[rank] ?? sorted[0] ?? { chips: {} };
+};
+
+/**
+ * Determine the stack order of hosts in the renderer's fallback layout based
+ * on where each host's inter-host connection chips sit in its local 4-wide-
+ * 2-row grid:
+ *
+ *   - For each host, compute the mean local-y (0 = top row, 1 = bottom row)
+ *     of its inter-host link endpoints.
+ *   - Sort descending: hosts whose connecting chips cluster near their
+ *     BOTTOM row come first (placed top of the stack), so their bottom row
+ *     faces the gutter and lines up across from the next host's top row.
+ *   - Ties — and hosts with no inter-host links — fall back to rank
+ *     descending so the highest rank is still drawn on top.
+ *
+ * Returns a new array; the input is not mutated.
+ */
+export const sortHostsByConnectionProximity = (
+    hosts: ClusterHost[],
+    interHostLinks: InterHostEthernetLink[],
+): ClusterHost[] => {
+    const localGridYForChip = new Map<string, number>();
+    for (const host of hosts) {
+        const uidChipIds = Object.keys(host.descriptor.chip_unique_ids ?? {})
+            .map(Number)
+            .sort((a, b) => a - b);
+        uidChipIds.forEach((chipId, idx) => {
+            localGridYForChip.set(`${host.rank}-${chipId}`, Math.floor(idx / FALLBACK_PER_HOST_COLS));
+        });
+    }
+    const accumByRank = new Map<number, { sum: number; count: number }>();
+    for (const link of interHostLinks) {
+        for (const endpoint of [link.a, link.b] as const) {
+            const localY = localGridYForChip.get(`${endpoint.rank}-${endpoint.chip}`);
+            if (localY !== undefined) {
+                const acc = accumByRank.get(endpoint.rank) ?? { sum: 0, count: 0 };
+                acc.sum += localY;
+                acc.count += 1;
+                accumByRank.set(endpoint.rank, acc);
+            }
+        }
+    }
+    const meanLocalYByRank = new Map<number, number>();
+    accumByRank.forEach((acc, rank) => meanLocalYByRank.set(rank, acc.sum / acc.count));
+    return [...hosts].sort((a, b) => {
+        const ya = meanLocalYByRank.get(a.rank);
+        const yb = meanLocalYByRank.get(b.rank);
+        if (ya !== undefined && yb !== undefined && ya !== yb) {
+            return yb - ya;
+        }
+        return b.rank - a.rank;
+    });
 };

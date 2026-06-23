@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router';
 import 'styles/components/ClusterView.scss';
 import { stringToArchitecture } from '../../definitions/DeviceArchitecture';
 import { useArchitecture, useGetClusterTopology } from '../../hooks/useAPI';
+import { sortHostsByConnectionProximity } from '../../functions/clusterTopology';
 import {
     CLUSTER_COORDS,
     CLUSTER_ETH_POSITION,
@@ -40,12 +41,14 @@ const ZOOM_PIXEL_SCALE = 0.004;
 const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 
 // Per-host fallback layout when mesh coordinates are missing. Hosts are tiled
-// *vertically* with the highest rank at the top and rank 0 at the bottom — the
-// arrangement that reads as "remote → local" top-down for a multi-host run.
-// Each host arranges its chips in a 4-column grid stacked into rows.
-// Chosen because most current reports are 1- or 2-host with ≤ 8 chips per host;
-// deeper packing can come with a proper mesh-aware layout once the
-// mesh-descriptor multi-doc YAML quirk (see plan doc) is resolved upstream.
+// *vertically* with one row gap between them. The order they're stacked in is
+// driven by where each host's inter-host connection chips sit in its local
+// 2-row grid (see the mean-local-y heuristic in `buildClusterRenderModel`),
+// so the row that carries the most cross-host links faces the gutter. Each
+// host arranges its chips in a 4-column grid stacked into rows.
+// Chosen because most current reports are 1- or 2-host with ≤ 8 chips per
+// host; deeper packing can come with a proper mesh-aware layout once the
+// mesh-descriptor multi-doc YAML quirk is resolved upstream.
 const FALLBACK_PER_HOST_COLS = 4;
 const FALLBACK_HOST_GUTTER_ROWS = 1;
 // Empty grid rows above the topmost host so any curves that exit through the
@@ -53,6 +56,13 @@ const FALLBACK_HOST_GUTTER_ROWS = 1;
 // links routed via the outward-edge rule) have somewhere to arc instead of
 // running into the cluster panel chrome.
 const FALLBACK_TOP_PAD_ROWS = 2;
+
+const ALL_EDGES: readonly CLUSTER_ETH_POSITION[] = [
+    CLUSTER_ETH_POSITION.TOP,
+    CLUSTER_ETH_POSITION.BOTTOM,
+    CLUSTER_ETH_POSITION.LEFT,
+    CLUSTER_ETH_POSITION.RIGHT,
+];
 
 interface PortPixel {
     x: number;
@@ -143,13 +153,12 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
 
     // Step 1: place every chip on a global virtual grid. Prefer mesh coordinates
     // when *every* host has a true 2D arrangement (both x and y axes vary);
-    // otherwise fall back to a per-host 4-wide grid tiled *vertically* with the
-    // highest rank at the top and rank 0 at the bottom. A degenerate 1D mesh
-    // (e.g. `physical_chip_mesh_coordinate_mapping_*.yaml` in
-    // multihost_poc_jun19_2043 packs all chips into mesh_x=0) collapses every
-    // chip into a single column, which forces the eth-port placement logic
-    // (relative-neighbour-direction below) to cluster all ports on the
-    // TOP/BOTTOM edges and doesn't match the physical chip board geometry.
+    // otherwise fall back to a per-host 4-wide grid tiled vertically. A
+    // degenerate 1D mesh (e.g. `physical_chip_mesh_coordinate_mapping_*.yaml`
+    // packs all chips into mesh_x=0) collapses every chip into a single column,
+    // which forces the eth-port placement logic (relative-neighbour-direction
+    // below) to cluster all ports on the TOP/BOTTOM edges and doesn't match
+    // the physical chip board geometry.
     const hostHasTwoDimensionalMesh = (host: ClusterTopology['hosts'][number]) => {
         const coords = Object.values(host.meshChips);
         if (coords.length === 0) {
@@ -170,47 +179,15 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     let totalCols = 0;
     let totalRows = 0;
 
-    // Stacking order is driven by where each host's inter-host connection
-    // chips sit in its local fallback grid (row 0 = top, row 1 = bottom of a
-    // 2-row tile). The host whose connecting chips cluster near its BOTTOM
-    // row is placed FIRST (top of the stack) so that bottom row faces the
-    // gutter; the host whose connecting chips cluster near its TOP row is
-    // placed last so its top row faces the gutter from below. Ties (and the
-    // single-host case) fall back to rank-descending. Mesh-aware mode keeps
-    // the report's coordinates unchanged.
-    const fallbackLocalGridYForChip = new Map<string, number>();
-    for (const host of hosts) {
-        const uidChipIds = Object.keys(host.descriptor.chip_unique_ids ?? {})
-            .map(Number)
-            .sort((a, b) => a - b);
-        uidChipIds.forEach((chipId, idx) => {
-            fallbackLocalGridYForChip.set(`${host.rank}-${chipId}`, Math.floor(idx / FALLBACK_PER_HOST_COLS));
-        });
-    }
-    const meanLocalYByRank = new Map<number, number>();
-    const accumByRank = new Map<number, { sum: number; count: number }>();
-    for (const link of interHostLinks) {
-        for (const endpoint of [link.a, link.b] as const) {
-            const localY = fallbackLocalGridYForChip.get(`${endpoint.rank}-${endpoint.chip}`);
-            if (localY !== undefined) {
-                const acc = accumByRank.get(endpoint.rank) ?? { sum: 0, count: 0 };
-                acc.sum += localY;
-                acc.count += 1;
-                accumByRank.set(endpoint.rank, acc);
-            }
-        }
-    }
-    accumByRank.forEach((acc, rank) => meanLocalYByRank.set(rank, acc.sum / acc.count));
-    const hostsByRenderOrder = useMeshCoords
-        ? hosts
-        : [...hosts].sort((a, b) => {
-              const ya = meanLocalYByRank.get(a.rank);
-              const yb = meanLocalYByRank.get(b.rank);
-              if (ya !== undefined && yb !== undefined && ya !== yb) {
-                  return yb - ya;
-              }
-              return b.rank - a.rank;
-          });
+    // Stacking order (fallback mode only) is driven by where each host's
+    // inter-host connection chips sit in its local 2-row grid. The host whose
+    // connecting chips cluster near its BOTTOM row is placed FIRST (top of the
+    // stack) so that bottom row faces the gutter; the host whose connecting
+    // chips cluster near its TOP row is placed last so its top row faces the
+    // gutter from below. Ties (and the single-host case) fall back to
+    // rank-descending. Mesh-aware mode keeps the report's coordinates
+    // unchanged and skips this heuristic entirely.
+    const hostsByRenderOrder = useMeshCoords ? hosts : sortHostsByConnectionProximity(hosts, interHostLinks);
 
     for (const host of hostsByRenderOrder) {
         const meshChipIds = Object.keys(host.meshChips).map(Number);
@@ -351,9 +328,9 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     const ethPositionsByChip = new Map<string, Map<CLUSTER_ETH_POSITION, string[]>>();
     const portPixelByUid = new Map<string, PortPixel>();
     // UIDs whose connection skips over one or more chips (intra-host non-adjacent,
-    // e.g. chip 5 ↔ chip 7 with chip 6 between them) — these are placed on a
-    // perpendicular empty edge in pass 2 and rendered as curves rather than
-    // straight lines so they don't visually overlap the chord they fly above.
+    // e.g. chip 5 ↔ chip 7 with chip 6 between them). Tagged here in pass 1
+    // and rendered as curves in step 4 so they don't visually overlap the
+    // chord they fly above.
     const longHaulUids = new Set<string>();
 
     // ETH port placement is *adjacency*-based, not hardware-based:
@@ -364,21 +341,27 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
     //     (e.g. `0-20-7-6` = rank 0, chip 20, core at chip-grid x=7, y=6) but
     //     are NOT used to decide which edge of the rendered chip a port sits on.
     //
-    //   - Instead, each port is positioned on the edge that *faces the chip
-    //     it connects to*: neighbour to my west → port on my LEFT edge,
-    //     neighbour above me → TOP, etc. Disconnected channels are not rendered.
+    //   - Each port is positioned on an edge derived from the chip it
+    //     connects to. Two passes:
+    //       Pass 1 — direct cardinal neighbours (mesh distance 1, same row or
+    //                column): port goes on the chord-direction edge.
+    //       Pass 2 — long-haul intra-host + inter-host: port prefers the
+    //                chip's outward edge (no chip-grid neighbour on that
+    //                side), so the bezier curve can leave the cluster body
+    //                through open space rather than overlapping intermediate
+    //                chips. Chord edge if it's outward; otherwise an outward
+    //                perpendicular; otherwise the chord. Interior chips with
+    //                no outward edges fall back to "first empty perpendicular".
     //
-    //   - Within an edge, ports are slotted in the discovery order of channels
-    //     (the `index` argument to `getEthGridPosition`), so the relative
-    //     ordering reflects the channel numbering in `ethernet_connections`.
+    //   - Within an edge, ports are ordered by their partner chip's
+    //     perpendicular-axis coord and then by a canonical link key
+    //     (lex-min of the two endpoint uids). Because both ends of a link
+    //     share the canonical key, facing edges always end up with matching
+    //     orderings and connection lines no longer cross spuriously.
     //
-    //   - **Long-haul intra-host links** (same rank, mesh distance > 1, e.g.
-    //     chip 5 ↔ chip 7 with chip 6 in between) bypass the direct-neighbour
-    //     edge and are placed on a *perpendicular* empty edge so they don't
-    //     stack with the direct connection that already occupies the chord
-    //     edge. They're paired with a Bezier curve in step 4 so they visibly
-    //     fly over/under the intermediate chip(s) instead of overlapping
-    //     adjacent ports.
+    //   - Long-haul intra-host placements are tagged in `longHaulUids`; step
+    //     4 renders them and inter-host links as cubic-Bezier curves so they
+    //     visibly fly past the intermediate chip(s) instead of overlapping.
     //
     // This means a hardware "top-row" core can render on the chip's LEFT edge
     // (or any other) — its physical NoC location is informational only.
@@ -482,24 +465,20 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
         //      otherwise the remaining outward edge (e.g. opposite of chord)
         //   c) interior-chip fallback: the legacy "first empty perpendicular"
         //      behaviour for chips that have no outward edges at all.
-        const ALL_EDGES: CLUSTER_ETH_POSITION[] = [
-            CLUSTER_ETH_POSITION.TOP,
-            CLUSTER_ETH_POSITION.BOTTOM,
-            CLUSTER_ETH_POSITION.LEFT,
-            CLUSTER_ETH_POSITION.RIGHT,
-        ];
+        // Outward edges depend only on the chip's grid position, so compute
+        // once per chip rather than once per deferred port.
+        const outwardForChip = ALL_EDGES.filter((edge) => isOutwardEdge(clusterChip, edge));
         for (const { uid, chord } of deferred) {
-            const outward = ALL_EDGES.filter((edge) => isOutwardEdge(clusterChip, edge));
             const perp = perpendicularEdges(chord);
             let chosen: CLUSTER_ETH_POSITION;
-            if (outward.length === 0) {
+            if (outwardForChip.length === 0) {
                 const emptyPerp = perp.find((e) => !directNeighbourEdges.has(e) && !ethPosition.has(e));
                 const fallbackPerp = perp.find((e) => !directNeighbourEdges.has(e));
                 chosen = emptyPerp ?? fallbackPerp ?? chord;
-            } else if (outward.includes(chord)) {
+            } else if (outwardForChip.includes(chord)) {
                 chosen = chord;
             } else {
-                chosen = perp.find((e) => outward.includes(e)) ?? outward[0];
+                chosen = perp.find((e) => outwardForChip.includes(e)) ?? outwardForChip[0];
             }
             if (!ethPosition.has(chosen)) {
                 ethPosition.set(chosen, []);
@@ -612,7 +591,7 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
             return;
         }
         // Inter-host always curves. Intra-host curves only when long-haul
-        // (port was displaced to a perpendicular empty edge in pass 2 above).
+        // (mesh distance > 1, port placed on a non-chord edge in pass 2 above).
         const longHaul = !interHost && (longHaulUids.has(uidA ?? '') || longHaulUids.has(uidB ?? ''));
         const useCurve = interHost || longHaul;
         linkSegments.push({
@@ -689,8 +668,9 @@ function ClusterRenderer() {
     const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
     const [hoveredChip, setHoveredChip] = useState<string | null>(null);
 
-    // we don't support mixed architecture for now (see issue #1510 follow-ups)
-    // we will default to wormhole and use the first host's arch when present
+    // Mixed-architecture clusters aren't supported yet; default to the first
+    // host's arch (wormhole when nothing is present). A heterogeneous topology
+    // would need per-chip ChipDesign lookup, which is left as a follow-up.
     const firstHostArch = topology?.hosts[0]?.descriptor.arch ?? [];
     const arch = stringToArchitecture((firstHostArch.length && firstHostArch[0]) || DEFAULT_ARCHITECTURE);
     const chipDesign = useArchitecture(arch);
