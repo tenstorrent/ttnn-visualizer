@@ -1,7 +1,7 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.90.0"
+version = "0.91.0"
 description = "TT-NN Visualizer"
 readme = "README.md"
 license = "Apache-2.0"
