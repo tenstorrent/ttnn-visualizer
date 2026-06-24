@@ -7,14 +7,16 @@ import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
+    successfulReportLinksAtom,
 } from '../../store/app';
+import { linkedPerformancePaths, linkedProfilerPaths } from '../../functions/reportLinks';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
@@ -136,7 +138,27 @@ const LocalFolderOptions = () => {
         [activePerformanceReport, perfFolderList, isPerformanceLocal],
     );
 
+    const reportLinks = useAtomValue(successfulReportLinksAtom);
+
     const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
+    const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;
+
+    // Performance reports that have linked with the active memory report (and vice versa).
+    // Experimental: only surfaced in development builds.
+    const linkedPerfPaths = useMemo(
+        () =>
+            isReportLinkingEnabled
+                ? linkedPerformancePaths(reportLinks, activeProfilerReport?.path, profilerReportLocation)
+                : undefined,
+        [reportLinks, activeProfilerReport, profilerReportLocation, isReportLinkingEnabled],
+    );
+    const linkedProfilerReportPaths = useMemo(
+        () =>
+            isReportLinkingEnabled
+                ? linkedProfilerPaths(reportLinks, activePerformanceReport?.path, performanceReportLocation)
+                : undefined,
+        [reportLinks, activePerformanceReport, performanceReportLocation, isReportLinkingEnabled],
+    );
 
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
@@ -285,6 +307,7 @@ const LocalFolderOptions = () => {
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
+                    linkedPaths={linkedProfilerReportPaths}
                     showReportName
                 />
             </FormGroup>
@@ -333,6 +356,7 @@ const LocalFolderOptions = () => {
                     valueLabel={activePerformanceReport?.reportName ?? null}
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}
+                    linkedPaths={linkedPerfPaths}
                 />
             </FormGroup>
 
