@@ -3,14 +3,11 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { getDefaultStore } from 'jotai';
-import { AxiosError, AxiosProgressEvent } from 'axios';
+import { AxiosProgressEvent } from 'axios';
 import axiosInstance from '../libs/axiosInstance';
 import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import Endpoints from '../definitions/Endpoints';
-import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
-import { MlirServerConnection } from '../definitions/MlirServer';
-import getResponseError from '../functions/getResponseError';
 
 type FileWithRelativePath = File & { webkitRelativePath?: string };
 
@@ -183,52 +180,6 @@ const useLocalConnection = () => {
 
     const uploadNpeFile = (files: FileList) => uploadFileList(files, '/upload/npe');
 
-    // Proxied through the backend over SSH (same path as the connection test):
-    // the file is scp'd to the remote host and curl runs against that machine's
-    // loopback MLIR port, avoiding browser CORS on a cross-origin POST.
-    //
-    // Deliberately does NOT drive the global `fileTransferProgressAtom` overlay:
-    // the browser→backend transfer is near-instant, but upload+conversion on the
-    // remote MLIR server can take minutes with no progress to report.
-    const uploadMlirFileToServer = async (files: FileList, server: MlirServerConnection) => {
-        const formData = new FormData();
-
-        Array.from(files).forEach((f) => {
-            formData.append('files', f);
-        });
-        formData.append('host', server.host);
-        formData.append('username', server.username);
-        formData.append('sshPort', server.sshPort.toString());
-        formData.append('port', server.port.toString());
-        formData.append('name', server.name);
-        if (server.identityFile) {
-            formData.append('identityFile', server.identityFile);
-        }
-
-        return axiosInstance.post(`${Endpoints.REMOTE}/mlir/upload`, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
-    };
-
-    // The MLIR server listens on the remote host's loopback, so reachability can only be
-    // checked server-side: the backend SSHes to the host and curls the endpoint there.
-    const testMlirServerConnection = async (server: MlirServerConnection): Promise<ConnectionStatus[]> => {
-        try {
-            const { data } = await axiosInstance.post<ConnectionStatus[]>(`${Endpoints.REMOTE}/mlir/test`, server);
-            return data;
-        } catch (err: unknown) {
-            const axiosError = err as AxiosError;
-
-            if (Array.isArray(axiosError.response?.data)) {
-                return axiosError.response.data;
-            }
-
-            return [{ status: ConnectionTestStates.FAILED, message: getResponseError(err, 'Connection test failed') }];
-        }
-    };
-
     return {
         getUploadedFolderName,
         checkRequiredReportFiles,
@@ -236,8 +187,6 @@ const useLocalConnection = () => {
         uploadLocalFolder,
         uploadLocalPerformanceFolder,
         uploadNpeFile,
-        uploadMlirFileToServer,
-        testMlirServerConnection,
         filterReportFiles,
     };
 };
