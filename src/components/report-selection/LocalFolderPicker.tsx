@@ -84,7 +84,7 @@ const LocalFolderPicker = ({
                     labelElement={
                         isLinked ? (
                             <Tooltip
-                                content='Previously linked with the active report (matched by operation sequence — may also match similar runs)'
+                                content='Previously linked with the active report'
                                 position={Position.RIGHT}
                             >
                                 <Icon
