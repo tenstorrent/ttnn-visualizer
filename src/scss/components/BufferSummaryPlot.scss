@@ -9,6 +9,7 @@ $label-width: 160px;
 $label-margin: 20px;
 $width-offset: $label-width;
 $height-offset: 15px;
+$rail-gutter: 26px;
 
 // Right-edge clearance for the fixed Feedback button (`.feedback-button`
 // sits at `right: -3px` with a rotated label extending ~35px into the
@@ -41,7 +42,14 @@ $footer-clearance: 44px;
     }
 
     .buffer-summary-plot {
-        width: calc(100% - $width-offset);
+        // Width matches the row canvases beneath. Each row sits inside
+        // `.scrollable-with-rail` (padding-right: $rail-gutter) and is
+        // sized via the grid's 1fr column, so it shrinks by both the
+        // label column AND the rail gutter. The plot has to subtract the
+        // same — otherwise it extends 26px past the rows on the right
+        // (overlapping the left edge of the label column and visually
+        // eating the leading op-id digit).
+        width: calc(100% - $width-offset - $rail-gutter);
         position: absolute;
         top: 0;
         left: 0;
@@ -56,11 +64,6 @@ $footer-clearance: 44px;
         width: calc(100% - $width-offset);
         text-align: center;
     }
-
-    // Rail gutter to the right of the scrollable list. Sized to clear the
-    // larger ranked dots (now carry the rank number) without sitting on the
-    // browser scrollbar.
-    $rail-gutter: 26px;
 
     .buffer-summary-plot-container {
         display: grid;
@@ -88,11 +91,10 @@ $footer-clearance: 44px;
             margin-bottom: 0;
 
             // The Tooltip wrapping the op name injects a `.bp6-popover-target`
-            // span between this flex container and the `<a>`. It needs to
-            // shrink so the `<a>` inside reaches its ellipsis, but it must
-            // NOT clip on its own — earlier overflow: hidden here on top of
-            // the link's own overflow truncated the leading op-id digit on
-            // the first row. Let only the `<a>` own its overflow.
+            // span between this flex container and the `<a>`. Force it to
+            // participate in flex shrinking so the `<a>` inside can reach
+            // its `text-overflow: ellipsis` when an op name is too long for
+            // the label column.
             > .bp6-popover-target {
                 display: block;
                 min-width: 0;
