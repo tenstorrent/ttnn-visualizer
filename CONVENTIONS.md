@@ -422,10 +422,12 @@ return useQuery<Buffer[], AxiosError>({
 
 The first element is the human-readable name, then every reactive value the query depends on. Re-used keys (invalidated from another module) are exported as `*_QUERY_KEY` constants.
 
+Report-bound queries must include the active report's identity in the key (typically `activeProfilerReport?.path` or `activePerformanceReport?.path`). Operation ids reset per report, so a key like `['get-operation-detail', operationId]` collides across reports and serves stale payloads when the same id is revisited under a different report. See #1674.
+
 `src/hooks/useAPI.tsx`
 
 ```tsx
-queryKey: ['get-operation-buffers', operationId],
+queryKey: ['get-operation-buffers', operationId, activeProfilerReport?.path],
 ```
 
 ### `staleTime: Infinity` for report-bound queries
@@ -449,7 +451,7 @@ When a query depends on another query's result (e.g. only fetch detail when a li
 ```ts
 return useQuery({
     queryFn: () => fetchOperationDetails(operationId),
-    queryKey: ['get-operation-detail', operationId],
+    queryKey: ['get-operation-detail', operationId, activeProfilerReport?.path],
     enabled: operationId !== null,
 });
 ```

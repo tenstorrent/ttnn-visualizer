@@ -144,6 +144,7 @@ Open pull requests with **`dev`** as the base branch by default.
 
 - Type every hook as **`useQuery<Data, AxiosError>`** — don't let the error parameter fall back to `unknown`. Call sites depend on `AxiosError` shape (e.g. `error?.status === HttpStatusCode.UnprocessableEntity`).
 - Query keys are tuples of `['kebab-string-name', ...reactiveDeps]` (e.g. `['fetch-all-buffers', bufferType, activeProfilerReport?.path]`). Report-bound queries use `staleTime: Infinity`. Keys that need invalidation from another module are exported as `*_QUERY_KEY` constants.
+- Report-bound query keys must include the active report's identity — typically **`activeProfilerReport?.path`** or **`activePerformanceReport?.path`**. Operation ids reset per report, so a key like `['get-operation-detail', operationId]` collides across reports and serves stale payloads when the same id is revisited under a different report. See #1674.
 
 ### Errors and toasts
 
