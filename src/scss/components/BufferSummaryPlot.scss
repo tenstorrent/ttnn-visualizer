@@ -87,13 +87,24 @@ $footer-clearance: 44px;
             padding-left: $label-margin;
             margin-bottom: 0;
 
-            .y-axis-tick-label {
-                // Row tooltip's Blueprint wrapper span lives here; it has
-                // to shrink with the cell or the ellipsis below never
-                // kicks in.
+            // The Tooltip wrapping the op name injects a `.bp6-popover-target`
+            // span between this flex container and `.y-axis-tick-label`. It
+            // sizes to content by default, so the link inside never reaches
+            // its `min-width: 0` and the row pushes past the grid column
+            // (bringing back horizontal page scroll). Force the wrapper to
+            // participate in flex shrinking.
+            > .bp6-popover-target {
                 display: flex;
                 min-width: 0;
                 flex: 1 1 auto;
+                overflow: hidden;
+            }
+
+            .y-axis-tick-label {
+                display: flex;
+                min-width: 0;
+                flex: 1 1 auto;
+                overflow: hidden;
             }
 
             a {
