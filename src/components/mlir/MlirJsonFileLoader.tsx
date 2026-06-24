@@ -7,7 +7,7 @@ import { useAtom, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import useMlirUpload from '../../hooks/useMlirUpload';
+import useMlirRemote from '../../hooks/useMlirRemote';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_SERVER_ACCEPTED_EXTENSIONS, MlirServerConnection } from '../../definitions/MlirServer';
 import ROUTES from '../../definitions/Routes';
@@ -40,7 +40,7 @@ interface MlirJsonFileLoaderProps {
 
 const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const { uploadMlirFileToServer } = useMlirUpload();
+    const { uploadMlirFileToServer } = useMlirRemote();
     const navigate = useNavigate();
     const location = useLocation();
     const [mlirJsonFileName, setMlirJsonFileName] = useAtom(activeMlirJsonAtom);
@@ -84,8 +84,8 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                     return;
                 }
 
-                graph = (response.data as { graph?: GraphBundle }).graph ?? null;
-                reportName = (response.data as { name?: string }).name ?? sanitiseFileName(file.name);
+                graph = response.data.graph ?? null;
+                reportName = response.data.name ?? sanitiseFileName(file.name);
             } else {
                 // Load an already-processed MLIR JSON straight into the viewer,
                 // bypassing the Model Explorer conversion backend.

@@ -8,7 +8,7 @@ import { getDefaultStore } from 'jotai';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AxiosProgressEvent } from 'axios';
-import useMlirUpload from '../src/hooks/useMlirUpload';
+import useMlirRemote from '../src/hooks/useMlirRemote';
 import axiosInstance from '../src/libs/axiosInstance';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { MlirServerConnection } from '../src/definitions/MlirServer';
@@ -60,7 +60,7 @@ afterEach(() => {
     getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
 });
 
-describe('useMlirUpload progress lifecycle', () => {
+describe('useMlirRemote progress lifecycle', () => {
     it('ignores zero-total upload progress events and keeps overlay state stable', async () => {
         const postMock = vi.mocked(axiosInstance.post);
         const deferred = createDeferred<{ data: { status: ConnectionTestStates } }>();
@@ -71,7 +71,7 @@ describe('useMlirUpload progress lifecycle', () => {
             return deferred.promise;
         });
 
-        const { result } = renderHook(() => useMlirUpload());
+        const { result } = renderHook(() => useMlirRemote());
         const uploadPromise = result.current.uploadMlirFileToServer(
             toFileList([new File(['module {}'], 'model.mlir')]),
             SERVER,
@@ -104,7 +104,7 @@ describe('useMlirUpload progress lifecycle', () => {
             return deferred.promise;
         });
 
-        const { result } = renderHook(() => useMlirUpload());
+        const { result } = renderHook(() => useMlirRemote());
         const uploadPromise = result.current.uploadMlirFileToServer(
             toFileList([new File(['module {}'], 'model.mlir')]),
             SERVER,

@@ -3,16 +3,25 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { getDefaultStore } from 'jotai';
-import { AxiosError } from 'axios';
+import { AxiosError, AxiosResponse } from 'axios';
 import axiosInstance from '../libs/axiosInstance';
 import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
 import { FileStatus } from '../model/APIData';
 import Endpoints from '../definitions/Endpoints';
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
 import { MlirServerConnection } from '../definitions/MlirServer';
+import { GraphBundle } from '../model/MLIRJsonModel';
 import getResponseError from '../functions/getResponseError';
 
-const useMlirUpload = () => {
+export interface MlirUploadResponse {
+    status: ConnectionTestStates;
+    message?: string;
+    detail?: string;
+    name?: string;
+    graph?: GraphBundle;
+}
+
+const useMlirRemote = () => {
     const resetTransferProgress = () => {
         getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
     };
@@ -27,7 +36,10 @@ const useMlirUpload = () => {
     // value while upload+conversion runs on the remote MLIR server (which can
     // take minutes with no further progress to report) until the request
     // resolves and `resetTransferProgress` closes the overlay.
-    const uploadMlirFileToServer = async (files: FileList, server: MlirServerConnection) => {
+    const uploadMlirFileToServer = async (
+        files: FileList,
+        server: MlirServerConnection,
+    ): Promise<AxiosResponse<MlirUploadResponse>> => {
         const formData = new FormData();
 
         Array.from(files).forEach((f) => {
@@ -54,7 +66,7 @@ const useMlirUpload = () => {
         });
 
         try {
-            return await axiosInstance.post(`${Endpoints.REMOTE}/mlir/upload`, formData, {
+            return await axiosInstance.post<MlirUploadResponse>(`${Endpoints.REMOTE}/mlir/upload`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
@@ -105,4 +117,4 @@ const useMlirUpload = () => {
     };
 };
 
-export default useMlirUpload;
+export default useMlirRemote;

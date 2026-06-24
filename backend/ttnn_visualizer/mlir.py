@@ -167,7 +167,7 @@ def test_mlir_server_connection(
             _endpoint_unreachable_message(remote, http_port),
         )
     else:
-        add_status(ConnectionTestStates.OK, f"MLIR server reachable")
+        add_status(ConnectionTestStates.OK, "MLIR server reachable")
 
     return statuses
 
