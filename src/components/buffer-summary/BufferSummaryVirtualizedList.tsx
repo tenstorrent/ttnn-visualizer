@@ -264,15 +264,16 @@ function BufferSummaryVirtualizedList({
 
                                         {/* Row tooltip and badge tooltip are siblings, not
                                             nested — hovering the badge no longer co-fires the
-                                            row tooltip. */}
+                                            row tooltip. Tooltip wraps the Link directly so
+                                            Blueprint's `.bp6-popover-target` is the only
+                                            shrinking wrapper between the flex container and
+                                            the `<a>`. */}
                                         <div className='y-axis-tick'>
                                             <Tooltip
                                                 content={getOperationTooltipContent(operation)}
                                                 disabled={isVirtualizerScrolling}
                                             >
-                                                <span className='y-axis-tick-label'>
-                                                    {renderOperationLink(operation)}
-                                                </span>
+                                                {renderOperationLink(operation)}
                                             </Tooltip>
                                             {badge}
                                         </div>

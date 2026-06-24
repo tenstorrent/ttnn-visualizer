@@ -88,28 +88,21 @@ $footer-clearance: 44px;
             margin-bottom: 0;
 
             // The Tooltip wrapping the op name injects a `.bp6-popover-target`
-            // span between this flex container and `.y-axis-tick-label`. It
-            // sizes to content by default, so the link inside never reaches
-            // its `min-width: 0` and the row pushes past the grid column
-            // (bringing back horizontal page scroll). Force the wrapper to
-            // participate in flex shrinking.
+            // span between this flex container and the `<a>`. It needs to
+            // shrink so the `<a>` inside reaches its ellipsis, but it must
+            // NOT clip on its own — earlier overflow: hidden here on top of
+            // the link's own overflow truncated the leading op-id digit on
+            // the first row. Let only the `<a>` own its overflow.
             > .bp6-popover-target {
-                display: flex;
+                display: block;
                 min-width: 0;
                 flex: 1 1 auto;
-                overflow: hidden;
-            }
-
-            .y-axis-tick-label {
-                display: flex;
-                min-width: 0;
-                flex: 1 1 auto;
-                overflow: hidden;
             }
 
             a {
                 // Ellipsis has to live on the link itself — `text-overflow`
                 // only applies to text directly inside the styled element.
+                display: block;
                 min-width: 0;
                 overflow: hidden;
                 white-space: nowrap;
