@@ -67,10 +67,12 @@ jobs:
 
       - name: Verify lockfile is up to date
         run: |
-          if ! uv lock --check; then
-            echo "::error::uv.lock is out of date with pyproject.toml. Run 'uv lock' locally and commit the updated uv.lock."
-            exit 1
-          fi
+          set -euo pipefail
+          uv lock --check || {
+            status=$?
+            echo "::error file=uv.lock::'uv lock --check' failed (uv.lock may be out of date with pyproject.toml). Run 'uv lock' locally and commit the updated uv.lock. See logs above for details."
+            exit "${status}"
+          }
 
       - name: Install dependencies
         run: uv sync --frozen
