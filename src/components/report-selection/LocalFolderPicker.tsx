@@ -2,8 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useState } from 'react';
-import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
+import { useMemo, useState } from 'react';
+import { Alert, Button, ButtonVariant, Icon, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
@@ -20,6 +20,8 @@ interface LocalFolderPickerProps {
     defaultLabel?: string;
     valueLabel?: string | null;
     showReportName?: boolean;
+    /** Paths of items previously observed to link with the active counterpart report. */
+    linkedPaths?: Set<string>;
 }
 
 const LocalFolderPicker = ({
@@ -30,6 +32,7 @@ const LocalFolderPicker = ({
     defaultLabel = 'Select a report...',
     valueLabel,
     showReportName,
+    linkedPaths,
 }: LocalFolderPickerProps) => {
     const { data: instance } = useInstance();
 
@@ -40,10 +43,22 @@ const LocalFolderPicker = ({
     const activeName = value ? (valueLabel ?? value) : null;
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
+    // Surface reports that linked with the active counterpart first, preserving the
+    // server-provided order (most-recently-modified) within each group.
+    const sortedItems = useMemo(() => {
+        if (!items || !linkedPaths?.size) {
+            return items ?? [];
+        }
+
+        return [...items].sort((a, b) => Number(linkedPaths.has(b.path)) - Number(linkedPaths.has(a.path)));
+    }, [items, linkedPaths]);
+
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
+
+        const isLinked = linkedPaths?.has(folder.path) ?? false;
 
         return (
             <div
@@ -66,6 +81,19 @@ const LocalFolderPicker = ({
                     onClick={handleClick}
                     onFocus={handleFocus}
                     icon={folder.path === activePath ? IconNames.SAVED : IconNames.DOCUMENT}
+                    labelElement={
+                        isLinked ? (
+                            <Tooltip
+                                content='Previously linked with the active report'
+                                position={Position.RIGHT}
+                            >
+                                <Icon
+                                    icon={IconNames.LINK}
+                                    intent={Intent.SUCCESS}
+                                />
+                            </Tooltip>
+                        ) : undefined
+                    }
                 />
 
                 {handleDelete && !isDeleteDisabled && (
@@ -107,7 +135,7 @@ const LocalFolderPicker = ({
     return (
         <Select<ReportFolder>
             className='folder-picker'
-            items={items ?? []}
+            items={sortedItems}
             itemPredicate={(query, item) => !query || item.path.toLowerCase().includes(query.toLowerCase())}
             itemRenderer={renderItem}
             noResults={

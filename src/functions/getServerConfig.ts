@@ -13,6 +13,7 @@ interface ServerConfig {
     BASE_PATH?: string;
     TT_METAL_HOME?: string;
     REPORT_DATA_DIRECTORY?: string;
+    REPORT_LINKING_ENABLED?: boolean;
 }
 
 const getServerConfig = (): ServerConfig => {
@@ -23,6 +24,7 @@ const getServerConfig = (): ServerConfig => {
             SERVER_MODE: !!import.meta.env.VITE_SERVER_MODE || false,
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
             REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/path/to/data/directory', // Default value for development
+            REPORT_LINKING_ENABLED: true,
         };
     }
 
@@ -31,6 +33,7 @@ const getServerConfig = (): ServerConfig => {
         SERVER_MODE: window?.TTNN_VISUALIZER_CONFIG?.SERVER_MODE || false,
         TT_METAL_HOME: window?.TTNN_VISUALIZER_CONFIG?.TT_METAL_HOME,
         REPORT_DATA_DIRECTORY: window?.TTNN_VISUALIZER_CONFIG?.REPORT_DATA_DIRECTORY,
+        REPORT_LINKING_ENABLED: window?.TTNN_VISUALIZER_CONFIG?.REPORT_LINKING_ENABLED || false,
     };
 };
 
