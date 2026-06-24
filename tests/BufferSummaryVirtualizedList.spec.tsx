@@ -245,9 +245,23 @@ describe('BufferSummaryVirtualizedList', () => {
             ]);
             renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
 
-            // Row 1 of 2 → 50% down the rail.
+            // Row 1 of 2 → 50% down the rail. `top` lives on the `<li>` so
+            // the Tooltip wrapper span inside has real geometry (otherwise
+            // Blueprint anchors the popover at the rail origin).
             const dot = screen.getByTestId('top-n-rail-dot-2') as HTMLButtonElement;
-            expect(dot.style.top).toBe('50%');
+            const item = dot.closest('li');
+            expect(item?.style.top).toBe('50%');
+        });
+
+        it('shows the rank number inside each rail dot so the colour scale is legible', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 2 })],
+                [2, buildAnnotation({ opId: 2, rowIndex: 1, rank: 1 })],
+            ]);
+            renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
+
+            expect(screen.getByTestId('top-n-rail-dot-1')).toHaveTextContent('2');
+            expect(screen.getByTestId('top-n-rail-dot-2')).toHaveTextContent('1');
         });
 
         it('scrolls the virtualizer to the row when a rail dot is clicked', () => {

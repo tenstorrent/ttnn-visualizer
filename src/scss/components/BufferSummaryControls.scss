@@ -11,9 +11,10 @@
     .top-n-controls {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 12px;
         margin-top: 6px;
         flex-wrap: wrap;
+        row-gap: 8px;
 
         // Blueprint 6 ships `.bp6-…` classes; the previous `.bp5-…` rules
         // here matched nothing, so the Switch kept its default
@@ -30,15 +31,15 @@
             align-items: center;
         }
 
-        // Three-digit ceiling (TOP_N_COUNT_MAX = 50; bumping into the
-        // low hundreds at most). The stock 80px / 60px sizing dwarfed
-        // the value next to it; tighten so the input reads as a pill
-        // rather than a giant text field.
+        // Two-digit ceiling (TOP_N_COUNT_MAX = 50). Width tuned so the
+        // stepper arrows on the right of the input have enough margin
+        // away from the adjacent "ops by" label — previously the arrows
+        // ran flush against the label at the wrap boundary.
         .bp6-numeric-input {
-            width: 64px;
+            width: 72px;
 
             .bp6-input {
-                width: 44px;
+                width: 48px;
             }
         }
 
@@ -46,6 +47,7 @@
             font-size: 12px;
             color: inherit;
             opacity: 0.85;
+            white-space: nowrap;
         }
     }
 }

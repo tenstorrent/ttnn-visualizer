@@ -57,12 +57,10 @@ $footer-clearance: 44px;
         text-align: center;
     }
 
-    // Rail lives in a fixed gutter to the right of the scrollable list so
-    // dots never sit on top of the browser scrollbar. The list itself uses
-    // `width: 100%`, which resolves against the parent's content-box and
-    // therefore shrinks by `padding-right`, leaving the gutter free for
-    // the rail dots.
-    $rail-gutter: 18px;
+    // Rail gutter to the right of the scrollable list. Sized to clear the
+    // larger ranked dots (now carry the rank number) without sitting on the
+    // browser scrollbar.
+    $rail-gutter: 26px;
 
     .buffer-summary-plot-container {
         display: grid;
@@ -78,12 +76,10 @@ $footer-clearance: 44px;
         .y-axis-tick {
             // Block-level flex (not `inline-flex`) so the tick fills its
             // fixed-width grid cell instead of sizing to content. With
-            // `inline-flex` + the top-N badge, long op names like
-            // `298 ttnn.to_memory_config` extended past the 160px column,
-            // and because grid cells don't clip overflow that pushed the
-            // page wider than the viewport (horizontal scrollbar).
-            // `min-width: 0` is required so the flex container itself can
-            // shrink below its content's intrinsic width.
+            // `inline-flex` + the top-N badge, long op names extended past
+            // the 160px column and triggered horizontal page scroll.
+            // `min-width: 0` lets the flex container shrink below its
+            // content's intrinsic width.
             display: flex;
             min-width: 0;
             align-items: center;
@@ -91,12 +87,18 @@ $footer-clearance: 44px;
             padding-left: $label-margin;
             margin-bottom: 0;
 
-            > a {
-                // Ellipsis has to live on the flex *item* — `text-overflow`
-                // only applies to text directly inside the styled element,
-                // so putting it on `.y-axis-tick` (whose text lives in a
-                // child `<a>`) had no effect. `min-width: 0` lets the link
-                // shrink below its intrinsic content width.
+            .y-axis-tick-label {
+                // Row tooltip's Blueprint wrapper span lives here; it has
+                // to shrink with the cell or the ellipsis below never
+                // kicks in.
+                display: flex;
+                min-width: 0;
+                flex: 1 1 auto;
+            }
+
+            a {
+                // Ellipsis has to live on the link itself — `text-overflow`
+                // only applies to text directly inside the styled element.
                 min-width: 0;
                 overflow: hidden;
                 white-space: nowrap;
@@ -149,10 +151,6 @@ $footer-clearance: 44px;
         top: $height-offset;
         bottom: 0;
         width: $rail-gutter;
-        // Semantic `<ul>` — neutralise the UA list defaults so the rail
-        // dimensions stay identical to the previous `<div>` version. The
-        // dots position absolutely against this element regardless of the
-        // tag, so this is the only visual change.
         list-style: none;
         margin: 0;
         padding: 0;
@@ -160,32 +158,40 @@ $footer-clearance: 44px;
         z-index: 2;
     }
 
-    // `<li>` wrappers exist purely for screen-reader list semantics
-    // (`role='listitem'` is implicit on `<li>` inside `<ul>`). `display:
-    // contents` keeps them out of layout so the absolutely-positioned dots
-    // still resolve against `.top-n-rail`.
+    // `<li>` is the absolute-positioned anchor (was `display: contents`).
+    // Blueprint's Tooltip target span is laid out inside the li, so its
+    // bounding box ends up at the dot's location and the popover anchors
+    // there. Previously the span had zero geometry and every tooltip
+    // parked at the rail origin.
     .top-n-rail-item {
-        display: contents;
+        position: absolute;
+        right: 2px;
+        transform: translateY(-50%);
     }
 
     .top-n-rail-dot {
-        position: absolute;
-        right: 4px;
-        width: 10px;
-        height: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
         margin: 0;
         padding: 0;
         border: 1px solid rgb(0 0 0 / 30%);
         border-radius: 50%;
         background-color: var(--top-n-color, #ff3b1f);
+        font-family: monospace;
+        font-size: 10px;
+        font-weight: 600;
+        color: $tt-white;
+        line-height: 1;
         pointer-events: auto;
-        transform: translateY(-50%);
         cursor: pointer;
         transition: transform 80ms ease;
 
         &:hover,
         &:focus-visible {
-            transform: translateY(-50%) scale(1.4);
+            transform: scale(1.3);
             outline: none;
         }
     }

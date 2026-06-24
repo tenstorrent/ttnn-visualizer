@@ -262,22 +262,20 @@ function BufferSummaryVirtualizedList({
                                             isScrolling={isVirtualizerScrolling}
                                         />
 
-                                        {/* Blueprint's Tooltip clones only the FIRST child it
-                                            receives (Children.toArray(children)[0]). A Fragment
-                                            with link + badge would silently drop the badge, and
-                                            swapping wrappers per `isScrolling` made the badge
-                                            flicker on/off as the virtualizer debounced. Wrap both
-                                            in one stable span and disable the tooltip during
-                                            scroll for perf parity with the old plain-span branch. */}
-                                        <Tooltip
-                                            content={getOperationTooltipContent(operation)}
-                                            disabled={isVirtualizerScrolling}
-                                        >
-                                            <span className='y-axis-tick'>
-                                                {renderOperationLink(operation)}
-                                                {badge}
-                                            </span>
-                                        </Tooltip>
+                                        {/* Row tooltip and badge tooltip are siblings, not
+                                            nested — hovering the badge no longer co-fires the
+                                            row tooltip. */}
+                                        <div className='y-axis-tick'>
+                                            <Tooltip
+                                                content={getOperationTooltipContent(operation)}
+                                                disabled={isVirtualizerScrolling}
+                                            >
+                                                <span className='y-axis-tick-label'>
+                                                    {renderOperationLink(operation)}
+                                                </span>
+                                            </Tooltip>
+                                            {badge}
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -286,12 +284,11 @@ function BufferSummaryVirtualizedList({
                 </div>
 
                 {sortedTopNAnnotations.length > 0 && operations.length > 0 ? (
-                    // Semantic `<ul>` / `<li>` so screen readers announce the
-                    // rail as a list with item count instead of a flat group
-                    // of unrelated buttons. The `<li>` wrappers use
-                    // `display: contents` so they don't add layout boxes and
-                    // the buttons keep positioning absolutely against the
-                    // `.top-n-rail` ancestor exactly as before.
+                    // `<li>` carries the absolute positioning so Blueprint's
+                    // Tooltip target span has non-zero geometry to anchor
+                    // against — earlier the dot was the positioned element
+                    // and the wrapper span collapsed to 0×0 at the rail's
+                    // origin, parking every tooltip at the top.
                     <ul
                         className='top-n-rail'
                         aria-label='Top-ranked operations'
@@ -300,12 +297,15 @@ function BufferSummaryVirtualizedList({
                         {sortedTopNAnnotations.map((annotation) => {
                             const dotStyle: TopNCssProperties = {
                                 '--top-n-color': perfColorScale(annotation.t),
+                            };
+                            const itemStyle: CSSProperties = {
                                 top: `${(annotation.rowIndex / operations.length) * 100}%`,
                             };
                             return (
                                 <li
                                     key={annotation.opId}
                                     className='top-n-rail-item'
+                                    style={itemStyle}
                                 >
                                     <Tooltip
                                         content={getRankTooltipText(annotation, topNAnnotationMode)}
@@ -318,7 +318,9 @@ function BufferSummaryVirtualizedList({
                                             onClick={() => handleRailDotClick(annotation.rowIndex)}
                                             aria-label={`Jump to ${getRankTooltipText(annotation, topNAnnotationMode)}`}
                                             data-testid={`top-n-rail-dot-${annotation.opId}`}
-                                        />
+                                        >
+                                            {annotation.rank}
+                                        </button>
                                     </Tooltip>
                                 </li>
                             );
