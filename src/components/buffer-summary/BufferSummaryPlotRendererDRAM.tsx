@@ -8,7 +8,7 @@ import { useAtomValue } from 'jotai';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
 import LoadingSpinner from '../LoadingSpinner';
 import ROUTES from '../../definitions/Routes';
-import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom } from '../../store/app';
+import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom, topNAnnotationModeAtom } from '../../store/app';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import { ScrollLocations } from '../../definitions/VirtualLists';
 import { BuffersByOperation } from '../../model/APIData';
@@ -20,6 +20,7 @@ import {
     getSplitBuffers,
     memoryZoomPaddingForRange,
 } from '../../functions/bufferSummary';
+import { useTopNAnnotations } from '../../hooks/useTopNAnnotations';
 import BufferSummaryVirtualizedList from './BufferSummaryVirtualizedList';
 
 const MEMORY_SIZE = DRAM_MEMORY_SIZE;
@@ -107,6 +108,14 @@ function BufferSummaryPlotRendererDRAM({
         [],
     );
 
+    // DRAM tab forces L1 fullness UNAVAILABLE — fullness is computed against the L1 budget
+    // and doesn't carry meaning here. Only perf-time mode produces annotations on this tab.
+    const { annotationsByOpId: topNAnnotationsByOpId } = useTopNAnnotations({
+        operations: operationsForList,
+        forceL1Unavailable: true,
+    });
+    const topNAnnotationMode = useAtomValue(topNAnnotationModeAtom);
+
     return uniqueBuffersByOperationList && tensorListByOperation ? (
         <BufferSummaryVirtualizedList
             operations={operationsForList}
@@ -119,6 +128,8 @@ function BufferSummaryPlotRendererDRAM({
             zoomEnd={zoomedMemoryOption?.end ?? MEMORY_SIZE}
             memoryPadding={zoomedMemoryOption?.padding ?? 0}
             axisConfiguration={BufferSummaryAxisConfiguration}
+            topNAnnotationsByOpId={topNAnnotationsByOpId}
+            topNAnnotationMode={topNAnnotationMode}
             getOperationTooltipContent={getOperationTooltipContent}
             renderOperationLink={renderOperationLink}
         />
