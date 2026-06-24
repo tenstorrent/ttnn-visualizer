@@ -65,6 +65,13 @@ jobs:
           python-version: ${{ steps.python.outputs.PYTHON_VERSION }}
           enable-cache: true
 
+      - name: Verify lockfile is up to date
+        run: |
+          if ! uv lock --check; then
+            echo "::error::uv.lock is out of date with pyproject.toml. Run 'uv lock' locally and commit the updated uv.lock."
+            exit 1
+          fi
+
       - name: Install dependencies
         run: uv sync --frozen
 
