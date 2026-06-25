@@ -29,6 +29,13 @@ const makeRow = (overrides: Record<string, unknown>): TypedPerfTableRow =>
         ...overrides,
     }) as unknown as TypedPerfTableRow;
 
+// Guards against a silent vacuous pass: it.each([]) registers no tests, so an empty/missing golden
+// would otherwise leave the frontend uncovered while only the Python contract test fails.
+it('the golden covers colour and fidelity scenarios', () => {
+    expect(golden.colours.length).toBeGreaterThan(0);
+    expect(golden.fidelity.length).toBeGreaterThan(0);
+});
+
 describe('getCellColour — golden parity with tt-perf-report color_row()', () => {
     it.each(golden.colours)('$id ($column) -> $expected', ({ column, row, expected }) => {
         expect(getCellColour(makeRow(row), column as ColumnKeys)).toBe(expected);

@@ -259,7 +259,8 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     const percentage = row.total_percent;
 
     // tt-perf-report mutes ops below the threshold, except host "(torch)" ops, which it always
-    // keeps coloured (perf_report.py color_row() + is_host_op()).
+    // keeps coloured (perf_report.py color_row() + is_host_op()). Safe to read raw_op_code here:
+    // the only rows without it (signposts) have a null total_percent, so the guard above exits first.
     if (percentage != null && percentage < MIN_PERCENTAGE && !row.raw_op_code.includes('(torch)')) {
         return FALLBACK_COLOUR;
     }
@@ -460,40 +461,39 @@ export enum MathFidelity {
     LoFi = 'LoFi',
 }
 
+// Mirrors tt-perf-report evaluate_fidelity() (perf_report.py:535-556).
+const INTEGER_DATATYPES = ['UINT8', 'UINT16', 'INT32', 'UINT32'];
+const MANTISSA_BITS: Record<string, number> = {
+    FLOAT32: 23,
+    BFLOAT16: 8,
+    BFLOAT8_B: 7,
+    BFLOAT4_B: 3,
+};
+
 export function evaluateFidelity(
     input0Datatype: string,
     input1Datatype: string,
     outputDatatype: string,
     mathFidelity: MathFidelity | '',
 ): [string, string | null] {
-    // Mirrors tt-perf-report evaluate_fidelity() (perf_report.py:535-556).
-    const integerTypes = ['UINT8', 'UINT16', 'INT32', 'UINT32'];
-
-    if ([input0Datatype, input1Datatype, outputDatatype].some((datatype) => integerTypes.includes(datatype))) {
+    if ([input0Datatype, input1Datatype, outputDatatype].some((datatype) => INTEGER_DATATYPES.includes(datatype))) {
         return [
             'not_applicable',
             'Fidelity evaluation is not applicable for integer datatypes (UINT8, UINT16, INT32, UINT32).',
         ];
     }
 
-    const mantissaBits: Record<string, number> = {
-        FLOAT32: 23,
-        BFLOAT16: 8,
-        BFLOAT8_B: 7,
-        BFLOAT4_B: 3,
-    };
-
     const unsupportedDatatype = [input0Datatype, input1Datatype, outputDatatype].find(
-        (datatype) => mantissaBits[datatype] === undefined,
+        (datatype) => MANTISSA_BITS[datatype] === undefined,
     );
 
     if (unsupportedDatatype !== undefined) {
         return ['unknown', `Datatype ${unsupportedDatatype} is not supported for fidelity evaluation.`];
     }
 
-    const in0Bits = mantissaBits[input0Datatype];
-    const in1Bits = mantissaBits[input1Datatype];
-    const outBits = mantissaBits[outputDatatype];
+    const in0Bits = MANTISSA_BITS[input0Datatype];
+    const in1Bits = MANTISSA_BITS[input1Datatype];
+    const outBits = MANTISSA_BITS[outputDatatype];
 
     // I note that we're not using the second part of the returned array, only the first part.
     if (in0Bits === 8 && outBits >= 7) {
