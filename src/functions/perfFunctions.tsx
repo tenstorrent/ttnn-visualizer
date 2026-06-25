@@ -258,7 +258,9 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     const keyValue = row[key];
     const percentage = row.total_percent;
 
-    if (row.op_type === OpType.DEVICE_OP && percentage != null && percentage < MIN_PERCENTAGE) {
+    // tt-perf-report mutes ops below the threshold, except host "(torch)" ops, which it always
+    // keeps coloured (perf_report.py color_row() + is_host_op()).
+    if (percentage != null && percentage < MIN_PERCENTAGE && !row.raw_op_code.includes('(torch)')) {
         return FALLBACK_COLOUR;
     }
 
@@ -287,9 +289,9 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
             return CellColour.Green;
         }
 
-        if (keyValue === BoundType.BOTH) {
-            return DEFAULT_COLOUR;
-        }
+        // tt-perf-report only colours the Bound cell for DRAM/FLOP/SLOW/HOST; anything else
+        // (BOTH, empty, unrecognised) stays neutral (perf_report.py color_row()).
+        return DEFAULT_COLOUR;
     }
 
     if (
@@ -377,7 +379,8 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     }
 
     if (key === ColumnKeys.OpToOpGap) {
-        return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : FALLBACK_COLOUR;
+        // tt-perf-report only ever colours this cell red (gap > 6.5µs); a missing gap stays neutral (perf_report.py:1052).
+        return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : DEFAULT_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something

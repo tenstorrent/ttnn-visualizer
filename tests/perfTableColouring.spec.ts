@@ -68,9 +68,14 @@ describe('getCellColour — parity with tt-perf-report color_row()', () => {
         });
 
         // perf_report.py — "BOTH" is never assigned a colour in color_row(), so it stays neutral.
-        // DIVERGENCE: the visualizer falls through to FALLBACK_COLOUR (grey) for BOTH.
         it('leaves a BOTH-bound op neutral (white)', () => {
             expect(getCellColour(makeRow({ bound: BoundType.BOTH }), ColumnKeys.Bound)).toBe(CellColour.White);
+        });
+
+        // perf_report.py — the Bound cell is only coloured for DRAM/FLOP/SLOW/HOST; a missing or
+        // unrecognised bound stays neutral.
+        it('leaves a missing bound neutral (white)', () => {
+            expect(getCellColour(makeRow({ bound: null }), ColumnKeys.Bound)).toBe(CellColour.White);
         });
     });
 
@@ -173,9 +178,13 @@ describe('getCellColour — parity with tt-perf-report color_row()', () => {
         });
 
         // perf_report.py — gaps at or below the threshold are never coloured, so they stay neutral.
-        // DIVERGENCE: the visualizer returns FALLBACK_COLOUR (grey) (perfFunctions.tsx:395-397).
         it('leaves a gap at or below 6.5µs neutral (white)', () => {
             expect(getCellColour(makeRow({ op_to_op_gap: 3 }), ColumnKeys.OpToOpGap)).toBe(CellColour.White);
+        });
+
+        // perf_report.py:1052 — a missing gap (e.g. the first op) is never coloured, so it stays neutral.
+        it('leaves a missing gap neutral (white)', () => {
+            expect(getCellColour(makeRow({ op_to_op_gap: null }), ColumnKeys.OpToOpGap)).toBe(CellColour.White);
         });
     });
 
@@ -229,6 +238,14 @@ describe('getCellColour — parity with tt-perf-report color_row()', () => {
         // perf_report.py:1015-1017 — ops below the threshold are muted grey, EXCEPT host "(torch)" ops.
         it('mutes a sub-threshold device op to grey', () => {
             const row = makeRow({ total_percent: 0.3, bound: BoundType.DRAM });
+
+            expect(getCellColour(row, ColumnKeys.Bound)).toBe(CellColour.Grey);
+        });
+
+        // perf_report.py:1015 — muting keys off the op code, not the op type, so a non-device,
+        // non-torch op (e.g. a tt_dnn_cpu op) is muted too when below the threshold.
+        it('mutes a sub-threshold non-device, non-torch op to grey', () => {
+            const row = makeRow({ op_type: OpType.CPU_OP, total_percent: 0.3, bound: BoundType.DRAM });
 
             expect(getCellColour(row, ColumnKeys.Bound)).toBe(CellColour.Grey);
         });
