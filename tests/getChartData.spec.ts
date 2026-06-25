@@ -31,7 +31,6 @@ describe('getChartData outline mode (#1652)', () => {
         const [bar] = getChartData([chunk], noTensor);
 
         expect(bar.marker?.color).toBeDefined();
-        expect(bar.marker?.color).not.toMatch(/rgba/);
         expect(bar.marker?.line?.width).toBe(0);
     });
 

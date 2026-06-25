@@ -32,14 +32,25 @@ const functionEnd = (name: string) =>
         params: { name },
     } as unknown as Partial<Node>);
 
-const cbAllocate = (address: number, size: number, options: { globallyAllocated?: boolean } = {}) =>
+const resolveGloballyAllocatedFlag = (options: { globallyAllocated?: boolean; rawFlag?: string | number }) => {
+    if (options.rawFlag !== undefined) {
+        return options.rawFlag;
+    }
+    return options.globallyAllocated ? '1' : '0';
+};
+
+const cbAllocate = (
+    address: number,
+    size: number,
+    options: { globallyAllocated?: boolean; rawFlag?: string | number } = {},
+) =>
     mkNode({
         node_type: NodeType.circular_buffer_allocate,
         params: {
             core_range_set: '{[(x=0,y=0) - (x=0,y=0)]}',
             size: String(size),
             address: String(address),
-            globally_allocated: options.globallyAllocated ? '1' : '0',
+            globally_allocated: resolveGloballyAllocatedFlag(options),
         },
     } as unknown as Partial<Node>);
 
@@ -92,6 +103,16 @@ describe('OperationDetails circular_buffer_allocate flag plumbing (#1652)', () =
 
         expect(op.deviceOperations[0].cbList[0].globallyAllocated).toBe(false);
     });
+
+    it('accepts numeric 1 for globally_allocated (forward-compat with future tt-metal emits)', () => {
+        const op = buildOperationDetails([
+            functionStart('matmul'),
+            cbAllocate(0x2000, 2048, { rawFlag: 1 }),
+            functionEnd('matmul'),
+        ]);
+
+        expect(op.deviceOperations[0].cbList[0].globallyAllocated).toBe(true);
+    });
 });
 
 describe('OperationDetails.memoryData() CB trace split (#1652)', () => {
@@ -134,5 +155,62 @@ describe('OperationDetails.memoryData() CB trace split (#1652)', () => {
         const traces = [...data.cbChartDataByOperation.values()][0];
         expect(traces).toHaveLength(2);
         expect(traces.every((trace) => !/^rgba\(/.test(trace.marker?.color as string))).toBe(true);
+    });
+
+    it('emits only outlined traces when all CBs on a DeviceOp are aliased (Halo case)', () => {
+        const op = buildOperationDetails([
+            functionStart('halo'),
+            cbAllocate(0x1000, 1024, { globallyAllocated: true }),
+            cbAllocate(0x2000, 2048, { globallyAllocated: true }),
+            functionEnd('halo'),
+        ]);
+
+        const data = op.memoryData();
+        const traces = [...data.cbChartDataByOperation.values()][0];
+        expect(traces).toHaveLength(2);
+        expect(traces.every((trace) => /^rgba\(\d+,\d+,\d+,0\.5\)$/.test(trace.marker?.color as string))).toBe(true);
+        expect(traces.every((trace) => Number(trace.marker?.line?.width ?? 0) > 0)).toBe(true);
+
+        // Top condensed CB stripe collapses to zero size when the op contributes no fresh CB bytes.
+        const condensedRange = (data.cbChartData[0] as Partial<PlotDataCustom>)?.memoryData;
+        expect(condensedRange?.size).toBe(0);
+    });
+
+    it('handles multi-DeviceOp graphs with mixed aliasing per op (Conv2d case)', () => {
+        const op = buildOperationDetails([
+            functionStart('halo'),
+            cbAllocate(0x1000, 1024, { globallyAllocated: true }),
+            functionEnd('halo'),
+            functionStart('conv2d'),
+            cbAllocate(0x4000, 2048),
+            cbAllocate(0x8000, 1024, { globallyAllocated: true }),
+            functionEnd('conv2d'),
+        ]);
+
+        const entries = [...op.memoryData().cbChartDataByOperation.entries()];
+        expect(entries).toHaveLength(2);
+
+        const haloTraces = entries[0][1];
+        expect(haloTraces).toHaveLength(1);
+        expect(haloTraces[0].marker?.color).toMatch(/^rgba\(\d+,\d+,\d+,0\.5\)$/);
+
+        const convTraces = entries[1][1];
+        expect(convTraces).toHaveLength(2);
+        expect(convTraces[0].marker?.color).not.toMatch(/^rgba\(/);
+        expect(convTraces[1].marker?.color).toMatch(/^rgba\(\d+,\d+,\d+,0\.5\)$/);
+    });
+
+    it('cbCondensed range excludes aliased CB addresses above the anonymous envelope', () => {
+        const op = buildOperationDetails([
+            functionStart('matmul'),
+            cbAllocate(0x1000, 1024),
+            cbAllocate(0xff000, 2048, { globallyAllocated: true }),
+            functionEnd('matmul'),
+        ]);
+
+        const data = op.memoryData();
+        const top = (data.cbChartData[0] as Partial<PlotDataCustom>).memoryData!;
+        expect(top.address).toBe(0x1000);
+        expect(top.address + top.size).toBeLessThan(0xff000);
     });
 });

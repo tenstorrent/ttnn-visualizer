@@ -146,16 +146,10 @@ export default function getChartData(
             hovertemplate:
                 overrides?.hovertemplate !== undefined
                     ? overrides?.hovertemplate
-                    : createHoverTemplate(
-                          address,
-                          size,
-                          chunk,
-                          tensor,
-                          tensorMemoryLayout,
-                          outline ? borderColor : color,
-                          options,
-                          { aliased: outline },
-                      ),
+                    : createHoverTemplate(address, size, chunk, tensor, tensorMemoryLayout, fillColor, {
+                          ...options,
+                          aliased: outline,
+                      }),
             hoverlabel: {
                 align: 'right',
                 bgcolor: 'white',
@@ -192,8 +186,7 @@ const createHoverTemplate = (
     tensor: Tensor | null,
     tensorMemoryLayout: TensorMemoryLayout | undefined,
     color?: string,
-    options?: { lateDeallocation?: boolean; showHex?: boolean },
-    extras?: { aliased?: boolean },
+    options?: { lateDeallocation?: boolean; showHex?: boolean; aliased?: boolean },
 ): string => {
     const square = `<span style="color:${color};font-size:22px">&#9632;</span>`;
     const formattedAddress = getMemoryAddress(address, options?.showHex || false);
@@ -205,7 +198,7 @@ const createHoverTemplate = (
         : '';
     // Plotly hover doesn't decode named HTML entities — use ASCII dash. #1652
     let aliasedHeader = '';
-    if (extras?.aliased) {
+    if (options?.aliased) {
         aliasedHeader = tensor
             ? `<b>Globally allocated CB</b> - aliased to Tensor ${tensor.id} below<br />`
             : `<b>Globally allocated CB</b><br />`;
