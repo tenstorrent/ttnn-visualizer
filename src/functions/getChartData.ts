@@ -6,7 +6,7 @@ import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatMemorySize, getMemoryAddress } from './math';
 import { toReadableShape, toReadableType } from './formatting';
 import { Chunk, ColoredChunk, DecoratedBufferChunk, Tensor } from '../model/APIData';
-import { PlotDataCustom } from '../definitions/PlotConfigurations';
+import { PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import { TensorMemoryLayout } from './parseMemoryConfig';
 
 // Half-opacity tint + solid border; fill keeps the bar readable when the stroke clips at plot edges. #1652
@@ -39,7 +39,7 @@ const withAlpha = (color: string | undefined, alpha: number): string | undefined
 export default function getChartData(
     memory: Chunk[],
     getTensorForAddress: (id: number) => Tensor | null,
-    overrides?: { color?: string; colorVariance?: number; hovertemplate?: string; outline?: boolean },
+    overrides?: PlotDataOverrides,
     options?: { renderPattern?: boolean; lateDeallocation?: boolean; showHex?: boolean },
 ): Partial<PlotDataCustom>[] {
     return memory.map((chunk) => {
