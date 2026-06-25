@@ -54,6 +54,13 @@ export interface PerfTableRow {
     output_subblock_w: string;
     high_dispatch?: boolean;
     pm_ideal_ns: string;
+    device_kernel_duration: string;
+    brisc_kernel_duration: string;
+    ncrisc_kernel_duration: string;
+    trisc0_kernel_duration: string;
+    trisc1_kernel_duration: string;
+    trisc2_kernel_duration: string;
+    erisc_kernel_duration: string;
     op_type: OpType;
     op?: number;
     missing?: boolean;
@@ -76,6 +83,13 @@ export interface TypedPerfTableRow extends Omit<
     | 'flops_percent'
     | 'bound'
     | 'pm_ideal_ns'
+    | 'device_kernel_duration'
+    | 'brisc_kernel_duration'
+    | 'ncrisc_kernel_duration'
+    | 'trisc0_kernel_duration'
+    | 'trisc1_kernel_duration'
+    | 'trisc2_kernel_duration'
+    | 'erisc_kernel_duration'
 > {
     id: number | null;
     global_call_count: number | null;
@@ -90,6 +104,13 @@ export interface TypedPerfTableRow extends Omit<
     flops_percent: number | null;
     bound: BoundType | null;
     pm_ideal_ns: number | null;
+    device_kernel_duration: number | null;
+    brisc_kernel_duration: number | null;
+    ncrisc_kernel_duration: number | null;
+    trisc0_kernel_duration: number | null;
+    trisc1_kernel_duration: number | null;
+    trisc2_kernel_duration: number | null;
+    erisc_kernel_duration: number | null;
     // Next two extracted from input_0_memory
     buffer_type: BufferTypeEnum | null;
     layout: DeviceOperationLayoutTypes | null;
@@ -299,6 +320,13 @@ export const signpostRowDefaults = Object.freeze({
     output_subblock_h: '',
     output_subblock_w: '',
     pm_ideal_ns: null,
+    device_kernel_duration: null,
+    brisc_kernel_duration: null,
+    ncrisc_kernel_duration: null,
+    trisc0_kernel_duration: null,
+    trisc1_kernel_duration: null,
+    trisc2_kernel_duration: null,
+    erisc_kernel_duration: null,
     op_type: OpType.SIGNPOST,
     device: null,
     layout: null,

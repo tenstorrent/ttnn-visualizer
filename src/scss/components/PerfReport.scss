@@ -151,40 +151,41 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         }
     }
 
-    tbody {
-        tr {
-            &:hover {
-                background-color: rgb(255 255 255 / 5%);
+    .row {
+        vertical-align: top;
+        border-bottom: 1px solid #333;
+
+        &:hover {
+            background-color: rgb(255 255 255 / 5%);
+        }
+
+        &.is-selected {
+            background-color: rgb(255 255 255 / 10%);
+        }
+
+        &.comparison-row {
+            border-bottom: 2px solid colours.$tt-sand-shade;
+            background-size: 5px 5px;
+            height: 12px; // Add a more visible height for empty rows
+
+            &.pattern-0 {
+                background-image: $row-pattern-0;
             }
 
-            &.is-selected {
-                background-color: rgb(255 255 255 / 10%);
+            &.pattern-1 {
+                background-image: $row-pattern-1;
             }
 
-            &.comparison-row {
-                border-bottom: 2px solid colours.$tt-sand-shade;
-                background-size: 5px 5px;
-                height: 12px; // Add a more visible height for empty rows
-
-                &.pattern-0 {
-                    background-image: $row-pattern-0;
-                }
-
-                &.pattern-1 {
-                    background-image: $row-pattern-1;
-                }
-
-                &.pattern-2 {
-                    background-image: $row-pattern-2;
-                }
+            &.pattern-2 {
+                background-image: $row-pattern-2;
             }
+        }
 
-            &:last-child {
+        &:last-child {
+            border-bottom: none;
+
+            > td {
                 border-bottom: none;
-
-                > td {
-                    border-bottom: none;
-                }
             }
         }
     }
@@ -195,6 +196,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         .perf-tensor-trigger {
             background-color: transparent;
         }
+    }
+
+    .kernel-timing-row {
+        background-color: rgb(255 255 255 / 3%);
     }
 
     .missing-data {
@@ -210,15 +215,45 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     }
 
     .cell {
-        border-bottom: 1px solid #333;
-        padding: 0.25rem;
+        padding: 4px;
+
+        &.leading-cell {
+            display: inline-flex;
+            padding-top: 1px;
+            padding-bottom: 1px;
+        }
+
+        .perf-kernel-timing-trigger {
+            background-color: transparent;
+        }
 
         &.align-right {
             text-align: right;
         }
 
-        &.advice {
-            border-bottom: none;
+        &.kernel-timing {
+            padding: 0.25rem 0.25rem 0.5rem 2rem;
+
+            .kernel-timing-breakdown {
+                border-collapse: collapse;
+
+                th,
+                td {
+                    padding: 0.1rem 1.5rem 0.1rem 0;
+                    text-align: left;
+                }
+
+                .kernel-name {
+                    font-weight: 600;
+                    color: colours.$tt-yellow-tint-1;
+                }
+
+                .kernel-duration,
+                .kernel-percent {
+                    text-align: right;
+                    font-variant-numeric: tabular-nums;
+                }
+            }
         }
 
         .l1-fullness-attributes {

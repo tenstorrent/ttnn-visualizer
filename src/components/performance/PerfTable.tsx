@@ -6,7 +6,7 @@ import { Button, ButtonVariant, Icon, Intent, Size, Tooltip } from '@blueprintjs
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { Fragment, useEffect, useMemo } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import 'styles/components/PerfReport.scss';
 import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
@@ -29,7 +29,9 @@ import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
+import { hasKernelTiming } from '../../functions/perfKernelTimings';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
+import PerfKernelTimingRow from './PerfKernelTimingRow';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableSkeleton from './PerfTableSkeleton';
 import PerfTensorDrawer from './PerfTensorDrawer';
@@ -70,6 +72,21 @@ const PerformanceTable = ({
     const mergeDevices = useAtomValue(mergeDevicesAtom);
     const selectedPerfRowId = useAtomValue(selectedPerfRowIdAtom);
     const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
+
+    // Rows whose per-RISC kernel timing breakdown is expanded, keyed by global_call_count (#1518).
+    const [expandedKernelRows, setExpandedKernelRows] = useState<Set<number>>(new Set());
+
+    const toggleKernelRow = useCallback((key: number) => {
+        setExpandedKernelRows((previous) => {
+            const next = new Set(previous);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+    }, []);
 
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
@@ -195,6 +212,28 @@ const PerformanceTable = ({
                         onClick={() => setSelectedPerfRowId(row.id)}
                     />
                 </span>
+            </Tooltip>
+        );
+    };
+
+    const renderKernelTimingToggle = (row: TypedPerfTableRow) => {
+        if (row.global_call_count === null || !hasKernelTiming(row)) {
+            return null;
+        }
+
+        const isExpanded = expandedKernelRows.has(row.global_call_count);
+
+        return (
+            <Tooltip content={isExpanded ? 'Hide per-kernel timing' : 'Show per-kernel timing'}>
+                <Button
+                    className='perf-kernel-timing-trigger'
+                    icon={isExpanded ? IconNames.CHEVRON_DOWN : IconNames.CHEVRON_RIGHT}
+                    variant={ButtonVariant.MINIMAL}
+                    size={Size.SMALL}
+                    aria-label={`${isExpanded ? 'Hide' : 'Show'} per-kernel timing for ${row.raw_op_code}`}
+                    aria-expanded={isExpanded}
+                    onClick={() => toggleKernelRow(row.global_call_count as number)}
+                />
             </Tooltip>
         );
     };
@@ -337,13 +376,23 @@ const PerformanceTable = ({
                         return (
                             <Fragment key={i}>
                                 <tr
-                                    className={classNames({
-                                        'missing-data': row.raw_op_code.includes('MISSING'),
-                                        'signpost-op': isSignpost,
-                                        'is-selected': isPrimarySelected,
-                                    })}
+                                    className={classNames(
+                                        {
+                                            'missing-data': row.raw_op_code.includes('MISSING'),
+                                            'signpost-op': isSignpost,
+                                            'is-selected': isPrimarySelected,
+                                        },
+                                        'row',
+                                    )}
                                 >
-                                    <td className='cell'>{isPrimaryActiveReport && renderTensorDrawerTrigger(row)}</td>
+                                    <td className='cell leading-cell'>
+                                        {isPrimaryActiveReport && (
+                                            <>
+                                                {renderKernelTimingToggle(row)}
+                                                {renderTensorDrawerTrigger(row)}
+                                            </>
+                                        )}
+                                    </td>
                                     {visibleColumns.map((h) => (
                                         <td
                                             key={h.key}
@@ -377,7 +426,7 @@ const PerformanceTable = ({
                                                         'signpost-op': subRow?.op_type === OpType.SIGNPOST,
                                                         'is-selected': isSubRowSelected,
                                                     },
-                                                    'comparison-row',
+                                                    'row comparison-row',
                                                     `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
                                                 )}
                                             >
@@ -405,7 +454,7 @@ const PerformanceTable = ({
                                     <tr>
                                         <td
                                             colSpan={visibleColumns.length + 1}
-                                            className='cell advice'
+                                            className='cell'
                                         >
                                             <ul>
                                                 {row?.advice.map((advice, j) => (
@@ -415,6 +464,14 @@ const PerformanceTable = ({
                                         </td>
                                     </tr>
                                 )}
+                                {isPrimaryActiveReport &&
+                                    row.global_call_count !== null &&
+                                    expandedKernelRows.has(row.global_call_count) && (
+                                        <PerfKernelTimingRow
+                                            row={row}
+                                            colSpan={visibleColumns.length + 1}
+                                        />
+                                    )}
                             </Fragment>
                         );
                     })}
