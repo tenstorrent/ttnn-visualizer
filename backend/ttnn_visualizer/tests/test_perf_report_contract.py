@@ -11,7 +11,7 @@ itself changed its rules in a new release.
 
 This test closes that gap: it drives the *real* installed tt-perf-report functions over a
 matrix of scenarios and writes a golden file (``tests/data/perfReportColourContract.json``).
-The frontend test ``tests/perfReportColourContract.spec.ts`` then asserts that
+The frontend test ``tests/perfTableColouring.spec.ts`` then asserts that
 ``getCellColour`` / ``evaluateFidelity`` reproduce that same golden.
 
 Chain of trust: tt-perf-report  ->  this golden  ->  the frontend.

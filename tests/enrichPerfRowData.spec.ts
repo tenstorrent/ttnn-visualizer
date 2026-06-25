@@ -117,6 +117,20 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
 
             expect(row.high_dispatch).toBe(false);
         });
+
+        // Pins the decimal boundary: parsing with parseInt would truncate "6.6" to 6 and miss it.
+        it('flags a fractional gap just over 6.5µs', () => {
+            const [row] = enrichRowData([makeRawRow({ op_to_op_gap: '6.6' })], [], null);
+
+            expect(row.high_dispatch).toBe(true);
+            expect(row.op_to_op_gap).toBe(6.6);
+        });
+
+        it('does not flag a gap exactly at 6.5µs', () => {
+            const [row] = enrichRowData([makeRawRow({ op_to_op_gap: '6.5' })], [], null);
+
+            expect(row.high_dispatch).toBe(false);
+        });
     });
 
     describe('first-occurrence marking by hash', () => {

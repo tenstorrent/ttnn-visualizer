@@ -41,20 +41,23 @@ export const enrichRowData = (
     }
 
     const typedRows = rows.map((row) => {
-        const val = parseInt(row.op_to_op_gap, 10);
         const op = opIdByPerfId.get(row.id);
         // TTNN-op snapshot is shared by all device ops that map to the same row.op.
         const l1Pressure = op !== undefined ? l1PressureMap?.get(op) : undefined;
+        // Parse the gap as a float once and reuse it for both the value and the high-dispatch flag.
+        // parseInt would truncate (e.g. "6.6" -> 6), wrongly clearing the > 6.5µs flag.
+        const parsedGap = parseFloat(row.op_to_op_gap);
+        const opToOpGap = Number.isNaN(parsedGap) ? null : parsedGap;
 
         return {
             ...row,
             op,
-            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD_MS,
+            high_dispatch: opToOpGap !== null && opToOpGap > HIGH_DISPATCH_THRESHOLD_MS,
             id: parseInt(row.id, 10),
             total_percent: parseFloat(row.total_percent),
             device: parseInt(row.device, 10) ?? null,
             device_time: parseFloat(row.device_time),
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
+            op_to_op_gap: opToOpGap,
             cores: parseInt(row.cores, 10),
             dram: row.dram ? parseFloat(row.dram) : null,
             dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
