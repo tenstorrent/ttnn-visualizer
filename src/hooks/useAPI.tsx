@@ -324,8 +324,13 @@ export const fetchOperationBuffers = async (operationId: number) => {
 };
 
 export const useOperationBuffers = (operationId: number) => {
+    // Scope the cache by the active report's path. Operation ids reset per
+    // report, so a key of `[..., operationId]` collides across reports and
+    // serves the previously-loaded report's payload when the same id is
+    // revisited under the new one. See #1674.
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     return useQuery<BuffersByOperation, AxiosError>({
-        queryKey: ['get-operation-buffers', operationId],
+        queryKey: ['get-operation-buffers', operationId, activeProfilerReport?.path],
         queryFn: () => fetchOperationBuffers(operationId),
         retry: false,
         staleTime: Infinity,
@@ -521,19 +526,22 @@ export const useMlir = (fileName: string | null) => {
 
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
+    // Scope the cache by the active report's path. Operation ids reset per
+    // report, so a key of `[..., operationId]` collides across reports and
+    // serves the previously-loaded report's payload when the same id is
+    // revisited under the new one. See #1674.
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    // Memoize the operation lookup
     const operation = useMemo(
         () => operations?.find((_operation) => _operation.id === operationId) || null,
         [operations, operationId],
     );
 
-    // Memoized function for fetching operation details
     const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
 
     const operationDetails = useQuery<OperationDetailsData>({
         queryFn: () => fetchDetails(),
-        queryKey: ['get-operation-detail', operationId],
+        queryKey: ['get-operation-detail', operationId, activeProfilerReport?.path],
         retry: 2,
         retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
         staleTime: Infinity,
@@ -785,8 +793,13 @@ export const useReportMetadata = () => {
 };
 
 export const useBufferChunks = (operationId: number, address?: number | string, bufferType?: BufferType) => {
+    // Scope the cache by the active report's path. Operation ids reset per
+    // report, so a key of `[..., operationId, ...]` collides across reports
+    // and serves the previously-loaded report's payload when the same id is
+    // revisited under the new one. See #1674.
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     return useQuery<BufferChunk[], AxiosError>({
-        queryKey: ['get-buffer-chunks', operationId, address, bufferType],
+        queryKey: ['get-buffer-chunks', operationId, address, bufferType, activeProfilerReport?.path],
         queryFn: () => fetchBufferChunks(operationId, address, bufferType),
         staleTime: Infinity,
     });

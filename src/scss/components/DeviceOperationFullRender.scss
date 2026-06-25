@@ -10,6 +10,7 @@
         justify-content: space-between;
         border-bottom: 1px solid $tt-grey-4;
         font-weight: normal;
+        margin-bottom: 10px;
     }
 }
 
@@ -92,10 +93,11 @@
         .title {
             &.node-type-buffer_allocate,
             &.node-type-buffer_deallocate {
+                display: flex;
                 margin-bottom: 10px;
+                justify-content: space-between;
             }
         }
-
         /* stylelint-enable selector-class-pattern */
 
         .collapsible-controls {
@@ -139,16 +141,44 @@
 
     .memory-info {
         width: 320px;
-        display: inline-grid;
         gap: 10px;
         font-weight: lighter;
-        position: absolute;
         right: 0;
         grid-template-columns: 1fr 1fr 1fr;
         padding: 0 5px;
+        position: static;
+        display: grid;
+        margin-left: auto;
 
         &.peak {
             border: 1px solid rgb(207 255 90 / 50%);
+        }
+    }
+
+    // Shared row layout for buffer and CB legend entries. Reserving a fixed
+    // 320px right gutter (either the in-flow `.memory-info` for CB rows, or
+    // the invisible `.memory-info-placeholder` for buffer rows where totals
+    // live in the h4 above) keeps every legend grid computed against the
+    // same available width. Combined with the default `.legend-item` grid
+    // templates (5-col `15px 0.5fr 2fr 13fr 3fr` and 6-col extra-info
+    // `15px 0.5fr 2fr 10fr 3fr 3fr` — both sum to 18.5fr after the swatch),
+    // this makes swatch / address / size / shape columns line up
+    // column-for-column across buffer and CB rows. Scoped under
+    // `.device-operations-full-render` so it doesn't bleed into the L1 /
+    // DRAM plot legends.
+    .memory-legend-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+
+        .legend-item {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .memory-info,
+        .memory-info-placeholder {
+            flex: 0 0 320px;
         }
     }
 }

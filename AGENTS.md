@@ -27,10 +27,11 @@ Treat the hosted deployment as **multi-user and untrusted-input**: requests can 
 
 ## Python environment
 
-- Use a **Python virtual environment** when running or developing the backend.
-- Supported versions are Python 3.10–3.14.
+- Use **[uv](https://docs.astral.sh/uv/)** to manage Python versions and dependencies. The pinned version is in [`.python-version`](.python-version) (currently 3.10.16); run `uv python install` to install it, then `uv sync` to create `.venv` and install the project editable.
+- Supported versions are Python 3.10–3.14 (`requires-python` in `pyproject.toml`).
+- Run backend commands via **`uv run`** (e.g. `uv run python -m ttnn_visualizer.app` or `pnpm run flask:start`).
 
-Backend package layout lives under `backend/` (e.g. `python -m ttnn_visualizer.app` with `PYTHONPATH=backend`).
+Backend package layout lives under `backend/`; `uv sync` makes `ttnn_visualizer` importable without `PYTHONPATH`.
 
 ## Architecture (high level)
 
@@ -143,6 +144,7 @@ Open pull requests with **`dev`** as the base branch by default.
 
 - Type every hook as **`useQuery<Data, AxiosError>`** — don't let the error parameter fall back to `unknown`. Call sites depend on `AxiosError` shape (e.g. `error?.status === HttpStatusCode.UnprocessableEntity`).
 - Query keys are tuples of `['kebab-string-name', ...reactiveDeps]` (e.g. `['fetch-all-buffers', bufferType, activeProfilerReport?.path]`). Report-bound queries use `staleTime: Infinity`. Keys that need invalidation from another module are exported as `*_QUERY_KEY` constants.
+- Report-bound query keys must include the active report's identity — typically **`activeProfilerReport?.path`** or **`activePerformanceReport?.path`**. Operation ids reset per report, so a key like `['get-operation-detail', operationId]` collides across reports and serves stale payloads when the same id is revisited under a different report. See #1674.
 
 ### Errors and toasts
 

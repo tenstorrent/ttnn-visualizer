@@ -11,6 +11,7 @@ import { MlirServerConnection, isSameMlirServer, mlirServerKey } from '../../def
 import { mlirServersAtom, selectedMlirServerAtom } from '../../store/app';
 import MlirJsonFileLoader from '../mlir/MlirJsonFileLoader';
 import MlirServerDialog from './MlirServerDialog';
+import 'styles/components/MlirFileSelector.scss';
 
 const EDIT_SERVER_LABEL = 'Edit selected server';
 const REMOVE_SERVER_LABEL = 'Remove selected server';
@@ -77,7 +78,7 @@ const MLIRFileSelector = () => {
                 label={<h3 className='label'>Use MLIR server</h3>}
                 subLabel='Select the MLIR server used for uploads'
             >
-                <div className='form-container'>
+                <div className='form-container mlir-server-select-row'>
                     <Select<MlirServerConnection>
                         items={servers}
                         itemRenderer={renderServer}
@@ -93,6 +94,7 @@ const MLIRFileSelector = () => {
                         onItemSelect={setSelectedServer}
                     >
                         <Button
+                            className='mlir-server-select-button'
                             icon={IconNames.CLOUD}
                             endIcon={IconNames.CARET_DOWN}
                             disabled={servers.length === 0}

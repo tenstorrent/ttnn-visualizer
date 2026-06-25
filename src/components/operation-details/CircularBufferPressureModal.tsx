@@ -35,6 +35,15 @@ const TENSIX_WIDTH = 120;
 const TENSIX_HEIGHT = TENSIX_WIDTH / 3;
 const STRIP_HEIGHT = 16;
 
+// SVG strokes are centered on the geometric edge of the rect by default, so a
+// rect at `y=0, height=H` with a 1.5px stroke would have its bottom 0.75px
+// rendered *outside* the SVG viewport and clipped. Insetting by 1px on each
+// side keeps the geometric edge 1px inside the SVG, fully containing the max
+// 2px stroke (selected state). Only applies to the per-core strip — the
+// zoomed plot uses a frame-wrapper + `overflow="visible"` approach instead
+// (see `ZoomedCorePlot`) so its rects don't need a y-inset.
+const STRIP_STROKE_INSET = 1;
+
 // Fallback grey for the rare case where the palette generator returns
 // undefined (e.g. address falls outside its known bands); keeps the rect
 // visible instead of letting SVG default to black.
@@ -42,6 +51,29 @@ const CB_FALLBACK_COLOR = '#888';
 
 const cbColor = (cb: CBAllocationSummary): string =>
     getBufferColor(cb.address + (cb.allocateOperationId ?? 0)) ?? CB_FALLBACK_COLOR;
+
+/**
+ * SVG paints siblings in document order, so the *last* rect in a sibling group
+ * wins at shared boundaries. The selected rect wears a thicker, brighter
+ * (2px yellow) stroke that must not be covered by an adjacent rect's stroke
+ * at a shared address edge — otherwise the selection outline drops on the
+ * shared side and the user sees only three of four edges. Pulling the
+ * selected rect to the end of the list guarantees its outline survives on
+ * every side. No-op when nothing is selected or the rect isn't in the list.
+ */
+const reorderSelectedLast = (cbs: CBAllocationSummary[], selectedNodeId: number | null): CBAllocationSummary[] => {
+    if (selectedNodeId === null) {
+        return cbs;
+    }
+    const idx = cbs.findIndex((c) => c.nodeId === selectedNodeId);
+    if (idx === -1 || idx === cbs.length - 1) {
+        return cbs;
+    }
+    const next = cbs.slice();
+    const [selected] = next.splice(idx, 1);
+    next.push(selected);
+    return next;
+};
 
 interface MiniCBStripProps {
     cbs: CBAllocationSummary[];
@@ -64,6 +96,7 @@ interface MiniCBStripProps {
  */
 const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBStripProps) => {
     const memoryRange = Math.max(1, memoryEnd - memoryStart);
+    const orderedCbs = useMemo(() => reorderSelectedLast(cbs, selectedCBNodeId), [cbs, selectedCBNodeId]);
     return (
         <svg
             className='cb-strip'
@@ -71,7 +104,7 @@ const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBSt
             width='100%'
             preserveAspectRatio='none'
         >
-            {cbs.map((cb) => {
+            {orderedCbs.map((cb) => {
                 const xPercent = ((cb.address - memoryStart) / memoryRange) * 100;
                 const widthPercent = (cb.size / memoryRange) * 100;
                 const isSelected = selectedCBNodeId === cb.nodeId;
@@ -81,9 +114,9 @@ const MiniCBStrip = ({ cbs, memoryStart, memoryEnd, selectedCBNodeId }: MiniCBSt
                     <rect
                         key={cb.nodeId}
                         x={`${xPercent}%`}
-                        y={0}
+                        y={STRIP_STROKE_INSET}
                         width={`${widthPercent}%`}
-                        height={STRIP_HEIGHT}
+                        height={STRIP_HEIGHT - STRIP_STROKE_INSET * 2}
                         fill={isAliased ? 'none' : colour}
                         // SVG `stroke` attribute would be clobbered by CSS rules
                         // on `.cb-strip-chunk`, so we surface the per-chunk colour
@@ -134,62 +167,86 @@ const ZoomedCorePlot = ({
     // can't fit the label without clipping. Below this we drop the label
     // and lean on the tooltip / legend for identity.
     const MIN_WIDTH_PERCENT_FOR_LABEL = 12;
+    const orderedCbs = useMemo(() => reorderSelectedLast(cbs, selectedCBNodeId), [cbs, selectedCBNodeId]);
 
     return (
         <div className='zoomed-core-plot'>
-            <svg
-                className='zoomed-core-svg'
-                width='100%'
-                height={plotHeight}
-                preserveAspectRatio='none'
-            >
-                {cbs.map((cb) => {
-                    const xPercent = ((cb.address - memoryStart) / memoryRange) * 100;
-                    const widthPercent = (cb.size / memoryRange) * 100;
-                    const isSelected = selectedCBNodeId === cb.nodeId;
-                    // Width-as-fraction-of-window is enough to decide whether
-                    // there's room for a label without forcing a layout pass.
-                    const labelFits = widthPercent > MIN_WIDTH_PERCENT_FOR_LABEL;
-                    const colour = cbColor(cb);
-                    const isAliased = cb.globallyAllocated;
-                    const titleText = isAliased
-                        ? `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)} · Aliased to tensor @ ${prettyPrintAddress(cb.address, l1Budget)} — no new allocation`
-                        : `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)}`;
-                    return (
-                        <g
-                            key={cb.nodeId}
-                            className={classNames('zoomed-chunk', { selected: isSelected, aliased: isAliased })}
-                            // CSS variable lets the `.aliased` rule provide the
-                            // outline colour at higher specificity than the base
-                            // `.zoomed-chunk-rect` stroke. Same pattern as the
-                            // per-core strip above.
-                            style={isAliased ? ({ '--cb-color': colour } as React.CSSProperties) : undefined}
-                            onClick={() => onSelectCB(isSelected ? null : cb.nodeId)}
-                        >
-                            <title>{titleText}</title>
-                            <rect
-                                x={`${xPercent}%`}
-                                y={0}
-                                width={`${widthPercent}%`}
-                                height={plotHeight}
-                                fill={isAliased ? 'none' : colour}
-                                className='zoomed-chunk-rect'
-                            />
-                            {labelFits && (
-                                <text
-                                    x={`${xPercent + widthPercent / 2}%`}
-                                    y={plotHeight / 2}
-                                    textAnchor='middle'
-                                    dominantBaseline='central'
-                                    className='zoomed-chunk-label'
-                                >
-                                    {prettyPrintAddress(cb.address, l1Budget)} · {formatMemorySize(cb.size, 2)}
-                                </text>
-                            )}
-                        </g>
-                    );
-                })}
-            </svg>
+            {/* Frame wrapper owns the border + background + a 2px inner
+                padding. Rect strokes that spill past the SVG viewport (top,
+                bottom, *and* the left/right edges where x/width are in `%`
+                and we can't easily inset in pixels) render into that padding
+                area instead of being clipped — combined with the SVG's
+                `overflow="visible"` below. Without this, Firefox in
+                particular clips the bottom/right strokes of outline-only
+                (aliased) rects that land flush against the SVG bounds,
+                leaving the border looking cut off. */}
+            <div className='zoomed-core-svg-frame'>
+                <svg
+                    className='zoomed-core-svg'
+                    width='100%'
+                    height={plotHeight}
+                    preserveAspectRatio='none'
+                    overflow='visible'
+                >
+                    {orderedCbs.map((cb) => {
+                        const xPercent = ((cb.address - memoryStart) / memoryRange) * 100;
+                        const widthPercent = (cb.size / memoryRange) * 100;
+                        const isSelected = selectedCBNodeId === cb.nodeId;
+                        // Width-as-fraction-of-window is enough to decide
+                        // whether there's room for a label without forcing
+                        // a layout pass.
+                        const labelFits = widthPercent > MIN_WIDTH_PERCENT_FOR_LABEL;
+                        const colour = cbColor(cb);
+                        const isAliased = cb.globallyAllocated;
+                        const titleText = isAliased
+                            ? `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)} · Aliased to tensor @ ${prettyPrintAddress(cb.address, l1Budget)} — no new allocation`
+                            : `${prettyPrintAddress(cb.address, l1Budget)}  ${formatMemorySize(cb.size, 2)}`;
+                        return (
+                            <g
+                                key={cb.nodeId}
+                                className={classNames('zoomed-chunk', { selected: isSelected, aliased: isAliased })}
+                                // CSS variable lets the `.aliased` rule
+                                // provide the outline colour at higher
+                                // specificity than the base
+                                // `.zoomed-chunk-rect` stroke. Same pattern
+                                // as the per-core strip above.
+                                style={isAliased ? ({ '--cb-color': colour } as React.CSSProperties) : undefined}
+                                onClick={() => onSelectCB(isSelected ? null : cb.nodeId)}
+                            >
+                                <title>{titleText}</title>
+                                <rect
+                                    x={`${xPercent}%`}
+                                    y={0}
+                                    width={`${widthPercent}%`}
+                                    height={plotHeight}
+                                    // `transparent` (rgba(0,0,0,0)) keeps
+                                    // the visual identical to `none` but
+                                    // counts as "painted" under the default
+                                    // `pointer-events: visiblePainted`, so
+                                    // the whole interior of outline-only
+                                    // (aliased) rects routes clicks up to
+                                    // the `<g>` onClick handler instead of
+                                    // only the 1.5px stroke being
+                                    // hit-testable.
+                                    fill={isAliased ? 'transparent' : colour}
+                                    className='zoomed-chunk-rect'
+                                />
+                                {labelFits && (
+                                    <text
+                                        x={`${xPercent + widthPercent / 2}%`}
+                                        y={plotHeight / 2}
+                                        textAnchor='middle'
+                                        dominantBaseline='central'
+                                        className='zoomed-chunk-label'
+                                    >
+                                        {prettyPrintAddress(cb.address, l1Budget)} · {formatMemorySize(cb.size, 2)}
+                                    </text>
+                                )}
+                            </g>
+                        );
+                    })}
+                </svg>
+            </div>
             <div className='zoomed-axis monospace'>
                 <span>{prettyPrintAddress(memoryStart, l1Budget)}</span>
                 <span>{prettyPrintAddress(memoryMid, l1Budget)}</span>
@@ -212,6 +269,11 @@ const CircularBufferPressureModal = ({ isOpen, onClose, title, snapshot }: Circu
     const [selectedCBNodeId, setSelectedCBNodeId] = useState<number | null>(null);
     const [normalisation, setNormalisation] = useState<Normalisation>('local');
     const [showAbsolute, setShowAbsolute] = useState<boolean>(true);
+    // Default-on per the #1655 spec: aliased CBs are visible until the user
+    // explicitly hides them. Sticky across snapshot changes (same as
+    // showAbsolute / normalisation) - it's a viewing preference, not a
+    // per-DeviceOp selection.
+    const [showAliasedCBs, setShowAliasedCBs] = useState<boolean>(true);
 
     // We render null on close instead of unmounting, so useState slots
     // persist across open/close cycles. Drop the per-snapshot selections
@@ -279,6 +341,8 @@ const CircularBufferPressureModal = ({ isOpen, onClose, title, snapshot }: Circu
                     setNormalisation={setNormalisation}
                     showAbsolute={showAbsolute}
                     setShowAbsolute={setShowAbsolute}
+                    showAliasedCBs={showAliasedCBs}
+                    setShowAliasedCBs={setShowAliasedCBs}
                     onClose={onClose}
                 />
             </Card>
@@ -300,6 +364,8 @@ interface BodyProps {
     setNormalisation: (v: Normalisation) => void;
     showAbsolute: boolean;
     setShowAbsolute: (v: boolean) => void;
+    showAliasedCBs: boolean;
+    setShowAliasedCBs: (v: boolean) => void;
     onClose: () => void;
 }
 
@@ -317,9 +383,39 @@ const CircularBufferPressureBody = ({
     setNormalisation,
     showAbsolute,
     setShowAbsolute,
+    showAliasedCBs,
+    setShowAliasedCBs,
     onClose,
 }: BodyProps) => {
-    // Quick lookup for "is core part of selected CB" highlighting.
+    // #1655: Aliased (`globallyAllocated`) CBs can flood dense ops where most
+    // CBs are tensor views. The toggle relieves grid-density only - the
+    // legend keeps all rows always so the right panel stays informationally
+    // complete; aliased rows just dim when the toggle is off. The data
+    // layer (snapshot.maxBytes, byCore, etc.) already excludes aliased
+    // bytes from pressure totals per #1651, so peak / total numbers stay
+    // anchored to the anonymous bytes regardless of toggle state.
+    const aliasedCount = useMemo(
+        () => snapshot.allocations.reduce((n, cb) => n + (cb.globallyAllocated ? 1 : 0), 0),
+        [snapshot.allocations],
+    );
+
+    // `gridVisibleAllocations` powers the per-core grid strip, zoomed
+    // plot, and address-axis window - the surfaces where rendering aliased
+    // CBs clutters the dense kernel-side view. The legend deliberately
+    // does NOT consume this; it always renders the full list.
+    const gridVisibleAllocations: CBAllocationSummary[] = useMemo(() => {
+        if (showAliasedCBs) {
+            return snapshot.allocations;
+        }
+        return snapshot.allocations.filter((cb) => !cb.globallyAllocated);
+    }, [snapshot.allocations, showAliasedCBs]);
+
+    const hiddenAliasedCount = showAliasedCBs ? 0 : aliasedCount;
+
+    // Quick lookup for "is core part of selected CB" highlighting. Uses
+    // the full snapshot so clicking a dimmed aliased row still lights up
+    // the cores it touches in the grid - the row stays interactive even
+    // when its strip rect is hidden.
     const selectedCBCores: Set<string> | null = useMemo(() => {
         if (selectedCBNodeId === null) {
             return null;
@@ -336,7 +432,7 @@ const CircularBufferPressureBody = ({
     // big chips). Only cores that actually have a CB get an entry.
     const cbsByCore: Map<string, CBAllocationSummary[]> = useMemo(() => {
         const map = new Map<string, CBAllocationSummary[]>();
-        for (const cb of snapshot.allocations) {
+        for (const cb of gridVisibleAllocations) {
             for (const c of cb.cores) {
                 const key = CORE_KEY(c.x, c.y);
                 const list = map.get(key);
@@ -348,7 +444,7 @@ const CircularBufferPressureBody = ({
             }
         }
         return map;
-    }, [snapshot.allocations]);
+    }, [gridVisibleAllocations]);
 
     // CBs that contribute to the currently focused core; powers the "core
     // selected" detail panel without re-walking allocations on every render.
@@ -361,12 +457,15 @@ const CircularBufferPressureBody = ({
 
     // Global address-axis clip. Cells share one [memStart, memEnd] so a
     // CB at the same address lines up across cores at the same x-offset.
+    // Derives from `gridVisibleAllocations` so that hiding aliased CBs
+    // tightens the address window around the anonymous (pressure-
+    // contributing) CBs instead of leaving a sparsely-populated strip.
     const [memStart, memEnd] = useMemo(() => {
         let lo = Number.POSITIVE_INFINITY;
         let hi = Number.NEGATIVE_INFINITY;
         // '?' bucket (numCores === 0) is excluded — it doesn't have a
         // meaningful position on the per-core address axis.
-        for (const cb of snapshot.allocations) {
+        for (const cb of gridVisibleAllocations) {
             if (cb.numCores > 0) {
                 if (cb.address < lo) {
                     lo = cb.address;
@@ -381,7 +480,7 @@ const CircularBufferPressureBody = ({
             return [0, 1];
         }
         return [lo, hi];
-    }, [snapshot.allocations]);
+    }, [gridVisibleAllocations]);
 
     const norm = normalisation === 'budget' ? l1Budget : snapshot.maxBytes || 1;
 
@@ -458,6 +557,23 @@ const CircularBufferPressureBody = ({
                         label='Show bytes on cells'
                         onChange={(e) => setShowAbsolute(e.currentTarget.checked)}
                     />
+                    {/* The aliased-CB toggle only renders when this snapshot
+                        has aliased CBs to hide - otherwise it's a no-op
+                        affordance that just adds noise to the control row.
+                        See #1655 for the design rationale (default-on,
+                        per-snapshot opt-out, sibling to "Show bytes"). */}
+                    {aliasedCount > 0 && (
+                        <div className='aliased-toggle'>
+                            <Switch
+                                checked={showAliasedCBs}
+                                label='Show globally allocated CBs'
+                                onChange={(e) => setShowAliasedCBs(e.currentTarget.checked)}
+                            />
+                            {hiddenAliasedCount > 0 && (
+                                <span className='aliased-hidden-hint monospace'>({hiddenAliasedCount} hidden)</span>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -548,6 +664,12 @@ const CircularBufferPressureBody = ({
                             const isSelected = selectedCBNodeId === cb.nodeId;
                             const swatchColor = cbColor(cb);
                             const isAliased = cb.globallyAllocated;
+                            // Dim aliased rows when the toggle is off.
+                            // Visual demotion only - the row stays clickable
+                            // (selection still highlights cores in the grid),
+                            // it just reads as secondary to the anonymous CBs
+                            // the user is currently focused on.
+                            const isDimmed = isAliased && !showAliasedCBs;
                             // Outline-only fill for aliased CBs ("border" instead of "background")
                             // mirrors the in-cell strip treatment and keeps the colour signal
                             // tied to the tensor they alias. See #1651.
@@ -563,7 +685,11 @@ const CircularBufferPressureBody = ({
                             const row = (
                                 <button
                                     type='button'
-                                    className={classNames('cb-row', { active: isSelected, aliased: isAliased })}
+                                    className={classNames('cb-row', {
+                                        active: isSelected,
+                                        aliased: isAliased,
+                                        'aliased-dimmed': isDimmed,
+                                    })}
                                     onClick={() => setSelectedCBNodeId(isSelected ? null : cb.nodeId)}
                                 >
                                     <span

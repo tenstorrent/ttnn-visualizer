@@ -214,8 +214,8 @@ export const MemoryLegendElement = ({
             <div className='shape-info-slot'>
                 {derivedTensor && (
                     <>
-                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)} &nbsp;{' '}
-                        {isMultiDeviceBuffer && `Device ${chunk?.device_id ?? derivedTensor.device_id}`}
+                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)}
+                        {isMultiDeviceBuffer && ` Device ${chunk?.device_id ?? derivedTensor.device_id}`}
                     </>
                 )}
             </div>

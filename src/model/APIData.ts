@@ -114,6 +114,8 @@ export enum FileStatus {
     DOWNLOADING = 'DOWNLOADING',
     FAILED = 'FAILED',
     UPLOADING = 'UPLOADING',
+    // Used for MLIR to indicate the file was uploaded but the server hasn't converted the file yet
+    PROCESSING = 'PROCESSING',
     FINISHED = 'FINISHED',
     STARTED = 'STARTED',
     INACTIVE = 'INACTIVE',

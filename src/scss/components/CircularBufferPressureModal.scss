@@ -64,6 +64,21 @@
                 .bp6-control {
                     margin-bottom: 0;
                 }
+
+                // Grouped switch + "(N hidden)" hint for the aliased CB toggle
+                // (#1655). The 8px gap inside this group is tighter than the
+                // surrounding 16px so the hint reads as belonging to the
+                // toggle rather than as a standalone control row item.
+                .aliased-toggle {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+
+                    .aliased-hidden-hint {
+                        font-size: 11px;
+                        color: rgba($tt-white, 0.6);
+                    }
+                }
             }
         }
 
@@ -235,9 +250,17 @@
                     }
 
                     .cb-row {
-                        display: flex;
+                        // Grid (rather than flex) so the optional aliased
+                        // marker can drop to its own row underneath the
+                        // data columns instead of competing horizontally
+                        // with `addr / size / cores`. Without this the
+                        // marker pushes the data grid narrow enough that
+                        // wide values like "98 KiB" wrap mid-row, breaking
+                        // alignment between aliased and anonymous rows.
+                        display: grid;
+                        grid-template-columns: 12px 1fr;
+                        gap: 2px 8px;
                         align-items: center;
-                        gap: 8px;
                         width: 100%;
                         padding: 4px 6px;
                         background: transparent;
@@ -260,7 +283,13 @@
                             width: 12px;
                             height: 12px;
                             border: 1px solid $tt-black;
-                            flex: 0 0 auto;
+
+                            // Span both grid rows so the swatch stays
+                            // vertically centred against the full visible
+                            // row height — including the marker line on
+                            // aliased rows.
+                            grid-row: 1 / -1;
+                            align-self: center;
                         }
 
                         // Outline-only treatment for aliased CBs: keep the
@@ -274,18 +303,20 @@
                             background-color: transparent;
                         }
 
-                        // The aliased marker sits at the end of the row,
-                        // visually grouping the icon and the label so the row
-                        // reads as `[swatch] addr  size  cores  [link icon]
-                        // Globally allocated`. Push it to the right edge with
-                        // `margin-left: auto` rather than a dedicated grid
-                        // column so the layout still degrades gracefully in
-                        // narrower viewports.
+                        // The aliased marker drops onto a second grid row
+                        // under `.cb-row-body` and aligns to the same start
+                        // edge as the addr column, so the row reads as
+                        // `[swatch] addr  size  cores`
+                        // `         [link icon] Globally allocated`. This
+                        // keeps the data columns aligned with anonymous
+                        // rows in the legend.
                         .aliased-marker {
                             display: inline-flex;
                             align-items: center;
                             gap: 4px;
-                            margin-left: auto;
+                            grid-column: 2;
+                            grid-row: 2;
+                            justify-self: start;
                             padding: 1px 6px;
                             border: 1px solid rgba($tt-white, 0.35);
                             border-radius: 8px;
@@ -304,7 +335,8 @@
                             display: grid;
                             grid-template-columns: 1fr auto auto;
                             gap: 8px;
-                            flex: 1;
+                            grid-column: 2;
+                            grid-row: 1;
                             font-size: 12px;
 
                             .addr {
@@ -328,6 +360,22 @@
                         &.aliased .cb-row-body .addr {
                             text-decoration: underline dotted rgba($tt-white, 0.4);
                             text-underline-offset: 2px;
+                        }
+
+                        // #1655: When the "Show globally allocated CBs"
+                        // toggle is off, aliased rows stay in the legend as
+                        // a reference panel but visually demote. Opacity
+                        // (rather than a colour shift) is reversible by
+                        // hover / active so the row still reads as
+                        // interactive — clicking a dimmed row continues to
+                        // highlight its cores in the grid.
+                        &.aliased-dimmed {
+                            opacity: 0.4;
+
+                            &:hover,
+                            &.active {
+                                opacity: 1;
+                            }
                         }
                     }
                 }
@@ -407,11 +455,27 @@
                 flex-direction: column;
                 gap: 4px;
 
-                .zoomed-core-svg {
-                    display: block;
+                // Frame wraps the SVG so that strokes overflowing the SVG
+                // viewport (especially at x=0%/x=100% where we can't inset
+                // in pixel space) render into the frame's 2px padding
+                // instead of being clipped by the SVG's own border. Fixes
+                // the Firefox "bottom/right border cut off" rendering on
+                // outline-only (aliased) rects flush against the edge.
+                // `overflow: visible` on the SVG itself lets the strokes
+                // escape the viewport in the first place.
+                .zoomed-core-svg-frame {
                     background-color: rgba($tt-black, 0.35);
                     border: 1px solid rgba($tt-black, 0.7);
                     border-radius: 1px;
+
+                    // 2px is enough for the widest stroke (selected = 2px,
+                    // half-spilling = 1px each side); 1px would be tight
+                    // for subpixel rounding in Firefox.
+                    padding: 2px;
+                }
+
+                .zoomed-core-svg {
+                    display: block;
 
                     .zoomed-chunk {
                         cursor: pointer;
@@ -471,6 +535,7 @@
     display: flex;
     align-items: baseline;
     gap: 8px;
+    margin-top: 5px;
     margin-bottom: 10px;
 
     h4 {

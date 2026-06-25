@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import { BufferType } from '../src/model/BufferType';
 import BufferSummaryVirtualizedList from '../src/components/buffer-summary/BufferSummaryVirtualizedList';
 import { ScrollLocations } from '../src/definitions/VirtualLists';
 import { BufferSummaryAxisConfiguration } from '../src/definitions/PlotConfigurations';
+import { RankedAnnotation, TopNAnnotationMode } from '../src/functions/topNAnnotations';
 
 const memoryPlotRendererMock = vi.fn();
 const bufferSummaryRowMock = vi.fn();
@@ -78,7 +79,10 @@ const operations = [
 
 const tensorListByOperation = new Map<number, Map<number, never>>();
 
-function renderVirtualizedList(isZoomedIn: boolean) {
+function renderVirtualizedList(
+    isZoomedIn: boolean,
+    extraProps: { topNAnnotationsByOpId?: Map<number, RankedAnnotation>; topNAnnotationMode?: TopNAnnotationMode } = {},
+) {
     return render(
         <BufferSummaryVirtualizedList
             operations={operations}
@@ -93,9 +97,19 @@ function renderVirtualizedList(isZoomedIn: boolean) {
             axisConfiguration={BufferSummaryAxisConfiguration}
             getOperationTooltipContent={(operation) => operation.name}
             renderOperationLink={(operation) => <span>{operation.name}</span>}
+            {...extraProps}
         />,
     );
 }
+
+const buildAnnotation = (overrides: Partial<RankedAnnotation>): RankedAnnotation => ({
+    opId: overrides.opId ?? 1,
+    rowIndex: overrides.rowIndex ?? 0,
+    rank: overrides.rank ?? 1,
+    t: overrides.t ?? 1,
+    valueLabel: overrides.valueLabel ?? '1.50 ms',
+    rawValue: overrides.rawValue ?? 1_500_000,
+});
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -164,5 +178,108 @@ describe('BufferSummaryVirtualizedList', () => {
         const scrollableElement = container.querySelector('.scrollable-element');
 
         expect(scrollableElement).toHaveClass('bottom-shade');
+    });
+
+    describe('top-N annotations (#1517)', () => {
+        it('does not render the rail or any rank badges when annotations are empty', () => {
+            const { container } = renderVirtualizedList(false);
+
+            expect(container.querySelector('[data-testid="top-n-rail"]')).toBeNull();
+            expect(container.querySelector('.top-n-badge')).toBeNull();
+        });
+
+        it('renders a rank badge in the y-tick gutter for an annotated row', () => {
+            // Virtualizer mock only emits row 0 — give it the annotation for op 1.
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 3, valueLabel: '850 µs' })],
+            ]);
+            renderVirtualizedList(false, {
+                topNAnnotationsByOpId: annotations,
+                topNAnnotationMode: TopNAnnotationMode.PERF_TIME,
+            });
+
+            const badge = screen.getByTestId('top-n-badge-1');
+            expect(badge).toHaveTextContent('#3');
+            expect(badge).toHaveAttribute('data-rank', '3');
+        });
+
+        it('renders one rail dot per annotation, sorted by rank ascending', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 2 })],
+                [2, buildAnnotation({ opId: 2, rowIndex: 1, rank: 1 })],
+            ]);
+            renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
+
+            const rail = screen.getByTestId('top-n-rail');
+            const dots = rail.querySelectorAll('.top-n-rail-dot');
+            expect(dots).toHaveLength(2);
+            // Both dots should be addressable by their op id for downstream wiring.
+            expect(screen.getByTestId('top-n-rail-dot-1')).toBeInTheDocument();
+            expect(screen.getByTestId('top-n-rail-dot-2')).toBeInTheDocument();
+        });
+
+        it('uses semantic <ul>/<li> markup so screen readers announce the rail as a list with item count', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 2 })],
+                [2, buildAnnotation({ opId: 2, rowIndex: 1, rank: 1 })],
+            ]);
+            renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
+
+            // The rail is the `<ul>` element; querying by ARIA role surfaces
+            // the implicit role=list/listitem semantics we care about for
+            // screen-reader output.
+            const rail = screen.getByRole('list', { name: 'Top-ranked operations' });
+            expect(rail.tagName).toBe('UL');
+            expect(rail).toHaveAttribute('data-testid', 'top-n-rail');
+            // One `<li>` per annotation; each contains the dot button.
+            const items = within(rail).getAllByRole('listitem');
+            expect(items).toHaveLength(2);
+            expect(items.every((item) => item.tagName === 'LI')).toBe(true);
+            expect(items[0].querySelector('button.top-n-rail-dot')).not.toBeNull();
+            expect(items[1].querySelector('button.top-n-rail-dot')).not.toBeNull();
+        });
+
+        it('positions rail dots by rowIndex / operations.length', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [2, buildAnnotation({ opId: 2, rowIndex: 1, rank: 1 })],
+            ]);
+            renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
+
+            // Row 1 of 2 → 50% down the rail. `top` lives on the `<li>` so
+            // the Tooltip wrapper span inside has real geometry (otherwise
+            // Blueprint anchors the popover at the rail origin).
+            const dot = screen.getByTestId('top-n-rail-dot-2') as HTMLButtonElement;
+            const item = dot.closest('li');
+            expect(item?.style.top).toBe('50%');
+        });
+
+        it('shows the rank number inside each rail dot so the colour scale is legible', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 2 })],
+                [2, buildAnnotation({ opId: 2, rowIndex: 1, rank: 1 })],
+            ]);
+            renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
+
+            expect(screen.getByTestId('top-n-rail-dot-1')).toHaveTextContent('2');
+            expect(screen.getByTestId('top-n-rail-dot-2')).toHaveTextContent('1');
+        });
+
+        it('scrolls the virtualizer to the row when a rail dot is clicked', () => {
+            const scrollToIndexMock = vi.fn();
+            virtualizerFactoryMock.mockReturnValue({
+                getVirtualItems: () => [{ index: 0, key: 'row-0', start: 0 }],
+                getTotalSize: () => 140,
+                scrollOffset: 0,
+                measurementsCache: [],
+                scrollToIndex: scrollToIndexMock,
+            });
+            const annotations = new Map<number, RankedAnnotation>([
+                [2, buildAnnotation({ opId: 2, rowIndex: 1, rank: 1 })],
+            ]);
+            renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
+
+            fireEvent.click(screen.getByTestId('top-n-rail-dot-2'));
+            expect(scrollToIndexMock).toHaveBeenCalledWith(1, { align: 'center' });
+        });
     });
 });
