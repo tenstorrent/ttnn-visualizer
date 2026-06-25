@@ -15,7 +15,8 @@ import { OpType } from '../src/definitions/Performance';
 // that conversion faithfully reflects the values tt-perf-report produced — including the >6.5µs
 // high-dispatch flag, which mirrors tt-perf-report's Op-to-Op Gap threshold (perf_report.py:1052).
 
-// A raw row as delivered to the frontend (every field a string, matching the CSV-derived JSON).
+// A raw row as delivered to the frontend: the numeric columns arrive as strings (matching the
+// CSV-derived JSON), alongside non-string fields like global_call_count, advice, and hash.
 const makeRawRow = (overrides: Partial<PerfTableRow> = {}): PerfTableRow =>
     ({
         id: '1',

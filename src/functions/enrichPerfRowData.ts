@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
-import { HIGH_DISPATCH_THRESHOLD_MS } from '../definitions/Performance';
+import { HIGH_DISPATCH_THRESHOLD_US } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { L1PressureMetrics } from './l1Pressure';
@@ -48,14 +48,17 @@ export const enrichRowData = (
         // parseInt would truncate (e.g. "6.6" -> 6), wrongly clearing the > 6.5µs flag.
         const parsedGap = parseFloat(row.op_to_op_gap);
         const opToOpGap = Number.isNaN(parsedGap) ? null : parsedGap;
+        // parseInt yields NaN (not nullish) for missing values, so collapse it to null explicitly
+        // rather than leaking NaN into a `number | null` field.
+        const parsedDevice = parseInt(row.device, 10);
 
         return {
             ...row,
             op,
-            high_dispatch: opToOpGap !== null && opToOpGap > HIGH_DISPATCH_THRESHOLD_MS,
+            high_dispatch: opToOpGap !== null && opToOpGap > HIGH_DISPATCH_THRESHOLD_US,
             id: parseInt(row.id, 10),
             total_percent: parseFloat(row.total_percent),
-            device: parseInt(row.device, 10) ?? null,
+            device: Number.isNaN(parsedDevice) ? null : parsedDevice,
             device_time: parseFloat(row.device_time),
             op_to_op_gap: opToOpGap,
             cores: parseInt(row.cores, 10),

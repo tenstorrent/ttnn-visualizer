@@ -12,7 +12,7 @@ import { OperationDescription } from '../model/APIData';
 import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
-import { HIGH_DISPATCH_THRESHOLD_MS, OpType } from '../definitions/Performance';
+import { HIGH_DISPATCH_THRESHOLD_US, OpType } from '../definitions/Performance';
 import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 import { NormalisedPerfData } from './normalisePerformanceData';
 import MemoryTag from '../components/MemoryTag';
@@ -88,9 +88,9 @@ export const formatCell = (
     }
 
     if (key === ColumnKeys.HighDispatch) {
-        const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency`;
+        const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency`;
 
-        return row?.[ColumnKeys.DeviceTime] !== null && row?.[ColumnKeys.DeviceTime] > HIGH_DISPATCH_THRESHOLD_MS ? (
+        return row?.[ColumnKeys.DeviceTime] !== null && row?.[ColumnKeys.DeviceTime] > HIGH_DISPATCH_THRESHOLD_US ? (
             <Tooltip content={tooltipMessage}>
                 <Icon
                     className={WARNING_COLOUR}
@@ -259,8 +259,8 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     const percentage = row.total_percent;
 
     // tt-perf-report mutes ops below the threshold, except host "(torch)" ops, which it always
-    // keeps coloured (perf_report.py color_row() + is_host_op()). Safe to read raw_op_code here:
-    // the only rows without it (signposts) have a null total_percent, so the guard above exits first.
+    // keeps coloured (perf_report.py color_row() + is_host_op()). raw_op_code is a required string
+    // on every row type (device ops, placeholders, signposts), so reading it here is always safe.
     if (percentage != null && percentage < MIN_PERCENTAGE && !row.raw_op_code.includes('(torch)')) {
         return FALLBACK_COLOUR;
     }
@@ -405,7 +405,7 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
 };
 
 export const getOpToOpGapColour = (value: number): CellColour => {
-    return value > HIGH_DISPATCH_THRESHOLD_MS ? CellColour.Red : DEFAULT_COLOUR;
+    return value > HIGH_DISPATCH_THRESHOLD_US ? CellColour.Red : DEFAULT_COLOUR;
 };
 
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
@@ -413,7 +413,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
         .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
         .filter(([_, opData]) => {
             const val = opData.op_to_op_gap;
-            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_MS;
+            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_US;
         });
 
     if (highDispatchOps.length === 0) {
@@ -424,7 +424,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
         const val = opData.op_to_op_gap || 0;
 
-        return acc + (val - HIGH_DISPATCH_THRESHOLD_MS);
+        return acc + (val - HIGH_DISPATCH_THRESHOLD_US);
     }, 0);
 
     // Compute total_duration as sum of device times + Op-to-Op Gaps
@@ -446,7 +446,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     return (
         <div className='high-dispatch-advice'>
             <p>
-                Marked ops have &gt; {HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency. Running with tracing could save{' '}
+                Marked ops have &gt; {HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency. Running with tracing could save{' '}
                 {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
                 {formatPercentage(percentageSaved, 1)} of overall time).
             </p>
