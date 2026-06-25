@@ -272,7 +272,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
 
     if (key === ColumnKeys.Bound) {
         if (keyValue === BoundType.HOST) {
-            return CellColour.Green;
+            return CellColour.Red;
         }
 
         if (keyValue === BoundType.FLOP) {
@@ -285,6 +285,10 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
 
         if (keyValue === BoundType.DRAM) {
             return CellColour.Green;
+        }
+
+        if (keyValue === BoundType.BOTH) {
+            return DEFAULT_COLOUR;
         }
     }
 
@@ -304,10 +308,6 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
             if (key === ColumnKeys.Flops || key === ColumnKeys.FlopsPercent) {
                 return CellColour.Green;
             }
-        }
-
-        if (row.bound === BoundType.HOST) {
-            return CellColour.Red;
         }
 
         const dramP = row.dram_percent;
@@ -346,6 +346,14 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     }
 
     if (key === ColumnKeys.MathFidelity && typeof keyValue === 'string') {
+        // tt-perf-report only evaluates fidelity for Matmul / OptimizedConvNew ops (perf_report.py:1055-1056).
+        const isFidelityEvaluatedOp =
+            row.raw_op_code.includes('Matmul') || row.raw_op_code.includes('OptimizedConvNew');
+
+        if (!isFidelityEvaluatedOp || keyValue === '') {
+            return DEFAULT_COLOUR;
+        }
+
         const parts = keyValue.split(' ');
         const mathFidelity = parts[0] as MathFidelity;
         const input0Datatype = row.input_0_datatype || '';
@@ -393,7 +401,7 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
 };
 
 export const getOpToOpGapColour = (value: number): CellColour => {
-    return value > HIGH_DISPATCH_THRESHOLD_MS ? CellColour.Red : FALLBACK_COLOUR;
+    return value > HIGH_DISPATCH_THRESHOLD_MS ? CellColour.Red : DEFAULT_COLOUR;
 };
 
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
@@ -455,12 +463,30 @@ export function evaluateFidelity(
     outputDatatype: string,
     mathFidelity: MathFidelity | '',
 ): [string, string | null] {
+    // Mirrors tt-perf-report evaluate_fidelity() (perf_report.py:535-556).
+    const integerTypes = ['UINT8', 'UINT16', 'INT32', 'UINT32'];
+
+    if ([input0Datatype, input1Datatype, outputDatatype].some((datatype) => integerTypes.includes(datatype))) {
+        return [
+            'not_applicable',
+            'Fidelity evaluation is not applicable for integer datatypes (UINT8, UINT16, INT32, UINT32).',
+        ];
+    }
+
     const mantissaBits: Record<string, number> = {
         FLOAT32: 23,
         BFLOAT16: 8,
         BFLOAT8_B: 7,
         BFLOAT4_B: 3,
     };
+
+    const unsupportedDatatype = [input0Datatype, input1Datatype, outputDatatype].find(
+        (datatype) => mantissaBits[datatype] === undefined,
+    );
+
+    if (unsupportedDatatype !== undefined) {
+        return ['unknown', `Datatype ${unsupportedDatatype} is not supported for fidelity evaluation.`];
+    }
 
     const in0Bits = mantissaBits[input0Datatype];
     const in1Bits = mantissaBits[input1Datatype];
