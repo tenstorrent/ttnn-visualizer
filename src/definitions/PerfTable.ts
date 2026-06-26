@@ -182,6 +182,13 @@ export enum ColumnKeys {
     Hash = 'hash',
     CacheHit = 'cache_hit',
     L1Fullness = 'l1_fullness_percent',
+    DeviceKernelDuration = 'device_kernel_duration',
+    BriscKernelDuration = 'brisc_kernel_duration',
+    NcriscKernelDuration = 'ncrisc_kernel_duration',
+    Trisc0KernelDuration = 'trisc0_kernel_duration',
+    Trisc1KernelDuration = 'trisc1_kernel_duration',
+    Trisc2KernelDuration = 'trisc2_kernel_duration',
+    EriscKernelDuration = 'erisc_kernel_duration',
 }
 
 export const Columns: ColumnDefinition[] = [
@@ -208,6 +215,15 @@ export const Columns: ColumnDefinition[] = [
     { name: 'FLOPS %', key: ColumnKeys.FlopsPercent, unit: '%', decimals: 1, sortable: true },
     { name: 'Math Fidelity', key: ColumnKeys.MathFidelity, colour: 'cyan' },
     { name: 'Cache Hit', key: ColumnKeys.CacheHit, colour: 'magenta', filterable: true },
+    // Per-RISC kernel durations (#1518). Stored in µs (converted from the raw ns CSV values in
+    // enrichRowData), so they share the µs/0dp formatting and sort alongside Device Time.
+    { name: 'Kernel Duration', key: ColumnKeys.DeviceKernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'BRISC', key: ColumnKeys.BriscKernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'NCRISC', key: ColumnKeys.NcriscKernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'TRISC0', key: ColumnKeys.Trisc0KernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'TRISC1', key: ColumnKeys.Trisc1KernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'TRISC2', key: ColumnKeys.Trisc2KernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'ERISC', key: ColumnKeys.EriscKernelDuration, unit: 'µs', decimals: 0, sortable: true },
 ];
 
 export const L1PressureColumns: ColumnDefinition[] = [
@@ -294,6 +310,13 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.OpCode,
     ColumnKeys.OpToOpGap,
     ColumnKeys.TotalPercent,
+    ColumnKeys.DeviceKernelDuration,
+    ColumnKeys.BriscKernelDuration,
+    ColumnKeys.NcriscKernelDuration,
+    ColumnKeys.Trisc0KernelDuration,
+    ColumnKeys.Trisc1KernelDuration,
+    ColumnKeys.Trisc2KernelDuration,
+    ColumnKeys.EriscKernelDuration,
 ];
 
 export const signpostRowDefaults = Object.freeze({

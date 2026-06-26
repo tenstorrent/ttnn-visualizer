@@ -317,6 +317,10 @@ const getRowAttributes = (row: PerfTableRow): RowAttributes => {
     };
 };
 
+const NS_PER_US = 1000;
+
+const nsToUs = (value: string | null | undefined): number | null => (value ? parseFloat(value) / NS_PER_US : null);
+
 const enrichRowData = (
     rows: PerfTableRow[],
     opIdsMap: { perfId?: string; opId: number }[],
@@ -352,13 +356,15 @@ const enrichRowData = (
             flops: row.flops ? parseFloat(row.flops) : null,
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
             pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
-            device_kernel_duration: row.device_kernel_duration ? parseFloat(row.device_kernel_duration) : null,
-            brisc_kernel_duration: row.brisc_kernel_duration ? parseFloat(row.brisc_kernel_duration) : null,
-            ncrisc_kernel_duration: row.ncrisc_kernel_duration ? parseFloat(row.ncrisc_kernel_duration) : null,
-            trisc0_kernel_duration: row.trisc0_kernel_duration ? parseFloat(row.trisc0_kernel_duration) : null,
-            trisc1_kernel_duration: row.trisc1_kernel_duration ? parseFloat(row.trisc1_kernel_duration) : null,
-            trisc2_kernel_duration: row.trisc2_kernel_duration ? parseFloat(row.trisc2_kernel_duration) : null,
-            erisc_kernel_duration: row.erisc_kernel_duration ? parseFloat(row.erisc_kernel_duration) : null,
+            // Kernel durations arrive as raw ns in the CSV; store as µs so they share the µs
+            // formatting/sorting of the Device Time column they sit beside (#1518).
+            device_kernel_duration: nsToUs(row.device_kernel_duration),
+            brisc_kernel_duration: nsToUs(row.brisc_kernel_duration),
+            ncrisc_kernel_duration: nsToUs(row.ncrisc_kernel_duration),
+            trisc0_kernel_duration: nsToUs(row.trisc0_kernel_duration),
+            trisc1_kernel_duration: nsToUs(row.trisc1_kernel_duration),
+            trisc2_kernel_duration: nsToUs(row.trisc2_kernel_duration),
+            erisc_kernel_duration: nsToUs(row.erisc_kernel_duration),
             l1_fullness_percent: l1Pressure?.fullnessPercent ?? null,
             l1_free_segments: l1Pressure?.freeSegments ?? null,
             l1_largest_free: l1Pressure?.largestFreeBytes ?? null,
