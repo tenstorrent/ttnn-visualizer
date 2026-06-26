@@ -21,4 +21,9 @@ describe('nsToUs', () => {
         expect(nsToUs(null)).toBeNull();
         expect(nsToUs(undefined)).toBeNull();
     });
+
+    it('returns null for non-numeric input instead of propagating NaN', () => {
+        expect(nsToUs('   ')).toBeNull();
+        expect(nsToUs('n/a')).toBeNull();
+    });
 });

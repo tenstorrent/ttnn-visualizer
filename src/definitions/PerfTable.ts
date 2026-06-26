@@ -54,13 +54,15 @@ export interface PerfTableRow {
     output_subblock_w: string;
     high_dispatch?: boolean;
     pm_ideal_ns: string;
-    device_kernel_duration: string;
-    brisc_kernel_duration: string;
-    ncrisc_kernel_duration: string;
-    trisc0_kernel_duration: string;
-    trisc1_kernel_duration: string;
-    trisc2_kernel_duration: string;
-    erisc_kernel_duration: string;
+    // Nullable: the backend reads these from the ops perf CSV with dict.get(), so they are absent
+    // when the source CSV lacks the column (older Tracy captures).
+    device_kernel_duration: string | null;
+    brisc_kernel_duration: string | null;
+    ncrisc_kernel_duration: string | null;
+    trisc0_kernel_duration: string | null;
+    trisc1_kernel_duration: string | null;
+    trisc2_kernel_duration: string | null;
+    erisc_kernel_duration: string | null;
     op_type: OpType;
     op?: number;
     missing?: boolean;
