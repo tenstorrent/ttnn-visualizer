@@ -46,6 +46,19 @@ const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
+// Per-RISC kernel durations run concurrently, so the device kernel duration is gated by whichever
+// RISC runs longest. Colour each by its share of that total to surface the bottleneck (#1518).
+const KERNEL_RISC_KEYS: ColumnKeys[] = [
+    ColumnKeys.BriscKernelDuration,
+    ColumnKeys.NcriscKernelDuration,
+    ColumnKeys.Trisc0KernelDuration,
+    ColumnKeys.Trisc1KernelDuration,
+    ColumnKeys.Trisc2KernelDuration,
+    ColumnKeys.EriscKernelDuration,
+];
+const KERNEL_BOTTLENECK_SHARE = 0.9;
+const KERNEL_SIGNIFICANT_SHARE = 0.5;
+
 // https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
     row: TypedPerfTableRow,
@@ -266,7 +279,12 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnKeys.Id || key === ColumnKeys.TotalPercent || key === ColumnKeys.DeviceTime) {
+    if (
+        key === ColumnKeys.Id ||
+        key === ColumnKeys.TotalPercent ||
+        key === ColumnKeys.DeviceTime ||
+        key === ColumnKeys.DeviceKernelDuration
+    ) {
         return DEFAULT_COLOUR;
     }
 
@@ -372,7 +390,33 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
         return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : FALLBACK_COLOUR;
     }
 
+    if (KERNEL_RISC_KEYS.includes(key)) {
+        return typeof keyValue === 'number'
+            ? getKernelRiscColour(keyValue, row.device_kernel_duration)
+            : FALLBACK_COLOUR;
+    }
+
     // Shouldn't get to this point but need to return something
+    return FALLBACK_COLOUR;
+};
+
+// Colour a per-RISC kernel duration by its share of the op's device kernel duration: the
+// gating RISC (≈100%) is the hotspot to optimise, smaller contributors are muted.
+export const getKernelRiscColour = (riscUs: number, deviceKernelUs: number | null): CellColour => {
+    if (!deviceKernelUs || deviceKernelUs <= 0) {
+        return DEFAULT_COLOUR;
+    }
+
+    const share = riscUs / deviceKernelUs;
+
+    if (share >= KERNEL_BOTTLENECK_SHARE) {
+        return CellColour.Red;
+    }
+
+    if (share >= KERNEL_SIGNIFICANT_SHARE) {
+        return CellColour.Yellow;
+    }
+
     return FALLBACK_COLOUR;
 };
 
