@@ -220,9 +220,9 @@ export const Columns: ColumnDefinition[] = [
     { name: 'Kernel Duration', key: ColumnKeys.DeviceKernelDuration, unit: 'µs', decimals: 0, sortable: true },
     { name: 'BRISC', key: ColumnKeys.BriscKernelDuration, unit: 'µs', decimals: 0, sortable: true },
     { name: 'NCRISC', key: ColumnKeys.NcriscKernelDuration, unit: 'µs', decimals: 0, sortable: true },
-    { name: 'TRISC0', key: ColumnKeys.Trisc0KernelDuration, unit: 'µs', decimals: 0, sortable: true },
-    { name: 'TRISC1', key: ColumnKeys.Trisc1KernelDuration, unit: 'µs', decimals: 0, sortable: true },
-    { name: 'TRISC2', key: ColumnKeys.Trisc2KernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'TRISC_0', key: ColumnKeys.Trisc0KernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'TRISC_1', key: ColumnKeys.Trisc1KernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'TRISC_2', key: ColumnKeys.Trisc2KernelDuration, unit: 'µs', decimals: 0, sortable: true },
     { name: 'ERISC', key: ColumnKeys.EriscKernelDuration, unit: 'µs', decimals: 0, sortable: true },
 ];
 
