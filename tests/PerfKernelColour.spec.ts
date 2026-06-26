@@ -8,18 +8,14 @@ import { getKernelRiscColour } from '../src/functions/perfFunctions';
 import { CellColour } from '../src/definitions/CellColour';
 
 describe('getKernelRiscColour', () => {
-    it('flags the gating RISC (>= 90% of device kernel duration) as red', () => {
-        expect(getKernelRiscColour(95, 100)).toBe(CellColour.Red);
-        expect(getKernelRiscColour(100, 100)).toBe(CellColour.Red);
+    it('accents the critical-path RISC (>= 90% of device kernel duration)', () => {
+        expect(getKernelRiscColour(95, 100)).toBe(CellColour.Blue);
+        expect(getKernelRiscColour(100, 100)).toBe(CellColour.Blue);
     });
 
-    it('marks a significant contributor (50-90%) as yellow', () => {
-        expect(getKernelRiscColour(50, 100)).toBe(CellColour.Yellow);
-        expect(getKernelRiscColour(89, 100)).toBe(CellColour.Yellow);
-    });
-
-    it('mutes minor contributors (< 50%) to grey', () => {
-        expect(getKernelRiscColour(10, 100)).toBe(CellColour.Grey);
+    it('mutes RISCs below the critical-path threshold', () => {
+        expect(getKernelRiscColour(89, 100)).toBe(CellColour.Grey);
+        expect(getKernelRiscColour(50, 100)).toBe(CellColour.Grey);
         expect(getKernelRiscColour(0, 100)).toBe(CellColour.Grey);
     });
 

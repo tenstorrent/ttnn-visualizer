@@ -47,7 +47,9 @@ const WARNING_COLOUR = CellColour.Yellow;
 const MIN_PERCENTAGE = 0.5;
 
 // Per-RISC kernel durations run concurrently, so the device kernel duration is gated by whichever
-// RISC runs longest. Colour each by its share of that total to surface the bottleneck (#1518).
+// RISC runs longest. Highlight the RISC(s) on that critical path so the user can see where the
+// time goes (#1518). This is informational, not a warning — a data-movement op pinned to BRISC or
+// a matmul pinned to a compute TRISC is expected, so a neutral accent is used rather than red.
 const KERNEL_RISC_KEYS: ColumnKeys[] = [
     ColumnKeys.BriscKernelDuration,
     ColumnKeys.NcriscKernelDuration,
@@ -56,8 +58,8 @@ const KERNEL_RISC_KEYS: ColumnKeys[] = [
     ColumnKeys.Trisc2KernelDuration,
     ColumnKeys.EriscKernelDuration,
 ];
-const KERNEL_BOTTLENECK_SHARE = 0.9;
-const KERNEL_SIGNIFICANT_SHARE = 0.5;
+// A RISC this close to the device kernel duration is effectively gating the op.
+const KERNEL_CRITICAL_PATH_SHARE = 0.9;
 
 // https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
@@ -400,8 +402,9 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     return FALLBACK_COLOUR;
 };
 
-// Colour a per-RISC kernel duration by its share of the op's device kernel duration: the
-// gating RISC (≈100%) is the hotspot to optimise, smaller contributors are muted.
+// Accent the RISC(s) on the op's critical path (≈ the device kernel duration) and mute the rest.
+// A neutral colour is used deliberately: being the critical path identifies where the time goes,
+// it does not imply the op is unhealthy.
 export const getKernelRiscColour = (riscUs: number, deviceKernelUs: number | null): CellColour => {
     if (!deviceKernelUs || deviceKernelUs <= 0) {
         return DEFAULT_COLOUR;
@@ -409,15 +412,7 @@ export const getKernelRiscColour = (riscUs: number, deviceKernelUs: number | nul
 
     const share = riscUs / deviceKernelUs;
 
-    if (share >= KERNEL_BOTTLENECK_SHARE) {
-        return CellColour.Red;
-    }
-
-    if (share >= KERNEL_SIGNIFICANT_SHARE) {
-        return CellColour.Yellow;
-    }
-
-    return FALLBACK_COLOUR;
+    return share >= KERNEL_CRITICAL_PATH_SHARE ? CellColour.Blue : FALLBACK_COLOUR;
 };
 
 export const getCoreColour = (value: string | string[] | boolean | number): CellColour => {
