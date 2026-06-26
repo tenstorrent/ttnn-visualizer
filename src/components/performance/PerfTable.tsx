@@ -257,7 +257,7 @@ const PerformanceTable = ({
 
         return (
             <table className='perf-table monospace'>
-                <thead className='table-header'>
+                <thead>
                     <tr>
                         <th
                             className='cell-header'

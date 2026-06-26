@@ -75,7 +75,7 @@ const StackedPerformanceTable = ({
 
         return (
             <table className='perf-table monospace'>
-                <thead className='table-header'>
+                <thead>
                     <tr>
                         {computedTableColumns.map((column) => {
                             const targetSortDirection =

@@ -10,11 +10,19 @@ $row-pattern-0: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%) 50
 $row-pattern-1: linear-gradient(0deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 $header-footer-border: 2px solid colours.$tt-grey-5;
+$cell-divider: rgb(255 255 255 / 10%); // light vertical column separator
 
 .perf-report {
     color: #fff;
+
+    // No `overflow` here on purpose: it would make this the sticky scroll-container for the
+    // table header, and since it has no fixed height the header would never pin. Horizontal
+    // scrolling for the wide table falls back to the page, matching the Buffer Summary header.
+    //
+    // `width: max-content` makes the panel grow to the widest child (the table) so its background
+    // spans the full scroll width; `min-width` keeps the 1240px floor for narrow reports.
+    width: max-content;
     min-width: 1240px;
-    overflow: auto;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -115,9 +123,25 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     }
 
     .cell-header {
+        // Sticky must live on the cells (not thead/tr) because the table uses border-collapse: collapse.
+        // A solid background stops scrolled rows showing through. The divider is a box-shadow, not a
+        // border, because under border-collapse a cell's own border is painted at its static position
+        // and would not travel with the pinned header — box-shadow follows the sticky box. The column
+        // dividers use the same box-shadow trick so they stay aligned with the body cells while pinned.
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background-color: colours.$tt-background;
+        box-shadow:
+            inset 0 -2px 0 colours.$tt-grey-5,
+            inset -1px 0 0 $cell-divider;
         text-align: left;
         vertical-align: initial;
-        padding: 3px;
+        padding: 3px 6px;
+
+        &:last-child {
+            box-shadow: inset 0 -2px 0 colours.$tt-grey-5;
+        }
 
         .header-label {
             font-weight: 400;
@@ -211,7 +235,12 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
 
     .cell {
         border-bottom: 1px solid #333;
-        padding: 0.25rem;
+        border-right: 1px solid $cell-divider;
+        padding: 3px 6px;
+
+        &:last-child {
+            border-right-width: 0;
+        }
 
         &.align-right {
             text-align: right;
@@ -224,10 +253,6 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         .l1-fullness-attributes {
             font-size: 12px;
         }
-    }
-
-    .table-header {
-        border-bottom: $header-footer-border;
     }
 
     .table-footer {

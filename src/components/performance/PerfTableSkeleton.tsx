@@ -26,7 +26,7 @@ function PerfTableSkeleton({
             aria-label='Loading performance data'
             data-testid={TEST_IDS.PERF_TABLE_SKELETON}
         >
-            <thead className='table-header'>
+            <thead>
                 <tr>
                     {hasLeadingColumn && (
                         <th
