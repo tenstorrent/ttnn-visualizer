@@ -216,14 +216,14 @@ export const Columns: ColumnDefinition[] = [
     { name: 'Math Fidelity', key: ColumnKeys.MathFidelity, colour: 'cyan' },
     { name: 'Cache Hit', key: ColumnKeys.CacheHit, colour: 'magenta', filterable: true },
     // Per-RISC kernel durations (#1518). Stored in µs (converted from the raw ns CSV values in
-    // enrichRowData), so they share the µs/0dp formatting and sort alongside Device Time.
-    { name: 'Kernel Duration', key: ColumnKeys.DeviceKernelDuration, unit: 'µs', decimals: 0, sortable: true },
-    { name: 'BRISC', key: ColumnKeys.BriscKernelDuration, unit: 'µs', decimals: 0, sortable: true },
-    { name: 'NCRISC', key: ColumnKeys.NcriscKernelDuration, unit: 'µs', decimals: 0, sortable: true },
-    { name: 'TRISC_0', key: ColumnKeys.Trisc0KernelDuration, unit: 'µs', decimals: 0, sortable: true },
-    { name: 'TRISC_1', key: ColumnKeys.Trisc1KernelDuration, unit: 'µs', decimals: 0, sortable: true },
-    { name: 'TRISC_2', key: ColumnKeys.Trisc2KernelDuration, unit: 'µs', decimals: 0, sortable: true },
-    { name: 'ERISC', key: ColumnKeys.EriscKernelDuration, unit: 'µs', decimals: 0, sortable: true },
+    // enrichRowData); 2dp keeps sub-microsecond contributions legible alongside Device Time.
+    { name: 'Kernel Duration', key: ColumnKeys.DeviceKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'BRISC', key: ColumnKeys.BriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'NCRISC', key: ColumnKeys.NcriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'TRISC_0', key: ColumnKeys.Trisc0KernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'TRISC_1', key: ColumnKeys.Trisc1KernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'TRISC_2', key: ColumnKeys.Trisc2KernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'ERISC', key: ColumnKeys.EriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
 ];
 
 export const L1PressureColumns: ColumnDefinition[] = [

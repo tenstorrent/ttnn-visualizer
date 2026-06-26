@@ -4,6 +4,12 @@
 
 const LOCALE = 'en-US';
 
+const NS_PER_US = 1000;
+
+/** Parse a raw nanosecond string (as it arrives in the perf CSV) into microseconds, or null when absent. */
+export const nsToUs = (value: string | null | undefined): number | null =>
+    value ? parseFloat(value) / NS_PER_US : null;
+
 export const toHex = (num: number): string => {
     // eslint-disable-next-line no-bitwise
     return `0x${(num >>> 0).toString(16).toUpperCase()}`;

@@ -37,6 +37,7 @@ import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 import { parsePerfRowTensorAttributes } from '../functions/parsePerfRowTensorAttributes';
+import { nsToUs } from '../functions/math';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
@@ -316,10 +317,6 @@ const getRowAttributes = (row: PerfTableRow): RowAttributes => {
         layout,
     };
 };
-
-const NS_PER_US = 1000;
-
-const nsToUs = (value: string | null | undefined): number | null => (value ? parseFloat(value) / NS_PER_US : null);
 
 const enrichRowData = (
     rows: PerfTableRow[],
