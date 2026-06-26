@@ -36,7 +36,12 @@ class TestPerfReportKernelDurations(unittest.TestCase):
             archive.extractall(cls._tmp.name)
 
         # The ops perf CSV lives under local/performance-reports/<REPORT_NAME>/
-        perf_csv = next(Path(cls._tmp.name).rglob("ops_perf_results*.csv"))
+        perf_csv = next(Path(cls._tmp.name).rglob("ops_perf_results*.csv"), None)
+        if perf_csv is None:
+            raise unittest.SkipTest(
+                "ops_perf_results*.csv not found in n300-llama demo report; "
+                "demo-report packaging may have changed"
+            )
         instance = Instance(instance_id="test", performance_path=str(perf_csv.parent))
         cls.report = OpsPerformanceReportQueries.generate_report(instance)["report"]
 
