@@ -55,19 +55,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Read .python-version
+        id: python
+        run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_OUTPUT
+
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
+          python-version: ${{ steps.python.outputs.PYTHON_VERSION }}
           enable-cache: true
 
+      - name: Verify lockfile is up to date
+        run: |
+          set -euo pipefail
+          uv lock --check || {
+            status=$?
+            echo "::error file=uv.lock::'uv lock --check' failed (uv.lock may be out of date with pyproject.toml). Run 'uv lock' locally and commit the updated uv.lock. See logs above for details."
+            exit "${status}"
+          }
+
       - name: Install dependencies
-        run: uv sync --extra dev --frozen
+        run: uv sync --frozen
 
       - name: Run Black
-        run: uv run --frozen --extra dev black --check backend/ttnn_visualizer
+        run: uv run --frozen black --check backend/ttnn_visualizer
+
+      - name: Run isort
+        run: uv run --frozen isort --check-only backend/ttnn_visualizer
 
       - name: Run Mypy
-        run: PYTHONPATH=backend uv run --frozen --extra dev mypy backend/ttnn_visualizer
+        run: uv run --frozen mypy backend/ttnn_visualizer
 
       - name: Run Backend Tests
-        run: PYTHONPATH=backend uv run --frozen --extra dev pytest backend/ttnn_visualizer
+        run: uv run --frozen pytest backend/ttnn_visualizer

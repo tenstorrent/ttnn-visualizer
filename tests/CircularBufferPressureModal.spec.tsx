@@ -467,18 +467,204 @@ describe('CircularBufferPressureModal - globally_allocated CBs (#1651)', () => {
         const details = document.querySelector('.tensix-details') as HTMLElement | null;
         expect(details).not.toBeNull();
 
-        // Zoomed plot mirrors the strip: aliased CBs render outline-only.
+        // Zoomed plot mirrors the strip: aliased CBs render outline-only. Per
+        // #1665 the aliased rect uses `fill="transparent"` rather than
+        // `fill="none"` so the whole interior is hit-testable under the
+        // default `pointer-events: visiblePainted` — without this the only
+        // clickable surface is the 1.5px stroke. Visually identical because
+        // `transparent` is `rgba(0,0,0,0)`.
         const zoomedChunks = details!.querySelectorAll('.zoomed-chunk');
         const aliasedChunks = Array.from(zoomedChunks).filter((c) => c.classList.contains('aliased'));
         expect(aliasedChunks.length).toBeGreaterThan(0);
         const aliasedRect = aliasedChunks[0].querySelector('.zoomed-chunk-rect');
-        expect(aliasedRect).toHaveAttribute('fill', 'none');
+        expect(aliasedRect).toHaveAttribute('fill', 'transparent');
 
         // Tooltip <title> for the aliased zoomed chunk surfaces the "aliased
         // to tensor" framing the issue asks for.
         const title = aliasedChunks[0].querySelector('title');
         expect(title?.textContent).toMatch(/Aliased to tensor @/);
         expect(title?.textContent).toMatch(/no new allocation/);
+    });
+});
+
+describe('CircularBufferPressureModal - show/hide globally allocated CBs (#1655)', () => {
+    it('renders the aliased-CB toggle only when the snapshot has aliased CBs', () => {
+        // No aliased CBs in the default fixture → the affordance must stay
+        // hidden; the existing "Show bytes on cells" toggle is the only
+        // Switch in the controls row.
+        renderModal(buildSnapshot());
+        expect(screen.queryByLabelText('Show globally allocated CBs')).not.toBeInTheDocument();
+
+        cleanup();
+
+        // Aliased fixture has one globally_allocated CB → toggle appears.
+        renderModal(buildAliasedSnapshot());
+        expect(screen.getByLabelText('Show globally allocated CBs')).toBeInTheDocument();
+    });
+
+    it('defaults to on - aliased CBs are visible until the user opts out', () => {
+        renderModal(buildAliasedSnapshot());
+
+        const toggle = screen.getByLabelText('Show globally allocated CBs') as HTMLInputElement;
+        expect(toggle).toBeChecked();
+
+        // Sanity-check the rendered state matches the toggle: aliased row
+        // present in the legend, header CBs count includes both CBs.
+        expect(document.querySelectorAll('button.cb-row')).toHaveLength(2);
+        expect(screen.getByText(/^CBs:\s*2$/)).toBeInTheDocument();
+        // "(N hidden)" hint only renders when something is hidden.
+        expect(screen.queryByText(/\(\d+ hidden\)/)).not.toBeInTheDocument();
+    });
+
+    it('dims aliased legend rows and filters them from the grid strip + zoomed plot when toggled off', () => {
+        renderModal(buildAliasedSnapshot());
+
+        fireEvent.click(screen.getByLabelText('Show globally allocated CBs'));
+
+        // Legend still shows both rows - the right panel is a reference
+        // surface, so we don't strip aliased CBs out of it. The aliased
+        // row picks up the `aliased-dimmed` class which drives the opacity
+        // demotion in SCSS.
+        const rows = document.querySelectorAll('button.cb-row');
+        expect(rows).toHaveLength(2);
+        const aliasedRow = rows[0];
+        const anonymousRow = rows[1];
+        expect(aliasedRow).toHaveClass('aliased');
+        expect(aliasedRow).toHaveClass('aliased-dimmed');
+        expect(anonymousRow).not.toHaveClass('aliased-dimmed');
+        // The "Globally allocated" marker stays visible on the dimmed row
+        // so the reason for the demotion is still legible.
+        expect(within(aliasedRow as HTMLElement).getByText('Globally allocated')).toBeInTheDocument();
+
+        // Header CBs count still reflects the full snapshot - the rows are
+        // dimmed, not removed.
+        expect(screen.getByText(/^CBs:\s*2$/)).toBeInTheDocument();
+        // Hint is grid-focused: "hidden" refers to the strip/zoomed plot,
+        // not to the legend.
+        expect(screen.getByText(/^\(1 hidden\)$/)).toBeInTheDocument();
+
+        // Per-core strip on (0,0) - the aliased-only core in the fixture -
+        // no longer has any CB rects to render. (1,0) still has the
+        // anonymous CB rect.
+        expect(getTensix(0, 0).querySelectorAll('.cb-strip-chunk')).toHaveLength(0);
+        expect(getTensix(1, 0).querySelectorAll('.cb-strip-chunk')).toHaveLength(1);
+
+        // Zoomed plot on the aliased-only core renders the empty-state copy
+        // (no contributions) instead of the outline-only rect that was there
+        // when the toggle was on.
+        fireEvent.click(getTensix(0, 0));
+        const details = document.querySelector('.tensix-details') as HTMLElement | null;
+        expect(details).not.toBeNull();
+        expect(within(details!).getByText(/No CB contributions for this core\./)).toBeInTheDocument();
+        expect(details!.querySelector('.zoomed-core-plot')).toBeNull();
+    });
+
+    it('keeps dimmed aliased rows interactive: clicking still highlights the cores they touch', () => {
+        // The dim-but-keep-in-legend trade-off only makes sense if the row
+        // is still useful as a reference. The selection lookup uses the
+        // full snapshot (not the grid-visible subset) so a dimmed row can
+        // still light up its cores even though no strip rect is rendered.
+        renderModal(buildAliasedSnapshot());
+
+        fireEvent.click(screen.getByLabelText('Show globally allocated CBs'));
+
+        const aliasedRow = document.querySelector('button.cb-row.aliased-dimmed') as HTMLButtonElement | null;
+        expect(aliasedRow).not.toBeNull();
+        fireEvent.click(aliasedRow!);
+
+        // Aliased CB in the fixture lives on (0,0) only.
+        expect(getTensix(0, 0)).toHaveClass('highlighted');
+        expect(getTensix(1, 0)).not.toHaveClass('highlighted');
+        // The strip on (0,0) still shows no rects - selection only drives
+        // the cell-level highlight, it does NOT re-introduce the filtered
+        // strip rect.
+        expect(getTensix(0, 0).querySelectorAll('.cb-strip-chunk')).toHaveLength(0);
+    });
+
+    it('keeps Peak per core and Total CBs anchored to the anonymous bytes when toggled off', () => {
+        // Build a fixture where Total CBs would visibly diverge if we
+        // accidentally driven it off the visible set: one anonymous CB on
+        // (0,0) and another anonymous CB on (1,0) (disjoint cores → sum >
+        // peak), plus an aliased CB on (0,0). Toggling the aliased CB off
+        // must NOT change either total.
+        const anonA = 1024;
+        const anonB = 2048;
+        const aliasedSize = 100_000;
+        const snapshot: CBPressureSnapshot = {
+            byCore: { '0,0': anonA, '1,0': anonB },
+            maxBytes: anonB,
+            unattributedBytes: 0,
+            allocations: [
+                {
+                    nodeId: 1,
+                    address: 0x1000,
+                    size: aliasedSize,
+                    numCores: 1,
+                    coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
+                    cores: [{ x: 0, y: 0 }],
+                    globallyAllocated: true,
+                },
+                {
+                    nodeId: 2,
+                    address: 0x2000,
+                    size: anonA,
+                    numCores: 1,
+                    coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
+                    cores: [{ x: 0, y: 0 }],
+                    globallyAllocated: false,
+                },
+                {
+                    nodeId: 3,
+                    address: 0x3000,
+                    size: anonB,
+                    numCores: 1,
+                    coreRangeSet: '{[(x=1,y=0) - (x=1,y=0)]}',
+                    cores: [{ x: 1, y: 0 }],
+                    globallyAllocated: false,
+                },
+            ],
+        };
+
+        renderModal(snapshot);
+
+        const peakRow = document.querySelector('.cb-list-total.row-peak') as HTMLElement;
+        const sumRow = document.querySelector('.cb-list-total.row-sum') as HTMLElement;
+        // Total CBs is visible because the two anonymous CBs sit on disjoint
+        // cores, so sum (3 KiB) > peak (2 KiB).
+        expect(peakRow).not.toBeNull();
+        expect(sumRow).not.toBeNull();
+        const peakValueBefore = peakRow.querySelector('.value')!.textContent;
+        const sumValueBefore = sumRow.querySelector('.value')!.textContent;
+        expect(peakValueBefore).toMatch(/^2\s*KiB/);
+        expect(sumValueBefore).toMatch(/^3\s*KiB/);
+
+        fireEvent.click(screen.getByLabelText('Show globally allocated CBs'));
+
+        // Values do not move when the aliased CB is filtered out - they're
+        // anchored to snapshot.maxBytes and the non-aliased sum, neither of
+        // which depends on the toggle.
+        const peakRowAfter = document.querySelector('.cb-list-total.row-peak') as HTMLElement;
+        const sumRowAfter = document.querySelector('.cb-list-total.row-sum') as HTMLElement;
+        expect(peakRowAfter.querySelector('.value')!.textContent).toBe(peakValueBefore);
+        expect(sumRowAfter.querySelector('.value')!.textContent).toBe(sumValueBefore);
+    });
+
+    it('restores aliased CB rendering when the toggle is flipped back on', () => {
+        renderModal(buildAliasedSnapshot());
+
+        // Off: row stays in the legend but dimmed, strip rect drops.
+        fireEvent.click(screen.getByLabelText('Show globally allocated CBs'));
+        expect(document.querySelectorAll('button.cb-row.aliased-dimmed')).toHaveLength(1);
+        expect(screen.getByText(/^\(1 hidden\)$/)).toBeInTheDocument();
+        expect(getTensix(0, 0).querySelectorAll('.cb-strip-chunk')).toHaveLength(0);
+
+        // On: dim class clears, hint disappears, strip rect comes back.
+        fireEvent.click(screen.getByLabelText('Show globally allocated CBs'));
+        expect(document.querySelectorAll('button.cb-row')).toHaveLength(2);
+        expect(document.querySelectorAll('button.cb-row.aliased-dimmed')).toHaveLength(0);
+        expect(document.querySelectorAll('button.cb-row.aliased')).toHaveLength(1);
+        expect(screen.queryByText(/\(\d+ hidden\)/)).not.toBeInTheDocument();
+        expect(getTensix(0, 0).querySelectorAll('.cb-strip-chunk.aliased')).toHaveLength(1);
     });
 });
 

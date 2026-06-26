@@ -74,4 +74,23 @@ describe('FileStatusOverlay status row', () => {
         expect(screen.queryByText(getFileStatusLabel(FileStatus.STARTED))).not.toBeInTheDocument();
         expect(screen.queryByText(getFileStatusLabel(FileStatus.UPLOADING))).not.toBeInTheDocument();
     });
+
+    it('renders PROCESSING as an indeterminate stage without transfer summary text', () => {
+        renderOverlay({
+            currentFileName: 'model.mlir',
+            numberOfFiles: 2,
+            percentOfCurrent: 100,
+            finishedFiles: 0,
+            status: FileStatus.PROCESSING,
+            bytesTransferred: 256_000,
+            bytesTotal: 256_000,
+            currentFileSize: 256_000,
+        });
+
+        expect(screen.getByText('Processing report')).toBeInTheDocument();
+        expect(screen.getByText(getFileStatusLabel(FileStatus.PROCESSING))).toBeInTheDocument();
+        expect(screen.getByLabelText('Processing report')).toBeInTheDocument();
+        expect(screen.queryByText(/files\s*\(/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/complete/i)).not.toBeInTheDocument();
+    });
 });

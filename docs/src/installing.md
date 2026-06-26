@@ -69,37 +69,20 @@ Refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe/blob/m
 (installing-from-pypi)=
 ## Installing from PyPI
 
-TT-NN Visualizer can be installed from [PyPI](https://pypi.org/project/ttnn-visualizer/):
+TT-NN Visualizer is a standard Python package and can be installed from [PyPI](https://pypi.org/project/ttnn-visualizer/) with whichever tool you already use.
+
+Using `pip` (within a virtual environment):
 
 `pip install ttnn-visualizer`
 
-After installation run `ttnn-visualizer` to start the application. It is recommended to do this within a virtual environment.
+Using `pipx`, which installs the app in an isolated environment for you:
 
-The minimum supported version of Python is **3.10**. Pyenv can be used to ensure the application runs with a supported version of Python:
+`pipx install ttnn-visualizer`
 
-```bash
-mkdir ttnn-visualizer
-cd ttnn-visualizer
-pyenv local 3.10 # Optional step if using pyenv to manage versions
-python -m venv .env
-source .env/bin/activate
-pip install ttnn-visualizer
-ttnn-visualizer
-```
+Or, if you already use `uv`:
 
-See [pyenv](https://github.com/pyenv/pyenv) for installation instructions.
+`uv tool install ttnn-visualizer`
 
-### pipx
+The minimum supported version of Python is **3.10**. After installation run `ttnn-visualizer` to start the application.
 
-If you have `pipx` installed on your system, it can be used to simplify the above steps.
-
-```bash
-pipx install --include-deps ttnn-visualizer
-ttnn-visualizer
-```
-
-See [pipx installation](https://pipx.pypa.io/stable/installation/) for further help with setting up `pipx`.
-
-When installing `ttnn-visualizer` in a virtual environment, ensure that it is not also installed with the system Python. Having the package installed at the system level and in a virtual environment at the same time can lead to version mismatches.
-
-If you run into any issue with an unexpected TT-NN Visualizer version appearing in the browser ensure you have uninstalled the system package by running `pip uninstall ttnn-visualizer` outside of the virtual env.
+Whichever tool you choose, ensure `ttnn-visualizer` is installed in an isolated/virtual environment and not with the system Python. Having the package installed at the system level and in a virtual environment at the same time can lead to version mismatches. If you run into any issue with an unexpected TT-NN Visualizer version appearing in the browser ensure you have uninstalled the system package.

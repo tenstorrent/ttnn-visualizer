@@ -19,18 +19,19 @@ ssh-add
 ## Unable to find Python modules
 
 ```shell
-deactivate
-rm -rf myenv
+rm -rf .venv
+uv sync
 ```
 
-Then {ref}`follow the steps <back-end>` for creating virtual environment and reinstalling dependencies
+Then {ref}`follow the steps <back-end>` if problems persist.
 
 ## Missing distutils package
 
-With the virtualenv activated run:
+Remove the virtual environment and resync dependencies:
 
 ```shell
-pip install --upgrade setuptools
+rm -rf .venv
+uv sync
 ```
 
 

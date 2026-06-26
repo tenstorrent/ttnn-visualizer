@@ -24,6 +24,7 @@ import {
     showBufferSummaryZoomedAtom,
     showDeallocationReportAtom,
     showMemoryRegionsAtom,
+    topNAnnotationModeAtom,
 } from '../../store/app';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { ScrollLocations } from '../../definitions/VirtualLists';
@@ -32,6 +33,7 @@ import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
 import { getBufferAddressZoomRange, memoryZoomPaddingForRange } from '../../functions/bufferSummary';
+import { useTopNAnnotations } from '../../hooks/useTopNAnnotations';
 import BufferSummaryVirtualizedList from './BufferSummaryVirtualizedList';
 
 const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
@@ -110,6 +112,11 @@ function BufferSummaryPlotRenderer({
         [],
     );
 
+    const { annotationsByOpId: topNAnnotationsByOpId } = useTopNAnnotations({
+        operations: uniqueBuffersByOperationList,
+    });
+    const topNAnnotationMode = useAtomValue(topNAnnotationModeAtom);
+
     return uniqueBuffersByOperationList && !isLoadingDevices && tensorListByOperation ? (
         <BufferSummaryVirtualizedList
             operations={uniqueBuffersByOperationList}
@@ -123,6 +130,8 @@ function BufferSummaryPlotRenderer({
             memoryPadding={memoryPadding}
             axisConfiguration={BufferSummaryAxisConfiguration}
             markers={memoryRegionsMarkers}
+            topNAnnotationsByOpId={topNAnnotationsByOpId}
+            topNAnnotationMode={topNAnnotationMode}
             getTensorDeallocationReport={getTensorDeallocationReport}
             getOperationTooltipContent={getOperationTooltipContent}
             renderOperationLink={renderOperationLink}

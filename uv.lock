@@ -192,22 +192,6 @@ wheels = [
 ]
 
 [[package]]
-name = "build"
-version = "1.5.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama", marker = "os_name == 'nt'" },
-    { name = "importlib-metadata", marker = "python_full_version < '3.10.2'" },
-    { name = "packaging" },
-    { name = "pyproject-hooks" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/78/e0/df5e171f685f82f37b12e1f208064e24244911079d7b767447d1af7e0d70/build-1.5.0.tar.gz", hash = "sha256:302c22c3ba2a0fd5f3911918651341ebb3896176cbdec15bd421f80b1afc7647", size = 89796, upload-time = "2026-04-30T03:18:25.17Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/fe/6bea5c9162869c5beba5d9c8abbed835ec85bf1ec1fba05a3822325c45f3/build-1.5.0-py3-none-any.whl", hash = "sha256:13f3eecb844759ab66efec90ca17639bbf14dc06cb2fdf37a9010322d9c50a6f", size = 26018, upload-time = "2026-04-30T03:18:23.644Z" },
-]
-
-[[package]]
 name = "certifi"
 version = "2026.5.20"
 source = { registry = "https://pypi.org/simple" }
@@ -934,18 +918,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6c/e6/7bf14eeb8f8b7251141944835abd42eb20a658d89084b7e1f3e5fe394090/imagesize-2.0.0.tar.gz", hash = "sha256:8e8358c4a05c304f1fccf7ff96f036e7243a189e9e42e90851993c558cfe9ee3", size = 1773045, upload-time = "2026-03-03T14:18:29.941Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5f/53/fb7122b71361a0d121b669dcf3d31244ef75badbbb724af388948de543e2/imagesize-2.0.0-py2.py3-none-any.whl", hash = "sha256:5667c5bbb57ab3f1fa4bc366f4fbc971db3d5ed011fd2715fd8001f782718d96", size = 9441, upload-time = "2026-03-03T14:18:27.892Z" },
-]
-
-[[package]]
-name = "importlib-metadata"
-version = "9.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a9/01/15bb152d77b21318514a96f43af312635eb2500c96b55398d020c93d86ea/importlib_metadata-9.0.0.tar.gz", hash = "sha256:a4f57ab599e6a2e3016d7595cfd72eb4661a5106e787a95bcc90c7105b831efc", size = 56405, upload-time = "2026-03-20T06:42:56.999Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/3d/2d244233ac4f76e38533cfcb2991c9eb4c7bf688ae0a036d30725b8faafe/importlib_metadata-9.0.0-py3-none-any.whl", hash = "sha256:2d21d1cc5a017bd0559e36150c21c830ab1dc304dedd1b7ea85d20f45ef3edd7", size = 27789, upload-time = "2026-03-20T06:42:55.665Z" },
 ]
 
 [[package]]
@@ -2382,15 +2354,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pyproject-hooks"
-version = "1.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e7/82/28175b2414effca1cdac8dc99f76d660e7a4fb0ceefa4b4ab8f5f6742925/pyproject_hooks-1.2.0.tar.gz", hash = "sha256:1e859bd5c40fae9448642dd871adf459e5e2084186e8d2c2a79a824c970da1f8", size = 19228, upload-time = "2024-09-29T09:24:13.293Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/24/12818598c362d7f300f18e74db45963dbcb85150324092410c8b49405e42/pyproject_hooks-1.2.0-py3-none-any.whl", hash = "sha256:9e5c6bfa8dcc30091c74b0cf803c81fdd29d94f01992a7707bc97babb1141913", size = 10216, upload-time = "2024-09-29T09:24:11.978Z" },
-]
-
-[[package]]
 name = "pytest"
 version = "9.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3282,11 +3245,10 @@ wheels = [
 
 [[package]]
 name = "ttnn-visualizer"
-version = "0.90.0"
+version = "0.91.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
-    { name = "build" },
     { name = "flask" },
     { name = "flask-cors" },
     { name = "flask-socketio" },
@@ -3304,7 +3266,7 @@ dependencies = [
     { name = "zstd" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "black" },
     { name = "isort" },
@@ -3325,8 +3287,6 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = "~=1.18.0" },
-    { name = "black", marker = "extra == 'dev'", specifier = "==26.3.1" },
-    { name = "build" },
     { name = "flask", specifier = ">=3.1.0,<4.0" },
     { name = "flask-cors", specifier = ">=6.0.0,<7.0" },
     { name = "flask-socketio", specifier = ">=5.6.0,<6.0" },
@@ -3334,27 +3294,33 @@ requires-dist = [
     { name = "flask-static-digest", specifier = "==0.4.1" },
     { name = "gevent", specifier = "==25.9.1" },
     { name = "gunicorn", specifier = "~=23.0.0" },
-    { name = "isort", marker = "extra == 'dev'", specifier = "==6.0.1" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = "==2.0.0" },
-    { name = "myst-parser", marker = "extra == 'docs'", specifier = "==4.0.1" },
-    { name = "nbsphinx", marker = "extra == 'docs'", specifier = "==0.9.7" },
     { name = "orjson", specifier = ">=3.9.0" },
     { name = "pandas", specifier = ">=2.2.0,<3.0" },
-    { name = "playwright", marker = "extra == 'dev'", specifier = "==1.58.0" },
     { name = "pydantic", specifier = "==2.12.5" },
     { name = "pydantic-core", specifier = "==2.41.5" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = "==9.0.3" },
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.0,<7.0" },
-    { name = "sphinx", marker = "extra == 'docs'", specifier = "==8.1.3" },
-    { name = "sphinx-rtd-theme", marker = "extra == 'docs'", specifier = "==3.0.2" },
-    { name = "sphinx-sitemap", marker = "extra == 'docs'", specifier = "==2.9.0" },
-    { name = "sphinxcontrib-email", marker = "extra == 'docs'", specifier = "==0.3.6" },
     { name = "tt-perf-report", specifier = "==1.2.4" },
-    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = "==6.0.12.20240311" },
     { name = "zstd", specifier = ">=1.5.7,<2.0" },
 ]
-provides-extras = ["dev", "docs"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = "==26.3.1" },
+    { name = "isort", specifier = "==6.0.1" },
+    { name = "mypy", specifier = "==2.0.0" },
+    { name = "playwright", specifier = "==1.58.0" },
+    { name = "pytest", specifier = "==9.0.3" },
+    { name = "types-pyyaml", specifier = "==6.0.12.20240311" },
+]
+docs = [
+    { name = "myst-parser", specifier = "==4.0.1" },
+    { name = "nbsphinx", specifier = "==0.9.7" },
+    { name = "sphinx", specifier = "==8.1.3" },
+    { name = "sphinx-rtd-theme", specifier = "==3.0.2" },
+    { name = "sphinx-sitemap", specifier = "==2.9.0" },
+    { name = "sphinxcontrib-email", specifier = "==0.3.6" },
+]
 
 [[package]]
 name = "types-pyyaml"
@@ -3435,15 +3401,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c7/79/12135bdf8b9c9367b8701c2c19a14c913c120b882d50b014ca0d38083c2c/wsproto-1.3.2.tar.gz", hash = "sha256:b86885dcf294e15204919950f666e06ffc6c7c114ca900b060d6e16293528294", size = 50116, upload-time = "2025-11-20T18:18:01.871Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/f5/10b68b7b1544245097b2a1b8238f66f2fc6dcaeb24ba5d917f52bd2eed4f/wsproto-1.3.2-py3-none-any.whl", hash = "sha256:61eea322cdf56e8cc904bd3ad7573359a242ba65688716b0710a5eb12beab584", size = 24405, upload-time = "2025-11-20T18:18:00.454Z" },
-]
-
-[[package]]
-name = "zipp"
-version = "4.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b9/d8/eab98a517c14134c0b2eb4e2387bc5f457334293ec5d2dd3857ec2966802/zipp-4.1.0.tar.gz", hash = "sha256:4cb57381f544315db7688e976e922a2b18cdb513d21cc194eb42232ba2a3e602", size = 26214, upload-time = "2026-05-18T20:08:57.967Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3a/13/547360d81e6d88d58492968ffda9f9542854f11310ee556fef14260cc886/zipp-4.1.0-py3-none-any.whl", hash = "sha256:25ad4e16390cd314347dd8f1de67a2ac538ae658ed4ab9db16029c07c188e97f", size = 10238, upload-time = "2026-05-18T20:08:57.045Z" },
 ]
 
 [[package]]

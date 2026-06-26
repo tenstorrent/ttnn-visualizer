@@ -6,19 +6,50 @@
 @use '../mixins/scrollShade' as scrollShade;
 
 $label-width: 160px;
-$label-margin: 10px;
+$label-margin: 20px;
 $width-offset: $label-width;
 $height-offset: 15px;
+$rail-gutter: 26px;
+
+// Right-edge clearance for the fixed Feedback button (`.feedback-button`
+// sits at `right: -3px` with a rotated label extending ~35px into the
+// viewport). Pad the whole chart away from it so the rail dots and op
+// names don't sit under the button.
+$feedback-button-clearance: 40px;
+
+// Bottom clearance for the fixed `.app-footer` (closed `min-height: 34px`)
+// so the last rail dots and list rows aren't covered by the status bar /
+// Range pill at the viewport bottom. Add a few extra px of breathing room.
+$footer-clearance: 44px;
 
 .buffer-summary-chart {
-    margin-bottom: $height-offset * 2;
+    // Use padding (not margin) + border-box so the clearance is taken
+    // from the chart's own content area. `margin-right` widens the outer
+    // box and pushes the chart past the parent, triggering horizontal
+    // page scroll; padding shrinks the inner box, leaving the parent
+    // layout intact.
+    box-sizing: border-box;
+    padding-right: $feedback-button-clearance;
+
+    // Bumped from `$height-offset * 2` (30px) so the chart bottom edge
+    // clears the fixed `.app-footer` (closed min-height 34px) instead of
+    // sitting underneath it — without this the bottom rail dots and the
+    // last list rows render behind the Range pill / status bar.
+    margin-bottom: $footer-clearance;
 
     .chart-position {
         position: relative;
     }
 
     .buffer-summary-plot {
-        width: calc(100% - $width-offset);
+        // Width matches the row canvases beneath. Each row sits inside
+        // `.scrollable-with-rail` (padding-right: $rail-gutter) and is
+        // sized via the grid's 1fr column, so it shrinks by both the
+        // label column AND the rail gutter. The plot has to subtract the
+        // same — otherwise it extends 26px past the rows on the right
+        // (overlapping the left edge of the label column and visually
+        // eating the leading op-id digit).
+        width: calc(100% - $width-offset - $rail-gutter);
         position: absolute;
         top: 0;
         left: 0;
@@ -46,13 +77,38 @@ $height-offset: 15px;
         }
 
         .y-axis-tick {
+            // Block-level flex (not `inline-flex`) so the tick fills its
+            // fixed-width grid cell instead of sizing to content. With
+            // `inline-flex` + the top-N badge, long op names extended past
+            // the 160px column and triggered horizontal page scroll.
+            // `min-width: 0` lets the flex container shrink below its
+            // content's intrinsic width.
+            display: flex;
+            min-width: 0;
+            align-items: center;
+            gap: 6px;
             padding-left: $label-margin;
             margin-bottom: 0;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            overflow: hidden;
 
-            > a {
+            // The Tooltip wrapping the op name injects a `.bp6-popover-target`
+            // span between this flex container and the `<a>`. Force it to
+            // participate in flex shrinking so the `<a>` inside can reach
+            // its `text-overflow: ellipsis` when an op name is too long for
+            // the label column.
+            > .bp6-popover-target {
+                display: block;
+                min-width: 0;
+                flex: 1 1 auto;
+            }
+
+            a {
+                // Ellipsis has to live on the link itself — `text-overflow`
+                // only applies to text directly inside the styled element.
+                display: block;
+                min-width: 0;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
                 color: $tt-white;
                 text-decoration: none;
 
@@ -63,6 +119,28 @@ $height-offset: 15px;
         }
     }
 
+    .top-n-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 8px;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: monospace;
+        background-color: var(--top-n-color, #ff3b1f);
+        color: $tt-white;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+
+    .scrollable-with-rail {
+        position: relative;
+        padding-right: $rail-gutter;
+    }
+
     .scrollable-element {
         height: 600px;
         width: 100%;
@@ -71,6 +149,57 @@ $height-offset: 15px;
         top: $height-offset;
 
         @include scrollShade.scroll-shade(10px);
+    }
+
+    .top-n-rail {
+        position: absolute;
+        right: 0;
+        top: $height-offset;
+        bottom: 0;
+        width: $rail-gutter;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        pointer-events: none;
+        z-index: 2;
+    }
+
+    // `<li>` is the absolute-positioned anchor (was `display: contents`).
+    // Blueprint's Tooltip target span is laid out inside the li, so its
+    // bounding box ends up at the dot's location and the popover anchors
+    // there. Previously the span had zero geometry and every tooltip
+    // parked at the rail origin.
+    .top-n-rail-item {
+        position: absolute;
+        right: 2px;
+        transform: translateY(-50%);
+    }
+
+    .top-n-rail-dot {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        margin: 0;
+        padding: 0;
+        border: 1px solid rgb(0 0 0 / 30%);
+        border-radius: 50%;
+        background-color: var(--top-n-color, #ff3b1f);
+        font-family: monospace;
+        font-size: 10px;
+        font-weight: 600;
+        color: $tt-white;
+        line-height: 1;
+        pointer-events: auto;
+        cursor: pointer;
+        transition: transform 80ms ease;
+
+        &:hover,
+        &:focus-visible {
+            transform: scale(1.3);
+            outline: none;
+        }
     }
 
     .list-container {
