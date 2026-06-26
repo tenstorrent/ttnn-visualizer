@@ -131,6 +131,21 @@ type ClusterRenderResult = { status: 'ready'; model: ClusterRenderModel } | { st
 const chipKey = (rank: number, id: number) => `${rank}-${id}`;
 const ethUid = (rank: number, chipId: number, coreId: string) => `${rank}-${chipId}-${coreId}`;
 
+// Cheap deterministic non-negative hash. Used to spread long-haul/inter-host
+// ports across multiple outward edges by indexing into a small candidate list.
+// Doesn't need cryptographic quality — uniformity over 2–3 buckets is enough,
+// and `Math.imul` keeps it within 32-bit range without `BigInt`. #1510
+const hashLinkKey = (key: string): number => {
+    let hash = 0;
+    for (let i = 0; i < key.length; i += 1) {
+        // `| 0` coerces to a 32-bit signed integer; standard idiom for cheap
+        // string hashes. Final `-hash` strips the sign before modulo use.
+        // eslint-disable-next-line no-bitwise
+        hash = (Math.imul(hash, 31) + key.charCodeAt(i)) | 0;
+    }
+    return hash < 0 ? -hash : hash;
+};
+
 const getEthGridPosition = (ethPosition: CLUSTER_ETH_POSITION, index: number) => {
     let x = 0;
     let y = 0;
@@ -472,9 +487,16 @@ function buildClusterRenderModel(
         //      nothing blocks it on this chip's side)
         //   b) any other outward edge — perpendicular first (cleaner from a
         //      chord-edge-already-occupied-by-direct-cardinal standpoint),
-        //      otherwise the remaining outward edge (e.g. opposite of chord)
+        //      otherwise any remaining outward edge.
         //   c) interior-chip fallback: the legacy "first empty perpendicular"
         //      behaviour for chips that have no outward edges at all.
+        // When (b) yields more than one candidate (typical of 1-column mesh
+        // layouts where every chord is vertical and BOTH LEFT and RIGHT are
+        // outward), we distribute ports across the candidate edges by hashing
+        // the canonical link key. Both endpoints of a link share that key, so
+        // they independently pick the *same* edge — the cubic-Bezier then bows
+        // in a single direction from both ports instead of arcing across the
+        // column when one end placed on LEFT and the other on RIGHT. #1510
         // Outward edges depend only on the chip's grid position, so compute
         // once per chip rather than once per deferred port.
         const outwardForChip = ALL_EDGES.filter((edge) => isOutwardEdge(clusterChip, edge));
@@ -488,7 +510,14 @@ function buildClusterRenderModel(
             } else if (outwardForChip.includes(chord)) {
                 chosen = chord;
             } else {
-                chosen = perp.find((e) => outwardForChip.includes(e)) ?? outwardForChip[0];
+                const outwardPerps = perp.filter((e) => outwardForChip.includes(e));
+                const candidates = outwardPerps.length > 0 ? outwardPerps : outwardForChip;
+                if (candidates.length === 1) {
+                    [chosen] = candidates;
+                } else {
+                    const linkKey = canonicalLinkKeyByUid.get(uid) ?? uid;
+                    chosen = candidates[hashLinkKey(linkKey) % candidates.length];
+                }
             }
             if (!ethPosition.has(chosen)) {
                 ethPosition.set(chosen, []);
