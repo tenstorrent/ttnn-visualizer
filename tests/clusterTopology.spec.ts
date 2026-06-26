@@ -5,6 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import {
     PerRankInput,
+    hostHasMeshCoords,
+    hostHasTwoDimensionalMesh,
     looksLikeRankedDescriptor,
     pickMeshDocForRank,
     sortHostsByConnectionProximity,
@@ -450,5 +452,81 @@ describe('sortHostsByConnectionProximity', () => {
         const hosts = [makeHost(0, eightChips(0)), makeHost(1, eightChips(100)), makeHost(2, eightChips(200))];
         const ordered = sortHostsByConnectionProximity(hosts, []);
         expect(ordered.map((h) => h.rank)).toEqual([2, 1, 0]);
+    });
+});
+
+describe('mesh-availability helpers', () => {
+    const makeHost = (meshChips: ClusterHost['meshChips']): ClusterHost => ({
+        rank: 0,
+        descriptor: {
+            arch: [],
+            chips: {},
+            ethernet_connections: [],
+            chips_with_mmio: [],
+            chip_to_boardtype: {},
+            chip_to_bus_id: {},
+            chip_unique_ids: {},
+            boards: [],
+        } as unknown as ClusterModel,
+        meshChips,
+    });
+
+    describe('hostHasMeshCoords', () => {
+        it('accepts a 1D mesh where only y varies (multihost_poc_jun24 single host slice)', () => {
+            const host = makeHost({
+                6: [0, 0, 0, 0],
+                4: [0, 1, 0, 0],
+                5: [0, 2, 0, 0],
+                7: [0, 3, 0, 0],
+            });
+            expect(hostHasMeshCoords(host)).toBe(true);
+        });
+
+        it('accepts a 1D mesh where only x varies', () => {
+            const host = makeHost({
+                0: [0, 0, 0, 0],
+                1: [1, 0, 0, 0],
+                2: [2, 0, 0, 0],
+            });
+            expect(hostHasMeshCoords(host)).toBe(true);
+        });
+
+        it('accepts a true 2D mesh (galaxy-shaped)', () => {
+            const host = makeHost({
+                0: [0, 0, 0, 0],
+                1: [1, 0, 0, 0],
+                2: [0, 1, 0, 0],
+                3: [1, 1, 0, 0],
+            });
+            expect(hostHasMeshCoords(host)).toBe(true);
+        });
+
+        it('rejects a fully-degenerate mesh where every chip sits at the same point', () => {
+            // Mirrors multihost_poc_jun19_2043's mesh-descriptor where every chip collapsed to (0,0).
+            const host = makeHost({
+                0: [0, 0, 0, 0],
+                1: [0, 0, 0, 0],
+                2: [0, 0, 0, 0],
+            });
+            expect(hostHasMeshCoords(host)).toBe(false);
+        });
+
+        it('rejects an empty mesh', () => {
+            expect(hostHasMeshCoords(makeHost({}))).toBe(false);
+        });
+    });
+
+    describe('hostHasTwoDimensionalMesh', () => {
+        it('requires BOTH axes to vary', () => {
+            const oneD = makeHost({ 0: [0, 0, 0, 0], 1: [0, 1, 0, 0] });
+            const twoD = makeHost({ 0: [0, 0, 0, 0], 1: [1, 0, 0, 0], 2: [0, 1, 0, 0] });
+            expect(hostHasTwoDimensionalMesh(oneD)).toBe(false);
+            expect(hostHasTwoDimensionalMesh(twoD)).toBe(true);
+        });
+
+        it('rejects fully-degenerate and empty meshes', () => {
+            expect(hostHasTwoDimensionalMesh(makeHost({}))).toBe(false);
+            expect(hostHasTwoDimensionalMesh(makeHost({ 0: [0, 0, 0, 0] }))).toBe(false);
+        });
     });
 });

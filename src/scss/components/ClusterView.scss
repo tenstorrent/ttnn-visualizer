@@ -38,6 +38,14 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 width: 54px;
             }
         }
+
+        .cluster-view-layout-toggle {
+            // Anchor right of the zoom group; the close button still floats to the
+            // far right via `justify-content: space-between`. The zeroed margin also
+            // overrides Blueprint Switch's default bottom margin so the toggle sits
+            // centred vertically with the zoom buttons.
+            margin: 0 0 0 auto;
+        }
     }
 }
 

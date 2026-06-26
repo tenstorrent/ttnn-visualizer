@@ -150,6 +150,42 @@ const canonicalInterHostLinkKey = (a: Endpoint, b: Endpoint): string => {
  * the world-size probe up to `MAX_PROBE_RANKS`, since the backend serves
  * the unranked `cluster_descriptor.yaml` for any `?rank=N`.
  */
+/**
+ * True when this host's mesh-descriptor places its chips at meaningfully
+ * distinct positions on at least one axis. Accepts 1D meshes — e.g. the
+ * multi-host POC reports where every chip has `mesh_x=0` but `mesh_y`
+ * spans the world. A fully degenerate mesh (every chip at the same point)
+ * returns false; an empty mesh returns false. #1510
+ */
+export const hostHasMeshCoords = (host: ClusterHost): boolean => {
+    const coords = Object.values(host.meshChips);
+    if (coords.length === 0) {
+        return false;
+    }
+    const xs = new Set<number>();
+    const ys = new Set<number>();
+    for (const coord of coords) {
+        xs.add(coord[0]);
+        ys.add(coord[1]);
+    }
+    return xs.size > 1 || ys.size > 1;
+};
+
+/** True when every host has a true 2D mesh (both axes vary). #1510 */
+export const hostHasTwoDimensionalMesh = (host: ClusterHost): boolean => {
+    const coords = Object.values(host.meshChips);
+    if (coords.length === 0) {
+        return false;
+    }
+    const xs = new Set<number>();
+    const ys = new Set<number>();
+    for (const coord of coords) {
+        xs.add(coord[0]);
+        ys.add(coord[1]);
+    }
+    return xs.size > 1 && ys.size > 1;
+};
+
 export const looksLikeRankedDescriptor = (descriptor: ClusterModel): boolean => {
     const remoteConnections = descriptor.ethernet_connections_to_remote_devices;
     if (!Array.isArray(remoteConnections) || remoteConnections.length === 0) {

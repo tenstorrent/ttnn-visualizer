@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, ButtonGroup, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -10,7 +10,11 @@ import { useNavigate } from 'react-router';
 import 'styles/components/ClusterView.scss';
 import { stringToArchitecture } from '../../definitions/DeviceArchitecture';
 import { useArchitecture, useGetClusterTopology } from '../../hooks/useAPI';
-import { sortHostsByConnectionProximity } from '../../functions/clusterTopology';
+import {
+    hostHasMeshCoords,
+    hostHasTwoDimensionalMesh,
+    sortHostsByConnectionProximity,
+} from '../../functions/clusterTopology';
 import {
     CLUSTER_COORDS,
     CLUSTER_ETH_POSITION,
@@ -36,15 +40,14 @@ const CLUSTER_CHIP_SIZE_LARGE = 350;
 const CLUSTER_CHIP_SIZE_MEDIUM = 250;
 const CLUSTER_CHIP_SIZE_SMALL = 150;
 
-// Per-host fallback layout when mesh coordinates are missing. Hosts are tiled
-// *vertically* with one row gap between them. The order they're stacked in is
-// driven by where each host's inter-host connection chips sit in its local
-// 2-row grid (see the mean-local-y heuristic in `buildClusterRenderModel`),
-// so the row that carries the most cross-host links faces the gutter. Each
-// host arranges its chips in a 4-column grid stacked into rows.
-// Chosen because most current reports are 1- or 2-host with ≤ 8 chips per
-// host; deeper packing can come with a proper mesh-aware layout once the
-// mesh-descriptor multi-doc YAML quirk is resolved upstream.
+// Per-host condensed layout. Used either as a fallback when no host has mesh
+// coords, or as the user-selected layout when the topology only has 1D mesh
+// data (e.g. multi-host POC reports) and the literal mesh layout produces an
+// unwieldy 1×N strip. Hosts are tiled vertically with one row gap; the order
+// is driven by where each host's inter-host connection chips sit in its local
+// 2-row grid (`sortHostsByConnectionProximity`) so the row carrying most
+// cross-host links faces the gutter. Each host packs its chips into a 4-column
+// grid — sized for the typical 1- or 2-host × ≤ 8 chips per-host POC reports. #1510
 const FALLBACK_PER_HOST_COLS = 4;
 const FALLBACK_HOST_GUTTER_ROWS = 1;
 // Empty grid rows above the topmost host so any curves that exit through the
@@ -86,6 +89,12 @@ interface RenderChip extends ClusterChip {
     chipUniqueId?: number;
 }
 
+// What layout the renderer is using to place chips. `mesh` honours the report's
+// `physical_chip_mesh_coordinate_mapping_*.yaml` coordinates (1D or 2D). `condensed`
+// ignores them and tiles each host into a per-host 4-wide grid stacked vertically.
+// Exposed through the render model so the UI toggle knows which mode is active. #1510
+export type ClusterLayoutMode = 'mesh' | 'condensed';
+
 interface ClusterRenderModel {
     chips: RenderChip[];
     chipsByKey: Map<string, RenderChip>;
@@ -104,6 +113,17 @@ interface ClusterRenderModel {
     // curves aren't clipped by the bounding box. Sized in `buildClusterRenderModel`
     // from the chip stride.
     svgPad: number;
+    // Layout the model was actually built for. May differ from the requested mode
+    // when the requested mode isn't supported by the topology (e.g. `mesh` was
+    // requested but no host has mesh coords, so `condensed` was used instead).
+    layoutMode: ClusterLayoutMode;
+    // True when at least one mesh axis varies on every host — i.e. `mesh` mode
+    // would produce a non-trivial layout. Drives toggle availability in the UI.
+    isMeshAvailable: boolean;
+    // True when every host has a true 2D mesh (both axes vary). Used to pick the
+    // default mode: 2D meshes (galaxy) start in `mesh`, 1D-only meshes start in
+    // `condensed` to preserve the multi-host POC's current visual.
+    has2DMesh: boolean;
 }
 
 type ClusterRenderResult = { status: 'ready'; model: ClusterRenderModel } | { status: 'unsupported' };
@@ -137,7 +157,11 @@ const getEthGridPosition = (ethPosition: CLUSTER_ETH_POSITION, index: number) =>
     return { x, y };
 };
 
-function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesign): ClusterRenderResult {
+function buildClusterRenderModel(
+    topology: ClusterTopology,
+    chipDesign: ChipDesign,
+    requestedLayoutMode: ClusterLayoutMode = 'mesh',
+): ClusterRenderResult {
     if (!chipDesign?.eth) {
         return { status: 'unsupported' };
     }
@@ -147,28 +171,18 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
         return { status: 'unsupported' };
     }
 
-    // Step 1: place every chip on a global virtual grid. Prefer mesh coordinates
-    // when *every* host has a true 2D arrangement (both x and y axes vary);
-    // otherwise fall back to a per-host 4-wide grid tiled vertically. A
-    // degenerate 1D mesh (e.g. `physical_chip_mesh_coordinate_mapping_*.yaml`
-    // packs all chips into mesh_x=0) collapses every chip into a single column,
-    // which forces the eth-port placement logic (relative-neighbour-direction
-    // below) to cluster all ports on the TOP/BOTTOM edges and doesn't match
-    // the physical chip board geometry.
-    const hostHasTwoDimensionalMesh = (host: ClusterTopology['hosts'][number]) => {
-        const coords = Object.values(host.meshChips);
-        if (coords.length === 0) {
-            return false;
-        }
-        const xs = new Set<number>();
-        const ys = new Set<number>();
-        for (const coord of coords) {
-            xs.add(coord[0]);
-            ys.add(coord[1]);
-        }
-        return xs.size > 1 && ys.size > 1;
-    };
-    const useMeshCoords = hosts.every(hostHasTwoDimensionalMesh);
+    // Step 1: place every chip on a global virtual grid. `mesh` mode honours the
+    // report's mesh coordinates when every host has at least one varying axis
+    // (1D y-only meshes from the multi-host POC are accepted; only fully
+    // degenerate single-point meshes are rejected). `condensed` mode ignores
+    // mesh coords and tiles each host into a per-host 4-wide grid stacked
+    // vertically — same shape that legacy single-host reports used as fallback.
+    // If `mesh` was requested but no host has usable mesh data, we transparently
+    // fall back to `condensed` so the UI never renders an empty layout. #1510
+    const isMeshAvailable = hosts.every(hostHasMeshCoords);
+    const has2DMesh = hosts.every(hostHasTwoDimensionalMesh);
+    const useMeshCoords = requestedLayoutMode === 'mesh' && isMeshAvailable;
+    const layoutMode: ClusterLayoutMode = useMeshCoords ? 'mesh' : 'condensed';
 
     const renderChips: RenderChip[] = [];
     let nextHostOffsetY = useMeshCoords ? 0 : FALLBACK_TOP_PAD_ROWS;
@@ -650,6 +664,9 @@ function buildClusterRenderModel(topology: ClusterTopology, chipDesign: ChipDesi
             isMultiHost,
             worldSize,
             svgPad: Math.round(stride),
+            layoutMode,
+            isMeshAvailable,
+            has2DMesh,
         },
     };
 }
@@ -663,6 +680,14 @@ function ClusterRenderer() {
     const [userZoom, setUserZoom] = useState<number | null>(null);
     const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
     const [hoveredChip, setHoveredChip] = useState<string | null>(null);
+    // User's explicit override of the layout mode, keyed by the topology it was
+    // set for. Storing the topology alongside the mode lets the override naturally
+    // expire when the active report changes — no effect needed, no cascading
+    // re-renders from a reset effect.
+    const [layoutOverride, setLayoutOverride] = useState<{
+        mode: ClusterLayoutMode;
+        topology: ClusterTopology;
+    } | null>(null);
 
     // Mixed-architecture clusters aren't supported yet; default to the first
     // host's arch (wormhole when nothing is present). A heterogeneous topology
@@ -671,12 +696,33 @@ function ClusterRenderer() {
     const arch = stringToArchitecture((firstHostArch.length && firstHostArch[0]) || DEFAULT_ARCHITECTURE);
     const chipDesign = useArchitecture(arch);
 
+    // Default mode preserves pre-toggle behaviour: 2D meshes (galaxy) start in
+    // `mesh`, anything else (1D-only or no mesh) starts in `condensed`.
+    const defaultLayoutMode: ClusterLayoutMode = useMemo(() => {
+        if (!topology) {
+            return 'condensed';
+        }
+        return topology.hosts.length > 0 && topology.hosts.every(hostHasTwoDimensionalMesh) ? 'mesh' : 'condensed';
+    }, [topology]);
+    // Honour the override only when it was set against the *current* topology;
+    // otherwise it's stale (user switched reports) and we fall back to default.
+    const requestedLayoutMode: ClusterLayoutMode =
+        layoutOverride && layoutOverride.topology === topology ? layoutOverride.mode : defaultLayoutMode;
+    const setUserLayoutMode = useCallback(
+        (mode: ClusterLayoutMode) => {
+            if (topology) {
+                setLayoutOverride({ mode, topology });
+            }
+        },
+        [topology],
+    );
+
     const renderResult = useMemo(() => {
         if (!topology) {
             return null;
         }
-        return buildClusterRenderModel(topology, chipDesign);
-    }, [topology, chipDesign]);
+        return buildClusterRenderModel(topology, chipDesign, requestedLayoutMode);
+    }, [topology, chipDesign, requestedLayoutMode]);
 
     // close the topology overlay when Escape is pressed
     useEffect(() => {
@@ -820,6 +866,8 @@ function ClusterRenderer() {
         svgPad,
         isMultiHost,
         worldSize,
+        layoutMode: activeLayoutMode,
+        isMeshAvailable,
     } = renderResult.model;
 
     const isChipActive = (key: string) => {
@@ -857,6 +905,17 @@ function ClusterRenderer() {
                     />
                 </Tooltip>
             </ButtonGroup>
+            {isMeshAvailable && (
+                <Tooltip content='Switch between honouring the report mesh coordinates and a condensed 4-wide grid'>
+                    <Switch
+                        className='cluster-view-layout-toggle'
+                        label='Condensed layout'
+                        checked={activeLayoutMode === 'condensed'}
+                        onChange={() => setUserLayoutMode(activeLayoutMode === 'condensed' ? 'mesh' : 'condensed')}
+                        aria-label='Toggle between mesh-aware and condensed cluster layout'
+                    />
+                </Tooltip>
+            )}
             <Button
                 icon={IconNames.CROSS}
                 onClick={() => {
