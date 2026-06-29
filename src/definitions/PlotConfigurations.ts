@@ -149,6 +149,8 @@ export interface PlotDataOverrides {
     color?: string;
     hovertemplate?: string;
     colorVariance?: number;
+    /** Render trace as a tinted-fill bordered overlay for aliased CBs. #1652 */
+    outline?: boolean;
 }
 
 export const PerfChartConfig: Partial<Config> = {

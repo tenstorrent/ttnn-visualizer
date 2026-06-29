@@ -6,13 +6,40 @@ import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatMemorySize, getMemoryAddress } from './math';
 import { toReadableShape, toReadableType } from './formatting';
 import { Chunk, ColoredChunk, DecoratedBufferChunk, Tensor } from '../model/APIData';
-import { PlotDataCustom } from '../definitions/PlotConfigurations';
+import { PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import { TensorMemoryLayout } from './parseMemoryConfig';
+
+// Half-opacity tint + solid border; fill keeps the bar readable when the stroke clips at plot edges. #1652
+const OUTLINE_FILL_ALPHA = 0.5;
+const OUTLINE_BORDER_WIDTH = 2;
+
+const RGB_TUPLE_RE = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i;
+
+const withAlpha = (color: string | undefined, alpha: number): string | undefined => {
+    if (!color) {
+        return color;
+    }
+    const match = color.match(RGB_TUPLE_RE);
+    if (match) {
+        return `rgba(${match[1]},${match[2]},${match[3]},${alpha})`;
+    }
+    if (color.startsWith('#') && (color.length === 7 || color.length === 4)) {
+        const hex =
+            color.length === 4 ? `${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}` : color.slice(1);
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+            return `rgba(${r},${g},${b},${alpha})`;
+        }
+    }
+    return color;
+};
 
 export default function getChartData(
     memory: Chunk[],
     getTensorForAddress: (id: number) => Tensor | null,
-    overrides?: { color?: string; colorVariance?: number; hovertemplate?: string },
+    overrides?: PlotDataOverrides,
     options?: { renderPattern?: boolean; lateDeallocation?: boolean; showHex?: boolean },
 ): Partial<PlotDataCustom>[] {
     return memory.map((chunk) => {
@@ -81,20 +108,35 @@ export default function getChartData(
             };
         }
 
+        const outline = overrides?.outline === true;
+        const borderColor = outline ? color : undefined;
+        const fillColor = outline ? withAlpha(color, OUTLINE_FILL_ALPHA) : color;
+        const marker = outline
+            ? {
+                  color: fillColor,
+                  line: {
+                      width: OUTLINE_BORDER_WIDTH,
+                      color: borderColor,
+                      simplify: false,
+                  },
+                  pattern,
+              }
+            : {
+                  color: fillColor,
+                  line: {
+                      width: 0,
+                      opacity: 0,
+                      simplify: false,
+                  },
+                  pattern,
+              };
+
         return {
             x: [address + size / 2],
             y: [1],
             type: 'bar',
             width: [size],
-            marker: {
-                color,
-                line: {
-                    width: 0,
-                    opacity: 0,
-                    simplify: false,
-                },
-                pattern,
-            },
+            marker,
             memoryData: {
                 address,
                 size,
@@ -104,7 +146,10 @@ export default function getChartData(
             hovertemplate:
                 overrides?.hovertemplate !== undefined
                     ? overrides?.hovertemplate
-                    : createHoverTemplate(address, size, chunk, tensor, tensorMemoryLayout, color, options),
+                    : createHoverTemplate(address, size, chunk, tensor, tensorMemoryLayout, fillColor, {
+                          ...options,
+                          aliased: outline,
+                      }),
             hoverlabel: {
                 align: 'right',
                 bgcolor: 'white',
@@ -141,7 +186,7 @@ const createHoverTemplate = (
     tensor: Tensor | null,
     tensorMemoryLayout: TensorMemoryLayout | undefined,
     color?: string,
-    options?: { lateDeallocation?: boolean; showHex?: boolean },
+    options?: { lateDeallocation?: boolean; showHex?: boolean; aliased?: boolean },
 ): string => {
     const square = `<span style="color:${color};font-size:22px">&#9632;</span>`;
     const formattedAddress = getMemoryAddress(address, options?.showHex || false);
@@ -151,6 +196,13 @@ const createHoverTemplate = (
     const tensorDetails = tensor
         ? `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)}<br />${tensorMemoryLayout || ''}<br />Tensor ${tensor.id}${canDeallocateText}`
         : '';
+    // Plotly hover doesn't decode named HTML entities — use ASCII dash. #1652
+    let aliasedHeader = '';
+    if (options?.aliased) {
+        aliasedHeader = tensor
+            ? `<b>Globally allocated CB</b> - aliased to Tensor ${tensor.id} below<br />`
+            : `<b>Globally allocated CB</b><br />`;
+    }
 
-    return `${square} ${formattedAddress} (${formattedSize})<br />${tensorDetails}<extra></extra>`;
+    return `${aliasedHeader}${square} ${formattedAddress} (${formattedSize})<br />${tensorDetails}<extra></extra>`;
 };

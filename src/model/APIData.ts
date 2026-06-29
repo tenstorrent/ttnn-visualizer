@@ -204,6 +204,8 @@ export interface FragmentationEntry extends Chunk {
     colorVariance?: number | undefined;
     empty?: boolean;
     largestEmpty?: boolean;
+    // Mirrors `CircularBuffer.globallyAllocated` for the legend renderer. #1652
+    globallyAllocated?: boolean;
 }
 
 // export interface ReportMetaData {
@@ -377,6 +379,8 @@ export interface CircularBuffer extends Chunk {
     num_cores: number;
     core_range_set: string;
     colorVariance?: number | undefined;
+    // Aliased views into an existing L1 buffer — not new allocations. #1651 / #1652
+    globallyAllocated?: boolean;
 }
 
 export interface TensorBuffer extends Chunk {
