@@ -1,0 +1,798 @@
+{
+    "_comment": "GENERATED from tt-perf-report by backend/ttnn_visualizer/tests/test_perf_report_contract.py. Do not edit by hand; run UPDATE_PERF_GOLDEN=1 pytest to refresh.",
+    "ttPerfReportVersion": "1.2.4",
+    "minPercentage": 0.5,
+    "highDispatchThresholdUs": 6.5,
+    "colours": [
+        {
+            "id": "bound-dram",
+            "column": "bound",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "DRAM",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "green"
+        },
+        {
+            "id": "bound-flop",
+            "column": "bound",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "FLOP",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "green"
+        },
+        {
+            "id": "bound-slow",
+            "column": "bound",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "SLOW",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "yellow"
+        },
+        {
+            "id": "bound-host",
+            "column": "bound",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "HOST",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "red"
+        },
+        {
+            "id": "bound-both",
+            "column": "bound",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "BOTH",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "white"
+        },
+        {
+            "id": "bound-missing",
+            "column": "bound",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "white"
+        },
+        {
+            "id": "dram-on-dram-bound",
+            "column": "dram",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "DRAM",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "green"
+        },
+        {
+            "id": "dram-pct-on-dram-bound",
+            "column": "dram_percent",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "DRAM",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "green"
+        },
+        {
+            "id": "flops-on-flop-bound",
+            "column": "flops",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "FLOP",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "green"
+        },
+        {
+            "id": "flops-pct-on-flop-bound",
+            "column": "flops_percent",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "FLOP",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "green"
+        },
+        {
+            "id": "dram-on-slow-dram-heavy",
+            "column": "dram",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "SLOW",
+                "cores": 32,
+                "dram_percent": 80.0,
+                "flops_percent": 10.0,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "yellow"
+        },
+        {
+            "id": "flops-on-slow-dram-heavy",
+            "column": "flops",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "SLOW",
+                "cores": 32,
+                "dram_percent": 80.0,
+                "flops_percent": 10.0,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "white"
+        },
+        {
+            "id": "flops-on-slow-flop-heavy",
+            "column": "flops",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "SLOW",
+                "cores": 32,
+                "dram_percent": 10.0,
+                "flops_percent": 80.0,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "yellow"
+        },
+        {
+            "id": "dram-on-host-bound",
+            "column": "dram",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "HOST",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "white"
+        },
+        {
+            "id": "flops-on-host-bound",
+            "column": "flops",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "HOST",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "white"
+        },
+        {
+            "id": "cores-low",
+            "column": "cores",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": null,
+                "cores": 4,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "red"
+        },
+        {
+            "id": "cores-full",
+            "column": "cores",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": null,
+                "cores": 64,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "green"
+        },
+        {
+            "id": "cores-mid",
+            "column": "cores",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "white"
+        },
+        {
+            "id": "cores-missing",
+            "column": "cores",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": null,
+                "cores": null,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "grey"
+        },
+        {
+            "id": "op-torch",
+            "column": "op_code",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "(torch) aten::add",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "red"
+        },
+        {
+            "id": "op-matmul",
+            "column": "op_code",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "Matmul",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "magenta"
+        },
+        {
+            "id": "op-conv2d",
+            "column": "op_code",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "Conv2d",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "orange"
+        },
+        {
+            "id": "op-optimizedconv",
+            "column": "op_code",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "OptimizedConvNew",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "orange"
+        },
+        {
+            "id": "op-layernorm",
+            "column": "op_code",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "LayerNorm",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "cyan"
+        },
+        {
+            "id": "op-allgather",
+            "column": "op_code",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "AllGather",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "cyan"
+        },
+        {
+            "id": "op-sdpa",
+            "column": "op_code",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "ScaledDotProductAttentionDecode",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "blue"
+        },
+        {
+            "id": "op-updatecache",
+            "column": "op_code",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "UpdateCache",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "blue"
+        },
+        {
+            "id": "op-unmapped",
+            "column": "op_code",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "Softmax",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "white"
+        },
+        {
+            "id": "gap-high",
+            "column": "op_to_op_gap",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": 7.0,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "red"
+        },
+        {
+            "id": "gap-low",
+            "column": "op_to_op_gap",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": 3.0,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "white"
+        },
+        {
+            "id": "gap-missing",
+            "column": "op_to_op_gap",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "white"
+        },
+        {
+            "id": "fidelity-sufficient",
+            "column": "math_fidelity",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "Matmul",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "HiFi4",
+                "input_0_datatype": "BFLOAT16",
+                "input_1_datatype": "BFLOAT16",
+                "output_datatype": "BFLOAT16"
+            },
+            "expected": "green"
+        },
+        {
+            "id": "fidelity-too-high",
+            "column": "math_fidelity",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "Matmul",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "HiFi4",
+                "input_0_datatype": "BFLOAT16",
+                "input_1_datatype": "BFLOAT16",
+                "output_datatype": "BFLOAT4_B"
+            },
+            "expected": "red"
+        },
+        {
+            "id": "fidelity-too-low",
+            "column": "math_fidelity",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "Matmul",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "HiFi2",
+                "input_0_datatype": "BFLOAT16",
+                "input_1_datatype": "BFLOAT16",
+                "output_datatype": "BFLOAT16"
+            },
+            "expected": "cyan"
+        },
+        {
+            "id": "fidelity-non-matmul-not-coloured",
+            "column": "math_fidelity",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "Softmax",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "HiFi4",
+                "input_0_datatype": "BFLOAT16",
+                "input_1_datatype": "BFLOAT16",
+                "output_datatype": "BFLOAT16"
+            },
+            "expected": "white"
+        },
+        {
+            "id": "muted-device-op",
+            "column": "bound",
+            "row": {
+                "total_percent": 0.3,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": "DRAM",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "grey"
+        },
+        {
+            "id": "muted-non-torch-op",
+            "column": "bound",
+            "row": {
+                "total_percent": 0.3,
+                "raw_op_code": "SomeCpuOp",
+                "bound": "DRAM",
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "grey"
+        },
+        {
+            "id": "unmuted-torch-op",
+            "column": "op_code",
+            "row": {
+                "total_percent": 0.3,
+                "raw_op_code": "(torch) aten::add",
+                "bound": null,
+                "cores": 32,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "red"
+        }
+    ],
+    "fidelity": [
+        {
+            "id": "f-bf16-hifi4",
+            "input_0": "BFLOAT16",
+            "input_1": "BFLOAT16",
+            "output": "BFLOAT16",
+            "math_fidelity": "HiFi4",
+            "expected": "sufficient"
+        },
+        {
+            "id": "f-bf16-hifi2",
+            "input_0": "BFLOAT16",
+            "input_1": "BFLOAT16",
+            "output": "BFLOAT16",
+            "math_fidelity": "HiFi2",
+            "expected": "too_low"
+        },
+        {
+            "id": "f-bf16-lofi",
+            "input_0": "BFLOAT16",
+            "input_1": "BFLOAT16",
+            "output": "BFLOAT16",
+            "math_fidelity": "LoFi",
+            "expected": "too_low"
+        },
+        {
+            "id": "f-bfp4out-hifi4",
+            "input_0": "BFLOAT16",
+            "input_1": "BFLOAT16",
+            "output": "BFLOAT4_B",
+            "math_fidelity": "HiFi4",
+            "expected": "too_high"
+        },
+        {
+            "id": "f-bfp4out-hifi2",
+            "input_0": "BFLOAT16",
+            "input_1": "BFLOAT16",
+            "output": "BFLOAT4_B",
+            "math_fidelity": "HiFi2",
+            "expected": "sufficient"
+        },
+        {
+            "id": "f-bfp4out-lofi",
+            "input_0": "BFLOAT16",
+            "input_1": "BFLOAT16",
+            "output": "BFLOAT4_B",
+            "math_fidelity": "LoFi",
+            "expected": "too_low"
+        },
+        {
+            "id": "f-bfp8-hifi4",
+            "input_0": "BFLOAT8_B",
+            "input_1": "BFLOAT8_B",
+            "output": "BFLOAT16",
+            "math_fidelity": "HiFi4",
+            "expected": "too_high"
+        },
+        {
+            "id": "f-bfp8-hifi2",
+            "input_0": "BFLOAT8_B",
+            "input_1": "BFLOAT8_B",
+            "output": "BFLOAT16",
+            "math_fidelity": "HiFi2",
+            "expected": "sufficient"
+        },
+        {
+            "id": "f-bfp8-lofi",
+            "input_0": "BFLOAT8_B",
+            "input_1": "BFLOAT8_B",
+            "output": "BFLOAT16",
+            "math_fidelity": "LoFi",
+            "expected": "too_low"
+        },
+        {
+            "id": "f-bfp4w-lofi",
+            "input_0": "BFLOAT8_B",
+            "input_1": "BFLOAT4_B",
+            "output": "BFLOAT16",
+            "math_fidelity": "LoFi",
+            "expected": "sufficient"
+        },
+        {
+            "id": "f-bfp4w-hifi4",
+            "input_0": "BFLOAT8_B",
+            "input_1": "BFLOAT4_B",
+            "output": "BFLOAT16",
+            "math_fidelity": "HiFi4",
+            "expected": "too_high"
+        },
+        {
+            "id": "f-integer",
+            "input_0": "UINT8",
+            "input_1": "BFLOAT16",
+            "output": "BFLOAT16",
+            "math_fidelity": "HiFi4",
+            "expected": "not_applicable"
+        },
+        {
+            "id": "f-unsupported",
+            "input_0": "MADE_UP",
+            "input_1": "BFLOAT16",
+            "output": "BFLOAT16",
+            "math_fidelity": "HiFi4",
+            "expected": "unknown"
+        }
+    ]
+}
