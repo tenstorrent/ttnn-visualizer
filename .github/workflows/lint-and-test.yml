@@ -48,8 +48,7 @@ jobs:
         run: pnpm test
         background: true
 
-      - name: Wait for lint and test to complete
-        run: wait-all
+      - wait-all:
 
   backend-lint-and-test:
     name: Lint and Test (Backend)
@@ -92,8 +91,7 @@ jobs:
         run: uv run --frozen mypy backend/ttnn_visualizer
         background: true
 
-      - name: Wait for linters to complete
-        run: wait-all
+      - wait-all:
 
       - name: Run Backend Tests
         run: uv run --frozen pytest backend/ttnn_visualizer
