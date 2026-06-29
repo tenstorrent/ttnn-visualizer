@@ -14,7 +14,12 @@ import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { MlirServerConnection } from '../src/definitions/MlirServer';
 import FileStatusOverlay from '../src/components/FileStatusOverlay';
 import MlirJsonFileLoader from '../src/components/mlir/MlirJsonFileLoader';
-import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../src/store/app';
+import {
+    fileTransferProgressAtom,
+    getInactiveFileTransferProgress,
+    mlirFileResultsAtom,
+    mlirFileResultsOpenAtom,
+} from '../src/store/app';
 import { FileStatus } from '../src/model/APIData';
 
 vi.mock('../src/libs/axiosInstance', () => ({
@@ -53,11 +58,15 @@ function createDeferred<T>(): Deferred<T> {
 beforeEach(() => {
     vi.resetAllMocks();
     getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
+    getDefaultStore().set(mlirFileResultsAtom, null);
+    getDefaultStore().set(mlirFileResultsOpenAtom, false);
 });
 
 afterEach(() => {
     cleanup();
     getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
+    getDefaultStore().set(mlirFileResultsAtom, null);
+    getDefaultStore().set(mlirFileResultsOpenAtom, false);
 });
 
 describe('useMlirRemote progress lifecycle', () => {
@@ -128,7 +137,9 @@ describe('useMlirRemote progress lifecycle', () => {
 
     it('shows overlay transition from upload to processing and closes when the request resolves', async () => {
         const postMock = vi.mocked(axiosInstance.post);
-        const deferred = createDeferred<{ data: { status: ConnectionTestStates; graph: null; name: string } }>();
+        const deferred = createDeferred<{
+            data: { results: { status: ConnectionTestStates; graph: null; name: string; filename: string }[] };
+        }>();
         let onUploadProgress: ((event: AxiosProgressEvent) => void) | undefined;
 
         postMock.mockImplementation((_url, _data, config) => {
@@ -158,20 +169,28 @@ describe('useMlirRemote progress lifecycle', () => {
 
         onUploadProgress?.({ loaded: 10, total: 10 } as AxiosProgressEvent);
 
+        // Processing lists each uploaded file with a spinner rather than a
+        // single "processing one report" line.
         await waitFor(() => {
-            expect(screen.getByText('Processing report')).toBeInTheDocument();
+            expect(screen.getByText('Processing reports')).toBeInTheDocument();
+            expect(screen.getByText('model.mlir')).toBeInTheDocument();
         });
 
         deferred.resolve({
             data: {
-                status: ConnectionTestStates.OK,
-                graph: null,
-                name: 'model',
+                results: [
+                    {
+                        status: ConnectionTestStates.OK,
+                        graph: null,
+                        name: 'model',
+                        filename: 'model.mlir',
+                    },
+                ],
             },
         });
 
         await waitFor(() => {
-            expect(screen.queryByText('Processing report')).not.toBeInTheDocument();
+            expect(screen.queryByText('Processing reports')).not.toBeInTheDocument();
             expect(getDefaultStore().get(fileTransferProgressAtom).status).toBe(FileStatus.INACTIVE);
         });
     });

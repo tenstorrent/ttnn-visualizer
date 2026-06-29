@@ -7,6 +7,7 @@ import { Icon, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useMemo } from 'react';
 import { semverParse } from '../functions/semverParse';
+import { VERSION_ICON_SIZE } from '../definitions/UiConfig';
 import 'styles/components/AppVersionStatus.scss';
 
 interface AppVersionStatusProps {
@@ -31,7 +32,6 @@ const OUTDATED_CLASS_MAP: Record<OutdatedLevel, string> = {
 };
 
 const PYPI_SOURCE_URL = 'https://pypi.org/project/ttnn-visualizer/';
-const VERSION_ICON_SIZE = 14;
 
 function AppVersionStatus({
     appVersion,
