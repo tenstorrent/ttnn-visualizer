@@ -16,15 +16,11 @@ export interface OpPerfRowScore {
 export interface OpPerfRowScores {
     scoreByOpId: Map<number, OpPerfRowScore>;
     isAvailable: boolean;
-    maxNs: number;
-    minNs: number;
 }
 
 const EMPTY_RESULT: OpPerfRowScores = {
     scoreByOpId: new Map(),
     isAvailable: false,
-    maxNs: 0,
-    minNs: 0,
 };
 
 // Reuses the perfOverlay scoring (#1517) so the row-bar colour ramp matches
@@ -53,19 +49,17 @@ export const useOpPerfRowScores = (): OpPerfRowScores => {
         if (aggregates.size === 0) {
             return EMPTY_RESULT;
         }
-        const { scoreByOpId: rawScores, minNs, maxNs } = scoreOps(aggregates);
+        const { scoreByOpId: rawScores } = scoreOps(aggregates);
         const scoreByOpId = new Map<number, OpPerfRowScore>();
-        for (const [opId, score] of rawScores) {
-            const aggregate = aggregates.get(opId);
-            if (aggregate) {
+        for (const [opId, aggregate] of aggregates) {
+            const score = rawScores.get(opId);
+            if (score) {
                 scoreByOpId.set(opId, { deviceTimeNs: aggregate.deviceTimeNs, t: score.t });
             }
         }
         return {
             scoreByOpId,
             isAvailable: scoreByOpId.size > 0,
-            maxNs,
-            minNs,
         };
     }, [deviceOperations]);
 };

@@ -5,14 +5,13 @@
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import 'styles/components/OperationPerfRowBar.scss';
 import { perfColorScale } from '../functions/perfOverlay';
-import { formatSize } from '../functions/math';
+import { formatDuration } from '../functions/formatting';
 import { OpPerfRowScore } from '../hooks/useOpPerfRowScores';
 
 interface OperationPerfRowBarProps {
     score: OpPerfRowScore | undefined;
 }
 
-const NS_TO_US = 1 / 1_000;
 // Floor so a near-zero `t` still leaves a visible marker instead of vanishing.
 const MIN_BAR_PERCENT = 2;
 
@@ -23,8 +22,7 @@ const OperationPerfRowBar = ({ score }: OperationPerfRowBarProps) => {
     const { deviceTimeNs, t } = score;
     const widthPercent = Math.max(MIN_BAR_PERCENT, Math.round(t * 100));
     const colour = perfColorScale(t);
-    const deviceTimeUs = deviceTimeNs * NS_TO_US;
-    const tooltip = `Device kernel duration: ${formatSize(deviceTimeUs, 2)} µs`;
+    const tooltip = `Device kernel duration: ${formatDuration(deviceTimeNs)}`;
 
     return (
         <Tooltip
