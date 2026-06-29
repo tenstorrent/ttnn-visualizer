@@ -27,17 +27,14 @@ import {
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
-import { Marker, MarkerColours, PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
-import { L1PressureMetrics, L1PressureStatus } from '../functions/l1Pressure';
+import { Marker, MarkerColours } from '../definitions/PerfTable';
+import { L1PressureStatus } from '../functions/l1Pressure';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
-import { HIGH_DISPATCH_THRESHOLD_MS, OpType, PerfTabIds } from '../definitions/Performance';
-import { BufferType } from '../model/BufferType';
-import { DeviceOperationLayoutTypes } from '../model/APIData';
+import { OpType, PerfTabIds } from '../definitions/Performance';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
-import { parsePerfRowTensorAttributes } from '../functions/parsePerfRowTensorAttributes';
-import { nsToUs } from '../functions/math';
+import { enrichRowData } from '../functions/enrichPerfRowData';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
@@ -303,87 +300,6 @@ export default function Performance() {
         </div>
     );
 }
-
-interface RowAttributes {
-    buffer_type: BufferType | null;
-    layout: DeviceOperationLayoutTypes | null;
-}
-
-const getRowAttributes = (row: PerfTableRow): RowAttributes => {
-    const { buffer_type: bufferType, layout } = parsePerfRowTensorAttributes(row);
-
-    return {
-        buffer_type: bufferType,
-        layout,
-    };
-};
-
-const enrichRowData = (
-    rows: PerfTableRow[],
-    opIdsMap: { perfId?: string; opId: number }[],
-    l1PressureMap: Map<number, L1PressureMetrics> | null,
-): TypedPerfTableRow[] => {
-    // Build the perf-id -> op-id lookup once so enrichment stays O(N) instead of O(N·M) — the
-    // previous `.find()` per row scaled with both row count and the active report's op count.
-    const opIdByPerfId = new Map<string, number>();
-    for (const { perfId, opId } of opIdsMap) {
-        if (perfId !== undefined) {
-            opIdByPerfId.set(perfId, opId);
-        }
-    }
-
-    const typedRows = rows.map((row) => {
-        const val = parseInt(row.op_to_op_gap, 10);
-        const op = opIdByPerfId.get(row.id);
-        // TTNN-op snapshot is shared by all device ops that map to the same row.op.
-        const l1Pressure = op !== undefined ? l1PressureMap?.get(op) : undefined;
-
-        return {
-            ...row,
-            op,
-            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD_MS,
-            id: parseInt(row.id, 10),
-            total_percent: parseFloat(row.total_percent),
-            device: parseInt(row.device, 10) ?? null,
-            device_time: parseFloat(row.device_time),
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: parseInt(row.cores, 10),
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-            pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
-            // Kernel durations arrive as raw ns in the CSV; store as µs so they share the µs
-            // formatting/sorting of the Device Time column they sit beside (#1518).
-            device_kernel_duration: nsToUs(row.device_kernel_duration),
-            brisc_kernel_duration: nsToUs(row.brisc_kernel_duration),
-            ncrisc_kernel_duration: nsToUs(row.ncrisc_kernel_duration),
-            trisc0_kernel_duration: nsToUs(row.trisc0_kernel_duration),
-            trisc1_kernel_duration: nsToUs(row.trisc1_kernel_duration),
-            trisc2_kernel_duration: nsToUs(row.trisc2_kernel_duration),
-            erisc_kernel_duration: nsToUs(row.erisc_kernel_duration),
-            l1_fullness_percent: l1Pressure?.fullnessPercent ?? null,
-            l1_free_segments: l1Pressure?.freeSegments ?? null,
-            l1_largest_free: l1Pressure?.largestFreeBytes ?? null,
-            l1_largest_free_percent: l1Pressure?.largestFreePercent ?? null,
-            ...getRowAttributes(row),
-            isFirstHashOccurrence: true, // Default to true, will be updated if needed in next step
-        };
-    });
-
-    // Mark which rows are the first occurrence of each hash
-    const hashFirstOccurrence = new Map<string | null, boolean>();
-    for (const row of typedRows) {
-        if (row.hash && !hashFirstOccurrence.has(row.hash)) {
-            hashFirstOccurrence.set(row.hash, true);
-            row.isFirstHashOccurrence = true;
-        } else if (row.hash) {
-            row.isFirstHashOccurrence = false;
-        }
-    }
-
-    return typedRows;
-};
 
 const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
     rows.map((row) => ({
