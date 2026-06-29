@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, ButtonGroup, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -11,8 +11,8 @@ import 'styles/components/ClusterView.scss';
 import { stringToArchitecture } from '../../definitions/DeviceArchitecture';
 import { useArchitecture, useGetClusterTopology } from '../../hooks/useAPI';
 import {
+    FALLBACK_PER_HOST_COLS,
     hostHasMeshCoords,
-    hostHasTwoDimensionalMesh,
     sortHostsByConnectionProximity,
 } from '../../functions/clusterTopology';
 import {
@@ -40,20 +40,13 @@ const CLUSTER_CHIP_SIZE_LARGE = 350;
 const CLUSTER_CHIP_SIZE_MEDIUM = 250;
 const CLUSTER_CHIP_SIZE_SMALL = 150;
 
-// Per-host condensed layout. Used either as a fallback when no host has mesh
-// coords, or as the user-selected layout when the topology only has 1D mesh
-// data (e.g. multi-host POC reports) and the literal mesh layout produces an
-// unwieldy 1×N strip. Hosts are tiled vertically with one row gap; the order
-// is driven by where each host's inter-host connection chips sit in its local
-// 2-row grid (`sortHostsByConnectionProximity`) so the row carrying most
-// cross-host links faces the gutter. Each host packs its chips into a 4-column
-// grid — sized for the typical 1- or 2-host × ≤ 8 chips per-host POC reports. #1510
-const FALLBACK_PER_HOST_COLS = 4;
+// Condensed layout: each host tiled vertically as a `FALLBACK_PER_HOST_COLS`
+// wide grid (sourced from `clusterTopology` so the host-ordering heuristic
+// stays in sync). Used as a fallback when no mesh coords are present, or as
+// a user-selectable alternative to the literal mesh layout. #1510
 const FALLBACK_HOST_GUTTER_ROWS = 1;
-// Empty grid rows above the topmost host so any curves that exit through the
-// TOP edge of that host's top row (long-haul intra-host loops, inter-host
-// links routed via the outward-edge rule) have somewhere to arc instead of
-// running into the cluster panel chrome.
+// Top padding gives outward-edge curves from the topmost host room to arc
+// without colliding with the cluster panel chrome.
 const FALLBACK_TOP_PAD_ROWS = 2;
 
 const ALL_EDGES: readonly CLUSTER_ETH_POSITION[] = [
@@ -89,10 +82,8 @@ interface RenderChip extends ClusterChip {
     chipUniqueId?: number;
 }
 
-// What layout the renderer is using to place chips. `mesh` honours the report's
-// `physical_chip_mesh_coordinate_mapping_*.yaml` coordinates (1D or 2D). `condensed`
-// ignores them and tiles each host into a per-host 4-wide grid stacked vertically.
-// Exposed through the render model so the UI toggle knows which mode is active. #1510
+// `mesh`: honour the report's `physical_chip_mesh_coordinate_mapping_*.yaml`
+// (1D or 2D). `condensed`: tile each host into a per-host 4-wide grid. #1510
 export type ClusterLayoutMode = 'mesh' | 'condensed';
 
 interface ClusterRenderModel {
@@ -109,21 +100,13 @@ interface ClusterRenderModel {
     idFontSize: number;
     isMultiHost: boolean;
     worldSize: number;
-    // Extra pixels added to each side of the SVG link layer so outward-bowing
-    // curves aren't clipped by the bounding box. Sized in `buildClusterRenderModel`
-    // from the chip stride.
+    // Padding around the SVG link layer so outward-bowing curves aren't clipped.
     svgPad: number;
-    // Layout the model was actually built for. May differ from the requested mode
-    // when the requested mode isn't supported by the topology (e.g. `mesh` was
-    // requested but no host has mesh coords, so `condensed` was used instead).
+    // Layout actually applied (may fall back to `condensed` if `mesh` was
+    // requested but no host has usable mesh data).
     layoutMode: ClusterLayoutMode;
-    // True when at least one mesh axis varies on every host — i.e. `mesh` mode
-    // would produce a non-trivial layout. Drives toggle availability in the UI.
+    // Mesh layout is viable for this topology (drives the UI toggle's visibility).
     isMeshAvailable: boolean;
-    // True when every host has a true 2D mesh (both axes vary). Used to pick the
-    // default mode: 2D meshes (galaxy) start in `mesh`, 1D-only meshes start in
-    // `condensed` to preserve the multi-host POC's current visual.
-    has2DMesh: boolean;
 }
 
 type ClusterRenderResult = { status: 'ready'; model: ClusterRenderModel } | { status: 'unsupported' };
@@ -131,15 +114,11 @@ type ClusterRenderResult = { status: 'ready'; model: ClusterRenderModel } | { st
 const chipKey = (rank: number, id: number) => `${rank}-${id}`;
 const ethUid = (rank: number, chipId: number, coreId: string) => `${rank}-${chipId}-${coreId}`;
 
-// Cheap deterministic non-negative hash. Used to spread long-haul/inter-host
-// ports across multiple outward edges by indexing into a small candidate list.
-// Doesn't need cryptographic quality — uniformity over 2–3 buckets is enough,
-// and `Math.imul` keeps it within 32-bit range without `BigInt`. #1510
+// Cheap deterministic non-negative hash for distributing ports across a small
+// candidate edge list. Quality only needs to be uniform over 2-3 buckets. #1510
 const hashLinkKey = (key: string): number => {
     let hash = 0;
     for (let i = 0; i < key.length; i += 1) {
-        // `| 0` coerces to a 32-bit signed integer; standard idiom for cheap
-        // string hashes. Final `-hash` strips the sign before modulo use.
         // eslint-disable-next-line no-bitwise
         hash = (Math.imul(hash, 31) + key.charCodeAt(i)) | 0;
     }
@@ -186,16 +165,11 @@ function buildClusterRenderModel(
         return { status: 'unsupported' };
     }
 
-    // Step 1: place every chip on a global virtual grid. `mesh` mode honours the
-    // report's mesh coordinates when every host has at least one varying axis
-    // (1D y-only meshes from the multi-host POC are accepted; only fully
-    // degenerate single-point meshes are rejected). `condensed` mode ignores
-    // mesh coords and tiles each host into a per-host 4-wide grid stacked
-    // vertically — same shape that legacy single-host reports used as fallback.
-    // If `mesh` was requested but no host has usable mesh data, we transparently
-    // fall back to `condensed` so the UI never renders an empty layout. #1510
+    // Step 1: place every chip on a global virtual grid. `mesh` honours the
+    // report's mesh coords (1D or 2D); `condensed` tiles each host into a
+    // 4-wide grid. Falls back to `condensed` when `mesh` was requested but no
+    // host has usable mesh data, so the UI never renders an empty layout. #1510
     const isMeshAvailable = hosts.every(hostHasMeshCoords);
-    const has2DMesh = hosts.every(hostHasTwoDimensionalMesh);
     const useMeshCoords = requestedLayoutMode === 'mesh' && isMeshAvailable;
     const layoutMode: ClusterLayoutMode = useMeshCoords ? 'mesh' : 'condensed';
 
@@ -204,14 +178,8 @@ function buildClusterRenderModel(
     let totalCols = 0;
     let totalRows = 0;
 
-    // Stacking order (fallback mode only) is driven by where each host's
-    // inter-host connection chips sit in its local 2-row grid. The host whose
-    // connecting chips cluster near its BOTTOM row is placed FIRST (top of the
-    // stack) so that bottom row faces the gutter; the host whose connecting
-    // chips cluster near its TOP row is placed last so its top row faces the
-    // gutter from below. Ties (and the single-host case) fall back to
-    // rank-descending. Mesh-aware mode keeps the report's coordinates
-    // unchanged and skips this heuristic entirely.
+    // Condensed-mode stacking: each host's connecting row faces the gutter.
+    // Mesh mode keeps the report's coordinates verbatim.
     const hostsByRenderOrder = useMeshCoords ? hosts : sortHostsByConnectionProximity(hosts, interHostLinks);
 
     for (const host of hostsByRenderOrder) {
@@ -225,8 +193,7 @@ function buildClusterRenderModel(
 
         let usedFallback = false;
 
-        // Plain `for` to avoid a closure that captures mutable outer-scope
-        // counters (eslint `no-loop-func`).
+        // Plain `for` to keep mutable counters out of a closure (no-loop-func).
         for (let localIndex = 0; localIndex < chipIdsForHost.length; localIndex += 1) {
             const chipId = chipIdsForHost[localIndex];
             const meshCoord = useMeshCoords ? host.meshChips[chipId] : undefined;
@@ -279,10 +246,8 @@ function buildClusterRenderModel(
         chipB.connectedChipsByEthId.set(uidB, chipA);
     };
 
-    // Canonical link key: the lexicographic min of the two endpoint uids.
-    // Both ends of a link share the same key, so when each edge sorts its
-    // ports by this key the two facing edges end up with matching orderings
-    // — connection lines no longer cross when they shouldn't.
+    // Canonical link key (lex-min of endpoint uids) shared by both ends, so
+    // ordering ports by it on each edge keeps facing edges in sync.
     const canonicalLinkKeyByUid = new Map<string, string>();
     const rememberLinkKey = (uidA: string | undefined, uidB: string | undefined) => {
         if (uidA === undefined || uidB === undefined) {
@@ -311,8 +276,8 @@ function buildClusterRenderModel(
         }
     }
 
-    // Step 3: figure out which edge of each chip its ETH ports live on, based
-    // on the relative coordinates of the neighbour they connect to.
+    // Step 3: pick which edge of each chip an ETH port sits on, based on the
+    // relative position of the chip it connects to.
     let clusterChipSize = CLUSTER_CHIP_SIZE_LARGE;
     if (renderChips.length >= 8) {
         clusterChipSize = CLUSTER_CHIP_SIZE_MEDIUM;
@@ -331,11 +296,8 @@ function buildClusterRenderModel(
         const chipTop = coords[CLUSTER_COORDS.Y] * stride + CHIP_PADDING;
         const cellX = chipLeft + (gx - 1) * (cellSize + CHIP_GAP);
         const cellY = chipTop + (gy - 1) * (cellSize + CHIP_GAP);
-        // Anchor the line endpoint to the OUTER side of the eth-port tile (the
-        // side closest to the chip's edge) instead of the tile centre. This
-        // makes the connection visibly exit/enter the chip at its boundary
-        // rather than appearing to start mid-port. Using the cell midpoint
-        // along the parallel axis keeps the line centred on the tile.
+        // Anchor the line at the OUTER edge of the port tile (not the centre)
+        // so the link visibly exits/enters at the chip's boundary.
         let px = cellX + cellSize / 2;
         let py = cellY + cellSize / 2;
         if (edge === CLUSTER_ETH_POSITION.TOP) {
@@ -352,44 +314,21 @@ function buildClusterRenderModel(
 
     const ethPositionsByChip = new Map<string, Map<CLUSTER_ETH_POSITION, string[]>>();
     const portPixelByUid = new Map<string, PortPixel>();
-    // UIDs whose connection skips over one or more chips (intra-host non-adjacent,
-    // e.g. chip 5 ↔ chip 7 with chip 6 between them). Tagged here in pass 1
-    // and rendered as curves in step 4 so they don't visually overlap the
-    // chord they fly above.
+    // UIDs whose link skips ≥1 chip. Tagged here, rendered as curves in step 4
+    // so they fly past the intermediates instead of overlapping them.
     const longHaulUids = new Set<string>();
 
-    // ETH port placement is *adjacency*-based, not hardware-based:
-    //
-    //   - The chip-design JSON enumerates 16 ethernet cores per chip with their
-    //     physical NoC-grid coordinates (e.g. wormhole has 8 cores at y=0 and
-    //     8 at y=6). Those coordinates are encoded in the eth port label
-    //     (e.g. `0-20-7-6` = rank 0, chip 20, core at chip-grid x=7, y=6) but
-    //     are NOT used to decide which edge of the rendered chip a port sits on.
-    //
-    //   - Each port is positioned on an edge derived from the chip it
-    //     connects to. Two passes:
-    //       Pass 1 — direct cardinal neighbours (mesh distance 1, same row or
-    //                column): port goes on the chord-direction edge.
-    //       Pass 2 — long-haul intra-host + inter-host: port prefers the
-    //                chip's outward edge (no chip-grid neighbour on that
-    //                side), so the bezier curve can leave the cluster body
-    //                through open space rather than overlapping intermediate
-    //                chips. Chord edge if it's outward; otherwise an outward
-    //                perpendicular; otherwise the chord. Interior chips with
-    //                no outward edges fall back to "first empty perpendicular".
-    //
-    //   - Within an edge, ports are ordered by their partner chip's
-    //     perpendicular-axis coord and then by a canonical link key
-    //     (lex-min of the two endpoint uids). Because both ends of a link
-    //     share the canonical key, facing edges always end up with matching
-    //     orderings and connection lines no longer cross spuriously.
-    //
-    //   - Long-haul intra-host placements are tagged in `longHaulUids`; step
-    //     4 renders them and inter-host links as cubic-Bezier curves so they
-    //     visibly fly past the intermediate chip(s) instead of overlapping.
-    //
-    // This means a hardware "top-row" core can render on the chip's LEFT edge
-    // (or any other) — its physical NoC location is informational only.
+    // ETH port placement is *adjacency*-based, not hardware-based. Each port
+    // is placed on an edge derived from the chip it connects to (the port's
+    // physical NoC coordinates are kept only for the label). Two passes:
+    //   1. Direct cardinal neighbour → chord-direction edge.
+    //   2. Long-haul / inter-host → prefer an OUTWARD edge so the curve leaves
+    //      the cluster body through open space (chord if outward, else
+    //      outward perpendicular, else any outward edge; interior chips fall
+    //      back to first empty perpendicular).
+    // Within each edge ports are sorted by partner perpendicular-axis coord
+    // then canonical link key; long-haul/inter-host uids are tagged for the
+    // curve renderer in step 4.
     const meshDistance = (a: ClusterCoordinates, b: ClusterCoordinates): number =>
         Math.abs(a[CLUSTER_COORDS.X] - b[CLUSTER_COORDS.X]) + Math.abs(a[CLUSTER_COORDS.Y] - b[CLUSTER_COORDS.Y]);
 
@@ -412,11 +351,9 @@ function buildClusterRenderModel(
         return dy > 0 ? CLUSTER_ETH_POSITION.BOTTOM : CLUSTER_ETH_POSITION.TOP;
     };
 
-    // Outward-edge lookup: an edge is "outward" for a chip if no other chip on
-    // the rendered grid sits immediately on that side. Long-haul intra-host
-    // and inter-host ports (deferred from pass 1) prefer outward edges so the
-    // bezier curve can leave the host cluster through open space instead of
-    // overlapping intermediate chips.
+    // An edge is "outward" for a chip when no other chip sits immediately on
+    // that side — pass 2 prefers outward edges so curves leave through open
+    // space rather than overlapping intermediate chips.
     const chipKeyByGridCoord = new Map<string, string>();
     for (const chip of renderChips) {
         chipKeyByGridCoord.set(`${chip.coords[CLUSTER_COORDS.X]},${chip.coords[CLUSTER_COORDS.Y]}`, chip.key);
@@ -438,15 +375,12 @@ function buildClusterRenderModel(
 
     renderChips.forEach((clusterChip) => {
         const ethPosition = new Map<CLUSTER_ETH_POSITION, string[]>();
-        // Edges occupied by direct cardinal-neighbour connections — pass 2
-        // will avoid these when placing long-haul ports.
+        // Edges already claimed by direct neighbours — pass 2 avoids these.
         const directNeighbourEdges = new Set<CLUSTER_ETH_POSITION>();
-        // Long-haul placements deferred until after pass 1 so we know which
-        // edges the direct-neighbour connections claimed.
+        // Long-haul/inter-host placements deferred until pass 2.
         const deferred: { uid: string; chord: CLUSTER_ETH_POSITION }[] = [];
 
-        // Pass 1: place direct cardinal neighbours on their facing edge; defer
-        // everything else (diagonals, non-adjacent same-rank, inter-host).
+        // Pass 1: direct cardinal neighbours go on their chord edge.
         clusterChip.design?.eth.forEach((coreId) => {
             const uid = ethUid(clusterChip.rank, clusterChip.id, coreId);
             const connectedChip = clusterChip.connectedChipsByEthId.get(uid);
@@ -472,8 +406,6 @@ function buildClusterRenderModel(
                 ethPosition.get(chord)!.push(uid);
                 directNeighbourEdges.add(chord);
             } else {
-                // Long-haul or inter-host: defer placement until we know which
-                // edges the direct-neighbour connections claimed.
                 deferred.push({ uid, chord });
                 if (sameRank) {
                     longHaulUids.add(uid);
@@ -481,24 +413,12 @@ function buildClusterRenderModel(
             }
         });
 
-        // Pass 2: prefer the chip's outward edges so curves can leave the host
-        // cluster through open space:
-        //   a) chord edge if it's outward (partner lies in that direction and
-        //      nothing blocks it on this chip's side)
-        //   b) any other outward edge — perpendicular first (cleaner from a
-        //      chord-edge-already-occupied-by-direct-cardinal standpoint),
-        //      otherwise any remaining outward edge.
-        //   c) interior-chip fallback: the legacy "first empty perpendicular"
-        //      behaviour for chips that have no outward edges at all.
-        // When (b) yields more than one candidate (typical of 1-column mesh
-        // layouts where every chord is vertical and BOTH LEFT and RIGHT are
-        // outward), we distribute ports across the candidate edges by hashing
-        // the canonical link key. Both endpoints of a link share that key, so
-        // they independently pick the *same* edge — the cubic-Bezier then bows
-        // in a single direction from both ports instead of arcing across the
-        // column when one end placed on LEFT and the other on RIGHT. #1510
-        // Outward edges depend only on the chip's grid position, so compute
-        // once per chip rather than once per deferred port.
+        // Pass 2: outward edge if possible (chord → outward perpendicular →
+        // any outward), else first empty perpendicular for interior chips.
+        // When multiple outward candidates exist (e.g. 1-column meshes where
+        // both LEFT and RIGHT are outward), distribute ports by hashing the
+        // canonical link key so both endpoints pick the same side and the
+        // bezier bows in one direction instead of arcing across. #1510
         const outwardForChip = ALL_EDGES.filter((edge) => isOutwardEdge(clusterChip, edge));
         for (const { uid, chord } of deferred) {
             const perp = perpendicularEdges(chord);
@@ -525,18 +445,9 @@ function buildClusterRenderModel(
             ethPosition.get(chosen)!.push(uid);
         }
 
-        // Order ports along each edge so connection lines don't cross when
-        // they don't need to. Sort key:
-        //   1) partner chip's perpendicular-axis grid coord
-        //      - TOP/BOTTOM edge (horizontal): partner.X (left-to-right)
-        //      - LEFT/RIGHT edge (vertical):   partner.Y (top-to-bottom)
-        //     This puts ports going to leftmost partners on the left of a
-        //     horizontal edge, ports going to topmost partners at the top of
-        //     a vertical edge, etc.
-        //   2) canonical link key (lexicographic min of the two endpoint
-        //      uids). Both ends of a link share this key, so multiple ports
-        //      between the same partner chip pair land in identical relative
-        //      positions on both facing edges.
+        // Order ports along each edge by partner perpendicular-axis coord
+        // (X for horizontal edges, Y for vertical), tiebroken by canonical
+        // link key so both facing edges produce matching orderings.
         ethPosition.forEach((uids, position) => {
             const isVerticalEdge = position === CLUSTER_ETH_POSITION.LEFT || position === CLUSTER_ETH_POSITION.RIGHT;
             const partnerAxis = isVerticalEdge ? CLUSTER_COORDS.Y : CLUSTER_COORDS.X;
@@ -563,31 +474,15 @@ function buildClusterRenderModel(
         ethPositionsByChip.set(clusterChip.key, ethPosition);
     });
 
-    // Step 4: derive link segments (positioned line endpoints) for the SVG layer.
-    // Three flavours:
-    //   - direct intra-host (mesh distance 1): straight `<line>`
-    //   - long-haul intra-host (skips ≥1 chip in between): cubic-Bezier curve
-    //     so the link visibly flies over/under the intermediate chip(s)
-    //   - inter-host: cubic-Bezier curve with dashed-teal styling
+    // Step 4: build SVG link segments. Direct intra-host → straight line;
+    // long-haul intra-host + inter-host → cubic-Bezier curve so the link
+    // visibly flies past intermediate chips.
     const linkSegments: LinkSegment[] = [];
 
-    // Cubic-Bezier curve whose control points are projected outward from each
-    // endpoint along the port edge's outward normal:
-    //
-    //         outNormal(TOP)    = ( 0,-1)
-    //         outNormal(BOTTOM) = ( 0,+1)
-    //         outNormal(LEFT)   = (-1, 0)
-    //         outNormal(RIGHT)  = (+1, 0)
-    //
-    // Control distance = max(stride * 0.4, dist * 0.22). The stride floor
-    // keeps short hops visibly bowed; the distance term lets long hops swing
-    // wider — but tuned modest enough that inter-host curves don't arc far
-    // past the gutter region. This guarantees the curve *leaves the source chip going outward*
-    // and *enters the destination chip from outside*, regardless of how the
-    // two endpoints are aligned, which fixes the previous degenerate case
-    // where two ports stacked on parallel edges with nearly the same x (e.g.
-    // inter-host straight below) collapsed into a line passing through every
-    // chip in between.
+    // Cubic-Bezier control points are projected outward along each port edge's
+    // normal. Control distance = max(stride * 0.4, dist * 0.22): the stride
+    // floor keeps short hops visibly bowed; the distance term lets long hops
+    // swing wider without arcing far past the gutter region.
     const outwardNormal = (edge: CLUSTER_ETH_POSITION): { x: number; y: number } => {
         switch (edge) {
             case CLUSTER_ETH_POSITION.TOP:
@@ -629,8 +524,7 @@ function buildClusterRenderModel(
         if (!portA || !portB) {
             return;
         }
-        // Inter-host always curves. Intra-host curves only when long-haul
-        // (mesh distance > 1, port placed on a non-chord edge in pass 2 above).
+        // Inter-host always curves; intra-host curves only when long-haul.
         const longHaul = !interHost && (longHaulUids.has(uidA ?? '') || longHaulUids.has(uidB ?? ''));
         const useCurve = interHost || longHaul;
         linkSegments.push({
@@ -695,7 +589,6 @@ function buildClusterRenderModel(
             svgPad: Math.round(stride),
             layoutMode,
             isMeshAvailable,
-            has2DMesh,
         },
     };
 }
@@ -704,37 +597,31 @@ function ClusterRenderer() {
     const navigate = useNavigate();
     const { data: topology } = useGetClusterTopology();
 
-    // `userZoom === null` means "auto-fit to the available space"; any number is an
-    // explicit zoom the user has dialled in.
+    // `null` zoom = auto-fit; any number is an explicit user-set zoom.
     const [userZoom, setUserZoom] = useState<number | null>(null);
     const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
     const [hoveredChip, setHoveredChip] = useState<string | null>(null);
-    // User's explicit override of the layout mode, keyed by the topology it was
-    // set for. Storing the topology alongside the mode lets the override naturally
-    // expire when the active report changes — no effect needed, no cascading
-    // re-renders from a reset effect.
+    // Layout override keyed by the topology it was set against — pairing it
+    // with the topology makes it expire automatically when the report changes.
     const [layoutOverride, setLayoutOverride] = useState<{
         mode: ClusterLayoutMode;
         topology: ClusterTopology;
     } | null>(null);
 
-    // Mixed-architecture clusters aren't supported yet; default to the first
-    // host's arch (wormhole when nothing is present). A heterogeneous topology
-    // would need per-chip ChipDesign lookup, which is left as a follow-up.
+    // Heterogeneous clusters aren't supported yet; assume the first host's arch.
     const firstHostArch = topology?.hosts[0]?.descriptor.arch ?? [];
     const arch = stringToArchitecture((firstHostArch.length && firstHostArch[0]) || DEFAULT_ARCHITECTURE);
     const chipDesign = useArchitecture(arch);
 
-    // Default mode preserves pre-toggle behaviour: 2D meshes (galaxy) start in
-    // `mesh`, anything else (1D-only or no mesh) starts in `condensed`.
+    // Honour the report's mesh coords (1D or 2D) when present; otherwise pick
+    // `condensed` upfront rather than silently falling back inside the builder. #1510
     const defaultLayoutMode: ClusterLayoutMode = useMemo(() => {
-        if (!topology) {
+        if (!topology || topology.hosts.length === 0) {
             return 'condensed';
         }
-        return topology.hosts.length > 0 && topology.hosts.every(hostHasTwoDimensionalMesh) ? 'mesh' : 'condensed';
+        return topology.hosts.every(hostHasMeshCoords) ? 'mesh' : 'condensed';
     }, [topology]);
-    // Honour the override only when it was set against the *current* topology;
-    // otherwise it's stale (user switched reports) and we fall back to default.
+    // Stale override (user switched reports) is ignored.
     const requestedLayoutMode: ClusterLayoutMode =
         layoutOverride && layoutOverride.topology === topology ? layoutOverride.mode : defaultLayoutMode;
     const setUserLayoutMode = useCallback(
@@ -888,10 +775,7 @@ function ClusterRenderer() {
         ethPositionsByChip,
         linkSegments,
         idFontSize,
-        // Extend the SVG canvas beyond the chip grid so outward-bowing curves
-        // (long-haul intra-host, inter-host) aren't clipped by the bounding
-        // box. The grid itself stays the same size — only the link layer is
-        // oversized via negative `left`/`top` and an expanded viewBox.
+        // Padding lets outward-bowing curves render outside the grid bounds.
         svgPad,
         isMultiHost,
         worldSize,
@@ -908,43 +792,45 @@ function ClusterRenderer() {
 
     const header = (
         <div className='cluster-view-header'>
-            <ButtonGroup className='cluster-view-zoom'>
-                <Tooltip content='Zoom out'>
-                    <Button
-                        icon={IconNames.ZOOM_OUT}
-                        onClick={() => setUserZoom(clampZoom(zoom - ZOOM_STEP))}
-                        disabled={zoom <= ZOOM_MIN}
-                        aria-label='Zoom out'
-                    />
-                </Tooltip>
-                <Tooltip content='Fit to screen'>
-                    <Button
-                        className='zoom-percentage-button'
-                        text={`${Math.round(zoom * 100)}%`}
-                        onClick={() => setUserZoom(null)}
-                        aria-label='Fit topology to screen'
-                    />
-                </Tooltip>
-                <Tooltip content='Zoom in'>
-                    <Button
-                        icon={IconNames.ZOOM_IN}
-                        onClick={() => setUserZoom(clampZoom(zoom + ZOOM_STEP))}
-                        disabled={zoom >= ZOOM_MAX}
-                        aria-label='Zoom in'
-                    />
-                </Tooltip>
-            </ButtonGroup>
-            {isMeshAvailable && (
-                <Tooltip content='Switch between honouring the report mesh coordinates and a condensed 4-wide grid'>
-                    <Switch
-                        className='cluster-view-layout-toggle'
-                        label='Condensed layout'
-                        checked={activeLayoutMode === 'condensed'}
-                        onChange={() => setUserLayoutMode(activeLayoutMode === 'condensed' ? 'mesh' : 'condensed')}
-                        aria-label='Toggle between mesh-aware and condensed cluster layout'
-                    />
-                </Tooltip>
-            )}
+            <div className='cluster-view-controls'>
+                <ButtonGroup className='cluster-view-zoom'>
+                    <Tooltip content='Zoom out'>
+                        <Button
+                            icon={IconNames.ZOOM_OUT}
+                            onClick={() => setUserZoom(clampZoom(zoom - ZOOM_STEP))}
+                            disabled={zoom <= ZOOM_MIN}
+                            aria-label='Zoom out'
+                        />
+                    </Tooltip>
+                    <Tooltip content='Fit to screen'>
+                        <Button
+                            className='zoom-percentage-button'
+                            text={`${Math.round(zoom * 100)}%`}
+                            onClick={() => setUserZoom(null)}
+                            aria-label='Fit topology to screen'
+                        />
+                    </Tooltip>
+                    <Tooltip content='Zoom in'>
+                        <Button
+                            icon={IconNames.ZOOM_IN}
+                            onClick={() => setUserZoom(clampZoom(zoom + ZOOM_STEP))}
+                            disabled={zoom >= ZOOM_MAX}
+                            aria-label='Zoom in'
+                        />
+                    </Tooltip>
+                </ButtonGroup>
+                {isMultiHost && isMeshAvailable && (
+                    <Tooltip content='Switch between honouring the report mesh coordinates and a condensed 4-wide grid'>
+                        <Switch
+                            className='cluster-view-layout-toggle'
+                            label='Condensed layout'
+                            checked={activeLayoutMode === 'condensed'}
+                            onChange={() => setUserLayoutMode(activeLayoutMode === 'condensed' ? 'mesh' : 'condensed')}
+                            aria-label='Toggle between mesh-aware and condensed cluster layout'
+                        />
+                    </Tooltip>
+                )}
+            </div>
             <Button
                 icon={IconNames.CROSS}
                 onClick={() => {
@@ -1032,9 +918,6 @@ function ClusterRenderer() {
                                     'is-inter-host': segment.interHost,
                                 });
                                 if (segment.pathD) {
-                                    // Inter-host links use a cubic-Bezier path so a bundle of
-                                    // parallel cross-host connections fans out visibly instead
-                                    // of stacking into a single straight bar.
                                     return (
                                         <path
                                             key={segment.key}

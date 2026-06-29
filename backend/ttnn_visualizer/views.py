@@ -1633,7 +1633,9 @@ def get_mesh_descriptor(instance: Instance):
                 if isinstance(doc, dict)
             ]
         if not docs:
-            return jsonify({})
+            # Keep the single-doc contract stable so the FE doesn't have to
+            # special-case an empty-payload shape.
+            return jsonify({"chips": {}})
         if len(docs) == 1:
             return jsonify(docs[0])
         return jsonify({"docs": docs})

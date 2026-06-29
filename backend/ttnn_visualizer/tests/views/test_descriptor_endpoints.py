@@ -122,3 +122,27 @@ def test_mesh_descriptor_returns_docs_envelope_for_multi_doc_file(app, client):
         # Both docs surfaced verbatim — rank-doc selection happens in the FE.
         assert data["docs"][0]["chips"] == {"0": [0, 12], "5": [0, 8]}
         assert data["docs"][1]["chips"] == {"0": [0, 6], "5": [0, 2]}
+
+
+def test_mesh_descriptor_returns_empty_chips_shape_when_yaml_has_no_dict_docs(
+    app, client
+):
+    """An empty / scalar-only YAML file still returns the single-doc shape so
+    the FE doesn't need a separate empty-payload branch."""
+    instance_id = "test-mesh-empty-docs"
+    with tempfile.TemporaryDirectory() as tmp:
+        report_dir = Path(tmp)
+        (report_dir / "physical_chip_mesh_coordinate_mapping.yaml").write_text(
+            "",
+            encoding="utf-8",
+        )
+        _register_profiler_instance_with_dir(app, instance_id, report_dir)
+
+        response = client.get(
+            "/api/mesh-descriptor",
+            query_string={"instanceId": instance_id},
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data == {"chips": {}}

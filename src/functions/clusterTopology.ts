@@ -13,24 +13,13 @@ import {
     RemoteEthernetConnectionRaw,
 } from '../model/ClusterModel';
 
-// Per-host fallback layout's column width. The host-ordering heuristic below
-// uses the same number to compute each chip's local-row, so any change here
-// must stay in sync with `FALLBACK_PER_HOST_COLS` in `ClusterRenderer.tsx`.
-const FALLBACK_PER_HOST_COLS = 4;
+// Width of the per-host condensed-layout grid. Shared with `ClusterRenderer`
+// so the host-ordering heuristic and the renderer stay in lockstep. #1510
+export const FALLBACK_PER_HOST_COLS = 4;
 
 /**
  * Stitch per-rank cluster descriptors and mesh-coordinate mappings into a unified
- * topology. Pure: no React, no fetch — designed to be testable in isolation.
- *
- * Responsibilities:
- *   1. Collect intra-host ethernet links from each rank's `ethernet_connections`.
- *   2. Resolve each rank's `ethernet_connections_to_remote_devices` against the
- *      union of `chip_unique_ids` across all hosts.
- *   3. Dedupe symmetric inter-host links (each link is listed on both hosts' side).
- *   4. Surface counts of unresolved remote links so callers can warn rather than crash.
- *
- * Single-host reports just pass a one-element `perRankInputs` array and get a
- * `ClusterTopology` with `isMultiHost: false`.
+ * topology. Pure; single-host reports pass a 1-element array. #1510
  */
 export interface PerRankInput {
     rank: number;
@@ -131,32 +120,7 @@ const canonicalInterHostLinkKey = (a: Endpoint, b: Endpoint): string => {
     return `${endpointKey(first)}__${endpointKey(second)}`;
 };
 
-/**
- * Heuristic for detecting that a per-rank cluster descriptor is part of a
- * multi-host report. A ranked descriptor must have BOTH:
- *
- *   - a non-empty `ethernet_connections_to_remote_devices` array (cross-host
- *     ethernet links — single-host reports don't have any), AND
- *   - a populated `chip_unique_ids` map (used to resolve remote chip ids
- *     against other ranks).
- *
- * Requiring both guards against:
- *   - galaxy / legacy single-host reports that omit these fields entirely
- *     (`undefined`) and would otherwise pass a more permissive check
- *   - backends that serialise the missing field as `null` / `[]` rather
- *     than dropping it from the JSON
- *
- * Without this, a single-host report can falsely look ranked and trigger
- * the world-size probe up to `MAX_PROBE_RANKS`, since the backend serves
- * the unranked `cluster_descriptor.yaml` for any `?rank=N`.
- */
-/**
- * True when this host's mesh-descriptor places its chips at meaningfully
- * distinct positions on at least one axis. Accepts 1D meshes — e.g. the
- * multi-host POC reports where every chip has `mesh_x=0` but `mesh_y`
- * spans the world. A fully degenerate mesh (every chip at the same point)
- * returns false; an empty mesh returns false. #1510
- */
+/** True when at least one mesh axis varies; accepts 1D meshes. #1510 */
 export const hostHasMeshCoords = (host: ClusterHost): boolean => {
     const coords = Object.values(host.meshChips);
     if (coords.length === 0) {
@@ -171,7 +135,7 @@ export const hostHasMeshCoords = (host: ClusterHost): boolean => {
     return xs.size > 1 || ys.size > 1;
 };
 
-/** True when every host has a true 2D mesh (both axes vary). #1510 */
+/** True when both mesh axes vary (proper 2D arrangement). #1510 */
 export const hostHasTwoDimensionalMesh = (host: ClusterHost): boolean => {
     const coords = Object.values(host.meshChips);
     if (coords.length === 0) {
@@ -186,6 +150,12 @@ export const hostHasTwoDimensionalMesh = (host: ClusterHost): boolean => {
     return xs.size > 1 && ys.size > 1;
 };
 
+/**
+ * True iff this descriptor looks like a per-rank slice of a multi-host report.
+ * Requires BOTH `ethernet_connections_to_remote_devices` and `chip_unique_ids`
+ * to be non-empty — single-host reports omit these and a more permissive check
+ * would trigger spurious world-size probes against the unranked descriptor.
+ */
 export const looksLikeRankedDescriptor = (descriptor: ClusterModel): boolean => {
     const remoteConnections = descriptor.ethernet_connections_to_remote_devices;
     if (!Array.isArray(remoteConnections) || remoteConnections.length === 0) {
@@ -211,40 +181,26 @@ const minMeshY = (doc: MeshData): number => {
 };
 
 /**
- * Resolve a mesh-descriptor response to the single `MeshData` doc that
- * corresponds to `rank`. Handles both legacy single-doc responses and the
- * multi-doc envelope (`{ docs: [...] }`) the backend uses for multi-host
- * reports.
+ * Pick the `MeshData` doc for `rank` from either a single-doc response or the
+ * multi-doc envelope. Multi-doc convention: lower ranks own lower mesh-y, so
+ * we sort by min-y and index by rank until tt-metal embeds explicit rank tags.
  *
- * For multi-doc envelopes, the convention is "lower ranks occupy lower mesh-y
- * values" — we sort docs by their minimum y-coordinate ascending and index by
- * rank. This is a heuristic forced by the fact that mesh-descriptor files do
- * not currently embed an explicit per-doc rank marker; once tt-metal-side
- * tagging lands we can switch to the explicit marker without breaking the
- * envelope contract.
+ * Always returns a `MeshData` with a defined `chips` map; defends against
+ * empty backend payloads (e.g. `{}`) that would otherwise leak `undefined`
+ * through to the renderer.
  */
 export const pickMeshDocForRank = (response: MeshDescriptorResponse, rank: number): MeshData => {
     if (!isMeshDocsEnvelope(response)) {
-        return response;
+        return response.chips ? response : { chips: {} };
     }
     const sorted = [...response.docs].sort((a, b) => minMeshY(a) - minMeshY(b));
     return sorted[rank] ?? sorted[0] ?? { chips: {} };
 };
 
 /**
- * Determine the stack order of hosts in the renderer's fallback layout based
- * on where each host's inter-host connection chips sit in its local 4-wide-
- * 2-row grid:
- *
- *   - For each host, compute the mean local-y (0 = top row, 1 = bottom row)
- *     of its inter-host link endpoints.
- *   - Sort descending: hosts whose connecting chips cluster near their
- *     BOTTOM row come first (placed top of the stack), so their bottom row
- *     faces the gutter and lines up across from the next host's top row.
- *   - Ties — and hosts with no inter-host links — fall back to rank
- *     descending so the highest rank is still drawn on top.
- *
- * Returns a new array; the input is not mutated.
+ * Stack order for hosts in the condensed layout: hosts whose inter-host link
+ * endpoints cluster near their LOCAL bottom row come first, so each host's
+ * connecting row faces the gutter. Ties fall back to rank-descending.
  */
 export const sortHostsByConnectionProximity = (
     hosts: ClusterHost[],

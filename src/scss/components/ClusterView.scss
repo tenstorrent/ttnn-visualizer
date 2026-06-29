@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/variables' as variables;
 @use '../definitions/colours' as colours;
@@ -33,6 +33,14 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         gap: 10px;
         margin: 0;
 
+        // Groups zoom buttons + layout toggle on the left; close button on the right.
+        .cluster-view-controls {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+        }
+
         .cluster-view-zoom {
             .zoom-percentage-button {
                 width: 54px;
@@ -40,11 +48,8 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         }
 
         .cluster-view-layout-toggle {
-            // Anchor right of the zoom group; the close button still floats to the
-            // far right via `justify-content: space-between`. The zeroed margin also
-            // overrides Blueprint Switch's default bottom margin so the toggle sits
-            // centred vertically with the zoom buttons.
-            margin: 0 0 0 auto;
+            // Drop Blueprint Switch's default bottom margin for vertical alignment.
+            margin: 0;
         }
     }
 }
@@ -137,20 +142,14 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         align-items: start;
         align-content: start;
 
-        // Let the oversized link-layer SVG bleed outside the grid bounds so
-        // outward-bowing curves (long-haul intra-host, inter-host) can use the
-        // gutter around the chips. The chip grid itself remains sized by the
-        // explicit `width`/`height` inline styles.
+        // Let the oversized link-layer SVG bleed outside the grid bounds.
         overflow: visible;
 
         .cluster-links {
             position: absolute;
 
-            // Sit above chip bodies (z-index 1), chip border overlays (z-index 2),
-            // and per-chip eth-port tiles so cubic-Bezier long-haul and inter-host
-            // curves visibly fly *over* the intermediate chips they route past
-            // instead of getting clipped behind them. `pointer-events: none` keeps
-            // chips, eth ports, and badges fully hoverable through the SVG layer.
+            // Stack above chip bodies / borders / eth ports so long-haul and
+            // inter-host curves render *over* the chips they route past.
             z-index: 4;
             pointer-events: none;
             overflow: visible;
@@ -176,8 +175,7 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 opacity: 0.08;
             }
 
-            // Inter-host links span ranks; styled distinctly so users can tell a
-            // 16-chip cluster spread across 2 hosts from a true 16-chip single host.
+            // Inter-host links styled distinctly from intra-host.
             &.is-inter-host {
                 stroke: colours.$tt-teal;
                 stroke-dasharray: 6 4;
@@ -227,9 +225,7 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 }
             }
 
-            // Dim unrelated chips with a darkening veil rather than `opacity`, so the
-            // PCIe marker (raised above the veil) stays fully legible while hovering.
-            // The veil is always present at opacity 0 so it can fade in/out smoothly.
+            // Dim with a veil (not `opacity`) so the PCIe marker stays legible.
             &::after {
                 content: '';
                 position: absolute;
@@ -261,9 +257,7 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
             }
 
-            // Rank badge shown only on multi-host topologies. Sits at the
-            // top-left corner of each chip so chips from different ranks are
-            // visually distinguishable at a glance.
+            // Rank badge (multi-host only); top-left corner of each chip.
             .chip-rank-badge {
                 position: absolute;
                 top: 6px;
@@ -280,11 +274,8 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 z-index: 3;
             }
 
-            // PCIe / host-connected badge. Absolutely positioned so it never
-            // participates in grid-track sizing and cannot displace eth elements.
-            // top/left/width/height are set inline from the physical PCIe coordinate
-            // projected onto the chip's cell geometry, so the badge lands at the
-            // correct edge position. z-raised above the dim veil.
+            // PCIe / host-connected badge. Position set inline from the
+            // physical PCIe coordinate; raised above the dim veil.
             .mmio {
                 position: absolute;
                 z-index: 3;

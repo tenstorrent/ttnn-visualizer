@@ -309,10 +309,8 @@ describe('pickMeshDocForRank', () => {
     });
 
     it('selects the doc with the lowest min-y for rank 0', () => {
-        // doc[0] in source order has higher y values (rank 1's chips); doc[1] has lower
-        // y values (rank 0's chips). Reflects the actual ordering in
-        // multihost_poc_jun19_2043 where the backend's safe_load only returned
-        // the first (rank 1's) doc.
+        // Source order is rank 1 (higher y) first, then rank 0 — mirrors the
+        // multihost_poc_jun19_2043 layout.
         const response: MeshDataDocs = {
             docs: [{ chips: { 0: [0, 12, 0, 0], 5: [0, 8, 0, 0] } }, { chips: { 0: [0, 6, 0, 0], 5: [0, 2, 0, 0] } }],
         };
@@ -331,6 +329,11 @@ describe('pickMeshDocForRank', () => {
 
     it('treats an empty docs array as missing mesh data', () => {
         const fallback = pickMeshDocForRank({ docs: [] }, 0);
+        expect(fallback).toEqual({ chips: {} });
+    });
+
+    it('coerces a single-doc payload missing `chips` to an empty MeshData', () => {
+        const fallback = pickMeshDocForRank({} as unknown as MeshData, 0);
         expect(fallback).toEqual({ chips: {} });
     });
 });

@@ -479,8 +479,7 @@ export const useGetClusterDescription = () => {
     });
 };
 
-// Cap iterative-probe rank scanning to avoid runaway requests if the backend
-// ever stops returning rank_out_of_range / missing_rank_file at world boundary.
+// Guards against runaway probing if the backend stops signalling world end.
 const MAX_PROBE_RANKS = 32;
 
 const fetchClusterDescriptorForRank = async (rank: number): Promise<ClusterModel> => {
@@ -495,8 +494,7 @@ const fetchMeshDescriptorForRank = async (rank: number): Promise<MeshData | null
         const { data } = await axiosInstance.get<MeshDescriptorResponse>(Endpoints.MESH_DESCRIPTOR, {
             params: { rank },
         });
-        // Backend returns either a single-doc shape ({ chips: {...} }) or a
-        // multi-doc envelope ({ docs: [...] }); resolve to a single doc here.
+        // Backend can return single-doc or `{ docs: [...] }` envelope.
         return pickMeshDocForRank(data, rank);
     } catch (err) {
         // mesh-descriptor is optional in some reports
@@ -511,40 +509,39 @@ const fetchRankSlice = async (rank: number): Promise<PerRankInput> => {
         fetchClusterDescriptorForRank(rank),
         fetchMeshDescriptorForRank(rank),
     ]);
-    // Chip coordinates come from one of two places:
-    //   1. The dedicated `physical_chip_mesh_coordinate_mapping_*.yaml` file
-    //      (mesh descriptor) — preferred when present (multi-host reports).
-    //   2. The `chips:` field on `cluster_descriptor.yaml` itself — the only
-    //      source for galaxy-style single-host reports that don't ship a
-    //      separate mesh file.
-    // Mesh-descriptor wins when both are available, mirroring the legacy
-    // single-host `fetchClusterDescription` behaviour.
+    // Mesh-descriptor wins; `descriptor.chips` is the fallback for galaxy
+    // reports that don't ship a separate mesh file.
     const meshChips = mesh?.chips ?? descriptor.chips ?? null;
     return { rank, descriptor, meshDescriptor: meshChips };
 };
 
 const fetchClusterTopology = async (): Promise<ClusterTopology> => {
-    // Rank 0 anchors detection: the backend resolves either `cluster_descriptor.yaml`
-    // (legacy single-host) or `cluster_descriptor_1_of_<world>.yaml` (multi-host).
+    // Rank 0 anchors detection (the backend serves either the legacy
+    // single-host or the multi-host rank-tagged descriptor).
     const rank0Slice = await fetchRankSlice(0);
 
     if (!looksLikeRankedDescriptor(rank0Slice.descriptor)) {
-        // Legacy single-host report: short-circuit to one host with rank 0.
         return stitchClusterTopology([rank0Slice]);
     }
 
-    // Multi-host: iteratively probe upward until the backend rejects the next rank.
-    // TODO(#1241): swap to the dedicated rank-metadata endpoint once it ships so we
-    //   can fan out all per-rank fetches in parallel instead of serially probing.
+    // TODO(#1241): replace serial probing with a dedicated rank-metadata
+    // endpoint so per-rank fetches can fan out in parallel.
     const perRankInputs: PerRankInput[] = [rank0Slice];
     for (let nextRank = 1; nextRank < MAX_PROBE_RANKS; nextRank += 1) {
         try {
             // eslint-disable-next-line no-await-in-loop
             const slice = await fetchRankSlice(nextRank);
             perRankInputs.push(slice);
-        } catch {
-            // 400 rank_out_of_range or 404 missing_rank_file → end of world.
-            break;
+        } catch (err) {
+            // Backend signals world end via 400 rank_out_of_range or
+            // 404 missing_rank_file. Anything else (5xx, network) should
+            // surface so React Query can mark the topology errored rather
+            // than silently truncating it.
+            const status = err instanceof AxiosError ? err.response?.status : undefined;
+            if (status === 400 || status === 404) {
+                break;
+            }
+            throw err;
         }
     }
 
@@ -554,7 +551,7 @@ const fetchClusterTopology = async (): Promise<ClusterTopology> => {
 export const useGetClusterTopology = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery({
+    return useQuery<ClusterTopology | null, AxiosError>({
         queryFn: () => fetchClusterTopology(),
         queryKey: ['get-cluster-topology', activeProfilerReport?.path],
         initialData: null,
