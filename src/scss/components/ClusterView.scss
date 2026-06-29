@@ -33,10 +33,23 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         gap: 10px;
         margin: 0;
 
+        // Groups zoom buttons + layout toggle on the left; close button on the right.
+        .cluster-view-controls {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+        }
+
         .cluster-view-zoom {
             .zoom-percentage-button {
                 width: 54px;
             }
+        }
+
+        .cluster-view-layout-toggle {
+            // Drop Blueprint Switch's default bottom margin for vertical alignment.
+            margin: 0;
         }
     }
 }
@@ -90,6 +103,23 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         height: 0;
         border-top: 2px solid $eth-line;
     }
+
+    .legend-line-inter-host {
+        border-top-style: dashed;
+        border-top-color: colours.$tt-teal;
+    }
+
+    .legend-multihost-tag {
+        margin-left: auto;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background-color: rgba(colours.$tt-teal, 0.18);
+        border: 1px solid rgba(colours.$tt-teal, 0.6);
+        color: colours.$tt-teal;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
 }
 
 .cluster-view-wrap {
@@ -112,12 +142,17 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         align-items: start;
         align-content: start;
 
+        // Let the oversized link-layer SVG bleed outside the grid bounds.
+        overflow: visible;
+
         .cluster-links {
             position: absolute;
-            inset: 0;
+
+            // Stack above chip bodies / borders / eth ports so long-haul and
+            // inter-host curves render *over* the chips they route past.
+            z-index: 4;
             pointer-events: none;
             overflow: visible;
-            z-index: 0;
         }
 
         .cluster-link {
@@ -138,6 +173,18 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
 
             &.is-dimmed {
                 opacity: 0.08;
+            }
+
+            // Inter-host links styled distinctly from intra-host.
+            &.is-inter-host {
+                stroke: colours.$tt-teal;
+                stroke-dasharray: 6 4;
+                opacity: 0.75;
+
+                &.is-highlighted {
+                    stroke-width: 3.5;
+                    opacity: 1;
+                }
             }
         }
 
@@ -178,9 +225,7 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 }
             }
 
-            // Dim unrelated chips with a darkening veil rather than `opacity`, so the
-            // PCIe marker (raised above the veil) stays fully legible while hovering.
-            // The veil is always present at opacity 0 so it can fade in/out smoothly.
+            // Dim with a veil (not `opacity`) so the PCIe marker stays legible.
             &::after {
                 content: '';
                 position: absolute;
@@ -212,11 +257,25 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
                 text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
             }
 
-            // PCIe / host-connected badge. Absolutely positioned so it never
-            // participates in grid-track sizing and cannot displace eth elements.
-            // top/left/width/height are set inline from the physical PCIe coordinate
-            // projected onto the chip's cell geometry, so the badge lands at the
-            // correct edge position. z-raised above the dim veil.
+            // Rank badge (multi-host only); top-left corner of each chip.
+            .chip-rank-badge {
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                padding: 1px 6px;
+                border-radius: 8px;
+                border: 1px solid rgba(colours.$tt-teal, 0.6);
+                background-color: rgba(colours.$tt-teal, 0.18);
+                color: colours.$tt-teal;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.4px;
+                pointer-events: none;
+                z-index: 3;
+            }
+
+            // PCIe / host-connected badge. Position set inline from the
+            // physical PCIe coordinate; raised above the dim veil.
             .mmio {
                 position: absolute;
                 z-index: 3;
