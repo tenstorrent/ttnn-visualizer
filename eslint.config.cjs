@@ -229,6 +229,7 @@ module.exports = defineConfig([
         '**/backend',
         '**/build',
         '**/dist',
+        '**/docs',
         '**/docs/output',
         '**/myenv',
         '**/node_modules',
