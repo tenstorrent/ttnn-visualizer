@@ -12,7 +12,7 @@ jobs:
     update-version:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
               # TODO Replace email with official email
             - run: git config --global user.email "support@tenstorrent.com"
             - run: git config --global user.name "CI Job"
@@ -36,7 +36,7 @@ jobs:
               run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_OUTPUT
 
             - name: Install uv
-              uses: astral-sh/setup-uv@v6
+              uses: astral-sh/setup-uv@v8.2.0
               with:
                   python-version: ${{ steps.python.outputs.PYTHON_VERSION }}
                   enable-cache: true

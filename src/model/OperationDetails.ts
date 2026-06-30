@@ -251,12 +251,16 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                             .find((op) => op.name === deviceOpNode.params.name);
 
                         if (deviceOp) {
+                            // Accept string/number for forward-compat — keep in sync with processMemoryAllocations. #1651 / #1652
+                            const rawGlobalFlag = node.params.globally_allocated as unknown;
+                            const globallyAllocated = rawGlobalFlag === '1' || rawGlobalFlag === 1;
                             deviceOp.cbList.push({
                                 address: parseInt(node.params.address, 10),
                                 size: parseInt(node.params.size, 10),
                                 core_range_set: node.params.core_range_set,
                                 num_cores: getCoresInRange(node.params.core_range_set),
                                 colorVariance: deviceOp.id,
+                                globallyAllocated,
                             });
                         }
                     }
@@ -401,6 +405,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 .sort((a, b) => a.address - b.address) || [];
 
         const cbMemory = bufferType === BufferType.L1 ? this.deviceOperations.flatMap((op) => op.cbList) : [];
+        // Aliased CBs share bytes with a tensor already in `memory` — exclude them to avoid double-counting. #1652
+        const anonymousCBMemory = cbMemory.filter((cb) => !cb.globallyAllocated);
         const bufferMemory =
             bufferType === BufferType.L1
                 ? this.deviceOperations.flatMap((op) => op.bufferList).filter((op) => op.type === 'L1')
@@ -480,7 +486,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         });
 
         const condensed: Chunk = calculateCondensed(memory);
-        const cbCondensed: Chunk = calculateCondensed(cbMemory);
+        const cbCondensed: Chunk = calculateCondensed(anonymousCBMemory);
         const bufferCondensed: Chunk = calculateCondensed(bufferMemory);
 
         const chartData = this.getChartData(memory);
@@ -495,12 +501,18 @@ ${getMemoryAddress(cbCondensed.address, this.options.showHex)} <br />${formatMem
         const cbChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]> = new Map();
         this.deviceOperations.forEach((op) => {
             if (op.cbList.length !== 0) {
+                // Aliased CBs are emitted as a separate outlined trace so they don't obscure the tensor below. #1652
+                const anonymousCBs = op.cbList.filter((cb) => !cb.globallyAllocated);
+                const aliasedCBs = op.cbList.filter((cb) => cb.globallyAllocated);
+                const filled = this.getChartData(anonymousCBs, { colorVariance: op.id });
+                const outlined =
+                    aliasedCBs.length > 0 ? this.getChartData(aliasedCBs, { colorVariance: op.id, outline: true }) : [];
                 cbChartDataByOperation.set(
                     {
                         name: op.name,
                         index: op.id,
                     },
-                    this.getChartData(op.cbList, { colorVariance: op.id }),
+                    [...filled, ...outlined],
                 );
             }
         });

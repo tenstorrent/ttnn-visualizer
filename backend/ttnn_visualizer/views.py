@@ -1623,8 +1623,23 @@ def get_mesh_descriptor(instance: Instance):
 
     try:
         with open(path, "r", encoding="utf-8") as mesh_descriptor_path:
-            yaml_data = yaml.safe_load(mesh_descriptor_path)
-            return jsonify(yaml_data)  # yaml_data is not compatible with orjson
+            # Mesh-descriptor files in some multi-host reports are emitted as a
+            # multi-document YAML stream (one ``chips:`` block per rank). The
+            # legacy single-doc shape is still common, so preserve it; expose
+            # multi-doc files under a ``docs`` envelope so the FE can pick the
+            # block that matches the requested rank.
+            docs = [
+                doc
+                for doc in yaml.safe_load_all(mesh_descriptor_path)
+                if isinstance(doc, dict)
+            ]
+        if not docs:
+            # Keep the single-doc contract stable so the FE doesn't have to
+            # special-case an empty-payload shape.
+            return jsonify({"chips": {}})
+        if len(docs) == 1:
+            return jsonify(docs[0])
+        return jsonify({"docs": docs})
     except yaml.YAMLError as e:
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
