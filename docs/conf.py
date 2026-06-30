@@ -84,22 +84,13 @@ exclude_patterns = []
 #
 
 html_theme = "sphinx_rtd_theme"
-html_theme_options = {
-    "collapse_navigation": False,
-    "titles_only": True,
-    "navigation_depth": 2,
-}
 html_logo = "shared/images/tt_logo.svg"
 html_favicon = "shared/images/favicon.png"
 html_static_path = ["shared/_static"]
 templates_path = ["shared/_templates"]
 html_last_updated_fmt = "%b %d, %Y"
-html_css_files = ["https://docs.tenstorrent.com/_static/tt_theme.css"]
 html_baseurl = f"https://docs.tenstorrent.com/{project}"
-html_context = {
-    "logo_link_url": "https://docs.tenstorrent.com/",
-    "search_site_base_url": f"https://docs.tenstorrent.com/{project}/",
-}
+html_context = {"logo_link_url": "https://docs.tenstorrent.com/"}
 
 
 def setup(app):
