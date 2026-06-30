@@ -134,6 +134,52 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
         });
     });
 
+    // tt-perf-report emits the per-RISC kernel durations as raw nanoseconds (CSV `[ns]` columns),
+    // but the table declares those columns in µs. enrichRowData must convert ns -> µs so a 1.5ms
+    // kernel renders as 1500 µs, not 1,500,000 µs (regression guard for the missing nsToUs call).
+    describe('per-RISC kernel durations (ns -> µs)', () => {
+        it('converts raw nanosecond strings into microseconds', () => {
+            const [row] = enrichRowData(
+                [
+                    makeRawRow({
+                        device_kernel_duration: '1500000',
+                        brisc_kernel_duration: '1234',
+                        ncrisc_kernel_duration: '500',
+                        trisc0_kernel_duration: '750',
+                        trisc1_kernel_duration: '0',
+                        trisc2_kernel_duration: '2500',
+                        erisc_kernel_duration: '10',
+                    } as Partial<PerfTableRow>),
+                ],
+                [],
+                null,
+            );
+
+            expect(row.device_kernel_duration).toBe(1500);
+            expect(row.brisc_kernel_duration).toBe(1.234);
+            expect(row.ncrisc_kernel_duration).toBe(0.5);
+            expect(row.trisc0_kernel_duration).toBe(0.75);
+            expect(row.trisc2_kernel_duration).toBe(2.5);
+            expect(row.erisc_kernel_duration).toBe(0.01);
+        });
+
+        it('maps absent or non-numeric kernel durations to null', () => {
+            const [row] = enrichRowData(
+                [
+                    makeRawRow({
+                        device_kernel_duration: '',
+                        brisc_kernel_duration: null,
+                    } as Partial<PerfTableRow>),
+                ],
+                [],
+                null,
+            );
+
+            expect(row.device_kernel_duration).toBeNull();
+            expect(row.brisc_kernel_duration).toBeNull();
+        });
+    });
+
     describe('first-occurrence marking by hash', () => {
         it('marks only the first row of each hash as the first occurrence', () => {
             const rows = enrichRowData(
