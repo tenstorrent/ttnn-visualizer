@@ -1731,7 +1731,7 @@ def test_mlir_server():
     )
 
 
-def _unique_mlir_name(base: str, used: set) -> str:
+def _unique_mlir_name(base: str, used: set[str]) -> str:
     """Disambiguate a stored MLIR report name within a single upload batch.
 
     Two uploaded files can share a stem (e.g. ``model.mlir`` and ``model.pb``
@@ -1782,7 +1782,7 @@ def upload_mlir_server():
     # picks which converted graph to make active. The active MLIR is set
     # separately via `/mlir/active` so nothing is activated until the user
     # chooses.
-    used_names: set = set()
+    used_names: set[str] = set()
     results = []
     for file in files:
         filename = file.filename or "model"

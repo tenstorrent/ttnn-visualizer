@@ -19,10 +19,10 @@ import getResponseError from '../../functions/getResponseError';
 import 'styles/components/MlirFileResultsOverlay.scss';
 
 // Lists the per-file outcome of the most recent MLIR upload/load and lets the
-// user pick which successfully-converted file to make the active graph. Driven
-// by `mlirFileResultsAtom`: a non-null value opens the overlay, clearing it
-// closes the overlay. Selecting a file only highlights it; the View button
-// commits the choice.
+// user pick which successfully-converted file to make the active graph.
+// Visibility is controlled by `mlirFileResultsOpenAtom`; `mlirFileResultsAtom`
+// holds the rows and is retained after closing so the overlay can be reopened.
+// Selecting a file only highlights it; the View button commits the choice.
 const MlirFileResultsOverlay = () => {
     const results = useAtomValue(mlirFileResultsAtom);
     const [isOpen, setIsOpen] = useAtom(mlirFileResultsOpenAtom);
