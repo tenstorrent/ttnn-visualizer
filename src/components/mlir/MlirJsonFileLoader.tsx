@@ -123,6 +123,9 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 }));
 
                 if (!results.length) {
+                    // Drop the pending spinner rows so they don't linger as
+                    // permanently-converting entries behind the View button.
+                    setMlirFileResults(null);
                     setUploadStatus(ConnectionTestStates.FAILED);
                     setErrorMessage('Upload failed');
                     return;
@@ -133,6 +136,9 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 showResults(await loadLocalFiles(files));
             }
         } catch (err: unknown) {
+            // Drop any pending spinner rows so a failed upload doesn't leave
+            // permanently-converting entries behind the View button.
+            setMlirFileResults(null);
             setUploadStatus(ConnectionTestStates.FAILED);
             setErrorMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));
         }
@@ -155,7 +161,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 icon={IconNames.LIST}
                 text='View MLIR uploads'
                 onClick={() => setMlirFileResultsOpen(true)}
-                disabled={!mlirFileResults || !(mlirFileResults?.length > 0)}
+                disabled={!mlirFileResults?.length}
             />
 
             <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>

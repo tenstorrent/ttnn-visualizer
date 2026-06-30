@@ -194,4 +194,51 @@ describe('useMlirRemote progress lifecycle', () => {
             expect(getDefaultStore().get(fileTransferProgressAtom).status).toBe(FileStatus.INACTIVE);
         });
     });
+
+    it('clears the pending rows and disables View when a server upload fails', async () => {
+        const postMock = vi.mocked(axiosInstance.post);
+        postMock.mockRejectedValue(new Error('network down'));
+
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+                <FileStatusOverlay />
+            </MemoryRouter>,
+        );
+
+        const fileInput = container.querySelector('input[type="file"]');
+        fireEvent.change(fileInput as HTMLInputElement, {
+            target: { files: [new File(['module {}'], 'model.mlir')] },
+        });
+
+        // The pending spinner rows must be dropped so they don't linger as
+        // permanently-converting entries behind the View button.
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirFileResultsAtom)).toBeNull();
+        });
+        expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
+    });
+
+    it('clears the pending rows and reports failure when the upload returns no results', async () => {
+        const postMock = vi.mocked(axiosInstance.post);
+        postMock.mockResolvedValue({ data: { results: [] } });
+
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+                <FileStatusOverlay />
+            </MemoryRouter>,
+        );
+
+        const fileInput = container.querySelector('input[type="file"]');
+        fireEvent.change(fileInput as HTMLInputElement, {
+            target: { files: [new File(['module {}'], 'model.mlir')] },
+        });
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirFileResultsAtom)).toBeNull();
+            expect(screen.getByText('Upload failed')).toBeInTheDocument();
+        });
+        expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
+    });
 });

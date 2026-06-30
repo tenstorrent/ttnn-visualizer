@@ -126,6 +126,10 @@ const FileStatusOverlay = () => {
                         {startedAt !== null && <p>{formatElapsed(elapsedSeconds)}</p>}
                     </>
                 ) : (
+                    // Upload/sync progress, plus the no-pending-rows fallback
+                    // for PROCESSING (the MLIR loader normally publishes rows,
+                    // so the isProcessing branches here only render when none
+                    // are available).
                     <>
                         {showFileCount && (
                             <p>
