@@ -13,10 +13,6 @@
     overflow-y: auto;
     text-align: left;
 
-    li {
-        // background-color: $tt-grey-4;
-    }
-
     .mlir-file-status {
         &.is-success {
             color: $tt-green;
@@ -27,11 +23,8 @@
         }
     }
 
-    // Muted grey in every state (overriding the disabled-row dimming on
-    // pending/failed rows), green only once the row is selected.
-    .bp6-menu-item .mlir-file-eye,
-    .bp6-menu-item.bp6-disabled .mlir-file-eye {
-        color: $tt-grey-5;
+    .bp6-menu-item .mlir-file-eye {
+        color: $tt-grey-4;
     }
 
     .bp6-menu-item .mlir-file-eye.is-selected {
