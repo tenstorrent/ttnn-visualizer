@@ -106,14 +106,14 @@ const MlirFileResultsOverlay = () => {
                 <MlirFileList
                     results={results ?? []}
                     selectedIndex={selectedIndex}
-                    onSelect={setSelectedIndex}
+                    // Clicking the already-selected file deselects it.
+                    onSelect={(index) => setSelectedIndex((current) => (current === index ? null : index))}
                 />
             </div>
 
             <div className={Classes.DIALOG_FOOTER_ACTIONS}>
                 <Button
                     intent={Intent.PRIMARY}
-                    icon={IconNames.EYE_OPEN}
                     disabled={selectedIndex === null}
                     onClick={handleView}
                 >
