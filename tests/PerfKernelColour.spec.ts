@@ -13,10 +13,12 @@ describe('getKernelRiscColour', () => {
         expect(getKernelRiscColour(100, 100)).toBe(CellColour.Blue);
     });
 
-    it('mutes RISCs below the critical-path threshold', () => {
-        expect(getKernelRiscColour(89, 100)).toBe(CellColour.Grey);
-        expect(getKernelRiscColour(50, 100)).toBe(CellColour.Grey);
-        expect(getKernelRiscColour(0, 100)).toBe(CellColour.Grey);
+    // Non-critical RISCs keep the default (readable) colour rather than being dimmed, so a near-miss
+    // RISC stays legible — only the gating RISC is accented.
+    it('leaves RISCs below the critical-path threshold at the default colour', () => {
+        expect(getKernelRiscColour(89, 100)).toBe(CellColour.White);
+        expect(getKernelRiscColour(50, 100)).toBe(CellColour.White);
+        expect(getKernelRiscColour(0, 100)).toBe(CellColour.White);
     });
 
     it('falls back to the default colour when the device kernel duration is missing or zero', () => {
