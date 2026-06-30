@@ -59,6 +59,7 @@ const MlirFileResultsOverlay = () => {
                 await setActiveMlir(result.name);
             } catch (err: unknown) {
                 createToastNotification('MLIR', getResponseError(err, 'Unable to set active MLIR'), ToastType.ERROR);
+                return;
             }
         }
 

@@ -174,6 +174,7 @@ describe('useMlirRemote progress lifecycle', () => {
         await waitFor(() => {
             expect(screen.getByText('Processing reports')).toBeInTheDocument();
             expect(screen.getByText('model.mlir')).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
         });
 
         deferred.resolve({
@@ -192,6 +193,40 @@ describe('useMlirRemote progress lifecycle', () => {
         await waitFor(() => {
             expect(screen.queryByText('Processing reports')).not.toBeInTheDocument();
             expect(getDefaultStore().get(fileTransferProgressAtom).status).toBe(FileStatus.INACTIVE);
+            expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeEnabled();
+        });
+    });
+
+    it('uses detail as fallback message when upload result omits message', async () => {
+        const postMock = vi.mocked(axiosInstance.post);
+        postMock.mockResolvedValue({
+            data: {
+                results: [
+                    {
+                        status: ConnectionTestStates.FAILED,
+                        graph: null,
+                        name: null,
+                        filename: 'model.mlir',
+                        detail: 'adapter conversion failed',
+                    },
+                ],
+            },
+        });
+
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+                <FileStatusOverlay />
+            </MemoryRouter>,
+        );
+
+        const fileInput = container.querySelector('input[type="file"]');
+        fireEvent.change(fileInput as HTMLInputElement, {
+            target: { files: [new File(['module {}'], 'model.mlir')] },
+        });
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirFileResultsAtom)?.[0]?.message).toBe('adapter conversion failed');
         });
     });
 

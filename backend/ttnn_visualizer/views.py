@@ -1797,6 +1797,7 @@ def upload_mlir_server():
     # picks which converted graph to make active. The active MLIR is set
     # separately via `/mlir/active` so nothing is activated until the user
     # chooses.
+    existing_names = {path.stem for path in target_directory.glob("*.json")}
     used_names: set[str] = set()
     results = []
     for file in files:
@@ -1814,7 +1815,14 @@ def upload_mlir_server():
             result.status.status == ConnectionTestStates.OK.value
             and result.graph_json is not None
         ):
-            mlir_name = _unique_mlir_name(Path(Path(filename).name).stem, used_names)
+            base_name = Path(Path(filename).name).stem
+            unavailable_names = existing_names | used_names
+            # Preserve intentional refresh semantics for the first upload using
+            # the base name while still avoiding clobbering previously-created
+            # disambiguated files (for example `model (2).json`).
+            if base_name not in used_names:
+                unavailable_names.discard(base_name)
+            mlir_name = _unique_mlir_name(base_name, unavailable_names)
             used_names.add(mlir_name)
             mlir_path = target_directory / f"{mlir_name}.json"
             mlir_path.write_text(result.graph_json, encoding="utf-8")
@@ -1834,8 +1842,8 @@ def upload_mlir_server():
 
 
 @api.route("/mlir/active", methods=["POST"])
-@local_only
 @with_instance
+@local_only
 def set_active_mlir(instance: Instance):
     """Make a previously-uploaded MLIR report the active one for this instance.
 
@@ -1845,12 +1853,13 @@ def set_active_mlir(instance: Instance):
     """
     data = request.get_json(silent=True) or {}
     name = data.get("name")
-    if not name:
+    if not isinstance(name, str) or not name.strip():
         return response_bad_request("Missing required field: name")
 
     # Strip any directory components — the stored report lives in the MLIR
-    # directory and the name is only ever a file stem.
-    safe_name = Path(name).name
+    # directory and the name is only ever a file stem. Accepting `.json`
+    # input from callers is fine: normalise to the stem before lookup.
+    safe_name = Path(name.strip()).stem
     mlir_path = get_mlir_path(safe_name, current_app)
     if not mlir_path or not Path(mlir_path).exists():
         return response_not_found()

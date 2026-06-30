@@ -14,13 +14,16 @@ import { activeMlirDataAtom, activeMlirJsonAtom, mlirFileResultsAtom, mlirFileRe
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
 
 const setActiveMlir = vi.fn();
+const { createToastNotification } = vi.hoisted(() => ({
+    createToastNotification: vi.fn(),
+}));
 
 vi.mock('../src/hooks/useMlirRemote', () => ({
     default: () => ({ setActiveMlir }),
 }));
 
 vi.mock('../src/functions/createToastNotification', () => ({
-    default: vi.fn(),
+    default: createToastNotification,
     ToastType: { SUCCESS: 'success', ERROR: 'error' },
 }));
 
@@ -130,5 +133,21 @@ describe('MlirFileResultsOverlay', () => {
             expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
         });
         expect(setActiveMlir).not.toHaveBeenCalled();
+    });
+
+    it('does not show a success toast when persisting active MLIR fails', async () => {
+        setActiveMlir.mockRejectedValueOnce(new Error('persist failed'));
+        renderOverlay([
+            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: true },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlir'));
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => {
+            expect(setActiveMlir).toHaveBeenCalledWith('a');
+        });
+        expect(createToastNotification).toHaveBeenCalledTimes(1);
+        expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'persist failed', 'error');
     });
 });

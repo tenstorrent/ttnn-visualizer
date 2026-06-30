@@ -117,7 +117,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                     filename: result.filename,
                     name: result.name,
                     status: result.status,
-                    message: result.message,
+                    message: result.message ?? result.detail,
                     graph: result.graph ?? null,
                     persisted: true,
                 }));
@@ -146,6 +146,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
 
     const acceptedExtensions = server ? MLIR_SERVER_ACCEPTED_EXTENSIONS.join(',') : '.json';
     const placeholder = server ? 'Upload model files' : 'Upload MLIR JSON files';
+    const hasSettledResults = !!mlirFileResults?.some((result) => result.status !== ConnectionTestStates.PROGRESS);
 
     return (
         <div className='file-loader'>
@@ -161,7 +162,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 icon={IconNames.LIST}
                 text='View MLIR uploads'
                 onClick={() => setMlirFileResultsOpen(true)}
-                disabled={!mlirFileResults?.length}
+                disabled={!hasSettledResults}
             />
 
             <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>
