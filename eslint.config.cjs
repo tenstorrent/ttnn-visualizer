@@ -229,7 +229,9 @@ module.exports = defineConfig([
         '**/backend',
         '**/build',
         '**/dist',
-        '**/docs/output',
+        // Sphinx docs tree (templates + static JS assets); not part of the TS
+        // project, so the typed parser/project service can't resolve them.
+        '**/docs',
         '**/myenv',
         '**/node_modules',
         '**/ttnn_env',
