@@ -39,14 +39,16 @@ jobs:
             CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }} | grep -E '\.(ts|tsx)$' | tr '\n' ' ' | xargs)
             echo "changed=$CHANGED_FILES" >> $GITHUB_OUTPUT
 
-      - name: Lint and test
-        run: |
-            if [ -n "${{ steps.pr_changes.outputs.changed }}" ]; then
-                pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0
-            else
-                echo "No .ts or .tsx files changed. Skipping lint."
-            fi
-            pnpm test
+      - name: Lint changed files
+        if: ${{ steps.pr_changes.outputs.changed != '' }}
+        run: pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0
+        background: true
+
+      - name: Run frontend tests
+        run: pnpm test
+        background: true
+
+      - wait-all:
 
   backend-lint-and-test:
     name: Lint and Test (Backend)
@@ -79,12 +81,17 @@ jobs:
 
       - name: Run Black
         run: uv run --frozen black --check backend/ttnn_visualizer
+        background: true
 
       - name: Run isort
         run: uv run --frozen isort --check-only backend/ttnn_visualizer
+        background: true
 
       - name: Run Mypy
         run: uv run --frozen mypy backend/ttnn_visualizer
+        background: true
+
+      - wait-all:
 
       - name: Run Backend Tests
         run: uv run --frozen pytest backend/ttnn_visualizer
