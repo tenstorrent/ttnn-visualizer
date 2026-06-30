@@ -7,6 +7,7 @@ import { HIGH_DISPATCH_THRESHOLD_US } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { L1PressureMetrics } from './l1Pressure';
+import { nsToUs } from './math';
 import { parsePerfRowTensorAttributes } from './parsePerfRowTensorAttributes';
 
 interface RowAttributes {
@@ -67,6 +68,15 @@ export const enrichRowData = (
             flops: row.flops ? parseFloat(row.flops) : null,
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
             pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
+            // Kernel durations arrive as raw nanosecond strings (CSV `[ns]` columns); convert to µs
+            // to match the table's `unit: 'µs'` column declarations. nsToUs handles the nullish case.
+            device_kernel_duration: nsToUs(row.device_kernel_duration),
+            brisc_kernel_duration: nsToUs(row.brisc_kernel_duration),
+            ncrisc_kernel_duration: nsToUs(row.ncrisc_kernel_duration),
+            trisc0_kernel_duration: nsToUs(row.trisc0_kernel_duration),
+            trisc1_kernel_duration: nsToUs(row.trisc1_kernel_duration),
+            trisc2_kernel_duration: nsToUs(row.trisc2_kernel_duration),
+            erisc_kernel_duration: nsToUs(row.erisc_kernel_duration),
             l1_fullness_percent: l1Pressure?.fullnessPercent ?? null,
             l1_free_segments: l1Pressure?.freeSegments ?? null,
             l1_largest_free: l1Pressure?.largestFreeBytes ?? null,

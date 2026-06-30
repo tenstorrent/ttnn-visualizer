@@ -46,6 +46,23 @@ const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
+// Per-RISC kernel durations run concurrently, so the device kernel duration is gated by whichever
+// RISC runs longest. Highlight the RISC(s) on that critical path so the user can see where the
+// time goes (#1518). This is informational, not a warning — a data-movement op pinned to BRISC or
+// a matmul pinned to a compute TRISC is expected, so a neutral accent is used rather than red.
+const KERNEL_RISC_KEYS: ColumnKeys[] = [
+    ColumnKeys.BriscKernelDuration,
+    ColumnKeys.NcriscKernelDuration,
+    ColumnKeys.Trisc0KernelDuration,
+    ColumnKeys.Trisc1KernelDuration,
+    ColumnKeys.Trisc2KernelDuration,
+    ColumnKeys.EriscKernelDuration,
+];
+// A RISC within 10% of the device kernel duration is treated as gating the op and accented. This
+// is a display heuristic, not a correctness boundary: non-critical RISCs keep the default (readable)
+// colour, so a near-miss RISC stays legible even when it isn't accented.
+const KERNEL_CRITICAL_PATH_SHARE = 0.9;
+
 // https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
     row: TypedPerfTableRow,
@@ -269,7 +286,12 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnKeys.Id || key === ColumnKeys.TotalPercent || key === ColumnKeys.DeviceTime) {
+    if (
+        key === ColumnKeys.Id ||
+        key === ColumnKeys.TotalPercent ||
+        key === ColumnKeys.DeviceTime ||
+        key === ColumnKeys.DeviceKernelDuration
+    ) {
         return DEFAULT_COLOUR;
     }
 
@@ -384,8 +406,27 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
         return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : DEFAULT_COLOUR;
     }
 
+    if (KERNEL_RISC_KEYS.includes(key)) {
+        return typeof keyValue === 'number'
+            ? getKernelRiscColour(keyValue, row.device_kernel_duration)
+            : FALLBACK_COLOUR;
+    }
+
     // Shouldn't get to this point but need to return something
     return FALLBACK_COLOUR;
+};
+
+// Accent the RISC(s) on the op's critical path (≈ the device kernel duration); the rest keep the
+// default colour so the whole row stays readable. A neutral accent is used deliberately: being the
+// critical path identifies where the time goes, it does not imply the op is unhealthy.
+export const getKernelRiscColour = (riscUs: number, deviceKernelUs: number | null): CellColour => {
+    if (!deviceKernelUs || deviceKernelUs <= 0) {
+        return DEFAULT_COLOUR;
+    }
+
+    const share = riscUs / deviceKernelUs;
+
+    return share >= KERNEL_CRITICAL_PATH_SHARE ? CellColour.Blue : DEFAULT_COLOUR;
 };
 
 export const getCoreColour = (value: string | string[] | boolean | number): CellColour => {
