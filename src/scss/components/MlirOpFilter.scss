@@ -22,18 +22,26 @@
     box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
 
     .bp6-input-group {
+        display: flex;
+        align-items: center;
         width: 240px;
     }
 
     .mlir-op-filter-counter {
-        align-self: center;
-        padding: 0 8px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 4px;
         color: $tt-grey-6;
         font-size: 11px;
+        line-height: 1;
         white-space: nowrap;
     }
 
+    .mlir-op-filter-clear,
     .mlir-op-filter-step {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         flex-shrink: 0;
     }
 }

@@ -74,11 +74,20 @@ const MlirOpFilter = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
                     onChange={(event) => onQueryChange(event.target.value)}
                     onKeyDown={handleKeyDown}
                     rightElement={
-                        counterText ? <span className='mlir-op-filter-counter'>{counterText}</span> : undefined
+                        hasQuery ? (
+                            <Button
+                                className='mlir-op-filter-clear'
+                                variant={ButtonVariant.MINIMAL}
+                                icon={IconNames.CROSS}
+                                aria-label='Clear filter'
+                                onClick={() => onQueryChange('')}
+                            />
+                        ) : undefined
                     }
                     spellCheck={false}
                     autoComplete='off'
                 />
+                {counterText ? <span className='mlir-op-filter-counter'>{counterText}</span> : null}
                 <Button
                     className='mlir-op-filter-step'
                     variant={ButtonVariant.MINIMAL}
