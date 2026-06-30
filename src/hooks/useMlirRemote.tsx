@@ -13,12 +13,19 @@ import { MlirServerConnection } from '../definitions/MlirServer';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import getResponseError from '../functions/getResponseError';
 
-export interface MlirUploadResponse {
+// One per uploaded file. `name` and `graph` are populated only when the file
+// converted successfully; on failure they are null and `message` explains why.
+export interface MlirFileUploadResult {
     status: ConnectionTestStates;
     message?: string;
     detail?: string;
-    name?: string;
-    graph?: GraphBundle;
+    filename: string;
+    name: string | null;
+    graph: GraphBundle | null;
+}
+
+export interface MlirUploadResponse {
+    results: MlirFileUploadResult[];
 }
 
 const useMlirRemote = () => {
@@ -111,9 +118,17 @@ const useMlirRemote = () => {
         }
     };
 
+    // Persist which uploaded MLIR report is active on the instance so `/mlir`
+    // serves it and a reload restores the same selection. Server uploads store
+    // each converted graph as `<name>.json`; this records the chosen one.
+    const setActiveMlir = async (name: string): Promise<void> => {
+        await axiosInstance.post(`${Endpoints.MLIR}/active`, { name });
+    };
+
     return {
         uploadMlirFileToServer,
         testMlirServerConnection,
+        setActiveMlir,
     };
 };
 

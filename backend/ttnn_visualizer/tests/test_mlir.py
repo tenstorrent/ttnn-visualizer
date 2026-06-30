@@ -236,10 +236,10 @@ def test_upload_and_convert_rejects_unsupported_file_before_upload(
 # ---- /api/remote/mlir/upload endpoint -------------------------------------
 
 
-def _ok_conversion() -> MlirConversionResult:
+def _ok_conversion(graph_id: str = "g") -> MlirConversionResult:
     return MlirConversionResult(
         status=StatusMessage(status=ConnectionTestStates.OK, message="Success"),
-        graph_json=json.dumps({"graphs": [{"id": "g", "nodes": []}]}),
+        graph_json=json.dumps({"graphs": [{"id": graph_id, "nodes": []}]}),
     )
 
 
@@ -302,7 +302,7 @@ def test_upload_endpoint_requires_files_and_port(app, client, make_report):
 
 
 def test_upload_endpoint_returns_graph_and_persists_json(app, client, make_report):
-    """Success returns the converted graph + name and writes it under MLIR dir."""
+    """Success returns a per-file result with graph + name and writes the JSON."""
     instance_id = make_report()
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
@@ -318,15 +318,120 @@ def test_upload_endpoint_returns_graph_and_persists_json(app, client, make_repor
         )
 
     assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
-    body = response.get_json()
-    assert body["status"] == ConnectionTestStates.OK.value
-    assert body["name"] == "my_model"
-    assert body["graph"] == {"graphs": [{"id": "g", "nodes": []}]}
+    results = response.get_json()["results"]
+    assert len(results) == 1
+    assert results[0]["status"] == ConnectionTestStates.OK.value
+    assert results[0]["filename"] == "my_model.mlir"
+    assert results[0]["name"] == "my_model"
+    assert results[0]["graph"] == {"graphs": [{"id": "g", "nodes": []}]}
 
     mlir_root = (
         Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
     ).resolve()
     assert (mlir_root / "my_model.json").is_file()
+
+
+def test_upload_endpoint_converts_every_file(app, client, make_report):
+    """Each uploaded file is converted and returned as its own result; a colliding
+    stem is disambiguated so the second file does not clobber the first."""
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    data = _mlir_upload_form_data(b"a", "model.mlir")
+    # A second file sharing the stem of the first.
+    data["files"] = [
+        (BytesIO(b"a"), "model.mlir"),
+        (BytesIO(b"b"), "model.pb"),
+    ]
+
+    with patch(
+        "ttnn_visualizer.views.upload_and_convert_mlir", return_value=_ok_conversion()
+    ):
+        response = client.post(
+            "/api/remote/mlir/upload",
+            query_string={"instanceId": instance_id},
+            data=data,
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    results = response.get_json()["results"]
+    assert [result["name"] for result in results] == ["model", "model (2)"]
+
+    mlir_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
+    ).resolve()
+    assert (mlir_root / "model.json").is_file()
+    assert (mlir_root / "model (2).json").is_file()
+
+
+def test_upload_endpoint_avoids_cross_batch_disambiguation_clobber(
+    app, client, make_report
+):
+    """A later batch must not overwrite an existing disambiguated sibling.
+
+    Re-uploading ``model`` may refresh ``model.json``, but the generated name
+    for a second same-stem file in a later batch must skip any existing
+    disambiguated files (for example ``model (2).json``).
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    first_batch = _mlir_upload_form_data(b"a", "model.mlir")
+    first_batch["files"] = [
+        (BytesIO(b"a"), "model.mlir"),
+        (BytesIO(b"b"), "model.pb"),
+    ]
+    with patch(
+        "ttnn_visualizer.views.upload_and_convert_mlir",
+        return_value=_ok_conversion("g1"),
+    ):
+        first = client.post(
+            "/api/remote/mlir/upload",
+            query_string={"instanceId": instance_id},
+            data=first_batch,
+            content_type="multipart/form-data",
+        )
+
+    assert first.status_code == HTTPStatus.OK, first.get_data(as_text=True)
+    assert [result["name"] for result in first.get_json()["results"]] == [
+        "model",
+        "model (2)",
+    ]
+
+    second_batch = _mlir_upload_form_data(b"c", "model.mlir")
+    second_batch["files"] = [
+        (BytesIO(b"c"), "model.mlir"),
+        (BytesIO(b"d"), "model.pb"),
+    ]
+    with patch(
+        "ttnn_visualizer.views.upload_and_convert_mlir",
+        return_value=_ok_conversion("g2"),
+    ):
+        second = client.post(
+            "/api/remote/mlir/upload",
+            query_string={"instanceId": instance_id},
+            data=second_batch,
+            content_type="multipart/form-data",
+        )
+
+    assert second.status_code == HTTPStatus.OK, second.get_data(as_text=True)
+    assert [result["name"] for result in second.get_json()["results"]] == [
+        "model",
+        "model (3)",
+    ]
+
+    mlir_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
+    ).resolve()
+    assert json.loads((mlir_root / "model (2).json").read_text(encoding="utf-8")) == {
+        "graphs": [{"id": "g1", "nodes": []}]
+    }
+    assert json.loads((mlir_root / "model (3).json").read_text(encoding="utf-8")) == {
+        "graphs": [{"id": "g2", "nodes": []}]
+    }
 
 
 def test_upload_endpoint_failure_returns_status_without_graph(app, client, make_report):
@@ -348,9 +453,86 @@ def test_upload_endpoint_failure_returns_status_without_graph(app, client, make_
         )
 
     assert response.status_code == HTTPStatus.OK
-    body = response.get_json()
-    assert body["status"] == ConnectionTestStates.FAILED.value
-    assert "graph" not in body
+    results = response.get_json()["results"]
+    assert results[0]["status"] == ConnectionTestStates.FAILED.value
+    assert results[0]["name"] is None
+    assert results[0]["graph"] is None
+
+
+def test_set_active_mlir_updates_instance(app, client, make_report):
+    """Selecting an uploaded file records it as the instance's active MLIR so
+    `/mlir` then serves it."""
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    mlir_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
+    )
+    mlir_root.mkdir(parents=True, exist_ok=True)
+    graph = {"graphs": [{"id": "g", "nodes": []}]}
+    (mlir_root / "my_model.json").write_text(json.dumps(graph), encoding="utf-8")
+
+    response = client.post(
+        "/api/mlir/active",
+        query_string={"instanceId": instance_id},
+        json={"name": "my_model"},
+    )
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert response.get_json()["name"] == "my_model"
+
+    served = client.get("/api/mlir", query_string={"instanceId": instance_id})
+    assert served.status_code == HTTPStatus.OK
+    assert served.get_json() == graph
+
+
+def test_set_active_mlir_missing_file_returns_not_found(app, client, make_report):
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    response = client.post(
+        "/api/mlir/active",
+        query_string={"instanceId": instance_id},
+        json={"name": "does_not_exist"},
+    )
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_set_active_mlir_accepts_json_suffix(app, client, make_report):
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    mlir_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
+    )
+    mlir_root.mkdir(parents=True, exist_ok=True)
+    graph = {"graphs": [{"id": "g", "nodes": []}]}
+    (mlir_root / "my_model.json").write_text(json.dumps(graph), encoding="utf-8")
+
+    response = client.post(
+        "/api/mlir/active",
+        query_string={"instanceId": instance_id},
+        json={"name": "my_model.json"},
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert response.get_json()["name"] == "my_model"
+
+
+def test_set_active_mlir_rejects_non_string_name(app, client, make_report):
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    response = client.post(
+        "/api/mlir/active",
+        query_string={"instanceId": instance_id},
+        json={"name": 42},
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
 def test_upload_endpoint_traversal_filename_stays_in_mlir_dir(app, client, make_report):

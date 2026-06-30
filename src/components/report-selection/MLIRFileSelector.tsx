@@ -150,8 +150,8 @@ const MLIRFileSelector = () => {
 
             <FormGroup
                 className='form-group'
-                label={<h3 className='label'>Model file</h3>}
-                subLabel='Upload a single model file (.mlir, .mlirbc, .pb, .pbtxt, .graphdef, .tflite, .json, .pt2)'
+                label={<h3 className='label'>Model files</h3>}
+                subLabel='Upload one or more model files (.mlir, .mlirbc, .pb, .pbtxt, .graphdef, .tflite, .json, .pt2)'
             >
                 {activeServer ? (
                     <MlirJsonFileLoader server={activeServer} />

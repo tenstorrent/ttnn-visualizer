@@ -94,6 +94,7 @@ from ttnn_visualizer.stack_trace_source import (
 )
 from ttnn_visualizer.utils import (
     create_path_resolver,
+    get_mlir_path,
     pick_cluster_descriptor_path,
     pick_mesh_descriptor_path,
     pick_profiler_config_paths,
@@ -1745,6 +1746,23 @@ def test_mlir_server():
     )
 
 
+def _unique_mlir_name(base: str, used: set[str]) -> str:
+    """Disambiguate a stored MLIR report name within a single upload batch.
+
+    Two uploaded files can share a stem (e.g. ``model.mlir`` and ``model.pb``
+    both reduce to ``model``); without this the second would silently clobber
+    the first on disk and in the results list. Names collide only within a
+    batch — a later upload of the same name intentionally replaces the earlier
+    file so re-uploading a model refreshes it.
+    """
+    name = base or "model"
+    counter = 2
+    while name in used:
+        name = f"{base} ({counter})"
+        counter += 1
+    return name
+
+
 @api.route("/remote/mlir/upload", methods=["POST"])
 @local_only
 def upload_mlir_server():
@@ -1769,45 +1787,92 @@ def upload_mlir_server():
             "MLIR server requires a host, username, and MLIR port"
         )
 
-    file = files[0]
-    result = upload_and_convert_mlir(mlir_connection, file.read(), file.filename or "")
-
-    if (
-        result.status.status != ConnectionTestStates.OK.value
-        or result.graph_json is None
-    ):
-        return result.status.model_dump()
-
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
     target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
-    mlir_name = Path(Path(file.filename or "model").name).stem
-    mlir_path = target_directory / f"{mlir_name}.json"
-    mlir_path.write_text(result.graph_json, encoding="utf-8")
+    # Convert every uploaded file independently. One file failing to convert
+    # must not abort the others, so per-file outcomes are collected and
+    # returned as a list; the caller surfaces them in the results overlay and
+    # picks which converted graph to make active. The active MLIR is set
+    # separately via `/mlir/active` so nothing is activated until the user
+    # chooses.
+    existing_names = {path.stem for path in target_directory.glob("*.json")}
+    used_names: set[str] = set()
+    results = []
+    for file in files:
+        filename = file.filename or "model"
+        result = upload_and_convert_mlir(mlir_connection, file.read(), filename)
 
-    instance_id = request.args.get("instanceId")
-    if not instance_id:
-        return response_bad_request("Missing required query parameter: instanceId")
+        entry = {
+            **result.status.model_dump(),
+            "filename": Path(filename).name,
+            "name": None,
+            "graph": None,
+        }
 
-    update_instance(
-        instance_id=instance_id,
-        mlir_name=mlir_name,
-        mlir_location=ReportLocation.LOCAL.value,
-        mlir_path=str(mlir_path),
+        if (
+            result.status.status == ConnectionTestStates.OK.value
+            and result.graph_json is not None
+        ):
+            base_name = Path(Path(filename).name).stem
+            unavailable_names = existing_names | used_names
+            # Preserve intentional refresh semantics for the first upload using
+            # the base name while still avoiding clobbering previously-created
+            # disambiguated files (for example `model (2).json`).
+            if base_name not in used_names:
+                unavailable_names.discard(base_name)
+            mlir_name = _unique_mlir_name(base_name, unavailable_names)
+            used_names.add(mlir_name)
+            mlir_path = target_directory / f"{mlir_name}.json"
+            mlir_path.write_text(result.graph_json, encoding="utf-8")
+
+            entry["name"] = mlir_name
+            # `graph_json` is already a JSON string, so embed it verbatim rather
+            # than re-serialising — the caller renders it without a follow-up
+            # `/mlir` fetch.
+            entry["graph"] = orjson.Fragment(result.graph_json.encode("utf-8"))
+
+        results.append(entry)
+
+    return Response(
+        orjson.dumps({"results": results}),
+        mimetype="application/json",
     )
 
-    # Return the converted graph alongside the status so callers can render it
-    # without a follow-up `/mlir` fetch. `graph_json` is already a JSON string,
-    # so embed it verbatim rather than re-serialising.
+
+@api.route("/mlir/active", methods=["POST"])
+@with_instance
+@local_only
+def set_active_mlir(instance: Instance):
+    """Make a previously-uploaded MLIR report the active one for this instance.
+
+    Multi-file uploads store each converted graph as ``<name>.json`` but leave
+    the instance untouched; this records the user's choice so `/mlir` serves it
+    and a reload restores the same selection.
+    """
+    data = request.get_json(silent=True) or {}
+    name = data.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return response_bad_request("Missing required field: name")
+
+    # Strip any directory components — the stored report lives in the MLIR
+    # directory and the name is only ever a file stem. Accepting `.json`
+    # input from callers is fine: normalise to the stem before lookup.
+    safe_name = Path(name.strip()).stem
+    mlir_path = get_mlir_path(safe_name, current_app)
+    if not mlir_path or not Path(mlir_path).exists():
+        return response_not_found()
+
+    update_instance(
+        instance_id=instance.instance_id,
+        mlir_name=safe_name,
+        mlir_location=ReportLocation.LOCAL.value,
+        mlir_path=mlir_path,
+    )
+
     return Response(
-        orjson.dumps(
-            {
-                **result.status.model_dump(),
-                "name": mlir_name,
-                "graph": orjson.Fragment(result.graph_json.encode("utf-8")),
-            }
-        ),
+        orjson.dumps({"name": safe_name}),
         mimetype="application/json",
     )
 

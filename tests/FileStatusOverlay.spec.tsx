@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import FileStatusOverlay from '../src/components/FileStatusOverlay';
 import { getFileStatusLabel } from '../src/functions/getFileStatusLabel';
 import { FileProgress, FileStatus } from '../src/model/APIData';
-import { fileTransferProgressAtom } from '../src/store/app';
+import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
+import { fileTransferProgressAtom, mlirFileResultsAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 
 function renderOverlay(progress: FileProgress) {
@@ -87,10 +88,58 @@ describe('FileStatusOverlay status row', () => {
             currentFileSize: 256_000,
         });
 
-        expect(screen.getByText('Processing report')).toBeInTheDocument();
+        expect(screen.getByText('Processing reports')).toBeInTheDocument();
         expect(screen.getByText(getFileStatusLabel(FileStatus.PROCESSING))).toBeInTheDocument();
-        expect(screen.getByLabelText('Processing report')).toBeInTheDocument();
+        expect(screen.getByLabelText('Processing reports')).toBeInTheDocument();
         expect(screen.queryByText(/files\s*\(/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/complete/i)).not.toBeInTheDocument();
+    });
+
+    // Files upload as one batch then convert in parallel on the server, so the
+    // processing stage lists every file with a spinner instead of a single
+    // "processing one report" line.
+    it('lists each pending file with a spinner while PROCESSING', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [
+                        fileTransferProgressAtom,
+                        {
+                            currentFileName: 'a.mlir',
+                            numberOfFiles: 2,
+                            percentOfCurrent: 100,
+                            finishedFiles: 0,
+                            status: FileStatus.PROCESSING,
+                        },
+                    ],
+                    [
+                        mlirFileResultsAtom,
+                        [
+                            {
+                                filename: 'a.mlir',
+                                name: null,
+                                status: ConnectionTestStates.PROGRESS,
+                                graph: null,
+                                persisted: true,
+                            },
+                            {
+                                filename: 'b.mlir',
+                                name: null,
+                                status: ConnectionTestStates.PROGRESS,
+                                graph: null,
+                                persisted: true,
+                            },
+                        ],
+                    ],
+                ]}
+            >
+                <FileStatusOverlay />
+            </TestProviders>,
+        );
+
+        expect(screen.getByText('a.mlir')).toBeInTheDocument();
+        expect(screen.getByText('b.mlir')).toBeInTheDocument();
+        // One spinner per file rather than the single indeterminate line.
+        expect(document.querySelectorAll('.bp6-spinner')).toHaveLength(2);
     });
 });
