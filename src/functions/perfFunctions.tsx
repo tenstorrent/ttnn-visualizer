@@ -12,7 +12,7 @@ import { OperationDescription } from '../model/APIData';
 import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
-import { HIGH_DISPATCH_THRESHOLD_MS, OpType } from '../definitions/Performance';
+import { HIGH_DISPATCH_THRESHOLD_US, OpType } from '../definitions/Performance';
 import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 import { NormalisedPerfData } from './normalisePerformanceData';
 import MemoryTag from '../components/MemoryTag';
@@ -88,9 +88,9 @@ export const formatCell = (
     }
 
     if (key === ColumnKeys.HighDispatch) {
-        const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency`;
+        const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency`;
 
-        return row?.[ColumnKeys.DeviceTime] !== null && row?.[ColumnKeys.DeviceTime] > HIGH_DISPATCH_THRESHOLD_MS ? (
+        return row?.[ColumnKeys.DeviceTime] !== null && row?.[ColumnKeys.DeviceTime] > HIGH_DISPATCH_THRESHOLD_US ? (
             <Tooltip content={tooltipMessage}>
                 <Icon
                     className={WARNING_COLOUR}
@@ -258,7 +258,10 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     const keyValue = row[key];
     const percentage = row.total_percent;
 
-    if (row.op_type === OpType.DEVICE_OP && percentage != null && percentage < MIN_PERCENTAGE) {
+    // tt-perf-report mutes ops below the threshold, except host "(torch)" ops, which it always
+    // keeps coloured (perf_report.py color_row() + is_host_op()). raw_op_code is a required string
+    // on every row type (device ops, placeholders, signposts), so reading it here is always safe.
+    if (percentage != null && percentage < MIN_PERCENTAGE && !row.raw_op_code.includes('(torch)')) {
         return FALLBACK_COLOUR;
     }
 
@@ -272,7 +275,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
 
     if (key === ColumnKeys.Bound) {
         if (keyValue === BoundType.HOST) {
-            return CellColour.Green;
+            return CellColour.Red;
         }
 
         if (keyValue === BoundType.FLOP) {
@@ -286,6 +289,10 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
         if (keyValue === BoundType.DRAM) {
             return CellColour.Green;
         }
+
+        // tt-perf-report only colours the Bound cell for DRAM/FLOP/SLOW/HOST; anything else
+        // (BOTH, empty, unrecognised) stays neutral (perf_report.py color_row()).
+        return DEFAULT_COLOUR;
     }
 
     if (
@@ -304,10 +311,6 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
             if (key === ColumnKeys.Flops || key === ColumnKeys.FlopsPercent) {
                 return CellColour.Green;
             }
-        }
-
-        if (row.bound === BoundType.HOST) {
-            return CellColour.Red;
         }
 
         const dramP = row.dram_percent;
@@ -346,6 +349,14 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     }
 
     if (key === ColumnKeys.MathFidelity && typeof keyValue === 'string') {
+        // tt-perf-report only evaluates fidelity for Matmul / OptimizedConvNew ops (perf_report.py:1055-1056).
+        const isFidelityEvaluatedOp =
+            row.raw_op_code.includes('Matmul') || row.raw_op_code.includes('OptimizedConvNew');
+
+        if (!isFidelityEvaluatedOp || keyValue === '') {
+            return DEFAULT_COLOUR;
+        }
+
         const parts = keyValue.split(' ');
         const mathFidelity = parts[0] as MathFidelity;
         const input0Datatype = row.input_0_datatype || '';
@@ -369,7 +380,8 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     }
 
     if (key === ColumnKeys.OpToOpGap) {
-        return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : FALLBACK_COLOUR;
+        // tt-perf-report only ever colours this cell red (gap > 6.5µs); a missing gap stays neutral (perf_report.py:1052).
+        return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : DEFAULT_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something
@@ -393,7 +405,7 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
 };
 
 export const getOpToOpGapColour = (value: number): CellColour => {
-    return value > HIGH_DISPATCH_THRESHOLD_MS ? CellColour.Red : FALLBACK_COLOUR;
+    return value > HIGH_DISPATCH_THRESHOLD_US ? CellColour.Red : DEFAULT_COLOUR;
 };
 
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
@@ -401,7 +413,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
         .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
         .filter(([_, opData]) => {
             const val = opData.op_to_op_gap;
-            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_MS;
+            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_US;
         });
 
     if (highDispatchOps.length === 0) {
@@ -412,7 +424,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
         const val = opData.op_to_op_gap || 0;
 
-        return acc + (val - HIGH_DISPATCH_THRESHOLD_MS);
+        return acc + (val - HIGH_DISPATCH_THRESHOLD_US);
     }, 0);
 
     // Compute total_duration as sum of device times + Op-to-Op Gaps
@@ -434,7 +446,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     return (
         <div className='high-dispatch-advice'>
             <p>
-                Marked ops have &gt; {HIGH_DISPATCH_THRESHOLD_MS} µs dispatch latency. Running with tracing could save{' '}
+                Marked ops have &gt; {HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency. Running with tracing could save{' '}
                 {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
                 {formatPercentage(percentageSaved, 1)} of overall time).
             </p>
@@ -449,22 +461,39 @@ export enum MathFidelity {
     LoFi = 'LoFi',
 }
 
+// Mirrors tt-perf-report evaluate_fidelity() (perf_report.py:535-556).
+const INTEGER_DATATYPES = ['UINT8', 'UINT16', 'INT32', 'UINT32'];
+const MANTISSA_BITS: Record<string, number> = {
+    FLOAT32: 23,
+    BFLOAT16: 8,
+    BFLOAT8_B: 7,
+    BFLOAT4_B: 3,
+};
+
 export function evaluateFidelity(
     input0Datatype: string,
     input1Datatype: string,
     outputDatatype: string,
     mathFidelity: MathFidelity | '',
 ): [string, string | null] {
-    const mantissaBits: Record<string, number> = {
-        FLOAT32: 23,
-        BFLOAT16: 8,
-        BFLOAT8_B: 7,
-        BFLOAT4_B: 3,
-    };
+    if ([input0Datatype, input1Datatype, outputDatatype].some((datatype) => INTEGER_DATATYPES.includes(datatype))) {
+        return [
+            'not_applicable',
+            'Fidelity evaluation is not applicable for integer datatypes (UINT8, UINT16, INT32, UINT32).',
+        ];
+    }
 
-    const in0Bits = mantissaBits[input0Datatype];
-    const in1Bits = mantissaBits[input1Datatype];
-    const outBits = mantissaBits[outputDatatype];
+    const unsupportedDatatype = [input0Datatype, input1Datatype, outputDatatype].find(
+        (datatype) => MANTISSA_BITS[datatype] === undefined,
+    );
+
+    if (unsupportedDatatype !== undefined) {
+        return ['unknown', `Datatype ${unsupportedDatatype} is not supported for fidelity evaluation.`];
+    }
+
+    const in0Bits = MANTISSA_BITS[input0Datatype];
+    const in1Bits = MANTISSA_BITS[input1Datatype];
+    const outBits = MANTISSA_BITS[outputDatatype];
 
     // I note that we're not using the second part of the returned array, only the first part.
     if (in0Bits === 8 && outBits >= 7) {

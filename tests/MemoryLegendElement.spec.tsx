@@ -147,4 +147,35 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
         const row = container.querySelector('.legend-item');
         expect(row).toHaveClass('globally-allocated');
     });
+
+    it('surfaces the aliased tensor id/shape/dtype in the marker tooltip when a tensor is resolved', () => {
+        const aliasedTensor = {
+            id: 188,
+            shape: 'Shape([1, 32, 64, 64])',
+            dtype: 'DataType.BFLOAT16',
+        };
+        const opDetails = {
+            getTensorForAddress: () => aliasedTensor,
+        } as unknown as OperationDetails;
+
+        render(
+            <TestProviders>
+                <MemoryLegendElement
+                    chunk={chunk}
+                    memSize={1024}
+                    selectedTensorAddress={null}
+                    operationDetails={opDetails}
+                    onLegendClick={onLegendClick}
+                    isGloballyAllocated
+                />
+            </TestProviders>,
+        );
+
+        // aria-label is the most reliable assertion — Blueprint renders the tooltip lazily on hover.
+        const marker = document.querySelector('.globally-allocated-marker');
+        expect(marker).toHaveAttribute(
+            'aria-label',
+            expect.stringMatching(/Globally allocated.*Tensor 188.*\[1, 32, 64, 64\].*bf16/),
+        );
+    });
 });

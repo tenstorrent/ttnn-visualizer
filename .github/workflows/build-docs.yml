@@ -17,17 +17,29 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: github-pages
+    env:
+      SEARCH_API_BASE: https://csl860x2oj.execute-api.us-east-2.amazonaws.com/prod
+      DOC_CATALOG_SOURCE_ID: docs-tenstorrent
+      DOC_SITE_BASE_URL: https://docs.tenstorrent.com/ttnn-visualizer
+      DOCS_ID_NAMESPACE: tt-visualizer
+      DOCS_INDEX_VERSION: latest
+      DOCS_OUTPUT_DIR: docs/output
+      DOCS_SEARCH_INGEST_API_KEY: ${{ secrets.DOCS_SEARCH_INGEST_API_KEY_DOCS_TENSTORRENT }}
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        fetch-tags: true
 
     - name: Read .python-version
       id: python
       run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_OUTPUT
 
     - name: Install uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v8.2.0
       with:
         python-version: ${{ steps.python.outputs.PYTHON_VERSION }}
         enable-cache: true
@@ -37,10 +49,20 @@ jobs:
 
     - name: Setup Pages
       id: pages
-      uses: actions/configure-pages@v5
+      uses: actions/configure-pages@v6
 
     - name: Build Docs
       run: uv run --frozen --no-default-groups --group docs sphinx-build docs docs/output
+
+    - name: Warn if search ingest key is missing
+      if: ${{ env.DOCS_SEARCH_INGEST_API_KEY == '' }}
+      run: |
+        echo "::warning::Skipping OpenSearch indexing: DOCS_SEARCH_INGEST_API_KEY_DOCS_TENSTORRENT secret not set."
+
+    - name: Index docs into OpenSearch
+      if: ${{ env.DOCS_SEARCH_INGEST_API_KEY != '' }}
+      continue-on-error: true
+      run: uv run --frozen --no-default-groups --group docs python scripts/index_remote_search.py
 
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
@@ -59,4 +81,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
