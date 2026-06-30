@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+.mlir-op-filter {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+
+    // Sit above React Flow nodes (1) and edges (0) but below the details
+    // panel (which uses 10). Controls panel uses 5.
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: $tt-grey-2;
+    border: 1px solid $tt-grey-3;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+
+    .bp6-input-group {
+        width: 240px;
+    }
+
+    .mlir-op-filter-counter {
+        align-self: center;
+        padding: 0 8px;
+        color: $tt-grey-6;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .mlir-op-filter-step {
+        flex-shrink: 0;
+    }
+}

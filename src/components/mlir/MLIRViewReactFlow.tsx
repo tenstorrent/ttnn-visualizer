@@ -49,7 +49,10 @@ import type {
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
+import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
 import { getNamespaceSegments } from './mlirGraphHelpers';
+
+const FILTER_DIM_OPACITY = 0.18;
 
 // Re-uses `WorkerNode['data']` (the canonical shape produced by the layout
 // worker) and tacks on `highlight` — a view-layer-only flag. Set when this
@@ -283,6 +286,12 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    // Live op-name filter. Empty query means "no filter" (canvas is the
+    // default state); a non-empty query dims non-matching op nodes and the
+    // edges between them. `currentMatchIndex` is the prev/next pan cursor.
+    const [filterQuery, setFilterQuery] = useState('');
+    const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
+    const filterRef = useRef<MlirOpFilterHandle>(null);
     const selectedNodeIdRef = useRef<string | null>(null);
     const viewportAnchorRef = useRef<{
         toNodeId: string;
@@ -316,6 +325,93 @@ const MlGraphInner = ({ data }: ViewProps) => {
     useEffect(() => {
         pendingFocusNodeIdRef.current = null;
     }, [selectedNodeId]);
+
+    // Visible op nodes whose label matches the current filter query.
+    // Matched against `nodes` (the post-build, collapse-aware list) so the
+    // user only sees hits among what's actually on the canvas. Collapsed-
+    // anchor and group nodes are excluded — group dimming would hide their
+    // children, and matching descendants buried in a collapsed namespace
+    // would dim everything visible. Surfacing buried matches is a follow-up.
+    const filterMatchedNodeIds = useMemo<Set<string> | null>(() => {
+        if (filterQuery.length === 0) {
+            return null;
+        }
+        const needle = filterQuery.toLowerCase();
+        const out = new Set<string>();
+        for (const node of nodes) {
+            if (node.type === 'mlirGroup') {
+                continue;
+            }
+            const label = (node.data?.label ?? '').toLowerCase();
+            if (label.includes(needle)) {
+                out.add(node.id);
+            }
+        }
+        return out;
+    }, [filterQuery, nodes]);
+
+    // Matched ids in canvas order so prev/next pans through them
+    // predictably as the user sees them stacked top-to-bottom.
+    const matchedNodesInOrder = useMemo<string[]>(() => {
+        if (!filterMatchedNodeIds || filterMatchedNodeIds.size === 0) {
+            return [];
+        }
+        const result: string[] = [];
+        for (const node of nodes) {
+            if (filterMatchedNodeIds.has(node.id)) {
+                result.push(node.id);
+            }
+        }
+        return result;
+    }, [nodes, filterMatchedNodeIds]);
+
+    // Reset the prev/next cursor whenever the query changes so the next
+    // arrow click starts at the first match. Done here (not in an effect)
+    // to keep set-state-in-effect lint clean.
+    const handleQueryChange = useCallback((next: string) => {
+        setFilterQuery(next);
+        setCurrentMatchIndex(null);
+    }, []);
+
+    const goToMatch = useCallback(
+        (direction: 'next' | 'prev') => {
+            if (matchedNodesInOrder.length === 0) {
+                return;
+            }
+            const total = matchedNodesInOrder.length;
+            setCurrentMatchIndex((prev) => {
+                let nextIdx: number;
+                if (prev === null) {
+                    nextIdx = direction === 'next' ? 0 : total - 1;
+                } else {
+                    nextIdx = direction === 'next' ? (prev + 1) % total : (prev - 1 + total) % total;
+                }
+                const targetId = matchedNodesInOrder[nextIdx];
+                if (targetId) {
+                    void fitView({ nodes: [{ id: targetId }], padding: 0.3, duration: 200 });
+                }
+                return nextIdx;
+            });
+        },
+        [matchedNodesInOrder, fitView],
+    );
+
+    // Cmd+F / Ctrl+F focuses the filter input. Hijacks the browser's
+    // find-in-page only while the MLIR view is mounted; the rest of the app
+    // gets the native shortcut back as soon as the user navigates away.
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (!(event.metaKey || event.ctrlKey) || event.key !== 'f' || event.shiftKey || event.altKey) {
+                return;
+            }
+            event.preventDefault();
+            filterRef.current?.focus();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, []);
 
     // Reflect selectedNodeId onto each node's `selected` flag so React Flow
     // applies its built-in selected styling.
@@ -1036,36 +1132,43 @@ const MlGraphInner = ({ data }: ViewProps) => {
         return { inputNodeIds, outputNodeIds, inputEdgeIds, outputEdgeIds };
     }, [displayedEdges, selectedNodeId]);
 
-    // Highlight input neighbours green and output neighbours yellow. Op nodes
-    // get a colored fill via `style.background`; group nodes route the
-    // highlight through `data.highlight` so their body border is colorized
-    // instead — painting the wrapper background on a group bleeds behind the
-    // dashed body and hides the children inside. The selected node itself
-    // still gets its blue ring from CSS (`.selected`).
+    // Combines two orthogonal passes:
+    //  - Selection highlight: green/yellow fill (op) or border colour (group)
+    //    for the producers/consumers of the selected node.
+    //  - Filter dim: fade non-matching leaf op nodes to `FILTER_DIM_OPACITY`.
+    //    Groups stay neutral (dimming the wrapper bleeds through to children),
+    //    the selected node itself never dims (so the user doesn't lose track),
+    //    and an empty query is a no-op.
     const styledNodes = useMemo<MLNode[]>(() => {
-        if (!selectedNodeId) {
-            return nodes;
-        }
         const { inputNodeIds, outputNodeIds } = focusedConnections;
-        if (inputNodeIds.size === 0 && outputNodeIds.size === 0) {
+        const hasSelectionHighlight = !!selectedNodeId && (inputNodeIds.size > 0 || outputNodeIds.size > 0);
+        const hasFilter = !!filterMatchedNodeIds;
+        if (!hasSelectionHighlight && !hasFilter) {
             return nodes;
         }
         return nodes.map((n) => {
-            const role: 'input' | 'output' | undefined = inputNodeIds.has(n.id)
-                ? 'input'
-                : outputNodeIds.has(n.id)
-                  ? 'output'
-                  : undefined;
-            if (!role) {
-                return n;
+            let next = n;
+            if (hasSelectionHighlight) {
+                const role: 'input' | 'output' | undefined = inputNodeIds.has(n.id)
+                    ? 'input'
+                    : outputNodeIds.has(n.id)
+                      ? 'output'
+                      : undefined;
+                if (role) {
+                    const color = role === 'input' ? GRAPH_COLORS.inputNode : GRAPH_COLORS.outputNode;
+                    if (n.type === 'mlirGroup') {
+                        next = { ...next, data: { ...next.data, highlight: role } };
+                    } else {
+                        next = { ...next, style: { ...(next.style ?? {}), background: color } };
+                    }
+                }
             }
-            const color = role === 'input' ? GRAPH_COLORS.inputNode : GRAPH_COLORS.outputNode;
-            if (n.type === 'mlirGroup') {
-                return { ...n, data: { ...n.data, highlight: role } };
+            if (hasFilter && n.type !== 'mlirGroup' && n.id !== selectedNodeId && !filterMatchedNodeIds.has(n.id)) {
+                next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
             }
-            return { ...n, style: { ...(n.style ?? {}), background: color } };
+            return next;
         });
-    }, [nodes, focusedConnections, selectedNodeId]);
+    }, [nodes, focusedConnections, selectedNodeId, filterMatchedNodeIds]);
 
     // MiniMap reads `node.style.background` to colour each mini-node. The
     // unhighlighted op-node fill now lives in SCSS (`.react-flow__node-mlirOp`),
@@ -1084,39 +1187,50 @@ const MlGraphInner = ({ data }: ViewProps) => {
         return '#f5f5f5';
     }, []);
 
-    // Colorize incoming edges green, outgoing edges yellow.
+    // Colourise selection's incoming edges green / outgoing yellow, then
+    // dim everything else when a filter is active. Edges between two
+    // matches stay bright so the matched subset remains traceable; edges
+    // touching the selection always stay bright (selection trumps filter).
     const styledEdges = useMemo<Edge[]>(() => {
-        if (!selectedNodeId) {
-            return displayedEdges;
-        }
         const { inputEdgeIds, outputEdgeIds } = focusedConnections;
-        if (inputEdgeIds.size === 0 && outputEdgeIds.size === 0) {
+        const hasSelectionHighlight = !!selectedNodeId && (inputEdgeIds.size > 0 || outputEdgeIds.size > 0);
+        const hasFilter = !!filterMatchedNodeIds;
+        if (!hasSelectionHighlight && !hasFilter) {
             return displayedEdges;
         }
         return displayedEdges.map((e) => {
-            if (inputEdgeIds.has(e.id)) {
-                return {
-                    ...e,
-                    style: { ...(e.style ?? {}), stroke: GRAPH_COLORS.inputEdge, strokeWidth: 2 },
-                    markerEnd:
-                        typeof e.markerEnd === 'object' && e.markerEnd
-                            ? { ...e.markerEnd, color: GRAPH_COLORS.inputEdge }
-                            : e.markerEnd,
-                };
+            let next = e;
+            if (hasSelectionHighlight) {
+                if (inputEdgeIds.has(e.id)) {
+                    next = {
+                        ...next,
+                        style: { ...(next.style ?? {}), stroke: GRAPH_COLORS.inputEdge, strokeWidth: 2 },
+                        markerEnd:
+                            typeof next.markerEnd === 'object' && next.markerEnd
+                                ? { ...next.markerEnd, color: GRAPH_COLORS.inputEdge }
+                                : next.markerEnd,
+                    };
+                } else if (outputEdgeIds.has(e.id)) {
+                    next = {
+                        ...next,
+                        style: { ...(next.style ?? {}), stroke: GRAPH_COLORS.outputEdge, strokeWidth: 2 },
+                        markerEnd:
+                            typeof next.markerEnd === 'object' && next.markerEnd
+                                ? { ...next.markerEnd, color: GRAPH_COLORS.outputEdge }
+                                : next.markerEnd,
+                    };
+                }
             }
-            if (outputEdgeIds.has(e.id)) {
-                return {
-                    ...e,
-                    style: { ...(e.style ?? {}), stroke: GRAPH_COLORS.outputEdge, strokeWidth: 2 },
-                    markerEnd:
-                        typeof e.markerEnd === 'object' && e.markerEnd
-                            ? { ...e.markerEnd, color: GRAPH_COLORS.outputEdge }
-                            : e.markerEnd,
-                };
+            if (hasFilter) {
+                const bothMatch = filterMatchedNodeIds.has(e.source) && filterMatchedNodeIds.has(e.target);
+                const isSelectionEdge = inputEdgeIds.has(e.id) || outputEdgeIds.has(e.id);
+                if (!bothMatch && !isSelectionEdge) {
+                    next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
+                }
             }
-            return e;
+            return next;
         });
-    }, [displayedEdges, focusedConnections, selectedNodeId]);
+    }, [displayedEdges, focusedConnections, selectedNodeId, filterMatchedNodeIds]);
 
     return (
         <div className='mlir-view-pane'>
@@ -1140,6 +1254,16 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     <Background />
                 </ReactFlow>
             </MlirGroupContext.Provider>
+
+            <MlirOpFilter
+                ref={filterRef}
+                query={filterQuery}
+                onQueryChange={handleQueryChange}
+                matchCount={matchedNodesInOrder.length}
+                currentMatchIndex={currentMatchIndex}
+                onPrev={() => goToMatch('prev')}
+                onNext={() => goToMatch('next')}
+            />
 
             <Button
                 className='mlir-relayout-button'
