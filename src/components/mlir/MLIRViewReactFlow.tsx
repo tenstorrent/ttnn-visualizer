@@ -55,12 +55,19 @@ import { getNamespaceSegments } from './mlirGraphHelpers';
 const FILTER_DIM_OPACITY = 0.18;
 
 // Re-uses `WorkerNode['data']` (the canonical shape produced by the layout
-// worker) and tacks on `highlight` — a view-layer-only flag. Set when this
-// node is a producer/consumer of the currently selected node. Op nodes get a
-// coloured fill via `style.background`; groups route the highlight through
-// `data.highlight` so the dashed body border is colourised instead, because
-// painting the wrapper background bleeds behind the body and hides children.
-type MLNodeData = WorkerNode['data'] & { highlight?: 'input' | 'output' };
+// worker) and tacks on view-layer-only flags:
+//  - `highlight`: producer/consumer role vs. the selected node. Op nodes get
+//    a coloured fill via `style.background`; groups route it through
+//    `data.highlight` so the dashed body border is colourised instead
+//    (painting the wrapper background bleeds behind the body and hides
+//    children).
+//  - `buriedMatchCount`: how many buried source nodes match the current
+//    filter query. Set on collapsed anchors that owe their filter-match
+//    entirely or partially to descendants; drives the "+N" badge.
+type MLNodeData = WorkerNode['data'] & {
+    highlight?: 'input' | 'output';
+    buriedMatchCount?: number;
+};
 
 interface ViewProps {
     data: GraphBundle;
@@ -86,6 +93,16 @@ const MlirOpNode = memo<NodeProps<MLNode>>(({ id, data }) => (
                 }
             >
                 {data.subgraphToggleState === 'expanded' ? '▾' : '▸'}
+            </span>
+        ) : null}
+        {data.buriedMatchCount ? (
+            <span
+                className='mlir-op-node-buried-badge'
+                title={`${data.buriedMatchCount} filter ${
+                    data.buriedMatchCount === 1 ? 'match' : 'matches'
+                } inside this collapsed subgraph`}
+            >
+                {`+${data.buriedMatchCount}`}
             </span>
         ) : null}
         <div className='mlir-op-node-label'>{data.label}</div>
@@ -326,45 +343,6 @@ const MlGraphInner = ({ data }: ViewProps) => {
         pendingFocusNodeIdRef.current = null;
     }, [selectedNodeId]);
 
-    // Visible op nodes whose label matches the current filter query.
-    // Matched against `nodes` (the post-build, collapse-aware list) so the
-    // user only sees hits among what's actually on the canvas. Collapsed-
-    // anchor and group nodes are excluded — group dimming would hide their
-    // children, and matching descendants buried in a collapsed namespace
-    // would dim everything visible. Surfacing buried matches is a follow-up.
-    const filterMatchedNodeIds = useMemo<Set<string> | null>(() => {
-        if (filterQuery.length === 0) {
-            return null;
-        }
-        const needle = filterQuery.toLowerCase();
-        const out = new Set<string>();
-        for (const node of nodes) {
-            if (node.type === 'mlirGroup') {
-                continue;
-            }
-            const label = (node.data?.label ?? '').toLowerCase();
-            if (label.includes(needle)) {
-                out.add(node.id);
-            }
-        }
-        return out;
-    }, [filterQuery, nodes]);
-
-    // Matched ids in canvas order so prev/next pans through them
-    // predictably as the user sees them stacked top-to-bottom.
-    const matchedNodesInOrder = useMemo<string[]>(() => {
-        if (!filterMatchedNodeIds || filterMatchedNodeIds.size === 0) {
-            return [];
-        }
-        const result: string[] = [];
-        for (const node of nodes) {
-            if (filterMatchedNodeIds.has(node.id)) {
-                result.push(node.id);
-            }
-        }
-        return result;
-    }, [nodes, filterMatchedNodeIds]);
-
     // Reset the prev/next cursor whenever the query changes so the next
     // arrow click starts at the first match. Done here (not in an effect)
     // to keep set-state-in-effect lint clean.
@@ -372,29 +350,6 @@ const MlGraphInner = ({ data }: ViewProps) => {
         setFilterQuery(next);
         setCurrentMatchIndex(null);
     }, []);
-
-    const goToMatch = useCallback(
-        (direction: 'next' | 'prev') => {
-            if (matchedNodesInOrder.length === 0) {
-                return;
-            }
-            const total = matchedNodesInOrder.length;
-            setCurrentMatchIndex((prev) => {
-                let nextIdx: number;
-                if (prev === null) {
-                    nextIdx = direction === 'next' ? 0 : total - 1;
-                } else {
-                    nextIdx = direction === 'next' ? (prev + 1) % total : (prev - 1 + total) % total;
-                }
-                const targetId = matchedNodesInOrder[nextIdx];
-                if (targetId) {
-                    void fitView({ nodes: [{ id: targetId }], padding: 0.3, duration: 200 });
-                }
-                return nextIdx;
-            });
-        },
-        [matchedNodesInOrder, fitView],
-    );
 
     // Cmd+F / Ctrl+F focuses the filter input. Hijacks the browser's
     // find-in-page only while the MLIR view is mounted; the rest of the app
@@ -506,6 +461,132 @@ const MlGraphInner = ({ data }: ViewProps) => {
     useEffect(() => {
         runBuild(expandedNamespaces);
     }, [expandedNamespaces, runBuild]);
+
+    // Filter index. Walks `sourceNodes` (the raw graph, regardless of
+    // collapse state) and maps each label-matching source to its "visible
+    // representative": itself if it's on the canvas, otherwise the collapsed
+    // anchor of its shallowest enclosing namespace. Buried matches roll up
+    // to the anchor so the user never gets a silent "no matches" on a
+    // collapsed graph.
+    //
+    // Walks `containingNamespacesByNodeId` (outer→inner) instead of
+    // `source.namespace` because topology sectioning wraps top-level ops in
+    // synthetic `section_N_of_M` namespaces that aren't reflected in the raw
+    // `namespace` field. Consulting the index makes sections indistinguishable
+    // from real MLIR namespaces for filter purposes.
+    //
+    // - `visibleRepIds`: what the canvas keeps bright, what prev/next walks.
+    // - `buriedCountByRepId`: per-anchor count of buried descendants that
+    //   contributed. Drives the "+N" badge on collapsed anchors.
+    // - `totalSourceMatches`: sum across visible + buried. What the counter
+    //   reports so the user knows the true match count.
+    const filterMatchInfo = useMemo<{
+        visibleRepIds: Set<string>;
+        buriedCountByRepId: Map<string, number>;
+        totalSourceMatches: number;
+    } | null>(() => {
+        if (filterQuery.length === 0) {
+            return null;
+        }
+        const needle = filterQuery.toLowerCase();
+        const anchorByNamespace = interactionIndex?.anchorByNamespace ?? {};
+        const containingNamespacesByNodeId = interactionIndex?.containingNamespacesByNodeId ?? {};
+        const visibleNodeIds = new Set<string>();
+        for (const node of nodes) {
+            visibleNodeIds.add(node.id);
+        }
+        const visibleRepIds = new Set<string>();
+        const buriedCountByRepId = new Map<string, number>();
+        let totalSourceMatches = 0;
+        for (const source of sourceNodes) {
+            if (!source.label.toLowerCase().includes(needle)) {
+                continue;
+            }
+            totalSourceMatches += 1;
+            const containing = containingNamespacesByNodeId[source.id];
+            let repId: string | null = null;
+            if (!containing || containing.length === 0) {
+                // Truly top-level — no containing subgraph or section.
+                repId = visibleNodeIds.has(source.id) ? source.id : null;
+            } else {
+                // `containing` is ordered outer→inner. The shortest namespace
+                // that isn't currently expanded is where visibility stops.
+                let hitCollapsed = false;
+                for (const ns of containing) {
+                    if (!expandedNamespaces.has(ns)) {
+                        const anchorId = anchorByNamespace[ns];
+                        repId = anchorId && visibleNodeIds.has(anchorId) ? anchorId : null;
+                        hitCollapsed = true;
+                        break;
+                    }
+                }
+                if (!hitCollapsed) {
+                    // Every containing namespace is expanded — the source
+                    // itself is on canvas.
+                    repId = visibleNodeIds.has(source.id) ? source.id : null;
+                }
+            }
+            if (repId === null) {
+                continue;
+            }
+            visibleRepIds.add(repId);
+            if (repId !== source.id) {
+                buriedCountByRepId.set(repId, (buriedCountByRepId.get(repId) ?? 0) + 1);
+            }
+        }
+        return { visibleRepIds, buriedCountByRepId, totalSourceMatches };
+    }, [filterQuery, sourceNodes, expandedNamespaces, interactionIndex, nodes]);
+
+    // Matched visible reps in canvas order so prev/next steps through them
+    // top-to-bottom as the user sees them.
+    const matchedNodesInOrder = useMemo<string[]>(() => {
+        if (!filterMatchInfo || filterMatchInfo.visibleRepIds.size === 0) {
+            return [];
+        }
+        const result: string[] = [];
+        for (const node of nodes) {
+            if (filterMatchInfo.visibleRepIds.has(node.id)) {
+                result.push(node.id);
+            }
+        }
+        return result;
+    }, [nodes, filterMatchInfo]);
+
+    // Sum of buried counts across every anchor — the number the counter
+    // suffixes as "+K inside".
+    const hiddenMatchCount = useMemo<number>(() => {
+        if (!filterMatchInfo) {
+            return 0;
+        }
+        let total = 0;
+        for (const count of filterMatchInfo.buriedCountByRepId.values()) {
+            total += count;
+        }
+        return total;
+    }, [filterMatchInfo]);
+
+    const goToMatch = useCallback(
+        (direction: 'next' | 'prev') => {
+            if (matchedNodesInOrder.length === 0) {
+                return;
+            }
+            const total = matchedNodesInOrder.length;
+            setCurrentMatchIndex((prev) => {
+                let nextIdx: number;
+                if (prev === null) {
+                    nextIdx = direction === 'next' ? 0 : total - 1;
+                } else {
+                    nextIdx = direction === 'next' ? (prev + 1) % total : (prev - 1 + total) % total;
+                }
+                const targetId = matchedNodesInOrder[nextIdx];
+                if (targetId) {
+                    void fitView({ nodes: [{ id: targetId }], padding: 0.3, duration: 200 });
+                }
+                return nextIdx;
+            });
+        },
+        [matchedNodesInOrder, fitView],
+    );
 
     // Anchor the viewport so the namespace's representative op (post-collapse)
     // visually stays put, then drop the namespace from `expandedNamespaces`.
@@ -1132,20 +1213,25 @@ const MlGraphInner = ({ data }: ViewProps) => {
         return { inputNodeIds, outputNodeIds, inputEdgeIds, outputEdgeIds };
     }, [displayedEdges, selectedNodeId]);
 
-    // Combines two orthogonal passes:
+    // Combines three orthogonal passes:
     //  - Selection highlight: green/yellow fill (op) or border colour (group)
     //    for the producers/consumers of the selected node.
     //  - Filter dim: fade non-matching leaf op nodes to `FILTER_DIM_OPACITY`.
     //    Groups stay neutral (dimming the wrapper bleeds through to children),
     //    the selected node itself never dims (so the user doesn't lose track),
     //    and an empty query is a no-op.
+    //  - Buried-match badge: attach `data.buriedMatchCount` to any anchor
+    //    whose match is (fully or partially) owed to hidden descendants, so
+    //    `MlirOpNode` can render a "+N" indicator.
     const styledNodes = useMemo<MLNode[]>(() => {
         const { inputNodeIds, outputNodeIds } = focusedConnections;
         const hasSelectionHighlight = !!selectedNodeId && (inputNodeIds.size > 0 || outputNodeIds.size > 0);
-        const hasFilter = !!filterMatchedNodeIds;
+        const hasFilter = !!filterMatchInfo;
         if (!hasSelectionHighlight && !hasFilter) {
             return nodes;
         }
+        const visibleRepIds = filterMatchInfo?.visibleRepIds;
+        const buriedByRep = filterMatchInfo?.buriedCountByRepId;
         return nodes.map((n) => {
             let next = n;
             if (hasSelectionHighlight) {
@@ -1163,12 +1249,19 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     }
                 }
             }
-            if (hasFilter && n.type !== 'mlirGroup' && n.id !== selectedNodeId && !filterMatchedNodeIds.has(n.id)) {
-                next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
+            if (hasFilter) {
+                const buriedCount = buriedByRep?.get(n.id) ?? 0;
+                if (buriedCount > 0) {
+                    next = { ...next, data: { ...next.data, buriedMatchCount: buriedCount } };
+                }
+                const isMatch = visibleRepIds!.has(n.id);
+                if (n.type !== 'mlirGroup' && n.id !== selectedNodeId && !isMatch) {
+                    next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
+                }
             }
             return next;
         });
-    }, [nodes, focusedConnections, selectedNodeId, filterMatchedNodeIds]);
+    }, [nodes, focusedConnections, selectedNodeId, filterMatchInfo]);
 
     // MiniMap reads `node.style.background` to colour each mini-node. The
     // unhighlighted op-node fill now lives in SCSS (`.react-flow__node-mlirOp`),
@@ -1194,10 +1287,11 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const styledEdges = useMemo<Edge[]>(() => {
         const { inputEdgeIds, outputEdgeIds } = focusedConnections;
         const hasSelectionHighlight = !!selectedNodeId && (inputEdgeIds.size > 0 || outputEdgeIds.size > 0);
-        const hasFilter = !!filterMatchedNodeIds;
+        const hasFilter = !!filterMatchInfo;
         if (!hasSelectionHighlight && !hasFilter) {
             return displayedEdges;
         }
+        const visibleRepIds = filterMatchInfo?.visibleRepIds;
         return displayedEdges.map((e) => {
             let next = e;
             if (hasSelectionHighlight) {
@@ -1222,7 +1316,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 }
             }
             if (hasFilter) {
-                const bothMatch = filterMatchedNodeIds.has(e.source) && filterMatchedNodeIds.has(e.target);
+                const bothMatch = visibleRepIds!.has(e.source) && visibleRepIds!.has(e.target);
                 const isSelectionEdge = inputEdgeIds.has(e.id) || outputEdgeIds.has(e.id);
                 if (!bothMatch && !isSelectionEdge) {
                     next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
@@ -1230,7 +1324,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
             }
             return next;
         });
-    }, [displayedEdges, focusedConnections, selectedNodeId, filterMatchedNodeIds]);
+    }, [displayedEdges, focusedConnections, selectedNodeId, filterMatchInfo]);
 
     return (
         <div className='mlir-view-pane'>
@@ -1260,6 +1354,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 query={filterQuery}
                 onQueryChange={handleQueryChange}
                 matchCount={matchedNodesInOrder.length}
+                hiddenMatchCount={hiddenMatchCount}
                 currentMatchIndex={currentMatchIndex}
                 onPrev={() => goToMatch('prev')}
                 onNext={() => goToMatch('next')}

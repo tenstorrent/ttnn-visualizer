@@ -217,6 +217,24 @@
     user-select: none;
 }
 
+// "+N" badge on collapsed anchors that own buried filter matches. Uses the
+// yellow accent so it reads as an informational hint distinct from the
+// input/output highlight greens/yellows on selected neighbours.
+.mlir-op-node-buried-badge {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    padding: 1px 5px;
+    background: $tt-yellow;
+    color: $tt-black;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.1;
+    pointer-events: none;
+    user-select: none;
+}
+
 .mlir-op-node-label {
     overflow: hidden;
     text-overflow: ellipsis;

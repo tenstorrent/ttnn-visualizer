@@ -176,6 +176,13 @@ export type WorkerInteractionIndex = {
      * to attribute those edges back to the outer op's input port.
      */
     namespaceInputByNamespace: Record<string, string[]>;
+    /**
+     * Ordered outer→inner list of every subgraph / synthetic-section
+     * namespace containing a given source node. Populated over
+     * post-sectioning namespaces, so filter code doesn't have to reason
+     * separately about topology-sectioned wrappers.
+     */
+    containingNamespacesByNodeId: Record<string, string[]>;
 };
 
 export type WorkerIndexedMessage = {

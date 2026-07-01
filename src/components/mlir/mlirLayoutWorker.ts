@@ -121,6 +121,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerInboundMessage>) => 
                     outerNamespaceByNodeId: index.outerNamespaceByNodeId,
                     namespaceReturnNodeByNamespace: index.namespaceReturnNodeByNamespace,
                     namespaceInputByNamespace: index.namespaceInputByNamespace,
+                    containingNamespacesByNodeId: index.containingNamespacesByNodeId,
                 },
             });
         } catch (error) {
