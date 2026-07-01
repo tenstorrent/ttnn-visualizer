@@ -9,8 +9,7 @@
     top: 12px;
     left: 12px;
 
-    // Sit above React Flow nodes (1) and edges (0) but below the details
-    // panel (which uses 10). Controls panel uses 5.
+    // Above React Flow nodes / edges / controls, below the details panel.
     z-index: 6;
     display: flex;
     align-items: center;

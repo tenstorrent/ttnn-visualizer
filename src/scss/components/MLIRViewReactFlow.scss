@@ -217,9 +217,8 @@
     user-select: none;
 }
 
-// "+N" badge on collapsed anchors that own buried filter matches. Uses the
-// yellow accent so it reads as an informational hint distinct from the
-// input/output highlight greens/yellows on selected neighbours.
+// "+N" badge on collapsed anchors with buried filter matches. Yellow reads
+// as informational, distinct from the input/output highlight fills.
 .mlir-op-node-buried-badge {
     position: absolute;
     right: 4px;

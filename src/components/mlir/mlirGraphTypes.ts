@@ -177,10 +177,9 @@ export type WorkerInteractionIndex = {
      */
     namespaceInputByNamespace: Record<string, string[]>;
     /**
-     * Ordered outer→inner list of every subgraph / synthetic-section
-     * namespace containing a given source node. Populated over
-     * post-sectioning namespaces, so filter code doesn't have to reason
-     * separately about topology-sectioned wrappers.
+     * Outer→inner list of every subgraph / synthetic-section namespace
+     * containing a given source node. Covers topology-sectioned wrappers so
+     * callers don't have to reason about them separately.
      */
     containingNamespacesByNodeId: Record<string, string[]>;
 };
