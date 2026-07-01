@@ -479,16 +479,15 @@ const MlGraphInner = ({ data }: ViewProps) => {
     }, [expandedNamespaces, runBuild]);
 
     // Maps each label-matching source to its visible representative: itself
-    // if on canvas, otherwise the collapsed anchor of its shallowest
-    // enclosing namespace. Uses `containingNamespacesByNodeId` rather than
-    // `source.namespace` because topology sectioning wraps top-level ops in
-    // synthetic `section_N_of_M` namespaces that aren't reflected in the raw
-    // namespace field.
-    // Collapsibility is derived from `visibleNodeIds.has(anchorId)` rather
-    // than `expandedNamespaces`: `nodes` is the authoritative post-worker
-    // snapshot, so reading collapsibility from it avoids the transient
-    // window where `expandedNamespaces` has updated but the worker rebuild
-    // is still in flight.
+    // if on canvas, otherwise the anchor of its outermost collapsed
+    // ancestor. Reads `containingNamespacesByNodeId` (not `source.namespace`)
+    // so topology sections and MLIR namespaces are walked uniformly.
+    //
+    // Collapsibility MUST come from `expandedNamespaces` — anchors are always
+    // visible under their own id (they render either as themselves in an
+    // expanded parent or as the collapsed anchor of their own namespace), so
+    // `visibleNodeIds.has(anchorId)` can't distinguish collapsed from
+    // expanded. Mirrors the graph builder's `resolveRenderedNodeId`.
     const filterMatchInfo = useMemo<{
         visibleRepIds: Set<string>;
         buriedCountByRepId: Map<string, number>;
@@ -514,12 +513,13 @@ const MlGraphInner = ({ data }: ViewProps) => {
             const containing = containingNamespacesByNodeId[source.id];
             let repId: string | null = null;
             if (containing && containing.length > 0) {
-                // Outer→inner; first namespace whose anchor is on canvas is
-                // the outermost collapsed ancestor.
+                // Outer→inner: the shortest collapsed namespace is where the
+                // source folds up to. Missing anchors fall back to `source.id`
+                // (mirrors `resolveRenderedNodeId`'s `?? nodeId`).
                 for (const ns of containing) {
-                    const anchorId = anchorByNamespace[ns];
-                    if (anchorId && visibleNodeIds.has(anchorId)) {
-                        repId = anchorId;
+                    if (!expandedNamespaces.has(ns)) {
+                        const anchorId = anchorByNamespace[ns] ?? source.id;
+                        repId = visibleNodeIds.has(anchorId) ? anchorId : null;
                         break;
                     }
                 }
@@ -537,7 +537,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
             }
         }
         return { visibleRepIds, buriedCountByRepId, hiddenMatchCount };
-    }, [appliedFilterQuery, sourceNodes, interactionIndex, nodes]);
+    }, [appliedFilterQuery, sourceNodes, expandedNamespaces, interactionIndex, nodes]);
 
     // Visible reps in canvas order so prev/next walks top-to-bottom.
     const matchedNodesInOrder = useMemo<string[]>(() => {
