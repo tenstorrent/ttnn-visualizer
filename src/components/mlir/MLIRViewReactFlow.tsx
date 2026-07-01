@@ -53,6 +53,10 @@ import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
 import { getNamespaceSegments } from './mlirGraphHelpers';
 
 const FILTER_DIM_OPACITY = 0.18;
+// Debounce the applied filter query so the memo chain (filterMatchInfo →
+// styledNodes/styledEdges → React Flow diff) only runs after typing settles.
+// Cleared queries bypass the debounce so Escape / clear feels instant.
+const FILTER_DEBOUNCE_MS = 120;
 
 // View-layer additions to the worker's canonical node data:
 //  - `highlight`: producer/consumer role vs. the selected node. Ops take a
@@ -300,8 +304,11 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-    // Live op-name filter. `currentMatchIndex` is the prev/next pan cursor.
+    // Live op-name filter. `filterQuery` drives the input for instant visual
+    // feedback; `appliedFilterQuery` is what the memo chain reads and lags
+    // by `FILTER_DEBOUNCE_MS` on non-empty queries.
     const [filterQuery, setFilterQuery] = useState('');
+    const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
     const filterRef = useRef<MlirOpFilterHandle>(null);
     const selectedNodeIdRef = useRef<string | null>(null);
@@ -338,12 +345,28 @@ const MlGraphInner = ({ data }: ViewProps) => {
         pendingFocusNodeIdRef.current = null;
     }, [selectedNodeId]);
 
-    // Reset the prev/next cursor with the query; kept out of an effect to
-    // avoid tripping set-state-in-effect.
+    // Reset the prev/next cursor with the query; clearing also applies
+    // instantly so Escape / clear feels responsive. Non-empty updates flow
+    // through the debounce effect below.
     const handleQueryChange = useCallback((next: string) => {
         setFilterQuery(next);
         setCurrentMatchIndex(null);
+        if (next === '') {
+            setAppliedFilterQuery('');
+        }
     }, []);
+
+    // Debounce non-empty query updates. `filterQuery` drives the input for
+    // instant feedback; `appliedFilterQuery` lands one debounce interval
+    // past the last keystroke so the memo → styledNodes → React Flow diff
+    // chain doesn't run per keystroke.
+    useEffect(() => {
+        if (filterQuery === '') {
+            return undefined;
+        }
+        const id = window.setTimeout(() => setAppliedFilterQuery(filterQuery), FILTER_DEBOUNCE_MS);
+        return () => window.clearTimeout(id);
+    }, [filterQuery]);
 
     // Cmd/Ctrl+F focuses the filter input while the MLIR view is mounted;
     // the native find-in-page returns as soon as the user navigates away.
@@ -471,10 +494,10 @@ const MlGraphInner = ({ data }: ViewProps) => {
         buriedCountByRepId: Map<string, number>;
         hiddenMatchCount: number;
     } | null>(() => {
-        if (filterQuery.length === 0) {
+        if (appliedFilterQuery.length === 0) {
             return null;
         }
-        const needle = filterQuery.toLowerCase();
+        const needle = appliedFilterQuery.toLowerCase();
         const anchorByNamespace = interactionIndex?.anchorByNamespace ?? {};
         const containingNamespacesByNodeId = interactionIndex?.containingNamespacesByNodeId ?? {};
         const visibleNodeIds = new Set<string>();
@@ -514,7 +537,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
             }
         }
         return { visibleRepIds, buriedCountByRepId, hiddenMatchCount };
-    }, [filterQuery, sourceNodes, interactionIndex, nodes]);
+    }, [appliedFilterQuery, sourceNodes, interactionIndex, nodes]);
 
     // Visible reps in canvas order so prev/next walks top-to-bottom.
     const matchedNodesInOrder = useMemo<string[]>(() => {
