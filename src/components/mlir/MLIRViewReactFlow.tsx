@@ -461,10 +461,15 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // `source.namespace` because topology sectioning wraps top-level ops in
     // synthetic `section_N_of_M` namespaces that aren't reflected in the raw
     // namespace field.
+    // Collapsibility is derived from `visibleNodeIds.has(anchorId)` rather
+    // than `expandedNamespaces`: `nodes` is the authoritative post-worker
+    // snapshot, so reading collapsibility from it avoids the transient
+    // window where `expandedNamespaces` has updated but the worker rebuild
+    // is still in flight.
     const filterMatchInfo = useMemo<{
         visibleRepIds: Set<string>;
         buriedCountByRepId: Map<string, number>;
-        totalSourceMatches: number;
+        hiddenMatchCount: number;
     } | null>(() => {
         if (filterQuery.length === 0) {
             return null;
@@ -478,31 +483,26 @@ const MlGraphInner = ({ data }: ViewProps) => {
         }
         const visibleRepIds = new Set<string>();
         const buriedCountByRepId = new Map<string, number>();
-        let totalSourceMatches = 0;
+        let hiddenMatchCount = 0;
         for (const source of sourceNodes) {
             if (!source.label.toLowerCase().includes(needle)) {
                 continue;
             }
-            totalSourceMatches += 1;
             const containing = containingNamespacesByNodeId[source.id];
             let repId: string | null = null;
-            if (!containing || containing.length === 0) {
-                repId = visibleNodeIds.has(source.id) ? source.id : null;
-            } else {
-                // `containing` is ordered outer→inner; the shortest collapsed
-                // one is where visibility stops.
-                let hitCollapsed = false;
+            if (containing && containing.length > 0) {
+                // Outer→inner; first namespace whose anchor is on canvas is
+                // the outermost collapsed ancestor.
                 for (const ns of containing) {
-                    if (!expandedNamespaces.has(ns)) {
-                        const anchorId = anchorByNamespace[ns];
-                        repId = anchorId && visibleNodeIds.has(anchorId) ? anchorId : null;
-                        hitCollapsed = true;
+                    const anchorId = anchorByNamespace[ns];
+                    if (anchorId && visibleNodeIds.has(anchorId)) {
+                        repId = anchorId;
                         break;
                     }
                 }
-                if (!hitCollapsed) {
-                    repId = visibleNodeIds.has(source.id) ? source.id : null;
-                }
+            }
+            if (repId === null) {
+                repId = visibleNodeIds.has(source.id) ? source.id : null;
             }
             if (repId === null) {
                 continue;
@@ -510,10 +510,11 @@ const MlGraphInner = ({ data }: ViewProps) => {
             visibleRepIds.add(repId);
             if (repId !== source.id) {
                 buriedCountByRepId.set(repId, (buriedCountByRepId.get(repId) ?? 0) + 1);
+                hiddenMatchCount += 1;
             }
         }
-        return { visibleRepIds, buriedCountByRepId, totalSourceMatches };
-    }, [filterQuery, sourceNodes, expandedNamespaces, interactionIndex, nodes]);
+        return { visibleRepIds, buriedCountByRepId, hiddenMatchCount };
+    }, [filterQuery, sourceNodes, interactionIndex, nodes]);
 
     // Visible reps in canvas order so prev/next walks top-to-bottom.
     const matchedNodesInOrder = useMemo<string[]>(() => {
@@ -528,19 +529,6 @@ const MlGraphInner = ({ data }: ViewProps) => {
         }
         return result;
     }, [nodes, filterMatchInfo]);
-
-    // Sum of buried counts across all anchors — drives the "+K inside"
-    // suffix on the counter.
-    const hiddenMatchCount = useMemo<number>(() => {
-        if (!filterMatchInfo) {
-            return 0;
-        }
-        let total = 0;
-        for (const count of filterMatchInfo.buriedCountByRepId.values()) {
-            total += count;
-        }
-        return total;
-    }, [filterMatchInfo]);
 
     const goToMatch = useCallback(
         (direction: 'next' | 'prev') => {
@@ -1197,12 +1185,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const styledNodes = useMemo<MLNode[]>(() => {
         const { inputNodeIds, outputNodeIds } = focusedConnections;
         const hasSelectionHighlight = !!selectedNodeId && (inputNodeIds.size > 0 || outputNodeIds.size > 0);
-        const hasFilter = !!filterMatchInfo;
-        if (!hasSelectionHighlight && !hasFilter) {
+        if (!hasSelectionHighlight && !filterMatchInfo) {
             return nodes;
         }
-        const visibleRepIds = filterMatchInfo?.visibleRepIds;
-        const buriedByRep = filterMatchInfo?.buriedCountByRepId;
         return nodes.map((n) => {
             let next = n;
             if (hasSelectionHighlight) {
@@ -1220,12 +1205,13 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     }
                 }
             }
-            if (hasFilter) {
-                const buriedCount = buriedByRep?.get(n.id) ?? 0;
+            if (filterMatchInfo) {
+                const { visibleRepIds, buriedCountByRepId } = filterMatchInfo;
+                const buriedCount = buriedCountByRepId.get(n.id) ?? 0;
                 if (buriedCount > 0) {
                     next = { ...next, data: { ...next.data, buriedMatchCount: buriedCount } };
                 }
-                const isMatch = visibleRepIds!.has(n.id);
+                const isMatch = visibleRepIds.has(n.id);
                 if (n.type !== 'mlirGroup' && n.id !== selectedNodeId && !isMatch) {
                     next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
                 }
@@ -1257,11 +1243,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const styledEdges = useMemo<Edge[]>(() => {
         const { inputEdgeIds, outputEdgeIds } = focusedConnections;
         const hasSelectionHighlight = !!selectedNodeId && (inputEdgeIds.size > 0 || outputEdgeIds.size > 0);
-        const hasFilter = !!filterMatchInfo;
-        if (!hasSelectionHighlight && !hasFilter) {
+        if (!hasSelectionHighlight && !filterMatchInfo) {
             return displayedEdges;
         }
-        const visibleRepIds = filterMatchInfo?.visibleRepIds;
         return displayedEdges.map((e) => {
             let next = e;
             if (hasSelectionHighlight) {
@@ -1285,8 +1269,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     };
                 }
             }
-            if (hasFilter) {
-                const bothMatch = visibleRepIds!.has(e.source) && visibleRepIds!.has(e.target);
+            if (filterMatchInfo) {
+                const { visibleRepIds } = filterMatchInfo;
+                const bothMatch = visibleRepIds.has(e.source) && visibleRepIds.has(e.target);
                 const isSelectionEdge = inputEdgeIds.has(e.id) || outputEdgeIds.has(e.id);
                 if (!bothMatch && !isSelectionEdge) {
                     next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
@@ -1324,7 +1309,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 query={filterQuery}
                 onQueryChange={handleQueryChange}
                 matchCount={matchedNodesInOrder.length}
-                hiddenMatchCount={hiddenMatchCount}
+                hiddenMatchCount={filterMatchInfo?.hiddenMatchCount ?? 0}
                 currentMatchIndex={currentMatchIndex}
                 onPrev={() => goToMatch('prev')}
                 onNext={() => goToMatch('next')}
