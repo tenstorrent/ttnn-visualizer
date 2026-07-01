@@ -553,27 +553,28 @@ const MlGraphInner = ({ data }: ViewProps) => {
         return result;
     }, [nodes, filterMatchInfo]);
 
+    // `fitView` lives outside the updater so React's StrictMode double-
+    // invocation of updaters in dev doesn't fire two pans per step.
     const goToMatch = useCallback(
         (direction: 'next' | 'prev') => {
-            if (matchedNodesInOrder.length === 0) {
+            const total = matchedNodesInOrder.length;
+            if (total === 0) {
                 return;
             }
-            const total = matchedNodesInOrder.length;
-            setCurrentMatchIndex((prev) => {
-                let nextIdx: number;
-                if (prev === null) {
-                    nextIdx = direction === 'next' ? 0 : total - 1;
-                } else {
-                    nextIdx = direction === 'next' ? (prev + 1) % total : (prev - 1 + total) % total;
-                }
-                const targetId = matchedNodesInOrder[nextIdx];
-                if (targetId) {
-                    void fitView({ nodes: [{ id: targetId }], padding: 0.3, duration: 200 });
-                }
-                return nextIdx;
-            });
+            let nextIdx: number;
+            if (currentMatchIndex === null) {
+                nextIdx = direction === 'next' ? 0 : total - 1;
+            } else {
+                nextIdx =
+                    direction === 'next' ? (currentMatchIndex + 1) % total : (currentMatchIndex - 1 + total) % total;
+            }
+            const targetId = matchedNodesInOrder[nextIdx];
+            if (targetId) {
+                void fitView({ nodes: [{ id: targetId }], padding: 0.3, duration: 200 });
+            }
+            setCurrentMatchIndex(nextIdx);
         },
-        [matchedNodesInOrder, fitView],
+        [matchedNodesInOrder, currentMatchIndex, fitView],
     );
 
     // Anchor the viewport so the namespace's representative op (post-collapse)
@@ -1208,7 +1209,10 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const styledNodes = useMemo<MLNode[]>(() => {
         const { inputNodeIds, outputNodeIds } = focusedConnections;
         const hasSelectionHighlight = !!selectedNodeId && (inputNodeIds.size > 0 || outputNodeIds.size > 0);
-        if (!hasSelectionHighlight && !filterMatchInfo) {
+        // Zero-match filter is treated as "no filter" for dim/badge purposes
+        // — leaves the canvas untouched instead of dimming everything to 18%.
+        const activeFilter = filterMatchInfo && filterMatchInfo.visibleRepIds.size > 0 ? filterMatchInfo : null;
+        if (!hasSelectionHighlight && !activeFilter) {
             return nodes;
         }
         return nodes.map((n) => {
@@ -1228,8 +1232,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     }
                 }
             }
-            if (filterMatchInfo) {
-                const { visibleRepIds, buriedCountByRepId } = filterMatchInfo;
+            if (activeFilter) {
+                const { visibleRepIds, buriedCountByRepId } = activeFilter;
                 const buriedCount = buriedCountByRepId.get(n.id) ?? 0;
                 if (buriedCount > 0) {
                     next = { ...next, data: { ...next.data, buriedMatchCount: buriedCount } };
@@ -1266,7 +1270,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const styledEdges = useMemo<Edge[]>(() => {
         const { inputEdgeIds, outputEdgeIds } = focusedConnections;
         const hasSelectionHighlight = !!selectedNodeId && (inputEdgeIds.size > 0 || outputEdgeIds.size > 0);
-        if (!hasSelectionHighlight && !filterMatchInfo) {
+        const activeFilter = filterMatchInfo && filterMatchInfo.visibleRepIds.size > 0 ? filterMatchInfo : null;
+        if (!hasSelectionHighlight && !activeFilter) {
             return displayedEdges;
         }
         return displayedEdges.map((e) => {
@@ -1292,8 +1297,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     };
                 }
             }
-            if (filterMatchInfo) {
-                const { visibleRepIds } = filterMatchInfo;
+            if (activeFilter) {
+                const { visibleRepIds } = activeFilter;
                 const bothMatch = visibleRepIds.has(e.source) && visibleRepIds.has(e.target);
                 const isSelectionEdge = inputEdgeIds.has(e.id) || outputEdgeIds.has(e.id);
                 if (!bothMatch && !isSelectionEdge) {
