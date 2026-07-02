@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import re
 import urllib.error
 import urllib.request
 import zipfile
@@ -16,6 +17,7 @@ from pathlib import Path
 from playwright.async_api import Page, Response
 
 BASE_URL = os.getenv("SMOKE_TEST_BASE_URL", "http://localhost:8000").rstrip("/")
+HOME_URL = re.compile(f"^{re.escape(BASE_URL)}/?$")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEMO_REPORTS_DIR = REPO_ROOT / "demo-reports"
 
@@ -99,12 +101,17 @@ def extract_profiler_report_dir(zip_path: Path, work_dir: Path) -> Path:
         report_name = report_prefix.rstrip("/").split("/")[-1]
         report_dir = work_dir / report_name
         report_dir.mkdir(parents=True, exist_ok=True)
+        report_dir_resolved = report_dir.resolve()
 
         for name in archive.namelist():
             if not name.startswith(report_prefix) or name.endswith("/"):
                 continue
             relative_path = name[len(report_prefix) :]
-            target = report_dir / relative_path
+            target = (report_dir / relative_path).resolve()
+            if not target.is_relative_to(report_dir_resolved):
+                raise ValueError(
+                    f"Zip entry escapes extraction directory: {name} in {zip_path}"
+                )
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(archive.read(name))
 

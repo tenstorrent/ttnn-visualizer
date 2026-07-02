@@ -27,6 +27,7 @@ from smoke_test_helpers import (
     BASE_URL,
     DEMO_REPORT_ZIPS,
     DEMO_REPORTS_DIR,
+    HOME_URL,
     MAIN_TAB_NAMES,
     ApiErrorTracker,
     assert_no_error_ui,
@@ -64,7 +65,7 @@ async def smoke_test_app_loads(page: Page) -> None:
 async def upload_profiler_report(page: Page, report_dir: Path) -> None:
     """Upload a local memory report directory via the Reports page."""
     await page.get_by_role("button", name="Reports").click()
-    await page.wait_for_url(f"{BASE_URL}/**")
+    await page.wait_for_url(HOME_URL)
 
     upload_input = page.get_by_test_id("local-profiler-upload")
     await upload_input.set_input_files(str(report_dir))
@@ -152,21 +153,21 @@ async def run_smoke_tests() -> None:
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch()
 
-        page = await browser.new_page()
         try:
-            await smoke_test_app_loads(page)
-        except Exception as exc:
-            print(f"❌ App load smoke test failed: {exc}")
-            await browser.close()
-            raise
-        finally:
-            await page.close()
+            page = await browser.new_page()
+            try:
+                await smoke_test_app_loads(page)
+            except Exception as exc:
+                print(f"❌ App load smoke test failed: {exc}")
+                raise
+            finally:
+                await page.close()
 
-        try:
-            await smoke_test_report_tabs(browser)
-        except Exception as exc:
-            print(f"❌ Report tab smoke test failed: {exc}")
-            raise
+            try:
+                await smoke_test_report_tabs(browser)
+            except Exception as exc:
+                print(f"❌ Report tab smoke test failed: {exc}")
+                raise
         finally:
             await browser.close()
 
