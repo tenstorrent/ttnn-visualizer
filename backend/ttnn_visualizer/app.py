@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import argparse
+import getpass
 import json
 import logging
 import os
@@ -112,6 +113,7 @@ def create_app(settings_override=None):
                 "BASE_PATH": app.config["BASE_PATH"],
                 "TT_METAL_HOME": app.config["TT_METAL_HOME"],
                 "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
+                "USERNAME": getpass.getuser(),
             }
             js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
 
