@@ -10,18 +10,25 @@ import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
-import { activePerformanceReportAtom, activeProfilerReportAtom, hasClusterDescriptionAtom } from '../store/app';
+import {
+    activeMlirJsonAtom,
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    hasClusterDescriptionAtom,
+} from '../store/app';
 import getServerConfig from '../functions/getServerConfig';
 
 const MEMORY_PROFILER_DISABLED = 'Upload or select an active memory report to enable this feature';
 const PERFORMANCE_PROFILER_DISABLED = 'Upload or select an active performance report to enable this feature';
 const CLUSTER_DISABLED = 'Active memory report does not contain cluster data';
+const MLIR_DISABLED = 'Upload and select an active MLIR file to enable this feature';
 
 function MainNavigation() {
     const navigate = useNavigate();
     const location = useLocation();
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeMlirJson = useAtomValue(activeMlirJsonAtom);
     const hasClusterDescription = useAtomValue(hasClusterDescriptionAtom);
     const [showBanner, setShowBanner] = useState(false);
 
@@ -35,6 +42,8 @@ function MainNavigation() {
 
     const hasActiveProfiler = !!activeProfilerReport;
     const hasActivePerf = !!activePerformanceReport;
+    const hasActiveMlir = !!activeMlirJson;
+    const isMlirDisabled = !import.meta.env.DEV && !hasActiveMlir;
 
     const serverMode = getServerConfig().SERVER_MODE;
 
@@ -216,20 +225,27 @@ function MainNavigation() {
                         className='cluster-button modal'
                     />
                 </Tooltip>
-                {!serverMode && (
-                    <Button
-                        text='MLIR'
-                        aria-label='MLIR'
-                        onClick={() => handleNavigate(ROUTES.MLIR)}
-                        active={hasMatchingPath(ROUTES.MLIR)}
-                        icon={IconNames.Layout}
-                        variant={ButtonVariant.MINIMAL}
-                        size={Size.LARGE}
-                        className='mlir-button'
+                {!serverMode ? (
+                    <Tooltip
+                        content={MLIR_DISABLED}
+                        position={Position.BOTTOM}
+                        disabled={!isMlirDisabled}
                     >
-                        <small>beta</small>
-                    </Button>
-                )}
+                        <Button
+                            text='MLIR'
+                            aria-label='MLIR'
+                            onClick={() => handleNavigate(ROUTES.MLIR)}
+                            active={hasMatchingPath(ROUTES.MLIR)}
+                            icon={IconNames.Layout}
+                            variant={ButtonVariant.MINIMAL}
+                            size={Size.LARGE}
+                            disabled={isMlirDisabled}
+                            className='mlir-button'
+                        >
+                            <small>beta</small>
+                        </Button>
+                    </Tooltip>
+                ) : null}
             </Navbar.Group>
         </Navbar>
     );
