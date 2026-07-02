@@ -8,6 +8,7 @@ import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
+import getServerConfig from '../../functions/getServerConfig';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
@@ -34,12 +35,27 @@ const PERFORMANCE_PATH_STATUS = {
 const FAILED_CONNECTION = { status: ConnectionTestStates.FAILED, message: 'Connection failed' };
 const FAILED_MEMORY_REPORT_PATH = { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' };
 
-const DEFAULT_CONNECTION: RemoteConnection = {
+const getDefaultConnection = (): RemoteConnection => ({
     name: '',
     host: '',
     port: 22,
     profilerPath: '',
-    username: '',
+    username: getServerConfig().USERNAME ?? '',
+});
+
+const shellQuote = (value: string): string => `'${value.replace(/'/g, `'"'"'`)}'`;
+
+const formatRemoteTestPreview = (connection: Partial<RemoteConnection>) => {
+    const sshIdentity = connection.identityFile ? ` -i ${shellQuote(connection.identityFile)}` : '';
+    const pathChecks = [connection.profilerPath, connection.performancePath]
+        .filter((path): path is string => Boolean(path && path.trim() !== ''))
+        .map((path) => `test -e ${shellQuote(path)}`)
+        .join(' && ');
+
+    const remoteCommand = pathChecks !== '' ? pathChecks : 'echo SSH connection OK';
+    const target = `${connection.username}@${connection.host}`;
+
+    return `ssh${sshIdentity} -p ${connection.port} ${shellQuote(target)} ${shellQuote(remoteCommand)}`;
 };
 
 const RemoteConnectionDialog = ({
@@ -51,7 +67,9 @@ const RemoteConnectionDialog = ({
     buttonLabel = 'Add connection',
     remoteConnection,
 }: RemoteConnectionDialogProps) => {
-    const [connection, setConnection] = useState<Partial<RemoteConnection>>(remoteConnection ?? DEFAULT_CONNECTION);
+    const [connection, setConnection] = useState<Partial<RemoteConnection>>(
+        () => remoteConnection ?? getDefaultConnection(),
+    );
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
@@ -61,6 +79,11 @@ const RemoteConnectionDialog = ({
         connectionTests.every(
             ({ status }) => status === ConnectionTestStates.OK || status === ConnectionTestStates.WARNING,
         );
+    const hasConnectionTestPreview =
+        connection.username?.trim() &&
+        connection.host?.trim() &&
+        connection.port &&
+        (connection.profilerPath?.trim() || connection.performancePath?.trim());
 
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
@@ -97,7 +120,7 @@ const RemoteConnectionDialog = ({
 
     const closeDialog = (resetChanges?: boolean) => {
         if (resetChanges) {
-            setConnection(remoteConnection ?? DEFAULT_CONNECTION);
+            setConnection(remoteConnection ?? getDefaultConnection());
         }
 
         setConnectionTests([]);
@@ -214,6 +237,15 @@ const RemoteConnectionDialog = ({
                         onChange={(e) => setConnection({ ...connection, performancePath: e.target.value })}
                     />
                 </FormGroup>
+
+                {hasConnectionTestPreview && (
+                    <FormGroup
+                        label='Connection test'
+                        subLabel='SSH into the remote host and check configured folder paths'
+                    >
+                        <code>{formatRemoteTestPreview(connection)}</code>
+                    </FormGroup>
+                )}
 
                 <fieldset>
                     <legend>Test Connection</legend>

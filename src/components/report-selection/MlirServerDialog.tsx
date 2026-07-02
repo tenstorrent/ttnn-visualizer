@@ -7,6 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { DEFAULT_SSH_PORT, MLIR_UPLOAD_PATH, MlirServerConnection } from '../../definitions/MlirServer';
+import getServerConfig from '../../functions/getServerConfig';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
@@ -20,13 +21,13 @@ interface MlirServerDialogProps {
     onClose: () => void;
 }
 
-const DEFAULT_SERVER: MlirServerConnection = {
+const getDefaultServer = (): MlirServerConnection => ({
     name: '',
-    username: '',
+    username: getServerConfig().USERNAME ?? '',
     host: '',
     sshPort: DEFAULT_SSH_PORT,
     port: 8080,
-};
+});
 
 const TEST_PROGRESS: ConnectionStatus = {
     status: ConnectionTestStates.PROGRESS,
@@ -38,11 +39,11 @@ const LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 const isLocalhostSshHost = (host: string) => LOCALHOST_HOSTNAMES.has(host.trim().toLowerCase());
 
 const formatMlirTestPreview = (connection: MlirServerConnection) =>
-    `Test: ssh -p ${connection.sshPort} ${connection.username}@${connection.host} ` +
+    `ssh -p ${connection.sshPort} ${connection.username}@${connection.host} ` +
     `→ curl http://127.0.0.1:${connection.port}${MLIR_UPLOAD_PATH} on remote`;
 
 const formatMlirUploadPreview = (connection: MlirServerConnection) =>
-    `Upload: ssh -p ${connection.sshPort} ${connection.username}@${connection.host} ` +
+    `ssh -p ${connection.sshPort} ${connection.username}@${connection.host} ` +
     `→ curl http://127.0.0.1:${connection.port}${MLIR_UPLOAD_PATH} on remote`;
 
 const MlirServerDialog = ({
@@ -54,7 +55,7 @@ const MlirServerDialog = ({
     onClose,
 }: MlirServerDialogProps) => {
     const { testMlirServerConnection } = useMlirRemote();
-    const [connection, setConnection] = useState<MlirServerConnection>(server ?? DEFAULT_SERVER);
+    const [connection, setConnection] = useState<MlirServerConnection>(() => server ?? getDefaultServer());
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [isTestingConnection, setIsTestingConnection] = useState(false);
 
@@ -86,7 +87,7 @@ const MlirServerDialog = ({
 
     const closeDialog = (resetChanges?: boolean) => {
         if (resetChanges) {
-            setConnection(server ?? DEFAULT_SERVER);
+            setConnection(server ?? getDefaultServer());
         }
 
         setConnectionTests([]);
@@ -204,13 +205,13 @@ const MlirServerDialog = ({
                     <>
                         <FormGroup
                             label='Connection test'
-                            subLabel='SSH into the remote host and probe the MLIR server on its loopback'
+                            subLabel='SSH into the remote host and probe the MLIR server'
                         >
                             <code>{formatMlirTestPreview(connection)}</code>
                         </FormGroup>
                         <FormGroup
                             label='Upload'
-                            subLabel='Proxied through this app to your local tunnel (avoids browser CORS)'
+                            subLabel='Proxied through this app to your local tunnel'
                         >
                             <code>{formatMlirUploadPreview(connection)}</code>
                         </FormGroup>

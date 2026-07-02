@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import argparse
+import getpass
 import json
 import logging
 import os
@@ -43,6 +44,19 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
+
+
+def _get_client_username(server_mode: bool) -> str | None:
+    if server_mode:
+        return None
+
+    try:
+        return getpass.getuser()
+    except Exception as error:
+        logger.warning(
+            "Unable to determine local username for client config: %s", error
+        )
+        return None
 
 
 def create_app(settings_override=None):
@@ -112,6 +126,7 @@ def create_app(settings_override=None):
                 "BASE_PATH": app.config["BASE_PATH"],
                 "TT_METAL_HOME": app.config["TT_METAL_HOME"],
                 "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
+                "USERNAME": _get_client_username(app.config["SERVER_MODE"]),
             }
             js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
 
