@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+.mlir-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 15px;
+    max-height: 50vh;
+    overflow-y: auto;
+    text-align: left;
+
+    .mlir-file-status {
+        &.is-success {
+            color: $tt-green;
+        }
+
+        &.is-failed {
+            color: $tt-red;
+        }
+    }
+
+    .bp6-menu-item .mlir-file-eye {
+        color: $tt-grey-4;
+    }
+
+    .bp6-menu-item .mlir-file-eye.is-selected {
+        color: $tt-green;
+    }
+}

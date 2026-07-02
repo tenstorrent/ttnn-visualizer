@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.91.0",
+  "version": "0.92.0",
   "type": "module",
   "description": "A tool for visualizing the Tenstorrent Neural Network model (TT-NN)",
   "repository": {
@@ -41,6 +41,7 @@
     "lint:spdx": "node scripts/check-spdx.mjs",
     "lint:ts": "pnpm exec tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "perf:golden": "UPDATE_PERF_GOLDEN=1 uv run pytest backend/ttnn_visualizer/tests/test_perf_report_contract.py",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
     "preview": "vite preview",

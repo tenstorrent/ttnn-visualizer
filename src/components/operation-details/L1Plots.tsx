@@ -113,6 +113,7 @@ function L1Plots({
                             ...cb,
                             markerType: MarkerType.CB,
                             colorVariance: op.id,
+                            globallyAllocated: cb.globallyAllocated,
                         }) as FragmentationEntry,
                 ),
             )
@@ -316,6 +317,7 @@ function L1Plots({
                             onLegendClick={onLegendClick}
                             colorVariance={chunk.colorVariance}
                             userL1ZoomRange={userL1ZoomRange}
+                            isGloballyAllocated={chunk.globallyAllocated === true}
                         />
                     ))}
 

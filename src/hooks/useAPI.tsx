@@ -52,7 +52,13 @@ import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
-import { ChipDesign, ClusterModel, MeshData } from '../model/ClusterModel';
+import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
+import {
+    PerRankInput,
+    looksLikeRankedDescriptor,
+    pickMeshDocForRank,
+    stitchClusterTopology,
+} from '../functions/clusterTopology';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
@@ -468,6 +474,86 @@ export const useGetClusterDescription = () => {
     return useQuery({
         queryFn: () => fetchClusterDescription(),
         queryKey: ['get-cluster-description', activeProfilerReport?.path],
+        initialData: null,
+        retry: false,
+    });
+};
+
+// Guards against runaway probing if the backend stops signalling world end.
+const MAX_PROBE_RANKS = 32;
+
+const fetchClusterDescriptorForRank = async (rank: number): Promise<ClusterModel> => {
+    const { data } = await axiosInstance.get<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, {
+        params: { rank },
+    });
+    return data;
+};
+
+const fetchMeshDescriptorForRank = async (rank: number): Promise<MeshData | null> => {
+    try {
+        const { data } = await axiosInstance.get<MeshDescriptorResponse>(Endpoints.MESH_DESCRIPTOR, {
+            params: { rank },
+        });
+        // Backend can return single-doc or `{ docs: [...] }` envelope.
+        return pickMeshDocForRank(data, rank);
+    } catch (err) {
+        // mesh-descriptor is optional in some reports
+        // eslint-disable-next-line no-console
+        console.warn(`mesh-descriptor for rank ${rank} not available`, err);
+        return null;
+    }
+};
+
+const fetchRankSlice = async (rank: number): Promise<PerRankInput> => {
+    const [descriptor, mesh] = await Promise.all([
+        fetchClusterDescriptorForRank(rank),
+        fetchMeshDescriptorForRank(rank),
+    ]);
+    // Mesh-descriptor wins; `descriptor.chips` is the fallback for galaxy
+    // reports that don't ship a separate mesh file.
+    const meshChips = mesh?.chips ?? descriptor.chips ?? null;
+    return { rank, descriptor, meshDescriptor: meshChips };
+};
+
+const fetchClusterTopology = async (): Promise<ClusterTopology> => {
+    // Rank 0 anchors detection (the backend serves either the legacy
+    // single-host or the multi-host rank-tagged descriptor).
+    const rank0Slice = await fetchRankSlice(0);
+
+    if (!looksLikeRankedDescriptor(rank0Slice.descriptor)) {
+        return stitchClusterTopology([rank0Slice]);
+    }
+
+    // TODO(#1241): replace serial probing with a dedicated rank-metadata
+    // endpoint so per-rank fetches can fan out in parallel.
+    const perRankInputs: PerRankInput[] = [rank0Slice];
+    for (let nextRank = 1; nextRank < MAX_PROBE_RANKS; nextRank += 1) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            const slice = await fetchRankSlice(nextRank);
+            perRankInputs.push(slice);
+        } catch (err) {
+            // Backend signals world end via 400 rank_out_of_range or
+            // 404 missing_rank_file. Anything else (5xx, network) should
+            // surface so React Query can mark the topology errored rather
+            // than silently truncating it.
+            const status = err instanceof AxiosError ? err.response?.status : undefined;
+            if (status === 400 || status === 404) {
+                break;
+            }
+            throw err;
+        }
+    }
+
+    return stitchClusterTopology(perRankInputs);
+};
+
+export const useGetClusterTopology = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ClusterTopology | null, AxiosError>({
+        queryFn: () => fetchClusterTopology(),
+        queryKey: ['get-cluster-topology', activeProfilerReport?.path],
         initialData: null,
         retry: false,
     });

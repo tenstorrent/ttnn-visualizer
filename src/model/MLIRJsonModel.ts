@@ -2,9 +2,25 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { ConnectionTestStates } from '../definitions/ConnectionStatus';
+
 // Root
 export interface GraphBundle {
     graphs: GraphDocument[];
+}
+
+// One entry per file in a multi-file MLIR upload/load, surfaced in the results
+// overlay so the user can see which files converted and pick one to make
+// active. `name` and `graph` are populated only on success.
+export interface MlirFileResult {
+    filename: string;
+    name: string | null;
+    status: ConnectionTestStates;
+    message?: string;
+    graph: GraphBundle | null;
+    // Server uploads are stored on disk and can be set active on the instance
+    // (restored after reload). Local JSON loads live only in memory.
+    persisted: boolean;
 }
 
 export interface GraphDocument {

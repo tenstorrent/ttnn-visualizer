@@ -43,6 +43,13 @@ describe('PerfTable column helpers', () => {
             ColumnKeys.MathFidelity,
             ColumnKeys.Hash,
             ColumnKeys.CacheHit,
+            ColumnKeys.DeviceKernelDuration,
+            ColumnKeys.BriscKernelDuration,
+            ColumnKeys.NcriscKernelDuration,
+            ColumnKeys.Trisc0KernelDuration,
+            ColumnKeys.Trisc1KernelDuration,
+            ColumnKeys.Trisc2KernelDuration,
+            ColumnKeys.EriscKernelDuration,
             ColumnKeys.GlobalCallCount,
         ]);
     });

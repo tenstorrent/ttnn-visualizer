@@ -14,6 +14,7 @@ import ClusterRenderer from './cluster/ClusterRenderer';
 import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
 import FeedbackButton from './FeedbackButton';
 import FileStatusOverlay from './FileStatusOverlay';
+import MlirFileResultsOverlay from './mlir/MlirFileResultsOverlay';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -70,6 +71,8 @@ function Layout() {
             <FeedbackButton />
 
             <FileStatusOverlay />
+
+            <MlirFileResultsOverlay />
 
             <ToastContainer
                 position={'bottom-right' as ToastPosition}

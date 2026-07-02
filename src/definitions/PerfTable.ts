@@ -54,6 +54,15 @@ export interface PerfTableRow {
     output_subblock_w: string;
     high_dispatch?: boolean;
     pm_ideal_ns: string;
+    // Nullable: the backend reads these from the ops perf CSV with dict.get(), so they are absent
+    // when the source CSV lacks the column (older Tracy captures).
+    device_kernel_duration: string | null;
+    brisc_kernel_duration: string | null;
+    ncrisc_kernel_duration: string | null;
+    trisc0_kernel_duration: string | null;
+    trisc1_kernel_duration: string | null;
+    trisc2_kernel_duration: string | null;
+    erisc_kernel_duration: string | null;
     op_type: OpType;
     op?: number;
     missing?: boolean;
@@ -76,6 +85,13 @@ export interface TypedPerfTableRow extends Omit<
     | 'flops_percent'
     | 'bound'
     | 'pm_ideal_ns'
+    | 'device_kernel_duration'
+    | 'brisc_kernel_duration'
+    | 'ncrisc_kernel_duration'
+    | 'trisc0_kernel_duration'
+    | 'trisc1_kernel_duration'
+    | 'trisc2_kernel_duration'
+    | 'erisc_kernel_duration'
 > {
     id: number | null;
     global_call_count: number | null;
@@ -90,6 +106,13 @@ export interface TypedPerfTableRow extends Omit<
     flops_percent: number | null;
     bound: BoundType | null;
     pm_ideal_ns: number | null;
+    device_kernel_duration: number | null;
+    brisc_kernel_duration: number | null;
+    ncrisc_kernel_duration: number | null;
+    trisc0_kernel_duration: number | null;
+    trisc1_kernel_duration: number | null;
+    trisc2_kernel_duration: number | null;
+    erisc_kernel_duration: number | null;
     // Next two extracted from input_0_memory
     buffer_type: BufferTypeEnum | null;
     layout: DeviceOperationLayoutTypes | null;
@@ -161,6 +184,13 @@ export enum ColumnKeys {
     Hash = 'hash',
     CacheHit = 'cache_hit',
     L1Fullness = 'l1_fullness_percent',
+    DeviceKernelDuration = 'device_kernel_duration',
+    BriscKernelDuration = 'brisc_kernel_duration',
+    NcriscKernelDuration = 'ncrisc_kernel_duration',
+    Trisc0KernelDuration = 'trisc0_kernel_duration',
+    Trisc1KernelDuration = 'trisc1_kernel_duration',
+    Trisc2KernelDuration = 'trisc2_kernel_duration',
+    EriscKernelDuration = 'erisc_kernel_duration',
 }
 
 export const Columns: ColumnDefinition[] = [
@@ -187,6 +217,15 @@ export const Columns: ColumnDefinition[] = [
     { name: 'FLOPS %', key: ColumnKeys.FlopsPercent, unit: '%', decimals: 1, sortable: true },
     { name: 'Math Fidelity', key: ColumnKeys.MathFidelity, colour: 'cyan' },
     { name: 'Cache Hit', key: ColumnKeys.CacheHit, colour: 'magenta', filterable: true },
+    // Per-RISC kernel durations (#1518). Stored in µs (converted from the raw ns CSV values in
+    // enrichRowData); 2dp keeps sub-microsecond contributions legible alongside Device Time.
+    { name: 'Kernel Duration', key: ColumnKeys.DeviceKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'BRISC', key: ColumnKeys.BriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'NCRISC', key: ColumnKeys.NcriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'TRISC_0', key: ColumnKeys.Trisc0KernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'TRISC_1', key: ColumnKeys.Trisc1KernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'TRISC_2', key: ColumnKeys.Trisc2KernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'ERISC', key: ColumnKeys.EriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
 ];
 
 export const L1PressureColumns: ColumnDefinition[] = [
@@ -273,6 +312,13 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.OpCode,
     ColumnKeys.OpToOpGap,
     ColumnKeys.TotalPercent,
+    ColumnKeys.DeviceKernelDuration,
+    ColumnKeys.BriscKernelDuration,
+    ColumnKeys.NcriscKernelDuration,
+    ColumnKeys.Trisc0KernelDuration,
+    ColumnKeys.Trisc1KernelDuration,
+    ColumnKeys.Trisc2KernelDuration,
+    ColumnKeys.EriscKernelDuration,
 ];
 
 export const signpostRowDefaults = Object.freeze({
@@ -299,6 +345,13 @@ export const signpostRowDefaults = Object.freeze({
     output_subblock_h: '',
     output_subblock_w: '',
     pm_ideal_ns: null,
+    device_kernel_duration: null,
+    brisc_kernel_duration: null,
+    ncrisc_kernel_duration: null,
+    trisc0_kernel_duration: null,
+    trisc1_kernel_duration: null,
+    trisc2_kernel_duration: null,
+    erisc_kernel_duration: null,
     op_type: OpType.SIGNPOST,
     device: null,
     layout: null,

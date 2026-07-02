@@ -35,8 +35,10 @@ import SourceFileButton from './operation-details/SourceFileButton';
 import { extractOperationSourceData } from '../functions/stackTraceSource';
 import OperationArguments from './OperationArguments';
 import OperationListPerfData from './OperationListPerfData';
+import OperationPerfRowBar from './OperationPerfRowBar';
 import SearchField from './SearchField';
 import SimpleMultiselect from './SimpleMultiselect';
+import { useOpPerfRowScores } from '../hooks/useOpPerfRowScores';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -58,6 +60,7 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const { scoreByOpId, isAvailable: hasPerfRowBars } = useOpPerfRowScores();
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
         useScrollShade();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.OPERATION_LIST);
@@ -462,7 +465,13 @@ const OperationList = () => {
                                                         filterQuery={filterQuery}
                                                         icon={operation?.error ? IconNames.ERROR : IconNames.CUBE}
                                                         iconColour={operation?.error ? 'error' : 'operation'}
-                                                    />
+                                                    >
+                                                        {hasPerfRowBars && (
+                                                            <OperationPerfRowBar
+                                                                score={scoreByOpId.get(operation.id)}
+                                                            />
+                                                        )}
+                                                    </ListItem>
                                                 </Tooltip>
                                             }
                                             additionalElements={

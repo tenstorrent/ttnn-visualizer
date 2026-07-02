@@ -172,18 +172,25 @@ export const MemoryLegendElement = ({
                         {isGloballyAllocated && (
                             <Tooltip
                                 content={
-                                    <span>
-                                        Aliased to tensor @ {prettyPrintAddress(chunk.address, memSize, showHex)}{' '}
-                                        &mdash; no new allocation
-                                    </span>
+                                    derivedTensor ? (
+                                        <span>
+                                            Aliased to Tensor {derivedTensor.id} {toReadableShape(derivedTensor.shape)}{' '}
+                                            {toReadableType(derivedTensor.dtype)}
+                                        </span>
+                                    ) : (
+                                        <span>
+                                            Aliased to tensor @ {prettyPrintAddress(chunk.address, memSize, showHex)}
+                                        </span>
+                                    )
                                 }
                             >
                                 <span
                                     className='globally-allocated-marker'
-                                    // aria-label keeps the row a single tab-stop
-                                    // while still surfacing the "aliased" semantic
-                                    // to assistive tech users.
-                                    aria-label='Globally allocated — aliased to tensor at this address'
+                                    aria-label={
+                                        derivedTensor
+                                            ? `Globally allocated — aliased to Tensor ${derivedTensor.id} ${toReadableShape(derivedTensor.shape)} ${toReadableType(derivedTensor.dtype)}`
+                                            : 'Globally allocated — aliased to tensor at this address'
+                                    }
                                 >
                                     <Icon
                                         icon={IconNames.LINK}

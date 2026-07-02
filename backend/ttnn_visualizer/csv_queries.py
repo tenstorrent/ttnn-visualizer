@@ -439,6 +439,13 @@ class OpsPerformanceReportQueries:
 
     PASSTHROUGH_COLUMNS = {
         "pm_ideal_ns": "PM IDEAL [ns]",
+        "device_kernel_duration": "DEVICE KERNEL DURATION [ns]",
+        "brisc_kernel_duration": "DEVICE BRISC KERNEL DURATION [ns]",
+        "ncrisc_kernel_duration": "DEVICE NCRISC KERNEL DURATION [ns]",
+        "trisc0_kernel_duration": "DEVICE TRISC0 KERNEL DURATION [ns]",
+        "trisc1_kernel_duration": "DEVICE TRISC1 KERNEL DURATION [ns]",
+        "trisc2_kernel_duration": "DEVICE TRISC2 KERNEL DURATION [ns]",
+        "erisc_kernel_duration": "DEVICE ERISC KERNEL DURATION [ns]",
     }
 
     DEFAULT_START_SIGNPOST = None
