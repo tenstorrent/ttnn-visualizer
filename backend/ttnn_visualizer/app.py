@@ -46,6 +46,19 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 logger = logging.getLogger(__name__)
 
 
+def _get_client_username(server_mode: bool) -> str | None:
+    if server_mode:
+        return None
+
+    try:
+        return getpass.getuser()
+    except Exception as error:
+        logger.warning(
+            "Unable to determine local username for client config: %s", error
+        )
+        return None
+
+
 def create_app(settings_override=None):
     from ttnn_visualizer.views import api
 
@@ -113,7 +126,7 @@ def create_app(settings_override=None):
                 "BASE_PATH": app.config["BASE_PATH"],
                 "TT_METAL_HOME": app.config["TT_METAL_HOME"],
                 "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
-                "USERNAME": getpass.getuser(),
+                "USERNAME": _get_client_username(app.config["SERVER_MODE"]),
             }
             js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
 

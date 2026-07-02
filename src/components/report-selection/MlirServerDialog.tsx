@@ -55,7 +55,7 @@ const MlirServerDialog = ({
     onClose,
 }: MlirServerDialogProps) => {
     const { testMlirServerConnection } = useMlirRemote();
-    const [connection, setConnection] = useState<MlirServerConnection>(server ?? getDefaultServer());
+    const [connection, setConnection] = useState<MlirServerConnection>(() => server ?? getDefaultServer());
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [isTestingConnection, setIsTestingConnection] = useState(false);
 

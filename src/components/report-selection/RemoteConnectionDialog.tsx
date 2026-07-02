@@ -43,16 +43,19 @@ const getDefaultConnection = (): RemoteConnection => ({
     username: getServerConfig().USERNAME ?? '',
 });
 
+const shellQuote = (value: string): string => `'${value.replace(/'/g, `'"'"'`)}'`;
+
 const formatRemoteTestPreview = (connection: Partial<RemoteConnection>) => {
-    const sshIdentity = connection.identityFile ? ` -i ${connection.identityFile}` : '';
+    const sshIdentity = connection.identityFile ? ` -i ${shellQuote(connection.identityFile)}` : '';
     const pathChecks = [connection.profilerPath, connection.performancePath]
         .filter((path): path is string => Boolean(path && path.trim() !== ''))
-        .map((path) => `test -e '${path}'`)
+        .map((path) => `test -e ${shellQuote(path)}`)
         .join(' && ');
 
     const remoteCommand = pathChecks !== '' ? pathChecks : 'echo SSH connection OK';
+    const target = `${connection.username}@${connection.host}`;
 
-    return `ssh${sshIdentity} -p ${connection.port} ${connection.username}@${connection.host} "${remoteCommand}"`;
+    return `ssh${sshIdentity} -p ${connection.port} ${shellQuote(target)} ${shellQuote(remoteCommand)}`;
 };
 
 const RemoteConnectionDialog = ({
@@ -64,7 +67,9 @@ const RemoteConnectionDialog = ({
     buttonLabel = 'Add connection',
     remoteConnection,
 }: RemoteConnectionDialogProps) => {
-    const [connection, setConnection] = useState<Partial<RemoteConnection>>(remoteConnection ?? getDefaultConnection());
+    const [connection, setConnection] = useState<Partial<RemoteConnection>>(
+        () => remoteConnection ?? getDefaultConnection(),
+    );
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
