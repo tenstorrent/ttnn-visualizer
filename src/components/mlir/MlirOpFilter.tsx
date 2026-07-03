@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { KeyboardEvent, forwardRef, useImperativeHandle, useRef } from 'react';
+import { type KeyboardEvent, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Button, ButtonVariant, InputGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirOpFilter.scss';
@@ -79,14 +79,19 @@ const MlirOpFilter = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
         const hasQuery = query.length > 0;
         const isRegexMode = mode === 'regex';
         const hiddenSuffix = hiddenMatchCount > 0 ? ` (+${hiddenMatchCount} inside)` : '';
+        // Ignore a stale cursor whose index no longer lives inside the current
+        // match set (e.g. after an expand/collapse changed the visible reps)
+        // so the counter can't render impossible ratios like "5 / 2".
+        const activeMatchIndex =
+            currentMatchIndex !== null && currentMatchIndex < matchCount ? currentMatchIndex : null;
         let counterText: string | null = null;
         if (hasQuery) {
             if (isRegexInvalid) {
                 counterText = 'invalid regex';
             } else if (matchCount === 0 && hiddenMatchCount === 0) {
                 counterText = 'no matches';
-            } else if (currentMatchIndex !== null) {
-                counterText = `${currentMatchIndex + 1} / ${matchCount}${hiddenSuffix}`;
+            } else if (activeMatchIndex !== null) {
+                counterText = `${activeMatchIndex + 1} / ${matchCount}${hiddenSuffix}`;
             } else {
                 counterText = `${matchCount} matches${hiddenSuffix}`;
             }

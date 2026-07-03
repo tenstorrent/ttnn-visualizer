@@ -4,9 +4,9 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
-import { Ref, createRef } from 'react';
+import { type Ref, createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import MlirOpFilter, { MlirFilterMode, MlirOpFilterHandle } from '../src/components/mlir/MlirOpFilter';
+import MlirOpFilter, { type MlirFilterMode, type MlirOpFilterHandle } from '../src/components/mlir/MlirOpFilter';
 import { TestProviders } from './helpers/TestProviders';
 
 afterEach(cleanup);
@@ -126,6 +126,15 @@ describe('MlirOpFilter', () => {
             renderFilter({ query: 'foo', matchCount: 4, currentMatchIndex: null });
 
             expect(screen.getByText('4 matches')).toBeInTheDocument();
+        });
+
+        it('ignores a stale currentMatchIndex that no longer fits the match set', () => {
+            // Cursor was at match 5/5, then expand/collapse shrank the set to 2.
+            // Counter must not read "6 / 2" — it should fall back to "2 matches".
+            renderFilter({ query: 'foo', matchCount: 2, currentMatchIndex: 5 });
+
+            expect(screen.getByText('2 matches')).toBeInTheDocument();
+            expect(screen.queryByText(/6\s*\/\s*2/)).toBeNull();
         });
     });
 
