@@ -44,7 +44,6 @@ const MlirFileList = ({
             const retryAvailable = canRetry ? canRetry(index) : true;
             const hasRetryAction = isFailedServerFile && !!onRetry && retryAvailable;
             const isSelected = !!onSelect && index === selectedIndex;
-            const isRetrying = retryingIndex === index;
             const retryInFlight = retryingIndex !== null;
 
             // Right-hand element: shows Processing during conversion/retry,
@@ -60,7 +59,6 @@ const MlirFileList = ({
                             variant={ButtonVariant.MINIMAL}
                             icon={IconNames.REFRESH}
                             disabled={retryInFlight}
-                            loading={isRetrying}
                             onClick={(event) => {
                                 event.stopPropagation();
                                 onRetry(index);
