@@ -189,6 +189,8 @@ describe('useMlirRemote progress lifecycle', () => {
             expect(getDefaultStore().get(fileTransferProgressAtom).status).toBe(FileStatus.INACTIVE);
             expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeEnabled();
         });
+        expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
+        expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
     });
 
     it('uses detail as fallback message when upload result omits message', async () => {

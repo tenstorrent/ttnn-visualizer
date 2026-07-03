@@ -145,6 +145,15 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                     return;
                 }
 
+                // Retry is only meaningful when at least one server file
+                // failed conversion. Clear retained File blobs after all-
+                // success batches to avoid unnecessary memory retention.
+                const hasRetryableFailures = results.some((result) => result.status === ConnectionTestStates.FAILED);
+                if (!hasRetryableFailures) {
+                    setMlirRetryFiles(null);
+                    setMlirRetryServer(null);
+                }
+
                 showResults(results);
             } else {
                 setMlirRetryFiles(null);
