@@ -37,6 +37,8 @@ from smoke_test_helpers import (
 
 UPLOAD_TIMEOUT_MS = 180_000
 TAB_TIMEOUT_MS = 120_000
+TAB_ENABLED_TIMEOUT_MS = 5_000
+SPINNER_VISIBLE_TIMEOUT_MS = 2_000
 
 
 async def smoke_test_app_loads(page: Page) -> None:
@@ -96,16 +98,15 @@ async def exercise_main_tabs(page: Page) -> None:
 
     for tab_name in MAIN_TAB_NAMES:
         tab_button = page.get_by_role("button", name=tab_name)
-        if not await tab_button.is_enabled():
-            raise AssertionError(f"{tab_name} tab is disabled after upload")
+        await expect(tab_button).to_be_enabled(timeout=TAB_ENABLED_TIMEOUT_MS)
 
         await tab_button.click()
         await page.wait_for_url(tab_urls[tab_name], timeout=TAB_TIMEOUT_MS)
 
         spinner = page.locator(".loading-spinner").first
         try:
-            if await spinner.is_visible():
-                await spinner.wait_for(state="hidden", timeout=TAB_TIMEOUT_MS)
+            await spinner.wait_for(state="visible", timeout=SPINNER_VISIBLE_TIMEOUT_MS)
+            await spinner.wait_for(state="hidden", timeout=TAB_TIMEOUT_MS)
         except TimeoutError:
             # Some views render without a spinner when data is already cached.
             pass

@@ -92,16 +92,33 @@ class ApiErrorTracker:
 
 def extract_profiler_report_dir(zip_path: Path, work_dir: Path) -> Path:
     """Extract the memory-profiler report folder from a demo zip archive."""
+    work_dir_resolved = work_dir.resolve()
+
     with zipfile.ZipFile(zip_path) as archive:
         db_paths = [name for name in archive.namelist() if name.endswith("/db.sqlite")]
         if not db_paths:
             raise ValueError(f"No db.sqlite found in {zip_path}")
+        if len(db_paths) > 1:
+            raise ValueError(
+                f"Expected exactly one db.sqlite in {zip_path}, found {len(db_paths)}: "
+                f"{db_paths}"
+            )
 
         report_prefix = f"{db_paths[0].rsplit('/', 1)[0]}/"
         report_name = report_prefix.rstrip("/").split("/")[-1]
+        if not report_name or report_name in (".", ".."):
+            raise ValueError(
+                f"Invalid report directory name derived from zip entry: {db_paths[0]!r}"
+            )
+
         report_dir = work_dir / report_name
-        report_dir.mkdir(parents=True, exist_ok=True)
         report_dir_resolved = report_dir.resolve()
+        if not report_dir_resolved.is_relative_to(work_dir_resolved):
+            raise ValueError(
+                f"Report directory escapes work directory: {report_dir} in {zip_path}"
+            )
+
+        report_dir.mkdir(parents=True, exist_ok=True)
 
         for name in archive.namelist():
             if not name.startswith(report_prefix) or name.endswith("/"):
