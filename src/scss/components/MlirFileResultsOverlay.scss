@@ -10,9 +10,13 @@
         padding-right: 30px;
     }
 
-    .close-button {
+    .close-button-anchor {
         position: absolute;
-        top: 0;
         right: 0;
+        top: 0;
+    }
+
+    .close-button {
+        position: static;
     }
 }

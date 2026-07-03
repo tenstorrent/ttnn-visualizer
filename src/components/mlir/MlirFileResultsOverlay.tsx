@@ -156,15 +156,17 @@ const MlirFileResultsOverlay = () => {
             hideCloseButton
         >
             <div className='mlir-file-results-overlay'>
-                <Tooltip content='Close'>
-                    <Button
-                        className='close-button'
-                        variant={ButtonVariant.MINIMAL}
-                        icon={IconNames.CROSS}
-                        aria-label='Close'
-                        onClick={handleClose}
-                    />
-                </Tooltip>
+                <div className='close-button-anchor'>
+                    <Tooltip content='Close'>
+                        <Button
+                            className='close-button'
+                            variant={ButtonVariant.MINIMAL}
+                            icon={IconNames.CROSS}
+                            aria-label='Close'
+                            onClick={handleClose}
+                        />
+                    </Tooltip>
+                </div>
 
                 <h2 className='heading'>
                     <Icon
