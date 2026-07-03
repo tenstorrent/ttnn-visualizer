@@ -36,8 +36,22 @@
         white-space: nowrap;
     }
 
+    .mlir-op-filter-right-slot {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .mlir-op-filter-mode {
+        // Monospace so `.*` reads as a symbol, not a variable-width sentence.
+        font-family: monospace;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
     .mlir-op-filter-clear,
-    .mlir-op-filter-step {
+    .mlir-op-filter-step,
+    .mlir-op-filter-mode {
         display: inline-flex;
         align-items: center;
         justify-content: center;

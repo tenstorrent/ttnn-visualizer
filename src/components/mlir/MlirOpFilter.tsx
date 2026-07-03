@@ -3,9 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { KeyboardEvent, forwardRef, useImperativeHandle, useRef } from 'react';
-import { Button, ButtonVariant, InputGroup } from '@blueprintjs/core';
+import { Button, ButtonVariant, InputGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirOpFilter.scss';
+
+export type MlirFilterMode = 'substring' | 'regex';
 
 export interface MlirOpFilterHandle {
     focus: () => void;
@@ -14,6 +16,11 @@ export interface MlirOpFilterHandle {
 interface MlirOpFilterProps {
     query: string;
     onQueryChange: (next: string) => void;
+    mode: MlirFilterMode;
+    onModeChange: (next: MlirFilterMode) => void;
+    // True only when in regex mode and the current query fails to compile —
+    // drives the danger-intent input styling and the counter text.
+    isRegexInvalid: boolean;
     // Number of visible reps prev/next steps through; collapsed anchors
     // standing in for buried descendants are counted here.
     matchCount: number;
@@ -28,7 +35,21 @@ interface MlirOpFilterProps {
 // Floating filter control over the React Flow canvas. Dim/highlight lives
 // in the view component; this is just the input + counter + prev/next.
 const MlirOpFilter = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
-    ({ query, onQueryChange, matchCount, hiddenMatchCount, currentMatchIndex, onPrev, onNext }, ref) => {
+    (
+        {
+            query,
+            onQueryChange,
+            mode,
+            onModeChange,
+            isRegexInvalid,
+            matchCount,
+            hiddenMatchCount,
+            currentMatchIndex,
+            onPrev,
+            onNext,
+        },
+        ref,
+    ) => {
         const inputRef = useRef<HTMLInputElement>(null);
 
         useImperativeHandle(ref, () => ({
@@ -55,10 +76,13 @@ const MlirOpFilter = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
         };
 
         const hasQuery = query.length > 0;
+        const isRegexMode = mode === 'regex';
         const hiddenSuffix = hiddenMatchCount > 0 ? ` (+${hiddenMatchCount} inside)` : '';
         let counterText: string | null = null;
         if (hasQuery) {
-            if (matchCount === 0 && hiddenMatchCount === 0) {
+            if (isRegexInvalid) {
+                counterText = 'invalid regex';
+            } else if (matchCount === 0 && hiddenMatchCount === 0) {
                 counterText = 'no matches';
             } else if (currentMatchIndex !== null) {
                 counterText = `${currentMatchIndex + 1} / ${matchCount}${hiddenSuffix}`;
@@ -67,25 +91,43 @@ const MlirOpFilter = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
             }
         }
 
+        const toggleMode = () => onModeChange(isRegexMode ? 'substring' : 'regex');
+
         return (
             <div className='mlir-op-filter'>
                 <InputGroup
                     inputRef={inputRef}
                     leftIcon={IconNames.SEARCH}
-                    placeholder='Filter ops (substring)'
+                    placeholder={isRegexMode ? 'Filter ops (regex)' : 'Filter ops (substring)'}
                     value={query}
                     onChange={(event) => onQueryChange(event.target.value)}
                     onKeyDown={handleKeyDown}
+                    intent={isRegexInvalid ? Intent.DANGER : Intent.NONE}
                     rightElement={
-                        hasQuery ? (
+                        <div className='mlir-op-filter-right-slot'>
                             <Button
-                                className='mlir-op-filter-clear'
+                                className='mlir-op-filter-mode'
                                 variant={ButtonVariant.MINIMAL}
-                                icon={IconNames.CROSS}
-                                aria-label='Clear filter'
-                                onClick={() => onQueryChange('')}
+                                active={isRegexMode}
+                                text='.*'
+                                aria-label={isRegexMode ? 'Switch to substring mode' : 'Switch to regex mode'}
+                                title={
+                                    isRegexMode
+                                        ? 'Regex mode (click for substring)'
+                                        : 'Substring mode (click for regex)'
+                                }
+                                onClick={toggleMode}
                             />
-                        ) : undefined
+                            {hasQuery ? (
+                                <Button
+                                    className='mlir-op-filter-clear'
+                                    variant={ButtonVariant.MINIMAL}
+                                    icon={IconNames.CROSS}
+                                    aria-label='Clear filter'
+                                    onClick={() => onQueryChange('')}
+                                />
+                            ) : null}
+                        </div>
                     }
                     spellCheck={false}
                     autoComplete='off'
