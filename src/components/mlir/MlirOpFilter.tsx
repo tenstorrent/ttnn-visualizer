@@ -6,8 +6,9 @@ import { KeyboardEvent, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Button, ButtonVariant, InputGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirOpFilter.scss';
+import type { MlirFilterMode } from './mlirFilter';
 
-export type MlirFilterMode = 'substring' | 'regex';
+export type { MlirFilterMode };
 
 export interface MlirOpFilterHandle {
     focus: () => void;

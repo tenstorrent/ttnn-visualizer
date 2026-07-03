@@ -49,7 +49,8 @@ import type {
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
-import MlirOpFilter, { MlirFilterMode, MlirOpFilterHandle } from './MlirOpFilter';
+import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
+import { MlirFilterMode, buildFilterMatcher } from './mlirFilter';
 import { getNamespaceSegments } from './mlirGraphHelpers';
 
 const FILTER_DIM_OPACITY = 0.18;
@@ -511,22 +512,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
         if (appliedFilterQuery.length === 0) {
             return null;
         }
-        // Precompute the matcher so an invalid regex short-circuits to
-        // "zero matches" instead of throwing inside the walk.
-        let testLabel: (label: string) => boolean;
-        let isRegexInvalid = false;
-        if (filterMode === 'regex') {
-            try {
-                const re = new RegExp(appliedFilterQuery, 'i');
-                testLabel = (label) => re.test(label);
-            } catch {
-                testLabel = () => false;
-                isRegexInvalid = true;
-            }
-        } else {
-            const needle = appliedFilterQuery.toLowerCase();
-            testLabel = (label) => label.toLowerCase().includes(needle);
-        }
+        const { testLabel, isRegexInvalid } = buildFilterMatcher(filterMode, appliedFilterQuery);
         const anchorByNamespace = interactionIndex?.anchorByNamespace ?? {};
         const containingNamespacesByNodeId = interactionIndex?.containingNamespacesByNodeId ?? {};
         const visibleNodeIds = new Set<string>();
