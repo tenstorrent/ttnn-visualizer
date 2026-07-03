@@ -56,7 +56,16 @@ const MlirFileResultsOverlay = () => {
     const handleRetry = async (index: number) => {
         const result = results?.[index];
         const file = retryFiles?.[index];
-        if (!result || result.status !== ConnectionTestStates.FAILED || !result.persisted || !file || !retryServer) {
+        if (!result || result.status !== ConnectionTestStates.FAILED || !result.persisted) {
+            return;
+        }
+
+        if (!file || !retryServer) {
+            createToastNotification(
+                'MLIR',
+                'Retry context missing. Re-upload the file and try again.',
+                ToastType.ERROR,
+            );
             return;
         }
 
@@ -183,6 +192,7 @@ const MlirFileResultsOverlay = () => {
                     // Clicking the already-selected file deselects it.
                     onSelect={(index) => setSelectedIndex((current) => (current === index ? null : index))}
                     onRetry={handleRetry}
+                    canRetry={(index) => !!retryServer && !!retryFiles?.[index]}
                 />
             </div>
 

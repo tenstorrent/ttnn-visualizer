@@ -103,6 +103,7 @@ Open pull requests with **`dev`** as the base branch by default.
 
 - Don't hardcode colour values in TS/TSX. Promote to a CSS custom property in `src/scss/_base.scss` (e.g. `--graph-focused-node: #f6bc42;`), then expose it through `GRAPH_COLORS` in `src/definitions/GraphColors.ts` via the `cssVar()` helper. Components import from `GRAPH_COLORS`, never from a literal.
 - The same rule applies to magic layout numbers used in more than one place — promote to a SCSS variable or CSS custom property.
+- In component-local SCSS, prefer app-owned classnames over direct `.bp6-*` selector overrides; reserve Blueprint-wide overrides for `src/scss/_blueprintjs.scss`.
 
 ### Lint discipline
 

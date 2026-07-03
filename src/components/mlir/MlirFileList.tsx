@@ -19,6 +19,7 @@ interface MlirFileListProps {
     // view shown while files are still being converted).
     onSelect?: (index: number) => void;
     onRetry?: (index: number) => void;
+    canRetry?: (index: number) => boolean;
 }
 
 // Shared row list for the per-file outcome of an MLIR upload/load. Used both
@@ -31,6 +32,7 @@ const MlirFileList = ({
     retryingIndex = null,
     onSelect,
     onRetry,
+    canRetry,
 }: MlirFileListProps) => (
     <Menu className={classNames('mlir-file-list', className)}>
         {results.map((result, index) => {
@@ -39,23 +41,25 @@ const MlirFileList = ({
             const isFailedServerFile = result.status === ConnectionTestStates.FAILED && result.persisted;
             const shouldShowEyeIcon = !isPending && result.status !== ConnectionTestStates.FAILED;
             const selectable = !!onSelect && isSuccess;
-            const hasRetryAction = isFailedServerFile && !!onRetry;
+            const retryAvailable = canRetry ? canRetry(index) : true;
+            const hasRetryAction = isFailedServerFile && !!onRetry && retryAvailable;
             const isSelected = !!onSelect && index === selectedIndex;
             const isRetrying = retryingIndex === index;
+            const retryInFlight = retryingIndex !== null;
 
-            // Right-hand element: a spinner while the file is still converting,
-            // otherwise the outcome text, colourised via class by its status.
+            // Right-hand element: shows Processing during conversion/retry,
+            // failed rows include Retry when context exists, else status text.
             let labelElement;
             if (isPending) {
                 labelElement = <span className='mlir-file-status'>Processing</span>;
-            } else if (isFailedServerFile && onRetry) {
+            } else if (hasRetryAction && onRetry) {
                 labelElement = (
                     <div className='mlir-file-failure-controls'>
                         <span className='mlir-file-status is-failed'>{result.message ?? 'Failed'}</span>
                         <Button
                             variant={ButtonVariant.MINIMAL}
                             icon={IconNames.REFRESH}
-                            disabled={isRetrying}
+                            disabled={retryInFlight}
                             loading={isRetrying}
                             onClick={(event) => {
                                 event.stopPropagation();

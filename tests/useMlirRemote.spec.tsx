@@ -19,6 +19,8 @@ import {
     getInactiveFileTransferProgress,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
+    mlirRetryFilesAtom,
+    mlirRetryServerAtom,
 } from '../src/store/app';
 import { FileStatus } from '../src/model/APIData';
 
@@ -54,6 +56,8 @@ beforeEach(() => {
     getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
+    getDefaultStore().set(mlirRetryFilesAtom, null);
+    getDefaultStore().set(mlirRetryServerAtom, null);
 });
 
 afterEach(() => {
@@ -61,6 +65,8 @@ afterEach(() => {
     getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
+    getDefaultStore().set(mlirRetryFilesAtom, null);
+    getDefaultStore().set(mlirRetryServerAtom, null);
 });
 
 describe('useMlirRemote progress lifecycle', () => {
@@ -239,6 +245,8 @@ describe('useMlirRemote progress lifecycle', () => {
         await waitFor(() => {
             expect(getDefaultStore().get(mlirFileResultsAtom)).toBeNull();
         });
+        expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
+        expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
         expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
     });
 
@@ -262,6 +270,8 @@ describe('useMlirRemote progress lifecycle', () => {
             expect(getDefaultStore().get(mlirFileResultsAtom)).toBeNull();
             expect(screen.getByText('Upload failed')).toBeInTheDocument();
         });
+        expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
+        expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
         expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
     });
 });

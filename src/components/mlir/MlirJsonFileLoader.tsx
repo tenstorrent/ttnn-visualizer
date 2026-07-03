@@ -138,6 +138,8 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                     // Drop the pending spinner rows so they don't linger as
                     // permanently-converting entries behind the View button.
                     setMlirFileResults(null);
+                    setMlirRetryFiles(null);
+                    setMlirRetryServer(null);
                     setUploadStatus(ConnectionTestStates.FAILED);
                     setErrorMessage('Upload failed');
                     return;
@@ -153,6 +155,8 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
             // Drop any pending spinner rows so a failed upload doesn't leave
             // permanently-converting entries behind the View button.
             setMlirFileResults(null);
+            setMlirRetryFiles(null);
+            setMlirRetryServer(null);
             setUploadStatus(ConnectionTestStates.FAILED);
             setErrorMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));
         }
