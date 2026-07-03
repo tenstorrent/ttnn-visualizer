@@ -208,4 +208,50 @@ describe('MlirFileResultsOverlay', () => {
             });
         });
     });
+
+    it('keeps View disabled for failed rows while allowing Retry', async () => {
+        const failedFile = new File(['module {}'], 'failed.mlir');
+        getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
+        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'failed.mlir',
+                        name: null,
+                        status: ConnectionTestStates.FAILED,
+                        message: 'Still failing',
+                        graph: null,
+                    },
+                ],
+            },
+        });
+
+        renderOverlay([
+            {
+                filename: 'failed.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+        ]);
+
+        const viewButton = screen.getByRole('button', { name: /view/i });
+        const retryButton = screen.getByRole('button', { name: /retry/i });
+        expect(viewButton).toBeDisabled();
+        expect(retryButton).toBeEnabled();
+
+        // Failed rows must remain non-selectable for View.
+        fireEvent.click(screen.getByText('failed.mlir'));
+        expect(viewButton).toBeDisabled();
+
+        fireEvent.click(retryButton);
+
+        await waitFor(() => {
+            expect(uploadMlirFileToServer).toHaveBeenCalledWith([failedFile], SERVER);
+            expect(viewButton).toBeDisabled();
+        });
+    });
 });

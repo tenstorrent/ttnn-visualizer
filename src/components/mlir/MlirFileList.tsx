@@ -39,6 +39,7 @@ const MlirFileList = ({
             const isFailedServerFile = result.status === ConnectionTestStates.FAILED && result.persisted;
             const shouldShowEyeIcon = !isPending && result.status !== ConnectionTestStates.FAILED;
             const selectable = !!onSelect && isSuccess;
+            const hasRetryAction = isFailedServerFile && !!onRetry;
             const isSelected = !!onSelect && index === selectedIndex;
             const isRetrying = retryingIndex === index;
 
@@ -101,9 +102,9 @@ const MlirFileList = ({
                     icon={leadingElement}
                     text={result.filename}
                     labelElement={labelElement}
-                    disabled={!selectable}
+                    disabled={!selectable && !hasRetryAction}
                     active={isSelected}
-                    onClick={onSelect ? () => onSelect(index) : undefined}
+                    onClick={selectable && onSelect ? () => onSelect(index) : undefined}
                     roleStructure='listoption'
                 />
             );
