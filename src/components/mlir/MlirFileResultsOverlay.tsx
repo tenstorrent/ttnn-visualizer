@@ -12,7 +12,14 @@ import MlirFileList from './MlirFileList';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { OVERLAY_HEADING_ICON_SIZE } from '../../definitions/UiConfig';
 import ROUTES from '../../definitions/Routes';
-import { activeMlirDataAtom, activeMlirJsonAtom, mlirFileResultsAtom, mlirFileResultsOpenAtom } from '../../store/app';
+import {
+    activeMlirDataAtom,
+    activeMlirJsonAtom,
+    mlirFileResultsAtom,
+    mlirFileResultsOpenAtom,
+    mlirRetryFilesAtom,
+    mlirRetryServerAtom,
+} from '../../store/app';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
@@ -24,14 +31,17 @@ import 'styles/components/MlirFileResultsOverlay.scss';
 // holds the rows and is retained after closing so the overlay can be reopened.
 // Selecting a file only highlights it; the View button commits the choice.
 const MlirFileResultsOverlay = () => {
-    const results = useAtomValue(mlirFileResultsAtom);
+    const [results, setResults] = useAtom(mlirFileResultsAtom);
     const [isOpen, setIsOpen] = useAtom(mlirFileResultsOpenAtom);
+    const retryFiles = useAtomValue(mlirRetryFilesAtom);
+    const retryServer = useAtomValue(mlirRetryServerAtom);
     const setActiveMlirData = useSetAtom(activeMlirDataAtom);
     const setActiveMlirJson = useSetAtom(activeMlirJsonAtom);
-    const { setActiveMlir } = useMlirRemote();
+    const { setActiveMlir, uploadMlirFileToServer } = useMlirRemote();
     const navigate = useNavigate();
     const location = useLocation();
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    const [retryingIndex, setRetryingIndex] = useState<number | null>(null);
 
     // Reset the pending selection on close so it can't carry over to a reopen
     // or the next upload. The results themselves are retained so the overlay
@@ -39,7 +49,75 @@ const MlirFileResultsOverlay = () => {
     // routes through here.
     const handleClose = () => {
         setSelectedIndex(null);
+        setRetryingIndex(null);
         setIsOpen(false);
+    };
+
+    const handleRetry = async (index: number) => {
+        const result = results?.[index];
+        const file = retryFiles?.[index];
+        if (!result || result.status !== ConnectionTestStates.FAILED || !result.persisted || !file || !retryServer) {
+            return;
+        }
+
+        setRetryingIndex(index);
+        setResults(
+            (current) =>
+                current?.map((entry, entryIndex) =>
+                    entryIndex === index
+                        ? {
+                              ...entry,
+                              status: ConnectionTestStates.PROGRESS,
+                              message: undefined,
+                              name: null,
+                              graph: null,
+                          }
+                        : entry,
+                ) ?? current,
+        );
+
+        try {
+            const response = await uploadMlirFileToServer([file], retryServer);
+            const retried = response.data.results?.[0];
+            if (!retried) {
+                throw new Error('Upload failed');
+            }
+
+            setResults(
+                (current) =>
+                    current?.map((entry, entryIndex) =>
+                        entryIndex === index
+                            ? {
+                                  filename: retried.filename,
+                                  name: retried.name,
+                                  status: retried.status,
+                                  message: retried.message ?? retried.detail,
+                                  graph: retried.graph ?? null,
+                                  persisted: true,
+                              }
+                            : entry,
+                    ) ?? current,
+            );
+        } catch (err: unknown) {
+            const message = getResponseError(err, 'Unable to retry MLIR conversion');
+            setResults(
+                (current) =>
+                    current?.map((entry, entryIndex) =>
+                        entryIndex === index
+                            ? {
+                                  ...entry,
+                                  status: ConnectionTestStates.FAILED,
+                                  message,
+                                  name: null,
+                                  graph: null,
+                              }
+                            : entry,
+                    ) ?? current,
+            );
+            createToastNotification('MLIR', message, ToastType.ERROR);
+        } finally {
+            setRetryingIndex(null);
+        }
     };
 
     const handleView = async () => {
@@ -71,8 +149,6 @@ const MlirFileResultsOverlay = () => {
         }
     };
 
-    const successCount = results?.filter((result) => result.status === ConnectionTestStates.OK).length ?? 0;
-
     return (
         <Overlay
             isOpen={isOpen && results !== null}
@@ -95,20 +171,16 @@ const MlirFileResultsOverlay = () => {
                         icon={IconNames.LAYOUT}
                         size={OVERLAY_HEADING_ICON_SIZE}
                     />
-                    MLIR upload results
+                    MLIR uploads
                 </h2>
-
-                <p>
-                    {successCount > 0
-                        ? 'Select a file to make it the active MLIR graph.'
-                        : 'No files could be processed.'}
-                </p>
 
                 <MlirFileList
                     results={results ?? []}
                     selectedIndex={selectedIndex}
+                    retryingIndex={retryingIndex}
                     // Clicking the already-selected file deselects it.
                     onSelect={(index) => setSelectedIndex((current) => (current === index ? null : index))}
+                    onRetry={handleRetry}
                 />
             </div>
 

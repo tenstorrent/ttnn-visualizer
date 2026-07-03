@@ -10,16 +10,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MlirFileResultsOverlay from '../src/components/mlir/MlirFileResultsOverlay';
 import MlirJsonFileLoader from '../src/components/mlir/MlirJsonFileLoader';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { activeMlirDataAtom, activeMlirJsonAtom, mlirFileResultsAtom, mlirFileResultsOpenAtom } from '../src/store/app';
+import {
+    activeMlirDataAtom,
+    activeMlirJsonAtom,
+    mlirFileResultsAtom,
+    mlirFileResultsOpenAtom,
+    mlirRetryFilesAtom,
+    mlirRetryServerAtom,
+} from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
+import { MlirServerConnection } from '../src/definitions/MlirServer';
 
 const setActiveMlir = vi.fn();
+const uploadMlirFileToServer = vi.fn();
 const { createToastNotification } = vi.hoisted(() => ({
     createToastNotification: vi.fn(),
 }));
 
 vi.mock('../src/hooks/useMlirRemote', () => ({
-    default: () => ({ setActiveMlir }),
+    default: () => ({ setActiveMlir, uploadMlirFileToServer }),
 }));
 
 vi.mock('../src/functions/createToastNotification', () => ({
@@ -28,6 +37,13 @@ vi.mock('../src/functions/createToastNotification', () => ({
 }));
 
 const GRAPH: GraphBundle = { graphs: [{ id: 'g', nodes: [] }] };
+const SERVER: MlirServerConnection = {
+    name: 'Test host',
+    username: 'tt',
+    host: 'worker-01',
+    sshPort: 22,
+    port: 8080,
+};
 
 function renderOverlay(results: MlirFileResult[]) {
     getDefaultStore().set(mlirFileResultsAtom, results);
@@ -43,6 +59,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
+    getDefaultStore().set(mlirRetryFilesAtom, null);
+    getDefaultStore().set(mlirRetryServerAtom, null);
     getDefaultStore().set(activeMlirDataAtom, null);
     getDefaultStore().set(activeMlirJsonAtom, null);
 });
@@ -112,12 +130,12 @@ describe('MlirFileResultsOverlay', () => {
         );
 
         // Closed: results retained but the overlay is not shown.
-        expect(screen.queryByText('MLIR upload results')).not.toBeInTheDocument();
+        expect(screen.queryByText('MLIR uploads')).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /view mlir uploads/i }));
 
         await waitFor(() => {
-            expect(screen.getByText('MLIR upload results')).toBeInTheDocument();
+            expect(screen.getByText('MLIR uploads')).toBeInTheDocument();
         });
     });
 
@@ -149,5 +167,45 @@ describe('MlirFileResultsOverlay', () => {
         });
         expect(createToastNotification).toHaveBeenCalledTimes(1);
         expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'persist failed', 'error');
+    });
+
+    it('retries conversion for a failed server file', async () => {
+        const failedFile = new File(['module {}'], 'failed.mlir');
+        getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
+        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'failed.mlir',
+                        name: 'failed',
+                        status: ConnectionTestStates.OK,
+                        graph: GRAPH,
+                    },
+                ],
+            },
+        });
+
+        renderOverlay([
+            {
+                filename: 'failed.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+        await waitFor(() => {
+            expect(uploadMlirFileToServer).toHaveBeenCalledWith([failedFile], SERVER);
+            expect(getDefaultStore().get(mlirFileResultsAtom)?.[0]).toMatchObject({
+                status: ConnectionTestStates.OK,
+                name: 'failed',
+                graph: GRAPH,
+            });
+        });
     });
 });

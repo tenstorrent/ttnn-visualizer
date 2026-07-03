@@ -36,12 +36,6 @@ const SERVER: MlirServerConnection = {
     port: 8080,
 };
 
-function toFileList(files: File[]): FileList {
-    const dataTransfer = new DataTransfer();
-    files.forEach((file) => dataTransfer.items.add(file));
-    return dataTransfer.files;
-}
-
 type Deferred<T> = {
     promise: Promise<T>;
     resolve: (value: T) => void;
@@ -81,10 +75,7 @@ describe('useMlirRemote progress lifecycle', () => {
         });
 
         const { result } = renderHook(() => useMlirRemote());
-        const uploadPromise = result.current.uploadMlirFileToServer(
-            toFileList([new File(['module {}'], 'model.mlir')]),
-            SERVER,
-        );
+        const uploadPromise = result.current.uploadMlirFileToServer([new File(['module {}'], 'model.mlir')], SERVER);
 
         await waitFor(() => {
             expect(getDefaultStore().get(fileTransferProgressAtom).status).toBe(FileStatus.UPLOADING);
@@ -114,10 +105,7 @@ describe('useMlirRemote progress lifecycle', () => {
         });
 
         const { result } = renderHook(() => useMlirRemote());
-        const uploadPromise = result.current.uploadMlirFileToServer(
-            toFileList([new File(['module {}'], 'model.mlir')]),
-            SERVER,
-        );
+        const uploadPromise = result.current.uploadMlirFileToServer([new File(['module {}'], 'model.mlir')], SERVER);
 
         onUploadProgress?.({ loaded: 5, total: 10 } as AxiosProgressEvent);
         let progress = getDefaultStore().get(fileTransferProgressAtom);

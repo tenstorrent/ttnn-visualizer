@@ -44,12 +44,12 @@ const useMlirRemote = () => {
     // take minutes with no further progress to report) until the request
     // resolves and `resetTransferProgress` closes the overlay.
     const uploadMlirFileToServer = async (
-        files: FileList,
+        files: File[],
         server: MlirServerConnection,
     ): Promise<AxiosResponse<MlirUploadResponse>> => {
         const formData = new FormData();
 
-        Array.from(files).forEach((f) => {
+        files.forEach((f) => {
             formData.append('files', f);
         });
         formData.append('host', server.host);
