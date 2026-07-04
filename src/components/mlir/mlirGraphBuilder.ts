@@ -108,13 +108,16 @@ function formatSectionLabel(namespace: string): string {
     return getShortName(namespace).replace(/_/g, ' ');
 }
 
-function estimateOpNodeDimensions(label: string): { width: number; height: number } {
+const OP_NODE_EXTRA_LINE_PX = 11;
+
+function estimateOpNodeDimensions(label: string, extraLines: number): { width: number; height: number } {
     const charW = 7.25;
     const padX = 32;
     const minW = 108;
     const maxW = 560;
     const width = Math.ceil(Math.min(maxW, Math.max(minW, label.length * charW + padX)));
-    return { width, height: 40 };
+    const height = 40 + Math.max(0, extraLines) * OP_NODE_EXTRA_LINE_PX;
+    return { width, height };
 }
 
 function getNodeLayoutSize(n: WorkerNode): { width: number; height: number } {
@@ -182,9 +185,10 @@ function makeOpNode(
     node: IndexedNode,
     toggle?: { namespace: string; state: 'collapsed' | 'expanded' },
     displayLabelOverride?: string,
+    extraLines: number = 0,
 ): WorkerNode {
     const label = displayLabelOverride ?? node.label;
-    const { width, height } = estimateOpNodeDimensions(label);
+    const { width, height } = estimateOpNodeDimensions(label, extraLines);
     // Visual chrome (background / border / text styling) lives in SCSS under
     // `.react-flow__node-mlirOp`. Only the dagre-computed dimensions are set
     // inline so React Flow's container matches the laid-out size and `dagre`'s
@@ -205,7 +209,12 @@ function makeOpNode(
     };
 }
 
-export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: string[]): BuiltGraph {
+export function buildVisibleGraph(
+    index: GraphIndex,
+    expandedNamespacesList: string[],
+    extraLinesByNodeId?: Record<string, number>,
+): BuiltGraph {
+    const extraLinesFor = (nodeId: string): number => extraLinesByNodeId?.[nodeId] ?? 0;
     const subgraphNamespaceSet = new Set(index.subgraphNamespaces);
     const sectionNsSet = new Set(index.sectionNamespaces ?? []);
 
@@ -347,6 +356,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 isSectionAnchor && toggleNs && !expandedNamespaces.has(toggleNs)
                     ? formatSectionLabel(toggleNs)
                     : undefined,
+                extraLinesFor(n.id),
             );
         });
 
@@ -486,6 +496,7 @@ export function buildVisibleGraph(index: GraphIndex, expandedNamespacesList: str
                 isSectionAnchor && toggleNs && !expandedNamespaces.has(toggleNs)
                     ? formatSectionLabel(toggleNs)
                     : undefined,
+                extraLinesFor(n.id),
             );
         });
 

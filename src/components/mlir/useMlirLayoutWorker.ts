@@ -33,7 +33,7 @@ export function useMlirLayoutWorker(
     onBuilt: (graph: BuiltGraph) => void,
 ): {
     interactionIndex: WorkerInteractionIndex | null;
-    runBuild: (expanded: Set<string>) => void;
+    runBuild: (expanded: Set<string>, extraLinesByNodeId?: Record<string, number>) => void;
 } {
     const workerRef = useRef<Worker | null>(null);
     const nextRequestIdRef = useRef(0);
@@ -106,7 +106,7 @@ export function useMlirLayoutWorker(
     }, [graphId, sourceNodes]);
 
     const runBuild = useCallback(
-        (expanded: Set<string>) => {
+        (expanded: Set<string>, extraLinesByNodeId?: Record<string, number>) => {
             const worker = workerRef.current;
             if (!worker || indexReadyGraphId !== graphId) {
                 return;
@@ -115,12 +115,28 @@ export function useMlirLayoutWorker(
             nextRequestIdRef.current = requestId;
             activeRequestIdRef.current = requestId;
             const expandedSorted = Array.from(expanded).sort((a, b) => a.localeCompare(b));
+            // Deterministic serialisation → cache key. Sorted keys keep the
+            // key stable across renders that produce the same map with a
+            // different insertion order.
+            let extraHash = '';
+            if (extraLinesByNodeId) {
+                const keys = Object.keys(extraLinesByNodeId).sort();
+                const parts: string[] = [];
+                for (const key of keys) {
+                    const val = extraLinesByNodeId[key];
+                    if (val > 0) {
+                        parts.push(`${key}:${val}`);
+                    }
+                }
+                extraHash = parts.join(',');
+            }
             worker.postMessage({
                 type: 'build' as const,
                 requestId,
                 graphId,
                 expandedNamespaces: expandedSorted,
-                cacheKey: `${graphId}:${expandedSorted.join('|')}`,
+                cacheKey: `${graphId}:${expandedSorted.join('|')}#${extraHash}`,
+                extraLinesByNodeId,
             });
         },
         [graphId, indexReadyGraphId],

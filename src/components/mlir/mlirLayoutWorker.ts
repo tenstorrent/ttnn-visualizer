@@ -13,7 +13,14 @@ const cacheByGraphId = new Map<string, Map<string, BuiltGraph>>();
 const graphVersionByGraphId = new Map<string, number>();
 const latestBuildByGraphId = new Map<
     string,
-    { graphId: string; requestId: number; expandedNamespaces: string[]; cacheKey: string; graphVersion: number }
+    {
+        graphId: string;
+        requestId: number;
+        expandedNamespaces: string[];
+        cacheKey: string;
+        graphVersion: number;
+        extraLinesByNodeId?: Record<string, number>;
+    }
 >();
 const processingGraphIds = new Set<string>();
 
@@ -71,7 +78,7 @@ function processLatestBuild(graphId: string): void {
             }
 
             try {
-                const built = buildVisibleGraph(index, request.expandedNamespaces);
+                const built = buildVisibleGraph(index, request.expandedNamespaces, request.extraLinesByNodeId);
                 cache.set(request.cacheKey, built);
                 const newerRequestExists = latestBuildByGraphId.has(graphId);
                 const graphVersionChanged = request.graphVersion !== getGraphVersion(graphId);
@@ -136,6 +143,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerInboundMessage>) => 
         expandedNamespaces: message.expandedNamespaces,
         cacheKey: message.cacheKey,
         graphVersion: getGraphVersion(message.graphId),
+        extraLinesByNodeId: message.extraLinesByNodeId,
     });
     processLatestBuild(message.graphId);
 });
