@@ -94,23 +94,26 @@ interface ViewProps {
 
 type MLNode = Node<MLNodeData>;
 
+// Stable empty-array reference for the overlay-line fallbacks — avoids
+// churning MlirOpNode's referential identity on every render when a node
+// has no overlay entry.
+const EMPTY_OVERLAY_LINES: readonly string[] = Object.freeze([]);
+
+type MlirNodeBodyOverlayLines = { shapes: string[]; location: string[] };
+
 type MlirNodeBodyContextValue = {
-    showLocation: boolean;
-    showShapes: boolean;
-    sourceNodeById: Map<string, SourceNode>;
+    overlayLinesByNodeId: Map<string, MlirNodeBodyOverlayLines>;
 };
 
 const MlirNodeBodyContext = createContext<MlirNodeBodyContextValue>({
-    showLocation: false,
-    showShapes: false,
-    sourceNodeById: new Map(),
+    overlayLinesByNodeId: new Map(),
 });
 
 const MlirOpNode = memo<NodeProps<MLNode>>(({ id, data }) => {
-    const { showLocation, showShapes, sourceNodeById } = useContext(MlirNodeBodyContext);
-    const source = showLocation || showShapes ? sourceNodeById.get(id) : undefined;
-    const shapeLines = showShapes && source ? collectShapeLines(source.outputsMetadata) : [];
-    const locationLines = showLocation && source ? collectLocationLines(source.attrs) : [];
+    const { overlayLinesByNodeId } = useContext(MlirNodeBodyContext);
+    const overlay = overlayLinesByNodeId.get(id);
+    const shapeLines = overlay?.shapes ?? EMPTY_OVERLAY_LINES;
+    const locationLines = overlay?.location ?? EMPTY_OVERLAY_LINES;
 
     return (
         <>
@@ -542,26 +545,38 @@ const MlGraphInner = ({ data }: ViewProps) => {
         runBuild(expandedNamespaces);
     }, [expandedNamespaces, runBuild]);
 
-    // Per-node extra-line count for the node-body overlays. Consumed by
-    // `styledNodes` to grow each node's DOM height inline; the layout
-    // worker is intentionally not told about these — trading occasional
-    // vertical overlap with the row below for zero layout shift when the
-    // user flicks a toggle.
-    const extraLinesByNodeId = useMemo<Map<string, number>>(() => {
-        const result = new Map<string, number>();
+    // Per-node overlay lines for the node-body toggles. Computed exactly
+    // once per (toggle, sourceNodes) change and shared with both the
+    // height-growth path (`extraLinesByNodeId` below → `styledNodes`) and
+    // the render path (via `MlirNodeBodyContext` → `MlirOpNode`), so
+    // `collectShapeLines` / `collectLocationLines` never run twice for
+    // the same node on a single toggle flip.
+    const overlayLinesByNodeId = useMemo<Map<string, MlirNodeBodyOverlayLines>>(() => {
+        const result = new Map<string, MlirNodeBodyOverlayLines>();
         if (!nodeBodyToggles.location && !nodeBodyToggles.shapes) {
             return result;
         }
         for (const source of sourceNodes) {
-            const shapeCount = nodeBodyToggles.shapes ? collectShapeLines(source.outputsMetadata).length : 0;
-            const locationCount = nodeBodyToggles.location ? collectLocationLines(source.attrs).length : 0;
-            const total = shapeCount + locationCount;
-            if (total > 0) {
-                result.set(source.id, total);
+            const shapes = nodeBodyToggles.shapes ? collectShapeLines(source.outputsMetadata) : [];
+            const location = nodeBodyToggles.location ? collectLocationLines(source.attrs) : [];
+            if (shapes.length > 0 || location.length > 0) {
+                result.set(source.id, { shapes, location });
             }
         }
         return result;
     }, [nodeBodyToggles.location, nodeBodyToggles.shapes, sourceNodes]);
+
+    // Derived count map consumed by `styledNodes` to grow each node's DOM
+    // height inline. The layout worker is intentionally not told about
+    // these — trading occasional vertical overlap with the row below for
+    // zero layout shift when the user flicks a toggle.
+    const extraLinesByNodeId = useMemo<Map<string, number>>(() => {
+        const result = new Map<string, number>();
+        for (const [id, { shapes, location }] of overlayLinesByNodeId) {
+            result.set(id, shapes.length + location.length);
+        }
+        return result;
+    }, [overlayLinesByNodeId]);
 
     // Maps each label-matching source to its visible representative: itself
     // if on canvas, otherwise the anchor of its outermost collapsed
@@ -1410,8 +1425,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
     }, [displayedEdges, focusedConnections, selectedNodeId, filterMatchInfo]);
 
     const nodeBodyContextValue = useMemo<MlirNodeBodyContextValue>(
-        () => ({ showLocation: nodeBodyToggles.location, showShapes: nodeBodyToggles.shapes, sourceNodeById }),
-        [nodeBodyToggles.location, nodeBodyToggles.shapes, sourceNodeById],
+        () => ({ overlayLinesByNodeId }),
+        [overlayLinesByNodeId],
     );
 
     return (
