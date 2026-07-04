@@ -61,6 +61,7 @@ const FILTER_DEBOUNCE_MS = 120;
 
 const NODE_BODY_TOGGLES_STORAGE_KEY = 'mlirNodeBodyToggles';
 const DEFAULT_NODE_BODY_TOGGLES: MlirNodeBodyTogglesState = { location: false, shapes: false };
+const NODE_BODY_OVERLAY_LINE_PX = 11;
 
 const readNodeBodyToggles = (): MlirNodeBodyTogglesState => {
     try {
@@ -537,28 +538,30 @@ const MlGraphInner = ({ data }: ViewProps) => {
     );
     const { interactionIndex, runBuild } = useMlirLayoutWorker(graph.id, sourceNodes, applyBuiltGraph);
 
-    // Precompute per-node line counts for the node-body overlays so the
-    // layout worker can size each op node with enough vertical room. Skips
-    // the walk when both toggles are off (empty map ≡ baseline heights).
-    const extraLinesByNodeId = useMemo<Record<string, number>>(() => {
+    useEffect(() => {
+        runBuild(expandedNamespaces);
+    }, [expandedNamespaces, runBuild]);
+
+    // Per-node extra-line count for the node-body overlays. Consumed by
+    // `styledNodes` to grow each node's DOM height inline; the layout
+    // worker is intentionally not told about these — trading occasional
+    // vertical overlap with the row below for zero layout shift when the
+    // user flicks a toggle.
+    const extraLinesByNodeId = useMemo<Map<string, number>>(() => {
+        const result = new Map<string, number>();
         if (!nodeBodyToggles.location && !nodeBodyToggles.shapes) {
-            return {};
+            return result;
         }
-        const result: Record<string, number> = {};
         for (const source of sourceNodes) {
             const shapeCount = nodeBodyToggles.shapes ? collectShapeLines(source.outputsMetadata).length : 0;
             const locationCount = nodeBodyToggles.location ? collectLocationLines(source.attrs).length : 0;
             const total = shapeCount + locationCount;
             if (total > 0) {
-                result[source.id] = total;
+                result.set(source.id, total);
             }
         }
         return result;
     }, [nodeBodyToggles.location, nodeBodyToggles.shapes, sourceNodes]);
-
-    useEffect(() => {
-        runBuild(expandedNamespaces, extraLinesByNodeId);
-    }, [expandedNamespaces, extraLinesByNodeId, runBuild]);
 
     // Maps each label-matching source to its visible representative: itself
     // if on canvas, otherwise the anchor of its outermost collapsed
@@ -1284,17 +1287,20 @@ const MlGraphInner = ({ data }: ViewProps) => {
         return { inputNodeIds, outputNodeIds, inputEdgeIds, outputEdgeIds };
     }, [displayedEdges, selectedNodeId]);
 
-    // Composes selection highlight + filter dim + buried-match badge in one
-    // map pass. Groups stay neutral (opacity on the wrapper bleeds into
-    // children); the selected node stays bright regardless of match state
-    // so the user doesn't lose their anchor.
+    // Composes selection highlight + filter dim + buried-match badge + the
+    // node-body overlay height in one map pass. Groups stay neutral
+    // (opacity on the wrapper bleeds into children); the selected node
+    // stays bright regardless of match state so the user doesn't lose
+    // their anchor. Overlay height is applied inline (not routed through
+    // the layout worker) so toggling doesn't reflow the graph.
     const styledNodes = useMemo<MLNode[]>(() => {
         const { inputNodeIds, outputNodeIds } = focusedConnections;
         const hasSelectionHighlight = !!selectedNodeId && (inputNodeIds.size > 0 || outputNodeIds.size > 0);
         // Zero-match filter is treated as "no filter" for dim/badge purposes
         // — leaves the canvas untouched instead of dimming everything to 18%.
         const activeFilter = filterMatchInfo && filterMatchInfo.visibleRepIds.size > 0 ? filterMatchInfo : null;
-        if (!hasSelectionHighlight && !activeFilter) {
+        const hasOverlayHeight = extraLinesByNodeId.size > 0;
+        if (!hasSelectionHighlight && !activeFilter && !hasOverlayHeight) {
             return nodes;
         }
         return nodes.map((n) => {
@@ -1325,9 +1331,21 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
                 }
             }
+            if (hasOverlayHeight && n.type !== 'mlirGroup') {
+                const extra = extraLinesByNodeId.get(n.id) ?? 0;
+                if (extra > 0) {
+                    const baseHeight = typeof n.height === 'number' ? n.height : 40;
+                    const grownHeight = baseHeight + extra * NODE_BODY_OVERLAY_LINE_PX;
+                    next = {
+                        ...next,
+                        height: grownHeight,
+                        style: { ...(next.style ?? {}), height: grownHeight },
+                    };
+                }
+            }
             return next;
         });
-    }, [nodes, focusedConnections, selectedNodeId, filterMatchInfo]);
+    }, [nodes, focusedConnections, selectedNodeId, filterMatchInfo, extraLinesByNodeId]);
 
     // MiniMap reads `node.style.background` to colour each mini-node. The
     // unhighlighted op-node fill now lives in SCSS (`.react-flow__node-mlirOp`),

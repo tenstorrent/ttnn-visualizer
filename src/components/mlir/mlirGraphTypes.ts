@@ -144,8 +144,6 @@ export type BuildMessage = {
     graphId: string;
     expandedNamespaces: string[];
     cacheKey: string;
-    /** Per-node line-count above baseline for the node-body overlays; drives extra height. */
-    extraLinesByNodeId?: Record<string, number>;
 };
 
 export type WorkerInboundMessage = SetGraphMessage | BuildMessage;
