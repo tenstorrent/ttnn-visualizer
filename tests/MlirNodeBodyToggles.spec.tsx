@@ -25,8 +25,8 @@ describe('MlirNodeBodyToggles', () => {
 
     it('emits a merged state (spreading the other field) when the location switch flips', () => {
         // Switching one field should never wipe the other — the parent
-        // persists this object to sessionStorage, so a bad merge would
-        // silently reset shapes on every location toggle.
+        // persists this object through `mlirNodeBodyTogglesAtom`, so a
+        // bad merge would silently reset shapes on every location toggle.
         const onChange = vi.fn();
         render(
             <MlirNodeBodyToggles

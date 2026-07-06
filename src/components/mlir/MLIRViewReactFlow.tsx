@@ -35,8 +35,10 @@ import {
     useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useAtom } from 'jotai';
 
 import { GraphBundle } from '../../model/MLIRJsonModel';
+import { mlirNodeBodyTogglesAtom } from '../../store/app';
 import type {
     BuiltGraph,
     IncomingEdgeView,
@@ -49,7 +51,7 @@ import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
-import MlirNodeBodyToggles, { MlirNodeBodyTogglesState } from './MlirNodeBodyToggles';
+import MlirNodeBodyToggles from './MlirNodeBodyToggles';
 import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
 import { getNamespaceSegments } from './mlirGraphHelpers';
 
@@ -59,22 +61,7 @@ const FILTER_DIM_OPACITY = 0.18;
 // Cleared queries bypass the debounce so Escape / clear feels instant.
 const FILTER_DEBOUNCE_MS = 120;
 
-const NODE_BODY_TOGGLES_STORAGE_KEY = 'mlirNodeBodyToggles';
-const DEFAULT_NODE_BODY_TOGGLES: MlirNodeBodyTogglesState = { location: false, shapes: false };
 const NODE_BODY_OVERLAY_LINE_PX = 11;
-
-const readNodeBodyToggles = (): MlirNodeBodyTogglesState => {
-    try {
-        const raw = sessionStorage.getItem(NODE_BODY_TOGGLES_STORAGE_KEY);
-        if (!raw) {
-            return DEFAULT_NODE_BODY_TOGGLES;
-        }
-        const parsed = JSON.parse(raw) as Partial<MlirNodeBodyTogglesState>;
-        return { location: !!parsed.location, shapes: !!parsed.shapes };
-    } catch {
-        return DEFAULT_NODE_BODY_TOGGLES;
-    }
-};
 
 // View-layer additions to the worker's canonical node data:
 //  - `highlight`: producer/consumer role vs. the selected node. Ops take a
@@ -100,6 +87,11 @@ type MLNode = Node<MLNodeData>;
 const EMPTY_OVERLAY_LINES: readonly string[] = Object.freeze([]);
 
 type MlirNodeBodyOverlayLines = { shapes: string[]; location: string[] };
+
+// Shared empty-map instance returned when both toggles are off, so
+// `nodeBodyContextValue`'s identity stays stable and every MlirOpNode
+// avoids a context-driven re-render on unrelated graph rebuilds.
+const EMPTY_OVERLAY_MAP: Map<string, MlirNodeBodyOverlayLines> = new Map();
 
 type MlirNodeBodyContextValue = {
     overlayLinesByNodeId: Map<string, MlirNodeBodyOverlayLines>;
@@ -367,16 +359,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
-    const [nodeBodyToggles, setNodeBodyToggles] = useState<MlirNodeBodyTogglesState>(readNodeBodyToggles);
-    const handleNodeBodyTogglesChange = useCallback((next: MlirNodeBodyTogglesState) => {
-        setNodeBodyToggles(next);
-        try {
-            sessionStorage.setItem(NODE_BODY_TOGGLES_STORAGE_KEY, JSON.stringify(next));
-        } catch {
-            // sessionStorage write can fail in private mode / when full — the
-            // in-memory toggle still works, we just lose the persistence.
-        }
-    }, []);
+    const [nodeBodyToggles, setNodeBodyToggles] = useAtom(mlirNodeBodyTogglesAtom);
     const filterRef = useRef<MlirOpFilterHandle>(null);
     const selectedNodeIdRef = useRef<string | null>(null);
     const viewportAnchorRef = useRef<{
@@ -539,32 +522,87 @@ const MlGraphInner = ({ data }: ViewProps) => {
             })),
         [graph.nodes],
     );
+    // Canonical lookup keyed on the same id space the worker builds against.
+    // Used by the details panel, the overlay-lines memo (needs source attrs
+    // + output metadata to compute per-node overlay strings), and by the
+    // edge/label memoisation chain further down. `sourceNodes` is already
+    // memoised so this map only rebuilds when the underlying graph changes.
+    const sourceNodeById = useMemo(() => {
+        const result = new Map<string, SourceNode>();
+        for (const sourceNode of sourceNodes) {
+            result.set(sourceNode.id, sourceNode);
+        }
+        return result;
+    }, [sourceNodes]);
     const { interactionIndex, runBuild } = useMlirLayoutWorker(graph.id, sourceNodes, applyBuiltGraph);
 
     useEffect(() => {
         runBuild(expandedNamespaces);
     }, [expandedNamespaces, runBuild]);
 
-    // Per-node overlay lines for the node-body toggles. Computed exactly
-    // once per (toggle, sourceNodes) change and shared with both the
+    // Op-node id set from the current React Flow `nodes` array. The
+    // reference here changes on every drag / selection frame even when
+    // the set contents don't; `visibleOpNodeIds` below stabilises that
+    // identity so downstream memos (`overlayLinesByNodeId` →
+    // `nodeBodyContextValue`) don't invalidate on unrelated frames.
+    const visibleOpNodeIdsSource = useMemo<Set<string>>(() => {
+        const next = new Set<string>();
+        for (const node of nodes) {
+            if (node.type === 'mlirOp') {
+                next.add(node.id);
+            }
+        }
+        return next;
+    }, [nodes]);
+    // "Computed cached state" pattern (React docs): only replace the
+    // tracked set when contents actually change. Prevents a drag from
+    // fanning out a re-render to every mounted `MlirOpNode` via the
+    // `MlirNodeBodyContext` provider.
+    const [visibleOpNodeIds, setVisibleOpNodeIds] = useState<Set<string>>(visibleOpNodeIdsSource);
+    if (visibleOpNodeIds !== visibleOpNodeIdsSource) {
+        let unchanged = visibleOpNodeIds.size === visibleOpNodeIdsSource.size;
+        if (unchanged) {
+            for (const id of visibleOpNodeIdsSource) {
+                if (!visibleOpNodeIds.has(id)) {
+                    unchanged = false;
+                    break;
+                }
+            }
+        }
+        if (!unchanged) {
+            setVisibleOpNodeIds(visibleOpNodeIdsSource);
+        }
+    }
+
+    // Per-node overlay lines for the node-body toggles. Scoped to op
+    // nodes currently on the canvas (`visibleOpNodeIds`) — sources hidden
+    // inside collapsed subgraphs never render overlay lines and don't
+    // contribute to `extraLinesByNodeId` height. Computed exactly once
+    // per (toggle, visible-set) change and shared with both the
     // height-growth path (`extraLinesByNodeId` below → `styledNodes`) and
     // the render path (via `MlirNodeBodyContext` → `MlirOpNode`), so
     // `collectShapeLines` / `collectLocationLines` never run twice for
-    // the same node on a single toggle flip.
+    // the same node on a single toggle flip. When both toggles are off
+    // we return a shared empty Map so the context Provider value stays
+    // referentially stable and doesn't fan out a re-render to every op.
     const overlayLinesByNodeId = useMemo<Map<string, MlirNodeBodyOverlayLines>>(() => {
-        const result = new Map<string, MlirNodeBodyOverlayLines>();
         if (!nodeBodyToggles.location && !nodeBodyToggles.shapes) {
-            return result;
+            return EMPTY_OVERLAY_MAP;
         }
-        for (const source of sourceNodes) {
+        const result = new Map<string, MlirNodeBodyOverlayLines>();
+        for (const id of visibleOpNodeIds) {
+            const source = sourceNodeById.get(id);
+            if (!source) {
+                continue;
+            }
             const shapes = nodeBodyToggles.shapes ? collectShapeLines(source.outputsMetadata) : [];
             const location = nodeBodyToggles.location ? collectLocationLines(source.attrs) : [];
             if (shapes.length > 0 || location.length > 0) {
-                result.set(source.id, { shapes, location });
+                result.set(id, { shapes, location });
             }
         }
         return result;
-    }, [nodeBodyToggles.location, nodeBodyToggles.shapes, sourceNodes]);
+    }, [nodeBodyToggles.location, nodeBodyToggles.shapes, visibleOpNodeIds, sourceNodeById]);
 
     // Derived count map consumed by `styledNodes` to grow each node's DOM
     // height inline. The layout worker is intentionally not told about
@@ -816,18 +854,6 @@ const MlGraphInner = ({ data }: ViewProps) => {
     );
 
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode, mlirGroup: MlirGroupNode }) as const, []);
-
-    // Look up the canonical SourceNode for the current selection so the
-    // details panel reads from the same authoritative shape that drove the
-    // graph build. `sourceNodes` is already memoised above, so this map is
-    // rebuilt only when the underlying graph changes.
-    const sourceNodeById = useMemo(() => {
-        const result = new Map<string, SourceNode>();
-        for (const sourceNode of sourceNodes) {
-            result.set(sourceNode.id, sourceNode);
-        }
-        return result;
-    }, [sourceNodes]);
 
     const selectedSourceNode = selectedNodeId ? (sourceNodeById.get(selectedNodeId) ?? null) : null;
 
@@ -1467,7 +1493,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
             <MlirNodeBodyToggles
                 value={nodeBodyToggles}
-                onChange={handleNodeBodyTogglesChange}
+                onChange={setNodeBodyToggles}
             />
 
             {selectedSourceNode && (
