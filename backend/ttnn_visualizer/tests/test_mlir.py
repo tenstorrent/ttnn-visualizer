@@ -18,6 +18,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.extensions import db
 from ttnn_visualizer.mlir import (
     MlirConversionResult,
     _convert_model_on_server,
@@ -26,7 +27,13 @@ from ttnn_visualizer.mlir import (
     is_supported_mlir_server_file,
     upload_and_convert_mlir,
 )
-from ttnn_visualizer.models import MlirServerConnection, RemoteConnection, StatusMessage
+from ttnn_visualizer.models import (
+    InstanceTable,
+    MlirServerConnection,
+    RemoteConnection,
+    ReportLocation,
+    StatusMessage,
+)
 
 # Model Explorer HTTP port on the remote host's loopback — not SSH (see ``mlir_http_port``).
 MLIR_HTTP_PORT = 8080
@@ -335,6 +342,128 @@ def test_upload_endpoint_returns_graph_and_persists_json(app, client, make_repor
 
     mlir_root = _mlir_remote_root(app).resolve()
     assert (mlir_root / "my_model.json").is_file()
+
+
+def test_upload_endpoint_does_not_retarget_existing_remote_report_context(
+    app, client, make_report
+):
+    """Uploading MLIR must not overwrite existing remote report host context.
+
+    Regression guard for instance updates: an existing remote profiler report on
+    host A must stay on host A after uploading MLIR via host B.
+    """
+    instance_id = make_report()
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    existing_connection = RemoteConnection(
+        name="existing",
+        username="user",
+        host="remote-a.test",
+        port=22,
+        profilerPath="/reports",
+    )
+    existing_profiler_path = str(
+        Path(app.config["REMOTE_DATA_DIRECTORY"])
+        / existing_connection.host
+        / app.config["PROFILER_DIRECTORY_NAME"]
+        / "existing-profiler"
+        / app.config["SQLITE_DB_PATH"]
+    )
+
+    with app.app_context():
+        instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        assert instance is not None
+        instance.active_report = {
+            "profiler_name": "existing-profiler",
+            "profiler_location": ReportLocation.REMOTE.value,
+        }
+        instance.remote_connection = existing_connection.model_dump()
+        instance.profiler_path = existing_profiler_path
+        db.session.commit()
+
+    with patch(
+        "ttnn_visualizer.views.upload_and_convert_mlir", return_value=_ok_conversion()
+    ):
+        response = client.post(
+            "/api/remote/mlir/upload",
+            query_string={"instanceId": instance_id},
+            data=_mlir_upload_form_data(
+                b"ignored", "my_model.mlir", host="remote-b.test"
+            ),
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+
+    with app.app_context():
+        instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        assert instance is not None
+        assert instance.remote_connection is not None
+        assert instance.remote_connection["host"] == existing_connection.host
+        assert instance.profiler_path == existing_profiler_path
+
+
+def test_put_instance_does_not_retarget_existing_remote_report_context(
+    app, client, make_report
+):
+    """`PUT /api/instance` must preserve existing remote report host context.
+
+    API-level regression guard: updating active_report without an explicit
+    remote connection must not move an existing remote profiler path off its
+    current remote host.
+    """
+    instance_id = make_report()
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    existing_connection = RemoteConnection(
+        name="existing",
+        username="user",
+        host="remote-a.test",
+        port=22,
+        profilerPath="/reports",
+    )
+    existing_profiler_path = str(
+        Path(app.config["REMOTE_DATA_DIRECTORY"])
+        / existing_connection.host
+        / app.config["PROFILER_DIRECTORY_NAME"]
+        / "existing-profiler"
+        / app.config["SQLITE_DB_PATH"]
+    )
+
+    with app.app_context():
+        instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        assert instance is not None
+        instance.active_report = {
+            "profiler_name": "existing-profiler",
+            "profiler_location": ReportLocation.REMOTE.value,
+            "mlir_name": "existing-mlir",
+            "mlir_location": ReportLocation.REMOTE.value,
+        }
+        instance.remote_connection = existing_connection.model_dump()
+        instance.profiler_path = existing_profiler_path
+        db.session.commit()
+
+    response = client.put(
+        "/api/instance",
+        query_string={"instanceId": instance_id},
+        json={
+            "active_report": {
+                "profiler_name": "existing-profiler",
+                "profiler_location": ReportLocation.REMOTE.value,
+                "mlir_name": "existing-mlir",
+            }
+        },
+    )
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+
+    with app.app_context():
+        instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        assert instance is not None
+        assert instance.remote_connection is not None
+        assert instance.remote_connection["host"] == existing_connection.host
+        assert instance.profiler_path == existing_profiler_path
 
 
 def test_upload_endpoint_converts_every_file(app, client, make_report):

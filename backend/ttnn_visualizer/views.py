@@ -1767,7 +1767,6 @@ def _unique_mlir_name(base: str, used: set[str]) -> str:
 @local_only
 def upload_mlir_server():
     files = request.files.getlist("files")
-    instance_id = request.args.get("instanceId")
 
     if not files:
         return response_bad_request("No files provided")
@@ -1786,14 +1785,6 @@ def upload_mlir_server():
     except ValidationError:
         return response_bad_request(
             "MLIR server requires a host, username, and MLIR port"
-        )
-
-    # Keep the MLIR host on the instance so `/mlir/active` can resolve
-    # host-scoped files in REMOTE_DATA_DIRECTORY/<host>/mlir-reports.
-    if instance_id:
-        update_instance(
-            instance_id=instance_id,
-            remote_connection=mlir_connection.to_remote_connection(),
         )
 
     data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
