@@ -898,6 +898,7 @@ def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):
     if not mlir_name:
         return None
     remote_dir = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
+    host_scoped_path: Path | None = None
 
     if remote_connection is not None and getattr(remote_connection, "host", None):
         host_scoped_path = (
@@ -906,9 +907,10 @@ def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):
             / current_app.config["MLIR_DIRECTORY_NAME"]
             / f"{mlir_name}.json"
         )
-        return str(host_scoped_path)
+        if host_scoped_path.exists():
+            return str(host_scoped_path)
 
-    host_scoped_candidates = list(
+    host_scoped_candidates = sorted(
         remote_dir.glob(
             f"*/{current_app.config['MLIR_DIRECTORY_NAME']}/{mlir_name}.json"
         )
@@ -919,6 +921,12 @@ def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):
     fallback_path = (
         remote_dir / current_app.config["MLIR_DIRECTORY_NAME"] / f"{mlir_name}.json"
     )
+    if fallback_path.exists():
+        return str(fallback_path)
+
+    if host_scoped_path is not None:
+        return str(host_scoped_path)
+
     return str(fallback_path)
 
 
