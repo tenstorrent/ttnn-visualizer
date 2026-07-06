@@ -23,11 +23,28 @@
         }
     }
 
-    .bp6-menu-item .mlir-file-eye {
+    .mlir-file-failure-controls {
+        align-items: center;
+        column-gap: 6px;
+        display: inline-flex;
+        height: 22px;
+    }
+
+    .mlir-file-list-item .mlir-file-icon {
+        display: inline-block;
+        height: 16px;
+        width: 16px;
         color: $tt-grey-4;
     }
 
-    .bp6-menu-item .mlir-file-eye.is-selected {
+    .mlir-file-list-item .mlir-file-icon.is-selected {
         color: $tt-green;
+    }
+
+    .mlir-file-list-item {
+        align-items: center;
+        box-sizing: border-box;
+        height: 30px;
+        min-height: 30px;
     }
 }

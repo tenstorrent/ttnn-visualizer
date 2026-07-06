@@ -230,6 +230,16 @@ If a pixel value, threshold, or duration is used in more than one place, promote
 
 Don't mix the two: a new component stylesheet doesn't need an underscore, and a new shared partial does.
 
+### Prefer app-owned classnames over direct Blueprint selector overrides
+
+In component stylesheets, prefer styling classes we own (for example wrapper or element classes) rather than targeting Blueprint internals like `.bp6-menu-item`, `.bp6-button`, etc.
+
+- Preferred: add a project classname in TSX and style that classname.
+- Avoid by default in new or touched component-local SCSS: direct `.bp6-*` overrides.
+- Exception: global Blueprint theming/normalisation in `src/scss/_blueprintjs.scss` when there is no stable app-owned hook.
+
+This keeps styles resilient to Blueprint markup changes and avoids cross-component side effects.
+
 ### Stylesheet imports go through the `styles/` alias
 
 The `styles/` alias is wired up in three places that must stay in sync — `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.

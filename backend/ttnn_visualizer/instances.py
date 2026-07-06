@@ -170,6 +170,16 @@ def update_existing_instance(
     if clear_remote:
         clear_remote_data(instance_data)
 
+    effective_remote_connection = remote_connection
+    if (
+        effective_remote_connection is None
+        and instance_data.remote_connection is not None
+    ):
+        effective_remote_connection = RemoteConnection.model_validate(
+            instance_data.remote_connection,
+            strict=False,
+        )
+
     if profiler_path is not _sentinel:
         instance_data.profiler_path = profiler_path
     else:
@@ -179,7 +189,7 @@ def update_existing_instance(
             KEY_PROFILER_NAME,
             KEY_PROFILER_LOCATION,
             active_report,
-            remote_connection,
+            effective_remote_connection,
         )
 
     if performance_path is not _sentinel:
@@ -191,7 +201,7 @@ def update_existing_instance(
             KEY_PERFORMANCE_NAME,
             KEY_PERFORMANCE_LOCATION,
             active_report,
-            remote_connection,
+            effective_remote_connection,
         )
 
     if npe_path is not _sentinel:
@@ -203,7 +213,7 @@ def update_existing_instance(
             KEY_NPE_NAME,
             KEY_NPE_LOCATION,
             active_report,
-            remote_connection,
+            effective_remote_connection,
         )
 
     if mlir_path is not _sentinel:
@@ -215,7 +225,7 @@ def update_existing_instance(
             KEY_MLIR_NAME,
             KEY_MLIR_LOCATION,
             active_report,
-            remote_connection,
+            effective_remote_connection,
         )
 
 
