@@ -13,7 +13,7 @@ interface MlirFileListProps {
     results: MlirFileResult[];
     className?: string;
     selectedIndex?: number | null;
-    retryingIndex?: number | null;
+    retryingIndices?: Set<number>;
     // When provided the list is selectable: successfully-converted rows become
     // clickable. Omit it for a read-only list (e.g. the in-progress spinner
     // view shown while files are still being converted).
@@ -29,7 +29,7 @@ const MlirFileList = ({
     results,
     className,
     selectedIndex = null,
-    retryingIndex = null,
+    retryingIndices = new Set<number>(),
     onSelect,
     onRetry,
     canRetry,
@@ -44,7 +44,7 @@ const MlirFileList = ({
             const retryAvailable = canRetry ? canRetry(index) : true;
             const hasRetryAction = isFailedServerFile && !!onRetry && retryAvailable;
             const isSelected = !!onSelect && index === selectedIndex;
-            const retryInFlight = retryingIndex !== null;
+            const retryInFlight = retryingIndices.has(index);
 
             // Right-hand element: shows Processing during conversion/retry,
             // failed rows include Retry when context exists, else status text.

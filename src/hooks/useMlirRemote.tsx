@@ -29,6 +29,10 @@ export interface MlirUploadResponse {
     results: MlirFileUploadResult[];
 }
 
+interface MlirUploadOptions {
+    signal?: AbortSignal;
+}
+
 const useMlirRemote = () => {
     const resetTransferProgress = () => {
         getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
@@ -47,6 +51,7 @@ const useMlirRemote = () => {
     const uploadMlirFileToServer = async (
         files: File[],
         server: MlirServerConnection,
+        options?: MlirUploadOptions,
     ): Promise<AxiosResponse<MlirUploadResponse>> => {
         const formData = new FormData();
 
@@ -78,6 +83,7 @@ const useMlirRemote = () => {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
+                signal: options?.signal,
                 onUploadProgress: (event) => {
                     if (!event || event.total === null || event.total === undefined || event.total <= 0) {
                         return;

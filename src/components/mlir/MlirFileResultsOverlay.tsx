@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button, ButtonVariant, Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
@@ -41,22 +41,54 @@ const MlirFileResultsOverlay = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-    const [retryingIndex, setRetryingIndex] = useState<number | null>(null);
+    const [retryingIndices, setRetryingIndices] = useState<Set<number>>(new Set<number>());
+    const retrySessionRef = useRef(0);
+    const retryAbortControllersRef = useRef<Map<number, AbortController>>(new Map<number, AbortController>());
 
     // Reset the pending selection on close so it can't carry over to a reopen
     // or the next upload. The results themselves are retained so the overlay
     // can be reopened. Every close path — Close, View, escape/outside click —
     // routes through here.
     const handleClose = () => {
+        retrySessionRef.current += 1;
+        retryAbortControllersRef.current.forEach((controller) => controller.abort());
+        retryAbortControllersRef.current.clear();
+        if (retryingIndices.size > 0) {
+            const cancelledRetryCount = retryingIndices.size;
+            setResults(
+                (current) =>
+                    current?.map((entry, entryIndex) =>
+                        retryingIndices.has(entryIndex) && entry.status === ConnectionTestStates.PROGRESS
+                            ? {
+                                  ...entry,
+                                  status: ConnectionTestStates.FAILED,
+                                  message: entry.message ?? 'Retry cancelled',
+                                  name: null,
+                                  graph: null,
+                              }
+                            : entry,
+                    ) ?? current,
+            );
+            createToastNotification(
+                'MLIR',
+                `Aborted ${cancelledRetryCount}x MLIR conversion${cancelledRetryCount === 1 ? '' : 's'}`,
+                ToastType.WARNING,
+            );
+        }
         setSelectedIndex(null);
-        setRetryingIndex(null);
+        setRetryingIndices(new Set<number>());
         setIsOpen(false);
     };
 
     const handleRetry = async (index: number) => {
         const result = results?.[index];
         const file = retryFiles?.[index];
-        if (!result || result.status !== ConnectionTestStates.FAILED || !result.persisted) {
+        if (
+            !result ||
+            result.status !== ConnectionTestStates.FAILED ||
+            !result.persisted ||
+            retryingIndices.has(index)
+        ) {
             return;
         }
 
@@ -69,7 +101,14 @@ const MlirFileResultsOverlay = () => {
             return;
         }
 
-        setRetryingIndex(index);
+        const retrySession = retrySessionRef.current;
+        const abortController = new AbortController();
+        retryAbortControllersRef.current.set(index, abortController);
+        setRetryingIndices((current) => {
+            const next = new Set(current);
+            next.add(index);
+            return next;
+        });
         setResults(
             (current) =>
                 current?.map((entry, entryIndex) =>
@@ -77,7 +116,6 @@ const MlirFileResultsOverlay = () => {
                         ? {
                               ...entry,
                               status: ConnectionTestStates.PROGRESS,
-                              message: undefined,
                               name: null,
                               graph: null,
                           }
@@ -86,10 +124,16 @@ const MlirFileResultsOverlay = () => {
         );
 
         try {
-            const response = await uploadMlirFileToServer([file], retryServer);
+            const response = await uploadMlirFileToServer([file], retryServer, {
+                signal: abortController.signal,
+            });
             const retried = response.data.results?.[0];
             if (!retried) {
                 throw new Error('Upload failed');
+            }
+
+            if (retrySessionRef.current !== retrySession) {
+                return;
             }
 
             setResults(
@@ -109,6 +153,10 @@ const MlirFileResultsOverlay = () => {
                     ) ?? current,
             );
         } catch (err: unknown) {
+            if (retrySessionRef.current !== retrySession) {
+                return;
+            }
+
             const message = getResponseError(err, 'Unable to retry MLIR conversion');
             setResults(
                 (current) =>
@@ -126,7 +174,15 @@ const MlirFileResultsOverlay = () => {
             );
             createToastNotification('MLIR', message, ToastType.ERROR);
         } finally {
-            setRetryingIndex(null);
+            retryAbortControllersRef.current.delete(index);
+
+            if (retrySessionRef.current === retrySession) {
+                setRetryingIndices((current) => {
+                    const next = new Set(current);
+                    next.delete(index);
+                    return next;
+                });
+            }
         }
     };
 
@@ -189,7 +245,7 @@ const MlirFileResultsOverlay = () => {
                 <MlirFileList
                     results={results ?? []}
                     selectedIndex={selectedIndex}
-                    retryingIndex={retryingIndex}
+                    retryingIndices={retryingIndices}
                     // Clicking the already-selected file deselects it.
                     onSelect={(index) => setSelectedIndex((current) => (current === index ? null : index))}
                     onRetry={handleRetry}
