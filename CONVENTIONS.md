@@ -235,7 +235,7 @@ Don't mix the two: a new component stylesheet doesn't need an underscore, and a 
 In component stylesheets, prefer styling classes we own (for example wrapper or element classes) rather than targeting Blueprint internals like `.bp6-menu-item`, `.bp6-button`, etc.
 
 - Preferred: add a project classname in TSX and style that classname.
-- Avoid by default: direct `.bp6-*` overrides in component-local SCSS.
+- Avoid by default in new or touched component-local SCSS: direct `.bp6-*` overrides.
 - Exception: global Blueprint theming/normalisation in `src/scss/_blueprintjs.scss` when there is no stable app-owned hook.
 
 This keeps styles resilient to Blueprint markup changes and avoids cross-component side effects.
