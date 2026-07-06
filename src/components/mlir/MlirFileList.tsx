@@ -99,8 +99,6 @@ const MlirFileList = ({
                 <MenuItem
                     className='mlir-file-list-item'
                     key={`${result.filename}-${result.name ?? index}`}
-                    // The leading eye marks the row as viewable: muted grey in
-                    // every state, turning green only on the selected row.
                     icon={leadingElement}
                     text={result.filename}
                     labelElement={labelElement}
