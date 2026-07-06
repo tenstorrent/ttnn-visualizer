@@ -99,9 +99,15 @@ def test_mlir_path_remains_a_file_when_switching_unrelated_report(app):
             instance_id="test-instance-mlir-preserve",
             active_report={
                 KEY_MLIR_NAME: mlir_name,
-                KEY_MLIR_LOCATION: ReportLocation.LOCAL.value,
+                KEY_MLIR_LOCATION: ReportLocation.REMOTE.value,
             },
-            remote_connection=None,
+            remote_connection=RemoteConnection(
+                name="conn",
+                username="u",
+                host="yyzc-wh-05",
+                port=22,
+                profilerPath="/data/profiler",
+            ).model_dump(),
             remote_profiler_folder=None,
             remote_performance_folder=None,
         )
@@ -126,10 +132,12 @@ def test_mlir_path_remains_a_file_when_switching_unrelated_report(app):
             clear_remote=False,
         )
 
-        local_root = Path(app.config["LOCAL_DATA_DIRECTORY"])
+        remote_root = Path(app.config["REMOTE_DATA_DIRECTORY"])
         mlir_subdir = app.config["MLIR_DIRECTORY_NAME"]
-        expected_file = str(local_root / mlir_subdir / f"{mlir_name}.json")
-        expected_dir = str(local_root / mlir_subdir)
+        expected_file = str(
+            remote_root / "yyzc-wh-05" / mlir_subdir / f"{mlir_name}.json"
+        )
+        expected_dir = str(remote_root / "yyzc-wh-05" / mlir_subdir)
 
         # The path must point at a file, not the directory (the pre-fix value).
         assert instance.mlir_path == expected_file

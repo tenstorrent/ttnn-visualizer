@@ -883,7 +883,7 @@ def get_npe_path(npe_name, current_app, remote_connection=None):
     return str(npe_path)
 
 
-def get_mlir_path(mlir_name, current_app, **_kwargs):
+def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):
     # MLIR uploads are saved as `<MLIR_DIRECTORY_NAME>/<mlir_name>.json`
     # (the upload endpoint enforces `.json` suffix; `extract_npe_name` strips
     # it back off when deriving `mlir_name`). Reconstruct the file path the
@@ -891,17 +891,35 @@ def get_mlir_path(mlir_name, current_app, **_kwargs):
     # returning just the directory previously caused `get_mlir_json()` to try
     # `open()` on a directory after any unrelated instance update.
     #
-    # `**_kwargs` accepts (and intentionally discards) the `remote_connection`
-    # kwarg that `_resolve_report_path` passes uniformly to every path getter.
-    # MLIR is local-only today; profiler/performance getters use the value, we
-    # don't. If/when remote MLIR is supported, replace with an explicit param.
+    # MLIR server uploads are stored under
+    # REMOTE_DATA_DIRECTORY/<remote_host>/mlir-reports/<name>.json, matching
+    # remote profiler/performance host scoping. Keep a flat-directory fallback
+    # for older instances created before host scoping.
     if not mlir_name:
         return None
-    local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
-    mlir_path = (
-        local_dir / current_app.config["MLIR_DIRECTORY_NAME"] / f"{mlir_name}.json"
+    remote_dir = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
+
+    if remote_connection is not None and getattr(remote_connection, "host", None):
+        host_scoped_path = (
+            remote_dir
+            / remote_connection.host
+            / current_app.config["MLIR_DIRECTORY_NAME"]
+            / f"{mlir_name}.json"
+        )
+        return str(host_scoped_path)
+
+    host_scoped_candidates = list(
+        remote_dir.glob(
+            f"*/{current_app.config['MLIR_DIRECTORY_NAME']}/{mlir_name}.json"
+        )
     )
-    return str(mlir_path)
+    if host_scoped_candidates:
+        return str(host_scoped_candidates[0])
+
+    fallback_path = (
+        remote_dir / current_app.config["MLIR_DIRECTORY_NAME"] / f"{mlir_name}.json"
+    )
+    return str(fallback_path)
 
 
 def pick_cluster_descriptor_path(

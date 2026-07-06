@@ -280,6 +280,14 @@ def _mlir_upload_form_data(file_data=b"{}", filename="model.mlir", **overrides):
     return data
 
 
+def _mlir_remote_root(app, host: str = "remote.test") -> Path:
+    return (
+        Path(app.config["REMOTE_DATA_DIRECTORY"])
+        / host
+        / app.config["MLIR_DIRECTORY_NAME"]
+    )
+
+
 def test_upload_endpoint_requires_files_and_port(app, client, make_report):
     instance_id = make_report()
     app.config["SERVER_MODE"] = False
@@ -304,7 +312,7 @@ def test_upload_endpoint_requires_files_and_port(app, client, make_report):
 def test_upload_endpoint_returns_graph_and_persists_json(app, client, make_report):
     """Success returns a per-file result with graph + name and writes the JSON."""
     instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
 
     with patch(
@@ -325,9 +333,7 @@ def test_upload_endpoint_returns_graph_and_persists_json(app, client, make_repor
     assert results[0]["name"] == "my_model"
     assert results[0]["graph"] == {"graphs": [{"id": "g", "nodes": []}]}
 
-    mlir_root = (
-        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
-    ).resolve()
+    mlir_root = _mlir_remote_root(app).resolve()
     assert (mlir_root / "my_model.json").is_file()
 
 
@@ -335,7 +341,7 @@ def test_upload_endpoint_converts_every_file(app, client, make_report):
     """Each uploaded file is converted and returned as its own result; a colliding
     stem is disambiguated so the second file does not clobber the first."""
     instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
 
     data = _mlir_upload_form_data(b"a", "model.mlir")
@@ -359,9 +365,7 @@ def test_upload_endpoint_converts_every_file(app, client, make_report):
     results = response.get_json()["results"]
     assert [result["name"] for result in results] == ["model", "model (2)"]
 
-    mlir_root = (
-        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
-    ).resolve()
+    mlir_root = _mlir_remote_root(app).resolve()
     assert (mlir_root / "model.json").is_file()
     assert (mlir_root / "model (2).json").is_file()
 
@@ -376,7 +380,7 @@ def test_upload_endpoint_avoids_cross_batch_disambiguation_clobber(
     disambiguated files (for example ``model (2).json``).
     """
     instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
 
     first_batch = _mlir_upload_form_data(b"a", "model.mlir")
@@ -423,9 +427,7 @@ def test_upload_endpoint_avoids_cross_batch_disambiguation_clobber(
         "model (3)",
     ]
 
-    mlir_root = (
-        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
-    ).resolve()
+    mlir_root = _mlir_remote_root(app).resolve()
     assert json.loads((mlir_root / "model (2).json").read_text(encoding="utf-8")) == {
         "graphs": [{"id": "g1", "nodes": []}]
     }
@@ -436,7 +438,7 @@ def test_upload_endpoint_avoids_cross_batch_disambiguation_clobber(
 
 def test_upload_endpoint_failure_returns_status_without_graph(app, client, make_report):
     instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
 
     failure = MlirConversionResult(
@@ -463,12 +465,10 @@ def test_set_active_mlir_updates_instance(app, client, make_report):
     """Selecting an uploaded file records it as the instance's active MLIR so
     `/mlir` then serves it."""
     instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
 
-    mlir_root = (
-        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
-    )
+    mlir_root = _mlir_remote_root(app)
     mlir_root.mkdir(parents=True, exist_ok=True)
     graph = {"graphs": [{"id": "g", "nodes": []}]}
     (mlir_root / "my_model.json").write_text(json.dumps(graph), encoding="utf-8")
@@ -488,7 +488,7 @@ def test_set_active_mlir_updates_instance(app, client, make_report):
 
 def test_set_active_mlir_missing_file_returns_not_found(app, client, make_report):
     instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
 
     response = client.post(
@@ -501,12 +501,10 @@ def test_set_active_mlir_missing_file_returns_not_found(app, client, make_report
 
 def test_set_active_mlir_accepts_json_suffix(app, client, make_report):
     instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
 
-    mlir_root = (
-        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["MLIR_DIRECTORY_NAME"]
-    )
+    mlir_root = _mlir_remote_root(app)
     mlir_root.mkdir(parents=True, exist_ok=True)
     graph = {"graphs": [{"id": "g", "nodes": []}]}
     (mlir_root / "my_model.json").write_text(json.dumps(graph), encoding="utf-8")
@@ -523,7 +521,7 @@ def test_set_active_mlir_accepts_json_suffix(app, client, make_report):
 
 def test_set_active_mlir_rejects_non_string_name(app, client, make_report):
     instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
 
     response = client.post(
@@ -543,7 +541,7 @@ def test_upload_endpoint_traversal_filename_stays_in_mlir_dir(app, client, make_
     directory rather than escaping it.
     """
     instance_id = make_report()
-    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = False
 
     with patch(
@@ -558,10 +556,10 @@ def test_upload_endpoint_traversal_filename_stays_in_mlir_dir(app, client, make_
 
     assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
 
-    local_root = Path(app.config["LOCAL_DATA_DIRECTORY"]).resolve()
-    mlir_root = (local_root / app.config["MLIR_DIRECTORY_NAME"]).resolve()
+    remote_root = Path(app.config["REMOTE_DATA_DIRECTORY"]).resolve()
+    mlir_root = _mlir_remote_root(app).resolve()
 
-    for path in local_root.rglob("*"):
+    for path in remote_root.rglob("*"):
         if path.is_file():
             assert (
                 mlir_root in path.resolve().parents
