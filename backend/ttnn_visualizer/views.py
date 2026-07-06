@@ -59,6 +59,7 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     ReportLocation,
     StatusMessage,
+    sanitise_remote_host_segment,
 )
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.report_source_file import (
@@ -1763,14 +1764,6 @@ def _unique_mlir_name(base: str, used: set[str]) -> str:
     return name
 
 
-def _safe_remote_host_segment(host: str) -> str:
-    """Normalize a user-provided host to a single safe storage path segment."""
-    safe_host = Path(host.replace("\\", "/")).name.strip()
-    if not safe_host:
-        raise ValueError("Invalid host")
-    return safe_host
-
-
 @api.route("/remote/mlir/upload", methods=["POST"])
 @local_only
 def upload_mlir_server():
@@ -1796,7 +1789,7 @@ def upload_mlir_server():
         )
 
     try:
-        safe_host = _safe_remote_host_segment(mlir_connection.host)
+        safe_host = sanitise_remote_host_segment(mlir_connection.host)
     except ValueError:
         return response_bad_request("Invalid host")
 
@@ -1887,7 +1880,7 @@ def set_active_mlir(instance: Instance):
         )
     else:
         try:
-            safe_host = _safe_remote_host_segment(host)
+            safe_host = sanitise_remote_host_segment(host)
         except ValueError:
             return response_bad_request("Invalid host")
         mlir_path = str(

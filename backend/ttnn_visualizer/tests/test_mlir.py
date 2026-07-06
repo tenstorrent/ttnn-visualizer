@@ -96,6 +96,29 @@ def test_mlir_server_connection_rejects_empty_host():
         )
 
 
+def test_remote_connection_sanitises_host_segment():
+    connection = RemoteConnection(
+        name="conn",
+        username="user",
+        host="../escaped-host",
+        port=22,
+        profilerPath="/reports",
+    )
+
+    assert connection.host == "escaped-host"
+
+
+def test_remote_connection_rejects_empty_host_after_sanitisation():
+    with pytest.raises(ValidationError):
+        RemoteConnection(
+            name="conn",
+            username="user",
+            host="../",
+            port=22,
+            profilerPath="/reports",
+        )
+
+
 # ---- is_supported_mlir_server_file ----------------------------------------
 
 
