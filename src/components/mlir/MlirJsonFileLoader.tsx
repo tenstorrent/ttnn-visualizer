@@ -115,6 +115,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 setMlirFileResults(
                     selectedFiles.map((file) => ({
                         filename: file.name,
+                        host: server.host,
                         name: null,
                         status: ConnectionTestStates.PROGRESS,
                         graph: null,
@@ -127,6 +128,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 const response = await uploadMlirFileToServer(selectedFiles, server);
                 const results: MlirFileResult[] = (response?.data?.results ?? []).map((result) => ({
                     filename: result.filename,
+                    host: result.host ?? server.host,
                     name: result.name,
                     status: result.status,
                     message: result.message ?? result.detail,

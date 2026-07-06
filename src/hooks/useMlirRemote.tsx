@@ -20,6 +20,7 @@ export interface MlirFileUploadResult {
     message?: string;
     detail?: string;
     filename: string;
+    host?: string | null;
     name: string | null;
     graph: GraphBundle | null;
 }
@@ -121,8 +122,8 @@ const useMlirRemote = () => {
     // Persist which uploaded MLIR report is active on the instance so `/mlir`
     // serves it and a reload restores the same selection. Server uploads store
     // each converted graph as `<name>.json`; this records the chosen one.
-    const setActiveMlir = async (name: string): Promise<void> => {
-        await axiosInstance.post(`${Endpoints.MLIR}/active`, { name });
+    const setActiveMlir = async (name: string, host?: string | null): Promise<void> => {
+        await axiosInstance.post(`${Endpoints.MLIR}/active`, host ? { name, host } : { name });
     };
 
     return {

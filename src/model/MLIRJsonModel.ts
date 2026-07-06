@@ -14,6 +14,7 @@ export interface GraphBundle {
 // active. `name` and `graph` are populated only on success.
 export interface MlirFileResult {
     filename: string;
+    host?: string | null;
     name: string | null;
     status: ConnectionTestStates;
     message?: string;

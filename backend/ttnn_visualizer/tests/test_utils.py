@@ -593,6 +593,20 @@ def test_get_mlir_path_uses_deterministic_host_candidate_order(app):
     assert resolved == str(alpha / f"{mlir_name}.json")
 
 
+def test_get_mlir_path_treats_glob_metacharacters_as_literal_name(app):
+    """Wildcard characters in mlir_name must not match arbitrary files."""
+    remote_dir = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    alpha = remote_dir / "alpha-host" / app.config["MLIR_DIRECTORY_NAME"]
+    alpha.mkdir(parents=True, exist_ok=True)
+    matched_by_glob = alpha / "modelx.json"
+    matched_by_glob.write_text("{}", encoding="utf-8")
+
+    resolved = get_mlir_path("model*", app)
+
+    assert resolved != str(matched_by_glob)
+    assert resolved.endswith(f"/{app.config['MLIR_DIRECTORY_NAME']}/model*.json")
+
+
 # Mesh / cluster descriptor YAML with and without _<n>_of_<world> suffix
 
 

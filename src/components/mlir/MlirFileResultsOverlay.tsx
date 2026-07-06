@@ -98,6 +98,7 @@ const MlirFileResultsOverlay = () => {
                         entryIndex === index
                             ? {
                                   filename: retried.filename,
+                                  host: retried.host ?? entry.host ?? null,
                                   name: retried.name,
                                   status: retried.status,
                                   message: retried.message ?? retried.detail,
@@ -143,7 +144,7 @@ const MlirFileResultsOverlay = () => {
         // restores them.
         if (result.persisted) {
             try {
-                await setActiveMlir(result.name);
+                await setActiveMlir(result.name, result.host);
             } catch (err: unknown) {
                 createToastNotification('MLIR', getResponseError(err, 'Unable to set active MLIR'), ToastType.ERROR);
                 return;

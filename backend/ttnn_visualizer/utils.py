@@ -910,11 +910,14 @@ def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):
         if host_scoped_path.exists():
             return str(host_scoped_path)
 
-    host_scoped_candidates = sorted(
-        remote_dir.glob(
-            f"*/{current_app.config['MLIR_DIRECTORY_NAME']}/{mlir_name}.json"
-        )
-    )
+    host_scoped_candidates = []
+    mlir_file_name = f"{mlir_name}.json"
+    mlir_dir_name = current_app.config["MLIR_DIRECTORY_NAME"]
+    if remote_dir.exists():
+        for host_dir in sorted(path for path in remote_dir.iterdir() if path.is_dir()):
+            candidate = host_dir / mlir_dir_name / mlir_file_name
+            if candidate.exists():
+                host_scoped_candidates.append(candidate)
     if host_scoped_candidates:
         return str(host_scoped_candidates[0])
 

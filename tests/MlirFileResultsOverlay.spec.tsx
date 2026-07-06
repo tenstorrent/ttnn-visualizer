@@ -88,7 +88,14 @@ describe('MlirFileResultsOverlay', () => {
 
     it('keeps View disabled until a file is selected', () => {
         renderOverlay([
-            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: true },
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
         ]);
 
         expect(screen.getByRole('button', { name: /view/i })).toBeDisabled();
@@ -100,7 +107,14 @@ describe('MlirFileResultsOverlay', () => {
 
     it('activates and persists the selected server file via View, then closes the overlay', async () => {
         renderOverlay([
-            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: true },
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
         ]);
 
         fireEvent.click(screen.getByText('a.mlir'));
@@ -110,7 +124,7 @@ describe('MlirFileResultsOverlay', () => {
             expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
         });
         expect(getDefaultStore().get(activeMlirJsonAtom)).toBe('a');
-        expect(setActiveMlir).toHaveBeenCalledWith('a');
+        expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
         // The overlay closes but the results are retained so it can be reopened.
         expect(getDefaultStore().get(mlirFileResultsOpenAtom)).toBe(false);
         expect(getDefaultStore().get(mlirFileResultsAtom)).not.toBeNull();
@@ -156,14 +170,21 @@ describe('MlirFileResultsOverlay', () => {
     it('does not show a success toast when persisting active MLIR fails', async () => {
         setActiveMlir.mockRejectedValueOnce(new Error('persist failed'));
         renderOverlay([
-            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: true },
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
         ]);
 
         fireEvent.click(screen.getByText('a.mlir'));
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
         await waitFor(() => {
-            expect(setActiveMlir).toHaveBeenCalledWith('a');
+            expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
         });
         expect(createToastNotification).toHaveBeenCalledTimes(1);
         expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'persist failed', 'error');

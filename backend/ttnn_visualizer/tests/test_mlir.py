@@ -605,10 +605,11 @@ def test_set_active_mlir_updates_instance(app, client, make_report):
     response = client.post(
         "/api/mlir/active",
         query_string={"instanceId": instance_id},
-        json={"name": "my_model"},
+        json={"name": "my_model", "host": "remote.test"},
     )
     assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
     assert response.get_json()["name"] == "my_model"
+    assert response.get_json()["host"] == "remote.test"
 
     served = client.get("/api/mlir", query_string={"instanceId": instance_id})
     assert served.status_code == HTTPStatus.OK
@@ -641,11 +642,12 @@ def test_set_active_mlir_accepts_json_suffix(app, client, make_report):
     response = client.post(
         "/api/mlir/active",
         query_string={"instanceId": instance_id},
-        json={"name": "my_model.json"},
+        json={"name": "my_model.json", "host": "remote.test"},
     )
 
     assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
     assert response.get_json()["name"] == "my_model"
+    assert response.get_json()["host"] == "remote.test"
 
 
 def test_set_active_mlir_rejects_non_string_name(app, client, make_report):
@@ -660,6 +662,79 @@ def test_set_active_mlir_rejects_non_string_name(app, client, make_report):
     )
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_set_active_mlir_rejects_non_string_host(app, client, make_report):
+    instance_id = make_report()
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    response = client.post(
+        "/api/mlir/active",
+        query_string={"instanceId": instance_id},
+        json={"name": "my_model", "host": 42},
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_set_active_mlir_uses_host_to_disambiguate_duplicate_names(
+    app, client, make_report
+):
+    """When duplicate names exist under multiple hosts, host must pick the right file."""
+    instance_id = make_report()
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    host_a_root = _mlir_remote_root(app, host="host-a")
+    host_b_root = _mlir_remote_root(app, host="host-b")
+    host_a_root.mkdir(parents=True, exist_ok=True)
+    host_b_root.mkdir(parents=True, exist_ok=True)
+
+    graph_a = {"graphs": [{"id": "ga", "nodes": []}]}
+    graph_b = {"graphs": [{"id": "gb", "nodes": []}]}
+    (host_a_root / "same_name.json").write_text(json.dumps(graph_a), encoding="utf-8")
+    (host_b_root / "same_name.json").write_text(json.dumps(graph_b), encoding="utf-8")
+
+    response = client.post(
+        "/api/mlir/active",
+        query_string={"instanceId": instance_id},
+        json={"name": "same_name", "host": "host-b"},
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    served = client.get("/api/mlir", query_string={"instanceId": instance_id})
+    assert served.status_code == HTTPStatus.OK
+    assert served.get_json() == graph_b
+
+
+def test_upload_endpoint_host_traversal_stays_in_remote_dir(app, client, make_report):
+    """A crafted host must not escape REMOTE_DATA_DIRECTORY when storing MLIR JSON."""
+    instance_id = make_report()
+    app.config["REMOTE_DATA_DIRECTORY"] = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    with patch(
+        "ttnn_visualizer.views.upload_and_convert_mlir", return_value=_ok_conversion()
+    ):
+        response = client.post(
+            "/api/remote/mlir/upload",
+            query_string={"instanceId": instance_id},
+            data=_mlir_upload_form_data(b"x", "model.mlir", host="../escaped-host"),
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    results = response.get_json()["results"]
+    assert results[0]["host"] == "escaped-host"
+
+    remote_root = Path(app.config["REMOTE_DATA_DIRECTORY"]).resolve()
+    expected_root = _mlir_remote_root(app, host="escaped-host").resolve()
+    assert (expected_root / "model.json").is_file()
+
+    for path in remote_root.rglob("*"):
+        if path.is_file():
+            assert remote_root in path.resolve().parents
 
 
 def test_upload_endpoint_traversal_filename_stays_in_mlir_dir(app, client, make_report):

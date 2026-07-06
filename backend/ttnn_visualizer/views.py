@@ -1763,6 +1763,14 @@ def _unique_mlir_name(base: str, used: set[str]) -> str:
     return name
 
 
+def _safe_remote_host_segment(host: str) -> str:
+    """Normalize a user-provided host to a single safe storage path segment."""
+    safe_host = Path(host.replace("\\", "/")).name.strip()
+    if not safe_host:
+        raise ValueError("Invalid host")
+    return safe_host
+
+
 @api.route("/remote/mlir/upload", methods=["POST"])
 @local_only
 def upload_mlir_server():
@@ -1787,11 +1795,14 @@ def upload_mlir_server():
             "MLIR server requires a host, username, and MLIR port"
         )
 
+    try:
+        safe_host = _safe_remote_host_segment(mlir_connection.host)
+    except ValueError:
+        return response_bad_request("Invalid host")
+
     data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     target_directory = (
-        data_directory
-        / mlir_connection.host
-        / current_app.config["MLIR_DIRECTORY_NAME"]
+        data_directory / safe_host / current_app.config["MLIR_DIRECTORY_NAME"]
     )
     target_directory.mkdir(parents=True, exist_ok=True)
 
@@ -1811,6 +1822,7 @@ def upload_mlir_server():
         entry = {
             **result.status.model_dump(),
             "filename": Path(filename).name,
+            "host": safe_host,
             "name": None,
             "graph": None,
         }
@@ -1857,18 +1869,34 @@ def set_active_mlir(instance: Instance):
     """
     data = request.get_json(silent=True) or {}
     name = data.get("name")
+    host = data.get("host")
     if not isinstance(name, str) or not name.strip():
         return response_bad_request("Missing required field: name")
+    if host is not None and (not isinstance(host, str) or not host.strip()):
+        return response_bad_request("Invalid host")
 
     # Strip any directory components — the stored report lives in the MLIR
     # directory and the name is only ever a file stem. Accepting `.json`
     # input from callers is fine: normalise to the stem before lookup.
     safe_name = Path(name.strip()).stem
-    mlir_path = get_mlir_path(
-        safe_name,
-        current_app,
-        remote_connection=instance.remote_connection,
-    )
+    if host is None:
+        mlir_path = get_mlir_path(
+            safe_name,
+            current_app,
+            remote_connection=instance.remote_connection,
+        )
+    else:
+        try:
+            safe_host = _safe_remote_host_segment(host)
+        except ValueError:
+            return response_bad_request("Invalid host")
+        mlir_path = str(
+            Path(current_app.config["REMOTE_DATA_DIRECTORY"])
+            / safe_host
+            / current_app.config["MLIR_DIRECTORY_NAME"]
+            / f"{safe_name}.json"
+        )
+
     if not mlir_path or not Path(mlir_path).exists():
         return response_not_found()
 
@@ -1880,7 +1908,7 @@ def set_active_mlir(instance: Instance):
     )
 
     return Response(
-        orjson.dumps({"name": safe_name}),
+        orjson.dumps({"name": safe_name, "host": host}),
         mimetype="application/json",
     )
 
