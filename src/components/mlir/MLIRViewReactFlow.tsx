@@ -53,6 +53,7 @@ import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
 import { MlirFilterMode, buildFilterMatcher } from './mlirFilter';
 import MlirNodeBodyToggles from './MlirNodeBodyToggles';
+import MlirExpandCollapseControls from './MlirExpandCollapseControls';
 import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
 import { getNamespaceSegments } from './mlirGraphHelpers';
 
@@ -378,6 +379,12 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // collapsed namespaces and we have to wait for the worker to rebuild
     // before we can fitView on it. Consumed once the rebuilt graph lands.
     const pendingFocusNodeIdRef = useRef<string | null>(null);
+    // Set by the Expand-all / Collapse-all buttons: a bulk toggle has no
+    // gesture-origin position for `viewportAnchorRef`, so we ask the next
+    // rebuild to reframe the whole graph instead of trying to preserve
+    // whichever landmark the user was previously looking at (there isn't
+    // one in a bulk op).
+    const pendingFitAllRef = useRef(false);
     const hasFitInitiallyRef = useRef(false);
 
     // No graph-id reset effect: `MlGraphInner` is keyed by `graph.id` in
@@ -511,7 +518,12 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 }
             }
 
-            if (!hasFitInitiallyRef.current) {
+            if (pendingFitAllRef.current) {
+                pendingFitAllRef.current = false;
+                requestAnimationFrame(() => {
+                    void fitView({ padding: 0.2, duration: 200 });
+                });
+            } else if (!hasFitInitiallyRef.current) {
                 requestAnimationFrame(() => {
                     void fitView({ padding: 0.2, duration: 200 });
                 });
@@ -770,6 +782,30 @@ const MlGraphInner = ({ data }: ViewProps) => {
             next.add(namespace);
             return next;
         });
+    }, []);
+
+    // The complete list of collapsible namespaces lives on the graph
+    // index's `anchorByNamespace` — every collapsible namespace, natural
+    // MLIR region OR topology-sectioned synthetic wrapper, has an anchor
+    // entry (see `mlirGraphIndexBuilder`). We take the keys as the
+    // authoritative expandable set instead of maintaining a parallel
+    // list on the worker interaction index.
+    const allSubgraphNamespaces = useMemo<string[]>(
+        () => (interactionIndex ? Object.keys(interactionIndex.anchorByNamespace) : []),
+        [interactionIndex],
+    );
+
+    const expandAllSubgraphs = useCallback(() => {
+        if (allSubgraphNamespaces.length === 0) {
+            return;
+        }
+        pendingFitAllRef.current = true;
+        setExpandedNamespaces(new Set(allSubgraphNamespaces));
+    }, [allSubgraphNamespaces]);
+
+    const collapseAllSubgraphs = useCallback(() => {
+        pendingFitAllRef.current = true;
+        setExpandedNamespaces(new Set());
     }, []);
 
     const onSubgraphNodeClick = useCallback(
@@ -1490,7 +1526,14 @@ const MlGraphInner = ({ data }: ViewProps) => {
                         selectNodesOnDrag={false}
                     >
                         <MiniMap nodeColor={minimapNodeColor} />
-                        <Controls />
+                        <Controls>
+                            <MlirExpandCollapseControls
+                                subgraphCount={allSubgraphNamespaces.length}
+                                expandedCount={expandedNamespaces.size}
+                                onExpandAll={expandAllSubgraphs}
+                                onCollapseAll={collapseAllSubgraphs}
+                            />
+                        </Controls>
                         <Background />
                     </ReactFlow>
                 </MlirNodeBodyContext.Provider>
