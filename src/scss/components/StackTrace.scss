@@ -65,6 +65,18 @@ $container-border-width: 1px;
         margin-top: -($source-path-vertical-padding - $container-border-width);
         margin-right: 30px; // Avoids overlapping with source-file-controls
         margin-bottom: 0;
+
+        .stack-trace-git-info {
+            display: block;
+            font-size: 12px;
+            margin-top: 5px;
+
+            .stack-trace-git-info-icon {
+                margin-left: 3px;
+                margin-bottom: 2px;
+                vertical-align: middle;
+            }
+        }
     }
 
     .code-wrapper {

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, Callout, Classes, Intent, Tooltip } from '@blueprintjs/core';
+import { Button, Callout, Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -11,6 +11,7 @@ import { ReportLocation } from '../../definitions/Reports';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import hljs from '../../functions/highlightSource';
 import useRemoteConnection from '../../hooks/useRemote';
+import { useReportMetadata } from '../../hooks/useAPI';
 import { profilerReportLocationAtom } from '../../store/app';
 import Overlay from '../Overlay';
 
@@ -41,6 +42,7 @@ function SourceFileOverlay({
 }: SourceFileOverlayProps) {
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
     const { persistentState } = useRemoteConnection();
+    const { data: reportMetadata } = useReportMetadata();
 
     const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
     const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
@@ -181,7 +183,15 @@ function SourceFileOverlay({
 
                 {errorDetails ? (
                     <div className='stack-trace-error'>
-                        <p className='stack-trace-path monospace'>{displaySourcePath}</p>
+                        <p className='stack-trace-path monospace'>
+                            {displaySourcePath}
+                            {reportMetadata?.gitSha && (
+                                <GitCommitInfo
+                                    gitUrl={reportMetadata.gitUrl}
+                                    gitSha={reportMetadata.gitSha}
+                                />
+                            )}
+                        </p>
                         <div className='error-details'>
                             <pre>{errorDetails}</pre>
                         </div>
@@ -190,7 +200,15 @@ function SourceFileOverlay({
 
                 {fileWithHighlights && !errorDetails ? (
                     <div className='stack-trace'>
-                        <p className='stack-trace-path monospace'>{displaySourcePath}</p>
+                        <p className='stack-trace-path monospace'>
+                            {displaySourcePath}
+                            {reportMetadata?.gitSha && (
+                                <GitCommitInfo
+                                    gitUrl={reportMetadata.gitUrl}
+                                    gitSha={reportMetadata.gitSha}
+                                />
+                            )}
+                        </p>
                         {matchedViaRemap ? (
                             <Callout
                                 className='stack-trace-source-remap-notice'
@@ -215,6 +233,33 @@ function SourceFileOverlay({
         </Overlay>
     );
 }
+
+interface GitCommitInfoProps {
+    gitUrl: string | null;
+    gitSha: string;
+}
+
+const GitCommitInfo = ({ gitUrl, gitSha }: GitCommitInfoProps) => (
+    <span className='stack-trace-git-info'>
+        {'Commit: '}
+        {gitUrl ? (
+            <a
+                href={`${gitUrl.replace(/\.git$/, '')}/commit/${gitSha}`}
+                target='_blank'
+                rel='noreferrer'
+            >
+                {gitSha.slice(0, 7)}
+                <Icon
+                    icon={IconNames.SHARE}
+                    size={10}
+                    className='stack-trace-git-info-icon'
+                />
+            </a>
+        ) : (
+            gitSha.slice(0, 7)
+        )}
+    </span>
+);
 
 const scrollToLineNumberInFile = () => {
     const lineElement = document.querySelector(`.highlighted-line .line-number`);
