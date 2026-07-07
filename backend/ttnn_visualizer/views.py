@@ -59,6 +59,7 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     ReportLocation,
     StatusMessage,
+    sanitise_remote_host_segment,
 )
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.report_source_file import (
@@ -1787,8 +1788,15 @@ def upload_mlir_server():
             "MLIR server requires a host, username, and MLIR port"
         )
 
-    data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
-    target_directory = data_directory / current_app.config["MLIR_DIRECTORY_NAME"]
+    try:
+        safe_host = sanitise_remote_host_segment(mlir_connection.host)
+    except ValueError:
+        return response_bad_request("Invalid host")
+
+    data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
+    target_directory = (
+        data_directory / safe_host / current_app.config["MLIR_DIRECTORY_NAME"]
+    )
     target_directory.mkdir(parents=True, exist_ok=True)
 
     # Convert every uploaded file independently. One file failing to convert
@@ -1807,6 +1815,7 @@ def upload_mlir_server():
         entry = {
             **result.status.model_dump(),
             "filename": Path(filename).name,
+            "host": safe_host,
             "name": None,
             "graph": None,
         }
@@ -1853,26 +1862,46 @@ def set_active_mlir(instance: Instance):
     """
     data = request.get_json(silent=True) or {}
     name = data.get("name")
+    host = data.get("host")
     if not isinstance(name, str) or not name.strip():
         return response_bad_request("Missing required field: name")
+    if host is not None and (not isinstance(host, str) or not host.strip()):
+        return response_bad_request("Invalid host")
 
     # Strip any directory components — the stored report lives in the MLIR
     # directory and the name is only ever a file stem. Accepting `.json`
     # input from callers is fine: normalise to the stem before lookup.
     safe_name = Path(name.strip()).stem
-    mlir_path = get_mlir_path(safe_name, current_app)
+    if host is None:
+        mlir_path = get_mlir_path(
+            safe_name,
+            current_app,
+            remote_connection=instance.remote_connection,
+        )
+    else:
+        try:
+            safe_host = sanitise_remote_host_segment(host)
+        except ValueError:
+            return response_bad_request("Invalid host")
+        mlir_path = str(
+            Path(current_app.config["REMOTE_DATA_DIRECTORY"])
+            / safe_host
+            / current_app.config["MLIR_DIRECTORY_NAME"]
+            / f"{safe_name}.json"
+        )
+
     if not mlir_path or not Path(mlir_path).exists():
         return response_not_found()
 
     update_instance(
         instance_id=instance.instance_id,
         mlir_name=safe_name,
-        mlir_location=ReportLocation.LOCAL.value,
+        mlir_location=ReportLocation.REMOTE.value,
         mlir_path=mlir_path,
     )
 
     return Response(
-        orjson.dumps({"name": safe_name}),
+        orjson.dumps({"name": safe_name, "host": host}),
         mimetype="application/json",
     )
 
@@ -2048,8 +2077,8 @@ def update_current_instance(instance: Instance):
             # NPE is always local right now
             "npe_location": ReportLocation.LOCAL.value,
             "mlir_name": active_report.get("mlir_name"),
-            # MLIR is always local right now
-            "mlir_location": ReportLocation.LOCAL.value,
+            # MLIR is always remote right now
+            "mlir_location": ReportLocation.REMOTE.value,
             # Doesn't handle remote at the moment
             "remote_connection": None,
             "remote_profiler_folder": None,

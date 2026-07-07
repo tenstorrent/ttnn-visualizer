@@ -4,6 +4,7 @@
 
 import dataclasses
 import enum
+from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -237,6 +238,16 @@ class SerializeableModel(BaseModel):
         use_enum_values = True
 
 
+def sanitise_remote_host_segment(value: object) -> str:
+    """Normalise a user-provided host to a single safe path segment."""
+    if not isinstance(value, str):
+        return value  # type: ignore[return-value]
+    safe_host = Path(value.replace("\\", "/")).name.strip()
+    if not safe_host or safe_host in {".", ".."}:
+        raise ValueError("must not be empty")
+    return safe_host
+
+
 class RemoteConnection(SerializeableModel):
     name: str
     username: str
@@ -245,6 +256,11 @@ class RemoteConnection(SerializeableModel):
     profilerPath: str
     performancePath: Optional[str] = None
     identityFile: Optional[str] = None
+
+    @field_validator("host", mode="before")
+    @classmethod
+    def _sanitise_host(cls, value: object) -> str:
+        return sanitise_remote_host_segment(value)
 
 
 class MlirServerConnection(SerializeableModel):
@@ -261,7 +277,7 @@ class MlirServerConnection(SerializeableModel):
     port: int = Field(ge=1, le=65535)
     identityFile: Optional[str] = None
 
-    @field_validator("host", "username", mode="before")
+    @field_validator("username", mode="before")
     @classmethod
     def _strip_required_strings(cls, value: object) -> str:
         if not isinstance(value, str):
@@ -270,6 +286,11 @@ class MlirServerConnection(SerializeableModel):
         if not stripped:
             raise ValueError("must not be empty")
         return stripped
+
+    @field_validator("host", mode="before")
+    @classmethod
+    def _sanitise_host(cls, value: object) -> str:
+        return sanitise_remote_host_segment(value)
 
     @field_validator("name", mode="before")
     @classmethod

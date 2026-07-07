@@ -9,7 +9,13 @@ import { IconNames } from '@blueprintjs/icons';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_SERVER_ACCEPTED_EXTENSIONS, MlirServerConnection } from '../../definitions/MlirServer';
-import { activeMlirJsonAtom, mlirFileResultsAtom, mlirFileResultsOpenAtom } from '../../store/app';
+import {
+    activeMlirJsonAtom,
+    mlirFileResultsAtom,
+    mlirFileResultsOpenAtom,
+    mlirRetryFilesAtom,
+    mlirRetryServerAtom,
+} from '../../store/app';
 import { GraphBundle, MlirFileResult } from '../../model/MLIRJsonModel';
 import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
@@ -41,6 +47,8 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const mlirJsonFileName = useAtomValue(activeMlirJsonAtom);
     const [mlirFileResults, setMlirFileResults] = useAtom(mlirFileResultsAtom);
     const setMlirFileResultsOpen = useSetAtom(mlirFileResultsOpenAtom);
+    const setMlirRetryFiles = useSetAtom(mlirRetryFilesAtom);
+    const setMlirRetryServer = useSetAtom(mlirRetryServerAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
     // Publish a fresh batch of results and open the overlay.
@@ -92,17 +100,22 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
         setErrorMessage(null);
 
         const { files } = event.target;
+        const selectedFiles = Array.from(files);
 
         try {
             if (server) {
+                setMlirRetryFiles(selectedFiles);
+                setMlirRetryServer(server);
+
                 // Files upload as one batch then convert in parallel on the
                 // server. Publish a pending row per file (without opening the
                 // results overlay) so the processing overlay can show each file
                 // with a spinner; replaced with outcomes once the request
                 // resolves.
                 setMlirFileResults(
-                    Array.from(files).map((file) => ({
+                    selectedFiles.map((file) => ({
                         filename: file.name,
+                        host: server.host,
                         name: null,
                         status: ConnectionTestStates.PROGRESS,
                         graph: null,
@@ -112,9 +125,10 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
 
                 // Server uploads report transfer progress through the shared
                 // FileStatusOverlay; the results overlay opens once converted.
-                const response = await uploadMlirFileToServer(files, server);
+                const response = await uploadMlirFileToServer(selectedFiles, server);
                 const results: MlirFileResult[] = (response?.data?.results ?? []).map((result) => ({
                     filename: result.filename,
+                    host: result.host ?? server.host,
                     name: result.name,
                     status: result.status,
                     message: result.message ?? result.detail,
@@ -126,19 +140,34 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                     // Drop the pending spinner rows so they don't linger as
                     // permanently-converting entries behind the View button.
                     setMlirFileResults(null);
+                    setMlirRetryFiles(null);
+                    setMlirRetryServer(null);
                     setUploadStatus(ConnectionTestStates.FAILED);
                     setErrorMessage('Upload failed');
                     return;
                 }
 
+                // Retry is only meaningful when at least one server file
+                // failed conversion. Clear retained File blobs after all-
+                // success batches to avoid unnecessary memory retention.
+                const hasRetryableFailures = results.some((result) => result.status === ConnectionTestStates.FAILED);
+                if (!hasRetryableFailures) {
+                    setMlirRetryFiles(null);
+                    setMlirRetryServer(null);
+                }
+
                 showResults(results);
             } else {
+                setMlirRetryFiles(null);
+                setMlirRetryServer(null);
                 showResults(await loadLocalFiles(files));
             }
         } catch (err: unknown) {
             // Drop any pending spinner rows so a failed upload doesn't leave
             // permanently-converting entries behind the View button.
             setMlirFileResults(null);
+            setMlirRetryFiles(null);
+            setMlirRetryServer(null);
             setUploadStatus(ConnectionTestStates.FAILED);
             setErrorMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));
         }

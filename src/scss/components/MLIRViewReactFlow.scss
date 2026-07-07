@@ -241,6 +241,28 @@
     text-align: center;
 }
 
+.mlir-op-node-overlay-line {
+    max-width: 100%;
+    padding: 0 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+    font-family: monospace;
+    font-size: 9px;
+    line-height: 11px;
+    color: rgb(34 34 34 / 78%);
+}
+
+.mlir-op-node-shapes {
+    color: rgb(20 60 100 / 82%);
+}
+
+.mlir-op-node-location {
+    color: rgb(34 34 34 / 62%);
+    font-style: italic;
+}
+
 .mlir-op-node-id {
     margin-top: 1px;
     font-family: monospace;
@@ -260,16 +282,6 @@
 .mlir-view-pane {
     width: 100%;
     height: calc(100vh - 92px - 30px - 56px - 40px);
-}
-
-/* Re-layout button overlays the React Flow canvas at the top-left, above the
- * minimap/controls panels. */
-.mlir-relayout-button {
-    position: absolute;
-    top: 56px;
-    left: 12px;
-    z-index: 10;
-    padding: 8px 10px;
 }
 
 /* stylelint-enable selector-class-pattern */

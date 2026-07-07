@@ -35,9 +35,10 @@ import {
     useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useAtom } from 'jotai';
 
-import { Button } from '@blueprintjs/core';
 import { GraphBundle } from '../../model/MLIRJsonModel';
+import { mlirNodeBodyTogglesAtom } from '../../store/app';
 import type {
     BuiltGraph,
     IncomingEdgeView,
@@ -51,6 +52,8 @@ import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
 import { MlirFilterMode, buildFilterMatcher } from './mlirFilter';
+import MlirNodeBodyToggles from './MlirNodeBodyToggles';
+import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
 import { getNamespaceSegments } from './mlirGraphHelpers';
 
 const FILTER_DIM_OPACITY = 0.18;
@@ -61,6 +64,8 @@ const FILTER_DEBOUNCE_MS = 120;
 // Session-scoped so a page reload preserves the user's mode choice without
 // leaking across browser sessions or profiles.
 const FILTER_MODE_STORAGE_KEY = 'mlirFilterMode';
+
+const NODE_BODY_OVERLAY_LINE_PX = 11;
 
 // View-layer additions to the worker's canonical node data:
 //  - `highlight`: producer/consumer role vs. the selected node. Ops take a
@@ -80,44 +85,88 @@ interface ViewProps {
 
 type MLNode = Node<MLNodeData>;
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const MlirOpNode = memo<NodeProps<MLNode>>(({ id, data }) => (
-    <>
-        <Handle
-            type='target'
-            position={Position.Top}
-            isConnectable={false}
-        />
-        {data.collapsedSubgraphNamespace ? (
-            <span
-                className='mlir-op-node-collapse-hint'
-                title={
-                    data.subgraphToggleState === 'expanded'
-                        ? 'Subgraph expanded — click to collapse'
-                        : 'Subgraph collapsed — click to expand'
-                }
-            >
-                {data.subgraphToggleState === 'expanded' ? '▾' : '▸'}
-            </span>
-        ) : null}
-        {data.buriedMatchCount ? (
-            <span
-                className='mlir-op-node-buried-badge'
-                title={`${data.buriedMatchCount} filter ${
-                    data.buriedMatchCount === 1 ? 'match' : 'matches'
-                } inside this collapsed subgraph`}
-            >
-                {`+${data.buriedMatchCount}`}
-            </span>
-        ) : null}
-        <div className='mlir-op-node-label'>{data.label}</div>
-        <Handle
-            type='source'
-            position={Position.Bottom}
-            isConnectable={false}
-        />
-    </>
-));
+// Stable empty-array reference for the overlay-line fallbacks — avoids
+// churning MlirOpNode's referential identity on every render when a node
+// has no overlay entry.
+const EMPTY_OVERLAY_LINES: readonly string[] = Object.freeze([]);
+
+type MlirNodeBodyOverlayLines = { shapes: string[]; location: string[] };
+
+// Shared empty-map instance returned when both toggles are off, so
+// `nodeBodyContextValue`'s identity stays stable and every MlirOpNode
+// avoids a context-driven re-render on unrelated graph rebuilds.
+const EMPTY_OVERLAY_MAP: Map<string, MlirNodeBodyOverlayLines> = new Map();
+
+type MlirNodeBodyContextValue = {
+    overlayLinesByNodeId: Map<string, MlirNodeBodyOverlayLines>;
+};
+
+const MlirNodeBodyContext = createContext<MlirNodeBodyContextValue>({
+    overlayLinesByNodeId: new Map(),
+});
+
+const MlirOpNode = memo<NodeProps<MLNode>>(({ id, data }) => {
+    const { overlayLinesByNodeId } = useContext(MlirNodeBodyContext);
+    const overlay = overlayLinesByNodeId.get(id);
+    const shapeLines = overlay?.shapes ?? EMPTY_OVERLAY_LINES;
+    const locationLines = overlay?.location ?? EMPTY_OVERLAY_LINES;
+
+    return (
+        <>
+            <Handle
+                type='target'
+                position={Position.Top}
+                isConnectable={false}
+            />
+            {data.collapsedSubgraphNamespace ? (
+                <span
+                    className='mlir-op-node-collapse-hint'
+                    title={
+                        data.subgraphToggleState === 'expanded'
+                            ? 'Subgraph expanded — click to collapse'
+                            : 'Subgraph collapsed — click to expand'
+                    }
+                >
+                    {data.subgraphToggleState === 'expanded' ? '▾' : '▸'}
+                </span>
+            ) : null}
+            {data.buriedMatchCount ? (
+                <span
+                    className='mlir-op-node-buried-badge'
+                    title={`${data.buriedMatchCount} filter ${
+                        data.buriedMatchCount === 1 ? 'match' : 'matches'
+                    } inside this collapsed subgraph`}
+                >
+                    {`+${data.buriedMatchCount}`}
+                </span>
+            ) : null}
+            <div className='mlir-op-node-label'>{data.label}</div>
+            {shapeLines.map((line, idx) => (
+                <div
+                    className='mlir-op-node-overlay-line mlir-op-node-shapes'
+                    key={`s-${idx}-${line}`}
+                    title={line}
+                >
+                    {line}
+                </div>
+            ))}
+            {locationLines.map((line, idx) => (
+                <div
+                    className='mlir-op-node-overlay-line mlir-op-node-location'
+                    key={`l-${idx}-${line}`}
+                    title={line}
+                >
+                    {line}
+                </div>
+            ))}
+            <Handle
+                type='source'
+                position={Position.Bottom}
+                isConnectable={false}
+            />
+        </>
+    );
+});
 
 // Group nodes communicate with the parent component via this context. We can't
 // re-enable React Flow's `draggable: true` (it would re-add the `nopan` class
@@ -318,6 +367,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
         return stored === MlirFilterMode.Regex ? MlirFilterMode.Regex : MlirFilterMode.Substring;
     });
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
+    const [nodeBodyToggles, setNodeBodyToggles] = useAtom(mlirNodeBodyTogglesAtom);
     const filterRef = useRef<MlirOpFilterHandle>(null);
     const selectedNodeIdRef = useRef<string | null>(null);
     const viewportAnchorRef = useRef<{
@@ -487,11 +537,99 @@ const MlGraphInner = ({ data }: ViewProps) => {
             })),
         [graph.nodes],
     );
+    // Canonical lookup keyed on the same id space the worker builds against.
+    // Used by the details panel, the overlay-lines memo (needs source attrs
+    // + output metadata to compute per-node overlay strings), and by the
+    // edge/label memoisation chain further down. `sourceNodes` is already
+    // memoised so this map only rebuilds when the underlying graph changes.
+    const sourceNodeById = useMemo(() => {
+        const result = new Map<string, SourceNode>();
+        for (const sourceNode of sourceNodes) {
+            result.set(sourceNode.id, sourceNode);
+        }
+        return result;
+    }, [sourceNodes]);
     const { interactionIndex, runBuild } = useMlirLayoutWorker(graph.id, sourceNodes, applyBuiltGraph);
 
     useEffect(() => {
         runBuild(expandedNamespaces);
     }, [expandedNamespaces, runBuild]);
+
+    // Op-node id set from the current React Flow `nodes` array. The
+    // reference here changes on every drag / selection frame even when
+    // the set contents don't; `visibleOpNodeIds` below stabilises that
+    // identity so downstream memos (`overlayLinesByNodeId` →
+    // `nodeBodyContextValue`) don't invalidate on unrelated frames.
+    const visibleOpNodeIdsSource = useMemo<Set<string>>(() => {
+        const next = new Set<string>();
+        for (const node of nodes) {
+            if (node.type === 'mlirOp') {
+                next.add(node.id);
+            }
+        }
+        return next;
+    }, [nodes]);
+    // "Computed cached state" pattern (React docs): only replace the
+    // tracked set when contents actually change. Prevents a drag from
+    // fanning out a re-render to every mounted `MlirOpNode` via the
+    // `MlirNodeBodyContext` provider.
+    const [visibleOpNodeIds, setVisibleOpNodeIds] = useState<Set<string>>(visibleOpNodeIdsSource);
+    if (visibleOpNodeIds !== visibleOpNodeIdsSource) {
+        let unchanged = visibleOpNodeIds.size === visibleOpNodeIdsSource.size;
+        if (unchanged) {
+            for (const id of visibleOpNodeIdsSource) {
+                if (!visibleOpNodeIds.has(id)) {
+                    unchanged = false;
+                    break;
+                }
+            }
+        }
+        if (!unchanged) {
+            setVisibleOpNodeIds(visibleOpNodeIdsSource);
+        }
+    }
+
+    // Per-node overlay lines for the node-body toggles. Scoped to op
+    // nodes currently on the canvas (`visibleOpNodeIds`) — sources hidden
+    // inside collapsed subgraphs never render overlay lines and don't
+    // contribute to `extraLinesByNodeId` height. Computed exactly once
+    // per (toggle, visible-set) change and shared with both the
+    // height-growth path (`extraLinesByNodeId` below → `styledNodes`) and
+    // the render path (via `MlirNodeBodyContext` → `MlirOpNode`), so
+    // `collectShapeLines` / `collectLocationLines` never run twice for
+    // the same node on a single toggle flip. When both toggles are off
+    // we return a shared empty Map so the context Provider value stays
+    // referentially stable and doesn't fan out a re-render to every op.
+    const overlayLinesByNodeId = useMemo<Map<string, MlirNodeBodyOverlayLines>>(() => {
+        if (!nodeBodyToggles.location && !nodeBodyToggles.shapes) {
+            return EMPTY_OVERLAY_MAP;
+        }
+        const result = new Map<string, MlirNodeBodyOverlayLines>();
+        for (const id of visibleOpNodeIds) {
+            const source = sourceNodeById.get(id);
+            if (!source) {
+                continue;
+            }
+            const shapes = nodeBodyToggles.shapes ? collectShapeLines(source.outputsMetadata) : [];
+            const location = nodeBodyToggles.location ? collectLocationLines(source.attrs) : [];
+            if (shapes.length > 0 || location.length > 0) {
+                result.set(id, { shapes, location });
+            }
+        }
+        return result;
+    }, [nodeBodyToggles.location, nodeBodyToggles.shapes, visibleOpNodeIds, sourceNodeById]);
+
+    // Derived count map consumed by `styledNodes` to grow each node's DOM
+    // height inline. The layout worker is intentionally not told about
+    // these — trading occasional vertical overlap with the row below for
+    // zero layout shift when the user flicks a toggle.
+    const extraLinesByNodeId = useMemo<Map<string, number>>(() => {
+        const result = new Map<string, number>();
+        for (const [id, { shapes, location }] of overlayLinesByNodeId) {
+            result.set(id, shapes.length + location.length);
+        }
+        return result;
+    }, [overlayLinesByNodeId]);
 
     // Maps each label-matching source to its visible representative: itself
     // if on canvas, otherwise the anchor of its outermost collapsed
@@ -732,18 +870,6 @@ const MlGraphInner = ({ data }: ViewProps) => {
     );
 
     const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode, mlirGroup: MlirGroupNode }) as const, []);
-
-    // Look up the canonical SourceNode for the current selection so the
-    // details panel reads from the same authoritative shape that drove the
-    // graph build. `sourceNodes` is already memoised above, so this map is
-    // rebuilt only when the underlying graph changes.
-    const sourceNodeById = useMemo(() => {
-        const result = new Map<string, SourceNode>();
-        for (const sourceNode of sourceNodes) {
-            result.set(sourceNode.id, sourceNode);
-        }
-        return result;
-    }, [sourceNodes]);
 
     const selectedSourceNode = selectedNodeId ? (sourceNodeById.get(selectedNodeId) ?? null) : null;
 
@@ -1218,17 +1344,20 @@ const MlGraphInner = ({ data }: ViewProps) => {
         return { inputNodeIds, outputNodeIds, inputEdgeIds, outputEdgeIds };
     }, [displayedEdges, selectedNodeId]);
 
-    // Composes selection highlight + filter dim + buried-match badge in one
-    // map pass. Groups stay neutral (opacity on the wrapper bleeds into
-    // children); the selected node stays bright regardless of match state
-    // so the user doesn't lose their anchor.
+    // Composes selection highlight + filter dim + buried-match badge + the
+    // node-body overlay height in one map pass. Groups stay neutral
+    // (opacity on the wrapper bleeds into children); the selected node
+    // stays bright regardless of match state so the user doesn't lose
+    // their anchor. Overlay height is applied inline (not routed through
+    // the layout worker) so toggling doesn't reflow the graph.
     const styledNodes = useMemo<MLNode[]>(() => {
         const { inputNodeIds, outputNodeIds } = focusedConnections;
         const hasSelectionHighlight = !!selectedNodeId && (inputNodeIds.size > 0 || outputNodeIds.size > 0);
         // Zero-match filter is treated as "no filter" for dim/badge purposes
         // — leaves the canvas untouched instead of dimming everything to 18%.
         const activeFilter = filterMatchInfo && filterMatchInfo.visibleRepIds.size > 0 ? filterMatchInfo : null;
-        if (!hasSelectionHighlight && !activeFilter) {
+        const hasOverlayHeight = extraLinesByNodeId.size > 0;
+        if (!hasSelectionHighlight && !activeFilter && !hasOverlayHeight) {
             return nodes;
         }
         return nodes.map((n) => {
@@ -1259,9 +1388,21 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
                 }
             }
+            if (hasOverlayHeight && n.type !== 'mlirGroup') {
+                const extra = extraLinesByNodeId.get(n.id) ?? 0;
+                if (extra > 0) {
+                    const baseHeight = typeof n.height === 'number' ? n.height : 40;
+                    const grownHeight = baseHeight + extra * NODE_BODY_OVERLAY_LINE_PX;
+                    next = {
+                        ...next,
+                        height: grownHeight,
+                        style: { ...(next.style ?? {}), height: grownHeight },
+                    };
+                }
+            }
             return next;
         });
-    }, [nodes, focusedConnections, selectedNodeId, filterMatchInfo]);
+    }, [nodes, focusedConnections, selectedNodeId, filterMatchInfo, extraLinesByNodeId]);
 
     // MiniMap reads `node.style.background` to colour each mini-node. The
     // unhighlighted op-node fill now lives in SCSS (`.react-flow__node-mlirOp`),
@@ -1325,27 +1466,34 @@ const MlGraphInner = ({ data }: ViewProps) => {
         });
     }, [displayedEdges, focusedConnections, selectedNodeId, filterMatchInfo]);
 
+    const nodeBodyContextValue = useMemo<MlirNodeBodyContextValue>(
+        () => ({ overlayLinesByNodeId }),
+        [overlayLinesByNodeId],
+    );
+
     return (
         <div className='mlir-view-pane'>
             <MlirGroupContext.Provider value={groupContextValue}>
-                <ReactFlow
-                    nodes={styledNodes}
-                    edges={styledEdges}
-                    onNodeClick={onSubgraphNodeClick}
-                    onPaneClick={onPaneClick}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    nodeTypes={nodeTypes}
-                    minZoom={0.003}
-                    maxZoom={1.5}
-                    fitView
-                    connectionLineType={ConnectionLineType.SmoothStep}
-                    selectNodesOnDrag={false}
-                >
-                    <MiniMap nodeColor={minimapNodeColor} />
-                    <Controls />
-                    <Background />
-                </ReactFlow>
+                <MlirNodeBodyContext.Provider value={nodeBodyContextValue}>
+                    <ReactFlow
+                        nodes={styledNodes}
+                        edges={styledEdges}
+                        onNodeClick={onSubgraphNodeClick}
+                        onPaneClick={onPaneClick}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        nodeTypes={nodeTypes}
+                        minZoom={0.003}
+                        maxZoom={1.5}
+                        fitView
+                        connectionLineType={ConnectionLineType.SmoothStep}
+                        selectNodesOnDrag={false}
+                    >
+                        <MiniMap nodeColor={minimapNodeColor} />
+                        <Controls />
+                        <Background />
+                    </ReactFlow>
+                </MlirNodeBodyContext.Provider>
             </MlirGroupContext.Provider>
 
             <MlirOpFilter
@@ -1362,12 +1510,10 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 onNext={() => goToMatch('next')}
             />
 
-            <Button
-                className='mlir-relayout-button'
-                onClick={() => runBuild(expandedNamespaces)}
-            >
-                Re-layout
-            </Button>
+            <MlirNodeBodyToggles
+                value={nodeBodyToggles}
+                onChange={setNodeBodyToggles}
+            />
 
             {selectedSourceNode && (
                 <MlirNodeDetailsPanel

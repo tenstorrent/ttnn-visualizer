@@ -123,7 +123,7 @@ const FileStatusOverlay = () => {
                 {showProcessingList ? (
                     <>
                         <MlirFileList results={processingFiles ?? []} />
-                        {startedAt !== null && <p>{formatElapsed(elapsedSeconds)}</p>}
+                        {startedAt !== null && <p>{formatElapsed(elapsedSeconds)} elapsed</p>}
                     </>
                 ) : (
                     // Upload/sync progress, plus the no-pending-rows fallback
