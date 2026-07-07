@@ -51,18 +51,20 @@ const MlirFileResultsOverlay = () => {
     // routes through here.
     const handleClose = () => {
         retrySessionRef.current += 1;
+        const cancelledRetryIndices = Array.from(retryAbortControllersRef.current.keys());
         retryAbortControllersRef.current.forEach((controller) => controller.abort());
         retryAbortControllersRef.current.clear();
-        if (retryingIndices.size > 0) {
-            const cancelledRetryCount = retryingIndices.size;
+        if (cancelledRetryIndices.length > 0) {
+            const cancelledRetryIndicesSet = new Set(cancelledRetryIndices);
+            const cancelledRetryCount = cancelledRetryIndices.length;
             setResults(
                 (current) =>
                     current?.map((entry, entryIndex) =>
-                        retryingIndices.has(entryIndex) && entry.status === ConnectionTestStates.PROGRESS
+                        cancelledRetryIndicesSet.has(entryIndex) && entry.status === ConnectionTestStates.PROGRESS
                             ? {
                                   ...entry,
                                   status: ConnectionTestStates.FAILED,
-                                  message: entry.message ?? 'Retry cancelled',
+                                  message: 'Retry cancelled',
                                   name: null,
                                   graph: null,
                               }
@@ -87,7 +89,7 @@ const MlirFileResultsOverlay = () => {
             !result ||
             result.status !== ConnectionTestStates.FAILED ||
             !result.persisted ||
-            retryingIndices.has(index)
+            retryAbortControllersRef.current.has(index)
         ) {
             return;
         }
@@ -126,6 +128,7 @@ const MlirFileResultsOverlay = () => {
         try {
             const response = await uploadMlirFileToServer([file], retryServer, {
                 signal: abortController.signal,
+                suppressProgressOverlay: true,
             });
             const retried = response.data.results?.[0];
             if (!retried) {

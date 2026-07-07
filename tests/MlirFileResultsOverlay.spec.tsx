@@ -224,7 +224,7 @@ describe('MlirFileResultsOverlay', () => {
             expect(uploadMlirFileToServer).toHaveBeenCalledWith(
                 [failedFile],
                 SERVER,
-                expect.objectContaining({ signal: expect.any(AbortSignal) }),
+                expect.objectContaining({ signal: expect.any(AbortSignal), suppressProgressOverlay: true }),
             );
             expect(getDefaultStore().get(mlirFileResultsAtom)?.[0]).toMatchObject({
                 status: ConnectionTestStates.OK,
@@ -278,7 +278,7 @@ describe('MlirFileResultsOverlay', () => {
             expect(uploadMlirFileToServer).toHaveBeenCalledWith(
                 [failedFile],
                 SERVER,
-                expect.objectContaining({ signal: expect.any(AbortSignal) }),
+                expect.objectContaining({ signal: expect.any(AbortSignal), suppressProgressOverlay: true }),
             );
             expect(viewButton).toBeDisabled();
         });
@@ -349,7 +349,7 @@ describe('MlirFileResultsOverlay', () => {
                 1,
                 [fileA],
                 SERVER,
-                expect.objectContaining({ signal: expect.any(AbortSignal) }),
+                expect.objectContaining({ signal: expect.any(AbortSignal), suppressProgressOverlay: true }),
             );
             // Row A is processing, so only row B still exposes Retry.
             const retryButtons = screen.getAllByRole('button', { name: /retry/i });
@@ -365,7 +365,7 @@ describe('MlirFileResultsOverlay', () => {
                 2,
                 [fileB],
                 SERVER,
-                expect.objectContaining({ signal: expect.any(AbortSignal) }),
+                expect.objectContaining({ signal: expect.any(AbortSignal), suppressProgressOverlay: true }),
             );
             // Both rows are now processing, so no Retry buttons are visible.
             expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
@@ -437,7 +437,7 @@ describe('MlirFileResultsOverlay', () => {
             expect(uploadMlirFileToServer).toHaveBeenCalledWith(
                 [failedFile],
                 SERVER,
-                expect.objectContaining({ signal: expect.any(AbortSignal) }),
+                expect.objectContaining({ signal: expect.any(AbortSignal), suppressProgressOverlay: true }),
             );
             retrySignal = uploadMlirFileToServer.mock.calls[0]?.[2]?.signal;
         });
@@ -469,6 +469,62 @@ describe('MlirFileResultsOverlay', () => {
                 name: null,
                 graph: null,
             });
+        });
+    });
+
+    it('ignores duplicate rapid retry clicks for the same row', async () => {
+        const failedFile = new File(['module {}'], 'failed.mlir');
+        getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
+        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+
+        let resolveRetry: (value: unknown) => void = () => undefined;
+        uploadMlirFileToServer.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    resolveRetry = resolve;
+                }),
+        );
+
+        renderOverlay([
+            {
+                filename: 'failed.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+        ]);
+
+        const retryButton = screen.getByRole('button', { name: /retry/i });
+        fireEvent.click(retryButton);
+        fireEvent.click(retryButton);
+
+        await waitFor(() => {
+            expect(uploadMlirFileToServer).toHaveBeenCalledTimes(1);
+            expect(uploadMlirFileToServer).toHaveBeenCalledWith(
+                [failedFile],
+                SERVER,
+                expect.objectContaining({ signal: expect.any(AbortSignal), suppressProgressOverlay: true }),
+            );
+        });
+
+        resolveRetry({
+            data: {
+                results: [
+                    {
+                        filename: 'failed.mlir',
+                        name: null,
+                        status: ConnectionTestStates.FAILED,
+                        message: 'Still failing',
+                        graph: null,
+                    },
+                ],
+            },
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /retry/i })).toBeEnabled();
         });
     });
 });

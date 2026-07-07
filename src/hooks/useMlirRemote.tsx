@@ -31,6 +31,7 @@ export interface MlirUploadResponse {
 
 interface MlirUploadOptions {
     signal?: AbortSignal;
+    suppressProgressOverlay?: boolean;
 }
 
 const useMlirRemote = () => {
@@ -68,15 +69,18 @@ const useMlirRemote = () => {
         }
 
         const fileName = files[0]?.name ?? '';
+        const shouldReportProgress = !options?.suppressProgressOverlay;
 
         // Open the overlay immediately: the remote conversion can run for some
         // time before the first upload-progress event, so don't wait for it.
-        getDefaultStore().set(fileTransferProgressAtom, {
-            ...getInactiveFileTransferProgress(),
-            numberOfFiles: files.length,
-            currentFileName: fileName,
-            status: FileStatus.UPLOADING,
-        });
+        if (shouldReportProgress) {
+            getDefaultStore().set(fileTransferProgressAtom, {
+                ...getInactiveFileTransferProgress(),
+                numberOfFiles: files.length,
+                currentFileName: fileName,
+                status: FileStatus.UPLOADING,
+            });
+        }
 
         try {
             return await axiosInstance.post<MlirUploadResponse>(`${Endpoints.REMOTE}/mlir/upload`, formData, {
@@ -85,6 +89,10 @@ const useMlirRemote = () => {
                 },
                 signal: options?.signal,
                 onUploadProgress: (event) => {
+                    if (!shouldReportProgress) {
+                        return;
+                    }
+
                     if (!event || event.total === null || event.total === undefined || event.total <= 0) {
                         return;
                     }
@@ -104,7 +112,9 @@ const useMlirRemote = () => {
                 },
             });
         } finally {
-            resetTransferProgress();
+            if (shouldReportProgress) {
+                resetTransferProgress();
+            }
         }
     };
 
