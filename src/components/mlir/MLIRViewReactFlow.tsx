@@ -51,6 +51,7 @@ import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
+import { MlirFilterMode, buildFilterMatcher } from './mlirFilter';
 import MlirNodeBodyToggles from './MlirNodeBodyToggles';
 import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
 import { getNamespaceSegments } from './mlirGraphHelpers';
@@ -60,6 +61,9 @@ const FILTER_DIM_OPACITY = 0.18;
 // styledNodes/styledEdges → React Flow diff) only runs after typing settles.
 // Cleared queries bypass the debounce so Escape / clear feels instant.
 const FILTER_DEBOUNCE_MS = 120;
+// Session-scoped so a page reload preserves the user's mode choice without
+// leaking across browser sessions or profiles.
+const FILTER_MODE_STORAGE_KEY = 'mlirFilterMode';
 
 const NODE_BODY_OVERLAY_LINE_PX = 11;
 
@@ -358,6 +362,10 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // by `FILTER_DEBOUNCE_MS` on non-empty queries.
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
+    const [filterMode, setFilterMode] = useState<MlirFilterMode>(() => {
+        const stored = sessionStorage.getItem(FILTER_MODE_STORAGE_KEY);
+        return stored === MlirFilterMode.Regex ? MlirFilterMode.Regex : MlirFilterMode.Substring;
+    });
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
     const [nodeBodyToggles, setNodeBodyToggles] = useAtom(mlirNodeBodyTogglesAtom);
     const filterRef = useRef<MlirOpFilterHandle>(null);
@@ -404,6 +412,13 @@ const MlGraphInner = ({ data }: ViewProps) => {
         if (next === '') {
             setAppliedFilterQuery('');
         }
+    }, []);
+
+    // Match set differs across modes, so reset the cursor on toggle.
+    const handleModeChange = useCallback((next: MlirFilterMode) => {
+        setFilterMode(next);
+        setCurrentMatchIndex(null);
+        sessionStorage.setItem(FILTER_MODE_STORAGE_KEY, next);
     }, []);
 
     // Debounce non-empty query updates. `filterQuery` drives the input for
@@ -630,11 +645,12 @@ const MlGraphInner = ({ data }: ViewProps) => {
         visibleRepIds: Set<string>;
         buriedCountByRepId: Map<string, number>;
         hiddenMatchCount: number;
+        isRegexInvalid: boolean;
     } | null>(() => {
         if (appliedFilterQuery.length === 0) {
             return null;
         }
-        const needle = appliedFilterQuery.toLowerCase();
+        const { testLabel, isRegexInvalid } = buildFilterMatcher(filterMode, appliedFilterQuery);
         const anchorByNamespace = interactionIndex?.anchorByNamespace ?? {};
         const containingNamespacesByNodeId = interactionIndex?.containingNamespacesByNodeId ?? {};
         const visibleNodeIds = new Set<string>();
@@ -645,7 +661,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
         const buriedCountByRepId = new Map<string, number>();
         let hiddenMatchCount = 0;
         for (const source of sourceNodes) {
-            if (!source.label.toLowerCase().includes(needle)) {
+            if (!testLabel(source.label)) {
                 continue;
             }
             const containing = containingNamespacesByNodeId[source.id];
@@ -674,8 +690,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 hiddenMatchCount += 1;
             }
         }
-        return { visibleRepIds, buriedCountByRepId, hiddenMatchCount };
-    }, [appliedFilterQuery, sourceNodes, expandedNamespaces, interactionIndex, nodes]);
+        return { visibleRepIds, buriedCountByRepId, hiddenMatchCount, isRegexInvalid };
+    }, [appliedFilterQuery, filterMode, sourceNodes, expandedNamespaces, interactionIndex, nodes]);
 
     // Visible reps in canvas order so prev/next walks top-to-bottom.
     const matchedNodesInOrder = useMemo<string[]>(() => {
@@ -1484,6 +1500,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 ref={filterRef}
                 query={filterQuery}
                 onQueryChange={handleQueryChange}
+                mode={filterMode}
+                onModeChange={handleModeChange}
+                isRegexInvalid={filterMatchInfo?.isRegexInvalid ?? false}
                 matchCount={matchedNodesInOrder.length}
                 hiddenMatchCount={filterMatchInfo?.hiddenMatchCount ?? 0}
                 currentMatchIndex={currentMatchIndex}
