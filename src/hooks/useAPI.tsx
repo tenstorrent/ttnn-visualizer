@@ -851,9 +851,11 @@ interface ReportMetadata {
     version: SemVer;
     timestamp: string;
     duration: number;
+    gitUrl: string | null;
+    gitSha: string | null;
 }
 
-const fetchReportMetadata = async (): Promise<ReportMetadata> => {
+export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
     const parsedSchemaVersion = semverParse(data?.schema_version);
     const parsedDuration = Number(data?.total_duration_ns);
@@ -862,6 +864,8 @@ const fetchReportMetadata = async (): Promise<ReportMetadata> => {
         timestamp: data?.capture_timestamp_ns,
         duration: Number.isFinite(parsedDuration) ? parsedDuration : 0,
         version: parsedSchemaVersion,
+        gitUrl: data?.git_url ?? null,
+        gitSha: data?.git_sha ?? null,
     } as ReportMetadata;
 };
 
