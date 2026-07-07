@@ -33,7 +33,7 @@ import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
-import { useGetLatestAppVersion, useInstance } from '../hooks/useAPI';
+import { useGetLatestAppVersion, useInstance, useReportMetadata } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
 import { Instance } from '../model/APIData';
 import LoadingSpinner from './LoadingSpinner';
@@ -53,6 +53,7 @@ function FooterInfobar() {
     const performanceReportLocation = useAtomValue(performanceReportLocationAtom);
 
     const { data: instance } = useInstance();
+    const { data: reportMetadata } = useReportMetadata();
     const location = useLocation();
     const {
         data: latestAppVersion,
@@ -141,7 +142,23 @@ function FooterInfobar() {
                     {activeProfilerReportPath && (
                         <Tooltip
                             disabled={!activeProfilerReportPath}
-                            content={formatPath(activeProfilerReportPath)}
+                            content={
+                                <>
+                                    <strong>Report path:</strong> {formatPath(activeProfilerReportPath)}
+                                    {reportMetadata?.gitUrl && (
+                                        <>
+                                            <br />
+                                            <strong>Git repo:</strong> {reportMetadata.gitUrl}
+                                        </>
+                                    )}
+                                    {reportMetadata?.gitSha && (
+                                        <>
+                                            <br />
+                                            <strong>Commit:</strong> {reportMetadata.gitSha.slice(0, 7)}
+                                        </>
+                                    )}
+                                </>
+                            }
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
