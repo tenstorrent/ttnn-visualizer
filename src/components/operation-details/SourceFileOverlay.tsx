@@ -11,7 +11,6 @@ import { ReportLocation } from '../../definitions/Reports';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import hljs from '../../functions/highlightSource';
 import useRemoteConnection from '../../hooks/useRemote';
-import { useReportMetadata } from '../../hooks/useAPI';
 import { profilerReportLocationAtom } from '../../store/app';
 import Overlay from '../Overlay';
 import GitCommitInfo from './GitCommitInfo';
@@ -27,6 +26,8 @@ interface SourceFileOverlayProps {
     filePath: string;
     matchedViaRemap: boolean;
     scrollToLineNumber: boolean;
+    gitUrl: string | null;
+    gitSha: string | null;
 }
 
 function SourceFileOverlay({
@@ -40,10 +41,11 @@ function SourceFileOverlay({
     filePath,
     matchedViaRemap,
     scrollToLineNumber = false,
+    gitUrl,
+    gitSha,
 }: SourceFileOverlayProps) {
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
     const { persistentState } = useRemoteConnection();
-    const { data: reportMetadata } = useReportMetadata();
 
     const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
     const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
@@ -81,6 +83,16 @@ function SourceFileOverlay({
 
         return path;
     }, [isRemote, persistentState, resolvedPath, filePath]);
+
+    const sourcePathWithGit = (
+        <p className='stack-trace-path monospace'>
+            {displaySourcePath}
+            <GitCommitInfo
+                gitUrl={gitUrl}
+                gitSha={gitSha}
+            />
+        </p>
+    );
 
     const scrollToTop = () => scrollContainerEl?.scrollTo({ top: 0, behavior: 'smooth' });
     const scrollToBottom = () =>
@@ -184,13 +196,7 @@ function SourceFileOverlay({
 
                 {errorDetails ? (
                     <div className='stack-trace-error'>
-                        <p className='stack-trace-path monospace'>
-                            {displaySourcePath}
-                            <GitCommitInfo
-                                gitUrl={reportMetadata?.gitUrl}
-                                gitSha={reportMetadata?.gitSha}
-                            />
-                        </p>
+                        {sourcePathWithGit}
                         <div className='error-details'>
                             <pre>{errorDetails}</pre>
                         </div>
@@ -199,13 +205,7 @@ function SourceFileOverlay({
 
                 {fileWithHighlights && !errorDetails ? (
                     <div className='stack-trace'>
-                        <p className='stack-trace-path monospace'>
-                            {displaySourcePath}
-                            <GitCommitInfo
-                                gitUrl={reportMetadata?.gitUrl}
-                                gitSha={reportMetadata?.gitSha}
-                            />
-                        </p>
+                        {sourcePathWithGit}
                         {matchedViaRemap ? (
                             <Callout
                                 className='stack-trace-source-remap-notice'

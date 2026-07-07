@@ -39,7 +39,7 @@ import { Instance } from '../model/APIData';
 import LoadingSpinner from './LoadingSpinner';
 import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 import AppVersionStatus from './AppVersionStatus';
-import { formatShortSha } from '../functions/formatting';
+import { ReportGitMetadataLines } from './operation-details/GitCommitInfo';
 
 const RANGE_DISALLOWED_ROUTES: string[] = [ROUTES.NPE];
 
@@ -146,18 +146,10 @@ function FooterInfobar() {
                             content={
                                 <>
                                     <strong>Report path:</strong> {formatPath(activeProfilerReportPath)}
-                                    {reportMetadata?.gitUrl && (
-                                        <>
-                                            <br />
-                                            <strong>Git repo:</strong> {reportMetadata.gitUrl}
-                                        </>
-                                    )}
-                                    {reportMetadata?.gitSha && (
-                                        <>
-                                            <br />
-                                            <strong>Commit:</strong> {formatShortSha(reportMetadata.gitSha)}
-                                        </>
-                                    )}
+                                    <ReportGitMetadataLines
+                                        gitUrl={reportMetadata?.gitUrl ?? null}
+                                        gitSha={reportMetadata?.gitSha ?? null}
+                                    />
                                 </>
                             }
                             position={PopoverPosition.TOP}

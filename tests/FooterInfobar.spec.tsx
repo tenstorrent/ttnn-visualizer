@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FooterInfobar from '../src/components/FooterInfobar';
 import { activeProfilerReportAtom } from '../src/store/app';
 import mockInstance from './data/mockInstance.json';
+import { MOCK_FULL_GIT_SHA, MOCK_HTTP_GIT_URL, MOCK_SHORT_GIT_SHA, MOCK_SSH_GIT_URL } from './helpers/gitFixtures';
 import { TestProviders } from './helpers/TestProviders';
 
 const mockUseReportMetadata = vi.fn();
@@ -51,7 +52,6 @@ vi.mock('@blueprintjs/core', async () => {
 });
 
 const REPORT_PATH = '/reports/memory/my-report';
-const FULL_SHA = 'abcdef0123456789abcdef0123456789abcdef01';
 
 const renderFooter = (reportMetadata: { gitUrl?: string | null; gitSha?: string | null } | undefined) => {
     mockUseReportMetadata.mockReturnValue({ data: reportMetadata });
@@ -106,26 +106,38 @@ describe('FooterInfobar memory report tooltip', () => {
     });
 
     it('shows git repo when only gitUrl is present', () => {
-        renderFooter({ gitUrl: 'https://github.com/foo/bar.git', gitSha: null });
+        renderFooter({ gitUrl: MOCK_HTTP_GIT_URL, gitSha: null });
 
         const tooltip = getMemoryReportTooltipContent();
-        expect(tooltip.textContent).toContain('Git repo: https://github.com/foo/bar.git');
+        expect(tooltip.textContent).toContain(`Git repo: ${MOCK_HTTP_GIT_URL}`);
         expect(tooltip.textContent).not.toMatch(/Commit:/);
     });
 
     it('shows commit when only gitSha is present', () => {
-        renderFooter({ gitUrl: null, gitSha: FULL_SHA });
+        renderFooter({ gitUrl: null, gitSha: MOCK_FULL_GIT_SHA });
 
         const tooltip = getMemoryReportTooltipContent();
         expect(tooltip.textContent).not.toMatch(/Git repo:/);
-        expect(tooltip.textContent).toContain('Commit: abcdef0');
+        expect(tooltip.textContent).toContain(`Commit: ${MOCK_SHORT_GIT_SHA}`);
     });
 
-    it('shows git repo and commit when both are present', () => {
-        renderFooter({ gitUrl: 'https://github.com/foo/bar.git', gitSha: FULL_SHA });
+    it('shows git repo and a commit link when both are present with an HTTP remote', () => {
+        renderFooter({ gitUrl: MOCK_HTTP_GIT_URL, gitSha: MOCK_FULL_GIT_SHA });
 
         const tooltip = getMemoryReportTooltipContent();
-        expect(tooltip.textContent).toContain('Git repo: https://github.com/foo/bar.git');
-        expect(tooltip.textContent).toContain('Commit: abcdef0');
+        expect(tooltip.textContent).toContain(`Git repo: ${MOCK_HTTP_GIT_URL}`);
+        expect(tooltip.textContent).toContain(`Commit: ${MOCK_SHORT_GIT_SHA}`);
+
+        const link = within(tooltip).getByRole('link');
+        expect(link).toHaveAttribute('href', `https://github.com/foo/bar/commit/${MOCK_FULL_GIT_SHA}`);
+    });
+
+    it('shows plain commit text when both are present with an SSH remote', () => {
+        renderFooter({ gitUrl: MOCK_SSH_GIT_URL, gitSha: MOCK_FULL_GIT_SHA });
+
+        const tooltip = getMemoryReportTooltipContent();
+        expect(tooltip.textContent).toContain(`Git repo: ${MOCK_SSH_GIT_URL}`);
+        expect(tooltip.textContent).toContain(`Commit: ${MOCK_SHORT_GIT_SHA}`);
+        expect(within(tooltip).queryByRole('link')).not.toBeInTheDocument();
     });
 });

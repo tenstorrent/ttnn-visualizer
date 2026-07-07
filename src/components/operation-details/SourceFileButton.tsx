@@ -7,6 +7,7 @@ import { IconName, IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { SourceFileStatus, StackTraceLanguage } from '../../definitions/StackTrace';
 import getServerConfig from '../../functions/getServerConfig';
+import { useReportMetadata } from '../../hooks/useAPI';
 import { useSourceFile } from '../../hooks/useSourceFile';
 import SourceFileOverlay from './SourceFileOverlay';
 
@@ -24,6 +25,49 @@ interface SourceFileButtonProps {
     endIcon?: IconName;
     // Probe availability on mount; leave false for many-instance surfaces.
     eagerProbe?: boolean;
+}
+
+interface OpenSourceFileOverlayProps {
+    isOpen: boolean;
+    onClose: () => void;
+    language: StackTraceLanguage;
+    lineNumber: number | null;
+    fileContents: string;
+    errorDetails: string;
+    resolvedPath: string | null;
+    filePath: string;
+    matchedViaRemap: boolean;
+}
+
+function OpenSourceFileOverlay({
+    isOpen,
+    onClose,
+    language,
+    lineNumber,
+    fileContents,
+    errorDetails,
+    resolvedPath,
+    filePath,
+    matchedViaRemap,
+}: OpenSourceFileOverlayProps) {
+    const { data: reportMetadata } = useReportMetadata();
+
+    return (
+        <SourceFileOverlay
+            isOpen={isOpen}
+            onClose={onClose}
+            language={language}
+            lineNumber={lineNumber}
+            fileContents={fileContents}
+            errorDetails={errorDetails}
+            resolvedPath={resolvedPath}
+            filePath={filePath}
+            matchedViaRemap={matchedViaRemap}
+            scrollToLineNumber
+            gitUrl={reportMetadata?.gitUrl ?? null}
+            gitSha={reportMetadata?.gitSha ?? null}
+        />
+    );
 }
 
 function SourceFileButton({
@@ -97,18 +141,19 @@ function SourceFileButton({
                 />
             </Tooltip>
 
-            <SourceFileOverlay
-                isOpen={isViewingSourceFile}
-                onClose={() => setIsViewingSourceFile(false)}
-                language={language}
-                lineNumber={lineNumber}
-                fileContents={fileContents}
-                errorDetails={errorDetails}
-                resolvedPath={resolvedPath}
-                filePath={filePath}
-                matchedViaRemap={matchedViaRemap}
-                scrollToLineNumber
-            />
+            {isViewingSourceFile ? (
+                <OpenSourceFileOverlay
+                    isOpen={isViewingSourceFile}
+                    onClose={() => setIsViewingSourceFile(false)}
+                    language={language}
+                    lineNumber={lineNumber}
+                    fileContents={fileContents}
+                    errorDetails={errorDetails}
+                    resolvedPath={resolvedPath}
+                    filePath={filePath}
+                    matchedViaRemap={matchedViaRemap}
+                />
+            ) : null}
         </>
     );
 }
