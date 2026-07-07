@@ -18,7 +18,7 @@ function GitCommitInfo({ gitUrl, gitSha }: GitCommitInfoProps) {
     return (
         <span className='stack-trace-git-info'>
             {'Commit: '}
-            {commitUrl ? (
+            {commitUrl && shortSha ? (
                 <a
                     href={commitUrl}
                     target='_blank'
@@ -31,9 +31,7 @@ function GitCommitInfo({ gitUrl, gitSha }: GitCommitInfoProps) {
                         className='stack-trace-git-info-icon'
                     />
                 </a>
-            ) : (
-                shortSha
-            )}
+            ) : null}
         </span>
     );
 }
