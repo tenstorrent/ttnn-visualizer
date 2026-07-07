@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { atomWithStorage } from 'jotai/utils';
+import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import { atom } from 'jotai';
 import { NumberRange, TabId } from '@blueprintjs/core';
 import { Id } from 'react-toastify';
@@ -68,6 +68,14 @@ export const selectedMlirServerAtom = atomWithStorage<MlirServerConnection | nul
 export const mlirNodeDetailsCollapsedAtom = atomWithStorage<{ attrs: boolean; inputs: boolean; outputs: boolean }>(
     'mlirNodeDetailsCollapsed',
     { attrs: false, inputs: true, outputs: true },
+);
+// Session-scoped so the view opens uncluttered after a browser restart —
+// deliberately different lifetime from the neighbouring `mlirNodeDetailsCollapsed`
+// (which is a stable structural preference that survives sessions).
+export const mlirNodeBodyTogglesAtom = atomWithStorage<{ location: boolean; shapes: boolean }>(
+    'mlirNodeBodyToggles',
+    { location: false, shapes: false },
+    createJSONStorage(() => sessionStorage),
 );
 export const hasClusterDescriptionAtom = atom(false);
 

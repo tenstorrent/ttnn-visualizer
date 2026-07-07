@@ -10,6 +10,18 @@
 $source-path-vertical-padding: 20px;
 $container-border-width: 1px;
 
+@mixin report-git-info {
+    display: block;
+    font-size: 12px;
+    margin-top: 5px;
+
+    .report-git-info-icon {
+        margin-left: 3px;
+        margin-bottom: 2px;
+        vertical-align: middle;
+    }
+}
+
 .stack-trace {
     margin-top: 0;
 
@@ -65,6 +77,10 @@ $container-border-width: 1px;
         margin-top: -($source-path-vertical-padding - $container-border-width);
         margin-right: 30px; // Avoids overlapping with source-file-controls
         margin-bottom: 0;
+
+        .report-git-info {
+            @include report-git-info;
+        }
     }
 
     .code-wrapper {
@@ -122,6 +138,10 @@ $container-border-width: 1px;
             }
         }
     }
+}
+
+.stack-trace-error .stack-trace-path .report-git-info {
+    @include report-git-info;
 }
 
 .source-file-controls {

@@ -10,9 +10,11 @@ import 'styles/components/StackTrace.scss';
 import { ReportLocation } from '../../definitions/Reports';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import hljs from '../../functions/highlightSource';
+import { useReportMetadata } from '../../hooks/useAPI';
 import useRemoteConnection from '../../hooks/useRemote';
 import { profilerReportLocationAtom } from '../../store/app';
 import Overlay from '../Overlay';
+import GitCommitInfo from './GitCommitInfo';
 
 interface SourceFileOverlayProps {
     isOpen: boolean;
@@ -39,6 +41,9 @@ function SourceFileOverlay({
     matchedViaRemap,
     scrollToLineNumber = false,
 }: SourceFileOverlayProps) {
+    const { data: reportMetadata } = useReportMetadata();
+    const gitUrl = reportMetadata?.gitUrl ?? null;
+    const gitSha = reportMetadata?.gitSha ?? null;
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
     const { persistentState } = useRemoteConnection();
 
@@ -78,6 +83,16 @@ function SourceFileOverlay({
 
         return path;
     }, [isRemote, persistentState, resolvedPath, filePath]);
+
+    const sourcePathWithGit = (
+        <p className='stack-trace-path monospace'>
+            {displaySourcePath}
+            <GitCommitInfo
+                gitUrl={gitUrl}
+                gitSha={gitSha}
+            />
+        </p>
+    );
 
     const scrollToTop = () => scrollContainerEl?.scrollTo({ top: 0, behavior: 'smooth' });
     const scrollToBottom = () =>
@@ -181,7 +196,7 @@ function SourceFileOverlay({
 
                 {errorDetails ? (
                     <div className='stack-trace-error'>
-                        <p className='stack-trace-path monospace'>{displaySourcePath}</p>
+                        {sourcePathWithGit}
                         <div className='error-details'>
                             <pre>{errorDetails}</pre>
                         </div>
@@ -190,7 +205,7 @@ function SourceFileOverlay({
 
                 {fileWithHighlights && !errorDetails ? (
                     <div className='stack-trace'>
-                        <p className='stack-trace-path monospace'>{displaySourcePath}</p>
+                        {sourcePathWithGit}
                         {matchedViaRemap ? (
                             <Callout
                                 className='stack-trace-source-remap-notice'
