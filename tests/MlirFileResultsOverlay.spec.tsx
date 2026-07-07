@@ -297,7 +297,7 @@ describe('MlirFileResultsOverlay', () => {
         getDefaultStore().set(mlirRetryFilesAtom, [fileA, fileB]);
         getDefaultStore().set(mlirRetryServerAtom, SERVER);
 
-        let resolveRetry: ((value: unknown) => void) | null = null;
+        let resolveRetry!: (value: unknown) => void;
         uploadMlirFileToServer.mockImplementationOnce(
             () =>
                 new Promise((resolve) => {
@@ -332,7 +332,7 @@ describe('MlirFileResultsOverlay', () => {
             expect(retryButtons[0]).toBeDisabled();
         });
 
-        resolveRetry?.({
+        resolveRetry({
             data: {
                 results: [
                     {
