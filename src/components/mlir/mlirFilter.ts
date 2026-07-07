@@ -2,7 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-export type MlirFilterMode = 'substring' | 'regex';
+// String-backed so the enum member values match the historical `sessionStorage`
+// payload ('substring' / 'regex'); persisted state migrates without a version bump.
+export enum MlirFilterMode {
+    Substring = 'substring',
+    Regex = 'regex',
+}
 
 export interface MlirFilterMatcher {
     /** True if a source label should be treated as a filter match. */
@@ -18,7 +23,7 @@ export function buildFilterMatcher(mode: MlirFilterMode, query: string): MlirFil
     if (query.length === 0) {
         return { testLabel: () => false, isRegexInvalid: false };
     }
-    if (mode === 'regex') {
+    if (mode === MlirFilterMode.Regex) {
         try {
             const re = new RegExp(query, 'i');
             return { testLabel: (label) => re.test(label), isRegexInvalid: false };

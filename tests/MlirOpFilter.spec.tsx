@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { type Ref, createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import MlirOpFilter, { type MlirFilterMode, type MlirOpFilterHandle } from '../src/components/mlir/MlirOpFilter';
+import MlirOpFilter, { MlirFilterMode, type MlirOpFilterHandle } from '../src/components/mlir/MlirOpFilter';
 import { TestProviders } from './helpers/TestProviders';
 
 afterEach(cleanup);
@@ -37,7 +37,7 @@ const renderFilter = (overrides: Overrides = {}) => {
                 ref={overrides.ref}
                 query={overrides.query ?? ''}
                 onQueryChange={onQueryChange}
-                mode={overrides.mode ?? 'substring'}
+                mode={overrides.mode ?? MlirFilterMode.Substring}
                 onModeChange={onModeChange}
                 isRegexInvalid={overrides.isRegexInvalid ?? false}
                 matchCount={overrides.matchCount ?? 0}
@@ -58,14 +58,14 @@ const getModeToggle = () => screen.getByRole('button', { name: /Switch to (regex
 describe('MlirOpFilter', () => {
     describe('mode toggle', () => {
         it('reflects substring mode with a non-active toggle and matching placeholder', () => {
-            renderFilter({ mode: 'substring' });
+            renderFilter({ mode: MlirFilterMode.Substring });
 
             expect(getInput().placeholder).toBe('Filter ops (substring)');
             expect(getModeToggle()).not.toHaveClass('bp6-active');
         });
 
         it('reflects regex mode with an active toggle and matching placeholder', () => {
-            renderFilter({ mode: 'regex' });
+            renderFilter({ mode: MlirFilterMode.Regex });
 
             expect(getInput().placeholder).toBe('Filter ops (regex)');
             expect(getModeToggle()).toHaveClass('bp6-active');
@@ -73,20 +73,20 @@ describe('MlirOpFilter', () => {
 
         it('calls onModeChange with the opposite mode when clicked', () => {
             const onModeChange = vi.fn();
-            renderFilter({ mode: 'substring', onModeChange });
+            renderFilter({ mode: MlirFilterMode.Substring, onModeChange });
 
             fireEvent.click(getModeToggle());
 
-            expect(onModeChange).toHaveBeenCalledWith('regex');
+            expect(onModeChange).toHaveBeenCalledWith(MlirFilterMode.Regex);
         });
 
         it('flips regex → substring on click', () => {
             const onModeChange = vi.fn();
-            renderFilter({ mode: 'regex', onModeChange });
+            renderFilter({ mode: MlirFilterMode.Regex, onModeChange });
 
             fireEvent.click(getModeToggle());
 
-            expect(onModeChange).toHaveBeenCalledWith('substring');
+            expect(onModeChange).toHaveBeenCalledWith(MlirFilterMode.Substring);
         });
     });
 
@@ -104,7 +104,7 @@ describe('MlirOpFilter', () => {
         });
 
         it('reads "invalid regex" when the regex fails to compile, regardless of counts', () => {
-            renderFilter({ query: '(', mode: 'regex', isRegexInvalid: true });
+            renderFilter({ query: '(', mode: MlirFilterMode.Regex, isRegexInvalid: true });
 
             expect(screen.getByText('invalid regex')).toBeInTheDocument();
             expect(screen.queryByText('no matches')).toBeNull();
@@ -140,7 +140,7 @@ describe('MlirOpFilter', () => {
 
     describe('regex-invalid styling', () => {
         it('applies bp6-intent-danger to the input group when invalid', () => {
-            const { container } = renderFilter({ query: '(', mode: 'regex', isRegexInvalid: true });
+            const { container } = renderFilter({ query: '(', mode: MlirFilterMode.Regex, isRegexInvalid: true });
 
             const group = container.querySelector('.bp6-input-group');
             expect(group).not.toBeNull();
@@ -148,7 +148,7 @@ describe('MlirOpFilter', () => {
         });
 
         it('does not apply the danger class when the regex compiles cleanly', () => {
-            const { container } = renderFilter({ query: '^foo$', mode: 'regex', isRegexInvalid: false });
+            const { container } = renderFilter({ query: '^foo$', mode: MlirFilterMode.Regex, isRegexInvalid: false });
 
             const group = container.querySelector('.bp6-input-group');
             expect(group).not.toHaveClass('bp6-intent-danger');

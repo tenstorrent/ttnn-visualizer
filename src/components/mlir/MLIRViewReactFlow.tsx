@@ -315,7 +315,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
     const [filterMode, setFilterMode] = useState<MlirFilterMode>(() => {
         const stored = sessionStorage.getItem(FILTER_MODE_STORAGE_KEY);
-        return stored === 'regex' ? 'regex' : 'substring';
+        return stored === MlirFilterMode.Regex ? MlirFilterMode.Regex : MlirFilterMode.Substring;
     });
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
     const filterRef = useRef<MlirOpFilterHandle>(null);

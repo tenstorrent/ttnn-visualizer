@@ -6,9 +6,9 @@ import { type KeyboardEvent, forwardRef, useImperativeHandle, useRef } from 'rea
 import { Button, ButtonVariant, InputGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirOpFilter.scss';
-import type { MlirFilterMode } from './mlirFilter';
+import { MlirFilterMode } from './mlirFilter';
 
-export type { MlirFilterMode };
+export { MlirFilterMode };
 
 export interface MlirOpFilterHandle {
     focus: () => void;
@@ -77,7 +77,7 @@ const MlirOpFilter = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
         };
 
         const hasQuery = query.length > 0;
-        const isRegexMode = mode === 'regex';
+        const isRegexMode = mode === MlirFilterMode.Regex;
         const hiddenSuffix = hiddenMatchCount > 0 ? ` (+${hiddenMatchCount} inside)` : '';
         // Ignore a stale cursor whose index no longer lives inside the current
         // match set (e.g. after an expand/collapse changed the visible reps)
@@ -97,7 +97,7 @@ const MlirOpFilter = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
             }
         }
 
-        const toggleMode = () => onModeChange(isRegexMode ? 'substring' : 'regex');
+        const toggleMode = () => onModeChange(isRegexMode ? MlirFilterMode.Substring : MlirFilterMode.Regex);
 
         return (
             <div className='mlir-op-filter'>
