@@ -2,9 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { Button, ButtonVariant, Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import Overlay from '../Overlay';
@@ -41,22 +42,66 @@ const MlirFileResultsOverlay = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-    const [retryingIndex, setRetryingIndex] = useState<number | null>(null);
+    const [retryingIndices, setRetryingIndices] = useState<Set<number>>(new Set<number>());
+    const retrySessionRef = useRef(0);
+    const retryAbortControllersRef = useRef<Map<number, AbortController>>(new Map<number, AbortController>());
+
+    // Abort all in-flight retries on unmount to prevent setResults writebacks
+    // on unmounted tree. Complements the axios.isCancel guard in the catch block.
+    useEffect(
+        () => () => {
+            retryAbortControllersRef.current.forEach((c) => c.abort());
+            retryAbortControllersRef.current.clear();
+        },
+        [],
+    );
 
     // Reset the pending selection on close so it can't carry over to a reopen
     // or the next upload. The results themselves are retained so the overlay
     // can be reopened. Every close path — Close, View, escape/outside click —
     // routes through here.
     const handleClose = () => {
+        retrySessionRef.current += 1;
+        const cancelledRetryIndices = Array.from(retryAbortControllersRef.current.keys());
+        retryAbortControllersRef.current.forEach((controller) => controller.abort());
+        retryAbortControllersRef.current.clear();
+        if (cancelledRetryIndices.length > 0) {
+            const cancelledRetryIndicesSet = new Set(cancelledRetryIndices);
+            const cancelledRetryCount = cancelledRetryIndices.length;
+            setResults(
+                (current) =>
+                    current?.map((entry, entryIndex) =>
+                        cancelledRetryIndicesSet.has(entryIndex) && entry.status === ConnectionTestStates.PROGRESS
+                            ? {
+                                  ...entry,
+                                  status: ConnectionTestStates.FAILED,
+                                  message: 'Retry cancelled',
+                                  name: null,
+                                  graph: null,
+                              }
+                            : entry,
+                    ) ?? current,
+            );
+            createToastNotification(
+                'MLIR',
+                `Aborted ${cancelledRetryCount}x MLIR conversion${cancelledRetryCount === 1 ? '' : 's'}`,
+                ToastType.WARNING,
+            );
+        }
         setSelectedIndex(null);
-        setRetryingIndex(null);
+        setRetryingIndices(new Set<number>());
         setIsOpen(false);
     };
 
     const handleRetry = async (index: number) => {
         const result = results?.[index];
         const file = retryFiles?.[index];
-        if (!result || result.status !== ConnectionTestStates.FAILED || !result.persisted) {
+        if (
+            !result ||
+            result.status !== ConnectionTestStates.FAILED ||
+            !result.persisted ||
+            retryAbortControllersRef.current.has(index)
+        ) {
             return;
         }
 
@@ -69,7 +114,14 @@ const MlirFileResultsOverlay = () => {
             return;
         }
 
-        setRetryingIndex(index);
+        const retrySession = retrySessionRef.current;
+        const abortController = new AbortController();
+        retryAbortControllersRef.current.set(index, abortController);
+        setRetryingIndices((current) => {
+            const next = new Set(current);
+            next.add(index);
+            return next;
+        });
         setResults(
             (current) =>
                 current?.map((entry, entryIndex) =>
@@ -77,7 +129,6 @@ const MlirFileResultsOverlay = () => {
                         ? {
                               ...entry,
                               status: ConnectionTestStates.PROGRESS,
-                              message: undefined,
                               name: null,
                               graph: null,
                           }
@@ -86,10 +137,17 @@ const MlirFileResultsOverlay = () => {
         );
 
         try {
-            const response = await uploadMlirFileToServer([file], retryServer);
+            const response = await uploadMlirFileToServer([file], retryServer, {
+                signal: abortController.signal,
+                suppressProgressOverlay: true,
+            });
             const retried = response.data.results?.[0];
             if (!retried) {
                 throw new Error('Upload failed');
+            }
+
+            if (retrySessionRef.current !== retrySession) {
+                return;
             }
 
             setResults(
@@ -109,6 +167,16 @@ const MlirFileResultsOverlay = () => {
                     ) ?? current,
             );
         } catch (err: unknown) {
+            // Skip writeback for user-triggered aborts (close, unmount, or per-row cancel).
+            // The abort → cancel error contract is explicit here rather than relying on retrySessionRef.
+            if (axios.isCancel(err)) {
+                return;
+            }
+
+            if (retrySessionRef.current !== retrySession) {
+                return;
+            }
+
             const message = getResponseError(err, 'Unable to retry MLIR conversion');
             setResults(
                 (current) =>
@@ -126,7 +194,20 @@ const MlirFileResultsOverlay = () => {
             );
             createToastNotification('MLIR', message, ToastType.ERROR);
         } finally {
-            setRetryingIndex(null);
+            // Only delete the controller if it matches the one we stored for this retry.
+            // Prevents a stale (completed) retry's finally block from evicting a new controller
+            // if the same row is retried after an overlay close/reopen.
+            if (retryAbortControllersRef.current.get(index) === abortController) {
+                retryAbortControllersRef.current.delete(index);
+            }
+
+            if (retrySessionRef.current === retrySession) {
+                setRetryingIndices((current) => {
+                    const next = new Set(current);
+                    next.delete(index);
+                    return next;
+                });
+            }
         }
     };
 
@@ -189,7 +270,7 @@ const MlirFileResultsOverlay = () => {
                 <MlirFileList
                     results={results ?? []}
                     selectedIndex={selectedIndex}
-                    retryingIndex={retryingIndex}
+                    retryingIndices={retryingIndices}
                     // Clicking the already-selected file deselects it.
                     onSelect={(index) => setSelectedIndex((current) => (current === index ? null : index))}
                     onRetry={handleRetry}

@@ -276,4 +276,30 @@ describe('useMlirRemote progress lifecycle', () => {
         expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
         expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
     });
+
+    it('does not mutate global progress state when suppressProgressOverlay is enabled', async () => {
+        const postMock = vi.mocked(axiosInstance.post);
+        const deferred = createDeferred<{ data: { status: ConnectionTestStates } }>();
+        let onUploadProgress: ((event: AxiosProgressEvent) => void) | undefined;
+
+        postMock.mockImplementation((_url, _data, config) => {
+            onUploadProgress = config?.onUploadProgress;
+            return deferred.promise;
+        });
+
+        const { result } = renderHook(() => useMlirRemote());
+        const uploadPromise = result.current.uploadMlirFileToServer([new File(['module {}'], 'model.mlir')], SERVER, {
+            suppressProgressOverlay: true,
+        });
+
+        expect(getDefaultStore().get(fileTransferProgressAtom)).toEqual(getInactiveFileTransferProgress());
+
+        onUploadProgress?.({ loaded: 10, total: 10 } as AxiosProgressEvent);
+        expect(getDefaultStore().get(fileTransferProgressAtom)).toEqual(getInactiveFileTransferProgress());
+
+        deferred.resolve({ data: { status: ConnectionTestStates.OK } });
+        await uploadPromise;
+
+        expect(getDefaultStore().get(fileTransferProgressAtom)).toEqual(getInactiveFileTransferProgress());
+    });
 });
