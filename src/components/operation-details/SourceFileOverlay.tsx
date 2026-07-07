@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, Callout, Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
+import { Button, Callout, Classes, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -14,6 +14,7 @@ import useRemoteConnection from '../../hooks/useRemote';
 import { useReportMetadata } from '../../hooks/useAPI';
 import { profilerReportLocationAtom } from '../../store/app';
 import Overlay from '../Overlay';
+import GitCommitInfo from './GitCommitInfo';
 
 interface SourceFileOverlayProps {
     isOpen: boolean;
@@ -233,33 +234,6 @@ function SourceFileOverlay({
         </Overlay>
     );
 }
-
-interface GitCommitInfoProps {
-    gitUrl: string | null;
-    gitSha: string;
-}
-
-const GitCommitInfo = ({ gitUrl, gitSha }: GitCommitInfoProps) => (
-    <span className='stack-trace-git-info'>
-        {'Commit: '}
-        {gitUrl ? (
-            <a
-                href={`${gitUrl.replace(/\.git$/, '')}/commit/${gitSha}`}
-                target='_blank'
-                rel='noreferrer'
-            >
-                {gitSha.slice(0, 7)}
-                <Icon
-                    icon={IconNames.SHARE}
-                    size={10}
-                    className='stack-trace-git-info-icon'
-                />
-            </a>
-        ) : (
-            gitSha.slice(0, 7)
-        )}
-    </span>
-);
 
 const scrollToLineNumberInFile = () => {
     const lineElement = document.querySelector(`.highlighted-line .line-number`);

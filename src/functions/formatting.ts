@@ -55,6 +55,21 @@ const toShortTypeLabel = (input: string) => {
     return TYPE_LABELS[key] ?? key.toLowerCase();
 };
 
+const SHORT_SHA_LENGTH = 7;
+const HTTP_GIT_URL_PATTERN = /^https?:\/\//;
+
+export const formatShortSha = (sha: string): string => sha.slice(0, SHORT_SHA_LENGTH);
+
+export const stripGitRemoteSuffix = (url: string): string => url.replace(/\.git$/, '');
+
+export const buildGitCommitUrl = (gitUrl: string, gitSha: string): string | null => {
+    if (!HTTP_GIT_URL_PATTERN.test(gitUrl)) {
+        return null;
+    }
+
+    return `${stripGitRemoteSuffix(gitUrl)}/commit/${gitSha}`;
+};
+
 /**
  * Human-readable nanosecond formatter — picks the largest unit that still
  * yields a reasonable mantissa (ns → µs → ms → s).

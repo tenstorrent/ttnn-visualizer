@@ -1,0 +1,131 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+import '@testing-library/jest-dom/vitest';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import FooterInfobar from '../src/components/FooterInfobar';
+import { activeProfilerReportAtom } from '../src/store/app';
+import mockInstance from './data/mockInstance.json';
+import { TestProviders } from './helpers/TestProviders';
+
+const mockUseReportMetadata = vi.fn();
+const mockUseInstance = vi.fn();
+const mockUseGetLatestAppVersion = vi.fn();
+
+vi.mock('../src/components/RangeSlider', () => ({
+    default: () => null,
+}));
+
+vi.mock('../src/hooks/useAPI.tsx', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../src/hooks/useAPI.tsx')>();
+    return {
+        ...actual,
+        useReportMetadata: () => mockUseReportMetadata(),
+        useInstance: () => mockUseInstance(),
+        useGetLatestAppVersion: () => mockUseGetLatestAppVersion(),
+    };
+});
+
+vi.mock('../src/functions/getServerConfig.ts', () => ({
+    default: () => ({
+        SERVER_MODE: false,
+        BASE_PATH: '/',
+        REPORT_DATA_DIRECTORY: '/data/reports',
+    }),
+}));
+
+vi.mock('@blueprintjs/core', async () => {
+    const original = await vi.importActual<typeof import('@blueprintjs/core')>('@blueprintjs/core');
+    return {
+        ...original,
+        Tooltip: ({ children, content }: { children: React.ReactNode; content: React.ReactNode }) => (
+            <div data-testid='tooltip-host'>
+                <div data-testid='tooltip-content'>{content}</div>
+                {children}
+            </div>
+        ),
+    };
+});
+
+const REPORT_PATH = '/reports/memory/my-report';
+const FULL_SHA = 'abcdef0123456789abcdef0123456789abcdef01';
+
+const renderFooter = (reportMetadata: { gitUrl?: string | null; gitSha?: string | null } | undefined) => {
+    mockUseReportMetadata.mockReturnValue({ data: reportMetadata });
+    mockUseInstance.mockReturnValue({ data: mockInstance });
+    mockUseGetLatestAppVersion.mockReturnValue({
+        data: '1.0.0',
+        isPending: false,
+        isError: false,
+    });
+
+    return render(
+        <TestProviders
+            initialAtomValues={[
+                [
+                    activeProfilerReportAtom,
+                    {
+                        reportName: 'my-report',
+                        path: REPORT_PATH,
+                    },
+                ],
+            ]}
+        >
+            <FooterInfobar />
+        </TestProviders>,
+    );
+};
+
+const getMemoryReportTooltipContent = (): HTMLElement => {
+    const tooltips = screen.getAllByTestId('tooltip-content');
+    const memoryTooltip = tooltips.find((tooltip) => within(tooltip).queryByText(/Report path:/));
+
+    expect(memoryTooltip).toBeDefined();
+
+    return memoryTooltip as HTMLElement;
+};
+
+beforeEach(() => {
+    vi.clearAllMocks();
+});
+
+afterEach(cleanup);
+
+describe('FooterInfobar memory report tooltip', () => {
+    it('shows only the report path when git metadata is absent', () => {
+        renderFooter(undefined);
+
+        const tooltip = getMemoryReportTooltipContent();
+        expect(tooltip.textContent).toContain('Report path:');
+        expect(tooltip.textContent).toContain('/my-report');
+        expect(tooltip.textContent).not.toMatch(/Git repo:/);
+        expect(tooltip.textContent).not.toMatch(/Commit:/);
+    });
+
+    it('shows git repo when only gitUrl is present', () => {
+        renderFooter({ gitUrl: 'https://github.com/foo/bar.git', gitSha: null });
+
+        const tooltip = getMemoryReportTooltipContent();
+        expect(tooltip.textContent).toContain('Git repo: https://github.com/foo/bar.git');
+        expect(tooltip.textContent).not.toMatch(/Commit:/);
+    });
+
+    it('shows commit when only gitSha is present', () => {
+        renderFooter({ gitUrl: null, gitSha: FULL_SHA });
+
+        const tooltip = getMemoryReportTooltipContent();
+        expect(tooltip.textContent).not.toMatch(/Git repo:/);
+        expect(tooltip.textContent).toContain('Commit: abcdef0');
+    });
+
+    it('shows git repo and commit when both are present', () => {
+        renderFooter({ gitUrl: 'https://github.com/foo/bar.git', gitSha: FULL_SHA });
+
+        const tooltip = getMemoryReportTooltipContent();
+        expect(tooltip.textContent).toContain('Git repo: https://github.com/foo/bar.git');
+        expect(tooltip.textContent).toContain('Commit: abcdef0');
+    });
+});

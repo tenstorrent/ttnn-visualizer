@@ -39,6 +39,7 @@ import { Instance } from '../model/APIData';
 import LoadingSpinner from './LoadingSpinner';
 import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 import AppVersionStatus from './AppVersionStatus';
+import { formatShortSha } from '../functions/formatting';
 
 const RANGE_DISALLOWED_ROUTES: string[] = [ROUTES.NPE];
 
@@ -154,7 +155,7 @@ function FooterInfobar() {
                                     {reportMetadata?.gitSha && (
                                         <>
                                             <br />
-                                            <strong>Commit:</strong> {reportMetadata.gitSha.slice(0, 7)}
+                                            <strong>Commit:</strong> {formatShortSha(reportMetadata.gitSha)}
                                         </>
                                     )}
                                 </>

@@ -3,7 +3,35 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { formatDuration } from '../src/functions/formatting';
+import { buildGitCommitUrl, formatDuration, formatShortSha, stripGitRemoteSuffix } from '../src/functions/formatting';
+
+describe('formatShortSha', () => {
+    it('truncates to seven characters', () => {
+        expect(formatShortSha('abcdef0123456789')).toBe('abcdef0');
+    });
+});
+
+describe('stripGitRemoteSuffix', () => {
+    it('removes a trailing .git suffix', () => {
+        expect(stripGitRemoteSuffix('https://github.com/foo/bar.git')).toBe('https://github.com/foo/bar');
+    });
+
+    it('leaves URLs without a .git suffix unchanged', () => {
+        expect(stripGitRemoteSuffix('https://github.com/foo/bar')).toBe('https://github.com/foo/bar');
+    });
+});
+
+describe('buildGitCommitUrl', () => {
+    it('builds an HTTP commit URL and strips .git', () => {
+        expect(buildGitCommitUrl('https://github.com/foo/bar.git', 'abc123')).toBe(
+            'https://github.com/foo/bar/commit/abc123',
+        );
+    });
+
+    it('returns null for SSH remotes', () => {
+        expect(buildGitCommitUrl('git@github.com:foo/bar.git', 'abc123')).toBeNull();
+    });
+});
 
 describe('formatDuration', () => {
     it('formats sub-microsecond as ns', () => {
