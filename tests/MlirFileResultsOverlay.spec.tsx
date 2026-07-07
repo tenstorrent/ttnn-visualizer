@@ -221,7 +221,14 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(screen.getByRole('button', { name: /retry/i }));
 
         await waitFor(() => {
-            expect(uploadMlirFileToServer).toHaveBeenCalledWith([failedFile], SERVER);
+            expect(uploadMlirFileToServer).toHaveBeenCalledWith(
+                [failedFile],
+                SERVER,
+                expect.objectContaining({
+                    signal: expect.any(AbortSignal),
+                    suppressProgressOverlay: true,
+                }),
+            );
             expect(getDefaultStore().get(mlirFileResultsAtom)?.[0]).toMatchObject({
                 status: ConnectionTestStates.OK,
                 name: 'failed',
@@ -271,7 +278,14 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(retryButton);
 
         await waitFor(() => {
-            expect(uploadMlirFileToServer).toHaveBeenCalledWith([failedFile], SERVER);
+            expect(uploadMlirFileToServer).toHaveBeenCalledWith(
+                [failedFile],
+                SERVER,
+                expect.objectContaining({
+                    signal: expect.any(AbortSignal),
+                    suppressProgressOverlay: true,
+                }),
+            );
             expect(viewButton).toBeDisabled();
         });
     });
@@ -291,7 +305,7 @@ describe('MlirFileResultsOverlay', () => {
         expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
     });
 
-    it('disables other Retry buttons while a retry is in flight', async () => {
+    it('keeps other Retry buttons enabled while a retry is in flight', async () => {
         const fileA = new File(['module {}'], 'failed-a.mlir');
         const fileB = new File(['module {}'], 'failed-b.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [fileA, fileB]);
@@ -330,7 +344,7 @@ describe('MlirFileResultsOverlay', () => {
         await waitFor(() => {
             const retryButtons = screen.getAllByRole('button', { name: /retry/i });
             expect(retryButtons).toHaveLength(1);
-            expect(retryButtons[0]).toBeDisabled();
+            expect(retryButtons[0]).toBeEnabled();
         });
 
         retryDeferred.resolve?.({
