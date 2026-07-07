@@ -28,10 +28,6 @@
     }
 }
 
-/* Top-left cluster of graph-shaping controls (filter, node-body toggles,
- * expand/collapse). Owned here so the vertical rhythm between widgets stays
- * consistent — each child no longer positions itself. Above React Flow's
- * nodes / edges / controls, below the details panel. */
 .mlir-top-left-controls {
     position: absolute;
     top: 12px;

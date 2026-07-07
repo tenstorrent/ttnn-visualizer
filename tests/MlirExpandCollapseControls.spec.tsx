@@ -11,10 +11,6 @@ import MlirExpandCollapseControls from '../src/components/mlir/MlirExpandCollaps
 
 afterEach(cleanup);
 
-// The buttons render as children of React Flow's `<Controls>` widget in
-// production, but `ControlButton` is a plain `<button>` under the hood
-// (`ButtonHTMLAttributes<HTMLButtonElement>`), so we can mount the fragment
-// bare and assert against the DOM directly.
 describe('MlirExpandCollapseControls', () => {
     const buildProps = (overrides: Partial<ComponentProps<typeof MlirExpandCollapseControls>> = {}) => ({
         subgraphCount: 3,

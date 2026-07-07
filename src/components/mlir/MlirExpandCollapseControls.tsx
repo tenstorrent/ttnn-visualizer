@@ -13,16 +13,6 @@ export interface MlirExpandCollapseControlsProps {
     onCollapseAll: () => void;
 }
 
-// Sits in the top-left cluster next to `MlirOpFilter` and
-// `MlirNodeBodyToggles` — grouping this with the filter-adjacent widgets
-// keeps all graph-shaping controls together and leaves the bottom-left zoom
-// widget alone.
-//
-// Disable rules keep the buttons truthful:
-//  - `Expand all`   grays out when the graph has no collapsible namespaces
-//                   OR every collapsible namespace is already expanded.
-//  - `Collapse all` grays out when nothing is expanded (already at
-//                   top-level anchors, so the click would be a no-op).
 const MlirExpandCollapseControls = ({
     subgraphCount,
     expandedCount,
