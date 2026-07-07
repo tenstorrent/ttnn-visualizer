@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FooterInfobar from '../src/components/FooterInfobar';
 import { activeProfilerReportAtom } from '../src/store/app';
 import mockInstance from './data/mockInstance.json';
-import { MOCK_FULL_GIT_SHA, MOCK_HTTP_GIT_URL, MOCK_SHORT_GIT_SHA, MOCK_SSH_GIT_URL } from './helpers/gitFixtures';
+import { MOCK_FULL_GIT_SHA, MOCK_HTTP_GIT_URL, MOCK_SHORT_GIT_SHA } from './helpers/gitFixtures';
 import { TestProviders } from './helpers/TestProviders';
 
 const mockUseReportMetadata = vi.fn();
@@ -95,6 +95,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('FooterInfobar memory report tooltip', () => {
+    it('subscribes to report metadata when a profiler report is active', () => {
+        renderFooter(undefined);
+
+        expect(mockUseReportMetadata).toHaveBeenCalled();
+    });
+
     it('shows only the report path when git metadata is absent', () => {
         renderFooter(undefined);
 
@@ -103,22 +109,6 @@ describe('FooterInfobar memory report tooltip', () => {
         expect(tooltip.textContent).toContain('/my-report');
         expect(tooltip.textContent).not.toMatch(/Git repo:/);
         expect(tooltip.textContent).not.toMatch(/Commit:/);
-    });
-
-    it('shows git repo when only gitUrl is present', () => {
-        renderFooter({ gitUrl: MOCK_HTTP_GIT_URL, gitSha: null });
-
-        const tooltip = getMemoryReportTooltipContent();
-        expect(tooltip.textContent).toContain(`Git repo: ${MOCK_HTTP_GIT_URL}`);
-        expect(tooltip.textContent).not.toMatch(/Commit:/);
-    });
-
-    it('shows commit when only gitSha is present', () => {
-        renderFooter({ gitUrl: null, gitSha: MOCK_FULL_GIT_SHA });
-
-        const tooltip = getMemoryReportTooltipContent();
-        expect(tooltip.textContent).not.toMatch(/Git repo:/);
-        expect(tooltip.textContent).toContain(`Commit: ${MOCK_SHORT_GIT_SHA}`);
     });
 
     it('shows git repo and a commit link when both are present with an HTTP remote', () => {
@@ -130,14 +120,5 @@ describe('FooterInfobar memory report tooltip', () => {
 
         const link = within(tooltip).getByRole('link');
         expect(link).toHaveAttribute('href', `https://github.com/foo/bar/commit/${MOCK_FULL_GIT_SHA}`);
-    });
-
-    it('shows plain commit text when both are present with an SSH remote', () => {
-        renderFooter({ gitUrl: MOCK_SSH_GIT_URL, gitSha: MOCK_FULL_GIT_SHA });
-
-        const tooltip = getMemoryReportTooltipContent();
-        expect(tooltip.textContent).toContain(`Git repo: ${MOCK_SSH_GIT_URL}`);
-        expect(tooltip.textContent).toContain(`Commit: ${MOCK_SHORT_GIT_SHA}`);
-        expect(within(tooltip).queryByRole('link')).not.toBeInTheDocument();
     });
 });

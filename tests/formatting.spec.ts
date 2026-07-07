@@ -9,6 +9,10 @@ describe('formatShortSha', () => {
     it('truncates to seven characters', () => {
         expect(formatShortSha('abcdef0123456789')).toBe('abcdef0');
     });
+
+    it('returns short SHAs unchanged', () => {
+        expect(formatShortSha('abc')).toBe('abc');
+    });
 });
 
 describe('stripGitRemoteSuffix', () => {
@@ -30,6 +34,16 @@ describe('buildGitCommitUrl', () => {
 
     it('returns null for SSH remotes', () => {
         expect(buildGitCommitUrl('git@github.com:foo/bar.git', 'abc123')).toBeNull();
+    });
+
+    it('builds an HTTP commit URL for http remotes', () => {
+        expect(buildGitCommitUrl('http://github.com/foo/bar', 'abc123')).toBe(
+            'http://github.com/foo/bar/commit/abc123',
+        );
+    });
+
+    it('returns null for git protocol remotes', () => {
+        expect(buildGitCommitUrl('git://github.com/foo/bar.git', 'abc123')).toBeNull();
     });
 });
 

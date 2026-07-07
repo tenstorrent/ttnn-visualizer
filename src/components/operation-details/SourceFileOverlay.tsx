@@ -10,6 +10,7 @@ import 'styles/components/StackTrace.scss';
 import { ReportLocation } from '../../definitions/Reports';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import hljs from '../../functions/highlightSource';
+import { useReportMetadata } from '../../hooks/useAPI';
 import useRemoteConnection from '../../hooks/useRemote';
 import { profilerReportLocationAtom } from '../../store/app';
 import Overlay from '../Overlay';
@@ -26,8 +27,6 @@ interface SourceFileOverlayProps {
     filePath: string;
     matchedViaRemap: boolean;
     scrollToLineNumber: boolean;
-    gitUrl: string | null;
-    gitSha: string | null;
 }
 
 function SourceFileOverlay({
@@ -41,9 +40,10 @@ function SourceFileOverlay({
     filePath,
     matchedViaRemap,
     scrollToLineNumber = false,
-    gitUrl,
-    gitSha,
 }: SourceFileOverlayProps) {
+    const { data: reportMetadata } = useReportMetadata();
+    const gitUrl = reportMetadata?.gitUrl ?? null;
+    const gitSha = reportMetadata?.gitSha ?? null;
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
     const { persistentState } = useRemoteConnection();
 

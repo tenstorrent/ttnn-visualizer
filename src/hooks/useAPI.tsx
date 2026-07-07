@@ -855,7 +855,7 @@ interface ReportMetadata {
     gitSha: string | null;
 }
 
-const fetchReportMetadata = async (): Promise<ReportMetadata> => {
+export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
     const parsedSchemaVersion = semverParse(data?.schema_version);
     const parsedDuration = Number(data?.total_duration_ns);

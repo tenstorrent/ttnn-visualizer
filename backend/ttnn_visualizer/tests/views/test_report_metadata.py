@@ -57,6 +57,8 @@ def test_report_metadata_returns_metadata_on_success(app, client):
             INSERT INTO report_metadata VALUES ('schema_version', '2');
             INSERT INTO report_metadata VALUES ('capture_timestamp_ns', '1773424287168605099');
             INSERT INTO report_metadata VALUES ('total_duration_ns', '22119664963');
+            INSERT INTO report_metadata VALUES ('git_url', 'https://github.com/foo/bar.git');
+            INSERT INTO report_metadata VALUES ('git_sha', 'abcdef0123456789');
         """)
         conn.commit()
         conn.close()
@@ -81,9 +83,13 @@ def test_report_metadata_returns_metadata_on_success(app, client):
             "schema_version",
             "capture_timestamp_ns",
             "total_duration_ns",
+            "git_url",
+            "git_sha",
         }
         assert data["schema_version"] == "2"
         assert data["capture_timestamp_ns"] == "1773424287168605099"
         assert data["total_duration_ns"] == "22119664963"
+        assert data["git_url"] == "https://github.com/foo/bar.git"
+        assert data["git_sha"] == "abcdef0123456789"
     finally:
         Path(db_path).unlink(missing_ok=True)

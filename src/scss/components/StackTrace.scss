@@ -10,6 +10,18 @@
 $source-path-vertical-padding: 20px;
 $container-border-width: 1px;
 
+@mixin report-git-info {
+    display: block;
+    font-size: 12px;
+    margin-top: 5px;
+
+    .report-git-info-icon {
+        margin-left: 3px;
+        margin-bottom: 2px;
+        vertical-align: middle;
+    }
+}
+
 .stack-trace {
     margin-top: 0;
 
@@ -67,15 +79,7 @@ $container-border-width: 1px;
         margin-bottom: 0;
 
         .report-git-info {
-            display: block;
-            font-size: 12px;
-            margin-top: 5px;
-
-            .report-git-info-icon {
-                margin-left: 3px;
-                margin-bottom: 2px;
-                vertical-align: middle;
-            }
+            @include report-git-info;
         }
     }
 
@@ -137,15 +141,7 @@ $container-border-width: 1px;
 }
 
 .stack-trace-error .stack-trace-path .report-git-info {
-    display: block;
-    font-size: 12px;
-    margin-top: 5px;
-
-    .report-git-info-icon {
-        margin-left: 3px;
-        margin-bottom: 2px;
-        vertical-align: middle;
-    }
+    @include report-git-info;
 }
 
 .source-file-controls {

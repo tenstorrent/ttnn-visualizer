@@ -297,11 +297,11 @@ describe('MlirFileResultsOverlay', () => {
         getDefaultStore().set(mlirRetryFilesAtom, [fileA, fileB]);
         getDefaultStore().set(mlirRetryServerAtom, SERVER);
 
-        let resolveRetry: ((value: unknown) => void) | null = null;
+        const retryDeferred: { resolve: ((value: unknown) => void) | null } = { resolve: null };
         uploadMlirFileToServer.mockImplementationOnce(
             () =>
                 new Promise((resolve) => {
-                    resolveRetry = resolve;
+                    retryDeferred.resolve = resolve;
                 }),
         );
 
@@ -332,7 +332,7 @@ describe('MlirFileResultsOverlay', () => {
             expect(retryButtons[0]).toBeDisabled();
         });
 
-        resolveRetry?.({
+        retryDeferred.resolve?.({
             data: {
                 results: [
                     {

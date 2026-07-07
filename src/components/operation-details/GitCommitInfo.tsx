@@ -7,17 +7,12 @@ import { IconNames } from '@blueprintjs/icons';
 import { ReactNode } from 'react';
 import { buildGitCommitUrl, formatShortSha } from '../../functions/formatting';
 
-export interface GitCommitInfoProps {
+export interface GitMetadataProps {
     gitUrl: string | null;
     gitSha: string | null;
 }
 
-export interface ReportGitMetadataLinesProps {
-    gitUrl: string | null;
-    gitSha: string | null;
-}
-
-function GitCommitInfo({ gitUrl, gitSha }: GitCommitInfoProps) {
+function GitCommitInfo({ gitUrl, gitSha }: GitMetadataProps) {
     const shortSha = gitSha ? formatShortSha(gitSha) : null;
     const commitUrl = gitUrl && gitSha ? buildGitCommitUrl(gitUrl, gitSha) : null;
 
@@ -48,7 +43,7 @@ function GitCommitInfo({ gitUrl, gitSha }: GitCommitInfoProps) {
     );
 }
 
-export function ReportGitMetadataLines({ gitUrl, gitSha }: ReportGitMetadataLinesProps): ReactNode {
+export function ReportGitMetadataLines({ gitUrl, gitSha }: GitMetadataProps): ReactNode {
     return (
         <>
             {gitUrl ? (
