@@ -1526,37 +1526,39 @@ const MlGraphInner = ({ data }: ViewProps) => {
                         selectNodesOnDrag={false}
                     >
                         <MiniMap nodeColor={minimapNodeColor} />
-                        <Controls>
-                            <MlirExpandCollapseControls
-                                subgraphCount={allSubgraphNamespaces.length}
-                                expandedCount={expandedNamespaces.size}
-                                onExpandAll={expandAllSubgraphs}
-                                onCollapseAll={collapseAllSubgraphs}
-                            />
-                        </Controls>
+                        <Controls />
                         <Background />
                     </ReactFlow>
                 </MlirNodeBodyContext.Provider>
             </MlirGroupContext.Provider>
 
-            <MlirOpFilter
-                ref={filterRef}
-                query={filterQuery}
-                onQueryChange={handleQueryChange}
-                mode={filterMode}
-                onModeChange={handleModeChange}
-                isRegexInvalid={filterMatchInfo?.isRegexInvalid ?? false}
-                matchCount={matchedNodesInOrder.length}
-                hiddenMatchCount={filterMatchInfo?.hiddenMatchCount ?? 0}
-                currentMatchIndex={currentMatchIndex}
-                onPrev={() => goToMatch('prev')}
-                onNext={() => goToMatch('next')}
-            />
+            <div className='mlir-top-left-controls'>
+                <MlirOpFilter
+                    ref={filterRef}
+                    query={filterQuery}
+                    onQueryChange={handleQueryChange}
+                    mode={filterMode}
+                    onModeChange={handleModeChange}
+                    isRegexInvalid={filterMatchInfo?.isRegexInvalid ?? false}
+                    matchCount={matchedNodesInOrder.length}
+                    hiddenMatchCount={filterMatchInfo?.hiddenMatchCount ?? 0}
+                    currentMatchIndex={currentMatchIndex}
+                    onPrev={() => goToMatch('prev')}
+                    onNext={() => goToMatch('next')}
+                />
 
-            <MlirNodeBodyToggles
-                value={nodeBodyToggles}
-                onChange={setNodeBodyToggles}
-            />
+                <MlirNodeBodyToggles
+                    value={nodeBodyToggles}
+                    onChange={setNodeBodyToggles}
+                />
+
+                <MlirExpandCollapseControls
+                    subgraphCount={allSubgraphNamespaces.length}
+                    expandedCount={expandedNamespaces.size}
+                    onExpandAll={expandAllSubgraphs}
+                    onCollapseAll={collapseAllSubgraphs}
+                />
+            </div>
 
             {selectedSourceNode && (
                 <MlirNodeDetailsPanel

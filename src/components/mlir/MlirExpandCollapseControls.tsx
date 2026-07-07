@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Icon } from '@blueprintjs/core';
+import { Button, ButtonVariant, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ControlButton } from '@xyflow/react';
+import 'styles/components/MlirExpandCollapseControls.scss';
 
 export interface MlirExpandCollapseControlsProps {
     subgraphCount: number;
@@ -13,10 +13,10 @@ export interface MlirExpandCollapseControlsProps {
     onCollapseAll: () => void;
 }
 
-// Renders as children of React Flow's `<Controls>` widget so the two buttons
-// sit right underneath the built-in zoom / fit / lock cluster in the
-// bottom-left corner — matching #1715's "next to the existing layout / zoom
-// controls" requirement.
+// Sits in the top-left cluster next to `MlirOpFilter` and
+// `MlirNodeBodyToggles` — grouping this with the filter-adjacent widgets
+// keeps all graph-shaping controls together and leaves the bottom-left zoom
+// widget alone.
 //
 // Disable rules keep the buttons truthful:
 //  - `Expand all`   grays out when the graph has no collapsible namespaces
@@ -32,24 +32,36 @@ const MlirExpandCollapseControls = ({
     const canExpand = subgraphCount > 0 && expandedCount < subgraphCount;
     const canCollapse = expandedCount > 0;
     return (
-        <>
-            <ControlButton
-                onClick={onExpandAll}
-                disabled={!canExpand}
-                title='Expand all subgraphs'
-                aria-label='Expand all subgraphs'
+        <div className='mlir-expand-collapse-controls'>
+            <Tooltip
+                content='Expand every subgraph and re-lay out'
+                compact
             >
-                <Icon icon={IconNames.EXPAND_ALL} />
-            </ControlButton>
-            <ControlButton
-                onClick={onCollapseAll}
-                disabled={!canCollapse}
-                title='Collapse all subgraphs'
-                aria-label='Collapse all subgraphs'
+                <Button
+                    size={Size.SMALL}
+                    variant={ButtonVariant.MINIMAL}
+                    icon={IconNames.EXPAND_ALL}
+                    text='Expand all'
+                    disabled={!canExpand}
+                    aria-label='Expand all subgraphs'
+                    onClick={onExpandAll}
+                />
+            </Tooltip>
+            <Tooltip
+                content='Collapse every subgraph back to the top-level anchors'
+                compact
             >
-                <Icon icon={IconNames.COLLAPSE_ALL} />
-            </ControlButton>
-        </>
+                <Button
+                    size={Size.SMALL}
+                    variant={ButtonVariant.MINIMAL}
+                    icon={IconNames.COLLAPSE_ALL}
+                    text='Collapse all'
+                    disabled={!canCollapse}
+                    aria-label='Collapse all subgraphs'
+                    onClick={onCollapseAll}
+                />
+            </Tooltip>
+        </div>
     );
 };
 
