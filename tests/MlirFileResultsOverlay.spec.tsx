@@ -298,8 +298,7 @@ describe('MlirFileResultsOverlay', () => {
         getDefaultStore().set(mlirRetryServerAtom, SERVER);
 
         const retryDeferred: { resolve: ((value: unknown) => void) | null } = { resolve: null };
-        let resolveRetry!: (value: unknown) => void;
-        
+
         uploadMlirFileToServer.mockImplementationOnce(
             () =>
                 new Promise((resolve) => {
