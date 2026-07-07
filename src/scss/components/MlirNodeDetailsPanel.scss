@@ -7,8 +7,8 @@
 /* The panel docks inside the MLIR view pane (top-right corner of the
  * React Flow canvas). Make sure the pane is a positioned ancestor so the
  * panel's absolute placement anchors to the canvas area rather than the
- * document — also lets the existing `.mlir-relayout-button` continue to
- * pin to top-left inside the canvas. */
+ * document — same positioning contract the `.mlir-node-body-toggles`
+ * panel relies on for its top-left placement inside the canvas. */
 /* stylelint-disable selector-class-pattern */
 .mlir-view-pane {
     position: relative;
