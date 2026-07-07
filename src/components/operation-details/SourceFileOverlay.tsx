@@ -186,12 +186,10 @@ function SourceFileOverlay({
                     <div className='stack-trace-error'>
                         <p className='stack-trace-path monospace'>
                             {displaySourcePath}
-                            {reportMetadata?.gitSha && (
-                                <GitCommitInfo
-                                    gitUrl={reportMetadata.gitUrl}
-                                    gitSha={reportMetadata.gitSha}
-                                />
-                            )}
+                            <GitCommitInfo
+                                gitUrl={reportMetadata?.gitUrl}
+                                gitSha={reportMetadata?.gitSha}
+                            />
                         </p>
                         <div className='error-details'>
                             <pre>{errorDetails}</pre>
@@ -203,12 +201,10 @@ function SourceFileOverlay({
                     <div className='stack-trace'>
                         <p className='stack-trace-path monospace'>
                             {displaySourcePath}
-                            {reportMetadata?.gitSha && (
-                                <GitCommitInfo
-                                    gitUrl={reportMetadata.gitUrl}
-                                    gitSha={reportMetadata.gitSha}
-                                />
-                            )}
+                            <GitCommitInfo
+                                gitUrl={reportMetadata?.gitUrl}
+                                gitSha={reportMetadata?.gitSha}
+                            />
                         </p>
                         {matchedViaRemap ? (
                             <Callout
