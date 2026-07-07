@@ -29,8 +29,21 @@ export interface MlirUploadResponse {
     results: MlirFileUploadResult[];
 }
 
-interface MlirUploadOptions {
+/**
+ * Options for controlling MLIR file upload behaviour.
+ */
+export interface MlirUploadOptions {
+    /**
+     * Abort signal for cancellation. When aborted, the request is cancelled
+     * and axios rejects with a cancel error. Callers must handle axios.isCancel(err)
+     * to distinguish user-triggered aborts from genuine errors.
+     */
     signal?: AbortSignal;
+    /**
+     * Suppress the global FileStatusOverlay during this upload. Used by retry flows
+     * to show per-row progress instead. Note: this is per-request and not concurrency-aware
+     * (no reference counting), so parallel non-retry uploads should not use this.
+     */
     suppressProgressOverlay?: boolean;
 }
 

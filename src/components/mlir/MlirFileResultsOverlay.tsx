@@ -2,9 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { Button, ButtonVariant, Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import Overlay from '../Overlay';
@@ -44,6 +45,16 @@ const MlirFileResultsOverlay = () => {
     const [retryingIndices, setRetryingIndices] = useState<Set<number>>(new Set<number>());
     const retrySessionRef = useRef(0);
     const retryAbortControllersRef = useRef<Map<number, AbortController>>(new Map<number, AbortController>());
+
+    // Abort all in-flight retries on unmount to prevent setResults writebacks
+    // on unmounted tree. Complements the axios.isCancel guard in the catch block.
+    useEffect(
+        () => () => {
+            retryAbortControllersRef.current.forEach((c) => c.abort());
+            retryAbortControllersRef.current.clear();
+        },
+        [],
+    );
 
     // Reset the pending selection on close so it can't carry over to a reopen
     // or the next upload. The results themselves are retained so the overlay
@@ -156,6 +167,12 @@ const MlirFileResultsOverlay = () => {
                     ) ?? current,
             );
         } catch (err: unknown) {
+            // Skip writeback for user-triggered aborts (close, unmount, or per-row cancel).
+            // The abort → cancel error contract is explicit here rather than relying on retrySessionRef.
+            if (axios.isCancel(err)) {
+                return;
+            }
+
             if (retrySessionRef.current !== retrySession) {
                 return;
             }
@@ -177,7 +194,12 @@ const MlirFileResultsOverlay = () => {
             );
             createToastNotification('MLIR', message, ToastType.ERROR);
         } finally {
-            retryAbortControllersRef.current.delete(index);
+            // Only delete the controller if it matches the one we stored for this retry.
+            // Prevents a stale (completed) retry's finally block from evicting a new controller
+            // if the same row is retried after an overlay close/reopen.
+            if (retryAbortControllersRef.current.get(index) === abortController) {
+                retryAbortControllersRef.current.delete(index);
+            }
 
             if (retrySessionRef.current === retrySession) {
                 setRetryingIndices((current) => {
