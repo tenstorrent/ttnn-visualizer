@@ -53,6 +53,7 @@ import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
 import { MlirFilterMode, buildFilterMatcher } from './mlirFilter';
 import MlirNodeBodyToggles from './MlirNodeBodyToggles';
+import MlirExpandCollapseControls from './MlirExpandCollapseControls';
 import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
 import { getNamespaceSegments } from './mlirGraphHelpers';
 
@@ -378,6 +379,11 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // collapsed namespaces and we have to wait for the worker to rebuild
     // before we can fitView on it. Consumed once the rebuilt graph lands.
     const pendingFocusNodeIdRef = useRef<string | null>(null);
+    // `viewportAnchorRef`, `pendingFocusNodeIdRef`, and `pendingFitAllRef`
+    // are mutually exclusive post-build viewport intents. The worker can
+    // coalesce successive builds into a single reply, so every arming site
+    // below clears the other two — whichever gesture fires last wins.
+    const pendingFitAllRef = useRef(false);
     const hasFitInitiallyRef = useRef(false);
 
     // No graph-id reset effect: `MlGraphInner` is keyed by `graph.id` in
@@ -474,7 +480,18 @@ const MlGraphInner = ({ data }: ViewProps) => {
             setNodes(styledNodes);
             setEdges(rf.edges);
 
+            // Read + clear every post-rebuild viewport baton up-front. The
+            // arming sites enforce mutual exclusion (see the useRef decl
+            // comment for `pendingFitAllRef`), and the `if / else if` chain
+            // below enforces it a second time at the consumer so a stray
+            // arming site can't schedule two fitViews on the same frame.
             const anchor = viewportAnchorRef.current;
+            viewportAnchorRef.current = null;
+            const pendingFocusId = pendingFocusNodeIdRef.current;
+            pendingFocusNodeIdRef.current = null;
+            const shouldFitAll = pendingFitAllRef.current;
+            pendingFitAllRef.current = false;
+
             if (anchor) {
                 const toNode = rf.nodes.find((n) => n.id === anchor.toNodeId);
                 if (toNode) {
@@ -486,36 +503,19 @@ const MlGraphInner = ({ data }: ViewProps) => {
                         { duration: 0 },
                     );
                 }
-                viewportAnchorRef.current = null;
-            }
-
-            // Locate-from-panel: the user clicked the "locate" button next to
-            // a producer/consumer reference and the target wasn't visible
-            // pre-rebuild (collapsed namespace). Now that the rebuilt graph
-            // has landed, recenter on it. Skip silently if the target still
-            // isn't in the build (e.g. synthetic id that never reaches the
-            // canvas) — a missing fitView is preferable to a noisy error,
-            // and the surrounding state stays consistent because navigation
-            // never touches selection.
-            const pendingFocusId = pendingFocusNodeIdRef.current;
-            if (pendingFocusId) {
-                pendingFocusNodeIdRef.current = null;
-                if (rf.nodes.some((n) => n.id === pendingFocusId)) {
-                    requestAnimationFrame(() => {
-                        void fitView({
-                            nodes: [{ id: pendingFocusId }],
-                            padding: 0.3,
-                            duration: 200,
-                        });
-                    });
-                }
-            }
-
-            if (!hasFitInitiallyRef.current) {
+            } else if (pendingFocusId && rf.nodes.some((n) => n.id === pendingFocusId)) {
+                // Locate-from-panel: the user clicked "locate" and the target
+                // wasn't visible pre-rebuild. Skip silently if the target still
+                // isn't in the build (e.g. synthetic id that never reaches the
+                // canvas) — a missing fitView is preferable to a noisy error.
+                requestAnimationFrame(() => {
+                    void fitView({ nodes: [{ id: pendingFocusId }], padding: 0.3, duration: 200 });
+                });
+            } else if (shouldFitAll || !hasFitInitiallyRef.current) {
+                hasFitInitiallyRef.current = true;
                 requestAnimationFrame(() => {
                     void fitView({ padding: 0.2, duration: 200 });
                 });
-                hasFitInitiallyRef.current = true;
             }
         },
         [fitView, getViewport, setEdges, setNodes, setViewport],
@@ -737,6 +737,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // clicked group header, or the parent group of a click on a nested op).
     const collapseNamespace = useCallback(
         (namespace: string, fromPosition: { x: number; y: number }) => {
+            pendingFitAllRef.current = false;
+            pendingFocusNodeIdRef.current = null;
             const anchorNodeId = interactionIndex?.anchorByNamespace[namespace];
             if (anchorNodeId) {
                 viewportAnchorRef.current = { toNodeId: anchorNodeId, fromPosition };
@@ -758,6 +760,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // synthesised at id `group:<namespace>`, so we anchor directly to that id —
     // there's no need to consult `interactionIndex.anchorByNamespace` here.
     const expandNamespace = useCallback((namespace: string, fromPosition: { x: number; y: number }) => {
+        pendingFitAllRef.current = false;
+        pendingFocusNodeIdRef.current = null;
         viewportAnchorRef.current = {
             toNodeId: `group:${namespace}`,
             fromPosition,
@@ -770,6 +774,30 @@ const MlGraphInner = ({ data }: ViewProps) => {
             next.add(namespace);
             return next;
         });
+    }, []);
+
+    // `anchorByNamespace` covers both natural regions and topology-sectioned
+    // synthetic wrappers, so its keys are the authoritative expandable set.
+    const allExpandableNamespaces = useMemo<string[]>(
+        () => (interactionIndex ? Object.keys(interactionIndex.anchorByNamespace) : []),
+        [interactionIndex],
+    );
+
+    const expandAllNamespaces = useCallback(() => {
+        if (allExpandableNamespaces.length === 0) {
+            return;
+        }
+        viewportAnchorRef.current = null;
+        pendingFocusNodeIdRef.current = null;
+        pendingFitAllRef.current = true;
+        setExpandedNamespaces(new Set(allExpandableNamespaces));
+    }, [allExpandableNamespaces]);
+
+    const collapseAllNamespaces = useCallback(() => {
+        viewportAnchorRef.current = null;
+        pendingFocusNodeIdRef.current = null;
+        pendingFitAllRef.current = true;
+        setExpandedNamespaces(new Set());
     }, []);
 
     const onSubgraphNodeClick = useCallback(
@@ -1174,6 +1202,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 void fitView({ nodes: [{ id: targetNodeId }], padding: 0.3, duration: 200 });
                 return;
             }
+            viewportAnchorRef.current = null;
+            pendingFitAllRef.current = false;
             pendingFocusNodeIdRef.current = targetNodeId;
             setExpandedNamespaces((prev) => {
                 const next = new Set(prev);
@@ -1496,24 +1526,33 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 </MlirNodeBodyContext.Provider>
             </MlirGroupContext.Provider>
 
-            <MlirOpFilter
-                ref={filterRef}
-                query={filterQuery}
-                onQueryChange={handleQueryChange}
-                mode={filterMode}
-                onModeChange={handleModeChange}
-                isRegexInvalid={filterMatchInfo?.isRegexInvalid ?? false}
-                matchCount={matchedNodesInOrder.length}
-                hiddenMatchCount={filterMatchInfo?.hiddenMatchCount ?? 0}
-                currentMatchIndex={currentMatchIndex}
-                onPrev={() => goToMatch('prev')}
-                onNext={() => goToMatch('next')}
-            />
+            <div className='mlir-top-left-controls'>
+                <MlirOpFilter
+                    ref={filterRef}
+                    query={filterQuery}
+                    onQueryChange={handleQueryChange}
+                    mode={filterMode}
+                    onModeChange={handleModeChange}
+                    isRegexInvalid={filterMatchInfo?.isRegexInvalid ?? false}
+                    matchCount={matchedNodesInOrder.length}
+                    hiddenMatchCount={filterMatchInfo?.hiddenMatchCount ?? 0}
+                    currentMatchIndex={currentMatchIndex}
+                    onPrev={() => goToMatch('prev')}
+                    onNext={() => goToMatch('next')}
+                />
 
-            <MlirNodeBodyToggles
-                value={nodeBodyToggles}
-                onChange={setNodeBodyToggles}
-            />
+                <MlirNodeBodyToggles
+                    value={nodeBodyToggles}
+                    onChange={setNodeBodyToggles}
+                />
+
+                <MlirExpandCollapseControls
+                    namespaceCount={allExpandableNamespaces.length}
+                    expandedCount={expandedNamespaces.size}
+                    onExpandAll={expandAllNamespaces}
+                    onCollapseAll={collapseAllNamespaces}
+                />
+            </div>
 
             {selectedSourceNode && (
                 <MlirNodeDetailsPanel

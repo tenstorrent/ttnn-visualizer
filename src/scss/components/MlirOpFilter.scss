@@ -5,12 +5,6 @@
 @use '../definitions/colours' as *;
 
 .mlir-op-filter {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-
-    // Above React Flow nodes / edges / controls, below the details panel.
-    z-index: 6;
     display: flex;
     align-items: center;
     gap: 4px;
