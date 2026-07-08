@@ -11,9 +11,10 @@ interface PerfChartsProps {
     filteredPerfData: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
     selectedOpCodes: Marker[];
+    onOpCodeClick?: (opCode: string) => void;
 }
 
-const PerfCharts = ({ filteredPerfData, comparisonData, selectedOpCodes }: PerfChartsProps) => {
+const PerfCharts = ({ filteredPerfData, comparisonData, selectedOpCodes, onOpCodeClick }: PerfChartsProps) => {
     const data = [filteredPerfData, ...(comparisonData || [])].filter((set) => set.length > 0);
 
     return (
@@ -21,6 +22,7 @@ const PerfCharts = ({ filteredPerfData, comparisonData, selectedOpCodes }: PerfC
             <PerfOpCountVsRuntimeChart
                 datasets={data}
                 selectedOpCodes={selectedOpCodes}
+                onOpCodeClick={onOpCodeClick}
             />
 
             <PerfDeviceKernelRuntimeChart datasets={data} />

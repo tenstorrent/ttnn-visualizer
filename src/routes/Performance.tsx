@@ -23,6 +23,7 @@ import {
     activePerformanceReportAtom,
     comparisonPerformanceReportListAtom,
     perfSelectedTabAtom,
+    rawOpCodeFilterListAtom,
     selectedPerfRowIdAtom,
     selectedPerformanceRangeAtom,
 } from '../store/app';
@@ -67,6 +68,7 @@ export default function Performance() {
     // hide it only once we know the data is genuinely unavailable.
     const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
     const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
+    const setRawOpCodeFilterList = useSetAtom(rawOpCodeFilterListAtom);
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
@@ -178,7 +180,8 @@ export default function Performance() {
 
     useEffect(() => {
         setSelectedPerfRowId(null);
-    }, [activePerformanceReport?.path, setSelectedPerfRowId]);
+        setRawOpCodeFilterList([]);
+    }, [activePerformanceReport?.path, setRawOpCodeFilterList, setSelectedPerfRowId]);
 
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {

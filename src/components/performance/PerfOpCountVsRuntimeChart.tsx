@@ -2,22 +2,24 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
-import { PlotData } from 'plotly.js';
+import { useCallback, useMemo } from 'react';
+import { PlotData, PlotMouseEvent } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
+import { getRawOpCodeFromPlotClick } from '../../functions/getRawOpCodeFromPlotClick';
+import getPlotLabel from '../../functions/getPlotLabel';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
-import getPlotLabel from '../../functions/getPlotLabel';
 
 interface PerfOpCountVsRuntimeChartProps {
     selectedOpCodes: Marker[];
     datasets?: TypedPerfTableRow[][];
+    onOpCodeClick?: (opCode: string) => void;
 }
 
-function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCountVsRuntimeChartProps) {
+function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeClick }: PerfOpCountVsRuntimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const flattenedData = datasets.flat();
@@ -36,6 +38,20 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
         [opCodes, selectedOpCodeSet],
     );
 
+    const handlePlotClick = useCallback(
+        (event: Readonly<PlotMouseEvent>) => {
+            if (!onOpCodeClick) {
+                return;
+            }
+
+            const opCode = getRawOpCodeFromPlotClick(event);
+            if (opCode) {
+                onOpCodeClick(opCode);
+            }
+        },
+        [onOpCodeClick],
+    );
+
     const opCountData = useMemo(
         () =>
             datasets.map((data, dataIndex) =>
@@ -47,6 +63,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                             type: 'bar',
                             name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
+                            customdata: [[opCode]],
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
                             },
@@ -70,6 +87,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                             type: 'bar',
                             name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
+                            customdata: [[opCode]],
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
                             },
@@ -99,6 +117,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
             title={PERF_CHART_LABELS[PerfChartId.OpCountVsRuntime]}
             chartData={[...opCountData.flat(), ...opDeviceTimeData.flat()]}
             configuration={configuration}
+            onPlotClick={onOpCodeClick ? handlePlotClick : undefined}
         />
     );
 }

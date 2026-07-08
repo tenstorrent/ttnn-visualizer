@@ -2,10 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Config, Layout, PlotData } from 'plotly.js';
+import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
 import Plot from '../../libs/PlotComponent';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PERF_CHART_TABLE_FILTER_HINT } from '../../definitions/PerformanceCharts';
+import { TEST_IDS } from '../../definitions/TestIds';
 import 'styles/components/PerfChart.scss';
 
 interface PerfChartProps {
@@ -13,13 +15,16 @@ interface PerfChartProps {
     configuration: PlotConfiguration;
     id?: string;
     title: string;
+    onPlotClick?: (event: Readonly<PlotMouseEvent>) => void;
 }
 
 const GRID_COLOUR = '#575757';
 const LINE_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
 
-function PerfChart({ chartData, configuration, id, title }: PerfChartProps) {
+function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfChartProps) {
+    const isClickable = onPlotClick != null;
+
     const layout: Partial<Layout> = {
         autosize: true,
         paper_bgcolor: 'transparent',
@@ -109,15 +114,28 @@ function PerfChart({ chartData, configuration, id, title }: PerfChartProps) {
     return (
         <div
             id={id}
-            className={classNames('chart-container', { 'legend-instructions': configuration.showLegend })}
+            className={classNames('chart-container', {
+                'legend-instructions': configuration.showLegend,
+                'perf-chart-clickable': isClickable,
+            })}
         >
             <h3>{title}</h3>
+
+            {isClickable ? (
+                <p
+                    className='perf-chart-hint'
+                    data-testid={TEST_IDS.PERF_CHART_TABLE_FILTER_HINT}
+                >
+                    {PERF_CHART_TABLE_FILTER_HINT}
+                </p>
+            ) : null}
 
             <Plot
                 className='chart'
                 data={chartData}
                 layout={layout}
                 config={config}
+                onClick={onPlotClick}
                 useResizeHandler
             />
         </div>
