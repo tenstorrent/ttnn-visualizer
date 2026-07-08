@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../mixins/perfChartClickable' as perf-chart-clickable;
 
 .chart-container {
     margin-bottom: 60px;
@@ -20,5 +21,9 @@
             font-style: italic;
             font-size: 12px;
         }
+    }
+
+    &.perf-chart-clickable {
+        @include perf-chart-clickable.perf-chart-clickable-cursor;
     }
 }

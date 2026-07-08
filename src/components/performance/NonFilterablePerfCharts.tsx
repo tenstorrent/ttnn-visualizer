@@ -15,6 +15,7 @@ import getCoreCount from '../../functions/getCoreCount';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { usePerfMeta } from '../../hooks/useAPI';
 import { PerfChartId, getOperationTypesChartId } from '../../definitions/PerformanceCharts';
+import { OnOpCodeClick } from '../../hooks/useHandlePerfChartPlotClick';
 
 interface NonFilterablePerfChartsProps {
     chartData: TypedPerfTableRow[];
@@ -24,7 +25,7 @@ interface NonFilterablePerfChartsProps {
     convData: TypedPerfTableRow[][];
     hasMatmulData: boolean;
     hasConvData: boolean;
-    onOpCodeClick?: (opCode: string) => void;
+    onOpCodeClick?: OnOpCodeClick;
 }
 
 const NonFilterablePerfCharts = ({

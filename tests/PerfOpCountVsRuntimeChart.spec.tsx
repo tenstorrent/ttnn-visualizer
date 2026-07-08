@@ -3,12 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { firePlotClick, resetPlotPropsCapture } from './mocks/plotComponent';
+import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfOpCountVsRuntimeChart from '../src/components/performance/PerfOpCountVsRuntimeChart';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import { TestProviders } from './helpers/TestProviders';
 
 const matmulMarker = { opCode: 'Matmul', colour: MarkerColours[0] };
@@ -66,5 +67,19 @@ describe('PerfOpCountVsRuntimeChart', () => {
         firePlotClick({ points: [{}] } as never);
 
         expect(onOpCodeClick).not.toHaveBeenCalled();
+    });
+
+    it('does not wire plot onClick or show the hint when onOpCodeClick is omitted', () => {
+        render(
+            <TestProviders>
+                <PerfOpCountVsRuntimeChart
+                    datasets={[[row('Matmul')]]}
+                    selectedOpCodes={[matmulMarker]}
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).not.toBeInTheDocument();
+        expect(getPlotInstances()[0]?.onClick).toBeUndefined();
     });
 });

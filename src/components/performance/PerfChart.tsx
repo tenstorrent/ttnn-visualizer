@@ -6,7 +6,7 @@ import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
 import Plot from '../../libs/PlotComponent';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
-import PerfChartFilterHint from './PerfChartFilterHint';
+import PerfClickableChartFrame from './PerfClickableChartFrame';
 import 'styles/components/PerfChart.scss';
 
 interface PerfChartProps {
@@ -111,17 +111,14 @@ function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfCha
     };
 
     return (
-        <div
+        <PerfClickableChartFrame
             id={id}
             className={classNames('chart-container', {
                 'legend-instructions': configuration.showLegend,
-                'perf-chart-clickable': isClickable,
             })}
+            title={title}
+            isClickable={isClickable}
         >
-            <h3>{title}</h3>
-
-            <PerfChartFilterHint isVisible={isClickable} />
-
             <Plot
                 className='chart'
                 data={chartData}
@@ -130,7 +127,7 @@ function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfCha
                 onClick={onPlotClick}
                 useResizeHandler
             />
-        </div>
+        </PerfClickableChartFrame>
     );
 }
 

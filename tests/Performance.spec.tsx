@@ -15,7 +15,7 @@ import {
     usePerformanceRange,
     usePerformanceReport,
 } from '../src/hooks/useAPI';
-import { activePerformanceReportAtom, selectedPerfRowIdAtom } from '../src/store/app';
+import { activePerformanceReportAtom, rawOpCodeFilterListAtom, selectedPerfRowIdAtom } from '../src/store/app';
 import { L1PressureStatus } from '../src/functions/l1Pressure';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -58,17 +58,28 @@ beforeEach(() => {
 
 function PerformanceController() {
     const [selected, setSelected] = useAtom(selectedPerfRowIdAtom);
+    const [rawOpCodeFilterList, setRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const setReport = useSetAtom(activePerformanceReportAtom);
 
     return (
         <div>
             <span data-testid='selected-row-probe'>{selected === null ? 'null' : String(selected)}</span>
+            <span data-testid='raw-op-code-filter-probe'>
+                {rawOpCodeFilterList.length === 0 ? 'empty' : rawOpCodeFilterList.join(',')}
+            </span>
             <button
                 type='button'
                 data-testid='select-row'
                 onClick={() => setSelected(SELECTED_ROW_ID)}
             >
                 select
+            </button>
+            <button
+                type='button'
+                data-testid='set-op-code-filter'
+                onClick={() => setRawOpCodeFilterList(['Matmul'])}
+            >
+                filter
             </button>
             <button
                 type='button'
@@ -122,5 +133,39 @@ describe('Performance route', () => {
         fireEvent.click(screen.getByTestId('set-report-a'));
 
         expect(screen.getByTestId('selected-row-probe')).toHaveTextContent(String(SELECTED_ROW_ID));
+    });
+
+    it('clears rawOpCodeFilterListAtom when the active performance report changes', () => {
+        render(
+            <TestProviders>
+                <Performance />
+                <PerformanceController />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByTestId('set-report-a'));
+        fireEvent.click(screen.getByTestId('set-op-code-filter'));
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('Matmul');
+
+        fireEvent.click(screen.getByTestId('set-report-b'));
+
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('empty');
+    });
+
+    it('does not re-clear rawOpCodeFilterListAtom while the active report is unchanged', () => {
+        render(
+            <TestProviders>
+                <Performance />
+                <PerformanceController />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByTestId('set-report-a'));
+        fireEvent.click(screen.getByTestId('set-op-code-filter'));
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('Matmul');
+
+        fireEvent.click(screen.getByTestId('set-report-a'));
+
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('Matmul');
     });
 });

@@ -9,9 +9,9 @@ import Plot from '../../libs/PlotComponent';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';
-import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { OnOpCodeClick, useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
 import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
-import PerfChartFilterHint from './PerfChartFilterHint';
+import PerfClickableChartFrame from './PerfClickableChartFrame';
 import 'styles/components/PerformanceOperationTypesChart.scss';
 
 interface PerfOperationTypesChartProps {
@@ -20,7 +20,7 @@ interface PerfOperationTypesChartProps {
     data?: TypedPerfTableRow[];
     className?: string;
     id?: string;
-    onOpCodeClick?: (opCode: string) => void;
+    onOpCodeClick?: OnOpCodeClick;
 }
 
 const LAYOUT: Partial<Layout> = {
@@ -70,17 +70,13 @@ function PerfOperationTypesChart({
     const isClickable = onOpCodeClick != null;
 
     return (
-        <div
+        <PerfClickableChartFrame
             id={id}
-            className={classNames('operation-types-chart', className, {
-                'perf-chart-clickable': isClickable,
-            })}
+            className={classNames('operation-types-chart', className)}
+            title={PERF_CHART_LABELS[PerfChartId.OperationTypes]}
+            subtitle={<p>{reportTitle}</p>}
+            isClickable={isClickable}
         >
-            <h3>{PERF_CHART_LABELS[PerfChartId.OperationTypes]}</h3>
-            <p>{reportTitle}</p>
-
-            <PerfChartFilterHint isVisible={isClickable} />
-
             <Plot
                 className='chart'
                 data={[chartData]}
@@ -89,7 +85,7 @@ function PerfOperationTypesChart({
                 onClick={isClickable ? handlePlotClick : undefined}
                 useResizeHandler
             />
-        </div>
+        </PerfClickableChartFrame>
     );
 }
 

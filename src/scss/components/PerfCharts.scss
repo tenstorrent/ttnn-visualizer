@@ -45,19 +45,3 @@ $perf-charts-nav-offset: 60px;
         flex-grow: 1;
     }
 }
-
-@mixin perf-chart-table-filter-hint {
-    .perf-chart-hint {
-        margin: 0 0 8px;
-        font-style: italic;
-        font-size: 12px;
-    }
-}
-
-.perf-chart-clickable {
-    @include perf-chart-table-filter-hint;
-
-    .chart {
-        cursor: pointer;
-    }
-}

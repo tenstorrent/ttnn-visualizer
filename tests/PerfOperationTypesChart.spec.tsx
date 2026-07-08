@@ -83,4 +83,19 @@ describe('PerfOperationTypesChart', () => {
 
         expect(onOpCodeClick).toHaveBeenCalledWith('Conv2d');
     });
+
+    it('does not wire plot onClick or show the hint when onOpCodeClick is omitted', () => {
+        render(
+            <TestProviders>
+                <PerfOperationTypesChart
+                    reportTitle='active-report'
+                    data={[row('Matmul', 1)]}
+                    opCodes={[matmulMarker, convMarker]}
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).not.toBeInTheDocument();
+        expect(getPlotInstances()[0]?.onClick).toBeUndefined();
+    });
 });

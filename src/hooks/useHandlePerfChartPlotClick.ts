@@ -6,7 +6,7 @@ import { useCallback } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
 import { getRawOpCodeFromPlotClick } from '../functions/getRawOpCodeFromPlotClick';
 
-type OnOpCodeClick = (opCode: string) => void;
+export type OnOpCodeClick = (opCode: string) => void;
 
 export function useHandlePerfChartPlotClick(onOpCodeClick?: OnOpCodeClick) {
     return useCallback(

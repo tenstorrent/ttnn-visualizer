@@ -8,7 +8,7 @@ import { useAtomValue } from 'jotai';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
-import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { OnOpCodeClick, useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
 import PerfChart from './PerfChart';
@@ -17,7 +17,7 @@ import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from
 interface PerfOpCountVsRuntimeChartProps {
     selectedOpCodes: Marker[];
     datasets?: TypedPerfTableRow[][];
-    onOpCodeClick?: (opCode: string) => void;
+    onOpCodeClick?: OnOpCodeClick;
 }
 
 function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeClick }: PerfOpCountVsRuntimeChartProps) {

@@ -4,6 +4,7 @@
 
 import { PERF_CHART_TABLE_FILTER_HINT } from '../../definitions/PerformanceCharts';
 import { TEST_IDS } from '../../definitions/TestIds';
+import 'styles/components/PerfChartFilterHint.scss';
 
 interface PerfChartFilterHintProps {
     isVisible: boolean;

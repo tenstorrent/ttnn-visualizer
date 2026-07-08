@@ -121,4 +121,43 @@ describe('Performance chart prefilter integration', () => {
         expect(screen.getByRole('tab', { name: 'Charts', selected: false })).toBeInTheDocument();
         expect(screen.getByRole('tab', { name: 'Table', selected: true })).toBeInTheDocument();
     });
+
+    it('clicking an operation types pie slice switches to table tab and filters rows', async () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, { path: '/reports/report-a', reportName: 'report-a' }],
+                    [selectedPerformanceRangeAtom, [1, 2]],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Charts' }));
+
+        await waitFor(() => {
+            expect(
+                getPlotInstances().some((instance) => (instance.data as { type?: string }[])?.[0]?.type === 'pie'),
+            ).toBe(true);
+        });
+
+        const opTypesOnClick = getPlotInstances().find(
+            (instance) =>
+                Array.isArray(instance.data) &&
+                (instance.data as { type?: string }[])[0]?.type === 'pie' &&
+                typeof instance.onClick === 'function',
+        )?.onClick as ((event: { points: { customdata?: unknown; label?: string }[] }) => void) | undefined;
+        expect(opTypesOnClick).toBeDefined();
+
+        opTypesOnClick?.({ points: [{ customdata: 'Conv2d', label: 'Conv2d' }] } as never);
+
+        await waitFor(() => {
+            expect(screen.getByRole('tab', { name: 'Table', selected: true })).toBeInTheDocument();
+        });
+
+        const table = screen.getByRole('table');
+        expect(within(table).getAllByText('Conv2d').length).toBeGreaterThan(0);
+        expect(within(table).queryByText('Matmul')).not.toBeInTheDocument();
+    });
 });
