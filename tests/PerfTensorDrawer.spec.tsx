@@ -18,6 +18,7 @@ import { TestProviders } from './helpers/TestProviders';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useOperationsList: vi.fn(),
+    useReportMetadata: vi.fn().mockReturnValue({ data: undefined }),
 }));
 
 vi.mock('../src/hooks/useRemote', () => ({

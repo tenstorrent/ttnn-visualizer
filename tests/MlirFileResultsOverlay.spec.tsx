@@ -10,16 +10,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MlirFileResultsOverlay from '../src/components/mlir/MlirFileResultsOverlay';
 import MlirJsonFileLoader from '../src/components/mlir/MlirJsonFileLoader';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { activeMlirDataAtom, activeMlirJsonAtom, mlirFileResultsAtom, mlirFileResultsOpenAtom } from '../src/store/app';
+import {
+    activeMlirDataAtom,
+    activeMlirJsonAtom,
+    mlirFileResultsAtom,
+    mlirFileResultsOpenAtom,
+    mlirRetryFilesAtom,
+    mlirRetryServerAtom,
+} from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
+import { MlirServerConnection } from '../src/definitions/MlirServer';
 
 const setActiveMlir = vi.fn();
+const uploadMlirFileToServer = vi.fn();
 const { createToastNotification } = vi.hoisted(() => ({
     createToastNotification: vi.fn(),
 }));
 
 vi.mock('../src/hooks/useMlirRemote', () => ({
-    default: () => ({ setActiveMlir }),
+    default: () => ({ setActiveMlir, uploadMlirFileToServer }),
 }));
 
 vi.mock('../src/functions/createToastNotification', () => ({
@@ -28,6 +37,13 @@ vi.mock('../src/functions/createToastNotification', () => ({
 }));
 
 const GRAPH: GraphBundle = { graphs: [{ id: 'g', nodes: [] }] };
+const SERVER: MlirServerConnection = {
+    name: 'Test host',
+    username: 'tt',
+    host: 'worker-01',
+    sshPort: 22,
+    port: 8080,
+};
 
 function renderOverlay(results: MlirFileResult[]) {
     getDefaultStore().set(mlirFileResultsAtom, results);
@@ -43,6 +59,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
+    getDefaultStore().set(mlirRetryFilesAtom, null);
+    getDefaultStore().set(mlirRetryServerAtom, null);
     getDefaultStore().set(activeMlirDataAtom, null);
     getDefaultStore().set(activeMlirJsonAtom, null);
 });
@@ -70,7 +88,14 @@ describe('MlirFileResultsOverlay', () => {
 
     it('keeps View disabled until a file is selected', () => {
         renderOverlay([
-            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: true },
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
         ]);
 
         expect(screen.getByRole('button', { name: /view/i })).toBeDisabled();
@@ -82,7 +107,14 @@ describe('MlirFileResultsOverlay', () => {
 
     it('activates and persists the selected server file via View, then closes the overlay', async () => {
         renderOverlay([
-            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: true },
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
         ]);
 
         fireEvent.click(screen.getByText('a.mlir'));
@@ -92,7 +124,7 @@ describe('MlirFileResultsOverlay', () => {
             expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
         });
         expect(getDefaultStore().get(activeMlirJsonAtom)).toBe('a');
-        expect(setActiveMlir).toHaveBeenCalledWith('a');
+        expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
         // The overlay closes but the results are retained so it can be reopened.
         expect(getDefaultStore().get(mlirFileResultsOpenAtom)).toBe(false);
         expect(getDefaultStore().get(mlirFileResultsAtom)).not.toBeNull();
@@ -112,12 +144,12 @@ describe('MlirFileResultsOverlay', () => {
         );
 
         // Closed: results retained but the overlay is not shown.
-        expect(screen.queryByText('MLIR upload results')).not.toBeInTheDocument();
+        expect(screen.queryByText('MLIR uploads')).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /view mlir uploads/i }));
 
         await waitFor(() => {
-            expect(screen.getByText('MLIR upload results')).toBeInTheDocument();
+            expect(screen.getByText('MLIR uploads')).toBeInTheDocument();
         });
     });
 
@@ -138,16 +170,202 @@ describe('MlirFileResultsOverlay', () => {
     it('does not show a success toast when persisting active MLIR fails', async () => {
         setActiveMlir.mockRejectedValueOnce(new Error('persist failed'));
         renderOverlay([
-            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: true },
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
         ]);
 
         fireEvent.click(screen.getByText('a.mlir'));
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
         await waitFor(() => {
-            expect(setActiveMlir).toHaveBeenCalledWith('a');
+            expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
         });
         expect(createToastNotification).toHaveBeenCalledTimes(1);
         expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'persist failed', 'error');
+    });
+
+    it('retries conversion for a failed server file', async () => {
+        const failedFile = new File(['module {}'], 'failed.mlir');
+        getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
+        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'failed.mlir',
+                        name: 'failed',
+                        status: ConnectionTestStates.OK,
+                        graph: GRAPH,
+                    },
+                ],
+            },
+        });
+
+        renderOverlay([
+            {
+                filename: 'failed.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+        await waitFor(() => {
+            expect(uploadMlirFileToServer).toHaveBeenCalledWith(
+                [failedFile],
+                SERVER,
+                expect.objectContaining({
+                    signal: expect.any(AbortSignal),
+                    suppressProgressOverlay: true,
+                }),
+            );
+            expect(getDefaultStore().get(mlirFileResultsAtom)?.[0]).toMatchObject({
+                status: ConnectionTestStates.OK,
+                name: 'failed',
+                graph: GRAPH,
+            });
+        });
+    });
+
+    it('keeps View disabled for failed rows while allowing Retry', async () => {
+        const failedFile = new File(['module {}'], 'failed.mlir');
+        getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
+        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'failed.mlir',
+                        name: null,
+                        status: ConnectionTestStates.FAILED,
+                        message: 'Still failing',
+                        graph: null,
+                    },
+                ],
+            },
+        });
+
+        renderOverlay([
+            {
+                filename: 'failed.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+        ]);
+
+        const viewButton = screen.getByRole('button', { name: /view/i });
+        const retryButton = screen.getByRole('button', { name: /retry/i });
+        expect(viewButton).toBeDisabled();
+        expect(retryButton).toBeEnabled();
+
+        // Failed rows must remain non-selectable for View.
+        fireEvent.click(screen.getByText('failed.mlir'));
+        expect(viewButton).toBeDisabled();
+
+        fireEvent.click(retryButton);
+
+        await waitFor(() => {
+            expect(uploadMlirFileToServer).toHaveBeenCalledWith(
+                [failedFile],
+                SERVER,
+                expect.objectContaining({
+                    signal: expect.any(AbortSignal),
+                    suppressProgressOverlay: true,
+                }),
+            );
+            expect(viewButton).toBeDisabled();
+        });
+    });
+
+    it('does not render Retry when retry context is missing', () => {
+        renderOverlay([
+            {
+                filename: 'failed.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+        ]);
+
+        expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+    });
+
+    it('keeps other Retry buttons enabled while a retry is in flight', async () => {
+        const fileA = new File(['module {}'], 'failed-a.mlir');
+        const fileB = new File(['module {}'], 'failed-b.mlir');
+        getDefaultStore().set(mlirRetryFilesAtom, [fileA, fileB]);
+        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+
+        const retryDeferred: { resolve: ((value: unknown) => void) | null } = { resolve: null };
+
+        uploadMlirFileToServer.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    retryDeferred.resolve = resolve;
+                }),
+        );
+
+        renderOverlay([
+            {
+                filename: 'failed-a.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+            {
+                filename: 'failed-b.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getAllByRole('button', { name: /retry/i })[0]);
+
+        await waitFor(() => {
+            const retryButtons = screen.getAllByRole('button', { name: /retry/i });
+            expect(retryButtons).toHaveLength(1);
+            expect(retryButtons[0]).toBeEnabled();
+        });
+
+        retryDeferred.resolve?.({
+            data: {
+                results: [
+                    {
+                        filename: 'failed-a.mlir',
+                        name: null,
+                        status: ConnectionTestStates.FAILED,
+                        message: 'Still failing',
+                        graph: null,
+                    },
+                ],
+            },
+        });
+
+        await waitFor(() => {
+            const retryButtons = screen.getAllByRole('button', { name: /retry/i });
+            expect(retryButtons).toHaveLength(2);
+            expect(retryButtons[0]).toBeEnabled();
+            expect(retryButtons[1]).toBeEnabled();
+        });
     });
 });

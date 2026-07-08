@@ -123,7 +123,7 @@ const FileStatusOverlay = () => {
                 {showProcessingList ? (
                     <>
                         <MlirFileList results={processingFiles ?? []} />
-                        {startedAt !== null && <p>{formatElapsed(elapsedSeconds)}</p>}
+                        {startedAt !== null && <p>{formatElapsed(elapsedSeconds)} elapsed</p>}
                     </>
                 ) : (
                     // Upload/sync progress, plus the no-pending-rows fallback
@@ -158,10 +158,11 @@ const FileStatusOverlay = () => {
                         <p>
                             {/* No quantifiable progress while the backend processes the
                                 upload \u2014 show elapsed time only. */}
-                            {!isProcessing && `${formatPercentage(overallPercent, 0)} complete`}
+                            {!isProcessing && `${formatPercentage(overallPercent, 0)}`}
                             {/* Show elapsed from the moment the transfer becomes active
                                 so sub-second transfers don't appear time-less. */}
-                            {startedAt !== null && `${isProcessing ? '' : ' \u2014 '}${formatElapsed(elapsedSeconds)}`}
+                            {startedAt !== null &&
+                                `${isProcessing ? '' : ' \u2014 '}${formatElapsed(elapsedSeconds)} elapsed`}
                             {/* During processing show the file being processed next to
                                 the elapsed time. */}
                             {isProcessing && currentFileName && (

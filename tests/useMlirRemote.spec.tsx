@@ -19,6 +19,8 @@ import {
     getInactiveFileTransferProgress,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
+    mlirRetryFilesAtom,
+    mlirRetryServerAtom,
 } from '../src/store/app';
 import { FileStatus } from '../src/model/APIData';
 
@@ -35,12 +37,6 @@ const SERVER: MlirServerConnection = {
     sshPort: 22,
     port: 8080,
 };
-
-function toFileList(files: File[]): FileList {
-    const dataTransfer = new DataTransfer();
-    files.forEach((file) => dataTransfer.items.add(file));
-    return dataTransfer.files;
-}
 
 type Deferred<T> = {
     promise: Promise<T>;
@@ -60,6 +56,8 @@ beforeEach(() => {
     getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
+    getDefaultStore().set(mlirRetryFilesAtom, null);
+    getDefaultStore().set(mlirRetryServerAtom, null);
 });
 
 afterEach(() => {
@@ -67,6 +65,8 @@ afterEach(() => {
     getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
+    getDefaultStore().set(mlirRetryFilesAtom, null);
+    getDefaultStore().set(mlirRetryServerAtom, null);
 });
 
 describe('useMlirRemote progress lifecycle', () => {
@@ -81,10 +81,7 @@ describe('useMlirRemote progress lifecycle', () => {
         });
 
         const { result } = renderHook(() => useMlirRemote());
-        const uploadPromise = result.current.uploadMlirFileToServer(
-            toFileList([new File(['module {}'], 'model.mlir')]),
-            SERVER,
-        );
+        const uploadPromise = result.current.uploadMlirFileToServer([new File(['module {}'], 'model.mlir')], SERVER);
 
         await waitFor(() => {
             expect(getDefaultStore().get(fileTransferProgressAtom).status).toBe(FileStatus.UPLOADING);
@@ -114,10 +111,7 @@ describe('useMlirRemote progress lifecycle', () => {
         });
 
         const { result } = renderHook(() => useMlirRemote());
-        const uploadPromise = result.current.uploadMlirFileToServer(
-            toFileList([new File(['module {}'], 'model.mlir')]),
-            SERVER,
-        );
+        const uploadPromise = result.current.uploadMlirFileToServer([new File(['module {}'], 'model.mlir')], SERVER);
 
         onUploadProgress?.({ loaded: 5, total: 10 } as AxiosProgressEvent);
         let progress = getDefaultStore().get(fileTransferProgressAtom);
@@ -195,6 +189,8 @@ describe('useMlirRemote progress lifecycle', () => {
             expect(getDefaultStore().get(fileTransferProgressAtom).status).toBe(FileStatus.INACTIVE);
             expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeEnabled();
         });
+        expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
+        expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
     });
 
     it('uses detail as fallback message when upload result omits message', async () => {
@@ -251,6 +247,8 @@ describe('useMlirRemote progress lifecycle', () => {
         await waitFor(() => {
             expect(getDefaultStore().get(mlirFileResultsAtom)).toBeNull();
         });
+        expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
+        expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
         expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
     });
 
@@ -274,6 +272,34 @@ describe('useMlirRemote progress lifecycle', () => {
             expect(getDefaultStore().get(mlirFileResultsAtom)).toBeNull();
             expect(screen.getByText('Upload failed')).toBeInTheDocument();
         });
+        expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
+        expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
         expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
+    });
+
+    it('does not mutate global progress state when suppressProgressOverlay is enabled', async () => {
+        const postMock = vi.mocked(axiosInstance.post);
+        const deferred = createDeferred<{ data: { status: ConnectionTestStates } }>();
+        let onUploadProgress: ((event: AxiosProgressEvent) => void) | undefined;
+
+        postMock.mockImplementation((_url, _data, config) => {
+            onUploadProgress = config?.onUploadProgress;
+            return deferred.promise;
+        });
+
+        const { result } = renderHook(() => useMlirRemote());
+        const uploadPromise = result.current.uploadMlirFileToServer([new File(['module {}'], 'model.mlir')], SERVER, {
+            suppressProgressOverlay: true,
+        });
+
+        expect(getDefaultStore().get(fileTransferProgressAtom)).toEqual(getInactiveFileTransferProgress());
+
+        onUploadProgress?.({ loaded: 10, total: 10 } as AxiosProgressEvent);
+        expect(getDefaultStore().get(fileTransferProgressAtom)).toEqual(getInactiveFileTransferProgress());
+
+        deferred.resolve({ data: { status: ConnectionTestStates.OK } });
+        await uploadPromise;
+
+        expect(getDefaultStore().get(fileTransferProgressAtom)).toEqual(getInactiveFileTransferProgress());
     });
 });

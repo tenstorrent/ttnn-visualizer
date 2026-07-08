@@ -4,7 +4,7 @@
 
 import { Button, ButtonVariant, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { SourceFileStatus, StackTraceLanguage } from '../../definitions/StackTrace';
 import getServerConfig from '../../functions/getServerConfig';
 import { useSourceFile } from '../../hooks/useSourceFile';
@@ -40,6 +40,7 @@ function SourceFileButton({
     endIcon = IconNames.DOCUMENT_OPEN,
     eagerProbe = false,
 }: SourceFileButtonProps) {
+    const [hasOpenedOverlay, setHasOpenedOverlay] = useState(false);
     const [isViewingSourceFile, setIsViewingSourceFile] = useState(false);
     const {
         canProbeSource,
@@ -63,6 +64,10 @@ function SourceFileButton({
     const isChecking = status === SourceFileStatus.Pending || isFetching;
     const tooltipContent = getSourceTooltipContents(!!getServerConfig()?.SERVER_MODE, canProbeSource, status);
 
+    const handleCloseOverlay = useCallback(() => {
+        setIsViewingSourceFile(false);
+    }, []);
+
     const handleClick = async () => {
         const available = await probe();
 
@@ -71,6 +76,7 @@ function SourceFileButton({
         }
 
         await readSource();
+        setHasOpenedOverlay(true);
         setIsViewingSourceFile(true);
     };
 
@@ -97,18 +103,20 @@ function SourceFileButton({
                 />
             </Tooltip>
 
-            <SourceFileOverlay
-                isOpen={isViewingSourceFile}
-                onClose={() => setIsViewingSourceFile(false)}
-                language={language}
-                lineNumber={lineNumber}
-                fileContents={fileContents}
-                errorDetails={errorDetails}
-                resolvedPath={resolvedPath}
-                filePath={filePath}
-                matchedViaRemap={matchedViaRemap}
-                scrollToLineNumber
-            />
+            {hasOpenedOverlay ? (
+                <SourceFileOverlay
+                    isOpen={isViewingSourceFile}
+                    onClose={handleCloseOverlay}
+                    language={language}
+                    lineNumber={lineNumber}
+                    fileContents={fileContents}
+                    errorDetails={errorDetails}
+                    resolvedPath={resolvedPath}
+                    filePath={filePath}
+                    matchedViaRemap={matchedViaRemap}
+                    scrollToLineNumber
+                />
+            ) : null}
         </>
     );
 }

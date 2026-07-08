@@ -229,6 +229,8 @@ export interface ReportMetadataResponse {
     schema_version?: string;
     capture_timestamp_ns?: string;
     total_duration_ns?: string;
+    git_url?: string;
+    git_sha?: string;
 }
 export interface OperationDescription extends Operation {
     duration: number;

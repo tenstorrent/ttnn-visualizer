@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import FileStatusOverlay from '../src/components/FileStatusOverlay';
 import { getFileStatusLabel } from '../src/functions/getFileStatusLabel';
 import { FileProgress, FileStatus } from '../src/model/APIData';
@@ -141,5 +141,32 @@ describe('FileStatusOverlay status row', () => {
         expect(screen.getByText('b.mlir')).toBeInTheDocument();
         // One spinner per file rather than the single indeterminate line.
         expect(document.querySelectorAll('.bp6-spinner')).toHaveLength(2);
+    });
+
+    it('shows percent and elapsed time during download', () => {
+        vi.useFakeTimers();
+
+        try {
+            vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+
+            renderOverlay({
+                currentFileName: 'db.sqlite',
+                numberOfFiles: 1,
+                percentOfCurrent: 50,
+                finishedFiles: 0,
+                status: FileStatus.DOWNLOADING,
+                bytesTransferred: 100,
+                bytesTotal: 200,
+                currentFileSize: 0,
+            });
+
+            act(() => {
+                vi.runOnlyPendingTimers();
+            });
+
+            expect(screen.getByText(/\d+% — \d+s elapsed/)).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

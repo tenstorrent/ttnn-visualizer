@@ -71,20 +71,14 @@ const FeedbackButton = () => {
 
                 <DialogFooter
                     actions={
-                        <>
-                            <Button
-                                text='Close'
-                                onClick={handleCloseDialog}
-                            />
-                            <AnchorButton
-                                intent={Intent.SUCCESS}
-                                icon={IconNames.SHARE}
-                                text='Share feedback'
-                                href='https://github.com/tenstorrent/ttnn-visualizer/issues'
-                                target='_blank'
-                                onClick={handleCloseDialog}
-                            />
-                        </>
+                        <AnchorButton
+                            intent={Intent.SUCCESS}
+                            icon={IconNames.SHARE}
+                            text='Share feedback'
+                            href='https://github.com/tenstorrent/ttnn-visualizer/issues'
+                            target='_blank'
+                            onClick={handleCloseDialog}
+                        />
                     }
                 />
             </Dialog>

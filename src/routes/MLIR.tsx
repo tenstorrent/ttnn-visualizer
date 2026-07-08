@@ -72,9 +72,11 @@ const MLIR = () => {
 
             <h1 className='page-title'>MLIR model viewer</h1>
 
-            <div className='inline-loaders'>
-                <MlirJsonFileLoader />
-            </div>
+            {import.meta.env.DEV && (
+                <div className='inline-loaders'>
+                    <MlirJsonFileLoader />
+                </div>
+            )}
 
             {mlirData && errorCode === MLIRValidationError.OK ? (
                 <MlGraph data={mlirData} />

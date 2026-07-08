@@ -5,12 +5,6 @@
 @use '../definitions/colours' as *;
 
 .mlir-op-filter {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-
-    // Above React Flow nodes / edges / controls, below the details panel.
-    z-index: 6;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -36,8 +30,36 @@
         white-space: nowrap;
     }
 
+    .mlir-op-filter-right-slot {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .mlir-op-filter-mode {
+        font-family: monospace;
+        font-size: 12px;
+        font-weight: 600;
+
+        &.bp6-button {
+            color: $tt-grey-5;
+            background: transparent;
+            border-radius: 3px;
+        }
+
+        &.bp6-button.bp6-active {
+            color: $tt-black;
+            background: $tt-yellow;
+        }
+
+        &.bp6-button.bp6-active:hover {
+            background: $tt-yellow-tint-1;
+        }
+    }
+
     .mlir-op-filter-clear,
-    .mlir-op-filter-step {
+    .mlir-op-filter-step,
+    .mlir-op-filter-mode {
         display: inline-flex;
         align-items: center;
         justify-content: center;

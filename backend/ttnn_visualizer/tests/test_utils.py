@@ -5,9 +5,11 @@
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
+from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     get_app_data_directory,
+    get_mlir_path,
     get_report_data_directory,
     is_running_in_container,
     pick_cluster_descriptor_path,
@@ -552,6 +554,57 @@ def test_read_profiler_config_api_payload_missing_directory(tmp_path):
     payload, err = read_profiler_config_api_payload(missing)
     assert payload is None
     assert err is None
+
+
+def test_get_mlir_path_falls_back_when_host_scoped_file_missing(app):
+    """With a remote host set, missing host-scoped MLIR should still use legacy fallback."""
+    remote_dir = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    mlir_name = "legacy-model"
+    fallback = remote_dir / app.config["MLIR_DIRECTORY_NAME"] / f"{mlir_name}.json"
+    fallback.parent.mkdir(parents=True, exist_ok=True)
+    fallback.write_text("{}", encoding="utf-8")
+
+    remote_connection = RemoteConnection(
+        name="conn",
+        username="user",
+        host="remote-host.test",
+        port=22,
+        profilerPath="/reports",
+    )
+
+    resolved = get_mlir_path(mlir_name, app, remote_connection=remote_connection)
+
+    assert resolved == str(fallback)
+
+
+def test_get_mlir_path_uses_deterministic_host_candidate_order(app):
+    """When no host context is supplied, host-scoped matches are chosen deterministically."""
+    remote_dir = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    mlir_name = "shared-model"
+    alpha = remote_dir / "alpha-host" / app.config["MLIR_DIRECTORY_NAME"]
+    zeta = remote_dir / "zeta-host" / app.config["MLIR_DIRECTORY_NAME"]
+    alpha.mkdir(parents=True, exist_ok=True)
+    zeta.mkdir(parents=True, exist_ok=True)
+    (alpha / f"{mlir_name}.json").write_text("{}", encoding="utf-8")
+    (zeta / f"{mlir_name}.json").write_text("{}", encoding="utf-8")
+
+    resolved = get_mlir_path(mlir_name, app)
+
+    assert resolved == str(alpha / f"{mlir_name}.json")
+
+
+def test_get_mlir_path_treats_glob_metacharacters_as_literal_name(app):
+    """Wildcard characters in mlir_name must not match arbitrary files."""
+    remote_dir = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    alpha = remote_dir / "alpha-host" / app.config["MLIR_DIRECTORY_NAME"]
+    alpha.mkdir(parents=True, exist_ok=True)
+    matched_by_glob = alpha / "modelx.json"
+    matched_by_glob.write_text("{}", encoding="utf-8")
+
+    resolved = get_mlir_path("model*", app)
+
+    assert resolved != str(matched_by_glob)
+    assert resolved.endswith(f"/{app.config['MLIR_DIRECTORY_NAME']}/model*.json")
 
 
 # Mesh / cluster descriptor YAML with and without _<n>_of_<world> suffix

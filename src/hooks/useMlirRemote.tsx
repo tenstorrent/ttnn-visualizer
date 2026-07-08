@@ -20,12 +20,31 @@ export interface MlirFileUploadResult {
     message?: string;
     detail?: string;
     filename: string;
+    host?: string | null;
     name: string | null;
     graph: GraphBundle | null;
 }
 
 export interface MlirUploadResponse {
     results: MlirFileUploadResult[];
+}
+
+/**
+ * Options for controlling MLIR file upload behaviour.
+ */
+export interface MlirUploadOptions {
+    /**
+     * Abort signal for cancellation. When aborted, the request is cancelled
+     * and axios rejects with a cancel error. Callers must handle axios.isCancel(err)
+     * to distinguish user-triggered aborts from genuine errors.
+     */
+    signal?: AbortSignal;
+    /**
+     * Suppress the global FileStatusOverlay during this upload. Used by retry flows
+     * to show per-row progress instead. Note: this is per-request and not concurrency-aware
+     * (no reference counting), so parallel non-retry uploads should not use this.
+     */
+    suppressProgressOverlay?: boolean;
 }
 
 const useMlirRemote = () => {
@@ -44,12 +63,13 @@ const useMlirRemote = () => {
     // take minutes with no further progress to report) until the request
     // resolves and `resetTransferProgress` closes the overlay.
     const uploadMlirFileToServer = async (
-        files: FileList,
+        files: File[],
         server: MlirServerConnection,
+        options?: MlirUploadOptions,
     ): Promise<AxiosResponse<MlirUploadResponse>> => {
         const formData = new FormData();
 
-        Array.from(files).forEach((f) => {
+        files.forEach((f) => {
             formData.append('files', f);
         });
         formData.append('host', server.host);
@@ -62,22 +82,30 @@ const useMlirRemote = () => {
         }
 
         const fileName = files[0]?.name ?? '';
+        const shouldReportProgress = !options?.suppressProgressOverlay;
 
         // Open the overlay immediately: the remote conversion can run for some
         // time before the first upload-progress event, so don't wait for it.
-        getDefaultStore().set(fileTransferProgressAtom, {
-            ...getInactiveFileTransferProgress(),
-            numberOfFiles: files.length,
-            currentFileName: fileName,
-            status: FileStatus.UPLOADING,
-        });
+        if (shouldReportProgress) {
+            getDefaultStore().set(fileTransferProgressAtom, {
+                ...getInactiveFileTransferProgress(),
+                numberOfFiles: files.length,
+                currentFileName: fileName,
+                status: FileStatus.UPLOADING,
+            });
+        }
 
         try {
             return await axiosInstance.post<MlirUploadResponse>(`${Endpoints.REMOTE}/mlir/upload`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
+                signal: options?.signal,
                 onUploadProgress: (event) => {
+                    if (!shouldReportProgress) {
+                        return;
+                    }
+
                     if (!event || event.total === null || event.total === undefined || event.total <= 0) {
                         return;
                     }
@@ -97,7 +125,9 @@ const useMlirRemote = () => {
                 },
             });
         } finally {
-            resetTransferProgress();
+            if (shouldReportProgress) {
+                resetTransferProgress();
+            }
         }
     };
 
@@ -121,8 +151,8 @@ const useMlirRemote = () => {
     // Persist which uploaded MLIR report is active on the instance so `/mlir`
     // serves it and a reload restores the same selection. Server uploads store
     // each converted graph as `<name>.json`; this records the chosen one.
-    const setActiveMlir = async (name: string): Promise<void> => {
-        await axiosInstance.post(`${Endpoints.MLIR}/active`, { name });
+    const setActiveMlir = async (name: string, host?: string | null): Promise<void> => {
+        await axiosInstance.post(`${Endpoints.MLIR}/active`, host ? { name, host } : { name });
     };
 
     return {
