@@ -480,7 +480,18 @@ const MlGraphInner = ({ data }: ViewProps) => {
             setNodes(styledNodes);
             setEdges(rf.edges);
 
+            // Read + clear every post-rebuild viewport baton up-front. The
+            // arming sites enforce mutual exclusion (see the useRef decl
+            // comment for `pendingFitAllRef`), and the `if / else if` chain
+            // below enforces it a second time at the consumer so a stray
+            // arming site can't schedule two fitViews on the same frame.
             const anchor = viewportAnchorRef.current;
+            viewportAnchorRef.current = null;
+            const pendingFocusId = pendingFocusNodeIdRef.current;
+            pendingFocusNodeIdRef.current = null;
+            const shouldFitAll = pendingFitAllRef.current;
+            pendingFitAllRef.current = false;
+
             if (anchor) {
                 const toNode = rf.nodes.find((n) => n.id === anchor.toNodeId);
                 if (toNode) {
@@ -492,41 +503,19 @@ const MlGraphInner = ({ data }: ViewProps) => {
                         { duration: 0 },
                     );
                 }
-                viewportAnchorRef.current = null;
-            }
-
-            // Locate-from-panel: the user clicked the "locate" button next to
-            // a producer/consumer reference and the target wasn't visible
-            // pre-rebuild (collapsed namespace). Now that the rebuilt graph
-            // has landed, recenter on it. Skip silently if the target still
-            // isn't in the build (e.g. synthetic id that never reaches the
-            // canvas) — a missing fitView is preferable to a noisy error,
-            // and the surrounding state stays consistent because navigation
-            // never touches selection.
-            const pendingFocusId = pendingFocusNodeIdRef.current;
-            if (pendingFocusId) {
-                pendingFocusNodeIdRef.current = null;
-                if (rf.nodes.some((n) => n.id === pendingFocusId)) {
-                    requestAnimationFrame(() => {
-                        void fitView({
-                            nodes: [{ id: pendingFocusId }],
-                            padding: 0.3,
-                            duration: 200,
-                        });
-                    });
-                }
-            }
-
-            if (pendingFitAllRef.current) {
-                pendingFitAllRef.current = false;
+            } else if (pendingFocusId && rf.nodes.some((n) => n.id === pendingFocusId)) {
+                // Locate-from-panel: the user clicked "locate" and the target
+                // wasn't visible pre-rebuild. Skip silently if the target still
+                // isn't in the build (e.g. synthetic id that never reaches the
+                // canvas) — a missing fitView is preferable to a noisy error.
                 requestAnimationFrame(() => {
-                    void fitView({ padding: 0.2, duration: 200 });
+                    void fitView({ nodes: [{ id: pendingFocusId }], padding: 0.3, duration: 200 });
                 });
-            } else if (!hasFitInitiallyRef.current) {
-                requestAnimationFrame(() => {
-                    void fitView({ padding: 0.2, duration: 200 });
-                });
+            } else if (shouldFitAll || !hasFitInitiallyRef.current) {
                 hasFitInitiallyRef.current = true;
+                requestAnimationFrame(() => {
+                    void fitView({ padding: 0.2, duration: 200 });
+                });
             }
         },
         [fitView, getViewport, setEdges, setNodes, setViewport],
@@ -789,22 +778,22 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
     // `anchorByNamespace` covers both natural regions and topology-sectioned
     // synthetic wrappers, so its keys are the authoritative expandable set.
-    const allSubgraphNamespaces = useMemo<string[]>(
+    const allExpandableNamespaces = useMemo<string[]>(
         () => (interactionIndex ? Object.keys(interactionIndex.anchorByNamespace) : []),
         [interactionIndex],
     );
 
-    const expandAllSubgraphs = useCallback(() => {
-        if (allSubgraphNamespaces.length === 0) {
+    const expandAllNamespaces = useCallback(() => {
+        if (allExpandableNamespaces.length === 0) {
             return;
         }
         viewportAnchorRef.current = null;
         pendingFocusNodeIdRef.current = null;
         pendingFitAllRef.current = true;
-        setExpandedNamespaces(new Set(allSubgraphNamespaces));
-    }, [allSubgraphNamespaces]);
+        setExpandedNamespaces(new Set(allExpandableNamespaces));
+    }, [allExpandableNamespaces]);
 
-    const collapseAllSubgraphs = useCallback(() => {
+    const collapseAllNamespaces = useCallback(() => {
         viewportAnchorRef.current = null;
         pendingFocusNodeIdRef.current = null;
         pendingFitAllRef.current = true;
@@ -1558,10 +1547,10 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 />
 
                 <MlirExpandCollapseControls
-                    subgraphCount={allSubgraphNamespaces.length}
+                    namespaceCount={allExpandableNamespaces.length}
                     expandedCount={expandedNamespaces.size}
-                    onExpandAll={expandAllSubgraphs}
-                    onCollapseAll={collapseAllSubgraphs}
+                    onExpandAll={expandAllNamespaces}
+                    onCollapseAll={collapseAllNamespaces}
                 />
             </div>
 

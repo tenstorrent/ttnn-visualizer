@@ -7,19 +7,19 @@ import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirExpandCollapseControls.scss';
 
 export interface MlirExpandCollapseControlsProps {
-    subgraphCount: number;
+    namespaceCount: number;
     expandedCount: number;
     onExpandAll: () => void;
     onCollapseAll: () => void;
 }
 
 const MlirExpandCollapseControls = ({
-    subgraphCount,
+    namespaceCount,
     expandedCount,
     onExpandAll,
     onCollapseAll,
 }: MlirExpandCollapseControlsProps) => {
-    const canExpand = subgraphCount > 0 && expandedCount < subgraphCount;
+    const canExpand = namespaceCount > 0 && expandedCount < namespaceCount;
     const canCollapse = expandedCount > 0;
     return (
         <div className='mlir-expand-collapse-controls'>
