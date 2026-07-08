@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+//
+// Shared Plot mock for chart click tests. Import named helpers from this module only —
+// do not add a separate side-effect `import './mocks/plotComponent'` (triggers import/no-duplicates).
+// Vitest hoists `vi.mock` here when the module is loaded via the named import.
 
 import React from 'react';
 import { PlotMouseEvent } from 'plotly.js';
