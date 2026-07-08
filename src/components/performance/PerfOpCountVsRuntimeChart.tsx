@@ -10,6 +10,7 @@ import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
 import getPlotLabel from '../../functions/getPlotLabel';
+import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 
@@ -23,10 +24,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeCli
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const flattenedData = datasets.flat();
-    const opCodes = useMemo(
-        () => [...new Set(flattenedData?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
-        [flattenedData],
-    );
+    const opCodes = useMemo(() => getUniqueChartRawOpCodes(flattenedData), [flattenedData]);
 
     const selectedOpCodeSet = useMemo(
         () => new Set(selectedOpCodes.map((selected) => selected.opCode)),

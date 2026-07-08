@@ -10,6 +10,7 @@ import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';
 import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
 import PerfChartFilterHint from './PerfChartFilterHint';
 import 'styles/components/PerformanceOperationTypesChart.scss';
 
@@ -42,10 +43,7 @@ function PerfOperationTypesChart({
     id,
     onOpCodeClick,
 }: PerfOperationTypesChartProps) {
-    const filteredOpCodes = useMemo(
-        () => [...new Set(data?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
-        [data],
-    );
+    const filteredOpCodes = useMemo(() => getUniqueChartRawOpCodes(data), [data]);
     const handlePlotClick = useHandlePerfChartPlotClick(onOpCodeClick);
 
     const chartData = useMemo(
