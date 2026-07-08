@@ -2,13 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useMemo } from 'react';
-import { PlotData, PlotMouseEvent } from 'plotly.js';
+import { useMemo } from 'react';
+import { PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
-import { getRawOpCodeFromPlotClick } from '../../functions/getRawOpCodeFromPlotClick';
+import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
 import getPlotLabel from '../../functions/getPlotLabel';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
@@ -38,19 +38,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeCli
         [opCodes, selectedOpCodeSet],
     );
 
-    const handlePlotClick = useCallback(
-        (event: Readonly<PlotMouseEvent>) => {
-            if (!onOpCodeClick) {
-                return;
-            }
-
-            const opCode = getRawOpCodeFromPlotClick(event);
-            if (opCode) {
-                onOpCodeClick(opCode);
-            }
-        },
-        [onOpCodeClick],
-    );
+    const handlePlotClick = useHandlePerfChartPlotClick(onOpCodeClick);
 
     const opCountData = useMemo(
         () =>

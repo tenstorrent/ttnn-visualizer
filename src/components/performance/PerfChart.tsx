@@ -6,8 +6,7 @@ import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
 import Plot from '../../libs/PlotComponent';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
-import { PERF_CHART_TABLE_FILTER_HINT } from '../../definitions/PerformanceCharts';
-import { TEST_IDS } from '../../definitions/TestIds';
+import PerfChartFilterHint from './PerfChartFilterHint';
 import 'styles/components/PerfChart.scss';
 
 interface PerfChartProps {
@@ -121,14 +120,7 @@ function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfCha
         >
             <h3>{title}</h3>
 
-            {isClickable ? (
-                <p
-                    className='perf-chart-hint'
-                    data-testid={TEST_IDS.PERF_CHART_TABLE_FILTER_HINT}
-                >
-                    {PERF_CHART_TABLE_FILTER_HINT}
-                </p>
-            ) : null}
+            <PerfChartFilterHint isVisible={isClickable} />
 
             <Plot
                 className='chart'

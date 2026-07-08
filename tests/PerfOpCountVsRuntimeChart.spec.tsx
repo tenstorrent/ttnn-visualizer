@@ -5,11 +5,11 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { firePlotClick, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfOpCountVsRuntimeChart from '../src/components/performance/PerfOpCountVsRuntimeChart';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import { TestProviders } from './helpers/TestProviders';
-import { firePlotClick, resetPlotPropsCapture } from './mocks/plotComponent';
 
 const matmulMarker = { opCode: 'Matmul', colour: MarkerColours[0] };
 const convMarker = { opCode: 'Conv2d', colour: MarkerColours[1] };
