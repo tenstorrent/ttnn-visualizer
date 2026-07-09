@@ -5,6 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import Performance from '../src/routes/Performance';
 import { OpType } from '../src/definitions/Performance';
 import { TypedPerfTableRow } from '../src/definitions/PerfTable';
@@ -22,7 +23,6 @@ import {
 import { L1PressureStatus } from '../src/functions/l1Pressure';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { activePerformanceReportAtom, selectedPerformanceRangeAtom } from '../src/store/app';
-import { getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import { TestProviders } from './helpers/TestProviders';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({

@@ -3,13 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
 import { PlotData } from 'plotly.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { firePlotClick, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfChart from '../src/components/performance/PerfChart';
 import { PERF_CHART_TABLE_FILTER_HINT } from '../src/definitions/PerformanceCharts';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { firePlotClick, resetPlotPropsCapture } from './mocks/plotComponent';
 
 afterEach(() => {
     cleanup();
