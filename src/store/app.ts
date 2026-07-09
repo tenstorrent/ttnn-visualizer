@@ -6,7 +6,6 @@ import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import { atom } from 'jotai';
 import { NumberRange, TabId } from '@blueprintjs/core';
 import { Id } from 'react-toastify';
-import { FileProgress, FileStatus } from '../model/APIData';
 import { TAB_IDS } from '../definitions/BufferSummary';
 import { ListStates } from '../definitions/VirtualLists';
 import { Signpost } from '../functions/perfFunctions';
@@ -20,6 +19,7 @@ import { SortingOptions } from '../definitions/SortingOptions';
 import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../functions/topNAnnotations';
 import { MlirServerConnection } from '../definitions/MlirServer';
 import { GraphBundle, MlirFileResult } from '../model/MLIRJsonModel';
+import { aggregateFileTransferProgress, fileTransferRegistryAtom } from '../functions/fileTransferRegistry';
 
 // App state
 export const activeToastAtom = atom<Id | null>(null);
@@ -27,18 +27,17 @@ export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
 export const listStatesAtom = atom<ListStates | null>(null);
 export const selectedBufferColourAtom = atom<string | null>(null);
-/** Fresh inactive progress snapshot. Always call this for resets — do not reuse a shared object or spread `previous`, or stale `numberOfFiles` / byte fields can linger. */
-export function getInactiveFileTransferProgress(): FileProgress {
-    return {
-        currentFileName: '',
-        numberOfFiles: 0,
-        percentOfCurrent: 0,
-        finishedFiles: 0,
-        status: FileStatus.INACTIVE,
-    };
-}
+export {
+    clearAllFileTransferProgress,
+    clearFileTransferProgressForSource,
+    clearFileTransferProgressForSourceIfInactive,
+    fileTransferProgressBySourceAtom,
+    fileTransferRegistryAtom,
+    getInactiveFileTransferProgress,
+    setFileTransferProgressForSource,
+} from '../functions/fileTransferRegistry';
 
-export const fileTransferProgressAtom = atom<FileProgress>(getInactiveFileTransferProgress());
+export const fileTransferProgressAtom = atom((get) => aggregateFileTransferProgress(get(fileTransferRegistryAtom)));
 export const showDeallocationReportAtom = atom(false);
 export const showHexAtom = atomWithStorage('showHex', false); // Used in Buffers and Operation Details
 export const showMemoryRegionsAtom = atomWithStorage('showMemoryRegions', true); // Used in Buffers and Operation Details
