@@ -31,6 +31,9 @@ const FILE_TRANSFER_SOURCE_PRIORITY: readonly FileTransferSource[] = [
     FileTransferSource.LOCAL_UPLOAD,
 ];
 
+// Atoms are co-located with mutators here rather than in store/app.ts to avoid a circular
+// import: app.ts derives fileTransferProgressAtom from aggregateFileTransferProgress, while
+// setters need fileTransferRegistryAtom. Both are re-exported from store/app.ts.
 export const fileTransferRegistryAtom = atom<FileTransferRegistry>({});
 
 export const fileTransferProgressBySourceAtom = atomFamily((source: FileTransferSource) =>

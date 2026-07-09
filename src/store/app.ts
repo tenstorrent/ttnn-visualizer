@@ -27,6 +27,8 @@ export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
 export const listStatesAtom = atom<ListStates | null>(null);
 export const selectedBufferColourAtom = atom<string | null>(null);
+// File transfer registry atoms — defined in fileTransferRegistry.ts (see comment there);
+// re-exported here so shared atoms remain discoverable via store/app.ts.
 export {
     clearAllFileTransferProgress,
     clearFileTransferProgressForSource,
