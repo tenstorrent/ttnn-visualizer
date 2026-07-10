@@ -8,12 +8,15 @@ import { useAtomValue } from 'jotai';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerfTable from '../src/components/performance/PerfTable';
 import { ColumnKeys, TypedPerfTableRow, signpostRowDefaults } from '../src/definitions/PerfTable';
-import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
+import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
 import { hiddenPerfTableColumnsAtom, selectedPerfRowIdAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
+import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
+
+const defaultHeuristicContext = { maxCores: DEFAULT_MAX_CORES };
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
@@ -65,6 +68,7 @@ function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}
                 provideMatmulAdvice={false}
                 hiliteHighDispatch={false}
                 reportName='unit-test'
+                heuristicContext={defaultHeuristicContext}
                 activeReportComparisonIndex={activeReportComparisonIndex}
             />
         </TestProviders>,
@@ -154,6 +158,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
+                    heuristicContext={defaultHeuristicContext}
                 />
             </TestProviders>,
         );
@@ -182,6 +187,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
+                    heuristicContext={defaultHeuristicContext}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -201,6 +207,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
+                    heuristicContext={defaultHeuristicContext}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -229,6 +236,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
+                    heuristicContext={defaultHeuristicContext}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -246,6 +254,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
+                    heuristicContext={defaultHeuristicContext}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -275,6 +284,7 @@ describe('PerfTable loading state', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
+                    heuristicContext={defaultHeuristicContext}
                     isLoading
                 />
             </TestProviders>,
@@ -298,6 +308,7 @@ describe('PerfTable loading state', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
+                    heuristicContext={defaultHeuristicContext}
                     isLoading
                 />
             </TestProviders>,
@@ -317,6 +328,7 @@ describe('PerfTable loading state', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
+                    heuristicContext={defaultHeuristicContext}
                 />
             </TestProviders>,
         );
@@ -362,7 +374,9 @@ describe('PerfTable heuristic flags column', () => {
 
         const flagsContainer = screen.getByTestId(TEST_IDS.PERF_HEURISTIC_FLAGS);
         expect(flagsContainer).toBeInTheDocument();
-        expect(within(flagsContainer).getByText('DRAM')).toBeInTheDocument();
+        expect(
+            within(flagsContainer).getByText(PERF_HEURISTIC_FLAG_DEFINITIONS[PerfHeuristicFlag.DRAM_BOUND].shortLabel),
+        ).toBeInTheDocument();
     });
 });
 

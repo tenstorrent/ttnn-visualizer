@@ -15,6 +15,8 @@ interface PerfTableToolbarProps {
     eligibleColumns: ColumnDefinition[];
 }
 
+const DISPLAY_COLUMNS_LABEL = 'Display columns';
+
 function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
     const [hiddenColumns, setHiddenColumns] = useAtom(hiddenPerfTableColumnsAtom);
 
@@ -28,7 +30,8 @@ function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
         [eligibleColumns, hiddenColumnKeys],
     );
 
-    const displayColumnsLabel = `Columns ${hiddenColumnCount > 0 ? ` (${hiddenColumnCount} hidden)` : ''}`.trim();
+    const displayColumnsLabel =
+        hiddenColumnCount > 0 ? `${DISPLAY_COLUMNS_LABEL} (${hiddenColumnCount} hidden)` : DISPLAY_COLUMNS_LABEL;
 
     const handleColumnToggle = (columnKey: ColumnKeys, isVisible: boolean) => {
         if (LOCKED_PERF_COLUMN_KEYS.includes(columnKey)) {

@@ -28,17 +28,15 @@ import {
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
-import { Marker, MarkerColours, TypedPerfTableRow } from '../definitions/PerfTable';
-import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
+import { Marker, MarkerColours } from '../definitions/PerfTable';
 import { L1PressureStatus } from '../functions/l1Pressure';
-import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
-import getCoreCount from '../functions/getCoreCount';
+import { annotatePerfHeuristicFlags, buildPerfHeuristicContext } from '../functions/computePerfHeuristicFlags';
+import { enrichRowData } from '../functions/enrichPerfRowData';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
 import { OpType, PerfTabIds } from '../definitions/Performance';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
-import { enrichRowData } from '../functions/enrichPerfRowData';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
@@ -68,7 +66,6 @@ export default function Performance() {
     const l1Pressure = useL1PressureByOperation();
     const l1PressureMap = l1Pressure.data;
     const { data: deviceMeta } = usePerfMeta(activePerformanceReport?.reportName ?? null);
-    const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
     // Reserve the column while still loading so it doesn't pop in and shift the table sideways;
     // hide it only once we know the data is genuinely unavailable.
     const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
@@ -122,24 +119,27 @@ export default function Performance() {
         [selectedRange, perfData],
     );
 
-    const annotateWithFlags = useCallback(
-        (rows: TypedPerfTableRow[]) => {
-            const maxCores = deviceMeta?.max_cores ?? getCoreCount(architecture, rows);
+    const { enrichedData, perfHeuristicContext } = useMemo(() => {
+        const typedRows = enrichRowData(rangedData, opIdsMap, l1PressureMap);
+        const context = buildPerfHeuristicContext(deviceMeta, typedRows);
 
-            return annotatePerfHeuristicFlags(rows, { maxCores });
-        },
-        [architecture, deviceMeta],
-    );
+        return {
+            enrichedData: annotatePerfHeuristicFlags(typedRows, context),
+            perfHeuristicContext: context,
+        };
+    }, [rangedData, opIdsMap, l1PressureMap, deviceMeta]);
 
-    const enrichedData = useMemo(
-        () => annotateWithFlags(enrichRowData(rangedData, opIdsMap, l1PressureMap)),
-        [annotateWithFlags, rangedData, opIdsMap, l1PressureMap],
-    );
-    const enrichedComparisonData = useMemo(
-        // L1 metrics come from the active memory report only — do not attach the active report's map here.
-        () => comparisonPerfData?.map((dataset) => annotateWithFlags(enrichRowData(dataset, opIdsMap, null))) || [],
-        [annotateWithFlags, comparisonPerfData, opIdsMap],
-    );
+    const enrichedComparisonData = useMemo(() => {
+        const context = perfHeuristicContext;
+
+        return (
+            comparisonPerfData?.map((dataset) => {
+                const typedRows = enrichRowData(dataset, opIdsMap, null);
+
+                return annotatePerfHeuristicFlags(typedRows, context);
+            }) || []
+        );
+    }, [comparisonPerfData, opIdsMap, perfHeuristicContext]);
 
     const selectedOpCodeSet = useMemo(
         () => new Set(selectedOpCodes.map((selected) => selected.opCode)),
@@ -285,6 +285,7 @@ export default function Performance() {
                             hasL1PressureData={hasL1PressureData}
                             isLoading={isLoadingPerformance}
                             isComparisonLoading={isLoadingComparison}
+                            perfHeuristicContext={perfHeuristicContext}
                         />
                     }
                 />

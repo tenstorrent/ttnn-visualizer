@@ -12,6 +12,9 @@ const CORE_COUNT = {
     blackhole: 130, // Mohamed: 130 for BH p150 and 120 for BH p100. P150 is more popular so 130 is good
 };
 
+// Wormhole default used when device metadata is unavailable (matches DeviceArchitecture.WORMHOLE).
+export const DEFAULT_MAX_CORES = CORE_COUNT[DeviceArchitecture.WORMHOLE];
+
 function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[]): number {
     const highestCoreCount = Math.max(
         ...data

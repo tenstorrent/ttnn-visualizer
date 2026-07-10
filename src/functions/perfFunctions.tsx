@@ -20,6 +20,7 @@ import MemoryTag from '../components/MemoryTag';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import L1FullnessBar from '../components/performance/L1FullnessBar';
 import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
+import { DEFAULT_MAX_CORES } from './getCoreCount';
 import { PerfHeuristicContext } from './computePerfHeuristicFlags';
 import { CellColour } from '../definitions/CellColour';
 
@@ -82,7 +83,7 @@ export const formatCell = (
             <PerfHeuristicFlags
                 flags={row.heuristicFlags ?? []}
                 row={row}
-                context={heuristicContext ?? { maxCores: 64 }}
+                context={heuristicContext ?? { maxCores: DEFAULT_MAX_CORES }}
             />
         );
     }
