@@ -123,6 +123,7 @@ export interface TypedPerfTableRow extends Omit<
     l1_largest_free: number | null;
     l1_largest_free_percent: number | null;
     heuristicFlags?: PerfHeuristicFlag[];
+    heuristicFlagDetails?: Partial<Record<PerfHeuristicFlag, string>>;
 }
 
 export const MarkerColours = [
@@ -242,6 +243,8 @@ const L1_PRESSURE_INSERTION_POINT = 2;
 const HIGH_DISPATCH_INSERTION_POINT = 6;
 
 export const LOCKED_PERF_COLUMN_KEYS: ColumnKeys[] = [ColumnKeys.Id, ColumnKeys.OpCode];
+
+export const DISPLAY_COLUMNS_LABEL = 'Display columns';
 
 export interface EligiblePerfColumnsFlags {
     hasOpIds: boolean;

@@ -4,24 +4,22 @@
 
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { BoundType, TypedPerfTableRow } from '../definitions/PerfTable';
-import {
-    PERF_HEURISTIC_FLAG_DEFINITIONS,
-    PERF_HEURISTIC_THRESHOLDS,
-    PerfHeuristicFlag,
-} from '../definitions/PerfHeuristics';
+import { PERF_HEURISTIC_THRESHOLDS, PerfHeuristicContext, PerfHeuristicFlag } from '../definitions/PerfHeuristics';
 import { OpType } from '../definitions/Performance';
-import getCoreCount from './getCoreCount';
+import getCoreCount, { DEFAULT_MAX_CORES } from './getCoreCount';
 import getCoreUtilization from './getCoreUtilization';
 import isValidNumber from './isValidNumber';
 import { formatPercentage } from './math';
-
-export interface PerfHeuristicContext {
-    maxCores: number;
-}
+import { isSlowDramDominant } from './perfBoundPredicates';
 
 interface DeviceMetaLike {
     architecture?: DeviceArchitecture | null;
     max_cores?: number | null;
+}
+
+interface RowHeuristicEvaluation {
+    flags: PerfHeuristicFlag[];
+    details: Partial<Record<PerfHeuristicFlag, string>> | undefined;
 }
 
 const { LOW_CORE_UTILISATION_RATIO, UNDERUTILISED_CORES_RATIO, MIN_TOTAL_PERCENT } = PERF_HEURISTIC_THRESHOLDS;
@@ -31,9 +29,10 @@ export function buildPerfHeuristicContext(
     rows: TypedPerfTableRow[],
 ): PerfHeuristicContext {
     const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
+    const maxCores = deviceMeta?.max_cores ?? getCoreCount(architecture, rows);
 
     return {
-        maxCores: deviceMeta?.max_cores ?? getCoreCount(architecture ?? DeviceArchitecture.WORMHOLE, rows),
+        maxCores: maxCores > 0 ? maxCores : DEFAULT_MAX_CORES,
     };
 }
 
@@ -57,17 +56,8 @@ function isEligibleRow(row: TypedPerfTableRow): boolean {
     return true;
 }
 
-function isSlowDramDominant(row: TypedPerfTableRow): boolean {
-    return (
-        row.bound === BoundType.SLOW &&
-        row.dram_percent != null &&
-        row.flops_percent != null &&
-        row.dram_percent > row.flops_percent
-    );
-}
-
-function isDramBound(row: TypedPerfTableRow): boolean {
-    if (!meetsMinImpact(row)) {
+function isDramBound(row: TypedPerfTableRow, hasMinImpact: boolean): boolean {
+    if (!hasMinImpact) {
         return false;
     }
 
@@ -86,34 +76,8 @@ function getDramBoundDetail(row: TypedPerfTableRow): string | null {
     return row.bound != null ? `Bound: ${row.bound}` : null;
 }
 
-function isLowUtilisation(row: TypedPerfTableRow, maxCores: number): boolean {
-    if (!meetsMinImpact(row)) {
-        return false;
-    }
-
-    const { pm_ideal_ns: idealNs, device_time: deviceTime, cores } = row;
-
-    if (!isValidNumber(idealNs) || !isValidNumber(deviceTime) || !isValidNumber(cores)) {
-        return false;
-    }
-
-    const utilisation = getCoreUtilization(row, maxCores);
-
-    return utilisation > 0 && utilisation < LOW_CORE_UTILISATION_RATIO;
-}
-
-function getLowUtilisationDetail(row: TypedPerfTableRow, maxCores: number): string | null {
-    if (!isValidNumber(row.pm_ideal_ns)) {
-        return null;
-    }
-
-    const utilisation = getCoreUtilization(row, maxCores);
-
-    return `Core utilisation: ${formatPercentage(utilisation * 100)}`;
-}
-
-function isUnderutilisedCores(row: TypedPerfTableRow, maxCores: number): boolean {
-    if (!meetsMinImpact(row)) {
+function isUnderutilisedCores(row: TypedPerfTableRow, maxCores: number, hasMinImpact: boolean): boolean {
+    if (!hasMinImpact) {
         return false;
     }
 
@@ -126,49 +90,54 @@ function isUnderutilisedCores(row: TypedPerfTableRow, maxCores: number): boolean
     return cores / maxCores < UNDERUTILISED_CORES_RATIO;
 }
 
-function isRecomputeCandidate(row: TypedPerfTableRow): boolean {
+function evaluateRowHeuristics(row: TypedPerfTableRow, context: PerfHeuristicContext): RowHeuristicEvaluation {
     if (!isEligibleRow(row)) {
-        return false;
+        return { flags: [], details: undefined };
     }
 
-    return row.hash != null && !row.isFirstHashOccurrence && row.cache_hit === false;
+    const hasMinImpact = meetsMinImpact(row);
+    const flags: PerfHeuristicFlag[] = [];
+    const details: Partial<Record<PerfHeuristicFlag, string>> = {};
+
+    if (isDramBound(row, hasMinImpact)) {
+        flags.push(PerfHeuristicFlag.DRAM_BOUND);
+        const detail = getDramBoundDetail(row);
+
+        if (detail != null) {
+            details[PerfHeuristicFlag.DRAM_BOUND] = detail;
+        }
+    }
+
+    if (hasMinImpact && isValidNumber(row.pm_ideal_ns) && isValidNumber(row.device_time) && isValidNumber(row.cores)) {
+        const utilisation = getCoreUtilization(row, context.maxCores);
+
+        if (utilisation > 0 && utilisation < LOW_CORE_UTILISATION_RATIO) {
+            flags.push(PerfHeuristicFlag.LOW_UTILISATION);
+            details[PerfHeuristicFlag.LOW_UTILISATION] = `Core utilisation: ${formatPercentage(utilisation * 100)}`;
+        }
+    }
+
+    if (isUnderutilisedCores(row, context.maxCores, hasMinImpact)) {
+        flags.push(PerfHeuristicFlag.UNDERUTILISED_CORES);
+
+        if (row.cores != null) {
+            details[PerfHeuristicFlag.UNDERUTILISED_CORES] = `Cores: ${row.cores} / ${context.maxCores}`;
+        }
+    }
+
+    if (row.hash != null && !row.isFirstHashOccurrence && row.cache_hit === false) {
+        flags.push(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
+        details[PerfHeuristicFlag.RECOMPUTE_CANDIDATE] = `Hash: ${row.hash}`;
+    }
+
+    return {
+        flags,
+        details: flags.length > 0 ? details : undefined,
+    };
 }
 
 export function computePerfHeuristicFlags(row: TypedPerfTableRow, context: PerfHeuristicContext): PerfHeuristicFlag[] {
-    if (!isEligibleRow(row)) {
-        return [];
-    }
-
-    const flags: PerfHeuristicFlag[] = [];
-
-    if (isDramBound(row)) {
-        flags.push(PerfHeuristicFlag.DRAM_BOUND);
-    }
-
-    if (isLowUtilisation(row, context.maxCores)) {
-        flags.push(PerfHeuristicFlag.LOW_UTILISATION);
-    }
-
-    if (isUnderutilisedCores(row, context.maxCores)) {
-        flags.push(PerfHeuristicFlag.UNDERUTILISED_CORES);
-    }
-
-    if (isRecomputeCandidate(row)) {
-        flags.push(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
-    }
-
-    return flags;
-}
-
-export function annotatePerfHeuristicFlags(
-    rows: TypedPerfTableRow[],
-    context: PerfHeuristicContext,
-): TypedPerfTableRow[] {
-    for (const row of rows) {
-        row.heuristicFlags = computePerfHeuristicFlags(row, context);
-    }
-
-    return rows;
+    return evaluateRowHeuristics(row, context).flags;
 }
 
 export function getPerfHeuristicFlagTooltipDetail(
@@ -176,20 +145,18 @@ export function getPerfHeuristicFlagTooltipDetail(
     row: TypedPerfTableRow,
     context: PerfHeuristicContext,
 ): string | null {
-    switch (flag) {
-        case PerfHeuristicFlag.DRAM_BOUND:
-            return getDramBoundDetail(row);
-        case PerfHeuristicFlag.LOW_UTILISATION:
-            return getLowUtilisationDetail(row, context.maxCores);
-        case PerfHeuristicFlag.UNDERUTILISED_CORES:
-            return row.cores != null ? `Cores: ${row.cores} / ${context.maxCores}` : null;
-        case PerfHeuristicFlag.RECOMPUTE_CANDIDATE:
-            return row.hash != null ? `Hash: ${row.hash}` : null;
-        default:
-            return null;
-    }
+    return evaluateRowHeuristics(row, context).details?.[flag] ?? null;
 }
 
-export function getPerfHeuristicFlagDefinition(flag: PerfHeuristicFlag) {
-    return PERF_HEURISTIC_FLAG_DEFINITIONS[flag];
+export function annotatePerfHeuristicFlags(
+    rows: TypedPerfTableRow[],
+    context: PerfHeuristicContext,
+): TypedPerfTableRow[] {
+    for (const row of rows) {
+        const { flags, details } = evaluateRowHeuristics(row, context);
+        row.heuristicFlags = flags;
+        row.heuristicFlagDetails = details;
+    }
+
+    return rows;
 }

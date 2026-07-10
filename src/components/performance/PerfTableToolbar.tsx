@@ -7,15 +7,18 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import { useMemo } from 'react';
 import 'styles/components/PerfTableToolbar.scss';
-import { ColumnDefinition, ColumnKeys, LOCKED_PERF_COLUMN_KEYS } from '../../definitions/PerfTable';
+import {
+    ColumnDefinition,
+    ColumnKeys,
+    DISPLAY_COLUMNS_LABEL,
+    LOCKED_PERF_COLUMN_KEYS,
+} from '../../definitions/PerfTable';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { hiddenPerfTableColumnsAtom } from '../../store/app';
 
 interface PerfTableToolbarProps {
     eligibleColumns: ColumnDefinition[];
 }
-
-const DISPLAY_COLUMNS_LABEL = 'Display columns';
 
 function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
     const [hiddenColumns, setHiddenColumns] = useAtom(hiddenPerfTableColumnsAtom);

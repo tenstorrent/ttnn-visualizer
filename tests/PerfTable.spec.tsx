@@ -368,6 +368,7 @@ describe('PerfTable heuristic flags column', () => {
             id: 10,
             raw_op_code: 'Matmul',
             heuristicFlags: [PerfHeuristicFlag.DRAM_BOUND],
+            heuristicFlagDetails: { [PerfHeuristicFlag.DRAM_BOUND]: 'Bound: DRAM' },
         });
 
         renderTable([flaggedRow]);
@@ -377,6 +378,51 @@ describe('PerfTable heuristic flags column', () => {
         expect(
             within(flagsContainer).getByText(PERF_HEURISTIC_FLAG_DEFINITIONS[PerfHeuristicFlag.DRAM_BOUND].shortLabel),
         ).toBeInTheDocument();
+    });
+
+    it('renders no flag container when heuristicFlags are absent', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
+        renderTable([matmulRow]);
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_HEURISTIC_FLAGS)).toBeNull();
+    });
+
+    it('renders multiple flag chips on one row', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
+        const flaggedRow = baseRow({
+            id: 10,
+            raw_op_code: 'Matmul',
+            heuristicFlags: [
+                PerfHeuristicFlag.DRAM_BOUND,
+                PerfHeuristicFlag.LOW_UTILISATION,
+                PerfHeuristicFlag.UNDERUTILISED_CORES,
+            ],
+        });
+
+        renderTable([flaggedRow]);
+
+        const flags = screen.getAllByTestId(TEST_IDS.PERF_HEURISTIC_FLAG);
+        expect(flags).toHaveLength(3);
+    });
+
+    it('renders flag chips on a comparison sub-row', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
+
+        const comparisonReportRow = baseRow({ id: 99, raw_op_code: 'Matmul', op: undefined });
+        const activeReportSubRow = baseRow({
+            id: 11,
+            raw_op_code: 'Matmul',
+            op: 11,
+            heuristicFlags: [PerfHeuristicFlag.DRAM_BOUND],
+        });
+
+        renderTable([comparisonReportRow], {
+            comparisonData: [[activeReportSubRow]],
+            activeReportComparisonIndex: 0,
+        });
+
+        const flagsContainer = screen.getByTestId(TEST_IDS.PERF_HEURISTIC_FLAGS);
+        expect(flagsContainer.closest('tr')).toHaveClass('comparison-row');
     });
 });
 

@@ -31,6 +31,7 @@ interface StackedPerformanceTableProps {
     stackedComparisonData: TypedStackedPerfRow[][];
     filters: Record<string, string> | null;
     reportName: string | null;
+    maxCores: number;
     isLoading?: boolean;
 }
 
@@ -40,6 +41,7 @@ const StackedPerformanceTable = ({
     stackedComparisonData,
     filters,
     reportName,
+    maxCores,
     isLoading = false,
 }: StackedPerformanceTableProps) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
@@ -209,6 +211,7 @@ const StackedPerformanceTable = ({
             <PerfDeviceArchitecture
                 data={data}
                 reportName={reportName}
+                maxCores={maxCores}
             />
 
             {mergeDevices && <PerfMultiDeviceNotice />}

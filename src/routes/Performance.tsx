@@ -119,24 +119,29 @@ export default function Performance() {
         [selectedRange, perfData],
     );
 
-    const { enrichedData, perfHeuristicContext } = useMemo(() => {
-        const typedRows = enrichRowData(rangedData, opIdsMap, l1PressureMap);
-        const context = buildPerfHeuristicContext(deviceMeta, typedRows);
+    const typedRows = useMemo(
+        () => enrichRowData(rangedData, opIdsMap, l1PressureMap),
+        [rangedData, opIdsMap, l1PressureMap],
+    );
 
-        return {
-            enrichedData: annotatePerfHeuristicFlags(typedRows, context),
-            perfHeuristicContext: context,
-        };
-    }, [rangedData, opIdsMap, l1PressureMap, deviceMeta]);
+    const perfHeuristicContext = useMemo(
+        () => buildPerfHeuristicContext(deviceMeta, typedRows),
+        [deviceMeta, typedRows],
+    );
 
+    const enrichedData = useMemo(
+        () => annotatePerfHeuristicFlags(typedRows, perfHeuristicContext),
+        [typedRows, perfHeuristicContext],
+    );
+
+    // Comparison rows reuse the active report's device meta for core thresholds.
+    // Assumes comparison reports target the same device architecture as the active report.
     const enrichedComparisonData = useMemo(() => {
-        const context = perfHeuristicContext;
-
         return (
             comparisonPerfData?.map((dataset) => {
-                const typedRows = enrichRowData(dataset, opIdsMap, null);
+                const comparisonTypedRows = enrichRowData(dataset, opIdsMap, null);
 
-                return annotatePerfHeuristicFlags(typedRows, context);
+                return annotatePerfHeuristicFlags(comparisonTypedRows, perfHeuristicContext);
             }) || []
         );
     }, [comparisonPerfData, opIdsMap, perfHeuristicContext]);

@@ -50,7 +50,7 @@ import {
     filterableStackedColumnKeys,
 } from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
-import { PerfHeuristicContext } from '../../functions/computePerfHeuristicFlags';
+import { PerfHeuristicContext } from '../../definitions/PerfHeuristics';
 import HighlightedText from '../HighlightedText';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
@@ -619,6 +619,7 @@ const PerformanceReport = ({
                                     filters={filters}
                                     stackedComparisonData={filteredComparisonStackedRowsList}
                                     reportName={activePerformanceReport?.reportName || null}
+                                    maxCores={perfHeuristicContext.maxCores}
                                     isLoading={isTableLoading}
                                 />
                             ) : (
@@ -670,6 +671,7 @@ const PerformanceReport = ({
                                         ]}
                                         filters={filters}
                                         reportName={report}
+                                        maxCores={perfHeuristicContext.maxCores}
                                         isLoading={isTableLoading}
                                     />
                                 ) : (

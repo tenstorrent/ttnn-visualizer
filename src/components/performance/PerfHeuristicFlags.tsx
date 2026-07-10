@@ -2,23 +2,23 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Tag, Tooltip } from '@blueprintjs/core';
+import { Intent, Tag, Tooltip } from '@blueprintjs/core';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
-import { PerfHeuristicFlag } from '../../definitions/PerfHeuristics';
+import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlagIntent } from '../../definitions/PerfHeuristics';
 import { TEST_IDS } from '../../definitions/TestIds';
-import {
-    PerfHeuristicContext,
-    getPerfHeuristicFlagDefinition,
-    getPerfHeuristicFlagTooltipDetail,
-} from '../../functions/computePerfHeuristicFlags';
+
+const FLAG_INTENT_BY_SEVERITY: Record<PerfHeuristicFlagIntent, Intent> = {
+    [PerfHeuristicFlagIntent.WARNING]: Intent.WARNING,
+    [PerfHeuristicFlagIntent.DANGER]: Intent.DANGER,
+};
 
 interface PerfHeuristicFlagsProps {
-    flags: PerfHeuristicFlag[];
     row: TypedPerfTableRow;
-    context: PerfHeuristicContext;
 }
 
-function PerfHeuristicFlags({ flags, row, context }: PerfHeuristicFlagsProps) {
+function PerfHeuristicFlags({ row }: PerfHeuristicFlagsProps) {
+    const flags = row.heuristicFlags ?? [];
+
     if (flags.length === 0) {
         return null;
     }
@@ -29,8 +29,8 @@ function PerfHeuristicFlags({ flags, row, context }: PerfHeuristicFlagsProps) {
             data-testid={TEST_IDS.PERF_HEURISTIC_FLAGS}
         >
             {flags.map((flag) => {
-                const definition = getPerfHeuristicFlagDefinition(flag);
-                const detail = getPerfHeuristicFlagTooltipDetail(flag, row, context);
+                const definition = PERF_HEURISTIC_FLAG_DEFINITIONS[flag];
+                const detail = row.heuristicFlagDetails?.[flag] ?? null;
 
                 return (
                     <Tooltip
@@ -48,7 +48,7 @@ function PerfHeuristicFlags({ flags, row, context }: PerfHeuristicFlagsProps) {
                             className='perf-heuristic-flag'
                             data-testid={TEST_IDS.PERF_HEURISTIC_FLAG}
                             data-flag={flag}
-                            intent={definition.intent}
+                            intent={FLAG_INTENT_BY_SEVERITY[definition.intent]}
                             minimal
                         >
                             {definition.shortLabel}

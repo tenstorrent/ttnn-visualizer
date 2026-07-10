@@ -34,7 +34,7 @@ import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableSkeleton from './PerfTableSkeleton';
 import PerfTensorDrawer from './PerfTensorDrawer';
 import PerfTableToolbar from './PerfTableToolbar';
-import { PerfHeuristicContext } from '../../functions/computePerfHeuristicFlags';
+import { PerfHeuristicContext } from '../../definitions/PerfHeuristics';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -234,7 +234,7 @@ const PerformanceTable = ({
             return null;
         }
 
-        return formatCell(row, column, operations, highlight, isFirstOfOpRun, heuristicContext);
+        return formatCell(row, column, operations, highlight, isFirstOfOpRun);
     };
 
     const renderTable = () => {
@@ -401,7 +401,6 @@ const PerformanceTable = ({
                                                                 operationsList,
                                                                 filters?.[h.key],
                                                                 true,
-                                                                heuristicContext,
                                                             )}
                                                     </td>
                                                 ))}
@@ -467,6 +466,7 @@ const PerformanceTable = ({
             <PerfDeviceArchitecture
                 data={data}
                 reportName={reportName}
+                maxCores={heuristicContext.maxCores}
             />
 
             {mergeDevices && <PerfMultiDeviceNotice />}

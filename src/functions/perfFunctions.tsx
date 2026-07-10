@@ -20,9 +20,8 @@ import MemoryTag from '../components/MemoryTag';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import L1FullnessBar from '../components/performance/L1FullnessBar';
 import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
-import { DEFAULT_MAX_CORES } from './getCoreCount';
-import { PerfHeuristicContext } from './computePerfHeuristicFlags';
 import { CellColour } from '../definitions/CellColour';
+import { isSlowDramDominant } from './perfBoundPredicates';
 
 export interface Signpost {
     id: number;
@@ -72,20 +71,13 @@ export const formatCell = (
     operations?: OperationDescription[],
     highlight?: string | null,
     isFirstOfOpRun: boolean = true,
-    heuristicContext?: PerfHeuristicContext,
 ): JSX.Element | string => {
     const { key, unit, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
     const isHost = isHostOp(row.bound);
 
     if (key === ColumnKeys.Flags) {
-        return (
-            <PerfHeuristicFlags
-                flags={row.heuristicFlags ?? []}
-                row={row}
-                context={heuristicContext ?? { maxCores: DEFAULT_MAX_CORES }}
-            />
-        );
+        return <PerfHeuristicFlags row={row} />;
     }
 
     const value = row[key];
@@ -352,15 +344,13 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
         const dramP = row.dram_percent;
         const flopsP = row.flops_percent;
 
-        if (row.bound === BoundType.SLOW) {
-            if (dramP != null && flopsP != null) {
-                if (dramP > flopsP) {
-                    if (key === ColumnKeys.Dram || key === ColumnKeys.DramPercent) {
-                        return CellColour.Yellow;
-                    }
-                } else if (key === ColumnKeys.Flops || key === ColumnKeys.FlopsPercent) {
+        if (row.bound === BoundType.SLOW && dramP != null && flopsP != null) {
+            if (isSlowDramDominant(row)) {
+                if (key === ColumnKeys.Dram || key === ColumnKeys.DramPercent) {
                     return CellColour.Yellow;
                 }
+            } else if (key === ColumnKeys.Flops || key === ColumnKeys.FlopsPercent) {
+                return CellColour.Yellow;
             }
         }
 

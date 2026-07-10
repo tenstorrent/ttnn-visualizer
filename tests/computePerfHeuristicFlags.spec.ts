@@ -194,18 +194,77 @@ describe('computePerfHeuristicFlags', () => {
         expect(flags).not.toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
     });
 
-    it('annotates rows with heuristicFlags in place', () => {
+    it('annotates rows with heuristicFlags and tooltip details in place', () => {
         const row = makeRow({ bound: BoundType.DRAM });
         const [annotated] = annotatePerfHeuristicFlags([row], context);
 
         expect(annotated).toBe(row);
         expect(annotated.heuristicFlags).toEqual([PerfHeuristicFlag.DRAM_BOUND]);
+        expect(annotated.heuristicFlagDetails?.[PerfHeuristicFlag.DRAM_BOUND]).toBe('Bound: DRAM');
     });
 
-    it('buildPerfHeuristicContext falls back to row-derived core count', () => {
+    it('annotates multi-flag rows with every detail key', () => {
+        const row = makeRow({
+            bound: BoundType.DRAM,
+            pm_ideal_ns: 1000,
+            device_time: 1000,
+            cores: 8,
+        });
+        const [annotated] = annotatePerfHeuristicFlags([row], context);
+
+        expect(annotated.heuristicFlags).toEqual([
+            PerfHeuristicFlag.DRAM_BOUND,
+            PerfHeuristicFlag.LOW_UTILISATION,
+            PerfHeuristicFlag.UNDERUTILISED_CORES,
+        ]);
+        expect(annotated.heuristicFlagDetails?.[PerfHeuristicFlag.DRAM_BOUND]).toBe('Bound: DRAM');
+        expect(annotated.heuristicFlagDetails?.[PerfHeuristicFlag.LOW_UTILISATION]).toMatch(/Core utilisation:/);
+        expect(annotated.heuristicFlagDetails?.[PerfHeuristicFlag.UNDERUTILISED_CORES]).toBe('Cores: 8 / 64');
+    });
+
+    it('clears heuristicFlagDetails when a row has no flags', () => {
+        const row = makeRow({
+            bound: BoundType.DRAM,
+            total_percent: 0.1,
+            heuristicFlagDetails: { [PerfHeuristicFlag.DRAM_BOUND]: 'stale' },
+        });
+        const [annotated] = annotatePerfHeuristicFlags([row], context);
+
+        expect(annotated.heuristicFlags).toEqual([]);
+        expect(annotated.heuristicFlagDetails).toBeUndefined();
+    });
+
+    it('does not flag low utilisation or underutilised cores below MIN_TOTAL_PERCENT', () => {
+        const flags = computePerfHeuristicFlags(
+            makeRow({
+                total_percent: 0.1,
+                pm_ideal_ns: 1000,
+                device_time: 1000,
+                cores: 8,
+            }),
+            context,
+        );
+
+        expect(flags).not.toContain(PerfHeuristicFlag.LOW_UTILISATION);
+        expect(flags).not.toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
+    });
+
+    it('buildPerfHeuristicContext uses device meta max_cores when provided', () => {
+        const contextFromMeta = buildPerfHeuristicContext({ max_cores: 130 }, [makeRow({ cores: 8 })]);
+
+        expect(contextFromMeta.maxCores).toBe(130);
+    });
+
+    it('buildPerfHeuristicContext falls back to architecture default when rows are below device max', () => {
         const contextFromRows = buildPerfHeuristicContext(null, [makeRow({ cores: 48 })]);
 
         expect(contextFromRows.maxCores).toBe(DEFAULT_MAX_CORES);
+    });
+
+    it('buildPerfHeuristicContext uses row core count when it exceeds architecture default', () => {
+        const contextFromRows = buildPerfHeuristicContext(null, [makeRow({ cores: 100 })]);
+
+        expect(contextFromRows.maxCores).toBe(100);
     });
 });
 
@@ -230,5 +289,25 @@ describe('getPerfHeuristicFlagTooltipDetail', () => {
         expect(
             getPerfHeuristicFlagTooltipDetail(PerfHeuristicFlag.UNDERUTILISED_CORES, makeRow({ cores: 8 }), context),
         ).toBe('Cores: 8 / 64');
+    });
+
+    it('returns bound detail for DRAM-bound rows', () => {
+        expect(
+            getPerfHeuristicFlagTooltipDetail(
+                PerfHeuristicFlag.DRAM_BOUND,
+                makeRow({ bound: BoundType.DRAM }),
+                context,
+            ),
+        ).toBe('Bound: DRAM');
+    });
+
+    it('returns hash detail for recompute candidates', () => {
+        expect(
+            getPerfHeuristicFlagTooltipDetail(
+                PerfHeuristicFlag.RECOMPUTE_CANDIDATE,
+                makeRow({ hash: 'abc123', isFirstHashOccurrence: false, cache_hit: false }),
+                context,
+            ),
+        ).toBe('Hash: abc123');
     });
 });
