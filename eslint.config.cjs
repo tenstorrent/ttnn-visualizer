@@ -25,6 +25,8 @@ const compat = new FlatCompat({
 
 module.exports = defineConfig([
     {
+        files: ['**/*.ts', '**/*.tsx'],
+
         languageOptions: {
             globals: {
                 ...globals.browser,
@@ -37,6 +39,7 @@ module.exports = defineConfig([
                 projectService: {
                     allowDefaultProject: [
                         '.stylelintrc.cjs',
+                        'eslint.config.cjs',
                         'scripts/check-spdx.mjs',
                         'scripts/release.mjs',
                         'scripts/check-missing-dep-licenses.mjs',
@@ -166,7 +169,8 @@ module.exports = defineConfig([
                     message: 'Type props directly: function Foo({…}: FooProps). Do not use React.FunctionComponent.',
                 },
             ],
-            'no-param-reassign': ['error', { props: false }],
+            // Migrated from eslint-config-erb: preserve prior lint behaviour after removing the preset.
+            'no-param-reassign': ['error', { props: false }], // overrides airbnb-base `props: true`
             'no-shadow': 'off',
             'no-underscore-dangle': 'off',
             'no-unused-vars': 'off',
@@ -189,8 +193,9 @@ module.exports = defineConfig([
                 },
             ],
 
-            'react/display-name': 'off',
-            'react/no-danger': 'warn',
+            // erb pulled in eslint-config-airbnb react rules; pin the two we still rely on.
+            'react/display-name': 'off', // airbnb disabled; react/recommended would error on anonymous components
+            'react/no-danger': 'warn', // keeps existing eslint-disable comments valid under --max-warnings 0
 
             'react/jsx-filename-extension': [
                 'warn',
@@ -225,6 +230,29 @@ module.exports = defineConfig([
             ],
         },
     },
+    {
+        files: ['**/*.cjs'],
+
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+
+            ecmaVersion: 'latest',
+            sourceType: 'commonjs',
+        },
+
+        plugins: {
+            prettier: fixupPluginRules(prettier),
+        },
+
+        rules: {
+            '@typescript-eslint/no-require-imports': 'off',
+            'import/newline-after-import': 'off',
+            'import/no-unresolved': 'off',
+            'prettier/prettier': 'warn',
+        },
+    },
     globalIgnores([
         '**/.DS_Store',
         '**/.venv',
@@ -238,7 +266,6 @@ module.exports = defineConfig([
         '**/myenv',
         '**/node_modules',
         '**/ttnn_env',
-        'eslint.config.cjs',
         'src/libs/blueprintjs/legacySassSvgInlinerFactory.js',
     ]),
 ]);
