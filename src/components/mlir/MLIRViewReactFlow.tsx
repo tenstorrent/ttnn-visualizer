@@ -1576,7 +1576,6 @@ const MlGraphWithProvider = (props: ViewProps) => (
             dozen state slots in an effect, and lints cleanly under
             react-hooks/set-state-in-effect. */}
         <MlGraphInner
-            // eslint-disable-next-line react/destructuring-assignment
             key={props.data.graphs[0]?.id}
             {...props}
         />

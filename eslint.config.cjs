@@ -131,6 +131,7 @@ module.exports = defineConfig([
                     css: 'always',
                     scss: 'always',
                     json: 'always',
+                    mjs: 'always',
                 },
             ],
 
@@ -187,6 +188,9 @@ module.exports = defineConfig([
                     unnamedComponents: 'arrow-function',
                 },
             ],
+
+            'react/display-name': 'off',
+            'react/no-danger': 'warn',
 
             'react/jsx-filename-extension': [
                 'warn',
