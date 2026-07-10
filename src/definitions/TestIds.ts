@@ -38,6 +38,8 @@ export const TEST_IDS = Object.freeze({
     PERF_COLUMN_PICKER_TRIGGER: 'perf-column-picker-trigger',
     PERF_COLUMN_PICKER_RESET: 'perf-column-picker-reset',
     PERF_COLUMN_PICKER_OPTION: 'perf-column-picker-option',
+    PERF_HEURISTIC_FLAGS: 'perf-heuristic-flags',
+    PERF_HEURISTIC_FLAG: 'perf-heuristic-flag',
 
     // General UI
     LOADING_SPINNER: 'loading-spinner',

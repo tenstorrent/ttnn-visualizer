@@ -8,6 +8,7 @@ import { Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
 import { BoundType, ColumnDefinition, ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { MIN_TOTAL_PERCENT } from '../definitions/PerfHeuristics';
 import { OperationDescription } from '../model/APIData';
 import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
@@ -18,6 +19,8 @@ import { NormalisedPerfData } from './normalisePerformanceData';
 import MemoryTag from '../components/MemoryTag';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import L1FullnessBar from '../components/performance/L1FullnessBar';
+import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
+import { PerfHeuristicContext } from './computePerfHeuristicFlags';
 import { CellColour } from '../definitions/CellColour';
 
 export interface Signpost {
@@ -44,8 +47,6 @@ const DEFAULT_COLOUR = CellColour.White;
 const FALLBACK_COLOUR = CellColour.Grey;
 const WARNING_COLOUR = CellColour.Yellow;
 
-const MIN_PERCENTAGE = 0.5;
-
 // Per-RISC kernel durations run concurrently, so the device kernel duration is gated by whichever
 // RISC runs longest. Highlight the RISC(s) on that critical path so the user can see where the
 // time goes (#1518). This is informational, not a warning — a data-movement op pinned to BRISC or
@@ -70,10 +71,22 @@ export const formatCell = (
     operations?: OperationDescription[],
     highlight?: string | null,
     isFirstOfOpRun: boolean = true,
+    heuristicContext?: PerfHeuristicContext,
 ): JSX.Element | string => {
     const { key, unit, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
     const isHost = isHostOp(row.bound);
+
+    if (key === ColumnKeys.Flags) {
+        return (
+            <PerfHeuristicFlags
+                flags={row.heuristicFlags ?? []}
+                row={row}
+                context={heuristicContext ?? { maxCores: 64 }}
+            />
+        );
+    }
+
     const value = row[key];
     let formatted: string | boolean | string[];
 
@@ -278,7 +291,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     // tt-perf-report mutes ops below the threshold, except host "(torch)" ops, which it always
     // keeps coloured (perf_report.py color_row() + is_host_op()). raw_op_code is a required string
     // on every row type (device ops, placeholders, signposts), so reading it here is always safe.
-    if (percentage != null && percentage < MIN_PERCENTAGE && !row.raw_op_code.includes('(torch)')) {
+    if (percentage != null && percentage < MIN_TOTAL_PERCENT && !row.raw_op_code.includes('(torch)')) {
         return FALLBACK_COLOUR;
     }
 

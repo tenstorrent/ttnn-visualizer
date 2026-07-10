@@ -25,7 +25,7 @@ import { TEST_IDS } from '../../definitions/TestIds';
 import isValidNumber from '../../functions/isValidNumber';
 import { formatPercentage, formatSize } from '../../functions/math';
 import { formatCell, isHostOp } from '../../functions/perfFunctions';
-import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
+import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../../hooks/useAPI';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
@@ -34,6 +34,9 @@ import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableSkeleton from './PerfTableSkeleton';
 import PerfTensorDrawer from './PerfTensorDrawer';
 import PerfTableToolbar from './PerfTableToolbar';
+import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
+import getCoreCount from '../../functions/getCoreCount';
+import { PerfHeuristicContext } from '../../functions/computePerfHeuristicFlags';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -42,7 +45,6 @@ interface PerformanceTableProps {
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     reportName: string | null;
-    showHashColumn: boolean;
     hasL1PressureData?: boolean;
     isLoading?: boolean;
     // Identifies which comparison dataset holds the active profiler report's rows. The
@@ -60,7 +62,6 @@ const PerformanceTable = ({
     provideMatmulAdvice,
     hiliteHighDispatch,
     reportName,
-    showHashColumn,
     hasL1PressureData = false,
     isLoading = false,
     activeReportComparisonIndex = null,
@@ -75,7 +76,16 @@ const PerformanceTable = ({
     const opIdsMap = useOpToPerfIdFiltered();
     const { data: operationsList } = useOperationsList();
     const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
+    const { data: deviceMeta } = usePerfMeta(reportName);
     const navigate = useNavigate();
+
+    const heuristicContext = useMemo<PerfHeuristicContext>(() => {
+        const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
+
+        return {
+            maxCores: deviceMeta?.max_cores ?? getCoreCount(architecture, data),
+        };
+    }, [data, deviceMeta]);
 
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
         if (!data) {
@@ -121,10 +131,9 @@ const PerformanceTable = ({
                 hasOpIds: opIdsMap.length > 0,
                 hasL1PressureData,
                 hiliteHighDispatch,
-                showHashColumn,
                 hasNpe: Boolean(npeManifest && npeManifest.length > 0),
             }),
-        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, showHashColumn, npeManifest],
+        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, npeManifest],
     );
 
     const visibleColumns = useMemo(
@@ -234,7 +243,7 @@ const PerformanceTable = ({
             return null;
         }
 
-        return formatCell(row, column, operations, highlight, isFirstOfOpRun);
+        return formatCell(row, column, operations, highlight, isFirstOfOpRun, heuristicContext);
     };
 
     const renderTable = () => {

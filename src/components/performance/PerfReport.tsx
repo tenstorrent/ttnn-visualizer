@@ -107,7 +107,6 @@ const PerformanceReport = ({
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
-    // const [showHashColumn, setShowHashColumn] = useState(false);
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
@@ -627,7 +626,6 @@ const PerformanceReport = ({
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     reportName={activePerformanceReport?.reportName || null}
-                                    showHashColumn={false}
                                     hasL1PressureData={hasL1PressureData}
                                     isLoading={isTableLoading}
                                 />
@@ -681,7 +679,6 @@ const PerformanceReport = ({
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         reportName={report}
-                                        showHashColumn={false}
                                         hasL1PressureData={hasL1PressureData}
                                         activeReportComparisonIndex={0}
                                         isLoading={isTableLoading}

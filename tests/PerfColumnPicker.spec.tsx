@@ -21,6 +21,26 @@ function HiddenColumnsProbe() {
 afterEach(cleanup);
 
 describe('PerfTableToolbar', () => {
+    it('shows the default label when no columns are hidden', () => {
+        render(
+            <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, []]]}>
+                <PerfTableToolbar eligibleColumns={Columns} />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_COLUMN_PICKER_TRIGGER)).toHaveTextContent('Display columns');
+    });
+
+    it('shows the hidden column count in the trigger label', () => {
+        render(
+            <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, [ColumnKeys.DeviceTime, ColumnKeys.Dram]]]}>
+                <PerfTableToolbar eligibleColumns={Columns} />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_COLUMN_PICKER_TRIGGER)).toHaveTextContent('Display columns (2 hidden)');
+    });
+
     it('toggles a column into hiddenPerfTableColumnsAtom', () => {
         render(
             <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, []]]}>

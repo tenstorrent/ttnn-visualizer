@@ -8,6 +8,7 @@ import { useAtomValue } from 'jotai';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerfTable from '../src/components/performance/PerfTable';
 import { ColumnKeys, TypedPerfTableRow, signpostRowDefaults } from '../src/definitions/PerfTable';
+import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
@@ -64,7 +65,6 @@ function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}
                 provideMatmulAdvice={false}
                 hiliteHighDispatch={false}
                 reportName='unit-test'
-                showHashColumn={false}
                 activeReportComparisonIndex={activeReportComparisonIndex}
             />
         </TestProviders>,
@@ -154,7 +154,6 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    showHashColumn={false}
                 />
             </TestProviders>,
         );
@@ -183,7 +182,6 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    showHashColumn={false}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -203,7 +201,6 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    showHashColumn={false}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -232,7 +229,6 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    showHashColumn={false}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -250,7 +246,6 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    showHashColumn={false}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -280,7 +275,6 @@ describe('PerfTable loading state', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    showHashColumn={false}
                     isLoading
                 />
             </TestProviders>,
@@ -304,7 +298,6 @@ describe('PerfTable loading state', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    showHashColumn={false}
                     isLoading
                 />
             </TestProviders>,
@@ -324,7 +317,6 @@ describe('PerfTable loading state', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    showHashColumn={false}
                 />
             </TestProviders>,
         );
@@ -354,6 +346,23 @@ describe('PerfTable column visibility', () => {
                 .reduce((total, cell) => total + Number(cell.getAttribute('colspan') ?? 1), 0) ?? 0;
 
         expect(footerSpanTotal).toBe(visibleHeaderCount - 1);
+    });
+});
+
+describe('PerfTable heuristic flags column', () => {
+    it('renders flag chips when heuristicFlags are present on a row', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
+        const flaggedRow = baseRow({
+            id: 10,
+            raw_op_code: 'Matmul',
+            heuristicFlags: [PerfHeuristicFlag.DRAM_BOUND],
+        });
+
+        renderTable([flaggedRow]);
+
+        const flagsContainer = screen.getByTestId(TEST_IDS.PERF_HEURISTIC_FLAGS);
+        expect(flagsContainer).toBeInTheDocument();
+        expect(within(flagsContainer).getByText('DRAM')).toBeInTheDocument();
     });
 });
 

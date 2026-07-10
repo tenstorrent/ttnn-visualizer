@@ -13,6 +13,7 @@ import {
     useL1PressureByOperation,
     useOpToPerfIdFiltered,
     usePerfFolderList,
+    usePerfMeta,
     usePerformanceComparisonReport,
     usePerformanceRange,
     usePerformanceReport,
@@ -27,8 +28,11 @@ import {
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
-import { Marker, MarkerColours } from '../definitions/PerfTable';
+import { Marker, MarkerColours, TypedPerfTableRow } from '../definitions/PerfTable';
+import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { L1PressureStatus } from '../functions/l1Pressure';
+import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
+import getCoreCount from '../functions/getCoreCount';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
@@ -63,6 +67,8 @@ export default function Performance() {
     const opIdsMap = useOpToPerfIdFiltered();
     const l1Pressure = useL1PressureByOperation();
     const l1PressureMap = l1Pressure.data;
+    const { data: deviceMeta } = usePerfMeta(activePerformanceReport?.reportName ?? null);
+    const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
     // Reserve the column while still loading so it doesn't pop in and shift the table sideways;
     // hide it only once we know the data is genuinely unavailable.
     const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
@@ -116,14 +122,23 @@ export default function Performance() {
         [selectedRange, perfData],
     );
 
+    const annotateWithFlags = useCallback(
+        (rows: TypedPerfTableRow[]) => {
+            const maxCores = deviceMeta?.max_cores ?? getCoreCount(architecture, rows);
+
+            return annotatePerfHeuristicFlags(rows, { maxCores });
+        },
+        [architecture, deviceMeta],
+    );
+
     const enrichedData = useMemo(
-        () => enrichRowData(rangedData, opIdsMap, l1PressureMap),
-        [rangedData, opIdsMap, l1PressureMap],
+        () => annotateWithFlags(enrichRowData(rangedData, opIdsMap, l1PressureMap)),
+        [annotateWithFlags, rangedData, opIdsMap, l1PressureMap],
     );
     const enrichedComparisonData = useMemo(
         // L1 metrics come from the active memory report only — do not attach the active report's map here.
-        () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap, null)) || [],
-        [comparisonPerfData, opIdsMap],
+        () => comparisonPerfData?.map((dataset) => annotateWithFlags(enrichRowData(dataset, opIdsMap, null))) || [],
+        [annotateWithFlags, comparisonPerfData, opIdsMap],
     );
 
     const selectedOpCodeSet = useMemo(

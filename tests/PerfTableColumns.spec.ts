@@ -18,7 +18,6 @@ describe('PerfTable column helpers', () => {
             hasOpIds: true,
             hasL1PressureData: true,
             hiliteHighDispatch: true,
-            showHashColumn: true,
             hasNpe: true,
         });
 
@@ -29,6 +28,7 @@ describe('PerfTable column helpers', () => {
             ColumnKeys.L1Fullness,
             ColumnKeys.Bound,
             ColumnKeys.OpCode,
+            ColumnKeys.Flags,
             ColumnKeys.Device,
             ColumnKeys.HighDispatch,
             ColumnKeys.BufferType,
@@ -41,8 +41,6 @@ describe('PerfTable column helpers', () => {
             ColumnKeys.Flops,
             ColumnKeys.FlopsPercent,
             ColumnKeys.MathFidelity,
-            ColumnKeys.Hash,
-            ColumnKeys.CacheHit,
             ColumnKeys.DeviceKernelDuration,
             ColumnKeys.BriscKernelDuration,
             ColumnKeys.NcriscKernelDuration,
@@ -50,8 +48,23 @@ describe('PerfTable column helpers', () => {
             ColumnKeys.Trisc1KernelDuration,
             ColumnKeys.Trisc2KernelDuration,
             ColumnKeys.EriscKernelDuration,
+            ColumnKeys.Hash,
+            ColumnKeys.CacheHit,
             ColumnKeys.GlobalCallCount,
         ]);
+    });
+
+    it('includes Flags, Hash, and Cache Hit in eligible columns by default', () => {
+        const eligibleColumns = getEligiblePerfColumns({
+            hasOpIds: false,
+            hasL1PressureData: false,
+            hiliteHighDispatch: false,
+            hasNpe: false,
+        });
+
+        expect(eligibleColumns.map((column) => column.key)).toContain(ColumnKeys.Flags);
+        expect(eligibleColumns.map((column) => column.key)).toContain(ColumnKeys.Hash);
+        expect(eligibleColumns.map((column) => column.key)).toContain(ColumnKeys.CacheHit);
     });
 
     it('keeps locked columns visible even when hidden', () => {

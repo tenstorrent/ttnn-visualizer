@@ -20,6 +20,16 @@ function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
 
     const hiddenColumnKeys = useMemo(() => new Set(hiddenColumns), [hiddenColumns]);
 
+    const hiddenColumnCount = useMemo(
+        () =>
+            eligibleColumns.filter(
+                (column) => !LOCKED_PERF_COLUMN_KEYS.includes(column.key) && hiddenColumnKeys.has(column.key),
+            ).length,
+        [eligibleColumns, hiddenColumnKeys],
+    );
+
+    const displayColumnsLabel = `Columns ${hiddenColumnCount > 0 ? ` (${hiddenColumnCount} hidden)` : ''}`.trim();
+
     const handleColumnToggle = (columnKey: ColumnKeys, isVisible: boolean) => {
         if (LOCKED_PERF_COLUMN_KEYS.includes(columnKey)) {
             return;
@@ -89,7 +99,7 @@ function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
             >
                 <Button
                     icon={IconNames.COLUMN_LAYOUT}
-                    text='Columns'
+                    text={displayColumnsLabel}
                     variant={ButtonVariant.OUTLINED}
                     data-testid={TEST_IDS.PERF_COLUMN_PICKER_TRIGGER}
                 />
