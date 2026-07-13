@@ -7,9 +7,12 @@ import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from '../../libs/PlotComponent';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
-import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
-import 'styles/components/PerformanceOperationTypesChart.scss';
+import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';
+import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
+import PerfChartFrame from './PerfChartFrame';
+import 'styles/components/PerformanceOperationTypesChart.scss';
 
 interface PerfOperationTypesChartProps {
     reportTitle: string;
@@ -17,6 +20,7 @@ interface PerfOperationTypesChartProps {
     data?: TypedPerfTableRow[];
     className?: string;
     id?: string;
+    onOpCodeClick?: OnOpCodeClick;
 }
 
 const LAYOUT: Partial<Layout> = {
@@ -37,17 +41,17 @@ function PerfOperationTypesChart({
     opCodes,
     className = '',
     id,
+    onOpCodeClick,
 }: PerfOperationTypesChartProps) {
-    const filteredOpCodes = useMemo(
-        () => [...new Set(data?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
-        [data],
-    );
+    const filteredOpCodes = useMemo(() => getUniqueChartRawOpCodes(data), [data]);
+    const handlePlotClick = useHandlePerfChartPlotClick(onOpCodeClick);
 
     const chartData = useMemo(
         () =>
             ({
                 values: filteredOpCodes.map((opCode) => data.filter((row) => row.raw_op_code === opCode).length),
                 labels: [...filteredOpCodes],
+                customdata: [...filteredOpCodes],
                 type: 'pie',
                 textinfo: 'percent',
                 hovertemplate: `%{label}<br />Count: %{value}<extra></extra>`,
@@ -63,22 +67,25 @@ function PerfOperationTypesChart({
         [data, opCodes, filteredOpCodes],
     );
 
+    const isClickable = onOpCodeClick != null;
+
     return (
-        <div
+        <PerfChartFrame
             id={id}
             className={classNames('operation-types-chart', className)}
+            title={PERF_CHART_LABELS[PerfChartId.OperationTypes]}
+            subtitle={<p>{reportTitle}</p>}
+            isClickable={isClickable}
         >
-            <h3>{PERF_CHART_LABELS[PerfChartId.OperationTypes]}</h3>
-            <p>{reportTitle}</p>
-
             <Plot
                 className='chart'
                 data={[chartData]}
                 layout={LAYOUT}
                 config={PerfChartConfig}
+                onClick={isClickable ? handlePlotClick : undefined}
                 useResizeHandler
             />
-        </div>
+        </PerfChartFrame>
     );
 }
 

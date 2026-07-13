@@ -10,7 +10,7 @@ import { TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
-import { comparisonPerformanceReportListAtom } from '../src/store/app';
+import { comparisonPerformanceReportListAtom, rawOpCodeFilterListAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
@@ -25,7 +25,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 
 const COMPARISON_REPORT = 'report-b';
 
-const row = (opCode: string): TypedPerfTableRow =>
+const row = (opCode: string, id = 1): TypedPerfTableRow =>
     ({
         op_type: OpType.DEVICE_OP,
         op_code: opCode,
@@ -33,7 +33,7 @@ const row = (opCode: string): TypedPerfTableRow =>
         advice: [],
         bound: null,
         isFirstHashOccurrence: true,
-        id: 1,
+        id,
     }) as unknown as TypedPerfTableRow;
 
 interface RenderOptions {
@@ -41,6 +41,8 @@ interface RenderOptions {
     isComparisonLoading?: boolean;
     comparisonData?: TypedPerfTableRow[][];
     comparisonReports?: string[] | null;
+    data?: TypedPerfTableRow[];
+    rawOpCodeFilterList?: string[];
 }
 
 function renderReport({
@@ -48,13 +50,24 @@ function renderReport({
     isComparisonLoading = false,
     comparisonData = [],
     comparisonReports = null,
+    data = [row('Matmul')],
+    rawOpCodeFilterList = [],
 }: RenderOptions = {}) {
+    const initialAtomValues: [typeof comparisonPerformanceReportListAtom | typeof rawOpCodeFilterListAtom, unknown][] =
+        [];
+
+    if (comparisonReports) {
+        initialAtomValues.push([comparisonPerformanceReportListAtom, comparisonReports]);
+    }
+
+    if (rawOpCodeFilterList.length > 0) {
+        initialAtomValues.push([rawOpCodeFilterListAtom, rawOpCodeFilterList]);
+    }
+
     return render(
-        <TestProviders
-            initialAtomValues={comparisonReports ? [[comparisonPerformanceReportListAtom, comparisonReports]] : []}
-        >
+        <TestProviders initialAtomValues={initialAtomValues}>
             <PerformanceReport
-                data={[row('Matmul')]}
+                data={data}
                 comparisonData={comparisonData}
                 stackedData={[]}
                 comparisonStackedData={[]}
@@ -103,5 +116,17 @@ describe('PerformanceReport loading state', () => {
 
         expect(screen.getByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeInTheDocument();
         expect(screen.queryByText('No data to display')).not.toBeInTheDocument();
+    });
+});
+
+describe('PerformanceReport raw op code filter', () => {
+    it('shows only rows matching the hydrated raw op code filter atom', () => {
+        renderReport({
+            data: [row('Matmul', 1), row('Conv2d', 2)],
+            rawOpCodeFilterList: ['Matmul'],
+        });
+
+        expect(screen.getAllByText('Matmul').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Conv2d')).not.toBeInTheDocument();
     });
 });

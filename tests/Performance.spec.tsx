@@ -5,6 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useAtom, useSetAtom } from 'jotai';
+import { useState } from 'react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Performance from '../src/routes/Performance';
 import {
@@ -16,7 +17,17 @@ import {
     usePerformanceRange,
     usePerformanceReport,
 } from '../src/hooks/useAPI';
-import { activePerformanceReportAtom, selectedPerfRowIdAtom, selectedPerformanceRangeAtom } from '../src/store/app';
+import {
+    activePerformanceReportAtom,
+    bufferTypeFilterListAtom,
+    layoutFilterListAtom,
+    mathFilterListAtom,
+    rawOpCodeFilterListAtom,
+    selectedPerfRowIdAtom,
+    selectedPerformanceRangeAtom,
+} from '../src/store/app';
+import { BufferType } from '../src/model/BufferType';
+import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { L1PressureStatus } from '../src/functions/l1Pressure';
 import { PerfTableRow } from '../src/definitions/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
@@ -85,6 +96,7 @@ const DRAM_PERF_ROW = {
 const REPORT_A = { path: '/reports/a', reportName: 'report-a' };
 const REPORT_B = { path: '/reports/b', reportName: 'report-b' };
 const SELECTED_ROW_ID = 100;
+const MATH_FIDELITY = 'HiFi4';
 
 afterEach(cleanup);
 
@@ -101,19 +113,43 @@ beforeEach(() => {
     (usePerfMeta as Mock).mockReturnValue({ data: undefined, isLoading: false });
 });
 
+function formatFilterProbe(values: unknown[]): string {
+    return values.length === 0 ? 'empty' : values.join(',');
+}
+
 function PerformanceController() {
     const [selected, setSelected] = useAtom(selectedPerfRowIdAtom);
+    const [rawOpCodeFilterList, setRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
+    const [mathFilterList, setMathFilterList] = useAtom(mathFilterListAtom);
+    const [bufferTypeFilterList, setBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
+    const [layoutFilterList, setLayoutFilterList] = useAtom(layoutFilterListAtom);
     const setReport = useSetAtom(activePerformanceReportAtom);
 
     return (
         <div>
             <span data-testid='selected-row-probe'>{selected === null ? 'null' : String(selected)}</span>
+            <span data-testid='raw-op-code-filter-probe'>{formatFilterProbe(rawOpCodeFilterList)}</span>
+            <span data-testid='math-filter-probe'>{formatFilterProbe(mathFilterList)}</span>
+            <span data-testid='buffer-type-filter-probe'>{formatFilterProbe(bufferTypeFilterList)}</span>
+            <span data-testid='layout-filter-probe'>{formatFilterProbe(layoutFilterList)}</span>
             <button
                 type='button'
                 data-testid='select-row'
                 onClick={() => setSelected(SELECTED_ROW_ID)}
             >
                 select
+            </button>
+            <button
+                type='button'
+                data-testid='set-all-filters'
+                onClick={() => {
+                    setRawOpCodeFilterList(['Matmul']);
+                    setMathFilterList([MATH_FIDELITY]);
+                    setBufferTypeFilterList([BufferType.L1]);
+                    setLayoutFilterList([DeviceOperationLayoutTypes.INTERLEAVED]);
+                }}
+            >
+                filter
             </button>
             <button
                 type='button'
@@ -222,5 +258,120 @@ describe('Performance route', () => {
         expect(lastProps?.comparisonData?.[0]?.[0]?.heuristicFlagDetails?.[PerfHeuristicFlag.DRAM_BOUND]).toBe(
             'Bound: DRAM',
         );
+    });
+
+    it('clears all table chip filters when the active performance report changes', () => {
+        render(
+            <TestProviders>
+                <Performance />
+                <PerformanceController />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByTestId('set-report-a'));
+        fireEvent.click(screen.getByTestId('set-all-filters'));
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('Matmul');
+        expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
+        expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
+        expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+
+        fireEvent.click(screen.getByTestId('set-report-b'));
+
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('empty');
+        expect(screen.getByTestId('math-filter-probe')).toHaveTextContent('empty');
+        expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent('empty');
+        expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent('empty');
+    });
+
+    it('does not re-clear table chip filters while the active report is unchanged', () => {
+        render(
+            <TestProviders>
+                <Performance />
+                <PerformanceController />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByTestId('set-report-a'));
+        fireEvent.click(screen.getByTestId('set-all-filters'));
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('Matmul');
+        expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
+
+        fireEvent.click(screen.getByTestId('set-report-a'));
+
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('Matmul');
+        expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
+        expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
+        expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+    });
+
+    it('does not clear table chip filters on Performance remount with the same report', () => {
+        function RemountHarness() {
+            const [routeKey, setRouteKey] = useState(0);
+
+            return (
+                <>
+                    <Performance key={routeKey} />
+                    <PerformanceController />
+                    <button
+                        type='button'
+                        data-testid='remount-performance'
+                        onClick={() => setRouteKey((key) => key + 1)}
+                    >
+                        remount
+                    </button>
+                </>
+            );
+        }
+
+        render(
+            <TestProviders>
+                <RemountHarness />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByTestId('set-report-a'));
+        fireEvent.click(screen.getByTestId('set-all-filters'));
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('Matmul');
+
+        fireEvent.click(screen.getByTestId('remount-performance'));
+
+        expect(screen.getByTestId('raw-op-code-filter-probe')).toHaveTextContent('Matmul');
+        expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
+        expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
+        expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+    });
+
+    it('does not clear selectedPerfRowIdAtom on Performance remount with the same report', () => {
+        function RemountHarness() {
+            const [routeKey, setRouteKey] = useState(0);
+
+            return (
+                <>
+                    <Performance key={routeKey} />
+                    <PerformanceController />
+                    <button
+                        type='button'
+                        data-testid='remount-performance'
+                        onClick={() => setRouteKey((key) => key + 1)}
+                    >
+                        remount
+                    </button>
+                </>
+            );
+        }
+
+        render(
+            <TestProviders>
+                <RemountHarness />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByTestId('set-report-a'));
+        fireEvent.click(screen.getByTestId('select-row'));
+        expect(screen.getByTestId('selected-row-probe')).toHaveTextContent(String(SELECTED_ROW_ID));
+
+        fireEvent.click(screen.getByTestId('remount-performance'));
+
+        expect(screen.getByTestId('selected-row-probe')).toHaveTextContent(String(SELECTED_ROW_ID));
     });
 });

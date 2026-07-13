@@ -44,6 +44,9 @@ importers:
       jotai:
         specifier: ^2.20.1
         version: 2.20.1(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@18.3.31)(react@18.3.1)
+      jotai-family:
+        specifier: ^1.0.2
+        version: 1.0.2(jotai@2.20.1(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@18.3.31)(react@18.3.1))
       normalize.css:
         specifier: ^8.0.1
         version: 8.0.1
@@ -3005,6 +3008,12 @@ packages:
 
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
+
+  jotai-family@1.0.2:
+    resolution: {integrity: sha512-U1aTMGxmsmz2Z8gaJD1/ljmMnsmG4/dqrcsfwGbjWV7p6boB9Vy3+75YwUpwPj7GbLNJk9O8rl1VNi8d7+6Rxw==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      jotai: '>=2.9.0'
 
   jotai@2.20.1:
     resolution: {integrity: sha512-dnuKfU/GLi8B28RRMjQ3AfoN7kfzP8o41+AX2FmITZqEMY8PHnjABq+VkEooomLwYaGjda+pgy0yFSjaHX/ZPg==}
@@ -7882,6 +7891,10 @@ snapshots:
       '@isaacs/cliui': 8.0.2
     optionalDependencies:
       '@pkgjs/parseargs': 0.11.0
+
+  jotai-family@1.0.2(jotai@2.20.1(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@18.3.31)(react@18.3.1)):
+    dependencies:
+      jotai: 2.20.1(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@18.3.31)(react@18.3.1)
 
   jotai@2.20.1(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@18.3.31)(react@18.3.1):
     optionalDependencies:

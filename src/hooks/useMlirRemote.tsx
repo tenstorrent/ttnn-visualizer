@@ -2,10 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { getDefaultStore } from 'jotai';
 import { AxiosError, AxiosResponse } from 'axios';
 import axiosInstance from '../libs/axiosInstance';
-import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
+import { FileTransferSource } from '../definitions/FileTransferSource';
+import {
+    clearFileTransferProgressForSource,
+    getInactiveFileTransferProgress,
+    setFileTransferProgressForSource,
+} from '../functions/fileTransferRegistry';
 import { FileStatus } from '../model/APIData';
 import Endpoints from '../definitions/Endpoints';
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
@@ -49,19 +53,19 @@ export interface MlirUploadOptions {
 
 const useMlirRemote = () => {
     const resetTransferProgress = () => {
-        getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
+        clearFileTransferProgressForSource(FileTransferSource.MLIR_UPLOAD);
     };
 
     // Proxied through the backend over SSH (same path as the connection test):
     // the file is scp'd to the remote host and curl runs against that machine's
     // loopback MLIR port, avoiding browser CORS on a cross-origin POST.
     //
-    // Drives the global `fileTransferProgressAtom` so the shared
-    // `FileStatusOverlay` (also used by remote sync) reports progress. The
-    // browser→backend transfer fills the bar quickly; it then sits at the final
-    // value while upload+conversion runs on the remote MLIR server (which can
-    // take minutes with no further progress to report) until the request
-    // resolves and `resetTransferProgress` closes the overlay.
+    // Drives the per-source `MLIR_UPLOAD` slot so the shared `FileStatusOverlay`
+    // (also used by remote sync) reports progress. The browser→backend transfer
+    // fills the bar quickly; it then sits at the final value while upload+conversion
+    // runs on the remote MLIR server (which can take minutes with no further progress
+    // to report) until the request resolves and `resetTransferProgress` closes the
+    // overlay for this source only.
     const uploadMlirFileToServer = async (
         files: File[],
         server: MlirServerConnection,
@@ -87,7 +91,7 @@ const useMlirRemote = () => {
         // Open the overlay immediately: the remote conversion can run for some
         // time before the first upload-progress event, so don't wait for it.
         if (shouldReportProgress) {
-            getDefaultStore().set(fileTransferProgressAtom, {
+            setFileTransferProgressForSource(FileTransferSource.MLIR_UPLOAD, {
                 ...getInactiveFileTransferProgress(),
                 numberOfFiles: files.length,
                 currentFileName: fileName,
@@ -110,7 +114,7 @@ const useMlirRemote = () => {
                         return;
                     }
                     const uploadComplete = event.loaded >= event.total;
-                    getDefaultStore().set(fileTransferProgressAtom, {
+                    setFileTransferProgressForSource(FileTransferSource.MLIR_UPLOAD, {
                         ...getInactiveFileTransferProgress(),
                         numberOfFiles: files.length,
                         currentFileName: fileName,

@@ -6,7 +6,8 @@ import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@bluepr
 import { useAtomValue } from 'jotai';
 import React from 'react';
 import { IconName, IconNames } from '@blueprintjs/icons';
-import { fileTransferProgressAtom } from '../../store/app';
+import { FileTransferSource } from '../../definitions/FileTransferSource';
+import { fileTransferProgressBySourceAtom } from '../../functions/fileTransferRegistry';
 import { FileProgress, FileStatus } from '../../model/APIData';
 import {
     NEVER_SYNCED_LABEL,
@@ -33,7 +34,9 @@ const RemoteSyncButton = ({
     isDisabled,
     handleClick,
 }: RemoteSyncButtonProps) => {
-    const fileTransferProgress = useAtomValue(fileTransferProgressAtom);
+    // Intentionally REMOTE_SYNC-only so the tooltip stays scoped to sync even
+    // when FileStatusOverlay is showing an aggregate from another source.
+    const fileTransferProgress = useAtomValue(fileTransferProgressBySourceAtom(FileTransferSource.REMOTE_SYNC));
 
     return (
         <Tooltip

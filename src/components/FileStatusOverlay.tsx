@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect, useState } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import Overlay from './Overlay';
@@ -42,7 +42,7 @@ const PROCESSING_META = {
 type DisplayMeta = typeof UPLOAD_META | typeof SYNC_META | typeof PROCESSING_META;
 
 const FileStatusOverlay = () => {
-    const [progress] = useAtom(fileTransferProgressAtom);
+    const progress = useAtomValue(fileTransferProgressAtom);
     const mlirFileResults = useAtomValue(mlirFileResultsAtom);
     // Total elapsed time for the whole transfer (not per-file). The interval
     // only runs while a transfer is active, so the mounted-but-idle overlay
