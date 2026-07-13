@@ -41,7 +41,7 @@ jobs:
 
       - name: Lint changed files
         if: ${{ steps.pr_changes.outputs.changed != '' }}
-        run: pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0
+        run: pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0 --no-warn-ignored
         background: true
 
       - name: Run frontend tests
