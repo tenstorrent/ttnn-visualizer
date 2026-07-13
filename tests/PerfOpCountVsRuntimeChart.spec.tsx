@@ -46,7 +46,7 @@ describe('PerfOpCountVsRuntimeChart', () => {
             </TestProviders>,
         );
 
-        firePlotClick({ points: [{ customdata: ['Matmul'] }] } as never);
+        firePlotClick({ points: [{ customdata: 'Matmul' }] } as never);
 
         expect(onOpCodeClick).toHaveBeenCalledWith('Matmul');
     });

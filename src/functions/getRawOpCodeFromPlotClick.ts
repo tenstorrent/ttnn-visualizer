@@ -6,7 +6,6 @@ import { PlotMouseEvent } from 'plotly.js';
 
 interface PlotClickDatum {
     customdata?: unknown;
-    label?: unknown;
 }
 
 export function getRawOpCodeFromPlotClick(event: Readonly<PlotMouseEvent>): string | null {
@@ -15,8 +14,7 @@ export function getRawOpCodeFromPlotClick(event: Readonly<PlotMouseEvent>): stri
         return null;
     }
 
-    const raw = point.customdata ?? point.label;
-    const opCode = Array.isArray(raw) ? raw[0] : raw;
+    const opCode = point.customdata;
 
     return typeof opCode === 'string' && opCode.length > 0 ? opCode : null;
 }

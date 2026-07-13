@@ -6,7 +6,7 @@ import classNames from 'classnames';
 import { ReactNode } from 'react';
 import PerfChartFilterHint from './PerfChartFilterHint';
 
-interface PerfClickableChartFrameProps {
+interface PerfChartFrameProps {
     id?: string;
     className?: string;
     title: string;
@@ -15,14 +15,7 @@ interface PerfClickableChartFrameProps {
     children: ReactNode;
 }
 
-function PerfClickableChartFrame({
-    id,
-    className,
-    title,
-    subtitle,
-    isClickable,
-    children,
-}: PerfClickableChartFrameProps) {
+function PerfChartFrame({ id, className, title, subtitle, isClickable, children }: PerfChartFrameProps) {
     return (
         <div
             id={id}
@@ -38,4 +31,4 @@ function PerfClickableChartFrame({
     );
 }
 
-export default PerfClickableChartFrame;
+export default PerfChartFrame;

@@ -6,7 +6,7 @@ import PerfDeviceKernelDurationChart from './PerfDeviceKernelDurationChart';
 import PerfDeviceKernelRuntimeChart from './PerfDeviceKernelRuntimeChart';
 import PerfOpCountVsRuntimeChart from './PerfOpCountVsRuntimeChart';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
-import { OnOpCodeClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { OnOpCodeClick } from '../../definitions/PerformanceCharts';
 
 interface PerfChartsProps {
     filteredPerfData: TypedPerfTableRow[];

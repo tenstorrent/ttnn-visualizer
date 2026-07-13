@@ -7,11 +7,11 @@ import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from '../../libs/PlotComponent';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
-import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
+import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';
-import { OnOpCodeClick, useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
 import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
-import PerfClickableChartFrame from './PerfClickableChartFrame';
+import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerformanceOperationTypesChart.scss';
 
 interface PerfOperationTypesChartProps {
@@ -70,7 +70,7 @@ function PerfOperationTypesChart({
     const isClickable = onOpCodeClick != null;
 
     return (
-        <PerfClickableChartFrame
+        <PerfChartFrame
             id={id}
             className={classNames('operation-types-chart', className)}
             title={PERF_CHART_LABELS[PerfChartId.OperationTypes]}
@@ -85,7 +85,7 @@ function PerfOperationTypesChart({
                 onClick={isClickable ? handlePlotClick : undefined}
                 useResizeHandler
             />
-        </PerfClickableChartFrame>
+        </PerfChartFrame>
     );
 }
 

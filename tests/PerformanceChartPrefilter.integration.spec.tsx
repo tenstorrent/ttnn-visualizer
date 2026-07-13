@@ -108,7 +108,7 @@ describe('Performance chart prefilter integration', () => {
             | undefined;
         expect(onClick).toBeDefined();
 
-        onClick?.({ points: [{ customdata: ['Matmul'] }] } as never);
+        onClick?.({ points: [{ customdata: 'Matmul' }] } as never);
 
         await waitFor(() => {
             expect(screen.getByRole('tab', { name: 'Table', selected: true })).toBeInTheDocument();

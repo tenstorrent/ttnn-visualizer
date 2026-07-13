@@ -16,12 +16,12 @@ describe('getRawOpCodeFromPlotClick', () => {
         expect(getRawOpCodeFromPlotClick(clickEvent({ customdata: 'Matmul' }))).toBe('Matmul');
     });
 
-    it('reads nested customdata arrays from Plotly bar traces', () => {
-        expect(getRawOpCodeFromPlotClick(clickEvent({ customdata: ['OptimizedConvNew'] }))).toBe('OptimizedConvNew');
+    it('returns null for nested customdata arrays', () => {
+        expect(getRawOpCodeFromPlotClick(clickEvent({ customdata: ['OptimizedConvNew'] }))).toBeNull();
     });
 
-    it('falls back to label when customdata is absent', () => {
-        expect(getRawOpCodeFromPlotClick(clickEvent({ label: 'Conv2d' }))).toBe('Conv2d');
+    it('does not fall back to label when customdata is absent', () => {
+        expect(getRawOpCodeFromPlotClick(clickEvent({ label: 'Conv2d' }))).toBeNull();
     });
 
     it('returns null when points are missing', () => {

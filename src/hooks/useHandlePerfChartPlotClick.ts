@@ -4,9 +4,8 @@
 
 import { useCallback } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
+import { OnOpCodeClick } from '../definitions/PerformanceCharts';
 import { getRawOpCodeFromPlotClick } from '../functions/getRawOpCodeFromPlotClick';
-
-export type OnOpCodeClick = (opCode: string) => void;
 
 export function useHandlePerfChartPlotClick(onOpCodeClick?: OnOpCodeClick) {
     return useCallback(

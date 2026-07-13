@@ -14,8 +14,7 @@ import PerfDeviceTimeChart from './PerfDeviceTimeChart';
 import getCoreCount from '../../functions/getCoreCount';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { usePerfMeta } from '../../hooks/useAPI';
-import { PerfChartId, getOperationTypesChartId } from '../../definitions/PerformanceCharts';
-import { OnOpCodeClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { OnOpCodeClick, PerfChartId, getOperationTypesChartId } from '../../definitions/PerformanceCharts';
 
 interface NonFilterablePerfChartsProps {
     chartData: TypedPerfTableRow[];

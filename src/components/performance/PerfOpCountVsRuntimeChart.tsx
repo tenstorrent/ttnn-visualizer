@@ -7,8 +7,8 @@ import { PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
-import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
-import { OnOpCodeClick, useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
+import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
 import PerfChart from './PerfChart';
@@ -49,7 +49,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeCli
                             type: 'bar',
                             name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
-                            customdata: [[opCode]],
+                            customdata: [opCode],
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
                             },
@@ -73,7 +73,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeCli
                             type: 'bar',
                             name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
-                            customdata: [[opCode]],
+                            customdata: [opCode],
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
                             },

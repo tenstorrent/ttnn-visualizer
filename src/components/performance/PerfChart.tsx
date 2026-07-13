@@ -6,7 +6,7 @@ import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
 import Plot from '../../libs/PlotComponent';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
-import PerfClickableChartFrame from './PerfClickableChartFrame';
+import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerfChart.scss';
 
 interface PerfChartProps {
@@ -111,7 +111,7 @@ function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfCha
     };
 
     return (
-        <PerfClickableChartFrame
+        <PerfChartFrame
             id={id}
             className={classNames('chart-container', {
                 'legend-instructions': configuration.showLegend,
@@ -127,7 +127,7 @@ function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfCha
                 onClick={onPlotClick}
                 useResizeHandler
             />
-        </PerfClickableChartFrame>
+        </PerfChartFrame>
     );
 }
 
