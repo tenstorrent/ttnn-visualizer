@@ -11,6 +11,7 @@ import NonFilterablePerfCharts from './NonFilterablePerfCharts';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { buildChartIndexEntries } from '../../definitions/PerformanceCharts';
 import { useActiveSection } from '../../hooks/useActiveSection';
+import { usePrefilterPerfTableByOpCode } from '../../hooks/usePrefilterPerfTableByOpCode';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import 'styles/components/PerfCharts.scss';
 
@@ -69,6 +70,7 @@ const PerformanceChartsTab = ({
 
     const chartIndexIds = useMemo(() => chartIndexEntries.map((entry) => entry.id), [chartIndexEntries]);
     const activeId = useActiveSection(chartIndexIds, PERF_CHARTS_NAV_OFFSET_PX);
+    const prefilterPerfTableByOpCode = usePrefilterPerfTableByOpCode();
 
     return (
         <div className='charts-container'>
@@ -91,6 +93,7 @@ const PerformanceChartsTab = ({
                         filteredPerfData={filteredPerfData}
                         comparisonData={filteredComparisonData}
                         selectedOpCodes={selectedOpCodes}
+                        onOpCodeClick={prefilterPerfTableByOpCode}
                     />
 
                     <NonFilterablePerfCharts
@@ -101,6 +104,7 @@ const PerformanceChartsTab = ({
                         convData={convData}
                         hasMatmulData={hasMatmulData}
                         hasConvData={hasConvData}
+                        onOpCodeClick={prefilterPerfTableByOpCode}
                     />
                 </div>
             </div>
