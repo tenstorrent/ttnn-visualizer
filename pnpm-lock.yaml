@@ -32,6 +32,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.14.5
         version: 3.14.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
       '@xyflow/react':
         specifier: ^12.11.2
         version: 12.11.2(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -128,7 +131,7 @@ importers:
         version: 8.63.0(eslint@10.6.0)(typescript@5.8.3)
       '@vitejs/plugin-react':
         specifier: ^6.0.3
-        version: 6.0.3(vite@8.1.3(sass@1.101.0)(yaml@2.9.0))
+        version: 6.0.3(vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0))
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
@@ -224,13 +227,13 @@ importers:
         version: 5.8.3
       vite:
         specifier: ^8.1.3
-        version: 8.1.3(sass@1.101.0)(yaml@2.9.0)
+        version: 8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.10
-        version: 4.1.10(jsdom@26.1.0)(vite@8.1.3(sass@1.101.0)(yaml@2.9.0))
+        version: 4.1.10(@types/node@26.1.1)(jsdom@26.1.0)(vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0))
       vitest-canvas-mock:
         specifier: ^1.1.4
-        version: 1.1.4(vitest@4.1.10(jsdom@26.1.0)(vite@8.1.3(sass@1.101.0)(yaml@2.9.0)))
+        version: 1.1.4(vitest@4.1.10(@types/node@26.1.1)(jsdom@26.1.0)(vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0)))
 
 packages:
 
@@ -1003,6 +1006,9 @@ packages:
 
   '@types/mapbox__vector-tile@1.3.4':
     resolution: {integrity: sha512-bpd8dRn9pr6xKvuEBQup8pwQfD4VUyqO/2deGjfpe6AwC8YRlyEipvefyRJUSiCJTZuCb8Pl1ciVV5ekqJ96Bg==}
+
+  '@types/node@26.1.1':
+    resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
 
   '@types/pbf@3.0.5':
     resolution: {integrity: sha512-j3pOPiEcWZ34R6a6mN07mUkM4o4Lwf6hPNt8eilOeZhTFbxFXmKhvXl9Y28jotFPaI1bpPDJsbCprUoNke6OrA==}
@@ -4419,6 +4425,9 @@ packages:
     resolution: {integrity: sha512-nWJ91DjeOkej/TA8pXQ3myruKpKEYgqvpw9lz4OPHj/NWFNluYrjbz9j01CJ8yKQd2g4jFoOkINCTW2I5LEEyw==}
     engines: {node: '>= 0.4'}
 
+  undici-types@8.3.0:
+    resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
+
   universalify@2.0.1:
     resolution: {integrity: sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==}
     engines: {node: '>= 10.0.0'}
@@ -5598,6 +5607,10 @@ snapshots:
       '@types/mapbox__point-geometry': 0.1.4
       '@types/pbf': 3.0.5
 
+  '@types/node@26.1.1':
+    dependencies:
+      undici-types: 8.3.0
+
   '@types/pbf@3.0.5': {}
 
   '@types/plotly.js@3.0.10': {}
@@ -5787,10 +5800,10 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.12.2':
     optional: true
 
-  '@vitejs/plugin-react@6.0.3(vite@8.1.3(sass@1.101.0)(yaml@2.9.0))':
+  '@vitejs/plugin-react@6.0.3(vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      vite: 8.1.3(sass@1.101.0)(yaml@2.9.0)
+      vite: 8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0)
 
   '@vitest/expect@4.1.10':
     dependencies:
@@ -5801,13 +5814,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.10(vite@8.1.3(sass@1.101.0)(yaml@2.9.0))':
+  '@vitest/mocker@4.1.10(vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.10
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.1.3(sass@1.101.0)(yaml@2.9.0)
+      vite: 8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.10':
     dependencies:
@@ -9558,6 +9571,8 @@ snapshots:
       has-symbols: 1.1.0
       which-boxed-primitive: 1.1.1
 
+  undici-types@8.3.0: {}
+
   universalify@2.0.1: {}
 
   unquote@1.1.1: {}
@@ -9643,7 +9658,7 @@ snapshots:
       '@egjs/hammerjs': 2.0.17
       component-emitter: 2.0.0
 
-  vite@8.1.3(sass@1.101.0)(yaml@2.9.0):
+  vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.5
@@ -9651,20 +9666,21 @@ snapshots:
       rolldown: 1.1.5
       tinyglobby: 0.2.17
     optionalDependencies:
+      '@types/node': 26.1.1
       fsevents: 2.3.3
       sass: 1.101.0
       yaml: 2.9.0
 
-  vitest-canvas-mock@1.1.4(vitest@4.1.10(jsdom@26.1.0)(vite@8.1.3(sass@1.101.0)(yaml@2.9.0))):
+  vitest-canvas-mock@1.1.4(vitest@4.1.10(@types/node@26.1.1)(jsdom@26.1.0)(vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0))):
     dependencies:
       cssfontparser: 1.2.1
       moo-color: 1.0.3
-      vitest: 4.1.10(jsdom@26.1.0)(vite@8.1.3(sass@1.101.0)(yaml@2.9.0))
+      vitest: 4.1.10(@types/node@26.1.1)(jsdom@26.1.0)(vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0))
 
-  vitest@4.1.10(jsdom@26.1.0)(vite@8.1.3(sass@1.101.0)(yaml@2.9.0)):
+  vitest@4.1.10(@types/node@26.1.1)(jsdom@26.1.0)(vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.10
-      '@vitest/mocker': 4.1.10(vite@8.1.3(sass@1.101.0)(yaml@2.9.0))
+      '@vitest/mocker': 4.1.10(vite@8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.10
       '@vitest/runner': 4.1.10
       '@vitest/snapshot': 4.1.10
@@ -9681,9 +9697,10 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.1.3(sass@1.101.0)(yaml@2.9.0)
+      vite: 8.1.3(@types/node@26.1.1)(sass@1.101.0)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
+      '@types/node': 26.1.1
       jsdom: 26.1.0
     transitivePeerDependencies:
       - msw

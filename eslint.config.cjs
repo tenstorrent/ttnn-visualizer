@@ -266,6 +266,7 @@ module.exports = defineConfig([
         '**/myenv',
         '**/node_modules',
         '**/ttnn_env',
+        'eslint.config.cjs',
         'src/libs/blueprintjs/legacySassSvgInlinerFactory.js',
     ]),
 ]);

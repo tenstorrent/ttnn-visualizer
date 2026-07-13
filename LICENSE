@@ -95,6 +95,7 @@ The following separate and independent dependencies are utilized by this project
 - @testing-library/jest-dom - MIT - https://github.com/testing-library/jest-dom/blob/main/LICENSE
 - @testing-library/react - MIT - https://github.com/testing-library/react-testing-library/blob/main/LICENSE
 - @types/dagre - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
+- @types/node - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react-dom - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react-plotly.js - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
