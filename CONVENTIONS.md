@@ -730,9 +730,7 @@ void queryClient.invalidateQueries({ queryKey: ['fetch-tensors'] });
 
 The lint exists to surface "did you forget to `await`?" — when the answer is genuinely "no, this is intentionally background", the explicit `void` documents the intent so reviewers don't have to re-derive it.
 
-### Pinned ESLint rules (post `eslint-config-erb` removal)
-
-The abandoned `eslint-config-erb` preset was removed. Most of what it bundled duplicated explicit extends already in `eslint.config.cjs` (`airbnb-base`, `react`, `promise`, `compat`, `prettier`). The rules below were **not** covered elsewhere and are pinned explicitly — do not delete them as "redundant" without checking call sites.
+### Pinned ESLint rules
 
 #### `no-param-reassign` — allow mutating parameter properties
 
