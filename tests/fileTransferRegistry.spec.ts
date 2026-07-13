@@ -94,6 +94,17 @@ describe('aggregateFileTransferProgress', () => {
         };
         expect(aggregateFileTransferProgress(registry).status).toBe(FileStatus.PROCESSING);
     });
+
+    it('skips FAILED slots so the overlay can follow other active work', () => {
+        const registry = {
+            [FileTransferSource.REMOTE_SYNC]: {
+                ...REMOTE_SYNCING,
+                status: FileStatus.FAILED,
+            },
+            [FileTransferSource.LOCAL_UPLOAD]: LOCAL_UPLOADING,
+        };
+        expect(aggregateFileTransferProgress(registry)).toEqual(LOCAL_UPLOADING);
+    });
 });
 
 describe('file transfer registry helpers', () => {
@@ -120,6 +131,28 @@ describe('file transfer registry helpers', () => {
         setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, {
             ...REMOTE_SYNCING,
             status: FileStatus.FINISHED,
+        });
+
+        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);
+
+        const registry = getDefaultStore().get(fileTransferRegistryAtom);
+        expect(registry[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
+        expect(registry[FileTransferSource.MLIR_UPLOAD]).toEqual(MLIR_UPLOADING);
+    });
+
+    it('clearFileTransferProgressForSourceIfInactive preserves an active remote sync slot', () => {
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, REMOTE_SYNCING);
+
+        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);
+
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toEqual(REMOTE_SYNCING);
+    });
+
+    it('clearFileTransferProgressForSourceIfInactive removes FAILED remote sync slots', () => {
+        setFileTransferProgressForSource(FileTransferSource.MLIR_UPLOAD, MLIR_UPLOADING);
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, {
+            ...REMOTE_SYNCING,
+            status: FileStatus.FAILED,
         });
 
         clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);

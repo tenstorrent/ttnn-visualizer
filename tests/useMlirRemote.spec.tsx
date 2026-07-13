@@ -323,6 +323,7 @@ describe('useMlirRemote progress lifecycle', () => {
         });
         expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
         expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.MLIR_UPLOAD]).toBeUndefined();
         expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
     });
 

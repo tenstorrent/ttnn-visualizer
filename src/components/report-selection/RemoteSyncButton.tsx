@@ -34,6 +34,8 @@ const RemoteSyncButton = ({
     isDisabled,
     handleClick,
 }: RemoteSyncButtonProps) => {
+    // Intentionally REMOTE_SYNC-only so the tooltip stays scoped to sync even
+    // when FileStatusOverlay is showing an aggregate from another source.
     const fileTransferProgress = useAtomValue(fileTransferProgressBySourceAtom(FileTransferSource.REMOTE_SYNC));
 
     return (

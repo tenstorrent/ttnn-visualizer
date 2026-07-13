@@ -25,6 +25,9 @@ const INACTIVE_FILE_TRANSFER_PROGRESS: FileProgress = Object.freeze(getInactiveF
 
 export type FileTransferRegistry = Partial<Record<FileTransferSource, FileProgress>>;
 
+// Overlay collision order when multiple sources are mid-transfer: remote sync is
+// the most disruptive (full-report folder copy), then MLIR upload, then a local
+// file drop. Do not reorder casually.
 const FILE_TRANSFER_SOURCE_PRIORITY: readonly FileTransferSource[] = [
     FileTransferSource.REMOTE_SYNC,
     FileTransferSource.MLIR_UPLOAD,
@@ -40,6 +43,14 @@ export const fileTransferProgressBySourceAtom = atomFamily((source: FileTransfer
     atom((get) => get(fileTransferRegistryAtom)[source] ?? INACTIVE_FILE_TRANSFER_PROGRESS),
 );
 
+/**
+ * Picks the highest-priority *active* transfer for the overlay.
+ *
+ * Terminal statuses (`FINISHED`, `FAILED`, `INACTIVE`) are skipped so a failed
+ * or finished high-priority slot cannot hide an active lower-priority one.
+ * Error surfacing is owned by toasts / connection UI — the overlay only tracks
+ * live work.
+ */
 export function aggregateFileTransferProgress(registry: FileTransferRegistry): FileProgress {
     for (const source of FILE_TRANSFER_SOURCE_PRIORITY) {
         const progress = registry[source];
