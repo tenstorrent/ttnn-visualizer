@@ -5,6 +5,7 @@
 import classNames from 'classnames';
 import { ReactNode } from 'react';
 import PerfChartFilterHint from './PerfChartFilterHint';
+import 'styles/components/PerfChartFrame.scss';
 
 interface PerfChartFrameProps {
     id?: string;

@@ -32,6 +32,24 @@ afterEach(() => {
 });
 
 describe('PerfOperationTypesChart', () => {
+    it('builds the pie trace with flat string customdata per slice', () => {
+        render(
+            <TestProviders>
+                <PerfOperationTypesChart
+                    reportTitle='active-report'
+                    data={[row('Matmul', 1), row('Conv2d', 2)]}
+                    opCodes={[matmulMarker, convMarker]}
+                    onOpCodeClick={vi.fn()}
+                />
+            </TestProviders>,
+        );
+
+        const pie = getPlotInstances()[0]?.data?.[0] as { customdata?: unknown } | undefined;
+        expect(Array.isArray(pie?.customdata)).toBe(true);
+        expect(pie?.customdata).toEqual(['Matmul', 'Conv2d']);
+        expect((pie?.customdata as unknown[]).every((value) => typeof value === 'string')).toBe(true);
+    });
+
     it('calls onOpCodeClick when a pie slice is clicked', () => {
         const onOpCodeClick = vi.fn();
 

@@ -19,8 +19,8 @@ export function usePrefilterPerfTableByOpCode() {
 
             setFilters([opCode]);
             setTab(PerfTabIds.TABLE);
-            // Charts tab content (especially Operation Types) sits far down the page; preserve
-            // scroll position across tab swap would land the table view mid-page.
+            // Charts tab content (especially Operation Types) sits far down the page
+            // Preserving scroll position across tab swap would land the table view mid-page
             window.requestAnimationFrame(() => {
                 window.scrollTo({ top: 0, left: 0 });
             });

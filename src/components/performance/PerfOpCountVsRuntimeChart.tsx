@@ -23,8 +23,7 @@ interface PerfOpCountVsRuntimeChartProps {
 function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeClick }: PerfOpCountVsRuntimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
-    const flattenedData = datasets.flat();
-    const opCodes = useMemo(() => getUniqueChartRawOpCodes(flattenedData), [flattenedData]);
+    const opCodes = useMemo(() => getUniqueChartRawOpCodes(datasets.flat()), [datasets]);
 
     const selectedOpCodeSet = useMemo(
         () => new Set(selectedOpCodes.map((selected) => selected.opCode)),

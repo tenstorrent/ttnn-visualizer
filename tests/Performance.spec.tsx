@@ -239,4 +239,38 @@ describe('Performance route', () => {
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
     });
+
+    it('does not clear selectedPerfRowIdAtom on Performance remount with the same report', () => {
+        function RemountHarness() {
+            const [routeKey, setRouteKey] = useState(0);
+
+            return (
+                <>
+                    <Performance key={routeKey} />
+                    <PerformanceController />
+                    <button
+                        type='button'
+                        data-testid='remount-performance'
+                        onClick={() => setRouteKey((key) => key + 1)}
+                    >
+                        remount
+                    </button>
+                </>
+            );
+        }
+
+        render(
+            <TestProviders>
+                <RemountHarness />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByTestId('set-report-a'));
+        fireEvent.click(screen.getByTestId('select-row'));
+        expect(screen.getByTestId('selected-row-probe')).toHaveTextContent(String(SELECTED_ROW_ID));
+
+        fireEvent.click(screen.getByTestId('remount-performance'));
+
+        expect(screen.getByTestId('selected-row-probe')).toHaveTextContent(String(SELECTED_ROW_ID));
+    });
 });

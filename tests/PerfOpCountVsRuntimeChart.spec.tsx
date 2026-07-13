@@ -33,6 +33,27 @@ afterEach(() => {
 });
 
 describe('PerfOpCountVsRuntimeChart', () => {
+    it('builds bar traces with flat string customdata per point', () => {
+        render(
+            <TestProviders>
+                <PerfOpCountVsRuntimeChart
+                    datasets={[[row('Matmul'), row('Conv2d')]]}
+                    selectedOpCodes={[matmulMarker, convMarker]}
+                    onOpCodeClick={vi.fn()}
+                />
+            </TestProviders>,
+        );
+
+        const traces = getPlotInstances()[0]?.data as { customdata?: unknown }[] | undefined;
+        expect(traces?.length).toBeGreaterThan(0);
+
+        for (const trace of traces ?? []) {
+            expect(trace.customdata).toEqual(expect.arrayContaining([expect.any(String)]));
+            expect(trace.customdata).toHaveLength(1);
+            expect(['Matmul', 'Conv2d']).toContain((trace.customdata as string[])[0]);
+        }
+    });
+
     it('calls onOpCodeClick with customdata from a bar segment click', () => {
         const onOpCodeClick = vi.fn();
 

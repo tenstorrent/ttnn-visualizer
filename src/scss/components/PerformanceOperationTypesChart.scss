@@ -2,8 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-@use '../mixins/perfChartClickable' as perf-chart-clickable;
-
 .operation-types-chart {
     margin-bottom: 20px;
     height: 500px; // TEMP: Stops charts from collapsing on occasion
@@ -11,9 +9,5 @@
     .chart {
         width: 100%;
         height: 450px;
-    }
-
-    &.perf-chart-clickable {
-        @include perf-chart-clickable.perf-chart-clickable-cursor;
     }
 }
