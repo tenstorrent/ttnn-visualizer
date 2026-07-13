@@ -91,6 +91,7 @@ const PerformanceChartsTab = ({
                         filteredPerfData={filteredPerfData}
                         comparisonData={filteredComparisonData}
                         selectedOpCodes={selectedOpCodes}
+                        opCodeOptions={opCodeOptions}
                     />
 
                     <NonFilterablePerfCharts

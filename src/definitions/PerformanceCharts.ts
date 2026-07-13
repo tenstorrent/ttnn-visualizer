@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 export enum PerfChartId {
+    OpDurationHistogram = 'perf-chart-op-duration-histogram',
     OpCountVsRuntime = 'perf-chart-op-count-vs-runtime',
     CoreCountKernelRuntime = 'perf-chart-core-count-kernel-runtime',
     KernelDurationVsCoreCount = 'perf-chart-kernel-duration-vs-core-count',
@@ -18,6 +19,7 @@ export enum PerfChartId {
 }
 
 export const PERF_CHART_LABELS: Record<PerfChartId, string> = {
+    [PerfChartId.OpDurationHistogram]: 'Op Duration Distribution',
     [PerfChartId.OpCountVsRuntime]: 'Operation Count vs Device Time',
     [PerfChartId.CoreCountKernelRuntime]: 'Core Count + Device Kernel Runtime',
     [PerfChartId.KernelDurationVsCoreCount]: 'Device Kernel Duration vs Core Count',
@@ -52,6 +54,10 @@ export interface PerfChartIndexEntry {
 }
 
 export const FILTERABLE_CHART_ENTRIES: PerfChartIndexEntry[] = [
+    {
+        id: PerfChartId.OpDurationHistogram,
+        label: PERF_CHART_LABELS[PerfChartId.OpDurationHistogram],
+    },
     {
         id: PerfChartId.OpCountVsRuntime,
         label: PERF_CHART_LABELS[PerfChartId.OpCountVsRuntime],
