@@ -95,6 +95,7 @@ The following separate and independent dependencies are utilized by this project
 - @testing-library/jest-dom - MIT - https://github.com/testing-library/jest-dom/blob/main/LICENSE
 - @testing-library/react - MIT - https://github.com/testing-library/react-testing-library/blob/main/LICENSE
 - @types/dagre - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
+- @types/node - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react-dom - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/react-plotly.js - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
@@ -110,7 +111,6 @@ The following separate and independent dependencies are utilized by this project
 - dom-serializer - MIT - https://github.com/cheeriojs/dom-serializer/blob/master/LICENSE
 - eslint - MIT - https://github.com/eslint/eslint/blob/main/LICENSE
 - eslint-config-airbnb-base - MIT - https://github.com/airbnb/javascript/blob/master/packages/eslint-config-airbnb-base/LICENSE.md
-- eslint-config-erb - MIT - https://github.com/electron-react-boilerplate/eslint-config-erb/blob/main/LICENSE
 - eslint-config-prettier - MIT - https://github.com/prettier/eslint-config-prettier/blob/main/LICENSE
 - eslint-import-resolver-alias - MIT - https://github.com/johvin/eslint-import-resolver-alias/blob/master/LICENSE
 - eslint-import-resolver-typescript - ISC - https://github.com/import-js/eslint-import-resolver-typescript/blob/master/LICENSE
