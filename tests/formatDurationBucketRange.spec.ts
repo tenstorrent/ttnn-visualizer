@@ -11,6 +11,6 @@ describe('formatDurationBucketRange', () => {
     });
 
     it('formats a microsecond range', () => {
-        expect(formatDurationBucketRange(1, 10)).toBe('1 µs–10 µs');
+        expect(formatDurationBucketRange(1, 10)).toBe('1 µs – 10 µs');
     });
 });
