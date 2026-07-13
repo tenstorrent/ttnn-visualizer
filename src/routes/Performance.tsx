@@ -3,10 +3,10 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import getResponseError from '../functions/getResponseError';
 import {
@@ -17,13 +17,13 @@ import {
     usePerformanceRange,
     usePerformanceReport,
 } from '../hooks/useAPI';
+import { useResetPerfTableSessionState } from '../hooks/useResetPerfTableSessionState';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
 import {
     activePerformanceReportAtom,
     comparisonPerformanceReportListAtom,
     perfSelectedTabAtom,
-    selectedPerfRowIdAtom,
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
@@ -66,7 +66,9 @@ export default function Performance() {
     // Reserve the column while still loading so it doesn't pop in and shift the table sideways;
     // hide it only once we know the data is genuinely unavailable.
     const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
-    const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
+    const resetPerfTableSessionState = useResetPerfTableSessionState();
+    // undefined until first effect run so we skip the mount cycle and clear only on path change
+    const previousReportPathRef = useRef<string | null | undefined>(undefined);
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
@@ -177,8 +179,21 @@ export default function Performance() {
     );
 
     useEffect(() => {
-        setSelectedPerfRowId(null);
-    }, [activePerformanceReport?.path, setSelectedPerfRowId]);
+        const nextPath = activePerformanceReport?.path ?? null;
+        const previousPath = previousReportPathRef.current;
+
+        if (previousPath === undefined) {
+            previousReportPathRef.current = nextPath;
+            return;
+        }
+
+        if (previousPath === nextPath) {
+            return;
+        }
+
+        previousReportPathRef.current = nextPath;
+        resetPerfTableSessionState();
+    }, [activePerformanceReport?.path, resetPerfTableSessionState]);
 
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {

@@ -127,8 +127,9 @@ export const mergeDevicesAtom = atom<boolean>(true);
 export const tracingModeAtom = atom<boolean>(false);
 export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);
 // Valid only while the modal tensor drawer is open — the backdrop blocks perf-tab switching,
-// so a selection can't leak across reports. Cleared on active-report change (Performance.tsx)
-// and on drawer close / row removal / unsynced reports (PerfTable.tsx).
+// so a selection can't leak across reports. Cleared with chip filters on active-report change
+// (useResetPerfTableSessionState / Performance.tsx) and on drawer close / row removal /
+// unsynced reports (PerfTable.tsx).
 export const selectedPerfRowIdAtom = atom<number | null>(null);
 // Persisted globally (atomWithStorage) by design: a user's preferred column layout follows them across reports
 export const hiddenPerfTableColumnsAtom = atomWithStorage<ColumnKeys[]>('hiddenPerfTableColumns', []);
