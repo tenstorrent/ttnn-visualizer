@@ -6,8 +6,9 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
-import { getDefaultStore, useAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import { FileTransferSource } from '../../definitions/FileTransferSource';
 import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
@@ -15,11 +16,10 @@ import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import useRemoteConnection from '../../hooks/useRemote';
+import { clearFileTransferProgressForSource } from '../../functions/fileTransferRegistry';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
-    fileTransferProgressAtom,
-    getInactiveFileTransferProgress,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
 } from '../../store/app';
@@ -32,7 +32,7 @@ import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
 
 const resetFileTransferProgress = () => {
-    getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
+    clearFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC);
 };
 
 const RemoteSyncConfigurator = () => {
