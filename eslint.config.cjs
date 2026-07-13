@@ -25,6 +25,8 @@ const compat = new FlatCompat({
 
 module.exports = defineConfig([
     {
+        files: ['**/*.ts', '**/*.tsx'],
+
         languageOptions: {
             globals: {
                 ...globals.browser,
@@ -37,6 +39,7 @@ module.exports = defineConfig([
                 projectService: {
                     allowDefaultProject: [
                         '.stylelintrc.cjs',
+                        'eslint.config.cjs',
                         'scripts/check-spdx.mjs',
                         'scripts/release.mjs',
                         'scripts/check-missing-dep-licenses.mjs',
@@ -53,7 +56,6 @@ module.exports = defineConfig([
                 'plugin:react/recommended',
                 'plugin:react-hooks/recommended',
                 'airbnb-base',
-                'erb',
                 'plugin:import/recommended',
                 'plugin:jsx-a11y/recommended',
                 'plugin:compat/recommended',
@@ -132,6 +134,7 @@ module.exports = defineConfig([
                     css: 'always',
                     scss: 'always',
                     json: 'always',
+                    mjs: 'always',
                 },
             ],
 
@@ -166,6 +169,8 @@ module.exports = defineConfig([
                     message: 'Type props directly: function Foo({…}: FooProps). Do not use React.FunctionComponent.',
                 },
             ],
+            // Migrated from eslint-config-erb: preserve prior lint behaviour after removing the preset.
+            'no-param-reassign': ['error', { props: false }], // overrides airbnb-base `props: true`
             'no-shadow': 'off',
             'no-underscore-dangle': 'off',
             'no-unused-vars': 'off',
@@ -187,6 +192,10 @@ module.exports = defineConfig([
                     unnamedComponents: 'arrow-function',
                 },
             ],
+
+            // erb pulled in eslint-config-airbnb react rules; pin the two we still rely on.
+            'react/display-name': 'off', // airbnb disabled; react/recommended would error on anonymous components
+            'react/no-danger': 'warn', // keeps existing eslint-disable comments valid under --max-warnings 0
 
             'react/jsx-filename-extension': [
                 'warn',
@@ -219,6 +228,29 @@ module.exports = defineConfig([
                     argsIgnorePattern: '^_',
                 },
             ],
+        },
+    },
+    {
+        files: ['**/*.cjs'],
+
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+
+            ecmaVersion: 'latest',
+            sourceType: 'commonjs',
+        },
+
+        plugins: {
+            prettier: fixupPluginRules(prettier),
+        },
+
+        rules: {
+            '@typescript-eslint/no-require-imports': 'off',
+            'import/newline-after-import': 'off',
+            'import/no-unresolved': 'off',
+            'prettier/prettier': 'warn',
         },
     },
     globalIgnores([
