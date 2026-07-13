@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
@@ -23,18 +22,16 @@ const findMissingDepLicenses = async (missingDeps, depLicenses) => {
     for (const obj of result) {
         if (obj.licenseFileGuess) {
             try {
-                // eslint-disable-next-line no-await-in-loop
                 let res = await fetch(obj.licenseFileGuess, { method: 'HEAD' });
                 if (!res.ok) {
                     // Try with .md appended
                     const altUrlMd = `${obj.licenseFileGuess}.md`;
-                    // eslint-disable-next-line no-await-in-loop
                     res = await fetch(altUrlMd, { method: 'HEAD' });
+
                     if (res.ok) {
                         obj.licenseFileGuess = altUrlMd;
                     } else {
                         const altUrlTxt = `${obj.licenseFileGuess}.txt`;
-                        // eslint-disable-next-line no-await-in-loop
                         res = await fetch(altUrlTxt, { method: 'HEAD' });
                         if (res.ok) {
                             obj.licenseFileGuess = altUrlTxt;

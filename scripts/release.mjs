@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-console */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
@@ -38,7 +37,6 @@ function bumpVersion(version, type) {
     return `${major}.${minor}.${patch + 1}`;
 }
 
-// eslint-disable-next-line consistent-return
 function getCurrentBranch() {
     try {
         return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
