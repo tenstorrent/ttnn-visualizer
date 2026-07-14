@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { type KeyboardEvent, forwardRef, useImperativeHandle, useRef } from 'react';
+import { type KeyboardEvent, forwardRef, memo, useImperativeHandle, useRef } from 'react';
 import { Button, ButtonVariant, InputGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirOpFilter.scss';
@@ -35,7 +35,7 @@ interface MlirOpFilterProps {
 
 // Floating filter control over the React Flow canvas. Dim/highlight lives
 // in the view component; this is just the input + counter + prev/next.
-const MlirOpFilter = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
+const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
     (
         {
             query,
@@ -160,6 +160,8 @@ const MlirOpFilter = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
     },
 );
 
-MlirOpFilter.displayName = 'MlirOpFilter';
+MlirOpFilterInner.displayName = 'MlirOpFilter';
+
+const MlirOpFilter = memo(MlirOpFilterInner);
 
 export default MlirOpFilter;
