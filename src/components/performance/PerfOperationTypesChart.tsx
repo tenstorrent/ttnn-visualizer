@@ -70,7 +70,6 @@ function PerfOperationTypesChart({
             subtitle={<p>{reportTitle}</p>}
             className={className}
             chartData={[chartData]}
-            configuration={{}}
             layout={PIE_LAYOUT}
             onPlotClick={onOpCodeClick ? handlePlotClick : undefined}
         />

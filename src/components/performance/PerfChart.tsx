@@ -12,7 +12,7 @@ import 'styles/components/PerfChart.scss';
 
 interface PerfChartProps {
     chartData: Partial<PlotData>[];
-    configuration: PlotConfiguration;
+    configuration?: PlotConfiguration;
     id?: string;
     title: string;
     subtitle?: ReactNode;
@@ -74,7 +74,7 @@ function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
 
 function PerfChart({
     chartData,
-    configuration,
+    configuration = {},
     id,
     title,
     subtitle,

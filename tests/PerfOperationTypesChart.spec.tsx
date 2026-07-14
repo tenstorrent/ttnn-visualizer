@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
+import { Layout } from 'plotly.js';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
@@ -44,10 +45,29 @@ describe('PerfOperationTypesChart', () => {
             </TestProviders>,
         );
 
-        const pie = getPlotInstances()[0]?.data?.[0] as { customdata?: unknown } | undefined;
+        const plotData = getPlotInstances()[0]?.data as { customdata?: unknown }[] | undefined;
+        const pie = plotData?.[0];
         expect(Array.isArray(pie?.customdata)).toBe(true);
         expect(pie?.customdata).toEqual(['Matmul', 'Conv2d']);
         expect((pie?.customdata as unknown[]).every((value) => typeof value === 'string')).toBe(true);
+    });
+
+    it('passes the pie layout override without Cartesian axes', () => {
+        render(
+            <TestProviders>
+                <PerfOperationTypesChart
+                    reportTitle='active-report'
+                    data={[row('Matmul', 1)]}
+                    opCodes={[matmulMarker]}
+                />
+            </TestProviders>,
+        );
+
+        const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
+        expect(plotLayout?.showlegend).toBe(false);
+        expect(plotLayout?.margin).toEqual({ l: 50, r: 50, b: 50, t: 50 });
+        expect(plotLayout?.xaxis).toBeUndefined();
+        expect(plotLayout?.yaxis).toBeUndefined();
     });
 
     it('calls onOpCodeClick when a pie slice is clicked', () => {

@@ -8,9 +8,9 @@ import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import {
-    NS_AXIS_TICK_FORMAT,
     PlotConfiguration,
     getDeviceUtilizationAxisConfig,
+    getNsAxisConfig,
 } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
@@ -51,13 +51,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: Per
 
     const configuration: PlotConfiguration = {
         showLegend: true,
-        xAxis: {
-            title: {
-                text: 'Device Kernel Duration (ns)',
-            },
-            tickformat: NS_AXIS_TICK_FORMAT,
-            hoverformat: ',.2r',
-        },
+        xAxis: getNsAxisConfig('Device Kernel Duration (ns)'),
         yAxis: getDeviceUtilizationAxisConfig(maxYValue),
     };
 

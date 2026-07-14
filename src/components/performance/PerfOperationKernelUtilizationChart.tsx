@@ -9,9 +9,9 @@ import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
 import {
-    NS_AXIS_TICK_FORMAT,
     PlotConfiguration,
     getDeviceUtilizationAxisConfig,
+    getNsAxisConfig,
 } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
@@ -84,14 +84,9 @@ function PerfOperationKernelUtilizationChart({
                 text: 'Operation',
             },
         },
-        yAxis: {
-            title: {
-                text: 'Device Kernel Duration (ns)',
-            },
-            tickformat: NS_AXIS_TICK_FORMAT,
-            hoverformat: ',.2r',
+        yAxis: getNsAxisConfig('Device Kernel Duration (ns)', {
             range: [0, maxYValue],
-        },
+        }),
         yAxis2: getDeviceUtilizationAxisConfig(maxY2Value),
     };
 

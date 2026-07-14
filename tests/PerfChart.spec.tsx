@@ -9,6 +9,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfChart from '../src/components/performance/PerfChart';
 import { PERF_CHART_TABLE_FILTER_HINT } from '../src/definitions/PerformanceCharts';
+import { NS_AXIS_HOVER_FORMAT, NS_AXIS_TICK_FORMAT, getNsAxisConfig } from '../src/definitions/PlotConfigurations';
 import { TEST_IDS } from '../src/definitions/TestIds';
 
 afterEach(() => {
@@ -24,7 +25,6 @@ describe('PerfChart', () => {
             <PerfChart
                 title='Test chart'
                 chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
-                configuration={{}}
                 onPlotClick={onPlotClick}
             />,
         );
@@ -42,7 +42,6 @@ describe('PerfChart', () => {
             <PerfChart
                 title='Test chart'
                 chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
-                configuration={{}}
             />,
         );
 
@@ -55,7 +54,6 @@ describe('PerfChart', () => {
                 title='Test chart'
                 subtitle={<p>active-report</p>}
                 chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
-                configuration={{}}
             />,
         );
 
@@ -74,7 +72,6 @@ describe('PerfChart', () => {
             <PerfChart
                 title='Pie chart'
                 chartData={[{ type: 'pie', values: [1], labels: ['a'] } as Partial<PlotData>]}
-                configuration={{}}
                 layout={pieLayout}
             />,
         );
@@ -85,12 +82,17 @@ describe('PerfChart', () => {
         expect(plotLayout?.yaxis).toBeUndefined();
     });
 
-    it('builds the default Cartesian layout from PerfChartLayout', () => {
+    it('merges configuration into the Cartesian layout from PerfChartLayout', () => {
+        const nsAxis = getNsAxisConfig('Time (ns)', { range: [0, 1_000_000] });
+
         render(
             <PerfChart
                 title='Test chart'
                 chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
-                configuration={{}}
+                configuration={{
+                    yAxis: nsAxis,
+                    yAxis2: { tickformat: NS_AXIS_TICK_FORMAT },
+                }}
             />,
         );
 
@@ -100,5 +102,10 @@ describe('PerfChart', () => {
         expect(plotLayout?.xaxis?.fixedrange).toBe(true);
         expect(plotLayout?.yaxis?.fixedrange).toBe(true);
         expect(plotLayout?.yaxis2?.overlaying).toBe('y');
+        expect(plotLayout?.yaxis?.title?.text).toBe('Time (ns)');
+        expect(plotLayout?.yaxis?.tickformat).toBe(NS_AXIS_TICK_FORMAT);
+        expect(plotLayout?.yaxis?.hoverformat).toBe(NS_AXIS_HOVER_FORMAT);
+        expect(plotLayout?.yaxis?.range).toEqual([0, 1_000_000]);
+        expect(plotLayout?.yaxis2?.tickformat).toBe(NS_AXIS_TICK_FORMAT);
     });
 });
