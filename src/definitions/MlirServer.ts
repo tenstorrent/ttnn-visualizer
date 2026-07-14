@@ -2,8 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-export { DEFAULT_SSH_PORT } from './RemoteConnection';
-
 export interface MlirServerConnection {
     name: string;
     username: string;
@@ -14,6 +12,8 @@ export interface MlirServerConnection {
 }
 
 export const MLIR_UPLOAD_PATH = '/apipost/v1/upload';
+
+export const DEFAULT_SSH_PORT = 22;
 
 // Model formats the MLIR server (Model Explorer) accepts:
 // TF (.pb/.pbtxt/.graphdef), TFLite (.tflite), TFJS/JAX (.json/.pb),

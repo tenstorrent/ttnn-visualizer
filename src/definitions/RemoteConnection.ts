@@ -4,8 +4,6 @@
 
 import { HttpStatusCode } from 'axios';
 
-export const DEFAULT_SSH_PORT = 22;
-
 export interface RemoteConnection {
     name: string;
     username: string;
