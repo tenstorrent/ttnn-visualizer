@@ -19,9 +19,14 @@ import {
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import { useState } from 'react';
-import { useAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
+import { FileTransferSource } from '../definitions/FileTransferSource';
+import {
+    clearFileTransferProgressForSource,
+    setFileTransferProgressForSource,
+} from '../functions/fileTransferRegistry';
 import ProgressBar from '../components/ProgressBar';
 import SearchField from '../components/SearchField';
 import AppVersionStatus from '../components/AppVersionStatus';
@@ -30,7 +35,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
-import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
+import { fileTransferProgressAtom } from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import { PerfOverlayLegend, PerfOverlayOpMetric } from '../components/OperationGraphComponent';
@@ -225,24 +230,27 @@ const MLIR_TERMINATOR_OUTGOING: OutgoingEdge[] = [
 ];
 
 export default function Styleguide() {
-    const [updateFileTransferProgress, setUpdateFileTransferProgress] = useAtom(fileTransferProgressAtom);
+    const fileTransferProgress = useAtomValue(fileTransferProgressAtom);
     const [autoCloseTime, setAutoCloseTime] = useState(1000);
     const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
 
-    const runFileTransferDemo = (initial: FileProgress) => {
-        setUpdateFileTransferProgress(initial);
+    const runFileTransferDemo = (source: FileTransferSource, initial: FileProgress) => {
+        const { percentOfCurrent: startingPercentOfCurrent } = initial;
+        let percentOfCurrent = startingPercentOfCurrent;
+        setFileTransferProgressForSource(source, initial);
         setTimeRemaining(autoCloseTime);
 
         const calculateRemainingTime = setInterval(() => {
             setTimeRemaining((prev) => prev - TIME_REMAINING_INTERVAL);
-            setUpdateFileTransferProgress((status) => ({
-                ...status,
-                percentOfCurrent: status.percentOfCurrent + (TIME_REMAINING_INTERVAL / autoCloseTime) * 75,
-            }));
+            percentOfCurrent += (TIME_REMAINING_INTERVAL / autoCloseTime) * 75;
+            setFileTransferProgressForSource(source, {
+                ...initial,
+                percentOfCurrent,
+            });
         }, TIME_REMAINING_INTERVAL);
 
         setTimeout(() => {
-            setUpdateFileTransferProgress(getInactiveFileTransferProgress());
+            clearFileTransferProgressForSource(source);
             clearInterval(calculateRemainingTime);
             setTimeRemaining(autoCloseTime);
         }, autoCloseTime);
@@ -760,32 +768,32 @@ export default function Styleguide() {
 
                     <ButtonGroup>
                         <Button
-                            onClick={() => runFileTransferDemo(SYNC_STARTING_DEMO_PROGRESS)}
+                            onClick={() =>
+                                runFileTransferDemo(FileTransferSource.REMOTE_SYNC, SYNC_STARTING_DEMO_PROGRESS)
+                            }
                             intent={Intent.PRIMARY}
-                            disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                            disabled={fileTransferProgress.status !== FileStatus.INACTIVE}
                         >
                             Open remote sync overlay (preparing)
                         </Button>
                         <Button
-                            onClick={() => runFileTransferDemo(SYNC_DEMO_PROGRESS)}
+                            onClick={() => runFileTransferDemo(FileTransferSource.REMOTE_SYNC, SYNC_DEMO_PROGRESS)}
                             intent={Intent.PRIMARY}
-                            disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                            disabled={fileTransferProgress.status !== FileStatus.INACTIVE}
                         >
                             Open remote sync overlay
                         </Button>
                         <Button
-                            onClick={() => runFileTransferDemo(UPLOAD_DEMO_PROGRESS)}
+                            onClick={() => runFileTransferDemo(FileTransferSource.LOCAL_UPLOAD, UPLOAD_DEMO_PROGRESS)}
                             intent={Intent.PRIMARY}
-                            disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                            disabled={fileTransferProgress.status !== FileStatus.INACTIVE}
                         >
                             Open local upload overlay
                         </Button>
                     </ButtonGroup>
                 </FormGroup>
 
-                {updateFileTransferProgress.status !== FileStatus.INACTIVE && (
-                    <p className='countdown'>{timeRemaining}ms</p>
-                )}
+                {fileTransferProgress.status !== FileStatus.INACTIVE && <p className='countdown'>{timeRemaining}ms</p>}
             </div>
 
             <div className='container flex flex-column'>

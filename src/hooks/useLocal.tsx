@@ -2,10 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { getDefaultStore } from 'jotai';
 import { AxiosProgressEvent } from 'axios';
 import axiosInstance from '../libs/axiosInstance';
-import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
+import { FileTransferSource } from '../definitions/FileTransferSource';
+import {
+    clearFileTransferProgressForSource,
+    setFileTransferProgressForSource,
+} from '../functions/fileTransferRegistry';
 import { FileStatus } from '../model/APIData';
 import Endpoints from '../definitions/Endpoints';
 
@@ -96,7 +99,7 @@ const useLocalConnection = () => {
             return;
         }
         const percentOfCurrent = Math.round((event.loaded * 100) / event.total);
-        getDefaultStore().set(fileTransferProgressAtom, {
+        setFileTransferProgressForSource(FileTransferSource.LOCAL_UPLOAD, {
             percentOfCurrent,
             currentFileName: '',
             finishedFiles: 0,
@@ -108,7 +111,7 @@ const useLocalConnection = () => {
     };
 
     const resetTransferProgress = () => {
-        getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
+        clearFileTransferProgressForSource(FileTransferSource.LOCAL_UPLOAD);
     };
 
     const uploadLocalFolder = async (files: FileList) => {

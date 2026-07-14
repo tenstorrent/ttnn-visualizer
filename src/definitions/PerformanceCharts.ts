@@ -18,6 +18,10 @@ export enum PerfChartId {
     OperationTypes = 'perf-chart-operation-types',
 }
 
+export const PERF_CHART_TABLE_FILTER_HINT = 'Click an operation to filter the performance table';
+
+export type OnOpCodeClick = (opCode: string) => void;
+
 export const PERF_CHART_LABELS: Record<PerfChartId, string> = {
     [PerfChartId.OpDurationHistogram]: 'Op Duration Distribution',
     [PerfChartId.OpCountVsRuntime]: 'Operation Count vs Device Time',

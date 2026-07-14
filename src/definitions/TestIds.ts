@@ -39,6 +39,7 @@ export const TEST_IDS = Object.freeze({
     PERF_COLUMN_PICKER_RESET: 'perf-column-picker-reset',
     PERF_COLUMN_PICKER_OPTION: 'perf-column-picker-option',
     PERF_DURATION_HISTOGRAM: 'perf-duration-histogram',
+    PERF_CHART_TABLE_FILTER_HINT: 'perf-chart-table-filter-hint',
 
     // General UI
     LOADING_SPINNER: 'loading-spinner',

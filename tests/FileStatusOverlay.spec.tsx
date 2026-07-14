@@ -9,12 +9,14 @@ import FileStatusOverlay from '../src/components/FileStatusOverlay';
 import { getFileStatusLabel } from '../src/functions/getFileStatusLabel';
 import { FileProgress, FileStatus } from '../src/model/APIData';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { fileTransferProgressAtom, mlirFileResultsAtom } from '../src/store/app';
+import { FileTransferSource } from '../src/definitions/FileTransferSource';
+import { fileTransferRegistryAtom } from '../src/functions/fileTransferRegistry';
+import { mlirFileResultsAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 
-function renderOverlay(progress: FileProgress) {
+function renderOverlay(progress: FileProgress, source: FileTransferSource = FileTransferSource.REMOTE_SYNC) {
     return render(
-        <TestProviders initialAtomValues={[[fileTransferProgressAtom, progress]]}>
+        <TestProviders initialAtomValues={[[fileTransferRegistryAtom, { [source]: progress }]]}>
             <FileStatusOverlay />
         </TestProviders>,
     );
@@ -62,15 +64,18 @@ describe('FileStatusOverlay status row', () => {
     // empty throughout. The STARTED-only guard keeps the per-file row hidden
     // for UPLOADING — no standalone "Uploading" line for the whole upload.
     it('does not render the per-file row for UPLOADING with no filename', () => {
-        renderOverlay({
-            currentFileName: '',
-            numberOfFiles: 5,
-            percentOfCurrent: 0,
-            finishedFiles: 0,
-            status: FileStatus.UPLOADING,
-            bytesTransferred: 64_000,
-            bytesTotal: 1_024_000,
-        });
+        renderOverlay(
+            {
+                currentFileName: '',
+                numberOfFiles: 5,
+                percentOfCurrent: 0,
+                finishedFiles: 0,
+                status: FileStatus.UPLOADING,
+                bytesTransferred: 64_000,
+                bytesTotal: 1_024_000,
+            },
+            FileTransferSource.LOCAL_UPLOAD,
+        );
 
         expect(screen.queryByText(getFileStatusLabel(FileStatus.STARTED))).not.toBeInTheDocument();
         expect(screen.queryByText(getFileStatusLabel(FileStatus.UPLOADING))).not.toBeInTheDocument();
@@ -103,13 +108,15 @@ describe('FileStatusOverlay status row', () => {
             <TestProviders
                 initialAtomValues={[
                     [
-                        fileTransferProgressAtom,
+                        fileTransferRegistryAtom,
                         {
-                            currentFileName: 'a.mlir',
-                            numberOfFiles: 2,
-                            percentOfCurrent: 100,
-                            finishedFiles: 0,
-                            status: FileStatus.PROCESSING,
+                            [FileTransferSource.MLIR_UPLOAD]: {
+                                currentFileName: 'a.mlir',
+                                numberOfFiles: 2,
+                                percentOfCurrent: 100,
+                                finishedFiles: 0,
+                                status: FileStatus.PROCESSING,
+                            },
                         },
                     ],
                     [
