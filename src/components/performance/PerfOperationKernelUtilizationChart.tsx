@@ -8,7 +8,11 @@ import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
-import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
+import {
+    NS_AXIS_TICK_FORMAT,
+    PlotConfiguration,
+    getDeviceUtilizationAxisConfig,
+} from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import getPlotLabel from '../../functions/getPlotLabel';
@@ -84,7 +88,7 @@ function PerfOperationKernelUtilizationChart({
             title: {
                 text: 'Device Kernel Duration (ns)',
             },
-            tickformat: 'd',
+            tickformat: NS_AXIS_TICK_FORMAT,
             hoverformat: ',.2r',
             range: [0, maxYValue],
         },

@@ -159,6 +159,9 @@ export const PerfChartConfig: Partial<Config> = {
     responsive: true,
 };
 
+/** Plotly/d3 tick format: integer with thousands separators (e.g. 1,000,000). */
+export const NS_AXIS_TICK_FORMAT = ',d';
+
 const GRID_COLOUR = '#575757';
 const LINE_COLOUR = '#575757';
 const TITLE_COLOUR = '#FFF';
