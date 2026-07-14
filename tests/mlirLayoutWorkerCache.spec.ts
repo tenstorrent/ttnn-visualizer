@@ -114,4 +114,21 @@ describe('touchLruCache', () => {
 
         expect([...cache.keys()]).toEqual([2, 3, 4]);
     });
+
+    it('evicts an `undefined` LRU-position key and stays at the limit', () => {
+        // Guard against a silent contract violation when the generic helper
+        // is used with a key type that admits `undefined`. Iterator-`done`
+        // is the correct sentinel; the `oldest.value !== undefined` shape
+        // that Copilot flagged on PR #1759 would leak past the cap here.
+        const cache = new Map<string | undefined, number>();
+        cache.set(undefined, 0);
+        cache.set('b', 2);
+        cache.set('c', 3);
+
+        touchLruCache(cache, 'd', 4, 3);
+
+        expect(cache.size).toBe(3);
+        expect(cache.has(undefined)).toBe(false);
+        expect([...cache.keys()]).toEqual(['b', 'c', 'd']);
+    });
 });
