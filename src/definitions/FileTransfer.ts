@@ -2,8 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-/** No progress events for this long → treat an "active" REMOTE_SYNC slot as orphaned on reconnect. */
-export const REMOTE_SYNC_PROGRESS_STALE_MS = 60_000;
+/**
+ * Reconnect orphan window for REMOTE_SYNC progress.
+ * Backend emits are file-granular and a single download can run up to the 5-minute
+ * SFTP/SCP per-file timeout with no further events — keep this above that bound
+ * (+ margin) so a mid-file socket reconnect does not wipe a live overlay.
+ */
+export const REMOTE_SYNC_PROGRESS_STALE_MS = 6 * 60 * 1000;
 
 /**
  * Upper bound for the remote sync HTTP call. Per-file server downloads already

@@ -7,7 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { RemoteConnection } from '../../definitions/RemoteConnection';
+import { DEFAULT_SSH_PORT, RemoteConnection } from '../../definitions/RemoteConnection';
 import getServerConfig from '../../functions/getServerConfig';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
@@ -35,10 +35,12 @@ const PERFORMANCE_PATH_STATUS = {
 const FAILED_CONNECTION = { status: ConnectionTestStates.FAILED, message: 'Connection failed' };
 const FAILED_MEMORY_REPORT_PATH = { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' };
 
+const getDefaultSshPort = (): number => getServerConfig().SSH_DEFAULT_PORT ?? DEFAULT_SSH_PORT;
+
 const getDefaultConnection = (): RemoteConnection => ({
     name: '',
     host: '',
-    port: 22,
+    port: getDefaultSshPort(),
     profilerPath: '',
     username: getServerConfig().USERNAME ?? '',
 });

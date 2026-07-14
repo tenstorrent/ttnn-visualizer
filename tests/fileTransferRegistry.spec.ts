@@ -161,10 +161,36 @@ describe('file transfer registry helpers', () => {
         expect(registry[FileTransferSource.MLIR_UPLOAD]).toMatchObject(MLIR_UPLOADING);
     });
 
+    it('clearFileTransferProgressForSourceIfInactive preserves active slots when staleAfterMs is omitted', () => {
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, REMOTE_SYNCING);
+        vi.advanceTimersByTime(REMOTE_SYNC_PROGRESS_STALE_MS);
+
+        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);
+
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toMatchObject(
+            REMOTE_SYNCING,
+        );
+    });
+
     it('clearFileTransferProgressForSourceIfInactive preserves a fresh active remote sync slot', () => {
         setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, REMOTE_SYNCING);
 
-        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);
+        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC, {
+            staleAfterMs: REMOTE_SYNC_PROGRESS_STALE_MS,
+        });
+
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toMatchObject(
+            REMOTE_SYNCING,
+        );
+    });
+
+    it('clearFileTransferProgressForSourceIfInactive preserves an active slot just inside the stale window', () => {
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, REMOTE_SYNCING);
+        vi.advanceTimersByTime(REMOTE_SYNC_PROGRESS_STALE_MS - 1);
+
+        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC, {
+            staleAfterMs: REMOTE_SYNC_PROGRESS_STALE_MS,
+        });
 
         expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toMatchObject(
             REMOTE_SYNCING,
@@ -175,17 +201,22 @@ describe('file transfer registry helpers', () => {
         setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, REMOTE_SYNCING);
         vi.advanceTimersByTime(REMOTE_SYNC_PROGRESS_STALE_MS);
 
-        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);
+        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC, {
+            staleAfterMs: REMOTE_SYNC_PROGRESS_STALE_MS,
+        });
 
         expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
+        expect(getDefaultStore().get(fileTransferProgressAtom)).toEqual(getInactiveFileTransferProgress());
     });
 
-    it('clearFileTransferProgressForSourceIfInactive clears active slots without updatedAtMs', () => {
+    it('clearFileTransferProgressForSourceIfInactive clears active slots without updatedAtMs when aging', () => {
         getDefaultStore().set(fileTransferRegistryAtom, {
             [FileTransferSource.REMOTE_SYNC]: REMOTE_SYNCING,
         });
 
-        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);
+        clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC, {
+            staleAfterMs: REMOTE_SYNC_PROGRESS_STALE_MS,
+        });
 
         expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
     });

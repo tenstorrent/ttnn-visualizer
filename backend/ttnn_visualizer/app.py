@@ -127,6 +127,7 @@ def create_app(settings_override=None):
                 "TT_METAL_HOME": app.config["TT_METAL_HOME"],
                 "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
                 "USERNAME": _get_client_username(app.config["SERVER_MODE"]),
+                "SSH_DEFAULT_PORT": app.config["SSH_DEFAULT_PORT"],
             }
             js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
 

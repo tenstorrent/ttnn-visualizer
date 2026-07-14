@@ -6,11 +6,12 @@
 import { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
 import { getOrCreateInstanceId } from './axiosInstance';
+import { REMOTE_SYNC_PROGRESS_STALE_MS } from '../definitions/FileTransfer';
+import { FileTransferSource } from '../definitions/FileTransferSource';
 import {
     clearFileTransferProgressForSourceIfInactive,
     setFileTransferProgressForSource,
 } from '../functions/fileTransferRegistry';
-import { FileTransferSource } from '../definitions/FileTransferSource';
 import getServerConfig from '../functions/getServerConfig';
 
 type SocketContextType = Socket | null;
@@ -30,12 +31,11 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
 
     useEffect(() => {
         socket.on('connect', () => {
-            // Clear terminal / orphaned REMOTE_SYNC slots on reconnect. Fresh
-            // active progress (updated within REMOTE_SYNC_PROGRESS_STALE_MS) is
-            // kept so a mid-transfer socket drop does not wipe live work while
-            // axios is still running. Slots left DOWNLOADING after backend death
-            // without a FAILED event age out and are cleared (#1757).
-            clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);
+            // REMOTE_SYNC only: clear terminal or orphaned slots (#1757). Fresh
+            // actives survive mid-transfer reconnects while axios is still running.
+            clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC, {
+                staleAfterMs: REMOTE_SYNC_PROGRESS_STALE_MS,
+            });
 
             console.log(`Socket connected with ID: ${socket.id}`);
         });
