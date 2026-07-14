@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Layout, PlotData } from 'plotly.js';
+import type { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';

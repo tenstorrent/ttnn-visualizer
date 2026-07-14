@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import type { Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import Plot from '../../libs/PlotComponent';
 import { PerfChartConfig, PerfChartLayout, PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChartFrame from './PerfChartFrame';

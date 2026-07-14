@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { Layout } from 'plotly.js';
+import type { Layout } from 'plotly.js';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
