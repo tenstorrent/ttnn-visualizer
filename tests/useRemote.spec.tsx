@@ -5,6 +5,7 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AxiosResponse } from 'axios';
+import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../src/definitions/FileTransfer';
 import { StackSourceOrigin } from '../src/definitions/StackTrace';
 import useRemoteConnection from '../src/hooks/useRemote';
 
@@ -181,5 +182,35 @@ describe('useRemoteConnection - stack source GETs', () => {
         expect(out.data).toBeNull();
         expect(out.resolvedPath).toBeNull();
         expect(typeof out.error).toBe('string');
+    });
+});
+
+describe('useRemoteConnection - syncRemoteFolder timeout', () => {
+    it('posts /api/remote/sync with REMOTE_SYNC_REQUEST_TIMEOUT_MS', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockResolvedValue({ data: { remotePath: '/r', reportName: 'r' } } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        const connection = {
+            name: 'c',
+            host: 'h',
+            port: 22,
+            username: 'u',
+            profilerPath: '/p',
+        };
+        const profilerFolder = { remotePath: '/r', reportName: 'r', lastModified: 1 };
+
+        await result.current.syncRemoteFolder(connection, profilerFolder);
+
+        expect(mockPost).toHaveBeenCalledWith(
+            '/api/remote/sync',
+            {
+                connection,
+                profiler: profilerFolder,
+                performance: undefined,
+            },
+            { timeout: REMOTE_SYNC_REQUEST_TIMEOUT_MS },
+        );
     });
 });

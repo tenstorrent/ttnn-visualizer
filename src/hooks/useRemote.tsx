@@ -5,12 +5,13 @@
 import axios, { HttpStatusCode } from 'axios';
 import { useCallback } from 'react';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
+import Endpoints from '../definitions/Endpoints';
+import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/FileTransfer';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
+import { StackSourceOrigin } from '../definitions/StackTrace';
+import { normaliseReportFolder } from '../functions/validateReportFolder';
 import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
-import { normaliseReportFolder } from '../functions/validateReportFolder';
-import Endpoints from '../definitions/Endpoints';
-import { StackSourceOrigin } from '../definitions/StackTrace';
 
 interface StackSourceAvailability {
     available: boolean;
@@ -106,11 +107,15 @@ const useRemoteConnection = () => {
             throw new Error('No remote folder provided');
         }
 
-        return axiosInstance.post<RemoteFolder>(`${Endpoints.REMOTE}/sync`, {
-            connection,
-            profiler: profilerRemoteFolder,
-            performance: performanceRemoteFolder,
-        });
+        return axiosInstance.post<RemoteFolder>(
+            `${Endpoints.REMOTE}/sync`,
+            {
+                connection,
+                profiler: profilerRemoteFolder,
+                performance: performanceRemoteFolder,
+            },
+            { timeout: REMOTE_SYNC_REQUEST_TIMEOUT_MS },
+        );
     };
 
     const mountRemoteFolder = async (

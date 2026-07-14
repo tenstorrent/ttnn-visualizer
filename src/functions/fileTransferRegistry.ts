@@ -5,9 +5,15 @@
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai-family';
 import { getDefaultStore } from 'jotai/vanilla';
+import { REMOTE_SYNC_PROGRESS_STALE_MS } from '../definitions/FileTransfer';
 import { FileTransferSource } from '../definitions/FileTransferSource';
 import { FileProgress, FileStatus } from '../model/APIData';
 import { isActiveTransferStatus } from './getFileStatusLabel';
+
+export interface ClearFileTransferIfInactiveOptions {
+    staleAfterMs?: number;
+    nowMs?: number;
+}
 
 /** Fresh inactive progress snapshot. Always call this for resets — do not reuse a shared object or spread `previous`, or stale `numberOfFiles` / byte fields can linger. */
 export function getInactiveFileTransferProgress(): FileProgress {
@@ -65,7 +71,10 @@ export function aggregateFileTransferProgress(registry: FileTransferRegistry): F
 export function setFileTransferProgressForSource(source: FileTransferSource, progress: FileProgress): void {
     getDefaultStore().set(fileTransferRegistryAtom, (registry) => ({
         ...registry,
-        [source]: progress,
+        [source]: {
+            ...progress,
+            updatedAtMs: Date.now(),
+        },
     }));
 }
 
@@ -76,11 +85,29 @@ export function clearFileTransferProgressForSource(source: FileTransferSource): 
     });
 }
 
-export function clearFileTransferProgressForSourceIfInactive(source: FileTransferSource): void {
+/**
+ * Drops a source slot that is terminal, missing a freshness stamp, or older than
+ * the staleness window. Fresh active slots are kept so a socket reconnect mid-
+ * transfer does not wipe live progress while axios is still running.
+ *
+ * Stale-but-still-"active" slots cover backend death mid-transfer: the process
+ * vanishes without a terminal FAILED, reconnect would otherwise preserve
+ * DOWNLOADING forever (#1757).
+ */
+export function clearFileTransferProgressForSourceIfInactive(
+    source: FileTransferSource,
+    options: ClearFileTransferIfInactiveOptions = {},
+): void {
+    const staleAfterMs = options.staleAfterMs ?? REMOTE_SYNC_PROGRESS_STALE_MS;
+    const nowMs = options.nowMs ?? Date.now();
+
     getDefaultStore().set(fileTransferRegistryAtom, (registry) => {
         const progress = registry[source];
         if (progress && isActiveTransferStatus(progress.status)) {
-            return registry;
+            const { updatedAtMs } = progress;
+            if (updatedAtMs !== undefined && nowMs - updatedAtMs < staleAfterMs) {
+                return registry;
+            }
         }
 
         if (!(source in registry)) {

@@ -30,9 +30,11 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
 
     useEffect(() => {
         socket.on('connect', () => {
-            // Only clear stale remote-sync progress if that transfer is no longer
-            // active. A reconnect mid-upload (axios still running on the same
-            // tab) must not close the overlay or drop live client-driven progress.
+            // Clear terminal / orphaned REMOTE_SYNC slots on reconnect. Fresh
+            // active progress (updated within REMOTE_SYNC_PROGRESS_STALE_MS) is
+            // kept so a mid-transfer socket drop does not wipe live work while
+            // axios is still running. Slots left DOWNLOADING after backend death
+            // without a FAILED event age out and are cleared (#1757).
             clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);
 
             console.log(`Socket connected with ID: ${socket.id}`);
