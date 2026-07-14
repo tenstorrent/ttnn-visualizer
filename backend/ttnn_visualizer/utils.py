@@ -712,6 +712,26 @@ def str_to_bool(string_value):
     return string_value.lower() in ("yes", "true", "t", "1")
 
 
+def parse_tcp_port(value: Optional[str], default: int = 22) -> int:
+    """Parse a TCP port from an env string; return ``default`` if invalid.
+
+    Accepts only integer ports in 1..65535. Non-integers, out-of-range values,
+    and ``None``/empty strings fall back to ``default``.
+    """
+    if value is None or value.strip() == "":
+        return default
+
+    try:
+        port = int(value, 10)
+    except ValueError:
+        return default
+
+    if 1 <= port <= 65535:
+        return port
+
+    return default
+
+
 def is_running_in_container():
     """
     Detect if running inside a container (Docker, Podman, Kubernetes, etc.).

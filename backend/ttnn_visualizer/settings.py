@@ -11,6 +11,7 @@ from ttnn_visualizer.utils import (
     get_app_data_directory,
     get_report_data_directory,
     is_running_in_container,
+    parse_tcp_port,
     str_to_bool,
 )
 
@@ -61,7 +62,7 @@ class DefaultConfig(object):
     LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
 
     # Remote SSH connection dialog defaults (local install only — suppressed under SERVER_MODE).
-    SSH_DEFAULT_PORT = int(os.getenv("SSH_DEFAULT_PORT", "22"))
+    SSH_DEFAULT_PORT = parse_tcp_port(os.getenv("SSH_DEFAULT_PORT"), default=22)
     SSH_DEFAULT_PROFILER_PATH = os.getenv("SSH_DEFAULT_PROFILER_PATH", "")
     SSH_DEFAULT_PERFORMANCE_PATH = os.getenv("SSH_DEFAULT_PERFORMANCE_PATH", "")
     # Remote SSH subprocess timeouts (seconds).

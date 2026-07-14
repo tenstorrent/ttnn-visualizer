@@ -6,6 +6,7 @@ import json
 import re
 
 from ttnn_visualizer.app import _build_spa_client_config, _serialize_spa_js_config
+from ttnn_visualizer.utils import parse_tcp_port
 
 
 class _FakeApp:
@@ -76,3 +77,20 @@ def test_app_config_exposes_ssh_default_settings(client, app):
     assert app.config["SSH_DEFAULT_PORT"] == 22
     assert app.config["SSH_DEFAULT_PROFILER_PATH"] == ""
     assert app.config["SSH_DEFAULT_PERFORMANCE_PATH"] == ""
+
+
+def test_parse_tcp_port_accepts_valid_ports():
+    assert parse_tcp_port("1") == 1
+    assert parse_tcp_port("65535") == 65535
+    assert parse_tcp_port("45985") == 45985
+
+
+def test_parse_tcp_port_falls_back_for_invalid_values():
+    assert parse_tcp_port(None) == 22
+    assert parse_tcp_port("") == 22
+    assert parse_tcp_port("   ") == 22
+    assert parse_tcp_port("not-a-port") == 22
+    assert parse_tcp_port("22.5") == 22
+    assert parse_tcp_port("0") == 22
+    assert parse_tcp_port("65536") == 22
+    assert parse_tcp_port("-1", default=45985) == 45985
