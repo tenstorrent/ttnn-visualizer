@@ -23,8 +23,7 @@ $perf-charts-nav-offset: 60px;
 
     // Anchored chart targets sit below the sticky "Jump to chart" nav bar, so their
     // titles would otherwise land hidden underneath it when navigated to via hash link.
-    .chart-container,
-    .operation-types-chart {
+    .chart-container {
         scroll-margin-top: $perf-charts-nav-offset;
     }
 }

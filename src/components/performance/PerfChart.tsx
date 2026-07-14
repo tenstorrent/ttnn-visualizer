@@ -2,10 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import { Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
+import { ReactNode } from 'react';
 import Plot from '../../libs/PlotComponent';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PerfChartConfig, PerfChartLayout, PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerfChart.scss';
 
@@ -14,20 +15,16 @@ interface PerfChartProps {
     configuration: PlotConfiguration;
     id?: string;
     title: string;
+    subtitle?: ReactNode;
+    className?: string;
+    /** When set, used as Plot layout instead of the Cartesian builder from configuration. */
+    layout?: Partial<Layout>;
     onPlotClick?: (event: Readonly<PlotMouseEvent>) => void;
 }
 
-const GRID_COLOUR = '#575757';
-const LINE_COLOUR = '#575757';
-const LEGEND_COLOUR = '#FFF';
-
-function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfChartProps) {
-    const isClickable = onPlotClick != null;
-
-    const layout: Partial<Layout> = {
-        autosize: true,
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
+function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
+    return {
+        ...PerfChartLayout,
         showlegend: configuration.showLegend || false,
         legend: {
             orientation: 'h',
@@ -41,89 +38,68 @@ function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfCha
             y: -0.25,
             xanchor: 'center',
         },
-        margin: {
-            l: 50,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
         barmode: configuration.barMode,
         xaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: LINE_COLOUR,
-            color: LEGEND_COLOUR,
+            ...PerfChartLayout.xaxis,
             title: {
-                font: {
-                    color: LEGEND_COLOUR,
-                },
+                ...PerfChartLayout.xaxis?.title,
                 text: configuration.xAxis?.title?.text,
             },
-            fixedrange: true,
-            zeroline: false,
             range: configuration.xAxis?.range,
             tickformat: configuration.xAxis?.tickformat,
             hoverformat: configuration.xAxis?.hoverformat,
         },
         yaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: LINE_COLOUR,
-            color: LEGEND_COLOUR,
+            ...PerfChartLayout.yaxis,
             title: {
-                standoff: 20,
-                font: {
-                    color: LEGEND_COLOUR,
-                },
+                ...PerfChartLayout.yaxis?.title,
                 text: configuration.yAxis?.title?.text,
             },
-            automargin: true,
-            fixedrange: true,
-            zeroline: false,
             range: configuration.yAxis?.range,
             tickformat: configuration.yAxis?.tickformat,
             hoverformat: configuration.yAxis?.hoverformat,
         },
         yaxis2: {
-            gridcolor: GRID_COLOUR,
-            linecolor: LINE_COLOUR,
-            color: LEGEND_COLOUR,
+            ...PerfChartLayout.yaxis2,
             title: {
-                standoff: 20,
-                font: {
-                    color: LEGEND_COLOUR,
-                },
+                ...PerfChartLayout.yaxis2?.title,
                 text: configuration.yAxis2?.title?.text,
             },
-            overlaying: 'y',
-            side: 'right',
-            automargin: true,
-            fixedrange: true,
-            zeroline: false,
             range: configuration.yAxis2?.range,
             tickformat: configuration.yAxis2?.tickformat,
             hoverformat: configuration.yAxis2?.hoverformat,
         },
     };
+}
 
-    const config: Partial<Config> = {
-        displayModeBar: false,
-        displaylogo: false,
-        responsive: true,
-    };
+function PerfChart({
+    chartData,
+    configuration,
+    id,
+    title,
+    subtitle,
+    className,
+    layout: layoutOverride,
+    onPlotClick,
+}: PerfChartProps) {
+    const isClickable = onPlotClick != null;
+    const layout = layoutOverride ?? getCartesianLayout(configuration);
 
     return (
         <PerfChartFrame
             id={id}
-            className={classNames('chart-container', {
+            className={classNames('chart-container', className, {
                 'legend-instructions': configuration.showLegend,
             })}
             title={title}
+            subtitle={subtitle}
             isClickable={isClickable}
         >
             <Plot
                 className='chart'
                 data={chartData}
                 layout={layout}
-                config={config}
+                config={PerfChartConfig}
                 onClick={onPlotClick}
                 useResizeHandler
             />
