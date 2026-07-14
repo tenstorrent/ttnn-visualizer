@@ -90,6 +90,7 @@ describe('PerfChart', () => {
                 title='Test chart'
                 chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
                 configuration={{
+                    margin: { l: 100, r: 0, b: 50, t: 0 },
                     yAxis: nsAxis,
                     yAxis2: { tickformat: NS_AXIS_TICK_FORMAT },
                 }}
@@ -99,6 +100,7 @@ describe('PerfChart', () => {
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
         expect(plotLayout?.paper_bgcolor).toBe('transparent');
         expect(plotLayout?.plot_bgcolor).toBe('transparent');
+        expect(plotLayout?.margin).toEqual({ l: 100, r: 0, b: 50, t: 0 });
         expect(plotLayout?.xaxis?.fixedrange).toBe(true);
         expect(plotLayout?.yaxis?.fixedrange).toBe(true);
         expect(plotLayout?.yaxis2?.overlaying).toBe('y');
@@ -107,5 +109,17 @@ describe('PerfChart', () => {
         expect(plotLayout?.yaxis?.hoverformat).toBe(NS_AXIS_HOVER_FORMAT);
         expect(plotLayout?.yaxis?.range).toEqual([0, 1_000_000]);
         expect(plotLayout?.yaxis2?.tickformat).toBe(NS_AXIS_TICK_FORMAT);
+    });
+
+    it('falls back to PerfChartLayout margin when configuration omits margin', () => {
+        render(
+            <PerfChart
+                title='Test chart'
+                chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
+            />,
+        );
+
+        const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
+        expect(plotLayout?.margin).toEqual({ l: 50, r: 0, b: 50, t: 0 });
     });
 });

@@ -26,6 +26,7 @@ function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
     return {
         ...PerfChartLayout,
         showlegend: configuration.showLegend || false,
+        margin: configuration.margin ?? PerfChartLayout.margin,
         legend: {
             orientation: 'h',
             font: {
