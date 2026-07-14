@@ -60,6 +60,10 @@ class DefaultConfig(object):
 
     LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
 
+    # Remote SSH connection dialog defaults (local install only — suppressed under SERVER_MODE).
+    SSH_DEFAULT_PORT = int(os.getenv("SSH_DEFAULT_PORT", "22"))
+    SSH_DEFAULT_PROFILER_PATH = os.getenv("SSH_DEFAULT_PROFILER_PATH", "")
+    SSH_DEFAULT_PERFORMANCE_PATH = os.getenv("SSH_DEFAULT_PERFORMANCE_PATH", "")
     # Remote SSH subprocess timeouts (seconds).
     SSH_SUBPROCESS_TIMEOUT = int(os.getenv("SSH_SUBPROCESS_TIMEOUT", "120"))
     SSH_REMOTE_CHECK_TIMEOUT = int(os.getenv("SSH_REMOTE_CHECK_TIMEOUT", "45"))

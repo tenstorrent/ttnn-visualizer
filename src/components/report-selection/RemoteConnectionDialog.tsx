@@ -35,13 +35,18 @@ const PERFORMANCE_PATH_STATUS = {
 const FAILED_CONNECTION = { status: ConnectionTestStates.FAILED, message: 'Connection failed' };
 const FAILED_MEMORY_REPORT_PATH = { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' };
 
-const getDefaultConnection = (): RemoteConnection => ({
-    name: '',
-    host: '',
-    port: 22,
-    profilerPath: '',
-    username: getServerConfig().USERNAME ?? '',
-});
+const getDefaultConnection = (): RemoteConnection => {
+    const serverConfig = getServerConfig();
+
+    return {
+        name: '',
+        host: '',
+        port: serverConfig.SSH_DEFAULT_PORT,
+        profilerPath: serverConfig.SSH_DEFAULT_PROFILER_PATH,
+        performancePath: serverConfig.SSH_DEFAULT_PERFORMANCE_PATH,
+        username: serverConfig.USERNAME ?? '',
+    };
+};
 
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'"'"'`)}'`;
 
@@ -233,7 +238,7 @@ const RemoteConnectionDialog = ({
                 >
                     <InputGroup
                         id='remote-performance-path'
-                        value={connection.performancePath}
+                        value={connection.performancePath ?? ''}
                         onChange={(e) => setConnection({ ...connection, performancePath: e.target.value })}
                     />
                 </FormGroup>
