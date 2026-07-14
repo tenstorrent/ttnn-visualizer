@@ -160,8 +160,7 @@ const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
     },
 );
 
-MlirOpFilterInner.displayName = 'MlirOpFilter';
-
 const MlirOpFilter = memo(MlirOpFilterInner);
+MlirOpFilter.displayName = 'MlirOpFilter';
 
 export default MlirOpFilter;

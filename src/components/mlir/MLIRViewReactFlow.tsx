@@ -51,7 +51,7 @@ import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
-import { MlirFilterMode, buildFilterMatcher } from './mlirFilter';
+import { MlirFilterMode, buildFilterMatcher, resolveFilterMatches } from './mlirFilter';
 import MlirNodeBodyToggles from './MlirNodeBodyToggles';
 import MlirExpandCollapseControls from './MlirExpandCollapseControls';
 import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
@@ -98,15 +98,6 @@ const EMPTY_OVERLAY_LINES: readonly string[] = Object.freeze([]);
 
 const EMPTY_CHAIN: readonly string[] = Object.freeze([]);
 
-const parentChainsEqual = (a: readonly string[], b: readonly string[]): boolean => {
-    for (let i = 0; i < a.length; i++) {
-        if (a[i] !== b[i]) {
-            return false;
-        }
-    }
-    return true;
-};
-
 // `parentChain` is root-first, terminating at the immediate parent.
 type NodeTopologyEntry = {
     parentChain: readonly string[];
@@ -115,6 +106,51 @@ type NodeTopologyEntry = {
     groupKind: MLNodeData['groupKind'];
     collapsedSubgraphNamespace: MLNodeData['collapsedSubgraphNamespace'];
     subgraphToggleState: MLNodeData['subgraphToggleState'];
+};
+
+const EMPTY_TOPOLOGY: Map<string, NodeTopologyEntry> = new Map();
+const EMPTY_VISIBLE_OP_IDS: Set<string> = new Set();
+
+// Derived once per worker rebuild in `applyBuiltGraph`. Structural fields
+// (parentId, type, groupKind, collapsedSubgraphNamespace, subgraphToggleState)
+// are invariant under drag / selection / hover — RF only mutates `position`
+// and `selected` on those paths — so recomputing here means downstream memos
+// keying on the topology map bail out for free on non-structural frames,
+// without a per-render source rebuild + equality walk.
+const buildNodeTopologyById = (nodes: readonly MLNode[]): Map<string, NodeTopologyEntry> => {
+    const parentById = new Map<string, string | undefined>();
+    for (const n of nodes) {
+        parentById.set(n.id, n.parentId);
+    }
+    const result = new Map<string, NodeTopologyEntry>();
+    for (const n of nodes) {
+        const chain: string[] = [];
+        let pid = n.parentId;
+        while (pid) {
+            chain.push(pid);
+            pid = parentById.get(pid);
+        }
+        chain.reverse();
+        result.set(n.id, {
+            parentChain: chain,
+            parentId: n.parentId,
+            type: n.type,
+            groupKind: n.data?.groupKind,
+            collapsedSubgraphNamespace: n.data?.collapsedSubgraphNamespace,
+            subgraphToggleState: n.data?.subgraphToggleState,
+        });
+    }
+    return result;
+};
+
+const buildVisibleOpNodeIds = (nodes: readonly MLNode[]): Set<string> => {
+    const next = new Set<string>();
+    for (const n of nodes) {
+        if (n.type === 'mlirOp') {
+            next.add(n.id);
+        }
+    }
+    return next;
 };
 
 type MlirNodeBodyOverlayLines = { shapes: string[]; location: string[] };
@@ -402,6 +438,11 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // below clears the other two — whichever gesture fires last wins.
     const pendingFitAllRef = useRef(false);
     const hasFitInitiallyRef = useRef(false);
+    // Group-drag mousemove deltas coalesce into a single per-frame write.
+    // Read in `moveGroup` / `flushMoveGroup`; also cleared by
+    // `applyBuiltGraph` to drop in-flight drags across a worker rebuild.
+    const moveGroupPendingRef = useRef<Map<string, { dx: number; dy: number }>>(new Map());
+    const moveGroupRafRef = useRef<number | null>(null);
 
     // No graph-id reset effect: `MlGraphInner` is keyed by `graph.id` in
     // `MlGraphWithProvider`, so React fully remounts the subtree when the
@@ -493,13 +534,33 @@ const MlGraphInner = ({ data }: ViewProps) => {
         });
     }, [selectedNodeId, setNodes]);
 
+    // Structural indices derived from the RF `nodes` array. Only recomputed
+    // when the worker delivers a fresh build (see `applyBuiltGraph`); the
+    // selection reflection effect, drag frames, and `updateNode` all preserve
+    // structural fields, so keeping these off the `[nodes]` render dep path
+    // means downstream memos (`displayedEdges`, `filterMatchInfo`,
+    // `overlayLinesByNodeId`) don't invalidate on drag / select / hover.
+    const [nodeTopologyById, setNodeTopologyById] = useState<Map<string, NodeTopologyEntry>>(EMPTY_TOPOLOGY);
+    const [visibleOpNodeIds, setVisibleOpNodeIds] = useState<Set<string>>(EMPTY_VISIBLE_OP_IDS);
+
     const applyBuiltGraph = useCallback(
         (built: BuiltGraph) => {
+            // Drop any in-flight group-drag delta: the pending RAF would
+            // otherwise apply it against the just-committed canonical
+            // position (shift by delta on top of the worker's placement).
+            if (moveGroupRafRef.current !== null) {
+                window.cancelAnimationFrame(moveGroupRafRef.current);
+                moveGroupRafRef.current = null;
+            }
+            moveGroupPendingRef.current.clear();
+
             const rf = builtGraphToReactFlow(built);
             const selId = selectedNodeIdRef.current;
             const styledNodes = selId ? rf.nodes.map((n) => (n.id === selId ? { ...n, selected: true } : n)) : rf.nodes;
             setNodes(styledNodes);
             setEdges(rf.edges);
+            setNodeTopologyById(buildNodeTopologyById(styledNodes));
+            setVisibleOpNodeIds(buildVisibleOpNodeIds(styledNodes));
 
             // Read + clear every post-rebuild viewport baton up-front. The
             // arming sites enforce mutual exclusion (see the useRef decl
@@ -576,94 +637,6 @@ const MlGraphInner = ({ data }: ViewProps) => {
         runBuild(expandedNamespaces);
     }, [expandedNamespaces, runBuild]);
 
-    // Op-node id set from the current React Flow `nodes` array. The
-    // reference here changes on every drag / selection frame even when
-    // the set contents don't; `visibleOpNodeIds` below stabilises that
-    // identity so downstream memos (`overlayLinesByNodeId` →
-    // `nodeBodyContextValue`) don't invalidate on unrelated frames.
-    const visibleOpNodeIdsSource = useMemo<Set<string>>(() => {
-        const next = new Set<string>();
-        for (const node of nodes) {
-            if (node.type === 'mlirOp') {
-                next.add(node.id);
-            }
-        }
-        return next;
-    }, [nodes]);
-    // "Computed cached state" pattern (React docs): only replace the
-    // tracked set when contents actually change. Downstream memos
-    // (`filterMatchInfo`, `overlayLinesByNodeId`) must not invalidate
-    // on drag frames.
-    const [visibleOpNodeIds, setVisibleOpNodeIds] = useState<Set<string>>(visibleOpNodeIdsSource);
-    if (visibleOpNodeIds !== visibleOpNodeIdsSource) {
-        let unchanged = visibleOpNodeIds.size === visibleOpNodeIdsSource.size;
-        if (unchanged) {
-            for (const id of visibleOpNodeIdsSource) {
-                if (!visibleOpNodeIds.has(id)) {
-                    unchanged = false;
-                    break;
-                }
-            }
-        }
-        if (!unchanged) {
-            setVisibleOpNodeIds(visibleOpNodeIdsSource);
-        }
-    }
-
-    // Structural topology per node — set once by the worker, invariant
-    // under drag / selection / hover. Stabilised via computed-cached-state
-    // so `displayedEdges` bails out on unrelated frames.
-    const nodeTopologyByIdSource = useMemo<Map<string, NodeTopologyEntry>>(() => {
-        const parentById = new Map<string, string | undefined>();
-        for (const n of nodes) {
-            parentById.set(n.id, n.parentId);
-        }
-        const result = new Map<string, NodeTopologyEntry>();
-        for (const n of nodes) {
-            const chain: string[] = [];
-            let pid = n.parentId;
-            while (pid) {
-                chain.push(pid);
-                pid = parentById.get(pid);
-            }
-            chain.reverse();
-            result.set(n.id, {
-                parentChain: chain,
-                parentId: n.parentId,
-                type: n.type,
-                groupKind: n.data?.groupKind,
-                collapsedSubgraphNamespace: n.data?.collapsedSubgraphNamespace,
-                subgraphToggleState: n.data?.subgraphToggleState,
-            });
-        }
-        return result;
-    }, [nodes]);
-    const [nodeTopologyById, setNodeTopologyById] = useState<Map<string, NodeTopologyEntry>>(nodeTopologyByIdSource);
-    if (nodeTopologyById !== nodeTopologyByIdSource) {
-        let unchanged = nodeTopologyById.size === nodeTopologyByIdSource.size;
-        if (unchanged) {
-            for (const [id, next] of nodeTopologyByIdSource) {
-                const prev = nodeTopologyById.get(id);
-                if (
-                    !prev ||
-                    prev.parentId !== next.parentId ||
-                    prev.type !== next.type ||
-                    prev.groupKind !== next.groupKind ||
-                    prev.collapsedSubgraphNamespace !== next.collapsedSubgraphNamespace ||
-                    prev.subgraphToggleState !== next.subgraphToggleState ||
-                    prev.parentChain.length !== next.parentChain.length ||
-                    !parentChainsEqual(prev.parentChain, next.parentChain)
-                ) {
-                    unchanged = false;
-                    break;
-                }
-            }
-        }
-        if (!unchanged) {
-            setNodeTopologyById(nodeTopologyByIdSource);
-        }
-    }
-
     // Per-node overlay lines for the node-body toggles. Only op-nodes
     // with non-empty overlay content appear in this map; `styledNodes`
     // applies the arrays onto `data.shapeLines` / `data.locationLines`
@@ -715,46 +688,15 @@ const MlGraphInner = ({ data }: ViewProps) => {
         if (!filterMatcher) {
             return null;
         }
-        const { testLabel, isRegexInvalid } = filterMatcher;
-        const anchorByNamespace = interactionIndex?.anchorByNamespace ?? {};
-        const containingNamespacesByNodeId = interactionIndex?.containingNamespacesByNodeId ?? {};
-        // Anchor and source ids are always op-node ids, so the stabilised
-        // op set is the correct visibility check and keeps the memo out
-        // of the per-frame `nodes` invalidation path.
-        const visibleRepIds = new Set<string>();
-        const buriedCountByRepId = new Map<string, number>();
-        let hiddenMatchCount = 0;
-        for (const source of sourceNodes) {
-            if (!testLabel(source.label)) {
-                continue;
-            }
-            const containing = containingNamespacesByNodeId[source.id];
-            let repId: string | null = null;
-            if (containing && containing.length > 0) {
-                // Outer→inner: the shortest collapsed namespace is where the
-                // source folds up to. Missing anchors fall back to `source.id`
-                // (mirrors `resolveRenderedNodeId`'s `?? nodeId`).
-                for (const ns of containing) {
-                    if (!expandedNamespaces.has(ns)) {
-                        const anchorId = anchorByNamespace[ns] ?? source.id;
-                        repId = visibleOpNodeIds.has(anchorId) ? anchorId : null;
-                        break;
-                    }
-                }
-            }
-            if (repId === null) {
-                repId = visibleOpNodeIds.has(source.id) ? source.id : null;
-            }
-            if (repId === null) {
-                continue;
-            }
-            visibleRepIds.add(repId);
-            if (repId !== source.id) {
-                buriedCountByRepId.set(repId, (buriedCountByRepId.get(repId) ?? 0) + 1);
-                hiddenMatchCount += 1;
-            }
-        }
-        return { visibleRepIds, buriedCountByRepId, hiddenMatchCount, isRegexInvalid };
+        const resolution = resolveFilterMatches({
+            testLabel: filterMatcher.testLabel,
+            sources: sourceNodes,
+            expandedNamespaces,
+            anchorByNamespace: interactionIndex?.anchorByNamespace ?? {},
+            containingNamespacesByNodeId: interactionIndex?.containingNamespacesByNodeId ?? {},
+            visibleOpNodeIds,
+        });
+        return { ...resolution, isRegexInvalid: filterMatcher.isRegexInvalid };
     }, [filterMatcher, sourceNodes, expandedNamespaces, interactionIndex, visibleOpNodeIds]);
 
     // Visible reps in canvas order so prev/next walks top-to-bottom.
@@ -947,10 +889,10 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
     // Header drag updates only the group's own position; React Flow auto-
     // moves children because they declare `parentId` + `extent: 'parent'`.
-    // Mousemove deltas are coalesced into a single RAF-batched write and
-    // routed through `updateNode` to skip the O(N) `setNodes` cascade.
-    const moveGroupPendingRef = useRef<Map<string, { dx: number; dy: number }>>(new Map());
-    const moveGroupRafRef = useRef<number | null>(null);
+    // Mousemove deltas are coalesced into a single RAF-batched write —
+    // per-flush cost against the RF store is the same as `setNodes` (xyflow's
+    // `updateNode` is `setNodes(prev.map(...))` internally), but the write
+    // rate drops from one-per-mousemove to one-per-frame.
     const flushMoveGroup = useCallback(() => {
         moveGroupRafRef.current = null;
         const pending = moveGroupPendingRef.current;
