@@ -83,12 +83,8 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeCli
     );
 
     const configuration: PlotConfiguration = {
-        margin: {
-            l: 0,
-            r: 0,
-            b: 0,
-            t: 0,
-        },
+        // No margin override: all-zero was previously ignored by PerfChart and would now
+        // clip category labels (xaxis has no automargin).
         barMode: 'stack',
         yAxis: {
             tickformat: '.0%',
