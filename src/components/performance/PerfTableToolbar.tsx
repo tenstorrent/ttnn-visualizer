@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, Checkbox, Popover, PopoverInteractionKind, Position } from '@blueprintjs/core';
+import { Button, ButtonVariant, Checkbox, Popover, PopoverInteractionKind, Position, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import { useMemo } from 'react';
@@ -67,7 +67,7 @@ function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
                 <strong>Table columns</strong>
                 <Button
                     variant={ButtonVariant.MINIMAL}
-                    size='small'
+                    size={Size.SMALL}
                     onClick={handleResetColumns}
                     disabled={hiddenColumns.length === 0}
                     data-testid={TEST_IDS.PERF_COLUMN_PICKER_RESET}

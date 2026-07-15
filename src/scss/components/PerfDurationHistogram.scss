@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+.perf-duration-histogram-chart {
+    margin-bottom: 24px;
+}
+
+.perf-duration-histogram {
+    min-height: 280px;
+}
+
+.perf-duration-histogram-empty {
+    color: var(--tt-grey-3);
+    font-size: 13px;
+    margin: 0;
+}

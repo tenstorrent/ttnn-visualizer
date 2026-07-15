@@ -4,6 +4,7 @@
 
 import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
+import { ReactNode } from 'react';
 import Plot from '../../libs/PlotComponent';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChartFrame from './PerfChartFrame';
@@ -14,6 +15,7 @@ interface PerfChartProps {
     configuration: PlotConfiguration;
     id?: string;
     title: string;
+    subtitle?: ReactNode;
     onPlotClick?: (event: Readonly<PlotMouseEvent>) => void;
 }
 
@@ -21,7 +23,7 @@ const GRID_COLOUR = '#575757';
 const LINE_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
 
-function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfChartProps) {
+function PerfChart({ chartData, configuration, id, title, subtitle, onPlotClick }: PerfChartProps) {
     const isClickable = onPlotClick != null;
 
     const layout: Partial<Layout> = {
@@ -117,6 +119,7 @@ function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfCha
                 'legend-instructions': configuration.showLegend,
             })}
             title={title}
+            subtitle={subtitle}
             isClickable={isClickable}
         >
             <Plot
