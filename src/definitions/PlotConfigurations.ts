@@ -88,7 +88,7 @@ export const BufferSummaryAxisConfiguration: PlotConfiguration = {
     bgColour: '#fff',
 } as PlotConfiguration;
 
-interface AxisConfig {
+export interface AxisConfig {
     title?: {
         text?: string;
     };
@@ -159,6 +159,36 @@ export const PerfChartConfig: Partial<Config> = {
     responsive: true,
 };
 
+/** Plotly/d3 tick format: integer with thousands separators (e.g. 1,000,000). */
+export const NS_AXIS_TICK_FORMAT = ',d';
+export const NS_AXIS_HOVER_FORMAT = ',.2r';
+
+export const getNsAxisConfig = (titleText: string, overrides?: Partial<AxisConfig>): AxisConfig => ({
+    title: { text: titleText },
+    tickformat: NS_AXIS_TICK_FORMAT,
+    hoverformat: NS_AXIS_HOVER_FORMAT,
+    ...overrides,
+});
+
+/** Integer ticks without thousands separators — intentional for core counts (unlike ns `,d`). */
+export const CORE_COUNT_AXIS_TICK_FORMAT = 'd';
+
+export const getCoreCountAxisConfig = (maxCores: number, overrides?: Partial<AxisConfig>): AxisConfig => ({
+    title: { text: 'Core Count' },
+    tickformat: CORE_COUNT_AXIS_TICK_FORMAT,
+    hoverformat: NS_AXIS_HOVER_FORMAT,
+    range: [0, maxCores],
+    ...overrides,
+});
+
+/** Shared left-pad margin for dual-series operation-index charts. */
+export const PERF_CHART_WIDE_LEFT_MARGIN = {
+    l: 100,
+    r: 0,
+    b: 50,
+    t: 0,
+};
+
 const GRID_COLOUR = '#575757';
 const LINE_COLOUR = '#575757';
 const TITLE_COLOUR = '#FFF';
@@ -216,6 +246,19 @@ export const PerfChartLayout: Partial<Layout> = {
         fixedrange: true,
         zeroline: false,
     },
+};
+
+/** Shared shell for non-Cartesian charts (pie) routed through PerfChart. */
+export const PerfPieChartLayout: Partial<Layout> = {
+    autosize: true,
+    paper_bgcolor: 'transparent',
+    margin: {
+        l: 50,
+        r: 50,
+        b: 50,
+        t: 50,
+    },
+    showlegend: false,
 };
 
 export const L1_SMALL_MARKER_COLOR: string = '#FF0000';

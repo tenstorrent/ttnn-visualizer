@@ -6,7 +6,7 @@ import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PERF_CHART_WIDE_LEFT_MARGIN, PlotConfiguration, getNsAxisConfig } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
@@ -60,23 +60,15 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
     const maxIdealTime = Math.max(...datasets.flatMap((data) => data.map((row) => row.pm_ideal_ns ?? 0)));
 
     const configuration: PlotConfiguration = {
-        margin: {
-            l: 100,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
+        margin: PERF_CHART_WIDE_LEFT_MARGIN,
         showLegend: true,
         xAxis: {
             title: { text: 'Operation' },
             range: [0, getAxisUpperRange(datasets)],
         },
-        yAxis: {
-            title: { text: 'Time (ns)' },
-            tickformat: 'd',
-            hoverformat: ',.2r',
+        yAxis: getNsAxisConfig('Time (ns)', {
             range: [0, Math.max(maxDeviceTime, maxIdealTime)],
-        },
+        }),
     };
 
     return (

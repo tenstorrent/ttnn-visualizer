@@ -3,12 +3,14 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
+import type { Layout } from 'plotly.js';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfOperationTypesChart from '../src/components/performance/PerfOperationTypesChart';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
+import { PerfPieChartLayout } from '../src/definitions/PlotConfigurations';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -44,10 +46,30 @@ describe('PerfOperationTypesChart', () => {
             </TestProviders>,
         );
 
-        const pie = getPlotInstances()[0]?.data?.[0] as { customdata?: unknown } | undefined;
+        const plotData = getPlotInstances()[0]?.data as { customdata?: unknown }[] | undefined;
+        const pie = plotData?.[0];
         expect(Array.isArray(pie?.customdata)).toBe(true);
         expect(pie?.customdata).toEqual(['Matmul', 'Conv2d']);
         expect((pie?.customdata as unknown[]).every((value) => typeof value === 'string')).toBe(true);
+    });
+
+    it('passes the pie layout override without Cartesian axes', () => {
+        render(
+            <TestProviders>
+                <PerfOperationTypesChart
+                    reportTitle='active-report'
+                    data={[row('Matmul', 1)]}
+                    opCodes={[matmulMarker]}
+                />
+            </TestProviders>,
+        );
+
+        const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
+        expect(plotLayout).toEqual(PerfPieChartLayout);
+        expect(plotLayout).not.toBe(PerfPieChartLayout);
+        expect(plotLayout?.margin).not.toBe(PerfPieChartLayout.margin);
+        expect(plotLayout?.xaxis).toBeUndefined();
+        expect(plotLayout?.yaxis).toBeUndefined();
     });
 
     it('calls onOpCodeClick when a pie slice is clicked', () => {
@@ -93,6 +115,16 @@ describe('PerfOperationTypesChart', () => {
         );
 
         expect(getPlotInstances()).toHaveLength(2);
+
+        const [activeLayout, comparisonLayout] = getPlotInstances().map(
+            (instance) => instance?.layout as Partial<Layout> | undefined,
+        );
+        expect(activeLayout).toEqual(PerfPieChartLayout);
+        expect(comparisonLayout).toEqual(PerfPieChartLayout);
+        expect(activeLayout).not.toBe(PerfPieChartLayout);
+        expect(comparisonLayout).not.toBe(PerfPieChartLayout);
+        expect(activeLayout).not.toBe(comparisonLayout);
+        expect(activeLayout?.margin).not.toBe(comparisonLayout?.margin);
 
         const comparisonOnClick = getPlotInstances()[1]?.onClick as
             | ((event: { points: { customdata: string }[] }) => void)

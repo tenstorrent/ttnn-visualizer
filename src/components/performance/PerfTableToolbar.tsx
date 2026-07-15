@@ -2,12 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, Checkbox, Popover, PopoverInteractionKind, Position } from '@blueprintjs/core';
+import { Button, ButtonVariant, Checkbox, Popover, PopoverInteractionKind, Position, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import { useMemo } from 'react';
 import 'styles/components/PerfTableToolbar.scss';
-import { ColumnDefinition, ColumnKeys, LOCKED_PERF_COLUMN_KEYS } from '../../definitions/PerfTable';
+import {
+    ColumnDefinition,
+    ColumnKeys,
+    DISPLAY_COLUMNS_LABEL,
+    LOCKED_PERF_COLUMN_KEYS,
+} from '../../definitions/PerfTable';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { hiddenPerfTableColumnsAtom } from '../../store/app';
 
@@ -19,6 +24,17 @@ function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
     const [hiddenColumns, setHiddenColumns] = useAtom(hiddenPerfTableColumnsAtom);
 
     const hiddenColumnKeys = useMemo(() => new Set(hiddenColumns), [hiddenColumns]);
+
+    const hiddenColumnCount = useMemo(
+        () =>
+            eligibleColumns.filter(
+                (column) => !LOCKED_PERF_COLUMN_KEYS.includes(column.key) && hiddenColumnKeys.has(column.key),
+            ).length,
+        [eligibleColumns, hiddenColumnKeys],
+    );
+
+    const displayColumnsLabel =
+        hiddenColumnCount > 0 ? `${DISPLAY_COLUMNS_LABEL} (${hiddenColumnCount} hidden)` : DISPLAY_COLUMNS_LABEL;
 
     const handleColumnToggle = (columnKey: ColumnKeys, isVisible: boolean) => {
         if (LOCKED_PERF_COLUMN_KEYS.includes(columnKey)) {
@@ -51,7 +67,7 @@ function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
                 <strong>Table columns</strong>
                 <Button
                     variant={ButtonVariant.MINIMAL}
-                    size='small'
+                    size={Size.SMALL}
                     onClick={handleResetColumns}
                     disabled={hiddenColumns.length === 0}
                     data-testid={TEST_IDS.PERF_COLUMN_PICKER_RESET}
@@ -89,7 +105,7 @@ function PerfTableToolbar({ eligibleColumns }: PerfTableToolbarProps) {
             >
                 <Button
                     icon={IconNames.COLUMN_LAYOUT}
-                    text='Columns'
+                    text={displayColumnsLabel}
                     variant={ButtonVariant.OUTLINED}
                     data-testid={TEST_IDS.PERF_COLUMN_PICKER_TRIGGER}
                 />

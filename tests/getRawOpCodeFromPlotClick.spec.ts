@@ -16,8 +16,15 @@ describe('getRawOpCodeFromPlotClick', () => {
         expect(getRawOpCodeFromPlotClick(clickEvent({ customdata: 'Matmul' }))).toBe('Matmul');
     });
 
-    it('returns null for nested customdata arrays', () => {
-        expect(getRawOpCodeFromPlotClick(clickEvent({ customdata: ['OptimizedConvNew'] }))).toBeNull();
+    it('reads raw op code from tuple customdata used by the duration histogram', () => {
+        expect(getRawOpCodeFromPlotClick(clickEvent({ customdata: ['OptimizedConvNew', 3, 'a, b'] }))).toBe(
+            'OptimizedConvNew',
+        );
+    });
+
+    it('returns null for empty or non-string tuple customdata heads', () => {
+        expect(getRawOpCodeFromPlotClick(clickEvent({ customdata: [''] }))).toBeNull();
+        expect(getRawOpCodeFromPlotClick(clickEvent({ customdata: [42] }))).toBeNull();
     });
 
     it('does not fall back to label when customdata is absent', () => {

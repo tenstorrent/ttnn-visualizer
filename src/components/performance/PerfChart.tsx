@@ -2,33 +2,63 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import type { Layout, LayoutAxis, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
+import type { ReactNode } from 'react';
 import Plot from '../../libs/PlotComponent';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { AxisConfig, PerfChartConfig, PerfChartLayout, PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerfChart.scss';
 
-interface PerfChartProps {
+interface PerfChartSharedProps {
     chartData: Partial<PlotData>[];
-    configuration: PlotConfiguration;
     id?: string;
     title: string;
+    subtitle?: ReactNode;
+    className?: string;
     onPlotClick?: (event: Readonly<PlotMouseEvent>) => void;
 }
 
-const GRID_COLOUR = '#575757';
-const LINE_COLOUR = '#575757';
-const LEGEND_COLOUR = '#FFF';
+/** Custom layout (e.g. pie) — mutually exclusive with configuration. */
+type PerfChartCustomLayoutProps = PerfChartSharedProps & {
+    layout: Partial<Layout>;
+    configuration?: never;
+};
 
-function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfChartProps) {
-    const isClickable = onPlotClick != null;
+/** Cartesian charts — mutually exclusive with custom `layout` (e.g. pie). */
+type PerfChartCartesianProps = PerfChartSharedProps & {
+    configuration: PlotConfiguration;
+    layout?: never;
+};
 
-    const layout: Partial<Layout> = {
-        autosize: true,
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
+type PerfChartProps = PerfChartCustomLayoutProps | PerfChartCartesianProps;
+
+function mergeAxis(base: Partial<LayoutAxis> | undefined, axis?: AxisConfig): Partial<LayoutAxis> {
+    return {
+        ...base,
+        ...axis,
+        // Fresh title/font objects so Plotly in-place mutation cannot alter PerfChartLayout.
+        title: {
+            ...base?.title,
+            ...(base?.title?.font ? { font: { ...base.title.font } } : {}),
+            ...axis?.title,
+        },
+    };
+}
+
+function cloneCustomLayout(layout: Partial<Layout>): Partial<Layout> {
+    return {
+        ...layout,
+        ...(layout.margin ? { margin: { ...layout.margin } } : {}),
+    };
+}
+
+function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
+    return {
+        ...PerfChartLayout,
         showlegend: configuration.showLegend || false,
+        // Clone margins — never hand Plotly the shared PerfChartLayout.margin reference.
+        margin: { ...(configuration.margin ?? PerfChartLayout.margin!) },
         legend: {
             orientation: 'h',
             font: {
@@ -41,89 +71,37 @@ function PerfChart({ chartData, configuration, id, title, onPlotClick }: PerfCha
             y: -0.25,
             xanchor: 'center',
         },
-        margin: {
-            l: 50,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
         barmode: configuration.barMode,
-        xaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: LINE_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-                text: configuration.xAxis?.title?.text,
-            },
-            fixedrange: true,
-            zeroline: false,
-            range: configuration.xAxis?.range,
-            tickformat: configuration.xAxis?.tickformat,
-            hoverformat: configuration.xAxis?.hoverformat,
-        },
-        yaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: LINE_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                standoff: 20,
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-                text: configuration.yAxis?.title?.text,
-            },
-            automargin: true,
-            fixedrange: true,
-            zeroline: false,
-            range: configuration.yAxis?.range,
-            tickformat: configuration.yAxis?.tickformat,
-            hoverformat: configuration.yAxis?.hoverformat,
-        },
-        yaxis2: {
-            gridcolor: GRID_COLOUR,
-            linecolor: LINE_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                standoff: 20,
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-                text: configuration.yAxis2?.title?.text,
-            },
-            overlaying: 'y',
-            side: 'right',
-            automargin: true,
-            fixedrange: true,
-            zeroline: false,
-            range: configuration.yAxis2?.range,
-            tickformat: configuration.yAxis2?.tickformat,
-            hoverformat: configuration.yAxis2?.hoverformat,
-        },
+        xaxis: mergeAxis(PerfChartLayout.xaxis, configuration.xAxis),
+        yaxis: mergeAxis(PerfChartLayout.yaxis, configuration.yAxis),
+        yaxis2: mergeAxis(PerfChartLayout.yaxis2, configuration.yAxis2),
     };
+}
 
-    const config: Partial<Config> = {
-        displayModeBar: false,
-        displaylogo: false,
-        responsive: true,
-    };
+function PerfChart(props: PerfChartProps) {
+    const { chartData, id, title, subtitle, className, onPlotClick } = props;
+    const isClickable = onPlotClick != null;
+    const isCustomLayout = props.layout != null;
+    // Clone custom layouts too — pie charts share PerfPieChartLayout as a module singleton.
+    const layout = isCustomLayout ? cloneCustomLayout(props.layout) : getCartesianLayout(props.configuration);
+    // Legend CSS hint is Cartesian-only; custom layout owns its own legend chrome.
+    const showLegendInstructions = !isCustomLayout && Boolean(props.configuration.showLegend);
 
     return (
         <PerfChartFrame
             id={id}
-            className={classNames('chart-container', {
-                'legend-instructions': configuration.showLegend,
+            className={classNames('chart-container', className, {
+                'legend-instructions': showLegendInstructions,
             })}
             title={title}
+            subtitle={subtitle}
             isClickable={isClickable}
         >
             <Plot
                 className='chart'
                 data={chartData}
                 layout={layout}
-                config={config}
+                config={PerfChartConfig}
                 onClick={onPlotClick}
                 useResizeHandler
             />

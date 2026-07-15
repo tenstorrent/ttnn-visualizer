@@ -7,14 +7,18 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import {
+    PERF_CHART_WIDE_LEFT_MARGIN,
+    PlotConfiguration,
+    getCoreCountAxisConfig,
+    getNsAxisConfig,
+} from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 import { usePerfMeta } from '../../hooks/useAPI';
-import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
-import getCoreCount from '../../functions/getCoreCount';
+import { resolveMaxCores } from '../../functions/getCoreCount';
 
 interface PerfDeviceKernelRuntimeChartProps {
     datasets?: TypedPerfTableRow[][];
@@ -25,8 +29,7 @@ function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntime
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const maxDataSize = datasets.reduce((max, data) => Math.max(max, data?.length || 0), 0);
-    const architecture = (deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
-    const maxCores = getCoreCount(architecture, datasets[0] ?? []);
+    const maxCores = resolveMaxCores(deviceMeta, datasets[0] ?? []);
 
     const chartDataCoreCount = useMemo(
         () =>
@@ -63,28 +66,14 @@ function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntime
     );
 
     const configuration: PlotConfiguration = {
-        margin: {
-            l: 100,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
+        margin: PERF_CHART_WIDE_LEFT_MARGIN,
         showLegend: true,
         xAxis: {
             title: { text: 'Operation' },
             range: [0, maxDataSize],
         },
-        yAxis: {
-            title: { text: 'Core Count' },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-            range: [0, maxCores],
-        },
-        yAxis2: {
-            title: { text: 'Device Kernel Duration (ns)' },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-        },
+        yAxis: getCoreCountAxisConfig(maxCores),
+        yAxis2: getNsAxisConfig('Device Kernel Duration (ns)'),
     };
 
     return (
