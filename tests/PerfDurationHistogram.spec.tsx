@@ -56,4 +56,18 @@ describe('PerfDurationHistogram', () => {
         expect(document.getElementById(PerfChartId.OpDurationHistogram)).toBeInTheDocument();
         expect(screen.getByText('No device ops available for duration histogram.')).toBeInTheDocument();
     });
+
+    it('documents single-report scope when comparison reports are present', () => {
+        render(
+            <TestProviders>
+                <PerfDurationHistogram
+                    rows={[row(5)]}
+                    selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                    hasComparisonReports
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.getByText('Active report only')).toBeInTheDocument();
+    });
 });

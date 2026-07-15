@@ -5,11 +5,20 @@
 import { useMemo } from 'react';
 import { PlotData } from 'plotly.js';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
-import { MAX_LEGEND_OP_CODES } from '../../definitions/PerfDurationHistogram';
+import {
+    MAX_LEGEND_OP_CODES,
+    OTHER_OP_CODE_COLOUR,
+    OTHER_OP_CODE_LABEL,
+    SAMPLE_OPS_PER_BUCKET,
+} from '../../definitions/PerfDurationHistogram';
 import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { TEST_IDS } from '../../definitions/TestIds';
 import buildDurationHistogram from '../../functions/buildDurationHistogram';
+import {
+    getDisplayedHistogramOpCodes,
+    getRolledUpHistogramOpCodes,
+} from '../../functions/getDisplayedHistogramOpCodes';
 import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
 import PerfChart from './PerfChart';
 import PerfChartFrame from './PerfChartFrame';
@@ -22,9 +31,16 @@ interface PerfDurationHistogramProps {
     rows: TypedPerfTableRow[];
     selectedOpCodes: Marker[];
     onOpCodeClick?: OnOpCodeClick;
+    /** When true, surface that comparison reports are not plotted here. */
+    hasComparisonReports?: boolean;
 }
 
-function PerfDurationHistogram({ rows, selectedOpCodes, onOpCodeClick }: PerfDurationHistogramProps) {
+function PerfDurationHistogram({
+    rows,
+    selectedOpCodes,
+    onOpCodeClick,
+    hasComparisonReports = false,
+}: PerfDurationHistogramProps) {
     const histogramData = useMemo(() => buildDurationHistogram(rows), [rows]);
     const handlePlotClick = useHandlePerfChartPlotClick(onOpCodeClick);
 
@@ -38,22 +54,30 @@ function PerfDurationHistogram({ rows, selectedOpCodes, onOpCodeClick }: PerfDur
         [selectedOpCodes],
     );
 
-    const opCodesInHistogram = useMemo(() => {
-        const opCodes = new Set<string>();
-        histogramData.buckets.forEach((bucket) => {
-            bucket.segmentsByOpCode.forEach((segment) => opCodes.add(segment.rawOpCode));
-        });
-
-        return [...opCodes];
-    }, [histogramData.buckets]);
+    const displayedOpCodes = useMemo(() => getDisplayedHistogramOpCodes(histogramData), [histogramData]);
+    const rolledUpOpCodes = useMemo(
+        () => getRolledUpHistogramOpCodes(histogramData, displayedOpCodes),
+        [displayedOpCodes, histogramData],
+    );
 
     const chartData = useMemo(() => {
         const segmentMaps = histogramData.buckets.map(
             (bucket) => new Map(bucket.segmentsByOpCode.map((segment) => [segment.rawOpCode, segment])),
         );
 
-        return opCodesInHistogram.map((rawOpCode) => {
+        return displayedOpCodes.map((rawOpCode) => {
+            const isOther = rawOpCode === OTHER_OP_CODE_LABEL;
+
             const customData: DurationHistogramCustomData[] = histogramData.buckets.map((bucket, bucketIndex) => {
+                if (isOther) {
+                    const otherSegments = [...rolledUpOpCodes].flatMap(
+                        (opCode) => segmentMaps[bucketIndex].get(opCode)?.sampleOps ?? [],
+                    );
+                    const sampleOpsSummary = otherSegments.slice(0, SAMPLE_OPS_PER_BUCKET).join(', ') || '—';
+
+                    return ['', bucket.totalCount, sampleOpsSummary];
+                }
+
                 const segment = segmentMaps[bucketIndex].get(rawOpCode);
                 const sampleOpsSummary = (segment?.sampleOps ?? []).join(', ') || '—';
 
@@ -63,6 +87,14 @@ function PerfDurationHistogram({ rows, selectedOpCodes, onOpCodeClick }: PerfDur
             return {
                 x: bucketLabels,
                 y: histogramData.buckets.map((_, bucketIndex) => {
+                    if (isOther) {
+                        let otherCount = 0;
+                        rolledUpOpCodes.forEach((opCode) => {
+                            otherCount += segmentMaps[bucketIndex].get(opCode)?.count ?? 0;
+                        });
+                        return otherCount;
+                    }
+
                     return segmentMaps[bucketIndex].get(rawOpCode)?.count ?? 0;
                 }),
                 type: 'bar',
@@ -71,11 +103,11 @@ function PerfDurationHistogram({ rows, selectedOpCodes, onOpCodeClick }: PerfDur
                 hovertemplate:
                     '%{x}<br />%{fullData.name}: %{y}<br />Bucket total: %{customdata[1]}<br />Samples: %{customdata[2]}<extra></extra>',
                 marker: {
-                    color: colourByOpCode.get(rawOpCode),
+                    color: isOther ? OTHER_OP_CODE_COLOUR : colourByOpCode.get(rawOpCode),
                 },
             } as Partial<PlotData>;
         });
-    }, [bucketLabels, colourByOpCode, histogramData.buckets, opCodesInHistogram]);
+    }, [bucketLabels, colourByOpCode, displayedOpCodes, histogramData.buckets, rolledUpOpCodes]);
 
     const configuration: PlotConfiguration = {
         margin: {
@@ -85,7 +117,7 @@ function PerfDurationHistogram({ rows, selectedOpCodes, onOpCodeClick }: PerfDur
             t: 0,
         },
         barMode: 'stack',
-        showLegend: opCodesInHistogram.length <= MAX_LEGEND_OP_CODES,
+        showLegend: displayedOpCodes.length <= MAX_LEGEND_OP_CODES,
         xAxis: {
             title: {
                 text: 'Device time',
@@ -99,6 +131,7 @@ function PerfDurationHistogram({ rows, selectedOpCodes, onOpCodeClick }: PerfDur
     };
 
     const title = PERF_CHART_LABELS[PerfChartId.OpDurationHistogram];
+    const subtitle = hasComparisonReports ? 'Active report only' : undefined;
 
     if (histogramData.buckets.length === 0) {
         return (
@@ -109,6 +142,7 @@ function PerfDurationHistogram({ rows, selectedOpCodes, onOpCodeClick }: PerfDur
                 <PerfChartFrame
                     id={PerfChartId.OpDurationHistogram}
                     title={title}
+                    subtitle={subtitle}
                     isClickable={false}
                 >
                     <p className='perf-duration-histogram-empty'>No device ops available for duration histogram.</p>
@@ -127,6 +161,7 @@ function PerfDurationHistogram({ rows, selectedOpCodes, onOpCodeClick }: PerfDur
                 <PerfChart
                     id={PerfChartId.OpDurationHistogram}
                     title={title}
+                    subtitle={subtitle}
                     chartData={chartData}
                     configuration={configuration}
                     onPlotClick={onOpCodeClick ? handlePlotClick : undefined}

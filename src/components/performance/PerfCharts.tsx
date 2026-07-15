@@ -17,8 +17,8 @@ interface PerfChartsProps {
 }
 
 const PerfCharts = ({ filteredPerfData, comparisonData, selectedOpCodes, onOpCodeClick }: PerfChartsProps) => {
-    // Histogram is intentionally single-report: comparison faceting is deferred.
     const data = [filteredPerfData, ...(comparisonData || [])].filter((set) => set.length > 0);
+    const hasComparisonReports = Boolean(comparisonData?.some((set) => set.length > 0));
 
     return (
         <>
@@ -26,6 +26,7 @@ const PerfCharts = ({ filteredPerfData, comparisonData, selectedOpCodes, onOpCod
                 rows={filteredPerfData}
                 selectedOpCodes={selectedOpCodes}
                 onOpCodeClick={onOpCodeClick}
+                hasComparisonReports={hasComparisonReports}
             />
 
             <PerfOpCountVsRuntimeChart

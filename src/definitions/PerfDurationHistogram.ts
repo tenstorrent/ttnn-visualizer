@@ -27,4 +27,10 @@ export interface DurationHistogramData {
 
 export const SAMPLE_OPS_PER_BUCKET = 5;
 
+/** Max distinct stacked traces (including the rolled-up Other segment when used). */
 export const MAX_LEGEND_OP_CODES = 12;
+
+export const OTHER_OP_CODE_LABEL = 'Other';
+
+/** Neutral grey from `MarkerColours` — reserved for the rolled-up tail segment. */
+export const OTHER_OP_CODE_COLOUR = 'rgb(199, 199, 199)';
