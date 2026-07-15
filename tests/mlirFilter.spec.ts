@@ -135,23 +135,41 @@ describe('resolveFilterMatches', () => {
         expect(result.buriedCountByRepId.get('outer-anchor')).toBe(1);
     });
 
-    it('skips collapsed namespaces whose anchor is off-canvas (op-only visibility)', () => {
-        // Regression lock for the #1739 item-4 narrowing: visibility must be
+    it('does not satisfy visibility from a group id sharing the namespace (op-only)', () => {
+        // Regression lock for the #1739 item-4 narrowing: visibility is
         // resolved against the op-only id set, not the full RF node array.
-        // A group id sharing a name with the expected anchor must NOT satisfy
-        // visibility.
+        // The *group* id for `region.a` is on canvas, but it must NOT stand
+        // in for the op anchor — the buried match has no visible rep.
         const result = resolveFilterMatches({
             testLabel: label('add'),
             sources: [{ id: 'buried-op', label: 'stablehlo.add' }],
             expandedNamespaces: new Set(),
             anchorByNamespace: { 'region.a': 'anchor-op' },
             containingNamespacesByNodeId: { 'buried-op': ['region.a'] },
-            visibleOpNodeIds: new Set(),
+            visibleOpNodeIds: new Set(['group:region.a']),
         });
 
         expect(result.visibleRepIds.size).toBe(0);
         expect(result.buriedCountByRepId.size).toBe(0);
         expect(result.hiddenMatchCount).toBe(0);
+    });
+
+    it('folds to the op anchor once it is present alongside the group id (op-only twin)', () => {
+        // Same fixture as above, but the op anchor is now on canvas: the
+        // buried match resolves to the op id. Proves the previous case fails
+        // specifically because a group id can't satisfy op-only visibility.
+        const result = resolveFilterMatches({
+            testLabel: label('add'),
+            sources: [{ id: 'buried-op', label: 'stablehlo.add' }],
+            expandedNamespaces: new Set(),
+            anchorByNamespace: { 'region.a': 'anchor-op' },
+            containingNamespacesByNodeId: { 'buried-op': ['region.a'] },
+            visibleOpNodeIds: new Set(['group:region.a', 'anchor-op']),
+        });
+
+        expect([...result.visibleRepIds]).toEqual(['anchor-op']);
+        expect(result.buriedCountByRepId.get('anchor-op')).toBe(1);
+        expect(result.hiddenMatchCount).toBe(1);
     });
 
     it('descends into inner namespaces once outer ones are expanded', () => {
