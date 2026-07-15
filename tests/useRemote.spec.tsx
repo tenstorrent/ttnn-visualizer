@@ -15,6 +15,7 @@ import {
     getInactiveFileTransferProgress,
     setFileTransferProgressForSource,
 } from '../src/functions/fileTransferRegistry';
+import { abortActiveRemoteSyncRequest } from '../src/functions/remoteSyncRequest';
 import useRemoteConnection from '../src/hooks/useRemote';
 import { FileStatus } from '../src/model/APIData';
 
@@ -266,6 +267,34 @@ describe('useRemoteConnection - syncRemoteFolder timeout', () => {
         const { result } = renderHook(() => useRemoteConnection());
         await result.current.syncRemoteFolder(connection, profilerFolder);
 
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
+    });
+
+    it('rejects and clears REMOTE_SYNC when the active abort signal fires', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockImplementation(
+            (_url, _body, config) =>
+                new Promise((_resolve, reject) => {
+                    const { signal } = config as { signal: AbortSignal };
+                    signal.addEventListener('abort', () => {
+                        reject(new Error('aborted'));
+                    });
+                }) as ReturnType<typeof mockPost>,
+        );
+
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, {
+            ...getInactiveFileTransferProgress(),
+            status: FileStatus.DOWNLOADING,
+            numberOfFiles: 1,
+        });
+
+        const { result } = renderHook(() => useRemoteConnection());
+        const syncPromise = result.current.syncRemoteFolder(connection, profilerFolder);
+
+        abortActiveRemoteSyncRequest();
+
+        await expect(syncPromise).rejects.toThrow('aborted');
         expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
     });
 });

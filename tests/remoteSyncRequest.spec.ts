@@ -26,4 +26,14 @@ describe('remoteSyncRequest', () => {
 
         expect(controller.signal.aborted).toBe(false);
     });
+
+    it('beginRemoteSyncRequest replaces the active controller so abort only hits the latest', () => {
+        const first = beginRemoteSyncRequest();
+        const second = beginRemoteSyncRequest();
+
+        abortActiveRemoteSyncRequest();
+
+        expect(first.signal.aborted).toBe(false);
+        expect(second.signal.aborted).toBe(true);
+    });
 });

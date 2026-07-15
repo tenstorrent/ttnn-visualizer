@@ -139,8 +139,10 @@ export function clearFileTransferProgressForSourceIfInactive(
  * abort a hanging `/api/remote/sync` when an *active* orphan is removed so the
  * UI `isSyncing` lock can release. Not timer-driven — if the socket never
  * reconnects, the axios timeout in `syncRemoteFolder` is the backstop.
+ *
+ * Returns whether an in-flight sync abort was requested.
  */
-export function clearStaleRemoteSyncOnReconnect(options: { nowMs?: number } = {}): void {
+export function clearStaleRemoteSyncOnReconnect(options: { nowMs?: number } = {}): boolean {
     const progress = getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC];
     const wasActive = progress !== undefined && isActiveTransferStatus(progress.status);
 
@@ -151,7 +153,10 @@ export function clearStaleRemoteSyncOnReconnect(options: { nowMs?: number } = {}
 
     if (wasActive && didClear) {
         abortActiveRemoteSyncRequest();
+        return true;
     }
+
+    return false;
 }
 
 export function clearAllFileTransferProgress(): void {

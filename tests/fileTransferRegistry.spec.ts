@@ -242,7 +242,7 @@ describe('file transfer registry helpers', () => {
         setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, REMOTE_SYNCING);
         vi.advanceTimersByTime(REMOTE_SYNC_PROGRESS_STALE_MS);
 
-        clearStaleRemoteSyncOnReconnect();
+        expect(clearStaleRemoteSyncOnReconnect()).toBe(true);
 
         expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
         expect(abortController.signal.aborted).toBe(true);
@@ -252,7 +252,7 @@ describe('file transfer registry helpers', () => {
         const abortController = beginRemoteSyncRequest();
         setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, REMOTE_SYNCING);
 
-        clearStaleRemoteSyncOnReconnect();
+        expect(clearStaleRemoteSyncOnReconnect()).toBe(false);
 
         expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toMatchObject(
             REMOTE_SYNCING,

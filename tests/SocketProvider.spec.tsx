@@ -130,7 +130,7 @@ describe('SocketProvider file transfer progress', () => {
         expect(registryMocks.clearStaleRemoteSyncOnReconnect).toHaveBeenCalledTimes(1);
     });
 
-    it('clears a stale REMOTE_SYNC slot on connect', async () => {
+    it('clears a stale REMOTE_SYNC slot on connect and requests an in-flight sync abort', async () => {
         // Mount before fake timers — waitFor needs real time to settle effects.
         await mountSocketProvider();
 
@@ -146,6 +146,11 @@ describe('SocketProvider file transfer progress', () => {
         });
         vi.advanceTimersByTime(REMOTE_SYNC_PROGRESS_STALE_MS);
 
+        let didRequestAbort = false;
+        registryMocks.clearStaleRemoteSyncOnReconnect.mockImplementationOnce((...args) => {
+            didRequestAbort = actualRegistry.clearStaleRemoteSyncOnReconnect(...args);
+        });
+
         socketTestContext.emit('connect');
 
         const registry = getDefaultStore().get(actualRegistry.fileTransferRegistryAtom);
@@ -153,6 +158,7 @@ describe('SocketProvider file transfer progress', () => {
         expect(actualRegistry.aggregateFileTransferProgress(registry)).toEqual(
             actualRegistry.getInactiveFileTransferProgress(),
         );
+        expect(didRequestAbort).toBe(true);
     });
 
     it('preserves a fresh REMOTE_SYNC slot on connect', async () => {
