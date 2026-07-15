@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { AxiosError } from 'axios';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
@@ -441,6 +441,10 @@ interface MetaData {
     architecture: DeviceArchitecture | null;
     frequency: number | null;
     max_cores: number | null;
+}
+
+function getDeviceMetaQueryKey(name: string | null) {
+    return ['get-device-log-meta', name] as const;
 }
 
 const fetchDeviceMeta = async (name: string | null) => {
@@ -1040,10 +1044,39 @@ export const useL1PressureByOperation = (): L1PressureResult => {
 
 export const usePerfMeta = (name?: string | null) => {
     const key = name || null;
-    return useQuery({
+    return useQuery<MetaData, AxiosError>({
         queryFn: () => fetchDeviceMeta(key),
-        queryKey: ['get-device-log-meta', key],
+        queryKey: getDeviceMetaQueryKey(key),
         staleTime: Infinity,
+    });
+};
+
+const EMPTY_REPORT_NAMES: string[] = [];
+const EMPTY_DEVICE_METAS: (MetaData | null)[] = [];
+
+/** Device meta for each comparison report, keyed in the same order as `reportNames`. */
+export const usePerfMetas = (reportNames: string[] | null | undefined): (MetaData | null)[] => {
+    // Stable empty list when unset so `queries` / `combine` keep referential equality across renders.
+    const names = reportNames ?? EMPTY_REPORT_NAMES;
+    const queries = useMemo(
+        () =>
+            names.map((name) => ({
+                queryKey: getDeviceMetaQueryKey(name),
+                queryFn: () => fetchDeviceMeta(name),
+                staleTime: Infinity,
+            })),
+        [names],
+    );
+
+    return useQueries({
+        queries,
+        combine: (results) => {
+            if (results.length === 0) {
+                return EMPTY_DEVICE_METAS;
+            }
+
+            return results.map((result) => result.data ?? null);
+        },
     });
 };
 

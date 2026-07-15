@@ -12,6 +12,7 @@ import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
 import { comparisonPerformanceReportListAtom, rawOpCodeFilterListAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
+import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
@@ -70,6 +71,7 @@ function renderReport({
                 comparisonStackedData={[]}
                 isLoading={isLoading}
                 isComparisonLoading={isComparisonLoading}
+                maxCores={DEFAULT_MAX_CORES}
             />
         </TestProviders>,
     );

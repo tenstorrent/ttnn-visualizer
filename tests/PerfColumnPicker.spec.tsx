@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { useAtomValue } from 'jotai';
 import { afterEach, describe, expect, it } from 'vitest';
 import PerfTableToolbar from '../src/components/performance/PerfTableToolbar';
-import { ColumnKeys, Columns } from '../src/definitions/PerfTable';
+import { ColumnKeys, Columns, DISPLAY_COLUMNS_LABEL } from '../src/definitions/PerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { hiddenPerfTableColumnsAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
@@ -21,6 +21,42 @@ function HiddenColumnsProbe() {
 afterEach(cleanup);
 
 describe('PerfTableToolbar', () => {
+    it('shows the default label when no columns are hidden', () => {
+        render(
+            <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, []]]}>
+                <PerfTableToolbar eligibleColumns={Columns} />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_COLUMN_PICKER_TRIGGER)).toHaveTextContent(DISPLAY_COLUMNS_LABEL);
+    });
+
+    it('excludes locked columns from the hidden count', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[[hiddenPerfTableColumnsAtom, [ColumnKeys.OpCode, ColumnKeys.DeviceTime]]]}
+            >
+                <PerfTableToolbar eligibleColumns={Columns} />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_COLUMN_PICKER_TRIGGER)).toHaveTextContent(
+            `${DISPLAY_COLUMNS_LABEL} (1 hidden)`,
+        );
+    });
+
+    it('shows the hidden column count in the trigger label', () => {
+        render(
+            <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, [ColumnKeys.DeviceTime, ColumnKeys.Dram]]]}>
+                <PerfTableToolbar eligibleColumns={Columns} />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_COLUMN_PICKER_TRIGGER)).toHaveTextContent(
+            `${DISPLAY_COLUMNS_LABEL} (2 hidden)`,
+        );
+    });
+
     it('toggles a column into hiddenPerfTableColumnsAtom', () => {
         render(
             <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, []]]}>

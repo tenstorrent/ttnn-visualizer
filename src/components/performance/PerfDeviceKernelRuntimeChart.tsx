@@ -13,8 +13,7 @@ import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 import { usePerfMeta } from '../../hooks/useAPI';
-import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
-import getCoreCount from '../../functions/getCoreCount';
+import { resolveMaxCores } from '../../functions/getCoreCount';
 
 interface PerfDeviceKernelRuntimeChartProps {
     datasets?: TypedPerfTableRow[][];
@@ -25,8 +24,7 @@ function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntime
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const maxDataSize = datasets.reduce((max, data) => Math.max(max, data?.length || 0), 0);
-    const architecture = (deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
-    const maxCores = getCoreCount(architecture, datasets[0] ?? []);
+    const maxCores = resolveMaxCores(deviceMeta, datasets[0] ?? []);
 
     const chartDataCoreCount = useMemo(
         () =>
