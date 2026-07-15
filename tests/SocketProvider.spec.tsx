@@ -6,8 +6,8 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { getDefaultStore } from 'jotai';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { REMOTE_SYNC_PROGRESS_STALE_MS } from '../src/definitions/FileTransfer';
 import { FileTransferSource } from '../src/definitions/FileTransferSource';
+import { REMOTE_SYNC_PROGRESS_STALE_MS } from '../src/definitions/RemoteSync';
 import { FileStatus } from '../src/model/APIData';
 
 const socketTestContext = vi.hoisted(() => {
@@ -35,7 +35,7 @@ const socketTestContext = vi.hoisted(() => {
 });
 
 const registryMocks = vi.hoisted(() => ({
-    clearFileTransferProgressForSourceIfInactive: vi.fn(),
+    clearStaleRemoteSyncOnReconnect: vi.fn(),
     setFileTransferProgressForSource: vi.fn(),
 }));
 
@@ -57,9 +57,8 @@ vi.mock('../src/functions/fileTransferRegistry', async () => {
     );
     return {
         ...actual,
-        clearFileTransferProgressForSourceIfInactive: (
-            ...args: Parameters<typeof actual.clearFileTransferProgressForSourceIfInactive>
-        ) => registryMocks.clearFileTransferProgressForSourceIfInactive(...args),
+        clearStaleRemoteSyncOnReconnect: (...args: Parameters<typeof actual.clearStaleRemoteSyncOnReconnect>) =>
+            registryMocks.clearStaleRemoteSyncOnReconnect(...args),
         setFileTransferProgressForSource: (...args: Parameters<typeof actual.setFileTransferProgressForSource>) =>
             registryMocks.setFileTransferProgressForSource(...args),
     };
@@ -101,12 +100,12 @@ beforeAll(async () => {
 
 beforeEach(() => {
     actualRegistry.clearAllFileTransferProgress();
-    registryMocks.clearFileTransferProgressForSourceIfInactive.mockReset();
+    registryMocks.clearStaleRemoteSyncOnReconnect.mockReset();
     registryMocks.setFileTransferProgressForSource.mockReset();
     // Call through so reconnect exercises real stale/fresh registry outcomes.
-    registryMocks.clearFileTransferProgressForSourceIfInactive.mockImplementation(
-        (...args: Parameters<typeof actualRegistry.clearFileTransferProgressForSourceIfInactive>) =>
-            actualRegistry.clearFileTransferProgressForSourceIfInactive(...args),
+    registryMocks.clearStaleRemoteSyncOnReconnect.mockImplementation(
+        (...args: Parameters<typeof actualRegistry.clearStaleRemoteSyncOnReconnect>) =>
+            actualRegistry.clearStaleRemoteSyncOnReconnect(...args),
     );
     registryMocks.setFileTransferProgressForSource.mockImplementation(
         (...args: Parameters<typeof actualRegistry.setFileTransferProgressForSource>) =>
@@ -124,14 +123,11 @@ afterEach(() => {
 });
 
 describe('SocketProvider file transfer progress', () => {
-    it('clears terminal or orphaned REMOTE_SYNC on connect with the remote-sync stale window', async () => {
+    it('clears terminal or orphaned REMOTE_SYNC on connect via clearStaleRemoteSyncOnReconnect', async () => {
         await mountSocketProvider();
         socketTestContext.emit('connect');
 
-        expect(registryMocks.clearFileTransferProgressForSourceIfInactive).toHaveBeenCalledWith(
-            FileTransferSource.REMOTE_SYNC,
-            { staleAfterMs: REMOTE_SYNC_PROGRESS_STALE_MS },
-        );
+        expect(registryMocks.clearStaleRemoteSyncOnReconnect).toHaveBeenCalledTimes(1);
     });
 
     it('clears a stale REMOTE_SYNC slot on connect', async () => {

@@ -33,6 +33,7 @@ export {
     clearAllFileTransferProgress,
     clearFileTransferProgressForSource,
     clearFileTransferProgressForSourceIfInactive,
+    clearStaleRemoteSyncOnReconnect,
     fileTransferProgressBySourceAtom,
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,

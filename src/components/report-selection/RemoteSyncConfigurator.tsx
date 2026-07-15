@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { FileTransferSource } from '../../definitions/FileTransferSource';
@@ -219,7 +220,10 @@ const RemoteSyncConfigurator = () => {
                 }
             }
         } catch (err: unknown) {
-            createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
+            // Orphan reconnect aborts the hanging sync on purpose — no error toast.
+            if (!axios.isCancel(err)) {
+                createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
+            }
         } finally {
             setIsSyncingReportFolder(false);
             resetFileTransferProgress();
@@ -267,7 +271,10 @@ const RemoteSyncConfigurator = () => {
                 }
             }
         } catch (err: unknown) {
-            createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
+            // Orphan reconnect aborts the hanging sync on purpose — no error toast.
+            if (!axios.isCancel(err)) {
+                createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
+            }
         } finally {
             setIsSyncingPerformanceFolder(false);
             resetFileTransferProgress();

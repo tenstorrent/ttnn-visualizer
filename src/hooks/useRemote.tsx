@@ -6,9 +6,12 @@ import axios, { HttpStatusCode } from 'axios';
 import { useCallback } from 'react';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import Endpoints from '../definitions/Endpoints';
-import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/FileTransfer';
+import { FileTransferSource } from '../definitions/FileTransferSource';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
+import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/RemoteSync';
 import { StackSourceOrigin } from '../definitions/StackTrace';
+import { clearFileTransferProgressForSource } from '../functions/fileTransferRegistry';
+import { beginRemoteSyncRequest, endRemoteSyncRequest } from '../functions/remoteSyncRequest';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
@@ -107,15 +110,26 @@ const useRemoteConnection = () => {
             throw new Error('No remote folder provided');
         }
 
-        return axiosInstance.post<RemoteFolder>(
-            `${Endpoints.REMOTE}/sync`,
-            {
-                connection,
-                profiler: profilerRemoteFolder,
-                performance: performanceRemoteFolder,
-            },
-            { timeout: REMOTE_SYNC_REQUEST_TIMEOUT_MS },
-        );
+        // Bound the hang and guarantee REMOTE_SYNC cleanup for every caller —
+        // not only RemoteSyncConfigurator's finally (#1757).
+        const abortController = beginRemoteSyncRequest();
+        try {
+            return await axiosInstance.post<RemoteFolder>(
+                `${Endpoints.REMOTE}/sync`,
+                {
+                    connection,
+                    profiler: profilerRemoteFolder,
+                    performance: performanceRemoteFolder,
+                },
+                {
+                    timeout: REMOTE_SYNC_REQUEST_TIMEOUT_MS,
+                    signal: abortController.signal,
+                },
+            );
+        } finally {
+            endRemoteSyncRequest(abortController);
+            clearFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC);
+        }
     };
 
     const mountRemoteFolder = async (

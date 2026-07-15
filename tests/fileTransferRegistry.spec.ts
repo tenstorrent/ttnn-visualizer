@@ -5,17 +5,19 @@
 import '@testing-library/jest-dom/vitest';
 import { getDefaultStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { REMOTE_SYNC_PROGRESS_STALE_MS } from '../src/definitions/FileTransfer';
 import { FileTransferSource } from '../src/definitions/FileTransferSource';
+import { REMOTE_SYNC_PROGRESS_STALE_MS } from '../src/definitions/RemoteSync';
 import {
     aggregateFileTransferProgress,
     clearAllFileTransferProgress,
     clearFileTransferProgressForSource,
     clearFileTransferProgressForSourceIfInactive,
+    clearStaleRemoteSyncOnReconnect,
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,
     setFileTransferProgressForSource,
 } from '../src/functions/fileTransferRegistry';
+import { beginRemoteSyncRequest, endRemoteSyncRequest } from '../src/functions/remoteSyncRequest';
 import { FileStatus } from '../src/model/APIData';
 import { fileTransferProgressAtom } from '../src/store/app';
 
@@ -233,5 +235,29 @@ describe('file transfer registry helpers', () => {
         const registry = getDefaultStore().get(fileTransferRegistryAtom);
         expect(registry[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
         expect(registry[FileTransferSource.MLIR_UPLOAD]).toMatchObject(MLIR_UPLOADING);
+    });
+
+    it('clearStaleRemoteSyncOnReconnect aborts an in-flight sync when clearing a stale active slot', () => {
+        const abortController = beginRemoteSyncRequest();
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, REMOTE_SYNCING);
+        vi.advanceTimersByTime(REMOTE_SYNC_PROGRESS_STALE_MS);
+
+        clearStaleRemoteSyncOnReconnect();
+
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
+        expect(abortController.signal.aborted).toBe(true);
+    });
+
+    it('clearStaleRemoteSyncOnReconnect preserves a fresh active slot without aborting', () => {
+        const abortController = beginRemoteSyncRequest();
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, REMOTE_SYNCING);
+
+        clearStaleRemoteSyncOnReconnect();
+
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toMatchObject(
+            REMOTE_SYNCING,
+        );
+        expect(abortController.signal.aborted).toBe(false);
+        endRemoteSyncRequest(abortController);
     });
 });

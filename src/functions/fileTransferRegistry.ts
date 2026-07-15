@@ -6,8 +6,10 @@ import { atom } from 'jotai';
 import { atomFamily } from 'jotai-family';
 import { getDefaultStore } from 'jotai/vanilla';
 import { FileTransferSource } from '../definitions/FileTransferSource';
+import { REMOTE_SYNC_PROGRESS_STALE_MS } from '../definitions/RemoteSync';
 import { FileProgress, FileStatus } from '../model/APIData';
 import { isActiveTransferStatus } from './getFileStatusLabel';
+import { abortActiveRemoteSyncRequest } from './remoteSyncRequest';
 
 export interface ClearFileTransferIfInactiveOptions {
     /**
@@ -97,12 +99,15 @@ export function clearFileTransferProgressForSource(source: FileTransferSource): 
  * that window — so a reconnect can clear orphaned DOWNLOADING state after
  * backend death without a FAILED event (#1757), while fresh mid-transfer
  * progress (axios still running) is kept.
+ *
+ * Returns whether the source slot was removed from the registry.
  */
 export function clearFileTransferProgressForSourceIfInactive(
     source: FileTransferSource,
     options: ClearFileTransferIfInactiveOptions = {},
-): void {
+): boolean {
     const { staleAfterMs, nowMs = Date.now() } = options;
+    let didClear = false;
 
     getDefaultStore().set(fileTransferRegistryAtom, (registry) => {
         const progress = registry[source];
@@ -121,9 +126,32 @@ export function clearFileTransferProgressForSourceIfInactive(
             return registry;
         }
 
+        didClear = true;
         const { [source]: _removed, ...rest } = registry;
         return rest;
     });
+
+    return didClear;
+}
+
+/**
+ * REMOTE_SYNC reconnect policy for #1757: drop terminal or orphaned slots, and
+ * abort a hanging `/api/remote/sync` when an *active* orphan is removed so the
+ * UI `isSyncing` lock can release. Not timer-driven — if the socket never
+ * reconnects, the axios timeout in `syncRemoteFolder` is the backstop.
+ */
+export function clearStaleRemoteSyncOnReconnect(options: { nowMs?: number } = {}): void {
+    const progress = getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC];
+    const wasActive = progress !== undefined && isActiveTransferStatus(progress.status);
+
+    const didClear = clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC, {
+        staleAfterMs: REMOTE_SYNC_PROGRESS_STALE_MS,
+        nowMs: options.nowMs,
+    });
+
+    if (wasActive && didClear) {
+        abortActiveRemoteSyncRequest();
+    }
 }
 
 export function clearAllFileTransferProgress(): void {
