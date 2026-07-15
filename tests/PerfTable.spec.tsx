@@ -357,6 +357,19 @@ describe('PerfTable column visibility', () => {
 
         expect(footerSpanTotal).toBe(visibleHeaderCount - 1);
     });
+
+    it('gives OP Code a colspan that covers Flags under default columns', () => {
+        renderTable([matmulRow]);
+
+        const table = screen.getByRole('table');
+        expect(within(table).getByText('Flags')).toBeInTheDocument();
+
+        const opCodeFooter = Array.from(table.querySelectorAll('tfoot td')).find((cell) =>
+            cell.textContent?.includes('device ops'),
+        );
+
+        expect(Number(opCodeFooter?.getAttribute('colspan'))).toBe(4);
+    });
 });
 
 describe('PerfTable heuristic flags column', () => {

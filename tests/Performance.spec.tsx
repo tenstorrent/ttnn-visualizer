@@ -288,7 +288,7 @@ describe('Performance route', () => {
             data: [{ report: [{ ...DRAM_PERF_ROW, id: '2' }], stacked_report: [] }],
         });
         (usePerformanceRange as Mock).mockReturnValue([1, 2]);
-        (usePerfMetas as Mock).mockReturnValue([{ data: { max_cores: 130 } }]);
+        (usePerfMetas as Mock).mockReturnValue([{ max_cores: 130, architecture: null, frequency: null }]);
 
         render(
             <TestProviders

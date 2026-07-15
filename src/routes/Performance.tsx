@@ -41,6 +41,8 @@ import { OpType, PerfTabIds } from '../definitions/Performance';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
+const EMPTY_COMPARISON_ROWS: TypedPerfTableRow[][] = [];
+const EMPTY_COMPARISON_MAX_CORES: number[] = [];
 
 export default function Performance() {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
@@ -68,7 +70,8 @@ export default function Performance() {
     const l1Pressure = useL1PressureByOperation();
     const l1PressureMap = l1Pressure.data;
     const { data: deviceMeta } = usePerfMeta(activePerformanceReport?.reportName ?? null);
-    const comparisonDeviceMetaQueries = usePerfMetas(comparisonReportList);
+    // Combined to `(MetaData | null)[]` so comparison enrichment memos on stable data, not per-render query objects.
+    const comparisonDeviceMetas = usePerfMetas(comparisonReportList);
     // Reserve the column while still loading so it doesn't pop in and shift the table sideways;
     // hide it only once we know the data is genuinely unavailable.
     const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
@@ -155,18 +158,15 @@ export default function Performance() {
 
     // Each comparison dataset is thresholded with its own device capacity (meta when
     // available, else row/architecture fallback) so cross-architecture compares stay honest.
-    const comparisonDeviceMetas = useMemo(
-        () => comparisonDeviceMetaQueries.map((query) => query.data ?? null),
-        [comparisonDeviceMetaQueries],
-    );
-
     const { enrichedComparisonData, comparisonMaxCores } = useMemo(() => {
         if (!comparisonPerfData?.length) {
-            return { enrichedComparisonData: [] as TypedPerfTableRow[][], comparisonMaxCores: [] as number[] };
+            return { enrichedComparisonData: EMPTY_COMPARISON_ROWS, comparisonMaxCores: EMPTY_COMPARISON_MAX_CORES };
         }
 
         const maxCoresByDataset: number[] = [];
         const annotatedByDataset = comparisonPerfData.map((dataset, index) => {
+            // L1 pressure comes from the active profiler report only — never attribute it to
+            // comparison datasets (op-id sync and buffer lookups are keyed to the active report).
             const comparisonTypedRows = enrichRowData(dataset, opIdsMap, null);
             const datasetMaxCores = resolveMaxCores(comparisonDeviceMetas[index], comparisonTypedRows);
             maxCoresByDataset.push(datasetMaxCores);

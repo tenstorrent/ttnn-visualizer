@@ -74,18 +74,23 @@ describe('PerfTable column helpers', () => {
         expect(visibleColumns.map((column) => column.key)).toContain(ColumnKeys.OpCode);
     });
 
-    it('recomputes OP Code footer span when footerSpan:0 columns are hidden', () => {
+    it('recomputes OP Code footer span when Device and Type are hidden', () => {
         const visibleColumns = getVisiblePerfColumns(Columns, [ColumnKeys.Device, ColumnKeys.BufferType]);
         const footerColumns = getFooterColumns(visibleColumns);
         const opCodeFooter = footerColumns.find((column) => column.key === ColumnKeys.OpCode);
 
-        expect(opCodeFooter?.footerSpan).toBe(1);
+        // Flags remains visible (footerSpan: 0), so Op Code still absorbs it.
+        expect(opCodeFooter?.footerSpan).toBe(2);
+        expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.Flags);
     });
 
-    it('uses the default OP Code footer span when Device and Type remain visible', () => {
+    it('absorbs Flags, Device, and Type into the OP Code footer span by default', () => {
         const footerColumns = getFooterColumns(Columns);
         const opCodeFooter = footerColumns.find((column) => column.key === ColumnKeys.OpCode);
 
-        expect(opCodeFooter?.footerSpan).toBe(3);
+        expect(opCodeFooter?.footerSpan).toBe(4);
+        expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.Flags);
+        expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.Device);
+        expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.BufferType);
     });
 });

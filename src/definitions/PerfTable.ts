@@ -207,9 +207,10 @@ export const Columns: ColumnDefinition[] = [
         colour: 'blue',
         sortable: true,
         filterable: true,
-        footerSpan: 3,
+        // Absorbs Flags + Device + Type (all footerSpan: 0) — keep in sync with getFooterColumns.
+        footerSpan: 4,
     },
-    { name: 'Flags', key: ColumnKeys.Flags },
+    { name: 'Flags', key: ColumnKeys.Flags, footerSpan: 0 },
     { name: 'Device', key: ColumnKeys.Device, footerSpan: 0 },
     { name: 'Type', key: ColumnKeys.BufferType, sortable: true, filterable: true, footerSpan: 0 },
     { name: 'Layout', key: ColumnKeys.Layout, sortable: true, filterable: true },

@@ -16,6 +16,7 @@ import {
     useOperationsList,
     usePerfFolderList,
     usePerfMeta,
+    usePerfMetas,
     usePerformanceComparisonReport,
     usePerformanceRange,
     usePerformanceReport,
@@ -32,6 +33,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useOperationsList: vi.fn(),
     usePerfFolderList: vi.fn(),
     usePerfMeta: vi.fn(),
+    usePerfMetas: vi.fn(),
     usePerformanceComparisonReport: vi.fn(),
     usePerformanceRange: vi.fn(),
     usePerformanceReport: vi.fn(),
@@ -81,6 +83,7 @@ beforeEach(() => {
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     (useOperationsList as Mock).mockReturnValue({ data: [] });
     (usePerfMeta as Mock).mockReturnValue({ data: null, isLoading: false });
+    (usePerfMetas as Mock).mockReturnValue([]);
     (useL1PressureByOperation as Mock).mockReturnValue({ status: L1PressureStatus.Unavailable, data: null });
 });
 
