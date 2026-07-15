@@ -9,13 +9,20 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfChart from '../src/components/performance/PerfChart';
 import { PERF_CHART_TABLE_FILTER_HINT } from '../src/definitions/PerformanceCharts';
-import { NS_AXIS_HOVER_FORMAT, NS_AXIS_TICK_FORMAT, getNsAxisConfig } from '../src/definitions/PlotConfigurations';
+import {
+    NS_AXIS_HOVER_FORMAT,
+    NS_AXIS_TICK_FORMAT,
+    PerfPieChartLayout,
+    getNsAxisConfig,
+} from '../src/definitions/PlotConfigurations';
 import { TEST_IDS } from '../src/definitions/TestIds';
 
 afterEach(() => {
     cleanup();
     resetPlotPropsCapture();
 });
+
+const barData = [{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>];
 
 describe('PerfChart', () => {
     it('forwards onPlotClick to Plot and shows the table-filter hint when clickable', () => {
@@ -24,7 +31,8 @@ describe('PerfChart', () => {
         render(
             <PerfChart
                 title='Test chart'
-                chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
+                chartData={barData}
+                configuration={{}}
                 onPlotClick={onPlotClick}
             />,
         );
@@ -41,7 +49,8 @@ describe('PerfChart', () => {
         render(
             <PerfChart
                 title='Test chart'
-                chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
+                chartData={barData}
+                configuration={{}}
             />,
         );
 
@@ -53,33 +62,66 @@ describe('PerfChart', () => {
             <PerfChart
                 title='Test chart'
                 subtitle={<p>active-report</p>}
-                chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
+                chartData={barData}
+                configuration={{}}
             />,
         );
 
         expect(screen.getByText('active-report')).toBeInTheDocument();
     });
 
-    it('forwards a custom layout override without injecting Cartesian axes', () => {
-        const pieLayout: Partial<Layout> = {
-            autosize: true,
-            paper_bgcolor: 'transparent',
-            showlegend: false,
-            margin: { l: 50, r: 50, b: 50, t: 50 },
-        };
+    it('forwards className onto the chart frame', () => {
+        const { container } = render(
+            <PerfChart
+                title='Test chart'
+                chartData={barData}
+                configuration={{}}
+                className='flex-chart'
+            />,
+        );
 
+        expect(container.querySelector('.chart-container.flex-chart')).toBeInTheDocument();
+    });
+
+    it('forwards a custom layout override without injecting Cartesian axes', () => {
         render(
             <PerfChart
                 title='Pie chart'
                 chartData={[{ type: 'pie', values: [1], labels: ['a'] } as Partial<PlotData>]}
-                layout={pieLayout}
+                layout={PerfPieChartLayout}
             />,
         );
 
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
-        expect(plotLayout).toEqual(pieLayout);
+        expect(plotLayout).toEqual(PerfPieChartLayout);
         expect(plotLayout?.xaxis).toBeUndefined();
         expect(plotLayout?.yaxis).toBeUndefined();
+    });
+
+    it('does not apply legend-instructions when a custom layout is supplied', () => {
+        const { container } = render(
+            <PerfChart
+                title='Pie chart'
+                chartData={[{ type: 'pie', values: [1], labels: ['a'] } as Partial<PlotData>]}
+                layout={PerfPieChartLayout}
+                className='flex-chart'
+            />,
+        );
+
+        expect(container.querySelector('.legend-instructions')).not.toBeInTheDocument();
+        expect(container.querySelector('.chart-container.flex-chart')).toBeInTheDocument();
+    });
+
+    it('applies legend-instructions for Cartesian charts with showLegend', () => {
+        const { container } = render(
+            <PerfChart
+                title='Test chart'
+                chartData={barData}
+                configuration={{ showLegend: true }}
+            />,
+        );
+
+        expect(container.querySelector('.chart-container.legend-instructions')).toBeInTheDocument();
     });
 
     it('merges configuration into the Cartesian layout from PerfChartLayout', () => {
@@ -88,7 +130,7 @@ describe('PerfChart', () => {
         render(
             <PerfChart
                 title='Test chart'
-                chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
+                chartData={barData}
                 configuration={{
                     margin: { l: 100, r: 0, b: 50, t: 0 },
                     yAxis: nsAxis,
@@ -115,7 +157,8 @@ describe('PerfChart', () => {
         render(
             <PerfChart
                 title='Test chart'
-                chartData={[{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>]}
+                chartData={barData}
+                configuration={{}}
             />,
         );
 

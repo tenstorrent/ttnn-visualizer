@@ -229,6 +229,19 @@ export const PerfChartLayout: Partial<Layout> = {
     },
 };
 
+/** Shared shell for non-Cartesian charts (pie) routed through PerfChart. */
+export const PerfPieChartLayout: Partial<Layout> = {
+    autosize: true,
+    paper_bgcolor: 'transparent',
+    margin: {
+        l: 50,
+        r: 50,
+        b: 50,
+        t: 50,
+    },
+    showlegend: false,
+};
+
 export const L1_SMALL_MARKER_COLOR: string = '#FF0000';
 export const L1_START_MARKER_COLOR: string = '#8EF32F';
 

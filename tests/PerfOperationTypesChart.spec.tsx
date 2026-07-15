@@ -10,6 +10,7 @@ import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/
 import PerfOperationTypesChart from '../src/components/performance/PerfOperationTypesChart';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
+import { PerfPieChartLayout } from '../src/definitions/PlotConfigurations';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -64,8 +65,7 @@ describe('PerfOperationTypesChart', () => {
         );
 
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
-        expect(plotLayout?.showlegend).toBe(false);
-        expect(plotLayout?.margin).toEqual({ l: 50, r: 50, b: 50, t: 50 });
+        expect(plotLayout).toEqual(PerfPieChartLayout);
         expect(plotLayout?.xaxis).toBeUndefined();
         expect(plotLayout?.yaxis).toBeUndefined();
     });

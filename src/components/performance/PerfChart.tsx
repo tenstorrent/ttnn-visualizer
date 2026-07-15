@@ -10,17 +10,28 @@ import { PerfChartConfig, PerfChartLayout, PlotConfiguration } from '../../defin
 import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerfChart.scss';
 
-interface PerfChartProps {
+interface PerfChartSharedProps {
     chartData: Partial<PlotData>[];
-    configuration?: PlotConfiguration;
     id?: string;
     title: string;
     subtitle?: ReactNode;
     className?: string;
-    /** When set, used as Plot layout instead of the Cartesian builder from configuration. */
-    layout?: Partial<Layout>;
     onPlotClick?: (event: Readonly<PlotMouseEvent>) => void;
 }
+
+/** Custom layout (e.g. pie) — mutually exclusive with configuration. */
+type PerfChartCustomLayoutProps = PerfChartSharedProps & {
+    layout: Partial<Layout>;
+    configuration?: never;
+};
+
+/** Cartesian charts — configuration required so axis titles stay compile-checked. */
+type PerfChartCartesianProps = PerfChartSharedProps & {
+    configuration: PlotConfiguration;
+    layout?: never;
+};
+
+type PerfChartProps = PerfChartCustomLayoutProps | PerfChartCartesianProps;
 
 function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
     return {
@@ -73,24 +84,19 @@ function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
     };
 }
 
-function PerfChart({
-    chartData,
-    configuration = {},
-    id,
-    title,
-    subtitle,
-    className,
-    layout: layoutOverride,
-    onPlotClick,
-}: PerfChartProps) {
+function PerfChart(props: PerfChartProps) {
+    const { chartData, id, title, subtitle, className, onPlotClick } = props;
     const isClickable = onPlotClick != null;
-    const layout = layoutOverride ?? getCartesianLayout(configuration);
+    const isCustomLayout = props.layout != null;
+    const layout = isCustomLayout ? props.layout : getCartesianLayout(props.configuration);
+    // Legend CSS hint is Cartesian-only; custom layout owns its own legend chrome.
+    const showLegendInstructions = !isCustomLayout && Boolean(props.configuration.showLegend);
 
     return (
         <PerfChartFrame
             id={id}
             className={classNames('chart-container', className, {
-                'legend-instructions': configuration.showLegend,
+                'legend-instructions': showLegendInstructions,
             })}
             title={title}
             subtitle={subtitle}

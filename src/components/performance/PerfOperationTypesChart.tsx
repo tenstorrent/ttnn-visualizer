@@ -2,10 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import type { Layout, PlotData } from 'plotly.js';
+import type { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
+import { PerfPieChartLayout } from '../../definitions/PlotConfigurations';
 import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
 import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
 import PerfChart from './PerfChart';
@@ -18,18 +19,6 @@ interface PerfOperationTypesChartProps {
     id?: string;
     onOpCodeClick?: OnOpCodeClick;
 }
-
-const PIE_LAYOUT: Partial<Layout> = {
-    autosize: true,
-    paper_bgcolor: 'transparent',
-    margin: {
-        l: 50,
-        r: 50,
-        b: 50,
-        t: 50,
-    },
-    showlegend: false,
-};
 
 function PerfOperationTypesChart({
     reportTitle,
@@ -70,7 +59,7 @@ function PerfOperationTypesChart({
             subtitle={<p>{reportTitle}</p>}
             className={className}
             chartData={[chartData]}
-            layout={PIE_LAYOUT}
+            layout={PerfPieChartLayout}
             onPlotClick={onOpCodeClick ? handlePlotClick : undefined}
         />
     );
