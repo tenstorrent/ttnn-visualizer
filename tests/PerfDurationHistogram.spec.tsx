@@ -5,8 +5,9 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import PerfOpDurationHistogramChart from '../src/components/performance/PerfOpDurationHistogramChart';
+import PerfDurationHistogram from '../src/components/performance/PerfDurationHistogram';
 import { OpType } from '../src/definitions/Performance';
+import { PerfChartId } from '../src/definitions/PerformanceCharts';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { TestProviders } from './helpers/TestProviders';
@@ -26,18 +27,33 @@ const row = (deviceTime: number): TypedPerfTableRow =>
 
 afterEach(cleanup);
 
-describe('PerfOpDurationHistogramChart', () => {
+describe('PerfDurationHistogram', () => {
     it('renders the histogram container and chart title', () => {
         render(
             <TestProviders>
-                <PerfOpDurationHistogramChart
+                <PerfDurationHistogram
                     rows={[row(5)]}
-                    opCodeOptions={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                    selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
                 />
             </TestProviders>,
         );
 
         expect(screen.getByTestId(TEST_IDS.PERF_DURATION_HISTOGRAM)).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Op Duration Distribution' })).toBeInTheDocument();
+        expect(document.getElementById(PerfChartId.OpDurationHistogram)).toBeInTheDocument();
+    });
+
+    it('keeps the chart anchor id when there are no eligible ops', () => {
+        render(
+            <TestProviders>
+                <PerfDurationHistogram
+                    rows={[row(0)]}
+                    selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                />
+            </TestProviders>,
+        );
+
+        expect(document.getElementById(PerfChartId.OpDurationHistogram)).toBeInTheDocument();
+        expect(screen.getByText('No device ops available for duration histogram.')).toBeInTheDocument();
     });
 });

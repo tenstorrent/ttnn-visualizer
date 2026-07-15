@@ -6,26 +6,27 @@ import { useMemo } from 'react';
 import { PlotData } from 'plotly.js';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { MAX_LEGEND_OP_CODES } from '../../definitions/PerfDurationHistogram';
+import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { TEST_IDS } from '../../definitions/TestIds';
 import buildDurationHistogram from '../../functions/buildDurationHistogram';
+import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
 import PerfChart from './PerfChart';
+import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerfDurationHistogram.scss';
 
-interface DurationHistogramPointMeta {
-    totalCount: number;
-    sampleOps: string[];
-}
+/** Plotly hovertemplate indexes: [0]=rawOpCode, [1]=bucketTotal, [2]=sampleOpsSummary */
+type DurationHistogramCustomData = [string, number, string];
 
 interface PerfDurationHistogramProps {
-    id: string;
-    title: string;
     rows: TypedPerfTableRow[];
-    opCodeOptions: Marker[];
+    selectedOpCodes: Marker[];
+    onOpCodeClick?: OnOpCodeClick;
 }
 
-function PerfDurationHistogram({ id, title, rows, opCodeOptions }: PerfDurationHistogramProps) {
+function PerfDurationHistogram({ rows, selectedOpCodes, onOpCodeClick }: PerfDurationHistogramProps) {
     const histogramData = useMemo(() => buildDurationHistogram(rows), [rows]);
+    const handlePlotClick = useHandlePerfChartPlotClick(onOpCodeClick);
 
     const bucketLabels = useMemo(
         () => histogramData.buckets.map((bucket) => bucket.bucket.label),
@@ -33,8 +34,8 @@ function PerfDurationHistogram({ id, title, rows, opCodeOptions }: PerfDurationH
     );
 
     const colourByOpCode = useMemo(
-        () => new Map(opCodeOptions.map((marker) => [marker.opCode, marker.colour])),
-        [opCodeOptions],
+        () => new Map(selectedOpCodes.map((marker) => [marker.opCode, marker.colour])),
+        [selectedOpCodes],
     );
 
     const opCodesInHistogram = useMemo(() => {
@@ -47,27 +48,28 @@ function PerfDurationHistogram({ id, title, rows, opCodeOptions }: PerfDurationH
     }, [histogramData.buckets]);
 
     const chartData = useMemo(() => {
-        return opCodesInHistogram.map((rawOpCode) => {
-            const customData: DurationHistogramPointMeta[] = histogramData.buckets.map((bucket) => {
-                const segment = bucket.segmentsByOpCode.find((entry) => entry.rawOpCode === rawOpCode);
+        const segmentMaps = histogramData.buckets.map(
+            (bucket) => new Map(bucket.segmentsByOpCode.map((segment) => [segment.rawOpCode, segment])),
+        );
 
-                return {
-                    totalCount: bucket.totalCount,
-                    sampleOps: segment?.sampleOps ?? [],
-                };
+        return opCodesInHistogram.map((rawOpCode) => {
+            const customData: DurationHistogramCustomData[] = histogramData.buckets.map((bucket, bucketIndex) => {
+                const segment = segmentMaps[bucketIndex].get(rawOpCode);
+                const sampleOpsSummary = (segment?.sampleOps ?? []).join(', ') || '—';
+
+                return [rawOpCode, bucket.totalCount, sampleOpsSummary];
             });
 
             return {
                 x: bucketLabels,
-                y: histogramData.buckets.map((bucket) => {
-                    const segment = bucket.segmentsByOpCode.find((entry) => entry.rawOpCode === rawOpCode);
-                    return segment?.count ?? 0;
+                y: histogramData.buckets.map((_, bucketIndex) => {
+                    return segmentMaps[bucketIndex].get(rawOpCode)?.count ?? 0;
                 }),
                 type: 'bar',
                 name: rawOpCode,
                 customdata: customData as unknown as PlotData['customdata'],
                 hovertemplate:
-                    '%{x}<br />%{fullData.name}: %{y}<br />Bucket total: %{customdata.totalCount}<extra></extra>',
+                    '%{x}<br />%{fullData.name}: %{y}<br />Bucket total: %{customdata[1]}<br />Samples: %{customdata[2]}<extra></extra>',
                 marker: {
                     color: colourByOpCode.get(rawOpCode),
                 },
@@ -96,21 +98,40 @@ function PerfDurationHistogram({ id, title, rows, opCodeOptions }: PerfDurationH
         },
     };
 
+    const title = PERF_CHART_LABELS[PerfChartId.OpDurationHistogram];
+
     if (histogramData.buckets.length === 0) {
-        return <p className='perf-duration-histogram-empty'>No device ops available for duration histogram.</p>;
+        return (
+            <div
+                className='perf-duration-histogram-chart'
+                aria-label='Op duration distribution'
+            >
+                <PerfChartFrame
+                    id={PerfChartId.OpDurationHistogram}
+                    title={title}
+                    isClickable={false}
+                >
+                    <p className='perf-duration-histogram-empty'>No device ops available for duration histogram.</p>
+                </PerfChartFrame>
+            </div>
+        );
     }
 
     return (
         <div
-            className='perf-duration-histogram'
+            className='perf-duration-histogram-chart'
+            aria-label='Op duration distribution'
             data-testid={TEST_IDS.PERF_DURATION_HISTOGRAM}
         >
-            <PerfChart
-                id={id}
-                title={title}
-                chartData={chartData}
-                configuration={configuration}
-            />
+            <div className='perf-duration-histogram'>
+                <PerfChart
+                    id={PerfChartId.OpDurationHistogram}
+                    title={title}
+                    chartData={chartData}
+                    configuration={configuration}
+                    onPlotClick={onOpCodeClick ? handlePlotClick : undefined}
+                />
+            </div>
         </div>
     );
 }

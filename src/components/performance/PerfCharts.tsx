@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import PerfOpDurationHistogramChart from './PerfOpDurationHistogramChart';
+import PerfDurationHistogram from './PerfDurationHistogram';
 import PerfDeviceKernelDurationChart from './PerfDeviceKernelDurationChart';
 import PerfDeviceKernelRuntimeChart from './PerfDeviceKernelRuntimeChart';
 import PerfOpCountVsRuntimeChart from './PerfOpCountVsRuntimeChart';
@@ -13,24 +13,19 @@ interface PerfChartsProps {
     filteredPerfData: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
     selectedOpCodes: Marker[];
-    opCodeOptions: Marker[];
     onOpCodeClick?: OnOpCodeClick;
 }
 
-const PerfCharts = ({
-    filteredPerfData,
-    comparisonData,
-    selectedOpCodes,
-    opCodeOptions,
-    onOpCodeClick,
-}: PerfChartsProps) => {
+const PerfCharts = ({ filteredPerfData, comparisonData, selectedOpCodes, onOpCodeClick }: PerfChartsProps) => {
+    // Histogram is intentionally single-report: comparison faceting is deferred.
     const data = [filteredPerfData, ...(comparisonData || [])].filter((set) => set.length > 0);
 
     return (
         <>
-            <PerfOpDurationHistogramChart
+            <PerfDurationHistogram
                 rows={filteredPerfData}
-                opCodeOptions={opCodeOptions}
+                selectedOpCodes={selectedOpCodes}
+                onOpCodeClick={onOpCodeClick}
             />
 
             <PerfOpCountVsRuntimeChart

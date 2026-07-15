@@ -13,32 +13,40 @@ import { TypedPerfTableRow } from '../definitions/PerfTable';
 import { formatDurationBucketRange } from './formatDurationBucketRange';
 
 const isEligibleHistogramRow = (row: TypedPerfTableRow): boolean =>
-    row.op_type !== OpType.SIGNPOST && row.device_time !== null && row.device_time !== undefined;
+    row.op_type !== OpType.SIGNPOST &&
+    row.device_time !== null &&
+    row.device_time !== undefined &&
+    Number.isFinite(row.device_time) &&
+    row.device_time > 0;
 
-const buildLogDecadeBuckets = (rows: TypedPerfTableRow[]): DurationBucket[] => {
-    const positiveDurations = rows
-        .map((row) => row.device_time)
-        .filter((duration): duration is number => duration !== null && duration !== undefined && duration > 0);
+const getMinMaxDuration = (durations: number[]): { min: number; max: number } => {
+    let min = durations[0];
+    let max = durations[0];
 
-    const hasNonPositive = rows.some((row) => (row.device_time ?? 0) <= 0);
-
-    if (positiveDurations.length === 0) {
-        return [
-            {
-                bucketIndex: 0,
-                minUs: 0,
-                maxUs: 1,
-                label: formatDurationBucketRange(0, 1),
-            },
-        ];
+    for (let index = 1; index < durations.length; index++) {
+        const duration = durations[index];
+        if (duration < min) {
+            min = duration;
+        }
+        if (duration > max) {
+            max = duration;
+        }
     }
 
-    const minExponent = Math.floor(Math.log10(Math.min(...positiveDurations)));
-    const maxExponent = Math.ceil(Math.log10(Math.max(...positiveDurations)));
+    return { min, max };
+};
+
+const buildLogDecadeBuckets = (rows: TypedPerfTableRow[]): DurationBucket[] => {
+    const positiveDurations = rows.map((row) => row.device_time as number);
+    const { min, max } = getMinMaxDuration(positiveDurations);
+
+    // floor(log10(max)) so the top decade can contain max; ceil would leave an empty high bucket.
+    const minExponent = Math.floor(Math.log10(min));
+    const maxExponent = Math.floor(Math.log10(max));
 
     return Array.from({ length: maxExponent - minExponent + 1 }, (_, offset) => {
         const exponent = minExponent + offset;
-        const minUs = exponent === minExponent && hasNonPositive ? 0 : 10 ** exponent;
+        const minUs = 10 ** exponent;
         const maxUs = 10 ** (exponent + 1);
 
         return {
@@ -67,7 +75,7 @@ function buildDurationHistogram(rows: TypedPerfTableRow[]): DurationHistogramDat
     const rowsByBucketIndex = new Map<number, TypedPerfTableRow[]>();
 
     eligibleRows.forEach((row) => {
-        const bucket = findBucketForDuration(row.device_time ?? 0, buckets);
+        const bucket = findBucketForDuration(row.device_time as number, buckets);
         const bucketRows = rowsByBucketIndex.get(bucket.bucketIndex) ?? [];
         bucketRows.push(row);
         rowsByBucketIndex.set(bucket.bucketIndex, bucketRows);
@@ -75,16 +83,16 @@ function buildDurationHistogram(rows: TypedPerfTableRow[]): DurationHistogramDat
 
     const histogramBuckets: DurationHistogramBucket[] = buckets.map((bucket) => {
         const bucketRows = rowsByBucketIndex.get(bucket.bucketIndex) ?? [];
-        const countByOpCode = new Map<string, TypedPerfTableRow[]>();
+        const rowsByOpCode = new Map<string, TypedPerfTableRow[]>();
 
         bucketRows.forEach((row) => {
             const opCode = row.raw_op_code ?? 'unknown';
-            const opRows = countByOpCode.get(opCode) ?? [];
+            const opRows = rowsByOpCode.get(opCode) ?? [];
             opRows.push(row);
-            countByOpCode.set(opCode, opRows);
+            rowsByOpCode.set(opCode, opRows);
         });
 
-        const segmentsByOpCode = [...countByOpCode.entries()].map(([rawOpCode, opRows]) => ({
+        const segmentsByOpCode = [...rowsByOpCode.entries()].map(([rawOpCode, opRows]) => ({
             rawOpCode,
             count: opRows.length,
             sampleOps: [...opRows]
