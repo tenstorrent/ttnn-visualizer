@@ -59,6 +59,35 @@ def _get_client_username(server_mode: bool) -> str | None:
         return None
 
 
+def _build_spa_client_config(app: Flask) -> dict:
+    """Shape of ``window.TTNN_VISUALIZER_CONFIG`` injected into the SPA shell."""
+    server_mode = app.config["SERVER_MODE"]
+    js_config = {
+        "SERVER_MODE": server_mode,
+        "BASE_PATH": app.config["BASE_PATH"],
+        "TT_METAL_HOME": app.config["TT_METAL_HOME"],
+        "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
+        "USERNAME": _get_client_username(server_mode),
+    }
+
+    # SSH dialog defaults are local-dev convenience only. Never publish
+    # operator-configured paths/ports under SERVER_MODE (same posture as USERNAME).
+    if not server_mode:
+        js_config["SSH_DEFAULT_PORT"] = app.config["SSH_DEFAULT_PORT"]
+        js_config["SSH_DEFAULT_PROFILER_PATH"] = app.config["SSH_DEFAULT_PROFILER_PATH"]
+        js_config["SSH_DEFAULT_PERFORMANCE_PATH"] = app.config[
+            "SSH_DEFAULT_PERFORMANCE_PATH"
+        ]
+
+    return js_config
+
+
+def _serialize_spa_js_config(js_config: dict) -> str:
+    """Embed client config in a ``<script>`` tag without ``</script>`` breakout."""
+    payload = json.dumps(js_config).replace("<", "\\u003c")
+    return f"window.TTNN_VISUALIZER_CONFIG = {payload};"
+
+
 def create_app(settings_override=None):
     from ttnn_visualizer.views import api
 
@@ -121,14 +150,7 @@ def create_app(settings_override=None):
             if path.startswith("static/"):
                 abort(404)  # Pass control to Flask's static view
 
-            js_config = {
-                "SERVER_MODE": app.config["SERVER_MODE"],
-                "BASE_PATH": app.config["BASE_PATH"],
-                "TT_METAL_HOME": app.config["TT_METAL_HOME"],
-                "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
-                "USERNAME": _get_client_username(app.config["SERVER_MODE"]),
-            }
-            js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
+            js = _serialize_spa_js_config(_build_spa_client_config(app))
 
             with open(os.path.join(app.static_folder, "index.html")) as f:
                 html = f.read()
