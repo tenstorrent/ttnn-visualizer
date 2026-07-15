@@ -66,6 +66,8 @@ describe('PerfOperationTypesChart', () => {
 
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
         expect(plotLayout).toEqual(PerfPieChartLayout);
+        expect(plotLayout).not.toBe(PerfPieChartLayout);
+        expect(plotLayout?.margin).not.toBe(PerfPieChartLayout.margin);
         expect(plotLayout?.xaxis).toBeUndefined();
         expect(plotLayout?.yaxis).toBeUndefined();
     });
@@ -113,6 +115,16 @@ describe('PerfOperationTypesChart', () => {
         );
 
         expect(getPlotInstances()).toHaveLength(2);
+
+        const [activeLayout, comparisonLayout] = getPlotInstances().map(
+            (instance) => instance?.layout as Partial<Layout> | undefined,
+        );
+        expect(activeLayout).toEqual(PerfPieChartLayout);
+        expect(comparisonLayout).toEqual(PerfPieChartLayout);
+        expect(activeLayout).not.toBe(PerfPieChartLayout);
+        expect(comparisonLayout).not.toBe(PerfPieChartLayout);
+        expect(activeLayout).not.toBe(comparisonLayout);
+        expect(activeLayout?.margin).not.toBe(comparisonLayout?.margin);
 
         const comparisonOnClick = getPlotInstances()[1]?.onClick as
             | ((event: { points: { customdata: string }[] }) => void)

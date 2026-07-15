@@ -95,6 +95,8 @@ describe('PerfChart', () => {
 
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
         expect(plotLayout).toEqual(PerfPieChartLayout);
+        expect(plotLayout).not.toBe(PerfPieChartLayout);
+        expect(plotLayout?.margin).not.toBe(PerfPieChartLayout.margin);
         expect(plotLayout?.xaxis).toBeUndefined();
         expect(plotLayout?.yaxis).toBeUndefined();
     });
@@ -163,6 +165,12 @@ describe('PerfChart', () => {
         // Nested title fonts must be cloned so Plotly cannot mutate the shared layout defaults.
         expect(plotLayout?.yaxis?.title?.font).toEqual(PerfChartLayout.yaxis?.title?.font);
         expect(plotLayout?.yaxis?.title?.font).not.toBe(PerfChartLayout.yaxis?.title?.font);
+        // Base title fields beyond font must survive merge (naive title replace would drop these).
+        expect(plotLayout?.yaxis?.title?.standoff).toBe(PerfChartLayout.yaxis?.title?.standoff);
+        expect(plotLayout?.yaxis?.automargin).toBe(true);
+        expect(plotLayout?.yaxis2?.title?.standoff).toBe(PerfChartLayout.yaxis2?.title?.standoff);
+        expect(plotLayout?.yaxis2?.automargin).toBe(true);
+        expect(plotLayout?.yaxis2?.side).toBe('right');
     });
 
     it('applies an explicit all-zero margin rather than falling back to defaults', () => {

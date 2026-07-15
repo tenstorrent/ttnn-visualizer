@@ -11,6 +11,11 @@ import PerfCoreCountUtilizationChart from '../src/components/performance/PerfCor
 import { PERF_CHART_LABELS, PerfChartId } from '../src/definitions/PerformanceCharts';
 import { TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
+import {
+    CORE_COUNT_AXIS_TICK_FORMAT,
+    NS_AXIS_HOVER_FORMAT,
+    PERF_CHART_WIDE_LEFT_MARGIN,
+} from '../src/definitions/PlotConfigurations';
 import { TestProviders } from './helpers/TestProviders';
 
 const row = (cores: number): TypedPerfTableRow =>
@@ -31,7 +36,7 @@ afterEach(() => {
 });
 
 describe('PerfCoreCountUtilizationChart', () => {
-    it('honors its configuration margins and legend frame class', () => {
+    it('honours its configuration margins, core-count axis formats, and legend frame class', () => {
         const { container } = render(
             <TestProviders>
                 <PerfCoreCountUtilizationChart
@@ -45,7 +50,11 @@ describe('PerfCoreCountUtilizationChart', () => {
         expect(screen.getByText(PERF_CHART_LABELS[PerfChartId.MatmulCoreCountUtilization])).toBeInTheDocument();
 
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
-        expect(plotLayout?.margin).toEqual({ l: 100, r: 0, b: 50, t: 0 });
+        expect(plotLayout?.margin).toEqual(PERF_CHART_WIDE_LEFT_MARGIN);
+        expect(plotLayout?.yaxis?.title?.text).toBe('Core Count');
+        expect(plotLayout?.yaxis?.tickformat).toBe(CORE_COUNT_AXIS_TICK_FORMAT);
+        expect(plotLayout?.yaxis?.hoverformat).toBe(NS_AXIS_HOVER_FORMAT);
+        expect(plotLayout?.yaxis?.range).toEqual([0, 64]);
         expect(plotLayout?.showlegend).toBe(true);
         expect(container.querySelector('.chart-container.legend-instructions')).toBeInTheDocument();
     });

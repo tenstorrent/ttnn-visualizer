@@ -6,12 +6,7 @@ import type { Layout, LayoutAxis, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
 import type { ReactNode } from 'react';
 import Plot from '../../libs/PlotComponent';
-import {
-    AxisConfig,
-    PerfChartConfig,
-    PerfChartLayout,
-    PlotConfiguration,
-} from '../../definitions/PlotConfigurations';
+import { AxisConfig, PerfChartConfig, PerfChartLayout, PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerfChart.scss';
 
@@ -30,7 +25,7 @@ type PerfChartCustomLayoutProps = PerfChartSharedProps & {
     configuration?: never;
 };
 
-/** Cartesian charts — configuration required so axis titles stay compile-checked. */
+/** Cartesian charts — mutually exclusive with custom `layout` (e.g. pie). */
 type PerfChartCartesianProps = PerfChartSharedProps & {
     configuration: PlotConfiguration;
     layout?: never;
@@ -51,14 +46,19 @@ function mergeAxis(base: Partial<LayoutAxis> | undefined, axis?: AxisConfig): Pa
     };
 }
 
-function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
-    const defaultMargin = PerfChartLayout.margin ?? { l: 50, r: 0, b: 50, t: 0 };
+function cloneCustomLayout(layout: Partial<Layout>): Partial<Layout> {
+    return {
+        ...layout,
+        ...(layout.margin ? { margin: { ...layout.margin } } : {}),
+    };
+}
 
+function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
     return {
         ...PerfChartLayout,
         showlegend: configuration.showLegend || false,
         // Clone margins — never hand Plotly the shared PerfChartLayout.margin reference.
-        margin: { ...(configuration.margin ?? defaultMargin) },
+        margin: { ...(configuration.margin ?? PerfChartLayout.margin!) },
         legend: {
             orientation: 'h',
             font: {
@@ -82,7 +82,8 @@ function PerfChart(props: PerfChartProps) {
     const { chartData, id, title, subtitle, className, onPlotClick } = props;
     const isClickable = onPlotClick != null;
     const isCustomLayout = props.layout != null;
-    const layout = isCustomLayout ? props.layout : getCartesianLayout(props.configuration);
+    // Clone custom layouts too — pie charts share PerfPieChartLayout as a module singleton.
+    const layout = isCustomLayout ? cloneCustomLayout(props.layout) : getCartesianLayout(props.configuration);
     // Legend CSS hint is Cartesian-only; custom layout owns its own legend chrome.
     const showLegendInstructions = !isCustomLayout && Boolean(props.configuration.showLegend);
 

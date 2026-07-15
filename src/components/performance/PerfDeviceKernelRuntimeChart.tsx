@@ -7,7 +7,12 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
-import { PlotConfiguration, getNsAxisConfig } from '../../definitions/PlotConfigurations';
+import {
+    PERF_CHART_WIDE_LEFT_MARGIN,
+    PlotConfiguration,
+    getCoreCountAxisConfig,
+    getNsAxisConfig,
+} from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
@@ -61,23 +66,13 @@ function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntime
     );
 
     const configuration: PlotConfiguration = {
-        margin: {
-            l: 100,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
+        margin: PERF_CHART_WIDE_LEFT_MARGIN,
         showLegend: true,
         xAxis: {
             title: { text: 'Operation' },
             range: [0, maxDataSize],
         },
-        yAxis: {
-            title: { text: 'Core Count' },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-            range: [0, maxCores],
-        },
+        yAxis: getCoreCountAxisConfig(maxCores),
         yAxis2: getNsAxisConfig('Device Kernel Duration (ns)'),
     };
 

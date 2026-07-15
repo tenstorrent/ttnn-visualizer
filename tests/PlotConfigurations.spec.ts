@@ -4,8 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    CORE_COUNT_AXIS_TICK_FORMAT,
     NS_AXIS_HOVER_FORMAT,
     NS_AXIS_TICK_FORMAT,
+    getCoreCountAxisConfig,
     getNsAxisConfig,
 } from '../src/definitions/PlotConfigurations';
 
@@ -35,5 +37,28 @@ describe('getNsAxisConfig', () => {
         expect(axis.tickformat).toBe('e');
         expect(axis.tickvals).toEqual([0, 500_000, 1_000_000]);
         expect(axis.hoverformat).toBe(',.2r');
+    });
+
+    it('allows title override without dropping ns format defaults', () => {
+        const axis = getNsAxisConfig('A', { title: { text: 'B' } });
+
+        expect(axis.title).toEqual({ text: 'B' });
+        expect(axis.tickformat).toBe(NS_AXIS_TICK_FORMAT);
+        expect(axis.hoverformat).toBe(NS_AXIS_HOVER_FORMAT);
+    });
+});
+
+describe('getCoreCountAxisConfig', () => {
+    it('uses plain integer ticks (not ns thousands separators) and a max-cores range', () => {
+        const axis = getCoreCountAxisConfig(64);
+
+        expect(axis).toEqual({
+            title: { text: 'Core Count' },
+            tickformat: 'd',
+            hoverformat: NS_AXIS_HOVER_FORMAT,
+            range: [0, 64],
+        });
+        expect(CORE_COUNT_AXIS_TICK_FORMAT).toBe('d');
+        expect(CORE_COUNT_AXIS_TICK_FORMAT).not.toBe(NS_AXIS_TICK_FORMAT);
     });
 });
