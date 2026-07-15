@@ -42,7 +42,7 @@ interface PerformanceTableProps {
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     reportName: string | null;
-    showHashColumn: boolean;
+    maxCores: number;
     hasL1PressureData?: boolean;
     isLoading?: boolean;
     // Identifies which comparison dataset holds the active profiler report's rows. The
@@ -60,7 +60,7 @@ const PerformanceTable = ({
     provideMatmulAdvice,
     hiliteHighDispatch,
     reportName,
-    showHashColumn,
+    maxCores,
     hasL1PressureData = false,
     isLoading = false,
     activeReportComparisonIndex = null,
@@ -121,10 +121,9 @@ const PerformanceTable = ({
                 hasOpIds: opIdsMap.length > 0,
                 hasL1PressureData,
                 hiliteHighDispatch,
-                showHashColumn,
                 hasNpe: Boolean(npeManifest && npeManifest.length > 0),
             }),
-        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, showHashColumn, npeManifest],
+        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, npeManifest],
     );
 
     const visibleColumns = useMemo(
@@ -395,7 +394,13 @@ const PerformanceTable = ({
                                                     >
                                                         {comparisonKeys.includes(h.key) &&
                                                             subRow &&
-                                                            formatCell(subRow, h, operationsList, filters?.[h.key])}
+                                                            formatCell(
+                                                                subRow,
+                                                                h,
+                                                                operationsList,
+                                                                filters?.[h.key],
+                                                                true,
+                                                            )}
                                                     </td>
                                                 ))}
                                             </tr>
@@ -458,8 +463,8 @@ const PerformanceTable = ({
             )}
 
             <PerfDeviceArchitecture
-                data={data}
                 reportName={reportName}
+                maxCores={maxCores}
             />
 
             {mergeDevices && <PerfMultiDeviceNotice />}
