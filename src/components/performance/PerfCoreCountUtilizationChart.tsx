@@ -7,7 +7,12 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
-import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
+import {
+    PERF_CHART_WIDE_LEFT_MARGIN,
+    PlotConfiguration,
+    getCoreCountAxisConfig,
+    getDeviceUtilizationAxisConfig,
+} from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
@@ -61,23 +66,13 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores, chartId }: Per
     const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
 
     const configuration: PlotConfiguration = {
-        margin: {
-            l: 100,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
+        margin: PERF_CHART_WIDE_LEFT_MARGIN,
         showLegend: true,
         xAxis: {
             title: { text: 'Operation' },
             range: [0, getAxisUpperRange(datasets)],
         },
-        yAxis: {
-            title: { text: 'Core Count' },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-            range: [0, maxCores],
-        },
+        yAxis: getCoreCountAxisConfig(maxCores),
         yAxis2: getDeviceUtilizationAxisConfig(maxY2Value),
     };
 

@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PlotConfiguration, getNsAxisConfig } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
@@ -45,13 +45,7 @@ function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurati
                 text: 'Core Count',
             },
         },
-        yAxis: {
-            title: {
-                text: 'Device Kernel Duration (ns)',
-            },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-        },
+        yAxis: getNsAxisConfig('Device Kernel Duration (ns)'),
     };
 
     return (

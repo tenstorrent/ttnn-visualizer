@@ -224,6 +224,26 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         .l1-fullness-attributes {
             font-size: 12px;
         }
+
+        .perf-heuristic-flags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            max-width: 180px;
+        }
+    }
+
+    .perf-heuristic-flag-tooltip {
+        max-width: 260px;
+
+        p {
+            margin: 4px 0 0;
+        }
+
+        .perf-heuristic-flag-detail {
+            font-family: $base-font;
+            opacity: 0.85;
+        }
     }
 
     .table-header {

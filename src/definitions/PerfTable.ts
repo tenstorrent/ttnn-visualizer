@@ -4,6 +4,7 @@
 
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { BufferType as BufferTypeEnum } from '../model/BufferType';
+import { PerfHeuristicFlag } from './PerfHeuristics';
 import { OpType } from './Performance';
 
 export interface ColumnDefinition {
@@ -121,6 +122,8 @@ export interface TypedPerfTableRow extends Omit<
     l1_free_segments: number | null;
     l1_largest_free: number | null;
     l1_largest_free_percent: number | null;
+    heuristicFlags?: PerfHeuristicFlag[];
+    heuristicFlagDetails?: Partial<Record<PerfHeuristicFlag, string>>;
 }
 
 export const MarkerColours = [
@@ -167,6 +170,7 @@ export enum ColumnKeys {
     TotalPercent = 'total_percent',
     Bound = 'bound',
     OpCode = 'op_code',
+    Flags = 'heuristicFlags',
     Device = 'device',
     BufferType = 'buffer_type',
     DeviceTime = 'device_time',
@@ -203,8 +207,10 @@ export const Columns: ColumnDefinition[] = [
         colour: 'blue',
         sortable: true,
         filterable: true,
-        footerSpan: 3,
+        // Absorbs Flags + Device + Type (all footerSpan: 0) — keep in sync with getFooterColumns.
+        footerSpan: 4,
     },
+    { name: 'Flags', key: ColumnKeys.Flags, footerSpan: 0 },
     { name: 'Device', key: ColumnKeys.Device, footerSpan: 0 },
     { name: 'Type', key: ColumnKeys.BufferType, sortable: true, filterable: true, footerSpan: 0 },
     { name: 'Layout', key: ColumnKeys.Layout, sortable: true, filterable: true },
@@ -216,7 +222,6 @@ export const Columns: ColumnDefinition[] = [
     { name: 'FLOPS', key: ColumnKeys.Flops, unit: 'TFLOPS', decimals: 1, sortable: true },
     { name: 'FLOPS %', key: ColumnKeys.FlopsPercent, unit: '%', decimals: 1, sortable: true },
     { name: 'Math Fidelity', key: ColumnKeys.MathFidelity, colour: 'cyan' },
-    { name: 'Cache Hit', key: ColumnKeys.CacheHit, colour: 'magenta', filterable: true },
     // Per-RISC kernel durations (#1518). Stored in µs (converted from the raw ns CSV values in
     // enrichRowData); 2dp keeps sub-microsecond contributions legible alongside Device Time.
     { name: 'Kernel Duration', key: ColumnKeys.DeviceKernelDuration, unit: 'µs', decimals: 2, sortable: true },
@@ -226,6 +231,8 @@ export const Columns: ColumnDefinition[] = [
     { name: 'TRISC_1', key: ColumnKeys.Trisc1KernelDuration, unit: 'µs', decimals: 2, sortable: true },
     { name: 'TRISC_2', key: ColumnKeys.Trisc2KernelDuration, unit: 'µs', decimals: 2, sortable: true },
     { name: 'ERISC', key: ColumnKeys.EriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'Hash', key: ColumnKeys.Hash },
+    { name: 'Cache Hit', key: ColumnKeys.CacheHit, colour: 'magenta', filterable: true },
 ];
 
 export const L1PressureColumns: ColumnDefinition[] = [
@@ -234,16 +241,16 @@ export const L1PressureColumns: ColumnDefinition[] = [
 
 const OP_ID_INSERTION_POINT = 1;
 const L1_PRESSURE_INSERTION_POINT = 2;
-const HIGH_DISPATCH_INSERTION_POINT = 5;
-const CACHE_HIT_INSERTION_POINT = 15;
+const HIGH_DISPATCH_INSERTION_POINT = 6;
 
 export const LOCKED_PERF_COLUMN_KEYS: ColumnKeys[] = [ColumnKeys.Id, ColumnKeys.OpCode];
+
+export const DISPLAY_COLUMNS_LABEL = 'Display columns';
 
 export interface EligiblePerfColumnsFlags {
     hasOpIds: boolean;
     hasL1PressureData: boolean;
     hiliteHighDispatch: boolean;
-    showHashColumn: boolean;
     hasNpe: boolean;
 }
 
@@ -255,9 +262,7 @@ export function getEligiblePerfColumns(flags: EligiblePerfColumnsFlags): ColumnD
         ...(flags.hasL1PressureData ? L1PressureColumns : []),
         ...Columns.slice(L1_PRESSURE_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
         ...(flags.hiliteHighDispatch ? [{ name: 'Slow', key: ColumnKeys.HighDispatch }] : []),
-        ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT, CACHE_HIT_INSERTION_POINT),
-        ...(flags.showHashColumn ? [{ name: 'Hash', key: ColumnKeys.Hash }] : []),
-        ...Columns.slice(CACHE_HIT_INSERTION_POINT),
+        ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT),
         ...(flags.hasNpe ? [{ name: 'NPE', key: ColumnKeys.GlobalCallCount }] : []),
     ];
 }
@@ -310,6 +315,7 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.Layout,
     ColumnKeys.MathFidelity,
     ColumnKeys.OpCode,
+    ColumnKeys.Flags,
     ColumnKeys.OpToOpGap,
     ColumnKeys.TotalPercent,
     ColumnKeys.DeviceKernelDuration,
@@ -319,6 +325,8 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.Trisc1KernelDuration,
     ColumnKeys.Trisc2KernelDuration,
     ColumnKeys.EriscKernelDuration,
+    ColumnKeys.Hash,
+    ColumnKeys.CacheHit,
 ];
 
 export const signpostRowDefaults = Object.freeze({

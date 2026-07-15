@@ -5,10 +5,12 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Layout } from 'plotly.js';
 import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfOpCountVsRuntimeChart from '../src/components/performance/PerfOpCountVsRuntimeChart';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
+import { PerfChartLayout } from '../src/definitions/PlotConfigurations';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -102,5 +104,19 @@ describe('PerfOpCountVsRuntimeChart', () => {
 
         expect(screen.queryByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).not.toBeInTheDocument();
         expect(getPlotInstances()[0]?.onClick).toBeUndefined();
+    });
+
+    it('uses PerfChartLayout margins rather than a zero margin override', () => {
+        render(
+            <TestProviders>
+                <PerfOpCountVsRuntimeChart
+                    datasets={[[row('Matmul')]]}
+                    selectedOpCodes={[matmulMarker]}
+                />
+            </TestProviders>,
+        );
+
+        const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
+        expect(plotLayout?.margin).toEqual(PerfChartLayout.margin);
     });
 });
