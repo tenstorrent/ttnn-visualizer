@@ -55,6 +55,7 @@ import { MlirFilterMode, buildFilterMatcher, resolveFilterMatches } from './mlir
 import MlirNodeBodyToggles from './MlirNodeBodyToggles';
 import MlirExpandCollapseControls from './MlirExpandCollapseControls';
 import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
+import { createMoveGroupBatcher } from './mlirMoveGroupBatch';
 import { getNamespaceSegments } from './mlirGraphHelpers';
 
 const FILTER_DIM_OPACITY = 0.18;
@@ -110,6 +111,9 @@ type NodeTopologyEntry = {
 
 const EMPTY_TOPOLOGY: Map<string, NodeTopologyEntry> = new Map();
 const EMPTY_VISIBLE_OP_IDS: Set<string> = new Set();
+// Shared empty result so an idle filter yields a stable `matchedNodesInOrder`
+// identity (no fresh `[]` per render).
+const EMPTY_MATCHED_ORDER: string[] = [];
 
 // Derived once per worker rebuild in `applyBuiltGraph`. Structural fields
 // (parentId, type, groupKind, collapsedSubgraphNamespace, subgraphToggleState)
@@ -438,11 +442,23 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // below clears the other two — whichever gesture fires last wins.
     const pendingFitAllRef = useRef(false);
     const hasFitInitiallyRef = useRef(false);
-    // Group-drag mousemove deltas coalesce into a single per-frame write.
-    // Read in `moveGroup` / `flushMoveGroup`; also cleared by
-    // `applyBuiltGraph` to drop in-flight drags across a worker rebuild.
-    const moveGroupPendingRef = useRef<Map<string, { dx: number; dy: number }>>(new Map());
-    const moveGroupRafRef = useRef<number | null>(null);
+    // Group-drag mousemove deltas coalesce into a single per-frame write via a
+    // RAF batcher. `applyBuiltGraph` cancels it so an in-flight drag delta
+    // can't land on top of a fresh worker placement; the unmount effect cancels
+    // it to release a dangling frame. `updateNode` from `useReactFlow` is
+    // referentially stable, so the batcher is created once.
+    const moveGroupBatcher = useMemo(
+        () =>
+            createMoveGroupBatcher({
+                applyDelta: (groupId, dx, dy) =>
+                    updateNode(groupId, (n) => ({
+                        position: { x: n.position.x + dx, y: n.position.y + dy },
+                    })),
+                requestFrame: (callback) => window.requestAnimationFrame(callback),
+                cancelFrame: (handle) => window.cancelAnimationFrame(handle),
+            }),
+        [updateNode],
+    );
 
     // No graph-id reset effect: `MlGraphInner` is keyed by `graph.id` in
     // `MlGraphWithProvider`, so React fully remounts the subtree when the
@@ -548,11 +564,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
             // Drop any in-flight group-drag delta: the pending RAF would
             // otherwise apply it against the just-committed canonical
             // position (shift by delta on top of the worker's placement).
-            if (moveGroupRafRef.current !== null) {
-                window.cancelAnimationFrame(moveGroupRafRef.current);
-                moveGroupRafRef.current = null;
-            }
-            moveGroupPendingRef.current.clear();
+            moveGroupBatcher.cancel();
 
             const rf = builtGraphToReactFlow(built);
             const selId = selectedNodeIdRef.current;
@@ -600,7 +612,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 });
             }
         },
-        [fitView, getViewport, setEdges, setNodes, setViewport],
+        [fitView, getViewport, moveGroupBatcher, setEdges, setNodes, setViewport],
     );
 
     // The view component owns React Flow / viewport / selection state; the
@@ -660,18 +672,11 @@ const MlGraphInner = ({ data }: ViewProps) => {
         return result;
     }, [nodeBodyToggles.location, nodeBodyToggles.shapes, visibleOpNodeIds, sourceNodeById]);
 
-    // Maps each label-matching source to its visible representative: itself
-    // if on canvas, otherwise the anchor of its outermost collapsed
-    // ancestor. Reads `containingNamespacesByNodeId` (not `source.namespace`)
-    // so topology sections and MLIR namespaces are walked uniformly.
-    //
-    // Collapsibility MUST come from `expandedNamespaces` — anchors are always
-    // visible under their own id (they render either as themselves in an
-    // expanded parent or as the collapsed anchor of their own namespace), so
-    // `visibleNodeIds.has(anchorId)` can't distinguish collapsed from
-    // expanded. Mirrors the graph builder's `resolveRenderedNodeId`.
-    // Lifted from `filterMatchInfo` so an active filter doesn't recompile
-    // the RegExp on every interaction frame.
+    // Compile the label matcher once per applied query. Lifted out of
+    // `filterMatchInfo` so an active filter doesn't rebuild the RegExp on
+    // every interaction frame. Match *resolution* — mapping each hit to its
+    // visible representative and counting buried matches — lives in
+    // `resolveFilterMatches`, which owns the up-to-date contract comment.
     const filterMatcher = useMemo(() => {
         if (appliedFilterQuery.length === 0) {
             return null;
@@ -699,19 +704,22 @@ const MlGraphInner = ({ data }: ViewProps) => {
         return { ...resolution, isRegexInvalid: filterMatcher.isRegexInvalid };
     }, [filterMatcher, sourceNodes, expandedNamespaces, interactionIndex, visibleOpNodeIds]);
 
-    // Visible reps in canvas order so prev/next walks top-to-bottom.
+    // Visible reps in canvas order so prev/next walks top-to-bottom. Iterates
+    // `visibleOpNodeIds` (build-time state, insertion order == canvas order)
+    // rather than `nodes`, so a position-only drag frame — which churns the
+    // `nodes` array but never the visible-op set — doesn't recompute the walk.
     const matchedNodesInOrder = useMemo<string[]>(() => {
         if (!filterMatchInfo || filterMatchInfo.visibleRepIds.size === 0) {
-            return [];
+            return EMPTY_MATCHED_ORDER;
         }
         const result: string[] = [];
-        for (const node of nodes) {
-            if (filterMatchInfo.visibleRepIds.has(node.id)) {
-                result.push(node.id);
+        for (const id of visibleOpNodeIds) {
+            if (filterMatchInfo.visibleRepIds.has(id)) {
+                result.push(id);
             }
         }
         return result;
-    }, [nodes, filterMatchInfo]);
+    }, [visibleOpNodeIds, filterMatchInfo]);
 
     // `fitView` lives outside the updater so React's StrictMode double-
     // invocation of updaters in dev doesn't fire two pans per step.
@@ -893,45 +901,13 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // per-flush cost against the RF store is the same as `setNodes` (xyflow's
     // `updateNode` is `setNodes(prev.map(...))` internally), but the write
     // rate drops from one-per-mousemove to one-per-frame.
-    const flushMoveGroup = useCallback(() => {
-        moveGroupRafRef.current = null;
-        const pending = moveGroupPendingRef.current;
-        if (pending.size === 0) {
-            return;
-        }
-        for (const [groupId, delta] of pending) {
-            updateNode(groupId, (n) => ({
-                position: { x: n.position.x + delta.dx, y: n.position.y + delta.dy },
-            }));
-        }
-        pending.clear();
-    }, [updateNode]);
     const moveGroup = useCallback(
         (groupId: string, dx: number, dy: number) => {
-            const pending = moveGroupPendingRef.current;
-            const existing = pending.get(groupId);
-            if (existing) {
-                existing.dx += dx;
-                existing.dy += dy;
-            } else {
-                pending.set(groupId, { dx, dy });
-            }
-            if (moveGroupRafRef.current === null) {
-                moveGroupRafRef.current = window.requestAnimationFrame(flushMoveGroup);
-            }
+            moveGroupBatcher.accumulate(groupId, dx, dy);
         },
-        [flushMoveGroup],
+        [moveGroupBatcher],
     );
-    useEffect(
-        () => () => {
-            if (moveGroupRafRef.current !== null) {
-                window.cancelAnimationFrame(moveGroupRafRef.current);
-                moveGroupRafRef.current = null;
-            }
-            moveGroupPendingRef.current.clear();
-        },
-        [],
-    );
+    useEffect(() => () => moveGroupBatcher.cancel(), [moveGroupBatcher]);
 
     const groupContextValue = useMemo<MlirGroupContextValue>(
         () => ({
