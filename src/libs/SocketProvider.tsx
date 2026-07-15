@@ -6,11 +6,8 @@
 import { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
 import { getOrCreateInstanceId } from './axiosInstance';
-import {
-    clearFileTransferProgressForSourceIfInactive,
-    setFileTransferProgressForSource,
-} from '../functions/fileTransferRegistry';
 import { FileTransferSource } from '../definitions/FileTransferSource';
+import { clearStaleRemoteSyncOnReconnect, setFileTransferProgressForSource } from '../functions/fileTransferRegistry';
 import getServerConfig from '../functions/getServerConfig';
 
 type SocketContextType = Socket | null;
@@ -30,10 +27,11 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
 
     useEffect(() => {
         socket.on('connect', () => {
-            // Only clear stale remote-sync progress if that transfer is no longer
-            // active. A reconnect mid-upload (axios still running on the same
-            // tab) must not close the overlay or drop live client-driven progress.
-            clearFileTransferProgressForSourceIfInactive(FileTransferSource.REMOTE_SYNC);
+            // Reconnect-triggered only (not a wall-clock timer). If the backend
+            // dies and socket.io never reconnects, the axios timeout in
+            // syncRemoteFolder is the backstop — not infinite, but until then
+            // the overlay can linger (#1757).
+            clearStaleRemoteSyncOnReconnect();
 
             console.log(`Socket connected with ID: ${socket.id}`);
         });

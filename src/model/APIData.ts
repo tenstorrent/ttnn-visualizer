@@ -132,6 +132,8 @@ export interface FileProgress {
     bytesTotal?: number;
     currentFileSize?: number;
     timestamp?: string; // Optional, with default handled elsewhere if necessary
+    /** Client-only: ms since epoch of the last registry write. Used for reconnect staleness. */
+    updatedAtMs?: number;
 }
 
 export const defaultOperation: OperationDetailsData = {

@@ -8,15 +8,14 @@ import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
-import { FileTransferSource } from '../../definitions/FileTransferSource';
 import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import notifyFolderSyncError from '../../functions/notifyFolderSyncError';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import useRemoteConnection from '../../hooks/useRemote';
-import { clearFileTransferProgressForSource } from '../../functions/fileTransferRegistry';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -30,10 +29,6 @@ import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
-
-const resetFileTransferProgress = () => {
-    clearFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC);
-};
 
 const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
@@ -219,10 +214,10 @@ const RemoteSyncConfigurator = () => {
                 }
             }
         } catch (err: unknown) {
-            createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
+            notifyFolderSyncError(err);
         } finally {
+            // REMOTE_SYNC registry clear is owned by syncRemoteFolder's finally.
             setIsSyncingReportFolder(false);
-            resetFileTransferProgress();
         }
     };
 
@@ -267,10 +262,10 @@ const RemoteSyncConfigurator = () => {
                 }
             }
         } catch (err: unknown) {
-            createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
+            notifyFolderSyncError(err);
         } finally {
+            // REMOTE_SYNC registry clear is owned by syncRemoteFolder's finally.
             setIsSyncingPerformanceFolder(false);
-            resetFileTransferProgress();
         }
     };
 
