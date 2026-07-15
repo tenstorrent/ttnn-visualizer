@@ -11,6 +11,7 @@ import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, usePerfMeta } from '../src/hooks/useAPI';
 import { TestProviders } from './helpers/TestProviders';
+import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
@@ -36,11 +37,11 @@ function renderStacked({ stackedData = [], isLoading = false }: RenderOptions = 
     return render(
         <TestProviders>
             <StackedPerformanceTable
-                data={[]}
                 stackedData={stackedData}
                 stackedComparisonData={[]}
                 filters={null}
                 reportName='unit-test'
+                maxCores={DEFAULT_MAX_CORES}
                 isLoading={isLoading}
             />
         </TestProviders>,

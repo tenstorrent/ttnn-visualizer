@@ -72,6 +72,8 @@ interface PerformanceReportProps {
     hasL1PressureData?: boolean;
     isLoading?: boolean;
     isComparisonLoading?: boolean;
+    maxCores: number;
+    comparisonMaxCores?: number[];
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -86,6 +88,8 @@ const PerformanceReport = ({
     hasL1PressureData = false,
     isLoading = false,
     isComparisonLoading = false,
+    maxCores,
+    comparisonMaxCores = [],
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -107,7 +111,6 @@ const PerformanceReport = ({
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
-    // const [showHashColumn, setShowHashColumn] = useState(false);
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
@@ -612,11 +615,11 @@ const PerformanceReport = ({
                         panel={
                             isStackedView ? (
                                 <StackedPerformanceTable
-                                    data={filteredRows}
                                     stackedData={filteredStackedRows}
                                     filters={filters}
                                     stackedComparisonData={filteredComparisonStackedRowsList}
                                     reportName={activePerformanceReport?.reportName || null}
+                                    maxCores={maxCores}
                                     isLoading={isTableLoading}
                                 />
                             ) : (
@@ -627,8 +630,8 @@ const PerformanceReport = ({
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     reportName={activePerformanceReport?.reportName || null}
-                                    showHashColumn={false}
                                     hasL1PressureData={hasL1PressureData}
+                                    maxCores={maxCores}
                                     isLoading={isTableLoading}
                                 />
                             )
@@ -656,7 +659,6 @@ const PerformanceReport = ({
                             panel={
                                 isStackedView ? (
                                     <StackedPerformanceTable
-                                        data={filteredRows}
                                         stackedData={
                                             comparisonIndex > -1 ? filteredComparisonStackedRows : filteredStackedRows
                                         }
@@ -668,6 +670,7 @@ const PerformanceReport = ({
                                         ]}
                                         filters={filters}
                                         reportName={report}
+                                        maxCores={comparisonMaxCores[index] ?? maxCores}
                                         isLoading={isTableLoading}
                                     />
                                 ) : (
@@ -681,8 +684,8 @@ const PerformanceReport = ({
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         reportName={report}
-                                        showHashColumn={false}
                                         hasL1PressureData={hasL1PressureData}
+                                        maxCores={comparisonMaxCores[index] ?? maxCores}
                                         activeReportComparisonIndex={0}
                                         isLoading={isTableLoading}
                                     />
