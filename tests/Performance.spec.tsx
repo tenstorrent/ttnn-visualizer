@@ -13,6 +13,7 @@ import {
     useOpToPerfIdFiltered,
     usePerfFolderList,
     usePerfMeta,
+    usePerfMetas,
     usePerformanceComparisonReport,
     usePerformanceRange,
     usePerformanceReport,
@@ -41,6 +42,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useOpToPerfIdFiltered: vi.fn(),
     usePerfFolderList: vi.fn(),
     usePerfMeta: vi.fn(),
+    usePerfMetas: vi.fn(),
     usePerformanceComparisonReport: vi.fn(),
     usePerformanceRange: vi.fn(),
     usePerformanceReport: vi.fn(),
@@ -111,6 +113,7 @@ beforeEach(() => {
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     (useL1PressureByOperation as Mock).mockReturnValue({ status: L1PressureStatus.Unavailable, data: null });
     (usePerfMeta as Mock).mockReturnValue({ data: undefined, isLoading: false });
+    (usePerfMetas as Mock).mockReturnValue([]);
 });
 
 function formatFilterProbe(values: unknown[]): string {
@@ -205,7 +208,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('selected-row-probe')).toHaveTextContent(String(SELECTED_ROW_ID));
     });
 
-    it('annotates enriched rows and passes perfHeuristicContext to PerfReport', () => {
+    it('annotates enriched rows and passes maxCores to PerfReport', () => {
         (usePerformanceReport as Mock).mockReturnValue({
             data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
             isLoading: false,
@@ -226,9 +229,53 @@ describe('Performance route', () => {
 
         expect(perfReportProps).toHaveBeenCalled();
         const lastProps = perfReportProps.mock.calls.at(-1)?.[0];
-        expect(lastProps?.perfHeuristicContext).toEqual(expect.objectContaining({ maxCores: expect.any(Number) }));
+        expect(lastProps?.maxCores).toEqual(expect.any(Number));
         expect(lastProps?.data?.[0]?.heuristicFlags).toContain(PerfHeuristicFlag.DRAM_BOUND);
         expect(lastProps?.data?.[0]?.heuristicFlagDetails?.[PerfHeuristicFlag.DRAM_BOUND]).toBe('Bound: DRAM');
+    });
+
+    it('uses perfRange when selectedRange is not yet synced so the table does not flash empty', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    // selectedPerformanceRangeAtom defaults to null — the gap before RangeSlider syncs.
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        const lastProps = perfReportProps.mock.calls.at(-1)?.[0];
+        expect(lastProps?.isLoading).toBe(false);
+        expect(lastProps?.data).toHaveLength(1);
+        expect(lastProps?.data?.[0]?.heuristicFlags).toContain(PerfHeuristicFlag.DRAM_BOUND);
+    });
+
+    it('keeps the table loading while report rows exist but no range is available yet', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceRange as Mock).mockReturnValue(null);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        const lastProps = perfReportProps.mock.calls.at(-1)?.[0];
+        expect(lastProps?.isLoading).toBe(true);
+        expect(lastProps?.data).toHaveLength(0);
     });
 
     it('annotates comparison report rows with heuristic flags', () => {
@@ -241,6 +288,7 @@ describe('Performance route', () => {
             data: [{ report: [{ ...DRAM_PERF_ROW, id: '2' }], stacked_report: [] }],
         });
         (usePerformanceRange as Mock).mockReturnValue([1, 2]);
+        (usePerfMetas as Mock).mockReturnValue([{ data: { max_cores: 130 } }]);
 
         render(
             <TestProviders
@@ -258,6 +306,7 @@ describe('Performance route', () => {
         expect(lastProps?.comparisonData?.[0]?.[0]?.heuristicFlagDetails?.[PerfHeuristicFlag.DRAM_BOUND]).toBe(
             'Bound: DRAM',
         );
+        expect(lastProps?.comparisonMaxCores).toEqual([130]);
     });
 
     it('clears all table chip filters when the active performance report changes', () => {

@@ -37,7 +37,6 @@ function renderStacked({ stackedData = [], isLoading = false }: RenderOptions = 
     return render(
         <TestProviders>
             <StackedPerformanceTable
-                data={[]}
                 stackedData={stackedData}
                 stackedComparisonData={[]}
                 filters={null}

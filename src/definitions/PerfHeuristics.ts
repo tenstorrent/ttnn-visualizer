@@ -14,10 +14,6 @@ export enum PerfHeuristicFlagIntent {
     DANGER = 'danger',
 }
 
-export interface PerfHeuristicContext {
-    maxCores: number;
-}
-
 export interface PerfHeuristicFlagDefinition {
     label: string;
     shortLabel: string;

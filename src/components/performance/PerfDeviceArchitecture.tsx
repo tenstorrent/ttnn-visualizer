@@ -4,8 +4,6 @@
 
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
-import { TypedPerfTableRow } from '../../definitions/PerfTable';
-import { buildPerfHeuristicContext } from '../../functions/computePerfHeuristicFlags';
 import { usePerfMeta } from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
 import 'styles/components/PerfDeviceArchitecture.scss';
@@ -13,16 +11,14 @@ import 'styles/components/PerfDeviceArchitecture.scss';
 const NO_META_DATA = 'Unknown';
 
 interface PerfDeviceArchitectureProps {
-    data: TypedPerfTableRow[];
     reportName: string | null;
-    maxCores?: number;
+    maxCores: number;
 }
 
-const PerfDeviceArchitecture = ({ data, reportName, maxCores: maxCoresFromParent }: PerfDeviceArchitectureProps) => {
+const PerfDeviceArchitecture = ({ reportName, maxCores }: PerfDeviceArchitectureProps) => {
     const { data: deviceMeta, isLoading: isLoadingDeviceLog } = usePerfMeta(reportName);
 
     const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
-    const maxCores = maxCoresFromParent ?? buildPerfHeuristicContext(deviceMeta, data).maxCores;
 
     return (
         <div className='meta-data'>

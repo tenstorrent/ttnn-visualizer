@@ -34,7 +34,6 @@ import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableSkeleton from './PerfTableSkeleton';
 import PerfTensorDrawer from './PerfTensorDrawer';
 import PerfTableToolbar from './PerfTableToolbar';
-import { PerfHeuristicContext } from '../../definitions/PerfHeuristics';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -43,7 +42,7 @@ interface PerformanceTableProps {
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     reportName: string | null;
-    heuristicContext: PerfHeuristicContext;
+    maxCores: number;
     hasL1PressureData?: boolean;
     isLoading?: boolean;
     // Identifies which comparison dataset holds the active profiler report's rows. The
@@ -61,7 +60,7 @@ const PerformanceTable = ({
     provideMatmulAdvice,
     hiliteHighDispatch,
     reportName,
-    heuristicContext,
+    maxCores,
     hasL1PressureData = false,
     isLoading = false,
     activeReportComparisonIndex = null,
@@ -464,9 +463,8 @@ const PerformanceTable = ({
             )}
 
             <PerfDeviceArchitecture
-                data={data}
                 reportName={reportName}
-                maxCores={heuristicContext.maxCores}
+                maxCores={maxCores}
             />
 
             {mergeDevices && <PerfMultiDeviceNotice />}

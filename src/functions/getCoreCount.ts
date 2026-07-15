@@ -15,6 +15,11 @@ const CORE_COUNT = {
 // Wormhole default used when device metadata is unavailable (matches DeviceArchitecture.WORMHOLE).
 export const DEFAULT_MAX_CORES = CORE_COUNT[DeviceArchitecture.WORMHOLE];
 
+export interface DeviceMetaLike {
+    architecture?: DeviceArchitecture | null;
+    max_cores?: number | null;
+}
+
 function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[]): number {
     const highestCoreCount = Math.max(
         ...data
@@ -32,6 +37,14 @@ function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[
 
     // @ts-expect-error no blackhole yet
     return highestCoreCount > CORE_COUNT[architecture] ? highestCoreCount : CORE_COUNT[architecture];
+}
+
+/** Resolve device capacity for utilisation heuristics and UI core count display. */
+export function resolveMaxCores(deviceMeta: DeviceMetaLike | null | undefined, rows: TypedPerfTableRow[]): number {
+    const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
+    const maxCores = deviceMeta?.max_cores ?? getCoreCount(architecture, rows);
+
+    return maxCores > 0 ? maxCores : DEFAULT_MAX_CORES;
 }
 
 export default getCoreCount;

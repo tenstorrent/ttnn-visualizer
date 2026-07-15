@@ -16,8 +16,6 @@ import { hiddenPerfTableColumnsAtom, selectedPerfRowIdAtom } from '../src/store/
 import { TestProviders } from './helpers/TestProviders';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
-const defaultHeuristicContext = { maxCores: DEFAULT_MAX_CORES };
-
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
     useOpToPerfIdFiltered: vi.fn(),
@@ -68,7 +66,7 @@ function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}
                 provideMatmulAdvice={false}
                 hiliteHighDispatch={false}
                 reportName='unit-test'
-                heuristicContext={defaultHeuristicContext}
+                maxCores={DEFAULT_MAX_CORES}
                 activeReportComparisonIndex={activeReportComparisonIndex}
             />
         </TestProviders>,
@@ -158,7 +156,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    heuristicContext={defaultHeuristicContext}
+                    maxCores={DEFAULT_MAX_CORES}
                 />
             </TestProviders>,
         );
@@ -187,7 +185,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    heuristicContext={defaultHeuristicContext}
+                    maxCores={DEFAULT_MAX_CORES}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -207,7 +205,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    heuristicContext={defaultHeuristicContext}
+                    maxCores={DEFAULT_MAX_CORES}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -236,7 +234,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    heuristicContext={defaultHeuristicContext}
+                    maxCores={DEFAULT_MAX_CORES}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -254,7 +252,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    heuristicContext={defaultHeuristicContext}
+                    maxCores={DEFAULT_MAX_CORES}
                 />
                 <SelectedRowProbe />
             </TestProviders>,
@@ -284,7 +282,7 @@ describe('PerfTable loading state', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    heuristicContext={defaultHeuristicContext}
+                    maxCores={DEFAULT_MAX_CORES}
                     isLoading
                 />
             </TestProviders>,
@@ -308,7 +306,7 @@ describe('PerfTable loading state', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    heuristicContext={defaultHeuristicContext}
+                    maxCores={DEFAULT_MAX_CORES}
                     isLoading
                 />
             </TestProviders>,
@@ -328,7 +326,7 @@ describe('PerfTable loading state', () => {
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
                     reportName='unit-test'
-                    heuristicContext={defaultHeuristicContext}
+                    maxCores={DEFAULT_MAX_CORES}
                 />
             </TestProviders>,
         );

@@ -14,8 +14,6 @@ import { comparisonPerformanceReportListAtom, rawOpCodeFilterListAtom } from '..
 import { TestProviders } from './helpers/TestProviders';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
-const defaultHeuristicContext = { maxCores: DEFAULT_MAX_CORES };
-
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
     useOpToPerfIdFiltered: vi.fn(),
@@ -73,7 +71,7 @@ function renderReport({
                 comparisonStackedData={[]}
                 isLoading={isLoading}
                 isComparisonLoading={isComparisonLoading}
-                perfHeuristicContext={defaultHeuristicContext}
+                maxCores={DEFAULT_MAX_CORES}
             />
         </TestProviders>,
     );

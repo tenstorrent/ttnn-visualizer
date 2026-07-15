@@ -6,17 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { BoundType, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
-import {
-    annotatePerfHeuristicFlags,
-    buildPerfHeuristicContext,
-    computePerfHeuristicFlags,
-    getPerfHeuristicFlagTooltipDetail,
-} from '../src/functions/computePerfHeuristicFlags';
+import { annotatePerfHeuristicFlags } from '../src/functions/computePerfHeuristicFlags';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
 const MAX_CORES = DEFAULT_MAX_CORES;
-
-const context = { maxCores: MAX_CORES };
 
 const makeRow = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
     ({
@@ -36,171 +29,129 @@ const makeRow = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow 
         ...overrides,
     }) as TypedPerfTableRow;
 
-describe('computePerfHeuristicFlags', () => {
-    it('flags DRAM-bound when bound is DRAM', () => {
-        const flags = computePerfHeuristicFlags(makeRow({ bound: BoundType.DRAM }), context);
+const getFlags = (overrides: Partial<TypedPerfTableRow> = {}, maxCores = MAX_CORES): PerfHeuristicFlag[] =>
+    annotatePerfHeuristicFlags([makeRow(overrides)], maxCores)[0].heuristicFlags ?? [];
 
-        expect(flags).toContain(PerfHeuristicFlag.DRAM_BOUND);
+describe('annotatePerfHeuristicFlags', () => {
+    it('flags DRAM-bound when bound is DRAM', () => {
+        expect(getFlags({ bound: BoundType.DRAM })).toContain(PerfHeuristicFlag.DRAM_BOUND);
     });
 
     it('flags DRAM-bound for SLOW ops when DRAM percent dominates FLOPS percent', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({ bound: BoundType.SLOW, dram_percent: 80, flops_percent: 20 }),
-            context,
+        expect(getFlags({ bound: BoundType.SLOW, dram_percent: 80, flops_percent: 20 })).toContain(
+            PerfHeuristicFlag.DRAM_BOUND,
         );
-
-        expect(flags).toContain(PerfHeuristicFlag.DRAM_BOUND);
     });
 
     it('does not flag DRAM-bound for BoundType.BOTH', () => {
-        const flags = computePerfHeuristicFlags(makeRow({ bound: BoundType.BOTH, dram_percent: 90 }), context);
-
-        expect(flags).not.toContain(PerfHeuristicFlag.DRAM_BOUND);
+        expect(getFlags({ bound: BoundType.BOTH, dram_percent: 90 })).not.toContain(PerfHeuristicFlag.DRAM_BOUND);
     });
 
     it('does not flag DRAM-bound below MIN_TOTAL_PERCENT', () => {
-        const flags = computePerfHeuristicFlags(makeRow({ bound: BoundType.DRAM, total_percent: 0.1 }), context);
-
-        expect(flags).not.toContain(PerfHeuristicFlag.DRAM_BOUND);
+        expect(getFlags({ bound: BoundType.DRAM, total_percent: 0.1 })).not.toContain(PerfHeuristicFlag.DRAM_BOUND);
     });
 
     it('flags low utilisation when pm_ideal_ns is valid and utilisation is below threshold', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({
+        expect(
+            getFlags({
                 pm_ideal_ns: 1000,
                 device_time: 1000,
                 cores: 64,
             }),
-            context,
-        );
-
-        expect(flags).toContain(PerfHeuristicFlag.LOW_UTILISATION);
+        ).toContain(PerfHeuristicFlag.LOW_UTILISATION);
     });
 
     it('does not flag low utilisation when pm_ideal_ns is absent', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({
+        expect(
+            getFlags({
                 pm_ideal_ns: null,
                 device_time: 1000,
                 cores: 8,
             }),
-            context,
-        );
-
-        expect(flags).not.toContain(PerfHeuristicFlag.LOW_UTILISATION);
+        ).not.toContain(PerfHeuristicFlag.LOW_UTILISATION);
     });
 
     it('flags underutilised cores when core count is well below device max', () => {
-        const flags = computePerfHeuristicFlags(makeRow({ cores: 8 }), context);
-
-        expect(flags).toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
+        expect(getFlags({ cores: 8 })).toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
     });
 
     it('does not flag underutilised cores when enough cores are used', () => {
-        const flags = computePerfHeuristicFlags(makeRow({ cores: 32 }), context);
-
-        expect(flags).not.toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
+        expect(getFlags({ cores: 32 })).not.toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
     });
 
     it('flags recompute candidate on repeat hash with cache miss', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({
+        expect(
+            getFlags({
                 hash: 'abc123',
                 isFirstHashOccurrence: false,
                 cache_hit: false,
             }),
-            context,
-        );
-
-        expect(flags).toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
+        ).toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
     });
 
     it('does not flag recompute on first hash occurrence', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({
+        expect(
+            getFlags({
                 hash: 'abc123',
                 isFirstHashOccurrence: true,
                 cache_hit: false,
             }),
-            context,
-        );
-
-        expect(flags).not.toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
+        ).not.toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
     });
 
     it('does not flag recompute when cache hit is true', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({
+        expect(
+            getFlags({
                 hash: 'abc123',
                 isFirstHashOccurrence: false,
                 cache_hit: true,
             }),
-            context,
-        );
-
-        expect(flags).not.toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
+        ).not.toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
     });
 
     it('returns no flags for host ops', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({ bound: BoundType.HOST, cores: 1, total_percent: 10 }),
-            context,
-        );
-
-        expect(flags).toEqual([]);
+        expect(getFlags({ bound: BoundType.HOST, cores: 1, total_percent: 10 })).toEqual([]);
     });
 
     it('returns no flags for signposts', () => {
-        const flags = computePerfHeuristicFlags(makeRow({ op_type: OpType.SIGNPOST }), context);
-
-        expect(flags).toEqual([]);
+        expect(getFlags({ op_type: OpType.SIGNPOST })).toEqual([]);
     });
 
     it('can flag both low utilisation and underutilised cores on the same row', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({
-                pm_ideal_ns: 1000,
-                device_time: 1000,
-                cores: 8,
-            }),
-            context,
-        );
+        const flags = getFlags({
+            pm_ideal_ns: 1000,
+            device_time: 1000,
+            cores: 8,
+        });
 
         expect(flags).toContain(PerfHeuristicFlag.LOW_UTILISATION);
         expect(flags).toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
     });
 
     it('returns no flags for missing rows', () => {
-        const flags = computePerfHeuristicFlags(makeRow({ missing: true, bound: BoundType.DRAM }), context);
-
-        expect(flags).toEqual([]);
+        expect(getFlags({ missing: true, bound: BoundType.DRAM })).toEqual([]);
     });
 
     it('does not flag DRAM-bound for SLOW ops when FLOPS percent dominates', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({ bound: BoundType.SLOW, dram_percent: 20, flops_percent: 80 }),
-            context,
+        expect(getFlags({ bound: BoundType.SLOW, dram_percent: 20, flops_percent: 80 })).not.toContain(
+            PerfHeuristicFlag.DRAM_BOUND,
         );
-
-        expect(flags).not.toContain(PerfHeuristicFlag.DRAM_BOUND);
     });
 
     it('does not flag recompute when hash is null', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({ hash: null, isFirstHashOccurrence: false, cache_hit: false }),
-            context,
+        expect(getFlags({ hash: null, isFirstHashOccurrence: false, cache_hit: false })).not.toContain(
+            PerfHeuristicFlag.RECOMPUTE_CANDIDATE,
         );
-
-        expect(flags).not.toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
     });
 
-    it('annotates rows with heuristicFlags and tooltip details in place', () => {
+    it('returns new row objects with heuristicFlags and tooltip details', () => {
         const row = makeRow({ bound: BoundType.DRAM });
-        const [annotated] = annotatePerfHeuristicFlags([row], context);
+        const [annotated] = annotatePerfHeuristicFlags([row], MAX_CORES);
 
-        expect(annotated).toBe(row);
+        expect(annotated).not.toBe(row);
         expect(annotated.heuristicFlags).toEqual([PerfHeuristicFlag.DRAM_BOUND]);
         expect(annotated.heuristicFlagDetails?.[PerfHeuristicFlag.DRAM_BOUND]).toBe('Bound: DRAM');
+        expect(row.heuristicFlags).toBeUndefined();
     });
 
     it('annotates multi-flag rows with every detail key', () => {
@@ -210,7 +161,7 @@ describe('computePerfHeuristicFlags', () => {
             device_time: 1000,
             cores: 8,
         });
-        const [annotated] = annotatePerfHeuristicFlags([row], context);
+        const [annotated] = annotatePerfHeuristicFlags([row], MAX_CORES);
 
         expect(annotated.heuristicFlags).toEqual([
             PerfHeuristicFlag.DRAM_BOUND,
@@ -228,86 +179,45 @@ describe('computePerfHeuristicFlags', () => {
             total_percent: 0.1,
             heuristicFlagDetails: { [PerfHeuristicFlag.DRAM_BOUND]: 'stale' },
         });
-        const [annotated] = annotatePerfHeuristicFlags([row], context);
+        const [annotated] = annotatePerfHeuristicFlags([row], MAX_CORES);
 
         expect(annotated.heuristicFlags).toEqual([]);
         expect(annotated.heuristicFlagDetails).toBeUndefined();
     });
 
     it('does not flag low utilisation or underutilised cores below MIN_TOTAL_PERCENT', () => {
-        const flags = computePerfHeuristicFlags(
-            makeRow({
-                total_percent: 0.1,
-                pm_ideal_ns: 1000,
-                device_time: 1000,
-                cores: 8,
-            }),
-            context,
-        );
+        const flags = getFlags({
+            total_percent: 0.1,
+            pm_ideal_ns: 1000,
+            device_time: 1000,
+            cores: 8,
+        });
 
         expect(flags).not.toContain(PerfHeuristicFlag.LOW_UTILISATION);
         expect(flags).not.toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
     });
 
-    it('buildPerfHeuristicContext uses device meta max_cores when provided', () => {
-        const contextFromMeta = buildPerfHeuristicContext({ max_cores: 130 }, [makeRow({ cores: 8 })]);
-
-        expect(contextFromMeta.maxCores).toBe(130);
+    it('uses the supplied maxCores for underutilised-cores thresholds', () => {
+        // 20/64 ≈ 0.31 is above the underutilised ratio; 20/130 ≈ 0.15 is below.
+        expect(getFlags({ cores: 20 }, 64)).not.toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
+        expect(getFlags({ cores: 20 }, 130)).toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
     });
 
-    it('buildPerfHeuristicContext falls back to architecture default when rows are below device max', () => {
-        const contextFromRows = buildPerfHeuristicContext(null, [makeRow({ cores: 48 })]);
-
-        expect(contextFromRows.maxCores).toBe(DEFAULT_MAX_CORES);
-    });
-
-    it('buildPerfHeuristicContext uses row core count when it exceeds architecture default', () => {
-        const contextFromRows = buildPerfHeuristicContext(null, [makeRow({ cores: 100 })]);
-
-        expect(contextFromRows.maxCores).toBe(100);
-    });
-});
-
-describe('getPerfHeuristicFlagTooltipDetail', () => {
-    it('returns DRAM vs FLOPS detail for SLOW DRAM-bound rows', () => {
-        const row = makeRow({ bound: BoundType.SLOW, dram_percent: 80, flops_percent: 20 });
-
-        expect(getPerfHeuristicFlagTooltipDetail(PerfHeuristicFlag.DRAM_BOUND, row, context)).toBe(
-            'DRAM 80% vs FLOPS 20%',
+    it('stores DRAM vs FLOPS detail for SLOW DRAM-bound rows', () => {
+        const [annotated] = annotatePerfHeuristicFlags(
+            [makeRow({ bound: BoundType.SLOW, dram_percent: 80, flops_percent: 20 })],
+            MAX_CORES,
         );
+
+        expect(annotated.heuristicFlagDetails?.[PerfHeuristicFlag.DRAM_BOUND]).toBe('DRAM 80% vs FLOPS 20%');
     });
 
-    it('returns core utilisation detail for low utilisation flags', () => {
-        const row = makeRow({ pm_ideal_ns: 1000, device_time: 1000, cores: 64 });
-
-        expect(getPerfHeuristicFlagTooltipDetail(PerfHeuristicFlag.LOW_UTILISATION, row, context)).toMatch(
-            /Core utilisation:/,
+    it('stores hash detail for recompute candidates', () => {
+        const [annotated] = annotatePerfHeuristicFlags(
+            [makeRow({ hash: 'abc123', isFirstHashOccurrence: false, cache_hit: false })],
+            MAX_CORES,
         );
-    });
 
-    it('returns cores ratio for underutilised cores', () => {
-        expect(
-            getPerfHeuristicFlagTooltipDetail(PerfHeuristicFlag.UNDERUTILISED_CORES, makeRow({ cores: 8 }), context),
-        ).toBe('Cores: 8 / 64');
-    });
-
-    it('returns bound detail for DRAM-bound rows', () => {
-        expect(
-            getPerfHeuristicFlagTooltipDetail(
-                PerfHeuristicFlag.DRAM_BOUND,
-                makeRow({ bound: BoundType.DRAM }),
-                context,
-            ),
-        ).toBe('Bound: DRAM');
-    });
-
-    it('returns hash detail for recompute candidates', () => {
-        expect(
-            getPerfHeuristicFlagTooltipDetail(
-                PerfHeuristicFlag.RECOMPUTE_CANDIDATE,
-                makeRow({ hash: 'abc123', isFirstHashOccurrence: false, cache_hit: false }),
-                context,
-            ),
-        ).toBe('Hash: abc123');
+        expect(annotated.heuristicFlagDetails?.[PerfHeuristicFlag.RECOMPUTE_CANDIDATE]).toBe('Hash: abc123');
     });
 });

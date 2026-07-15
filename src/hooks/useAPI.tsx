@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { AxiosError } from 'axios';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
@@ -1044,6 +1044,19 @@ export const usePerfMeta = (name?: string | null) => {
         queryFn: () => fetchDeviceMeta(key),
         queryKey: ['get-device-log-meta', key],
         staleTime: Infinity,
+    });
+};
+
+/** Device meta for each comparison report, keyed in the same order as `reportNames`. */
+export const usePerfMetas = (reportNames: string[] | null | undefined) => {
+    const names = reportNames ?? [];
+
+    return useQueries({
+        queries: names.map((name) => ({
+            queryKey: ['get-device-log-meta', name] as const,
+            queryFn: () => fetchDeviceMeta(name),
+            staleTime: Infinity,
+        })),
     });
 };
 

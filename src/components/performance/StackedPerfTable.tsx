@@ -17,7 +17,6 @@ import 'styles/components/PerfReport.scss';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { useGetNPEManifest } from '../../hooks/useAPI';
 import { formatStackedCell } from '../../functions/stackedPerfFunctions';
-import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfTableSkeleton from './PerfTableSkeleton';
@@ -26,7 +25,6 @@ import { mergeDevicesAtom } from '../../store/app';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface StackedPerformanceTableProps {
-    data: TypedPerfTableRow[];
     stackedData: TypedStackedPerfRow[];
     stackedComparisonData: TypedStackedPerfRow[][];
     filters: Record<string, string> | null;
@@ -36,7 +34,6 @@ interface StackedPerformanceTableProps {
 }
 
 const StackedPerformanceTable = ({
-    data,
     stackedData,
     stackedComparisonData,
     filters,
@@ -209,7 +206,6 @@ const StackedPerformanceTable = ({
             )}
 
             <PerfDeviceArchitecture
-                data={data}
                 reportName={reportName}
                 maxCores={maxCores}
             />

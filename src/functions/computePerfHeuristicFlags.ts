@@ -2,20 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { BoundType, TypedPerfTableRow } from '../definitions/PerfTable';
-import { PERF_HEURISTIC_THRESHOLDS, PerfHeuristicContext, PerfHeuristicFlag } from '../definitions/PerfHeuristics';
+import { PERF_HEURISTIC_THRESHOLDS, PerfHeuristicFlag } from '../definitions/PerfHeuristics';
 import { OpType } from '../definitions/Performance';
-import getCoreCount, { DEFAULT_MAX_CORES } from './getCoreCount';
 import getCoreUtilization from './getCoreUtilization';
 import isValidNumber from './isValidNumber';
 import { formatPercentage } from './math';
 import { isSlowDramDominant } from './perfBoundPredicates';
-
-interface DeviceMetaLike {
-    architecture?: DeviceArchitecture | null;
-    max_cores?: number | null;
-}
 
 interface RowHeuristicEvaluation {
     flags: PerfHeuristicFlag[];
@@ -23,18 +16,6 @@ interface RowHeuristicEvaluation {
 }
 
 const { LOW_CORE_UTILISATION_RATIO, UNDERUTILISED_CORES_RATIO, MIN_TOTAL_PERCENT } = PERF_HEURISTIC_THRESHOLDS;
-
-export function buildPerfHeuristicContext(
-    deviceMeta: DeviceMetaLike | null | undefined,
-    rows: TypedPerfTableRow[],
-): PerfHeuristicContext {
-    const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
-    const maxCores = deviceMeta?.max_cores ?? getCoreCount(architecture, rows);
-
-    return {
-        maxCores: maxCores > 0 ? maxCores : DEFAULT_MAX_CORES,
-    };
-}
 
 function meetsMinImpact(row: TypedPerfTableRow): boolean {
     return row.total_percent != null && row.total_percent >= MIN_TOTAL_PERCENT;
@@ -90,7 +71,7 @@ function isUnderutilisedCores(row: TypedPerfTableRow, maxCores: number, hasMinIm
     return cores / maxCores < UNDERUTILISED_CORES_RATIO;
 }
 
-function evaluateRowHeuristics(row: TypedPerfTableRow, context: PerfHeuristicContext): RowHeuristicEvaluation {
+function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeuristicEvaluation {
     if (!isEligibleRow(row)) {
         return { flags: [], details: undefined };
     }
@@ -109,7 +90,7 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, context: PerfHeuristicCon
     }
 
     if (hasMinImpact && isValidNumber(row.pm_ideal_ns) && isValidNumber(row.device_time) && isValidNumber(row.cores)) {
-        const utilisation = getCoreUtilization(row, context.maxCores);
+        const utilisation = getCoreUtilization(row, maxCores);
 
         if (utilisation > 0 && utilisation < LOW_CORE_UTILISATION_RATIO) {
             flags.push(PerfHeuristicFlag.LOW_UTILISATION);
@@ -117,11 +98,11 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, context: PerfHeuristicCon
         }
     }
 
-    if (isUnderutilisedCores(row, context.maxCores, hasMinImpact)) {
+    if (isUnderutilisedCores(row, maxCores, hasMinImpact)) {
         flags.push(PerfHeuristicFlag.UNDERUTILISED_CORES);
 
         if (row.cores != null) {
-            details[PerfHeuristicFlag.UNDERUTILISED_CORES] = `Cores: ${row.cores} / ${context.maxCores}`;
+            details[PerfHeuristicFlag.UNDERUTILISED_CORES] = `Cores: ${row.cores} / ${maxCores}`;
         }
     }
 
@@ -136,27 +117,14 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, context: PerfHeuristicCon
     };
 }
 
-export function computePerfHeuristicFlags(row: TypedPerfTableRow, context: PerfHeuristicContext): PerfHeuristicFlag[] {
-    return evaluateRowHeuristics(row, context).flags;
-}
+export function annotatePerfHeuristicFlags(rows: TypedPerfTableRow[], maxCores: number): TypedPerfTableRow[] {
+    return rows.map((row) => {
+        const { flags, details } = evaluateRowHeuristics(row, maxCores);
 
-export function getPerfHeuristicFlagTooltipDetail(
-    flag: PerfHeuristicFlag,
-    row: TypedPerfTableRow,
-    context: PerfHeuristicContext,
-): string | null {
-    return evaluateRowHeuristics(row, context).details?.[flag] ?? null;
-}
-
-export function annotatePerfHeuristicFlags(
-    rows: TypedPerfTableRow[],
-    context: PerfHeuristicContext,
-): TypedPerfTableRow[] {
-    for (const row of rows) {
-        const { flags, details } = evaluateRowHeuristics(row, context);
-        row.heuristicFlags = flags;
-        row.heuristicFlagDetails = details;
-    }
-
-    return rows;
+        return {
+            ...row,
+            heuristicFlags: flags,
+            heuristicFlagDetails: details,
+        };
+    });
 }

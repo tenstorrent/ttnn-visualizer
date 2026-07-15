@@ -14,6 +14,7 @@ import {
     useOpToPerfIdFiltered,
     usePerfFolderList,
     usePerfMeta,
+    usePerfMetas,
     usePerformanceComparisonReport,
     usePerformanceRange,
     usePerformanceReport,
@@ -28,9 +29,10 @@ import {
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
-import { Marker, MarkerColours } from '../definitions/PerfTable';
+import { Marker, MarkerColours, TypedPerfTableRow } from '../definitions/PerfTable';
 import { L1PressureStatus } from '../functions/l1Pressure';
-import { annotatePerfHeuristicFlags, buildPerfHeuristicContext } from '../functions/computePerfHeuristicFlags';
+import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
+import { resolveMaxCores } from '../functions/getCoreCount';
 import { enrichRowData } from '../functions/enrichPerfRowData';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
@@ -66,6 +68,7 @@ export default function Performance() {
     const l1Pressure = useL1PressureByOperation();
     const l1PressureMap = l1Pressure.data;
     const { data: deviceMeta } = usePerfMeta(activePerformanceReport?.reportName ?? null);
+    const comparisonDeviceMetaQueries = usePerfMetas(comparisonReportList);
     // Reserve the column while still loading so it doesn't pop in and shift the table sideways;
     // hide it only once we know the data is genuinely unavailable.
     const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
@@ -110,43 +113,69 @@ export default function Performance() {
         [opCodeOptions],
     );
 
+    // Prefer the user's selected range, but don't wait on RangeSlider's sync effect — when
+    // selectedRange is still null (or left over from a disjoint prior report) fall back to
+    // the report's full span so we never flash "No data to display" after the skeleton.
+    const rangeForTable = useMemo(() => {
+        if (!perfRange) {
+            return selectedRange;
+        }
+
+        if (!selectedRange) {
+            return perfRange;
+        }
+
+        const selectionMissesReport = selectedRange[1] < perfRange[0] || selectedRange[0] > perfRange[1];
+
+        return selectionMissesReport ? perfRange : selectedRange;
+    }, [selectedRange, perfRange]);
+
     const rangedData = useMemo(
         () =>
-            selectedRange && perfData
+            rangeForTable && perfData
                 ? perfData.filter((row) => {
                       const rowId = typeof row?.id === 'number' ? row.id : parseInt(row?.id, 10);
-                      return rowId >= selectedRange[0] && rowId <= selectedRange[1];
+                      return rowId >= rangeForTable[0] && rowId <= rangeForTable[1];
                   })
                 : [],
-        [selectedRange, perfData],
+        [rangeForTable, perfData],
     );
+
+    // Report finished but range not yet derived (should be rare with the fallback above).
+    const isTableLoading = isLoadingPerformance || (!!perfData?.length && rangeForTable === null);
 
     const typedRows = useMemo(
         () => enrichRowData(rangedData, opIdsMap, l1PressureMap),
         [rangedData, opIdsMap, l1PressureMap],
     );
 
-    const perfHeuristicContext = useMemo(
-        () => buildPerfHeuristicContext(deviceMeta, typedRows),
-        [deviceMeta, typedRows],
+    const maxCores = useMemo(() => resolveMaxCores(deviceMeta, typedRows), [deviceMeta, typedRows]);
+
+    const enrichedData = useMemo(() => annotatePerfHeuristicFlags(typedRows, maxCores), [typedRows, maxCores]);
+
+    // Each comparison dataset is thresholded with its own device capacity (meta when
+    // available, else row/architecture fallback) so cross-architecture compares stay honest.
+    const comparisonDeviceMetas = useMemo(
+        () => comparisonDeviceMetaQueries.map((query) => query.data ?? null),
+        [comparisonDeviceMetaQueries],
     );
 
-    const enrichedData = useMemo(
-        () => annotatePerfHeuristicFlags(typedRows, perfHeuristicContext),
-        [typedRows, perfHeuristicContext],
-    );
+    const { enrichedComparisonData, comparisonMaxCores } = useMemo(() => {
+        if (!comparisonPerfData?.length) {
+            return { enrichedComparisonData: [] as TypedPerfTableRow[][], comparisonMaxCores: [] as number[] };
+        }
 
-    // Comparison rows reuse the active report's device meta for core thresholds.
-    // Assumes comparison reports target the same device architecture as the active report.
-    const enrichedComparisonData = useMemo(() => {
-        return (
-            comparisonPerfData?.map((dataset) => {
-                const comparisonTypedRows = enrichRowData(dataset, opIdsMap, null);
+        const maxCoresByDataset: number[] = [];
+        const annotatedByDataset = comparisonPerfData.map((dataset, index) => {
+            const comparisonTypedRows = enrichRowData(dataset, opIdsMap, null);
+            const datasetMaxCores = resolveMaxCores(comparisonDeviceMetas[index], comparisonTypedRows);
+            maxCoresByDataset.push(datasetMaxCores);
 
-                return annotatePerfHeuristicFlags(comparisonTypedRows, perfHeuristicContext);
-            }) || []
-        );
-    }, [comparisonPerfData, opIdsMap, perfHeuristicContext]);
+            return annotatePerfHeuristicFlags(comparisonTypedRows, datasetMaxCores);
+        });
+
+        return { enrichedComparisonData: annotatedByDataset, comparisonMaxCores: maxCoresByDataset };
+    }, [comparisonPerfData, opIdsMap, comparisonDeviceMetas]);
 
     const selectedOpCodeSet = useMemo(
         () => new Set(selectedOpCodes.map((selected) => selected.opCode)),
@@ -303,9 +332,10 @@ export default function Performance() {
                             comparisonStackedData={enrichedComparisonStackedData}
                             signposts={data?.signposts}
                             hasL1PressureData={hasL1PressureData}
-                            isLoading={isLoadingPerformance}
+                            isLoading={isTableLoading}
                             isComparisonLoading={isLoadingComparison}
-                            perfHeuristicContext={perfHeuristicContext}
+                            maxCores={maxCores}
+                            comparisonMaxCores={comparisonMaxCores}
                         />
                     }
                 />

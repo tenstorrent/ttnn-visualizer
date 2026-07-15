@@ -50,7 +50,6 @@ import {
     filterableStackedColumnKeys,
 } from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
-import { PerfHeuristicContext } from '../../definitions/PerfHeuristics';
 import HighlightedText from '../HighlightedText';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
@@ -73,7 +72,8 @@ interface PerformanceReportProps {
     hasL1PressureData?: boolean;
     isLoading?: boolean;
     isComparisonLoading?: boolean;
-    perfHeuristicContext: PerfHeuristicContext;
+    maxCores: number;
+    comparisonMaxCores?: number[];
 }
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
@@ -88,7 +88,8 @@ const PerformanceReport = ({
     hasL1PressureData = false,
     isLoading = false,
     isComparisonLoading = false,
-    perfHeuristicContext,
+    maxCores,
+    comparisonMaxCores = [],
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -614,12 +615,11 @@ const PerformanceReport = ({
                         panel={
                             isStackedView ? (
                                 <StackedPerformanceTable
-                                    data={filteredRows}
                                     stackedData={filteredStackedRows}
                                     filters={filters}
                                     stackedComparisonData={filteredComparisonStackedRowsList}
                                     reportName={activePerformanceReport?.reportName || null}
-                                    maxCores={perfHeuristicContext.maxCores}
+                                    maxCores={maxCores}
                                     isLoading={isTableLoading}
                                 />
                             ) : (
@@ -631,7 +631,7 @@ const PerformanceReport = ({
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     reportName={activePerformanceReport?.reportName || null}
                                     hasL1PressureData={hasL1PressureData}
-                                    heuristicContext={perfHeuristicContext}
+                                    maxCores={maxCores}
                                     isLoading={isTableLoading}
                                 />
                             )
@@ -659,7 +659,6 @@ const PerformanceReport = ({
                             panel={
                                 isStackedView ? (
                                     <StackedPerformanceTable
-                                        data={filteredRows}
                                         stackedData={
                                             comparisonIndex > -1 ? filteredComparisonStackedRows : filteredStackedRows
                                         }
@@ -671,7 +670,7 @@ const PerformanceReport = ({
                                         ]}
                                         filters={filters}
                                         reportName={report}
-                                        maxCores={perfHeuristicContext.maxCores}
+                                        maxCores={comparisonMaxCores[index] ?? maxCores}
                                         isLoading={isTableLoading}
                                     />
                                 ) : (
@@ -686,7 +685,7 @@ const PerformanceReport = ({
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         reportName={report}
                                         hasL1PressureData={hasL1PressureData}
-                                        heuristicContext={perfHeuristicContext}
+                                        maxCores={comparisonMaxCores[index] ?? maxCores}
                                         activeReportComparisonIndex={0}
                                         isLoading={isTableLoading}
                                     />
