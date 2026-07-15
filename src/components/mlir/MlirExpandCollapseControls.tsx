@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { memo } from 'react';
 import { Button, ButtonVariant, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirExpandCollapseControls.scss';
@@ -13,7 +14,7 @@ export interface MlirExpandCollapseControlsProps {
     onCollapseAll: () => void;
 }
 
-const MlirExpandCollapseControls = ({
+const MlirExpandCollapseControlsInner = ({
     namespaceCount,
     expandedCount,
     onExpandAll,
@@ -54,5 +55,8 @@ const MlirExpandCollapseControls = ({
         </div>
     );
 };
+
+const MlirExpandCollapseControls = memo(MlirExpandCollapseControlsInner);
+MlirExpandCollapseControls.displayName = 'MlirExpandCollapseControls';
 
 export default MlirExpandCollapseControls;
