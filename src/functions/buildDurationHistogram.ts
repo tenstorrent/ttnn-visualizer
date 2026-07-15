@@ -12,12 +12,17 @@ import { OpType } from '../definitions/Performance';
 import { TypedPerfTableRow } from '../definitions/PerfTable';
 import { formatDurationBucketRange } from './formatDurationBucketRange';
 
+const hasChartRawOpCode = (row: TypedPerfTableRow): boolean => {
+    const { raw_op_code: rawOpCode } = row;
+    return rawOpCode != null && rawOpCode !== '';
+};
+
 const isEligibleHistogramRow = (row: TypedPerfTableRow): boolean =>
     row.op_type !== OpType.SIGNPOST &&
     row.device_time !== null &&
-    row.device_time !== undefined &&
     Number.isFinite(row.device_time) &&
-    row.device_time > 0;
+    (row.device_time as number) > 0 &&
+    hasChartRawOpCode(row);
 
 const getMinMaxDuration = (durations: number[]): { min: number; max: number } => {
     let min = durations[0];
@@ -64,6 +69,34 @@ const findBucketForDuration = (deviceTimeUs: number, buckets: DurationBucket[]):
     return matchedBucket ?? buckets[buckets.length - 1];
 };
 
+interface SampleCandidate {
+    opCode: string;
+    deviceTime: number;
+}
+
+/** Keep at most SAMPLE_OPS_PER_BUCKET samples, ordered by descending device time. */
+const insertTopSampleByDuration = (samples: SampleCandidate[], candidate: SampleCandidate): void => {
+    if (samples.length === SAMPLE_OPS_PER_BUCKET && candidate.deviceTime <= samples[samples.length - 1].deviceTime) {
+        return;
+    }
+
+    let insertAt = samples.findIndex((sample) => candidate.deviceTime > sample.deviceTime);
+    if (insertAt === -1) {
+        insertAt = samples.length;
+    }
+
+    samples.splice(insertAt, 0, candidate);
+
+    if (samples.length > SAMPLE_OPS_PER_BUCKET) {
+        samples.length = SAMPLE_OPS_PER_BUCKET;
+    }
+};
+
+interface SegmentAggregate {
+    count: number;
+    topSamples: SampleCandidate[];
+}
+
 function buildDurationHistogram(rows: TypedPerfTableRow[]): DurationHistogramData {
     const eligibleRows = rows.filter(isEligibleHistogramRow);
 
@@ -83,22 +116,23 @@ function buildDurationHistogram(rows: TypedPerfTableRow[]): DurationHistogramDat
 
     const histogramBuckets: DurationHistogramBucket[] = buckets.map((bucket) => {
         const bucketRows = rowsByBucketIndex.get(bucket.bucketIndex) ?? [];
-        const rowsByOpCode = new Map<string, TypedPerfTableRow[]>();
+        const aggregateByOpCode = new Map<string, SegmentAggregate>();
 
         bucketRows.forEach((row) => {
-            const opCode = row.raw_op_code ?? 'unknown';
-            const opRows = rowsByOpCode.get(opCode) ?? [];
-            opRows.push(row);
-            rowsByOpCode.set(opCode, opRows);
+            const rawOpCode = row.raw_op_code;
+            const aggregate = aggregateByOpCode.get(rawOpCode) ?? { count: 0, topSamples: [] };
+            aggregate.count += 1;
+            insertTopSampleByDuration(aggregate.topSamples, {
+                opCode: row.op_code,
+                deviceTime: row.device_time as number,
+            });
+            aggregateByOpCode.set(rawOpCode, aggregate);
         });
 
-        const segmentsByOpCode = [...rowsByOpCode.entries()].map(([rawOpCode, opRows]) => ({
+        const segmentsByOpCode = [...aggregateByOpCode.entries()].map(([rawOpCode, aggregate]) => ({
             rawOpCode,
-            count: opRows.length,
-            sampleOps: [...opRows]
-                .sort((left, right) => (right.device_time ?? 0) - (left.device_time ?? 0))
-                .slice(0, SAMPLE_OPS_PER_BUCKET)
-                .map((row) => row.op_code),
+            count: aggregate.count,
+            sampleOps: aggregate.topSamples.map((sample) => sample.opCode),
         }));
 
         return {

@@ -4,12 +4,16 @@
 
 import { DurationHistogramData, MAX_LEGEND_OP_CODES, OTHER_OP_CODE_LABEL } from '../definitions/PerfDurationHistogram';
 
+export interface HistogramOpCodeStacks {
+    displayedOpCodes: string[];
+    rolledUpOpCodes: Set<string>;
+}
+
 /**
- * Returns the op-code labels to render as stacked traces, ranked by total count.
- * When there are more than `MAX_LEGEND_OP_CODES` distinct codes, keeps the top
- * `MAX_LEGEND_OP_CODES - 1` and appends `Other` for the tail.
+ * Returns stacked-trace labels ranked by total count across buckets.
+ * When over `MAX_LEGEND_OP_CODES`, keeps the top N−1 and rolls the tail into Other.
  */
-export function getDisplayedHistogramOpCodes(histogramData: DurationHistogramData): string[] {
+export function getHistogramOpCodeStacks(histogramData: DurationHistogramData): HistogramOpCodeStacks {
     const totalByOpCode = new Map<string, number>();
 
     histogramData.buckets.forEach((bucket) => {
@@ -23,30 +27,11 @@ export function getDisplayedHistogramOpCodes(histogramData: DurationHistogramDat
         .map(([rawOpCode]) => rawOpCode);
 
     if (rankedOpCodes.length <= MAX_LEGEND_OP_CODES) {
-        return rankedOpCodes;
+        return { displayedOpCodes: rankedOpCodes, rolledUpOpCodes: new Set<string>() };
     }
 
-    return [...rankedOpCodes.slice(0, MAX_LEGEND_OP_CODES - 1), OTHER_OP_CODE_LABEL];
-}
-
-export function getRolledUpHistogramOpCodes(
-    histogramData: DurationHistogramData,
-    displayedOpCodes: string[],
-): Set<string> {
-    if (!displayedOpCodes.includes(OTHER_OP_CODE_LABEL)) {
-        return new Set();
-    }
-
-    const namedOpCodes = new Set(displayedOpCodes.filter((opCode) => opCode !== OTHER_OP_CODE_LABEL));
-    const rolledUp = new Set<string>();
-
-    histogramData.buckets.forEach((bucket) => {
-        bucket.segmentsByOpCode.forEach((segment) => {
-            if (!namedOpCodes.has(segment.rawOpCode)) {
-                rolledUp.add(segment.rawOpCode);
-            }
-        });
-    });
-
-    return rolledUp;
+    return {
+        displayedOpCodes: [...rankedOpCodes.slice(0, MAX_LEGEND_OP_CODES - 1), OTHER_OP_CODE_LABEL],
+        rolledUpOpCodes: new Set(rankedOpCodes.slice(MAX_LEGEND_OP_CODES - 1)),
+    };
 }

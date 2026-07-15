@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { MarkerColours } from './PerfTable';
+
 export interface DurationBucket {
     bucketIndex: number;
     minUs: number;
@@ -32,5 +34,13 @@ export const MAX_LEGEND_OP_CODES = 12;
 
 export const OTHER_OP_CODE_LABEL = 'Other';
 
-/** Neutral grey from `MarkerColours` — reserved for the rolled-up tail segment. */
-export const OTHER_OP_CODE_COLOUR = 'rgb(199, 199, 199)';
+/** Neutral grey from the shared marker palette — reserved for the rolled-up tail segment. */
+export const OTHER_OP_CODE_COLOUR = MarkerColours[18];
+
+export const EMPTY_SAMPLES_SUMMARY = '—';
+
+export const PERF_DURATION_HISTOGRAM_ARIA_LABEL = 'Op duration distribution';
+
+export const PERF_DURATION_HISTOGRAM_EMPTY_MESSAGE = 'No device ops available for duration histogram.';
+
+export const PERF_DURATION_HISTOGRAM_ACTIVE_REPORT_SUBTITLE = 'Active report only';

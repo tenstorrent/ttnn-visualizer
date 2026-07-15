@@ -27,20 +27,28 @@ describe('buildDurationHistogram', () => {
                 row({ device_time: 0 }),
                 row({ device_time: -5 }),
                 row({ device_time: Number.NaN }),
+                row({ device_time: Number.POSITIVE_INFINITY }),
+                row({ raw_op_code: null as unknown as string, device_time: 5 }),
+                row({ raw_op_code: '', device_time: 5 }),
             ]).buckets,
         ).toEqual([]);
     });
 
-    it('excludes signposts and non-positive device_time rows', () => {
+    it('excludes signposts, non-positive device_time, and null/empty raw_op_code rows', () => {
         const histogram = buildDurationHistogram([
             row({ op_type: OpType.SIGNPOST, device_time: 100 }),
             row({ device_time: null }),
             row({ device_time: 0 }),
             row({ device_time: -5 }),
+            row({ raw_op_code: null as unknown as string, device_time: 8 }),
+            row({ raw_op_code: '', device_time: 9 }),
             row({ device_time: 5, raw_op_code: 'Matmul' }),
         ]);
 
         expect(histogram.buckets.reduce((sum, bucket) => sum + bucket.totalCount, 0)).toBe(1);
+        expect(histogram.buckets.flatMap((bucket) => bucket.segmentsByOpCode).map((s) => s.rawOpCode)).toEqual([
+            'Matmul',
+        ]);
     });
 
     it('bins positive durations into log-decade buckets without a spurious empty high bucket', () => {
