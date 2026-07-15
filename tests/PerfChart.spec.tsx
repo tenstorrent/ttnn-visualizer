@@ -12,6 +12,7 @@ import { PERF_CHART_TABLE_FILTER_HINT } from '../src/definitions/PerformanceChar
 import {
     NS_AXIS_HOVER_FORMAT,
     NS_AXIS_TICK_FORMAT,
+    PerfChartLayout,
     PerfPieChartLayout,
     getNsAxisConfig,
 } from '../src/definitions/PlotConfigurations';
@@ -125,7 +126,10 @@ describe('PerfChart', () => {
     });
 
     it('merges configuration into the Cartesian layout from PerfChartLayout', () => {
-        const nsAxis = getNsAxisConfig('Time (ns)', { range: [0, 1_000_000] });
+        const nsAxis = getNsAxisConfig('Time (ns)', {
+            range: [0, 1_000_000],
+            tickvals: [0, 500_000, 1_000_000],
+        });
 
         render(
             <PerfChart
@@ -133,6 +137,7 @@ describe('PerfChart', () => {
                 chartData={barData}
                 configuration={{
                     margin: { l: 100, r: 0, b: 50, t: 0 },
+                    xAxis: getNsAxisConfig('Operation', { tickformat: 'd' }),
                     yAxis: nsAxis,
                     yAxis2: { tickformat: NS_AXIS_TICK_FORMAT },
                 }}
@@ -143,14 +148,37 @@ describe('PerfChart', () => {
         expect(plotLayout?.paper_bgcolor).toBe('transparent');
         expect(plotLayout?.plot_bgcolor).toBe('transparent');
         expect(plotLayout?.margin).toEqual({ l: 100, r: 0, b: 50, t: 0 });
+        expect(plotLayout?.margin).not.toBe(PerfChartLayout.margin);
         expect(plotLayout?.xaxis?.fixedrange).toBe(true);
+        expect(plotLayout?.xaxis?.title?.text).toBe('Operation');
+        expect(plotLayout?.xaxis?.tickformat).toBe('d');
         expect(plotLayout?.yaxis?.fixedrange).toBe(true);
         expect(plotLayout?.yaxis2?.overlaying).toBe('y');
         expect(plotLayout?.yaxis?.title?.text).toBe('Time (ns)');
         expect(plotLayout?.yaxis?.tickformat).toBe(NS_AXIS_TICK_FORMAT);
         expect(plotLayout?.yaxis?.hoverformat).toBe(NS_AXIS_HOVER_FORMAT);
         expect(plotLayout?.yaxis?.range).toEqual([0, 1_000_000]);
+        expect(plotLayout?.yaxis?.tickvals).toEqual([0, 500_000, 1_000_000]);
         expect(plotLayout?.yaxis2?.tickformat).toBe(NS_AXIS_TICK_FORMAT);
+        // Nested title fonts must be cloned so Plotly cannot mutate the shared layout defaults.
+        expect(plotLayout?.yaxis?.title?.font).toEqual(PerfChartLayout.yaxis?.title?.font);
+        expect(plotLayout?.yaxis?.title?.font).not.toBe(PerfChartLayout.yaxis?.title?.font);
+    });
+
+    it('applies an explicit all-zero margin rather than falling back to defaults', () => {
+        render(
+            <PerfChart
+                title='Test chart'
+                chartData={barData}
+                configuration={{
+                    margin: { l: 0, r: 0, b: 0, t: 0 },
+                }}
+            />,
+        );
+
+        const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
+        expect(plotLayout?.margin).toEqual({ l: 0, r: 0, b: 0, t: 0 });
+        expect(plotLayout?.margin).not.toEqual(PerfChartLayout.margin);
     });
 
     it('falls back to PerfChartLayout margin when configuration omits margin', () => {
@@ -163,6 +191,7 @@ describe('PerfChart', () => {
         );
 
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
-        expect(plotLayout?.margin).toEqual({ l: 50, r: 0, b: 50, t: 0 });
+        expect(plotLayout?.margin).toEqual(PerfChartLayout.margin);
+        expect(plotLayout?.margin).not.toBe(PerfChartLayout.margin);
     });
 });

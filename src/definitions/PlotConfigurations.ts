@@ -88,7 +88,7 @@ export const BufferSummaryAxisConfiguration: PlotConfiguration = {
     bgColour: '#fff',
 } as PlotConfiguration;
 
-interface AxisConfig {
+export interface AxisConfig {
     title?: {
         text?: string;
     };

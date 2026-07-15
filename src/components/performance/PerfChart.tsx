@@ -2,11 +2,16 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import type { Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import type { Layout, LayoutAxis, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
 import type { ReactNode } from 'react';
 import Plot from '../../libs/PlotComponent';
-import { PerfChartConfig, PerfChartLayout, PlotConfiguration } from '../../definitions/PlotConfigurations';
+import {
+    AxisConfig,
+    PerfChartConfig,
+    PerfChartLayout,
+    PlotConfiguration,
+} from '../../definitions/PlotConfigurations';
 import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerfChart.scss';
 
@@ -33,11 +38,27 @@ type PerfChartCartesianProps = PerfChartSharedProps & {
 
 type PerfChartProps = PerfChartCustomLayoutProps | PerfChartCartesianProps;
 
+function mergeAxis(base: Partial<LayoutAxis> | undefined, axis?: AxisConfig): Partial<LayoutAxis> {
+    return {
+        ...base,
+        ...axis,
+        // Fresh title/font objects so Plotly in-place mutation cannot alter PerfChartLayout.
+        title: {
+            ...base?.title,
+            ...(base?.title?.font ? { font: { ...base.title.font } } : {}),
+            ...axis?.title,
+        },
+    };
+}
+
 function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
+    const defaultMargin = PerfChartLayout.margin ?? { l: 50, r: 0, b: 50, t: 0 };
+
     return {
         ...PerfChartLayout,
         showlegend: configuration.showLegend || false,
-        margin: configuration.margin ?? PerfChartLayout.margin,
+        // Clone margins — never hand Plotly the shared PerfChartLayout.margin reference.
+        margin: { ...(configuration.margin ?? defaultMargin) },
         legend: {
             orientation: 'h',
             font: {
@@ -51,36 +72,9 @@ function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
             xanchor: 'center',
         },
         barmode: configuration.barMode,
-        xaxis: {
-            ...PerfChartLayout.xaxis,
-            title: {
-                ...PerfChartLayout.xaxis?.title,
-                text: configuration.xAxis?.title?.text,
-            },
-            range: configuration.xAxis?.range,
-            tickformat: configuration.xAxis?.tickformat,
-            hoverformat: configuration.xAxis?.hoverformat,
-        },
-        yaxis: {
-            ...PerfChartLayout.yaxis,
-            title: {
-                ...PerfChartLayout.yaxis?.title,
-                text: configuration.yAxis?.title?.text,
-            },
-            range: configuration.yAxis?.range,
-            tickformat: configuration.yAxis?.tickformat,
-            hoverformat: configuration.yAxis?.hoverformat,
-        },
-        yaxis2: {
-            ...PerfChartLayout.yaxis2,
-            title: {
-                ...PerfChartLayout.yaxis2?.title,
-                text: configuration.yAxis2?.title?.text,
-            },
-            range: configuration.yAxis2?.range,
-            tickformat: configuration.yAxis2?.tickformat,
-            hoverformat: configuration.yAxis2?.hoverformat,
-        },
+        xaxis: mergeAxis(PerfChartLayout.xaxis, configuration.xAxis),
+        yaxis: mergeAxis(PerfChartLayout.yaxis, configuration.yAxis),
+        yaxis2: mergeAxis(PerfChartLayout.yaxis2, configuration.yAxis2),
     };
 }
 
