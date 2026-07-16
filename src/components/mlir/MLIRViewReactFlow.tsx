@@ -54,6 +54,7 @@ import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
 import { MlirFilterMode, buildFilterMatcher, resolveFilterMatches } from './mlirFilter';
 import MlirNodeBodyToggles from './MlirNodeBodyToggles';
 import MlirExpandCollapseControls from './MlirExpandCollapseControls';
+import MlirNodeColorLegend from './MlirNodeColorLegend';
 import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
 import { createMoveGroupBatcher } from './mlirMoveGroupBatch';
 import { getNamespaceSegments } from './mlirGraphHelpers';
@@ -1456,9 +1457,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
             return inlineBg;
         }
         if (node.type === 'mlirGroup') {
-            return 'rgba(125, 125, 125, 0.35)';
+            return GRAPH_COLORS.group;
         }
-        return '#f5f5f5';
+        return GRAPH_COLORS.opNode;
     }, []);
 
     // Selection incoming green / outgoing yellow, then dim when a filter is
@@ -1556,6 +1557,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     onCollapseAll={collapseAllNamespaces}
                 />
             </div>
+
+            <MlirNodeColorLegend />
 
             {selectedSourceNode && (
                 <MlirNodeDetailsPanel
