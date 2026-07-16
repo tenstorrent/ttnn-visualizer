@@ -19,7 +19,7 @@
   },
   "packageManager": "pnpm@11.1.2",
   "scripts": {
-    "build:docs": "sphinx-build ./docs ./docs/output",
+    "build:docs": "uv run --no-default-groups --group docs sphinx-build docs docs/output",
     "build:wheel": "pnpm run build && uv build --wheel",
     "build": "vite build",
     "dev:server": "VITE_SERVER_MODE=1 vite",
