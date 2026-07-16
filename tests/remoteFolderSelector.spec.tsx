@@ -6,8 +6,12 @@ import { Classes } from '@blueprintjs/core';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { AxiosResponse } from 'axios';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
-import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import RemoteSyncConfigurator, {
+    FOLDER_LIST_SYNC_ERROR_TOAST_TITLE,
+    LOCAL_SYNCED_REPORTS_TOAST_TITLE,
+} from '../src/components/report-selection/RemoteSyncConfigurator';
+import Endpoints from '../src/definitions/Endpoints';
+import { RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
 import { FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE } from '../src/functions/notifyFolderSyncLocalFallback';
@@ -244,7 +248,7 @@ it('sets active performance report by mounting local copy on selection without s
     const axiosInstance = await import('../src/libs/axiosInstance');
     const mockPost = vi.mocked(axiosInstance.default.post);
 
-    const selectedReport = {
+    const selectedReport: RemoteFolder = {
         ...mockRemotePerformanceFolderList[0],
         lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
     };
@@ -280,7 +284,7 @@ it('mounts an outdated performance folder on selection without SSH sync', async 
     const axiosInstance = await import('../src/libs/axiosInstance');
     const mockPost = vi.mocked(axiosInstance.default.post);
 
-    const selectedReport = {
+    const selectedReport: RemoteFolder = {
         ...mockRemotePerformanceFolderList[0],
         lastSynced: mockRemotePerformanceFolderList[0].lastModified - 1000,
     };
@@ -313,7 +317,7 @@ it('mounts the local copy and warns when Sync fails for a previously synced fold
     const axiosInstance = await import('../src/libs/axiosInstance');
     const mockPost = vi.mocked(axiosInstance.default.post);
 
-    const selectedReport = {
+    const selectedReport: RemoteFolder = {
         ...mockRemotePerformanceFolderList[0],
         lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
     };
@@ -355,6 +359,183 @@ it('mounts the local copy and warns when Sync fails for a previously synced fold
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(true);
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
     expect(screen.queryByText('Folder sync error')).toBeNull();
+});
+
+it('shows Folder sync error when Sync and local mount both fail', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const selectedReport: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
+    };
+    const syncErrorMessage = 'Unable to establish SSH connection';
+    let rejectLocalMount = false;
+
+    mockPost.mockImplementation((url: string) => {
+        if (url.includes('/api/remote/sync')) {
+            return Promise.reject(new Error(syncErrorMessage));
+        }
+
+        if (rejectLocalMount && url.includes('/api/remote/use')) {
+            return Promise.reject(new Error('Local mount failed'));
+        }
+
+        return mockRemoteFolderApis(url, selectedReport);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await selectPerformanceFolder(selectedReport.remotePath);
+
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(selectedReport.reportName),
+        WAIT_FOR_OPTIONS,
+    );
+
+    const syncButton = await screen.findByTestId(TEST_IDS.REMOTE_SYNC_BUTTON, undefined, WAIT_FOR_OPTIONS);
+    mockPost.mockClear();
+    rejectLocalMount = true;
+    syncButton.click();
+
+    await waitFor(() => {
+        expect(screen.getByText('Folder sync error')).not.toBeNull();
+        expect(screen.queryByText(FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE)).toBeNull();
+    }, WAIT_FOR_OPTIONS);
+});
+
+it('loads local synced reports when Fetch remote list fails but local list has folders', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const localFolder: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
+    };
+
+    mockPost.mockImplementation((url: string) => {
+        if (url === Endpoints.REMOTE_PERFORMANCE_REPORTS) {
+            return Promise.reject(new Error('SSH unreachable'));
+        }
+
+        if (url === Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS) {
+            return Promise.resolve({ status: 200, data: [localFolder] } as AxiosResponse);
+        }
+
+        if (url === Endpoints.REMOTE_PROFILER_REPORTS || url === Endpoints.REMOTE_LOCAL_PROFILER_REPORTS) {
+            return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+        }
+
+        return mockRemoteFolderApis(url, localFolder);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    getButtonWithText(FETCH_REMOTE_FOLDERS).click();
+
+    await waitFor(() => {
+        expect(screen.getByText(LOCAL_SYNCED_REPORTS_TOAST_TITLE)).not.toBeNull();
+    }, WAIT_FOR_OPTIONS);
+
+    await waitFor(() => {
+        const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+        const enabledButtons = selectButtons.filter((btn) => !btn.hasAttribute(HTML_DISABLED));
+        expect(enabledButtons.length).toBeGreaterThan(0);
+    }, WAIT_FOR_OPTIONS);
+
+    expect(mockPost.mock.calls.some(([url]) => url === Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS)).toBe(true);
+    expect(screen.queryByText(FOLDER_LIST_SYNC_ERROR_TOAST_TITLE)).toBeNull();
+});
+
+it('shows Folder list sync error when Fetch fails and local list is empty', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    mockPost.mockImplementation((url: string) => {
+        if (url === Endpoints.REMOTE_PERFORMANCE_REPORTS) {
+            return Promise.reject(new Error('SSH unreachable'));
+        }
+
+        if (url === Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS) {
+            return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+        }
+
+        if (url === Endpoints.REMOTE_PROFILER_REPORTS || url === Endpoints.REMOTE_LOCAL_PROFILER_REPORTS) {
+            return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+        }
+
+        return Promise.resolve({ status: 200, data: {} } as AxiosResponse);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    getButtonWithText(FETCH_REMOTE_FOLDERS).click();
+
+    await waitFor(() => {
+        expect(screen.getByText(FOLDER_LIST_SYNC_ERROR_TOAST_TITLE)).not.toBeNull();
+    }, WAIT_FOR_OPTIONS);
+
+    expect(screen.queryByText(LOCAL_SYNCED_REPORTS_TOAST_TITLE)).toBeNull();
+});
+
+it('seeds folder selects from local synced reports on mount without Fetch', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const localFolder: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
+    };
+
+    mockPost.mockImplementation((url: string) => {
+        if (url === Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS) {
+            return Promise.resolve({ status: 200, data: [localFolder] } as AxiosResponse);
+        }
+
+        if (url === Endpoints.REMOTE_LOCAL_PROFILER_REPORTS) {
+            return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+        }
+
+        return mockRemoteFolderApis(url, localFolder);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await waitFor(() => {
+        expect(mockPost.mock.calls.some(([url]) => url === Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS)).toBe(true);
+    }, WAIT_FOR_OPTIONS);
+
+    await waitFor(() => {
+        const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+        const enabledButtons = selectButtons.filter((btn) => !btn.hasAttribute(HTML_DISABLED));
+        expect(enabledButtons.length).toBeGreaterThan(0);
+    }, WAIT_FOR_OPTIONS);
+
+    expect(mockPost.mock.calls.some(([url]) => url === Endpoints.REMOTE_PERFORMANCE_REPORTS)).toBe(false);
 });
 
 it('handles connection with default port (22)', () => {
@@ -487,12 +668,18 @@ const setupConnection = (connection: RemoteConnection[], selected?: RemoteConnec
     }
 };
 
-const mockRemoteFolderApis = (url: string, selectedReport: (typeof mockRemotePerformanceFolderList)[0]) => {
-    if (url.includes('/api/remote/profiler-reports')) {
+const mockRemoteFolderApis = (url: string, selectedReport: RemoteFolder) => {
+    if (url.includes('/api/remote/profiler-reports') && !url.includes('local-')) {
         return Promise.resolve({ data: mockRemoteProfilerFolderList } as AxiosResponse);
     }
-    if (url.includes('/api/remote/performance-reports')) {
+    if (url.includes('/api/remote/performance-reports') && !url.includes('local-')) {
         return Promise.resolve({ data: [selectedReport] } as AxiosResponse);
+    }
+    if (url.includes('/api/remote/local-performance-reports')) {
+        return Promise.resolve({ status: 200, data: [selectedReport] } as AxiosResponse);
+    }
+    if (url.includes('/api/remote/local-profiler-reports')) {
+        return Promise.resolve({ status: 200, data: mockRemoteProfilerFolderList } as AxiosResponse);
     }
     if (url.includes('/api/remote/use')) {
         return Promise.resolve({ status: 200, data: {} } as AxiosResponse);

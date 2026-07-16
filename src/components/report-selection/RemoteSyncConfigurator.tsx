@@ -33,9 +33,23 @@ import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
 
-const LOCAL_SYNCED_REPORTS_TOAST_TITLE = 'Loaded local synced reports';
-const LOCAL_SYNCED_REPORTS_TOAST_DETAIL = 'Remote host unreachable; showing reports already synced on this machine.';
-const FOLDER_LIST_SYNC_ERROR_TOAST_TITLE = 'Folder list sync error';
+export const LOCAL_SYNCED_REPORTS_TOAST_TITLE = 'Loaded local synced reports';
+export const LOCAL_SYNCED_REPORTS_TOAST_DETAIL =
+    'Remote host unreachable; showing reports already synced on this machine.';
+export const FOLDER_LIST_SYNC_ERROR_TOAST_TITLE = 'Folder list sync error';
+
+function mergeRemoteFolders(savedFolders: RemoteFolder[] | undefined, updatedFolders: RemoteFolder[]): RemoteFolder[] {
+    return (updatedFolders ?? []).map((updatedFolder) => {
+        const existingFolder = savedFolders?.find((f) => f.reportName === updatedFolder.reportName);
+
+        return {
+            ...existingFolder,
+            ...updatedFolder,
+            // Prefer fresh stamp from disk; keep cached value if the list response omitted it.
+            lastSynced: updatedFolder.lastSynced ?? existingFolder?.lastSynced,
+        };
+    });
+}
 
 const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
@@ -83,8 +97,8 @@ const RemoteSyncConfigurator = () => {
               )
             : remotePerformanceFolderList[0],
     );
-    // Drops stale loadLocalSyncedFolders completions when the connection changes quickly.
-    const localSyncedFoldersRequestIdRef = useRef(0);
+    // Aborts in-flight local disk scans when the connection changes quickly.
+    const localSyncedFoldersAbortRef = useRef<AbortController | null>(null);
 
     const updateSelectedConnection = async (connection: RemoteConnection) => {
         setPersistentSelectedConnection(connection);
@@ -112,28 +126,43 @@ const RemoteSyncConfigurator = () => {
         }
 
         // Populate report dropdowns from on-disk synced copies for this host (no SSH).
-        await loadLocalSyncedFolders(connection);
+        // Fire-and-forget so connection switch stays cache-fast; abort cancels prior scans.
+        loadLocalSyncedFolders(connection).catch(() => {
+            // Local scan is best-effort; cached folders remain if it fails.
+        });
     };
 
     const loadLocalSyncedFolders = async (connection: RemoteConnection) => {
-        const requestId = ++localSyncedFoldersRequestIdRef.current;
-        const [localProfilerFolders, localPerformanceFolders] = await Promise.allSettled([
-            connection.profilerPath ? remote.listLocalProfilerReports(connection) : Promise.resolve([]),
-            connection.performancePath ? remote.listLocalPerformanceReports(connection) : Promise.resolve([]),
-        ]);
+        localSyncedFoldersAbortRef.current?.abort();
+        const abortController = new AbortController();
+        localSyncedFoldersAbortRef.current = abortController;
+        const { signal } = abortController;
 
-        if (requestId !== localSyncedFoldersRequestIdRef.current) {
-            return;
-        }
+        try {
+            const [localProfilerFolders, localPerformanceFolders] = await Promise.allSettled([
+                connection.profilerPath ? remote.listLocalProfilerReports(connection, signal) : Promise.resolve([]),
+                connection.performancePath
+                    ? remote.listLocalPerformanceReports(connection, signal)
+                    : Promise.resolve([]),
+            ]);
 
-        // Always replace cached lists on a successful scan — including []. Otherwise
-        // never-synced / empty local dirs from an older remote fetch stay visible.
-        if (localProfilerFolders.status === 'fulfilled') {
-            updateSavedReportFolders(connection, localProfilerFolders.value);
-        }
+            if (signal.aborted) {
+                return;
+            }
 
-        if (localPerformanceFolders.status === 'fulfilled') {
-            updateSavedPerformanceFolders(connection, localPerformanceFolders.value);
+            // Always replace cached lists on a successful scan — including []. Otherwise
+            // never-synced / empty local dirs from an older remote fetch stay visible.
+            if (localProfilerFolders.status === 'fulfilled') {
+                updateSavedReportFolders(connection, localProfilerFolders.value);
+            }
+
+            if (localPerformanceFolders.status === 'fulfilled') {
+                updateSavedPerformanceFolders(connection, localPerformanceFolders.value);
+            }
+        } finally {
+            if (localSyncedFoldersAbortRef.current === abortController) {
+                localSyncedFoldersAbortRef.current = null;
+            }
         }
     };
 
@@ -221,17 +250,10 @@ const RemoteSyncConfigurator = () => {
             return [];
         }
 
-        const savedFolders = remote.persistentState.getSavedReportFolders(connection);
-        const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
-            const existingFolder = savedFolders?.find((f) => f.reportName === updatedFolder.reportName);
-
-            return {
-                ...existingFolder,
-                ...updatedFolder,
-                // Prefer fresh stamp from disk; keep cached value if the list response omitted it.
-                lastSynced: updatedFolder.lastSynced ?? existingFolder?.lastSynced,
-            };
-        });
+        const mergedFolders = mergeRemoteFolders(
+            remote.persistentState.getSavedReportFolders(connection),
+            updatedFolders,
+        );
 
         remote.persistentState.setSavedReportFolders(connection, mergedFolders);
         setReportFolders(mergedFolders);
@@ -244,17 +266,10 @@ const RemoteSyncConfigurator = () => {
             return [];
         }
 
-        const savedFolders = remote.persistentState.getSavedPerformanceFolders(connection);
-        const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
-            const existingFolder = savedFolders?.find((f) => f.reportName === updatedFolder.reportName);
-
-            return {
-                ...existingFolder,
-                ...updatedFolder,
-                // Prefer fresh stamp from disk; keep cached value if the list response omitted it.
-                lastSynced: updatedFolder.lastSynced ?? existingFolder?.lastSynced,
-            };
-        });
+        const mergedFolders = mergeRemoteFolders(
+            remote.persistentState.getSavedPerformanceFolders(connection),
+            updatedFolders,
+        );
 
         remote.persistentState.setSavedPerformanceFolders(connection, mergedFolders);
         setRemotePerformanceFolders(mergedFolders);
@@ -386,7 +401,6 @@ const RemoteSyncConfigurator = () => {
 
                     if (mountResponse.status === HttpStatusCode.Ok) {
                         updateReportSelection(updatedFolder);
-                        queryClient.clear();
                     }
                 }
             }
@@ -441,7 +455,6 @@ const RemoteSyncConfigurator = () => {
 
                     if (mountResponse.status === HttpStatusCode.Ok) {
                         updatePerformanceSelection(updatedFolder);
-                        queryClient.clear();
                     }
                 }
             }

@@ -22,12 +22,26 @@ PERFORMANCE_REQUIRED_FILES = frozenset(
 PERFORMANCE_OPS_PERF_PREFIX = "ops_perf_results"
 
 
-def is_valid_local_profiler_report_dir(directory: Path) -> bool:
+def local_synced_report_path(
+    remote_data_directory: Path,
+    host: str,
+    report_directory_name: str,
+    report_name: Optional[str] = None,
+) -> Path:
+    """REMOTE_DATA_DIRECTORY/<host>/<report_directory_name>[/<report_name>].
+
+    Must match sync_remote_*_folders / PathResolver remote layout.
+    """
+    base = remote_data_directory / host / report_directory_name
+    return base / report_name if report_name is not None else base
+
+
+def _is_valid_local_profiler_report_dir(directory: Path) -> bool:
     """True when the folder has the files needed to load a memory/profiler report."""
     return all((directory / name).is_file() for name in PROFILER_REQUIRED_FILES)
 
 
-def is_valid_local_performance_report_dir(directory: Path) -> bool:
+def _is_valid_local_performance_report_dir(directory: Path) -> bool:
     """True when the folder has the files needed to load a performance report.
 
     Matches local performance folder listing / upload validation:
@@ -62,7 +76,9 @@ def list_local_synced_report_folders(
     Matches the layout written by sync_remote_*_folders / PathResolver.
     Only directories that pass ``is_valid_report_dir`` are included.
     """
-    host_reports_dir = remote_data_directory / host / report_directory_name
+    host_reports_dir = local_synced_report_path(
+        remote_data_directory, host, report_directory_name
+    )
     if not host_reports_dir.is_dir():
         logger.info("No local synced reports directory at %s", host_reports_dir)
         return []
@@ -84,11 +100,13 @@ def list_local_synced_report_folders(
         last_synced = read_last_synced_file(str(entry))
         # Without a remote lastModified, treat synced copies as current so select
         # does not force an SSH refresh while offline.
-        try:
-            mtime = int(entry.stat().st_mtime)
-        except OSError:
-            mtime = 0
-        last_modified = last_synced if last_synced is not None else mtime
+        if last_synced is not None:
+            last_modified = last_synced
+        else:
+            try:
+                last_modified = int(entry.stat().st_mtime)
+            except OSError:
+                last_modified = 0
 
         folders.append(
             RemoteReportFolder(
@@ -115,7 +133,7 @@ def list_local_synced_profiler_folders(
         host=connection.host,
         report_directory_name=profiler_directory_name,
         configured_remote_path=connection.profilerPath,
-        is_valid_report_dir=is_valid_local_profiler_report_dir,
+        is_valid_report_dir=_is_valid_local_profiler_report_dir,
     )
 
 
@@ -131,5 +149,5 @@ def list_local_synced_performance_folders(
         host=connection.host,
         report_directory_name=performance_directory_name,
         configured_remote_path=connection.performancePath,
-        is_valid_report_dir=is_valid_local_performance_report_dir,
+        is_valid_report_dir=_is_valid_local_performance_report_dir,
     )

@@ -39,16 +39,17 @@ export const LOCAL_STORAGE_KEY_SELECTED = 'selectedConnection';
 
 type RemoteFolderPathKey = 'profilerPath' | 'performancePath';
 
-const postRemoteFolderList = async (
-    endpoint: string,
+const fetchRemoteFolderList = async (
+    endpoint: Endpoints,
     connection: RemoteConnection | undefined,
     options: {
         requirePort?: boolean;
         pathKey: RemoteFolderPathKey;
         normalise?: boolean;
+        signal?: AbortSignal;
     },
 ): Promise<RemoteFolder[]> => {
-    const { requirePort = false, pathKey, normalise = false } = options;
+    const { requirePort = false, pathKey, normalise = false, signal } = options;
 
     if (!connection || !connection.host || (requirePort && !connection.port)) {
         throw new Error('No connection provided');
@@ -58,7 +59,7 @@ const postRemoteFolderList = async (
         return [];
     }
 
-    const response = await axiosInstance.post<RemoteFolder[]>(endpoint, connection);
+    const response = await axiosInstance.post<RemoteFolder[]>(endpoint, connection, { signal });
 
     if (response.status === HttpStatusCode.NoContent) {
         return [];
@@ -86,28 +87,41 @@ const useRemoteConnection = () => {
         return connectionTestStates;
     };
 
-    const listProfilerReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> =>
-        postRemoteFolderList(Endpoints.REMOTE_PROFILER_REPORTS, connection, {
+    const listProfilerReports = async (connection?: RemoteConnection, signal?: AbortSignal): Promise<RemoteFolder[]> =>
+        fetchRemoteFolderList(Endpoints.REMOTE_PROFILER_REPORTS, connection, {
             requirePort: true,
             pathKey: 'profilerPath',
             normalise: true,
+            signal,
         });
 
-    const listPerformanceReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> =>
-        postRemoteFolderList(Endpoints.REMOTE_PERFORMANCE_REPORTS, connection, {
+    const listPerformanceReports = async (
+        connection?: RemoteConnection,
+        signal?: AbortSignal,
+    ): Promise<RemoteFolder[]> =>
+        fetchRemoteFolderList(Endpoints.REMOTE_PERFORMANCE_REPORTS, connection, {
             requirePort: true,
             pathKey: 'performancePath',
+            signal,
         });
 
-    const listLocalProfilerReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> =>
-        postRemoteFolderList(Endpoints.REMOTE_LOCAL_PROFILER_REPORTS, connection, {
+    const listLocalProfilerReports = async (
+        connection?: RemoteConnection,
+        signal?: AbortSignal,
+    ): Promise<RemoteFolder[]> =>
+        fetchRemoteFolderList(Endpoints.REMOTE_LOCAL_PROFILER_REPORTS, connection, {
             pathKey: 'profilerPath',
             normalise: true,
+            signal,
         });
 
-    const listLocalPerformanceReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> =>
-        postRemoteFolderList(Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS, connection, {
+    const listLocalPerformanceReports = async (
+        connection?: RemoteConnection,
+        signal?: AbortSignal,
+    ): Promise<RemoteFolder[]> =>
+        fetchRemoteFolderList(Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS, connection, {
             pathKey: 'performancePath',
+            signal,
         });
 
     const syncRemoteFolder = async (
@@ -123,7 +137,7 @@ const useRemoteConnection = () => {
             throw new Error('No remote folder provided');
         }
 
-        // Performance-only connections omit profilerPath; require a path for the folder being synced.
+        // Performance-only connections use empty profilerPath; require a path for the folder being synced.
         if (profilerRemoteFolder && !connection.profilerPath) {
             throw new Error('No profiler path provided');
         }

@@ -51,6 +51,7 @@ from ttnn_visualizer.instances import get_instances, update_instance
 from ttnn_visualizer.local_remote_reports import (
     list_local_synced_performance_folders,
     list_local_synced_profiler_folders,
+    local_synced_report_path,
 )
 from ttnn_visualizer.mlir import (
     test_mlir_server_connection,
@@ -1508,14 +1509,11 @@ def list_remote_reports_profiler():
 
         for rf in remote_folders:
             directory_name = Path(rf.remotePath).name
-            remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-            # Must match sync_remote_profiler_folders / PathResolver:
-            # REMOTE_DATA_DIRECTORY/<host>/profiler-reports/<name>
-            local_path = (
-                remote_data_directory
-                / connection.host
-                / current_app.config["PROFILER_DIRECTORY_NAME"]
-                / directory_name
+            local_path = local_synced_report_path(
+                Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
+                connection.host,
+                current_app.config["PROFILER_DIRECTORY_NAME"],
+                directory_name,
             )
             logger.info(f"Checking last synced for {directory_name}")
             rf.lastSynced = read_last_synced_file(str(local_path))
@@ -1548,14 +1546,11 @@ def list_remote_reports_performance():
 
         for rf in remote_performance_folders:
             performance_name = Path(rf.remotePath).name
-            remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-            # Must match sync_remote_performance_folders / PathResolver:
-            # REMOTE_DATA_DIRECTORY/<host>/performance-reports/<name>
-            local_path = (
-                remote_data_directory
-                / connection.host
-                / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-                / performance_name
+            local_path = local_synced_report_path(
+                Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
+                connection.host,
+                current_app.config["PERFORMANCE_DIRECTORY_NAME"],
+                performance_name,
             )
             logger.info(f"Checking last synced for {performance_name}")
             rf.lastSynced = read_last_synced_file(str(local_path))
@@ -1596,7 +1591,11 @@ def _respond_local_synced_folders(list_fn, directory_config_key: str):
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
+    try:
+        connection = RemoteConnection.model_validate(connection_data, strict=False)
+    except ValidationError:
+        return response_bad_request("Invalid connection data")
+
     folders = list_fn(
         connection,
         Path(current_app.config["REMOTE_DATA_DIRECTORY"]),

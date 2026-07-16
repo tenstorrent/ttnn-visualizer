@@ -7,6 +7,7 @@ import type { AxiosResponse } from 'axios';
 import { getDefaultStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileTransferSource } from '../src/definitions/FileTransferSource';
+import Endpoints from '../src/definitions/Endpoints';
 import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../src/definitions/RemoteSync';
 import { StackSourceOrigin } from '../src/definitions/StackTrace';
 import {
@@ -240,6 +241,7 @@ describe('useRemoteConnection - syncRemoteFolder timeout', () => {
             host: 'h',
             port: 22,
             username: 'u',
+            profilerPath: '',
             performancePath: '/perf',
         };
         const performanceFolder = { remotePath: '/perf/r', reportName: 'r', lastModified: 1 };
@@ -265,7 +267,14 @@ describe('useRemoteConnection - syncRemoteFolder timeout', () => {
 
         await expect(
             result.current.syncRemoteFolder(
-                { name: 'c', host: 'h', port: 22, username: 'u', performancePath: '/perf' },
+                {
+                    name: 'c',
+                    host: 'h',
+                    port: 22,
+                    username: 'u',
+                    profilerPath: '',
+                    performancePath: '/perf',
+                },
                 profilerFolder,
             ),
         ).rejects.toThrow('No profiler path provided');
@@ -369,7 +378,9 @@ describe('useRemoteConnection - listLocal reports', () => {
         const { result } = renderHook(() => useRemoteConnection());
         const folders = await result.current.listLocalProfilerReports(connection);
 
-        expect(mockPost).toHaveBeenCalledWith('/api/remote/local-profiler-reports', connection);
+        expect(mockPost).toHaveBeenCalledWith(Endpoints.REMOTE_LOCAL_PROFILER_REPORTS, connection, {
+            signal: undefined,
+        });
         expect(folders).toHaveLength(1);
         expect(folders[0].reportName).toBe('r');
     });
@@ -385,7 +396,9 @@ describe('useRemoteConnection - listLocal reports', () => {
         const { result } = renderHook(() => useRemoteConnection());
         const folders = await result.current.listLocalPerformanceReports(connection);
 
-        expect(mockPost).toHaveBeenCalledWith('/api/remote/local-performance-reports', connection);
+        expect(mockPost).toHaveBeenCalledWith(Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS, connection, {
+            signal: undefined,
+        });
         expect(folders).toEqual([{ remotePath: '/perf/r', reportName: 'r', lastModified: 1, lastSynced: null }]);
     });
 
@@ -418,6 +431,7 @@ describe('useRemoteConnection - listLocal reports', () => {
                 host: 'h',
                 port: 22,
                 username: 'u',
+                profilerPath: '',
                 performancePath: '/perf',
             }),
         ).resolves.toEqual([]);
