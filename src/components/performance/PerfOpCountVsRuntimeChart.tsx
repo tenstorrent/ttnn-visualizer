@@ -7,24 +7,23 @@ import { PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
-import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
+import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
+import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
+import getPlotLabel from '../../functions/getPlotLabel';
+import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
-import getPlotLabel from '../../functions/getPlotLabel';
 
 interface PerfOpCountVsRuntimeChartProps {
     selectedOpCodes: Marker[];
     datasets?: TypedPerfTableRow[][];
+    onOpCodeClick?: OnOpCodeClick;
 }
 
-function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCountVsRuntimeChartProps) {
+function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeClick }: PerfOpCountVsRuntimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
-    const flattenedData = datasets.flat();
-    const opCodes = useMemo(
-        () => [...new Set(flattenedData?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
-        [flattenedData],
-    );
+    const opCodes = useMemo(() => getUniqueChartRawOpCodes(datasets.flat()), [datasets]);
 
     const selectedOpCodeSet = useMemo(
         () => new Set(selectedOpCodes.map((selected) => selected.opCode)),
@@ -35,6 +34,8 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
         () => opCodes.filter((opCode) => selectedOpCodeSet.has(opCode)),
         [opCodes, selectedOpCodeSet],
     );
+
+    const handlePlotClick = useHandlePerfChartPlotClick(onOpCodeClick);
 
     const opCountData = useMemo(
         () =>
@@ -47,6 +48,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                             type: 'bar',
                             name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
+                            customdata: [opCode],
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
                             },
@@ -70,6 +72,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                             type: 'bar',
                             name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
+                            customdata: [opCode],
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
                             },
@@ -80,12 +83,8 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
     );
 
     const configuration: PlotConfiguration = {
-        margin: {
-            l: 0,
-            r: 0,
-            b: 0,
-            t: 0,
-        },
+        // No margin override: all-zero was previously ignored by PerfChart and would now
+        // clip category labels (xaxis has no automargin).
         barMode: 'stack',
         yAxis: {
             tickformat: '.0%',
@@ -99,6 +98,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
             title={PERF_CHART_LABELS[PerfChartId.OpCountVsRuntime]}
             chartData={[...opCountData.flat(), ...opDeviceTimeData.flat()]}
             configuration={configuration}
+            onPlotClick={onOpCodeClick ? handlePlotClick : undefined}
         />
     );
 }

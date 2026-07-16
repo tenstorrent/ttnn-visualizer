@@ -7,7 +7,11 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
-import { PlotConfiguration, getDeviceUtilizationAxisConfig } from '../../definitions/PlotConfigurations';
+import {
+    PlotConfiguration,
+    getDeviceUtilizationAxisConfig,
+    getNsAxisConfig,
+} from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import getPlotLabel from '../../functions/getPlotLabel';
@@ -47,13 +51,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: Per
 
     const configuration: PlotConfiguration = {
         showLegend: true,
-        xAxis: {
-            title: {
-                text: 'Device Kernel Duration (ns)',
-            },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-        },
+        xAxis: getNsAxisConfig('Device Kernel Duration (ns)'),
         yAxis: getDeviceUtilizationAxisConfig(maxYValue),
     };
 

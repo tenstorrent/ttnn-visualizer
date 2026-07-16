@@ -11,10 +11,9 @@ import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizatio
 import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import PerfDeviceTimeChart from './PerfDeviceTimeChart';
-import getCoreCount from '../../functions/getCoreCount';
-import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
+import { resolveMaxCores } from '../../functions/getCoreCount';
 import { usePerfMeta } from '../../hooks/useAPI';
-import { PerfChartId, getOperationTypesChartId } from '../../definitions/PerformanceCharts';
+import { OnOpCodeClick, PerfChartId, getOperationTypesChartId } from '../../definitions/PerformanceCharts';
 
 interface NonFilterablePerfChartsProps {
     chartData: TypedPerfTableRow[];
@@ -24,6 +23,7 @@ interface NonFilterablePerfChartsProps {
     convData: TypedPerfTableRow[][];
     hasMatmulData: boolean;
     hasConvData: boolean;
+    onOpCodeClick?: OnOpCodeClick;
 }
 
 const NonFilterablePerfCharts = ({
@@ -34,6 +34,7 @@ const NonFilterablePerfCharts = ({
     convData,
     hasMatmulData,
     hasConvData,
+    onOpCodeClick,
 }: NonFilterablePerfChartsProps) => {
     const performanceReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
@@ -41,8 +42,7 @@ const NonFilterablePerfCharts = ({
     const { data: deviceMeta } = usePerfMeta();
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
-    const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
-    const maxCores = getCoreCount(architecture, datasets[0] ?? []);
+    const maxCores = resolveMaxCores(deviceMeta, datasets[0] ?? []);
 
     return (
         <>
@@ -117,6 +117,7 @@ const NonFilterablePerfCharts = ({
                         data={chartData}
                         opCodes={opCodeOptions}
                         id={getOperationTypesChartId('active')}
+                        onOpCodeClick={onOpCodeClick}
                     />
                 )}
 
@@ -128,6 +129,7 @@ const NonFilterablePerfCharts = ({
                         data={secondaryData[index]}
                         opCodes={opCodeOptions}
                         id={getOperationTypesChartId(`comparison-${index}`)}
+                        onOpCodeClick={onOpCodeClick}
                     />
                 ))}
             </div>

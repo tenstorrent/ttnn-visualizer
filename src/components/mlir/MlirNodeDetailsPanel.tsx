@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { type ReactNode, useMemo } from 'react';
+import { type ReactNode, memo, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { Button, ButtonVariant, Collapse, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -161,7 +161,7 @@ const DetailsSection = ({
     </section>
 );
 
-const MlirNodeDetailsPanel = ({
+const MlirNodeDetailsPanelInner = ({
     node,
     incomingEdges,
     outgoingEdges,
@@ -365,5 +365,8 @@ const MlirNodeDetailsPanel = ({
         </aside>
     );
 };
+
+const MlirNodeDetailsPanel = memo(MlirNodeDetailsPanelInner);
+MlirNodeDetailsPanel.displayName = 'MlirNodeDetailsPanel';
 
 export default MlirNodeDetailsPanel;

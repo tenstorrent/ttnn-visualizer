@@ -14,9 +14,16 @@ import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { MlirServerConnection } from '../src/definitions/MlirServer';
 import FileStatusOverlay from '../src/components/FileStatusOverlay';
 import MlirJsonFileLoader from '../src/components/mlir/MlirJsonFileLoader';
+import { FileTransferSource } from '../src/definitions/FileTransferSource';
+import {
+    clearAllFileTransferProgress,
+    clearFileTransferProgressForSource,
+    fileTransferRegistryAtom,
+    getInactiveFileTransferProgress,
+    setFileTransferProgressForSource,
+} from '../src/functions/fileTransferRegistry';
 import {
     fileTransferProgressAtom,
-    getInactiveFileTransferProgress,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
     mlirRetryFilesAtom,
@@ -53,7 +60,7 @@ function createDeferred<T>(): Deferred<T> {
 
 beforeEach(() => {
     vi.resetAllMocks();
-    getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
+    clearAllFileTransferProgress();
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
     getDefaultStore().set(mlirRetryFilesAtom, null);
@@ -62,7 +69,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
-    getDefaultStore().set(fileTransferProgressAtom, getInactiveFileTransferProgress());
+    clearAllFileTransferProgress();
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
     getDefaultStore().set(mlirRetryFilesAtom, null);
@@ -127,6 +134,73 @@ describe('useMlirRemote progress lifecycle', () => {
         await uploadPromise;
 
         expect(getDefaultStore().get(fileTransferProgressAtom)).toEqual(getInactiveFileTransferProgress());
+    });
+
+    it('keeps MLIR progress active when another source is cleared', async () => {
+        const postMock = vi.mocked(axiosInstance.post);
+        const deferred = createDeferred<{ data: { status: ConnectionTestStates } }>();
+        let onUploadProgress: ((event: AxiosProgressEvent) => void) | undefined;
+
+        postMock.mockImplementation((_url, _data, config) => {
+            onUploadProgress = config?.onUploadProgress;
+            return deferred.promise;
+        });
+
+        const { result } = renderHook(() => useMlirRemote());
+        const uploadPromise = result.current.uploadMlirFileToServer([new File(['module {}'], 'model.mlir')], SERVER);
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(fileTransferProgressAtom).status).toBe(FileStatus.UPLOADING);
+        });
+
+        setFileTransferProgressForSource(FileTransferSource.LOCAL_UPLOAD, {
+            ...getInactiveFileTransferProgress(),
+            numberOfFiles: 3,
+            percentOfCurrent: 100,
+            status: FileStatus.UPLOADING,
+        });
+        clearFileTransferProgressForSource(FileTransferSource.LOCAL_UPLOAD);
+
+        onUploadProgress?.({ loaded: 10, total: 10 } as AxiosProgressEvent);
+        expect(getDefaultStore().get(fileTransferProgressAtom).status).toBe(FileStatus.PROCESSING);
+
+        deferred.resolve({ data: { status: ConnectionTestStates.OK } });
+        await uploadPromise;
+
+        expect(getDefaultStore().get(fileTransferProgressAtom)).toEqual(getInactiveFileTransferProgress());
+    });
+
+    it('keeps remote sync progress active when MLIR upload completes', async () => {
+        const postMock = vi.mocked(axiosInstance.post);
+        const deferred = createDeferred<{ data: { status: ConnectionTestStates } }>();
+
+        postMock.mockImplementation(() => deferred.promise);
+
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, {
+            ...getInactiveFileTransferProgress(),
+            currentFileName: 'db.sqlite',
+            numberOfFiles: 5,
+            finishedFiles: 2,
+            status: FileStatus.DOWNLOADING,
+        });
+
+        const { result } = renderHook(() => useMlirRemote());
+        const uploadPromise = result.current.uploadMlirFileToServer([new File(['module {}'], 'model.mlir')], SERVER);
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.MLIR_UPLOAD]?.status).toBe(
+                FileStatus.UPLOADING,
+            );
+        });
+
+        deferred.resolve({ data: { status: ConnectionTestStates.OK } });
+        await uploadPromise;
+
+        const aggregate = getDefaultStore().get(fileTransferProgressAtom);
+        expect(aggregate.status).toBe(FileStatus.DOWNLOADING);
+        expect(aggregate.finishedFiles).toBe(2);
+        expect(aggregate.numberOfFiles).toBe(5);
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.MLIR_UPLOAD]).toBeUndefined();
     });
 
     it('shows overlay transition from upload to processing and closes when the request resolves', async () => {
@@ -249,6 +323,7 @@ describe('useMlirRemote progress lifecycle', () => {
         });
         expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
         expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.MLIR_UPLOAD]).toBeUndefined();
         expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
     });
 

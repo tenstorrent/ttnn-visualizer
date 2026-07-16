@@ -5,11 +5,9 @@
 /* eslint-disable no-console */
 import { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
-import { useSetAtom } from 'jotai';
 import { getOrCreateInstanceId } from './axiosInstance';
-import { fileTransferProgressAtom, getInactiveFileTransferProgress } from '../store/app';
-import { FileProgress } from '../model/APIData';
-import { isActiveTransferStatus } from '../functions/getFileStatusLabel';
+import { FileTransferSource } from '../definitions/FileTransferSource';
+import { clearStaleRemoteSyncOnReconnect, setFileTransferProgressForSource } from '../functions/fileTransferRegistry';
 import getServerConfig from '../functions/getServerConfig';
 
 type SocketContextType = Socket | null;
@@ -25,17 +23,15 @@ interface SocketProviderProps {
 }
 
 export const SocketProvider = ({ children }: SocketProviderProps) => {
-    const setFileTransferProgress = useSetAtom(fileTransferProgressAtom);
     const instanceId = getOrCreateInstanceId();
 
     useEffect(() => {
         socket.on('connect', () => {
-            // Only clear stale progress if the previous transfer is no longer
-            // active. A reconnect mid-upload (axios still running on the same
-            // tab) must not close the overlay or drop the live progress.
-            setFileTransferProgress((previous: FileProgress) =>
-                isActiveTransferStatus(previous.status) ? previous : getInactiveFileTransferProgress(),
-            );
+            // Reconnect-triggered only (not a wall-clock timer). If the backend
+            // dies and socket.io never reconnects, the axios timeout in
+            // syncRemoteFolder is the backstop — not infinite, but until then
+            // the overlay can linger (#1757).
+            clearStaleRemoteSyncOnReconnect();
 
             console.log(`Socket connected with ID: ${socket.id}`);
         });
@@ -61,7 +57,7 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
                 return;
             }
 
-            setFileTransferProgress({
+            setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, {
                 currentFileName: data.current_file_name,
                 numberOfFiles: data.number_of_files,
                 percentOfCurrent: data.percent_of_current,
@@ -86,7 +82,7 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
             socket.off('reconnect');
             socket.off('fileTransferProgress');
         };
-    }, [instanceId, setFileTransferProgress]);
+    }, [instanceId]);
 
     return <SocketContext.Provider value={socket}>{children}</SocketContext.Provider>;
 };

@@ -3,40 +3,46 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import getResponseError from '../functions/getResponseError';
 import {
     useL1PressureByOperation,
     useOpToPerfIdFiltered,
     usePerfFolderList,
+    usePerfMeta,
+    usePerfMetas,
     usePerformanceComparisonReport,
     usePerformanceRange,
     usePerformanceReport,
 } from '../hooks/useAPI';
+import { useResetPerfTableSessionState } from '../hooks/useResetPerfTableSessionState';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
 import {
     activePerformanceReportAtom,
     comparisonPerformanceReportListAtom,
     perfSelectedTabAtom,
-    selectedPerfRowIdAtom,
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
-import { Marker, MarkerColours } from '../definitions/PerfTable';
+import { Marker, MarkerColours, TypedPerfTableRow } from '../definitions/PerfTable';
 import { L1PressureStatus } from '../functions/l1Pressure';
+import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
+import { resolveMaxCores } from '../functions/getCoreCount';
+import { enrichRowData } from '../functions/enrichPerfRowData';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
 import { OpType, PerfTabIds } from '../definitions/Performance';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
-import { enrichRowData } from '../functions/enrichPerfRowData';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
+const EMPTY_COMPARISON_ROWS: TypedPerfTableRow[][] = [];
+const EMPTY_COMPARISON_MAX_CORES: number[] = [];
 
 export default function Performance() {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
@@ -63,10 +69,15 @@ export default function Performance() {
     const opIdsMap = useOpToPerfIdFiltered();
     const l1Pressure = useL1PressureByOperation();
     const l1PressureMap = l1Pressure.data;
+    const { data: deviceMeta } = usePerfMeta(activePerformanceReport?.reportName ?? null);
+    // Combined to `(MetaData | null)[]` so comparison enrichment memos on stable data, not per-render query objects.
+    const comparisonDeviceMetas = usePerfMetas(comparisonReportList);
     // Reserve the column while still loading so it doesn't pop in and shift the table sideways;
     // hide it only once we know the data is genuinely unavailable.
     const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
-    const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
+    const resetPerfTableSessionState = useResetPerfTableSessionState();
+    // undefined until first effect run so we skip the mount cycle and clear only on path change
+    const previousReportPathRef = useRef<string | null | undefined>(undefined);
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
@@ -105,26 +116,66 @@ export default function Performance() {
         [opCodeOptions],
     );
 
+    // Prefer the user's selected range, but don't wait on RangeSlider's sync effect — when
+    // selectedRange is still null (or left over from a disjoint prior report) fall back to
+    // the report's full span so we never flash "No data to display" after the skeleton.
+    const rangeForTable = useMemo(() => {
+        if (!perfRange) {
+            return selectedRange;
+        }
+
+        if (!selectedRange) {
+            return perfRange;
+        }
+
+        const selectionMissesReport = selectedRange[1] < perfRange[0] || selectedRange[0] > perfRange[1];
+
+        return selectionMissesReport ? perfRange : selectedRange;
+    }, [selectedRange, perfRange]);
+
     const rangedData = useMemo(
         () =>
-            selectedRange && perfData
+            rangeForTable && perfData
                 ? perfData.filter((row) => {
                       const rowId = typeof row?.id === 'number' ? row.id : parseInt(row?.id, 10);
-                      return rowId >= selectedRange[0] && rowId <= selectedRange[1];
+                      return rowId >= rangeForTable[0] && rowId <= rangeForTable[1];
                   })
                 : [],
-        [selectedRange, perfData],
+        [rangeForTable, perfData],
     );
 
-    const enrichedData = useMemo(
+    // Report finished but range not yet derived (should be rare with the fallback above).
+    const isTableLoading = isLoadingPerformance || (!!perfData?.length && rangeForTable === null);
+
+    const typedRows = useMemo(
         () => enrichRowData(rangedData, opIdsMap, l1PressureMap),
         [rangedData, opIdsMap, l1PressureMap],
     );
-    const enrichedComparisonData = useMemo(
-        // L1 metrics come from the active memory report only — do not attach the active report's map here.
-        () => comparisonPerfData?.map((dataset) => enrichRowData(dataset, opIdsMap, null)) || [],
-        [comparisonPerfData, opIdsMap],
-    );
+
+    const maxCores = useMemo(() => resolveMaxCores(deviceMeta, typedRows), [deviceMeta, typedRows]);
+
+    const enrichedData = useMemo(() => annotatePerfHeuristicFlags(typedRows, maxCores), [typedRows, maxCores]);
+
+    // Each comparison dataset is thresholded with its own device capacity (meta when
+    // available, else row/architecture fallback) so cross-architecture compares stay honest.
+    const { enrichedComparisonData, comparisonMaxCores } = useMemo(() => {
+        if (!comparisonPerfData?.length) {
+            return { enrichedComparisonData: EMPTY_COMPARISON_ROWS, comparisonMaxCores: EMPTY_COMPARISON_MAX_CORES };
+        }
+
+        const maxCoresByDataset: number[] = [];
+        const annotatedByDataset = comparisonPerfData.map((dataset, index) => {
+            // L1 pressure comes from the active profiler report only — never attribute it to
+            // comparison datasets (op-id sync and buffer lookups are keyed to the active report).
+            const comparisonTypedRows = enrichRowData(dataset, opIdsMap, null);
+            const datasetMaxCores = resolveMaxCores(comparisonDeviceMetas[index], comparisonTypedRows);
+            maxCoresByDataset.push(datasetMaxCores);
+
+            return annotatePerfHeuristicFlags(comparisonTypedRows, datasetMaxCores);
+        });
+
+        return { enrichedComparisonData: annotatedByDataset, comparisonMaxCores: maxCoresByDataset };
+    }, [comparisonPerfData, opIdsMap, comparisonDeviceMetas]);
 
     const selectedOpCodeSet = useMemo(
         () => new Set(selectedOpCodes.map((selected) => selected.opCode)),
@@ -177,8 +228,21 @@ export default function Performance() {
     );
 
     useEffect(() => {
-        setSelectedPerfRowId(null);
-    }, [activePerformanceReport?.path, setSelectedPerfRowId]);
+        const nextPath = activePerformanceReport?.path ?? null;
+        const previousPath = previousReportPathRef.current;
+
+        if (previousPath === undefined) {
+            previousReportPathRef.current = nextPath;
+            return;
+        }
+
+        if (previousPath === nextPath) {
+            return;
+        }
+
+        previousReportPathRef.current = nextPath;
+        resetPerfTableSessionState();
+    }, [activePerformanceReport?.path, resetPerfTableSessionState]);
 
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
@@ -268,8 +332,10 @@ export default function Performance() {
                             comparisonStackedData={enrichedComparisonStackedData}
                             signposts={data?.signposts}
                             hasL1PressureData={hasL1PressureData}
-                            isLoading={isLoadingPerformance}
+                            isLoading={isTableLoading}
                             isComparisonLoading={isLoadingComparison}
+                            maxCores={maxCores}
+                            comparisonMaxCores={comparisonMaxCores}
                         />
                     }
                 />

@@ -6,7 +6,7 @@ import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Toolti
 import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { DEFAULT_SSH_PORT, MLIR_UPLOAD_PATH, MlirServerConnection } from '../../definitions/MlirServer';
+import { MLIR_UPLOAD_PATH, MlirServerConnection } from '../../definitions/MlirServer';
 import getServerConfig from '../../functions/getServerConfig';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
@@ -21,13 +21,17 @@ interface MlirServerDialogProps {
     onClose: () => void;
 }
 
-const getDefaultServer = (): MlirServerConnection => ({
-    name: '',
-    username: getServerConfig().USERNAME ?? '',
-    host: '',
-    sshPort: DEFAULT_SSH_PORT,
-    port: 8080,
-});
+const getDefaultServer = (): MlirServerConnection => {
+    const serverConfig = getServerConfig();
+
+    return {
+        name: '',
+        username: serverConfig.USERNAME ?? '',
+        host: '',
+        sshPort: serverConfig.SSH_DEFAULT_PORT,
+        port: 8080,
+    };
+};
 
 const TEST_PROGRESS: ConnectionStatus = {
     status: ConnectionTestStates.PROGRESS,

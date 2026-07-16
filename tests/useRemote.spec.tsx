@@ -3,10 +3,21 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AxiosResponse } from 'axios';
+import { getDefaultStore } from 'jotai';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FileTransferSource } from '../src/definitions/FileTransferSource';
+import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../src/definitions/RemoteSync';
 import { StackSourceOrigin } from '../src/definitions/StackTrace';
+import {
+    clearAllFileTransferProgress,
+    fileTransferRegistryAtom,
+    getInactiveFileTransferProgress,
+    setFileTransferProgressForSource,
+} from '../src/functions/fileTransferRegistry';
+import { abortActiveRemoteSyncRequest } from '../src/functions/remoteSyncRequest';
 import useRemoteConnection from '../src/hooks/useRemote';
+import { FileStatus } from '../src/model/APIData';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -18,10 +29,12 @@ vi.mock('../src/libs/axiosInstance', () => ({
 beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
+    clearAllFileTransferProgress();
 });
 
 afterEach(() => {
     window.localStorage.clear();
+    clearAllFileTransferProgress();
 });
 
 describe('useRemoteConnection - stack source GETs', () => {
@@ -181,5 +194,107 @@ describe('useRemoteConnection - stack source GETs', () => {
         expect(out.data).toBeNull();
         expect(out.resolvedPath).toBeNull();
         expect(typeof out.error).toBe('string');
+    });
+});
+
+describe('useRemoteConnection - syncRemoteFolder timeout', () => {
+    const connection = {
+        name: 'c',
+        host: 'h',
+        port: 22,
+        username: 'u',
+        profilerPath: '/p',
+    };
+    const profilerFolder = { remotePath: '/r', reportName: 'r', lastModified: 1 };
+
+    it('posts /api/remote/sync with REMOTE_SYNC_REQUEST_TIMEOUT_MS and an abort signal', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockResolvedValue({ data: { remotePath: '/r', reportName: 'r' } } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        await result.current.syncRemoteFolder(connection, profilerFolder);
+
+        expect(mockPost).toHaveBeenCalledWith(
+            '/api/remote/sync',
+            {
+                connection,
+                profiler: profilerFolder,
+                performance: undefined,
+            },
+            {
+                timeout: REMOTE_SYNC_REQUEST_TIMEOUT_MS,
+                signal: expect.any(AbortSignal),
+            },
+        );
+    });
+
+    it('clears the REMOTE_SYNC slot when sync rejects', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockRejectedValue(new Error('timeout of 1800000ms exceeded'));
+
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, {
+            ...getInactiveFileTransferProgress(),
+            currentFileName: 'db.sqlite',
+            numberOfFiles: 3,
+            finishedFiles: 1,
+            percentOfCurrent: 0,
+            status: FileStatus.DOWNLOADING,
+        });
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        await expect(result.current.syncRemoteFolder(connection, profilerFolder)).rejects.toThrow(
+            'timeout of 1800000ms exceeded',
+        );
+
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
+    });
+
+    it('clears the REMOTE_SYNC slot when sync resolves', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockResolvedValue({ data: { remotePath: '/r', reportName: 'r' } } as AxiosResponse);
+
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, {
+            ...getInactiveFileTransferProgress(),
+            status: FileStatus.DOWNLOADING,
+            numberOfFiles: 1,
+        });
+
+        const { result } = renderHook(() => useRemoteConnection());
+        await result.current.syncRemoteFolder(connection, profilerFolder);
+
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
+    });
+
+    it('rejects and clears REMOTE_SYNC when the active abort signal fires', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockImplementation(
+            (_url, _body, config) =>
+                new Promise((_resolve, reject) => {
+                    const { signal } = config as { signal: AbortSignal };
+                    signal.addEventListener('abort', () => {
+                        reject(new Error('aborted'));
+                    });
+                }) as ReturnType<typeof mockPost>,
+        );
+
+        setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, {
+            ...getInactiveFileTransferProgress(),
+            status: FileStatus.DOWNLOADING,
+            numberOfFiles: 1,
+        });
+
+        const { result } = renderHook(() => useRemoteConnection());
+        const syncPromise = result.current.syncRemoteFolder(connection, profilerFolder);
+
+        abortActiveRemoteSyncRequest();
+
+        await expect(syncPromise).rejects.toThrow('aborted');
+        expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
     });
 });

@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { useMemo } from 'react';
 import { ParsedAttrKind, tryParseAttrValue } from './attrFormatter';
 
 interface MlirAttrValueProps {
@@ -77,7 +78,7 @@ const NestedTree = ({ data }: NestedTreeProps) => {
 };
 
 const MlirAttrValue = ({ value }: MlirAttrValueProps) => {
-    const parsed = tryParseAttrValue(value);
+    const parsed = useMemo(() => tryParseAttrValue(value), [value]);
     if (parsed.kind === ParsedAttrKind.Scalar) {
         return <span className='mlir-attr-value mlir-attr-value-scalar'>{parsed.text}</span>;
     }

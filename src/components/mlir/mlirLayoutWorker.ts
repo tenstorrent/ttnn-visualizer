@@ -6,7 +6,11 @@
 /* eslint-disable no-continue */
 import { buildVisibleGraph } from './mlirGraphBuilder';
 import { buildGraphIndex } from './mlirGraphIndexBuilder';
+import { CACHE_LIMIT_PER_GRAPH, touchLruCache } from './mlirLayoutWorkerCache';
 import type { BuiltGraph, GraphIndex, WorkerInboundMessage } from './mlirGraphTypes';
+
+const touchGraphCache = (cache: Map<string, BuiltGraph>, key: string, value: BuiltGraph): void =>
+    touchLruCache(cache, key, value, CACHE_LIMIT_PER_GRAPH);
 
 const indexByGraphId = new Map<string, GraphIndex>();
 const cacheByGraphId = new Map<string, Map<string, BuiltGraph>>();
@@ -58,6 +62,7 @@ function processLatestBuild(graphId: string): void {
 
             const cached = cache.get(request.cacheKey);
             if (cached) {
+                touchGraphCache(cache, request.cacheKey, cached);
                 if (!latestBuildByGraphId.has(graphId)) {
                     postMessage({
                         type: 'built',
@@ -72,7 +77,7 @@ function processLatestBuild(graphId: string): void {
 
             try {
                 const built = buildVisibleGraph(index, request.expandedNamespaces);
-                cache.set(request.cacheKey, built);
+                touchGraphCache(cache, request.cacheKey, built);
                 const newerRequestExists = latestBuildByGraphId.has(graphId);
                 const graphVersionChanged = request.graphVersion !== getGraphVersion(graphId);
                 if (!newerRequestExists && !graphVersionChanged) {

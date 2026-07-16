@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { memo } from 'react';
 import { Switch } from '@blueprintjs/core';
 import 'styles/components/MlirNodeBodyToggles.scss';
 
@@ -15,7 +16,7 @@ interface MlirNodeBodyTogglesProps {
     onChange: (next: MlirNodeBodyTogglesState) => void;
 }
 
-const MlirNodeBodyToggles = ({ value, onChange }: MlirNodeBodyTogglesProps) => (
+const MlirNodeBodyTogglesInner = ({ value, onChange }: MlirNodeBodyTogglesProps) => (
     <div className='mlir-node-body-toggles'>
         <Switch
             checked={value.location}
@@ -29,5 +30,8 @@ const MlirNodeBodyToggles = ({ value, onChange }: MlirNodeBodyTogglesProps) => (
         />
     </div>
 );
+
+const MlirNodeBodyToggles = memo(MlirNodeBodyTogglesInner);
+MlirNodeBodyToggles.displayName = 'MlirNodeBodyToggles';
 
 export default MlirNodeBodyToggles;

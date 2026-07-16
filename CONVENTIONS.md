@@ -730,6 +730,44 @@ void queryClient.invalidateQueries({ queryKey: ['fetch-tensors'] });
 
 The lint exists to surface "did you forget to `await`?" — when the answer is genuinely "no, this is intentionally background", the explicit `void` documents the intent so reviewers don't have to re-derive it.
 
+### Pinned ESLint rules
+
+#### `no-param-reassign` — allow mutating parameter properties
+
+Airbnb-base enables `no-param-reassign` with `props: true` (forbids `fn(arg) { arg.foo = … }`). We override to `props: false` so in-place mutation of object properties on parameters remains allowed — common in axios interceptors, graph builders, and reduce-style accumulators passed by reference.
+
+`eslint.config.cjs`
+
+```js
+'no-param-reassign': ['error', { props: false }], // overrides airbnb-base `props: true`
+```
+
+Reassigning the parameter binding itself (`arg = …`) is still an error. Only property writes on the parameter object are permitted.
+
+#### `react/display-name` — off
+
+`plugin:react/recommended` would error on anonymous components (e.g. `memo(...)`, Blueprint `ItemRenderer` factories). Full Airbnb (previously pulled in via erb) disabled this rule; we pin it off for the same reason. Named `function`/`const` components are still encouraged; this avoids noise on inline render callbacks that aren't exported.
+
+```js
+'react/display-name': 'off',
+```
+
+#### `react/no-danger` — warn
+
+Flags `dangerouslySetInnerHTML` (XSS risk). Configured as **warn** so existing, reviewed suppressions stay valid under `--max-warnings 0`. New uses need a justification comment on the `eslint-disable-next-line`:
+
+```tsx
+// HTML tags are escaped by hljs
+// eslint-disable-next-line react/no-danger
+<code dangerouslySetInnerHTML={{ __html: highlighted }} />
+```
+
+See `StackTrace.tsx`, `SourceFileOverlay.tsx`, and `DeviceOperationsFullRender.tsx` for the established pattern. Prefer safer alternatives when hljs (or similar trusted escaping) isn't in play.
+
+#### `.cjs` config files
+
+`eslint.config.cjs` and `.stylelintrc.cjs` are linted via a dedicated flat-config block (`files: ['**/*.cjs']`) with CommonJS-appropriate rule relaxations (`@typescript-eslint/no-require-imports` off, etc.). CI includes changed `.cjs` files in the frontend lint step (`.github/workflows/lint-and-test.yml`).
+
 ---
 
 ## Testing
