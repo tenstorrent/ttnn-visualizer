@@ -1523,7 +1523,11 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     connectionLineType={ConnectionLineType.SmoothStep}
                     selectNodesOnDrag={false}
                 >
-                    <MiniMap nodeColor={minimapNodeColor} />
+                    <MiniMap
+                        nodeColor={minimapNodeColor}
+                        pannable
+                        zoomable
+                    />
                     <Controls />
                     <Background />
                 </ReactFlow>
