@@ -480,18 +480,21 @@ const RemoteSyncConfigurator = () => {
 
     // On mount (and when SERVER_MODE is off), seed dropdowns from on-disk synced copies
     // for the currently selected host so offline use works without clicking Fetch.
+    // Cleanup aborts any in-flight scan so unmount cannot call setState after teardown.
     useEffect(() => {
-        if (disableRemoteSync) {
-            return;
+        if (!disableRemoteSync) {
+            const connection = remote.persistentState.selectedConnection;
+
+            if (connection) {
+                loadLocalSyncedFolders(connection).catch(() => {
+                    // Local scan is best-effort; cached folders remain if it fails.
+                });
+            }
         }
 
-        const connection = remote.persistentState.selectedConnection;
-
-        if (connection) {
-            loadLocalSyncedFolders(connection).catch(() => {
-                // Local scan is best-effort; cached folders remain if it fails.
-            });
-        }
+        return () => {
+            localSyncedFoldersAbortRef.current?.abort();
+        };
         // Intentionally once on mount for the persisted selection; connection changes go
         // through updateSelectedConnection which also calls loadLocalSyncedFolders.
         // eslint-disable-next-line react-hooks/exhaustive-deps -- mount seed only

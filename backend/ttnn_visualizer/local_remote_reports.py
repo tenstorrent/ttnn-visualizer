@@ -50,7 +50,10 @@ def _is_valid_local_performance_report_dir(directory: Path) -> bool:
     if not all((directory / name).is_file() for name in PERFORMANCE_REQUIRED_FILES):
         return False
     try:
-        return any(directory.glob(f"{PERFORMANCE_OPS_PERF_PREFIX}*"))
+        # Require a matching file — a directory named ops_perf_results* is not enough.
+        return any(
+            path.is_file() for path in directory.glob(f"{PERFORMANCE_OPS_PERF_PREFIX}*")
+        )
     except OSError:
         return False
 

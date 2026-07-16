@@ -110,6 +110,22 @@ def test_list_local_skips_incomplete_performance_folder(tmp_path: Path):
     assert folders == []
 
 
+def test_list_local_skips_ops_perf_results_directory(tmp_path: Path):
+    """A directory named ops_perf_results* must not satisfy the file marker check."""
+    host = "bh-lb-01"
+    report_dir = tmp_path / host / "performance-reports" / "partial"
+    report_dir.mkdir(parents=True)
+    (report_dir / "profile_log_device.csv").write_text("x")
+    (report_dir / "tracy_profile_log_host.tracy").write_bytes(b"x")
+    (report_dir / "ops_perf_results_0").mkdir()
+
+    folders = list_local_synced_performance_folders(
+        _connection(host), tmp_path, "performance-reports"
+    )
+
+    assert folders == []
+
+
 def test_list_local_skips_profiler_folder_without_db(tmp_path: Path):
     host = "bh-lb-01"
     incomplete = tmp_path / host / "profiler-reports" / "partial"
