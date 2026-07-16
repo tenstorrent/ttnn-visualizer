@@ -40,12 +40,20 @@ def test_remote_profiler_returns_json_when_reports_exist(app, client):
             lastModified=100,
         )
     ]
+    expected_local_path = str(
+        Path(app.config["REMOTE_DATA_DIRECTORY"])
+        / "remote.example.com"
+        / app.config["PROFILER_DIRECTORY_NAME"]
+        / "resnet50"
+    )
 
     with (
         patch(
             "ttnn_visualizer.views.get_remote_profiler_folders", return_value=folders
         ),
-        patch("ttnn_visualizer.views.read_last_synced_file", return_value=123),
+        patch(
+            "ttnn_visualizer.views.read_last_synced_file", return_value=123
+        ) as read_last_synced,
     ):
         response = client.post(
             "/api/remote/profiler-reports", json=_remote_connection_payload()
@@ -59,6 +67,7 @@ def test_remote_profiler_returns_json_when_reports_exist(app, client):
     assert data[0]["remotePath"] == "/remote/profiler/reports/resnet50"
     assert data[0]["lastModified"] == 100
     assert data[0]["lastSynced"] == 123
+    read_last_synced.assert_called_once_with(expected_local_path)
 
 
 def test_remote_performance_returns_204_when_no_reports(client):
@@ -81,12 +90,20 @@ def test_remote_performance_returns_json_when_reports_exist(app, client):
             lastModified=200,
         )
     ]
+    expected_local_path = str(
+        Path(app.config["REMOTE_DATA_DIRECTORY"])
+        / "remote.example.com"
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+        / "bert"
+    )
 
     with (
         patch(
             "ttnn_visualizer.views.get_remote_performance_folders", return_value=folders
         ),
-        patch("ttnn_visualizer.views.read_last_synced_file", return_value=456),
+        patch(
+            "ttnn_visualizer.views.read_last_synced_file", return_value=456
+        ) as read_last_synced,
     ):
         response = client.post(
             "/api/remote/performance-reports", json=_remote_connection_payload()
@@ -100,3 +117,4 @@ def test_remote_performance_returns_json_when_reports_exist(app, client):
     assert data[0]["remotePath"] == "/remote/performance/reports/bert"
     assert data[0]["lastModified"] == 200
     assert data[0]["lastSynced"] == 456
+    read_last_synced.assert_called_once_with(expected_local_path)

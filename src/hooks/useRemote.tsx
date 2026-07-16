@@ -97,17 +97,72 @@ const useRemoteConnection = () => {
         return performanceFolders;
     };
 
+    const listLocalProfilerReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
+        if (!connection || !connection.host) {
+            throw new Error('No connection provided');
+        }
+
+        if (!connection.profilerPath) {
+            return [];
+        }
+
+        const response = await axiosInstance.post<RemoteFolder[]>(
+            `${Endpoints.REMOTE}/local-profiler-reports`,
+            connection,
+        );
+
+        if (response.status === HttpStatusCode.NoContent) {
+            return [];
+        }
+
+        const reportFolders = Array.isArray(response.data) ? response.data : [];
+
+        return reportFolders.map(normaliseReportFolder) as RemoteFolder[];
+    };
+
+    const listLocalPerformanceReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
+        if (!connection || !connection.host) {
+            throw new Error('No connection provided');
+        }
+
+        if (!connection.performancePath) {
+            return [];
+        }
+
+        const response = await axiosInstance.post<RemoteFolder[]>(
+            `${Endpoints.REMOTE}/local-performance-reports`,
+            connection,
+        );
+
+        if (response.status === HttpStatusCode.NoContent) {
+            return [];
+        }
+
+        const performanceFolders = Array.isArray(response.data) ? response.data : [];
+
+        return performanceFolders;
+    };
+
     const syncRemoteFolder = async (
         connection?: RemoteConnection,
         profilerRemoteFolder?: RemoteFolder,
         performanceRemoteFolder?: RemoteFolder,
     ) => {
-        if (!connection || !connection.host || !connection.port || !connection.profilerPath) {
+        if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
 
         if (!profilerRemoteFolder && !performanceRemoteFolder) {
             throw new Error('No remote folder provided');
+        }
+
+        // Performance-only connections omit profilerPath; require a path for the folder being synced.
+        if (profilerRemoteFolder && !connection.profilerPath) {
+            throw new Error('No profiler path provided');
+        }
+
+        if (performanceRemoteFolder && !connection.performancePath) {
+            throw new Error('No performance path provided');
         }
 
         // Bound the hang and guarantee REMOTE_SYNC cleanup for every caller —
@@ -299,6 +354,8 @@ const useRemoteConnection = () => {
         syncRemoteFolder,
         listProfilerReports,
         listPerformanceReports,
+        listLocalProfilerReports,
+        listLocalPerformanceReports,
         mountRemoteFolder,
         persistentState,
         setPersistentSelectedConnection,

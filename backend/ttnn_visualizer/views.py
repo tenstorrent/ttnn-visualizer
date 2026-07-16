@@ -48,6 +48,10 @@ from ttnn_visualizer.file_uploads import (
     validate_files,
 )
 from ttnn_visualizer.instances import get_instances, update_instance
+from ttnn_visualizer.local_remote_reports import (
+    list_local_synced_performance_folders,
+    list_local_synced_profiler_folders,
+)
 from ttnn_visualizer.mlir import (
     test_mlir_server_connection,
     upload_and_convert_mlir,
@@ -1505,10 +1509,12 @@ def list_remote_reports_profiler():
         for rf in remote_folders:
             directory_name = Path(rf.remotePath).name
             remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
+            # Must match sync_remote_profiler_folders / PathResolver:
+            # REMOTE_DATA_DIRECTORY/<host>/profiler-reports/<name>
             local_path = (
                 remote_data_directory
-                / current_app.config["PROFILER_DIRECTORY_NAME"]
                 / connection.host
+                / current_app.config["PROFILER_DIRECTORY_NAME"]
                 / directory_name
             )
             logger.info(f"Checking last synced for {directory_name}")
@@ -1543,10 +1549,12 @@ def list_remote_reports_performance():
         for rf in remote_performance_folders:
             performance_name = Path(rf.remotePath).name
             remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
+            # Must match sync_remote_performance_folders / PathResolver:
+            # REMOTE_DATA_DIRECTORY/<host>/performance-reports/<name>
             local_path = (
                 remote_data_directory
-                / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
                 / connection.host
+                / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
                 / performance_name
             )
             logger.info(f"Checking last synced for {performance_name}")
@@ -1560,6 +1568,52 @@ def list_remote_reports_performance():
         )
     except RemoteConnectionException as e:
         return error_response(e.http_status, e.message)
+
+
+@api.route("/remote/local-profiler-reports", methods=["POST"])
+def list_local_remote_reports_profiler():
+    """List profiler reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return response_bad_request("Missing connection data")
+
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
+    folders = list_local_synced_profiler_folders(
+        connection,
+        Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
+        current_app.config["PROFILER_DIRECTORY_NAME"],
+    )
+    if not folders:
+        return Response(status=HTTPStatus.NO_CONTENT)
+
+    return Response(
+        orjson.dumps([folder.model_dump() for folder in folders]),
+        mimetype="application/json",
+    )
+
+
+@api.route("/remote/local-performance-reports", methods=["POST"])
+def list_local_remote_reports_performance():
+    """List performance reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return response_bad_request("Missing connection data")
+
+    connection = RemoteConnection.model_validate(connection_data, strict=False)
+    folders = list_local_synced_performance_folders(
+        connection,
+        Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
+        current_app.config["PERFORMANCE_DIRECTORY_NAME"],
+    )
+    if not folders:
+        return Response(status=HTTPStatus.NO_CONTENT)
+
+    return Response(
+        orjson.dumps([folder.model_dump() for folder in folders]),
+        mimetype="application/json",
+    )
 
 
 @api.route("/cluster-descriptor", methods=["GET"])
