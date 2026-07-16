@@ -4,7 +4,10 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToastType } from '../src/functions/createToastNotification';
-import notifyFolderSyncLocalFallback from '../src/functions/notifyFolderSyncLocalFallback';
+import notifyFolderSyncLocalFallback, {
+    FOLDER_SYNC_LOCAL_FALLBACK_TOAST_DETAIL_PREFIX,
+    FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE,
+} from '../src/functions/notifyFolderSyncLocalFallback';
 
 const { createToastNotification } = vi.hoisted(() => ({
     createToastNotification: vi.fn(),
@@ -29,8 +32,8 @@ describe('notifyFolderSyncLocalFallback', () => {
         notifyFolderSyncLocalFallback(new Error('Unable to establish SSH connection'));
 
         expect(createToastNotification).toHaveBeenCalledWith(
-            'Loaded local copy',
-            'Could not sync from remote; using previously synced report. Unable to establish SSH connection',
+            FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE,
+            `${FOLDER_SYNC_LOCAL_FALLBACK_TOAST_DETAIL_PREFIX} Unable to establish SSH connection`,
             ToastType.WARNING,
         );
     });

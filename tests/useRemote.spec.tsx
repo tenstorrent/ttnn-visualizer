@@ -230,6 +230,55 @@ describe('useRemoteConnection - syncRemoteFolder timeout', () => {
         );
     });
 
+    it('syncs a performance-only connection without requiring profilerPath', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockResolvedValue({ data: { remotePath: '/perf', reportName: 'perf' } } as AxiosResponse);
+
+        const performanceOnlyConnection = {
+            name: 'c',
+            host: 'h',
+            port: 22,
+            username: 'u',
+            performancePath: '/perf',
+        };
+        const performanceFolder = { remotePath: '/perf/r', reportName: 'r', lastModified: 1 };
+
+        const { result } = renderHook(() => useRemoteConnection());
+        await result.current.syncRemoteFolder(performanceOnlyConnection, undefined, performanceFolder);
+
+        expect(mockPost).toHaveBeenCalledWith(
+            '/api/remote/sync',
+            {
+                connection: performanceOnlyConnection,
+                profiler: undefined,
+                performance: performanceFolder,
+            },
+            expect.objectContaining({
+                timeout: REMOTE_SYNC_REQUEST_TIMEOUT_MS,
+            }),
+        );
+    });
+
+    it('throws when syncing a profiler folder without profilerPath', async () => {
+        const { result } = renderHook(() => useRemoteConnection());
+
+        await expect(
+            result.current.syncRemoteFolder(
+                { name: 'c', host: 'h', port: 22, username: 'u', performancePath: '/perf' },
+                profilerFolder,
+            ),
+        ).rejects.toThrow('No profiler path provided');
+    });
+
+    it('throws when syncing a performance folder without performancePath', async () => {
+        const { result } = renderHook(() => useRemoteConnection());
+
+        await expect(result.current.syncRemoteFolder(connection, undefined, profilerFolder)).rejects.toThrow(
+            'No performance path provided',
+        );
+    });
+
     it('clears the REMOTE_SYNC slot when sync rejects', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockPost = vi.mocked(axiosInstance.default.post);
@@ -296,5 +345,113 @@ describe('useRemoteConnection - syncRemoteFolder timeout', () => {
 
         await expect(syncPromise).rejects.toThrow('aborted');
         expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.REMOTE_SYNC]).toBeUndefined();
+    });
+});
+
+describe('useRemoteConnection - listLocal reports', () => {
+    const connection = {
+        name: 'c',
+        host: 'h',
+        port: 22,
+        username: 'u',
+        profilerPath: '/p',
+        performancePath: '/perf',
+    };
+
+    it('listLocalProfilerReports posts the local profiler endpoint and normalises folders', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockResolvedValue({
+            status: 200,
+            data: [{ remotePath: '/p/r', reportName: 'r', lastModified: 1, lastSynced: null }],
+        } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        const folders = await result.current.listLocalProfilerReports(connection);
+
+        expect(mockPost).toHaveBeenCalledWith('/api/remote/local-profiler-reports', connection);
+        expect(folders).toHaveLength(1);
+        expect(folders[0].reportName).toBe('r');
+    });
+
+    it('listLocalPerformanceReports posts the local performance endpoint', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockResolvedValue({
+            status: 200,
+            data: [{ remotePath: '/perf/r', reportName: 'r', lastModified: 1, lastSynced: null }],
+        } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        const folders = await result.current.listLocalPerformanceReports(connection);
+
+        expect(mockPost).toHaveBeenCalledWith('/api/remote/local-performance-reports', connection);
+        expect(folders).toEqual([{ remotePath: '/perf/r', reportName: 'r', lastModified: 1, lastSynced: null }]);
+    });
+
+    it('listLocalProfilerReports returns [] on 204 without treating the body as folders', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockResolvedValue({ status: 204, data: '' } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        await expect(result.current.listLocalProfilerReports(connection)).resolves.toEqual([]);
+    });
+
+    it('listLocalPerformanceReports returns [] on 204', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockResolvedValue({ status: 204, data: '' } as AxiosResponse);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        await expect(result.current.listLocalPerformanceReports(connection)).resolves.toEqual([]);
+    });
+
+    it('listLocalProfilerReports returns [] without posting when profilerPath is missing', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        await expect(
+            result.current.listLocalProfilerReports({
+                name: 'c',
+                host: 'h',
+                port: 22,
+                username: 'u',
+                performancePath: '/perf',
+            }),
+        ).resolves.toEqual([]);
+        expect(mockPost).not.toHaveBeenCalled();
+    });
+
+    it('listLocalPerformanceReports skips POST when performancePath is absent', async () => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+
+        const { result } = renderHook(() => useRemoteConnection());
+        await expect(
+            result.current.listLocalPerformanceReports({
+                name: 'c',
+                host: 'h',
+                port: 22,
+                username: 'u',
+                profilerPath: '/p',
+            }),
+        ).resolves.toEqual([]);
+        expect(mockPost).not.toHaveBeenCalled();
+    });
+
+    it('listLocalProfilerReports throws when host is missing', async () => {
+        const { result } = renderHook(() => useRemoteConnection());
+
+        await expect(
+            result.current.listLocalProfilerReports({
+                name: 'c',
+                host: '',
+                port: 22,
+                username: 'u',
+                profilerPath: '/p',
+            }),
+        ).rejects.toThrow('No connection provided');
     });
 });

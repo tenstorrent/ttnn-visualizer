@@ -2,10 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
+import { AxiosResponse, HttpStatusCode } from 'axios';
 import { useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
@@ -34,6 +35,7 @@ import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareD
 
 const LOCAL_SYNCED_REPORTS_TOAST_TITLE = 'Loaded local synced reports';
 const LOCAL_SYNCED_REPORTS_TOAST_DETAIL = 'Remote host unreachable; showing reports already synced on this machine.';
+const FOLDER_LIST_SYNC_ERROR_TOAST_TITLE = 'Folder list sync error';
 
 const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
@@ -81,6 +83,8 @@ const RemoteSyncConfigurator = () => {
               )
             : remotePerformanceFolderList[0],
     );
+    // Drops stale loadLocalSyncedFolders completions when the connection changes quickly.
+    const localSyncedFoldersRequestIdRef = useRef(0);
 
     const updateSelectedConnection = async (connection: RemoteConnection) => {
         setPersistentSelectedConnection(connection);
@@ -112,10 +116,15 @@ const RemoteSyncConfigurator = () => {
     };
 
     const loadLocalSyncedFolders = async (connection: RemoteConnection) => {
+        const requestId = ++localSyncedFoldersRequestIdRef.current;
         const [localProfilerFolders, localPerformanceFolders] = await Promise.allSettled([
             connection.profilerPath ? remote.listLocalProfilerReports(connection) : Promise.resolve([]),
             connection.performancePath ? remote.listLocalPerformanceReports(connection) : Promise.resolve([]),
         ]);
+
+        if (requestId !== localSyncedFoldersRequestIdRef.current) {
+            return;
+        }
 
         // Always replace cached lists on a successful scan — including []. Otherwise
         // never-synced / empty local dirs from an older remote fetch stay visible.
@@ -128,6 +137,36 @@ const RemoteSyncConfigurator = () => {
         }
     };
 
+    const applyRemoteOrLocalFolderList = async (
+        remoteResult: PromiseSettledResult<RemoteFolder[]>,
+        connection: RemoteConnection,
+        pathPresent: boolean,
+        listLocal: (connection: RemoteConnection) => Promise<RemoteFolder[]>,
+        updateSaved: (connection: RemoteConnection, folders: RemoteFolder[]) => void,
+    ): Promise<{ usedLocalFallback: boolean; error: string | null }> => {
+        if (remoteResult.status === 'fulfilled') {
+            updateSaved(connection, remoteResult.value);
+            return { usedLocalFallback: false, error: null };
+        }
+
+        if (!pathPresent) {
+            return { usedLocalFallback: false, error: null };
+        }
+
+        try {
+            const localFolders = await listLocal(connection);
+            updateSaved(connection, localFolders);
+
+            if (localFolders.length > 0) {
+                return { usedLocalFallback: true, error: null };
+            }
+
+            return { usedLocalFallback: false, error: getResponseError(remoteResult.reason) };
+        } catch {
+            return { usedLocalFallback: false, error: getResponseError(remoteResult.reason) };
+        }
+    };
+
     const fetchRemoteFolderLists = async (connection: RemoteConnection) => {
         try {
             setIsFetching(true);
@@ -137,42 +176,25 @@ const RemoteSyncConfigurator = () => {
                 connection.performancePath ? remote.listPerformanceReports(connection) : Promise.resolve([]),
             ]);
 
-            const fetchErrors: string[] = [];
-            let usedLocalFallback = false;
+            // Run local fallbacks in parallel when both SSH lists fail (same dual-failure cost).
+            const [profilerOutcome, performanceOutcome] = await Promise.all([
+                applyRemoteOrLocalFolderList(
+                    reportFolders,
+                    connection,
+                    Boolean(connection.profilerPath),
+                    remote.listLocalProfilerReports,
+                    updateSavedReportFolders,
+                ),
+                applyRemoteOrLocalFolderList(
+                    performanceFolders,
+                    connection,
+                    Boolean(connection.performancePath),
+                    remote.listLocalPerformanceReports,
+                    updateSavedPerformanceFolders,
+                ),
+            ]);
 
-            if (reportFolders.status === 'fulfilled') {
-                updateSavedReportFolders(connection, reportFolders.value);
-            } else if (connection.profilerPath) {
-                try {
-                    const localProfilerFolders = await remote.listLocalProfilerReports(connection);
-                    updateSavedReportFolders(connection, localProfilerFolders);
-                    if (localProfilerFolders.length > 0) {
-                        usedLocalFallback = true;
-                    } else {
-                        fetchErrors.push(getResponseError(reportFolders.reason));
-                    }
-                } catch {
-                    fetchErrors.push(getResponseError(reportFolders.reason));
-                }
-            }
-
-            if (performanceFolders.status === 'fulfilled') {
-                updateSavedPerformanceFolders(connection, performanceFolders.value);
-            } else if (connection.performancePath) {
-                try {
-                    const localPerformanceFolders = await remote.listLocalPerformanceReports(connection);
-                    updateSavedPerformanceFolders(connection, localPerformanceFolders);
-                    if (localPerformanceFolders.length > 0) {
-                        usedLocalFallback = true;
-                    } else {
-                        fetchErrors.push(getResponseError(performanceFolders.reason));
-                    }
-                } catch {
-                    fetchErrors.push(getResponseError(performanceFolders.reason));
-                }
-            }
-
-            if (usedLocalFallback) {
+            if (profilerOutcome.usedLocalFallback || performanceOutcome.usedLocalFallback) {
                 createToastNotification(
                     LOCAL_SYNCED_REPORTS_TOAST_TITLE,
                     LOCAL_SYNCED_REPORTS_TOAST_DETAIL,
@@ -180,11 +202,15 @@ const RemoteSyncConfigurator = () => {
                 );
             }
 
+            const fetchErrors = [profilerOutcome.error, performanceOutcome.error].filter(
+                (error): error is string => error !== null,
+            );
+
             if (fetchErrors.length > 0) {
-                createToastNotification('Folder list sync error', fetchErrors.join('; '), ToastType.ERROR);
+                createToastNotification(FOLDER_LIST_SYNC_ERROR_TOAST_TITLE, fetchErrors.join('; '), ToastType.ERROR);
             }
         } catch (err: unknown) {
-            createToastNotification('Folder list sync error', getResponseError(err), ToastType.ERROR);
+            createToastNotification(FOLDER_LIST_SYNC_ERROR_TOAST_TITLE, getResponseError(err), ToastType.ERROR);
         } finally {
             setIsFetching(false);
         }
@@ -274,7 +300,12 @@ const RemoteSyncConfigurator = () => {
         createToastNotification('Active performance report', folder.reportName, ToastType.SUCCESS);
     };
 
-    const mountLocalProfilerFolderOnSyncFailure = async (selectedReport: RemoteFolder, err: unknown) => {
+    const mountLocalFolderOnSyncFailure = async (
+        selectedReport: RemoteFolder,
+        err: unknown,
+        mount: (connection: RemoteConnection) => Promise<AxiosResponse>,
+        applySelection: (folder: RemoteFolder) => void,
+    ) => {
         const connection = remote.persistentState.selectedConnection;
 
         if (!connection) {
@@ -283,10 +314,10 @@ const RemoteSyncConfigurator = () => {
         }
 
         try {
-            const mountResponse = await remote.mountRemoteFolder(connection, selectedReport);
+            const mountResponse = await mount(connection);
 
-            if (mountResponse.status === 200) {
-                applyProfilerReportSelection(selectedReport);
+            if (mountResponse.status === HttpStatusCode.Ok) {
+                applySelection(selectedReport);
                 notifyFolderSyncLocalFallback(err);
 
                 if (hasBeenNormalised(selectedReport)) {
@@ -302,29 +333,20 @@ const RemoteSyncConfigurator = () => {
         notifyFolderSyncError(err);
     };
 
-    const mountLocalPerformanceFolderOnSyncFailure = async (selectedReport: RemoteFolder, err: unknown) => {
-        const connection = remote.persistentState.selectedConnection;
+    const handleSyncFailure = async (
+        err: unknown,
+        selectedReport: RemoteFolder | undefined,
+        mountLocalFallback: (folder: RemoteFolder, err: unknown) => Promise<void>,
+    ) => {
+        const failureAction = getRemoteSyncFailureAction(err, selectedReport);
 
-        if (!connection) {
-            notifyFolderSyncError(err);
+        if (failureAction === RemoteSyncFailureAction.IGNORE_CANCEL) {
             return;
         }
 
-        try {
-            const mountResponse = await remote.mountRemoteFolder(connection, undefined, selectedReport);
-
-            if (mountResponse.status === 200) {
-                applyPerformanceReportSelection(selectedReport);
-                notifyFolderSyncLocalFallback(err);
-
-                if (hasBeenNormalised(selectedReport)) {
-                    createDataIntegrityWarning(selectedReport);
-                }
-
-                return;
-            }
-        } catch {
-            // Mount itself failed; surface the original sync error below.
+        if (failureAction === RemoteSyncFailureAction.FALLBACK_LOCAL && selectedReport) {
+            await mountLocalFallback(selectedReport, err);
+            return;
         }
 
         notifyFolderSyncError(err);
@@ -362,25 +384,21 @@ const RemoteSyncConfigurator = () => {
                         updatedFolder,
                     );
 
-                    if (mountResponse.status === 200) {
+                    if (mountResponse.status === HttpStatusCode.Ok) {
                         updateReportSelection(updatedFolder);
                         queryClient.clear();
                     }
                 }
             }
         } catch (err: unknown) {
-            const failureAction = getRemoteSyncFailureAction(err, selectedReport);
-
-            if (failureAction === RemoteSyncFailureAction.IGNORE_CANCEL) {
-                return;
-            }
-
-            if (failureAction === RemoteSyncFailureAction.FALLBACK_LOCAL && selectedReport) {
-                await mountLocalProfilerFolderOnSyncFailure(selectedReport, err);
-                return;
-            }
-
-            notifyFolderSyncError(err);
+            await handleSyncFailure(err, selectedReport, (report, syncErr) =>
+                mountLocalFolderOnSyncFailure(
+                    report,
+                    syncErr,
+                    (connection) => remote.mountRemoteFolder(connection, report),
+                    applyProfilerReportSelection,
+                ),
+            );
         } finally {
             // REMOTE_SYNC registry clear is owned by syncRemoteFolder's finally.
             setIsSyncingReportFolder(false);
@@ -421,25 +439,21 @@ const RemoteSyncConfigurator = () => {
                         updatedFolder,
                     );
 
-                    if (mountResponse.status === 200) {
+                    if (mountResponse.status === HttpStatusCode.Ok) {
                         updatePerformanceSelection(updatedFolder);
                         queryClient.clear();
                     }
                 }
             }
         } catch (err: unknown) {
-            const failureAction = getRemoteSyncFailureAction(err, selectedReport);
-
-            if (failureAction === RemoteSyncFailureAction.IGNORE_CANCEL) {
-                return;
-            }
-
-            if (failureAction === RemoteSyncFailureAction.FALLBACK_LOCAL && selectedReport) {
-                await mountLocalPerformanceFolderOnSyncFailure(selectedReport, err);
-                return;
-            }
-
-            notifyFolderSyncError(err);
+            await handleSyncFailure(err, selectedReport, (report, syncErr) =>
+                mountLocalFolderOnSyncFailure(
+                    report,
+                    syncErr,
+                    (connection) => remote.mountRemoteFolder(connection, undefined, report),
+                    applyPerformanceReportSelection,
+                ),
+            );
         } finally {
             // REMOTE_SYNC registry clear is owned by syncRemoteFolder's finally.
             setIsSyncingPerformanceFolder(false);
@@ -590,7 +604,7 @@ const RemoteSyncConfigurator = () => {
                                 folder,
                             );
 
-                            if (response.status === 200) {
+                            if (response.status === HttpStatusCode.Ok) {
                                 updateReportSelection(folder);
 
                                 if (hasBeenNormalised(folder)) {
@@ -636,7 +650,7 @@ const RemoteSyncConfigurator = () => {
                                 folder,
                             );
 
-                            if (response.status === 200) {
+                            if (response.status === HttpStatusCode.Ok) {
                                 updatePerformanceSelection(folder);
 
                                 if (hasBeenNormalised(folder)) {

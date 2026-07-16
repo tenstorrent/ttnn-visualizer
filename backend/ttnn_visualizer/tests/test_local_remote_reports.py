@@ -42,6 +42,22 @@ def test_list_local_synced_profiler_folders(tmp_path: Path):
     assert folders[0].lastModified == folders[0].lastSynced
 
 
+def test_list_local_uses_mtime_when_last_synced_missing(tmp_path: Path):
+    host = "bh-lb-01"
+    report_dir = tmp_path / host / "profiler-reports" / "resnet50"
+    report_dir.mkdir(parents=True)
+    (report_dir / "db.sqlite").write_text("x")
+    expected_mtime = int(report_dir.stat().st_mtime)
+
+    folders = list_local_synced_profiler_folders(
+        _connection(host), tmp_path, "profiler-reports"
+    )
+
+    assert len(folders) == 1
+    assert folders[0].lastSynced is None
+    assert folders[0].lastModified == expected_mtime
+
+
 def test_list_local_synced_performance_folders(tmp_path: Path):
     host = "bh-lb-01"
     report_dir = tmp_path / host / "performance-reports" / "2026_07_14_18_51_53"

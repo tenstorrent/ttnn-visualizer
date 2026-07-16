@@ -10,6 +10,7 @@ import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyn
 import { RemoteConnection } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
+import { FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE } from '../src/functions/notifyFolderSyncLocalFallback';
 import mockInstance from './data/mockInstance.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
@@ -346,7 +347,7 @@ it('mounts the local copy and warns when Sync fails for a previously synced fold
     syncButton.click();
 
     await waitFor(() => {
-        expect(screen.getByText('Loaded local copy')).not.toBeNull();
+        expect(screen.getByText(FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE)).not.toBeNull();
         const toastDetails = screen.getAllByTestId(TEST_IDS.TOAST_FILENAME).map((el) => el.textContent ?? '');
         expect(toastDetails.some((text) => text.includes(syncErrorMessage))).toBe(true);
     }, WAIT_FOR_OPTIONS);

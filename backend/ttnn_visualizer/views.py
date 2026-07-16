@@ -1574,23 +1574,9 @@ def list_remote_reports_performance():
 @local_only
 def list_local_remote_reports_profiler():
     """List profiler reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
-    connection_data = request.get_json()
-
-    if not connection_data:
-        return response_bad_request("Missing connection data")
-
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
-    folders = list_local_synced_profiler_folders(
-        connection,
-        Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
-        current_app.config["PROFILER_DIRECTORY_NAME"],
-    )
-    if not folders:
-        return Response(status=HTTPStatus.NO_CONTENT)
-
-    return Response(
-        orjson.dumps([folder.model_dump() for folder in folders]),
-        mimetype="application/json",
+    return _respond_local_synced_folders(
+        list_local_synced_profiler_folders,
+        "PROFILER_DIRECTORY_NAME",
     )
 
 
@@ -1598,16 +1584,23 @@ def list_local_remote_reports_profiler():
 @local_only
 def list_local_remote_reports_performance():
     """List performance reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
+    return _respond_local_synced_folders(
+        list_local_synced_performance_folders,
+        "PERFORMANCE_DIRECTORY_NAME",
+    )
+
+
+def _respond_local_synced_folders(list_fn, directory_config_key: str):
     connection_data = request.get_json()
 
     if not connection_data:
         return response_bad_request("Missing connection data")
 
     connection = RemoteConnection.model_validate(connection_data, strict=False)
-    folders = list_local_synced_performance_folders(
+    folders = list_fn(
         connection,
         Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
-        current_app.config["PERFORMANCE_DIRECTORY_NAME"],
+        current_app.config[directory_config_key],
     )
     if not folders:
         return Response(status=HTTPStatus.NO_CONTENT)

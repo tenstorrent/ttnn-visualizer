@@ -36,13 +36,9 @@ def is_valid_local_performance_report_dir(directory: Path) -> bool:
     if not all((directory / name).is_file() for name in PERFORMANCE_REQUIRED_FILES):
         return False
     try:
-        entries = directory.iterdir()
+        return any(directory.glob(f"{PERFORMANCE_OPS_PERF_PREFIX}*"))
     except OSError:
         return False
-    return any(
-        entry.is_file() and entry.name.startswith(PERFORMANCE_OPS_PERF_PREFIX)
-        for entry in entries
-    )
 
 
 def _synthetic_remote_path(configured_path: Optional[str], report_name: str) -> str:
@@ -72,7 +68,13 @@ def list_local_synced_report_folders(
         return []
 
     folders: List[RemoteReportFolder] = []
-    for entry in sorted(host_reports_dir.iterdir(), key=lambda p: p.name.lower()):
+    try:
+        entries = host_reports_dir.iterdir()
+    except OSError:
+        logger.warning("Unable to list local synced reports at %s", host_reports_dir)
+        return []
+
+    for entry in entries:
         if not entry.is_dir() or entry.name.startswith("."):
             continue
         if not is_valid_report_dir(entry):
