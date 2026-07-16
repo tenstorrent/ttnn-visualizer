@@ -1571,6 +1571,7 @@ def list_remote_reports_performance():
 
 
 @api.route("/remote/local-profiler-reports", methods=["POST"])
+@local_only
 def list_local_remote_reports_profiler():
     """List profiler reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
     connection_data = request.get_json()
@@ -1594,6 +1595,7 @@ def list_local_remote_reports_profiler():
 
 
 @api.route("/remote/local-performance-reports", methods=["POST"])
+@local_only
 def list_local_remote_reports_performance():
     """List performance reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
     connection_data = request.get_json()

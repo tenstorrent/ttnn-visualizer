@@ -99,7 +99,43 @@ def test_list_local_skips_profiler_folder_without_db(tmp_path: Path):
     assert folders == []
 
 
+def _local_reports_connection_payload(host: str) -> dict:
+    return {
+        "name": "test-remote",
+        "username": "tester",
+        "host": host,
+        "port": 22,
+        "profilerPath": "/remote/profiler/reports",
+        "performancePath": "/remote/performance/reports",
+    }
+
+
+def test_local_profiler_reports_endpoint_forbidden_when_server_mode(app, client):
+    """Disk-only local list APIs are @local_only and must 403 in hosted SERVER_MODE."""
+    assert app.config["SERVER_MODE"] is True
+
+    response = client.post(
+        "/api/remote/local-profiler-reports",
+        json=_local_reports_connection_payload("remote.example.com"),
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_local_performance_reports_endpoint_forbidden_when_server_mode(app, client):
+    """Disk-only local list APIs are @local_only and must 403 in hosted SERVER_MODE."""
+    assert app.config["SERVER_MODE"] is True
+
+    response = client.post(
+        "/api/remote/local-performance-reports",
+        json=_local_reports_connection_payload("remote.example.com"),
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
 def test_local_profiler_reports_endpoint(app, client, tmp_path: Path):
+    app.config["SERVER_MODE"] = False
     app.config["REMOTE_DATA_DIRECTORY"] = tmp_path
     app.config["PROFILER_DIRECTORY_NAME"] = "profiler-reports"
 
@@ -111,14 +147,7 @@ def test_local_profiler_reports_endpoint(app, client, tmp_path: Path):
 
     response = client.post(
         "/api/remote/local-profiler-reports",
-        json={
-            "name": "test-remote",
-            "username": "tester",
-            "host": host,
-            "port": 22,
-            "profilerPath": "/remote/profiler/reports",
-            "performancePath": "/remote/performance/reports",
-        },
+        json=_local_reports_connection_payload(host),
     )
 
     assert response.status_code == HTTPStatus.OK
@@ -127,17 +156,12 @@ def test_local_profiler_reports_endpoint(app, client, tmp_path: Path):
     assert data[0]["reportName"] == "resnet50"
 
 
-def test_local_performance_reports_endpoint_204_when_empty(client):
+def test_local_performance_reports_endpoint_204_when_empty(app, client):
+    app.config["SERVER_MODE"] = False
+
     response = client.post(
         "/api/remote/local-performance-reports",
-        json={
-            "name": "test-remote",
-            "username": "tester",
-            "host": "missing-host",
-            "port": 22,
-            "profilerPath": "/remote/profiler/reports",
-            "performancePath": "/remote/performance/reports",
-        },
+        json=_local_reports_connection_payload("missing-host"),
     )
 
     assert response.status_code == HTTPStatus.NO_CONTENT
