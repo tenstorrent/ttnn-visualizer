@@ -135,6 +135,19 @@ describe('useMlirLayoutWorker', () => {
         expect(onBuilt).not.toHaveBeenCalled();
     });
 
+    it('swallows a synchronous postMessage failure (dead worker) without crashing', () => {
+        const { result } = setup();
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        worker().postMessage = () => {
+            throw new Error('worker terminated');
+        };
+
+        expect(() => act(() => result.current.runBuild(new Set()))).not.toThrow();
+        expect(result.current.isBuilding).toBe(false);
+
+        consoleError.mockRestore();
+    });
+
     it('ignores a stale built reply from a superseded request', () => {
         const { result, onBuilt } = setup();
         act(() => result.current.runBuild(new Set()));

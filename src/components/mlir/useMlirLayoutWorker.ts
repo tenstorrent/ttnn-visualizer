@@ -126,14 +126,22 @@ export function useMlirLayoutWorker(
             nextRequestIdRef.current = requestId;
             activeRequestIdRef.current = requestId;
             const expandedSorted = Array.from(expanded).sort((a, b) => a.localeCompare(b));
-            worker.postMessage({
-                type: 'build' as const,
-                requestId,
-                graphId,
-                expandedNamespaces: expandedSorted,
-                cacheKey: `${graphId}:${expandedSorted.join('|')}`,
-            });
             setIsBuilding(true);
+            try {
+                worker.postMessage({
+                    type: 'build' as const,
+                    requestId,
+                    graphId,
+                    expandedNamespaces: expandedSorted,
+                    cacheKey: `${graphId}:${expandedSorted.join('|')}`,
+                });
+            } catch (error) {
+                // A crashed/terminated worker throws synchronously on post; keep the
+                // React tree alive and release the controls rather than propagating.
+                setIsBuilding(false);
+                // eslint-disable-next-line no-console
+                console.error('mlir layout worker: build dispatch failed', error);
+            }
         },
         [graphId, indexReadyGraphId],
     );
