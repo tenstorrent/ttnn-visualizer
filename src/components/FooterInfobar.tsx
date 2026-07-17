@@ -30,6 +30,7 @@ import {
 } from '../store/app';
 import { ReportLocation } from '../definitions/Reports';
 import ReportLinkStatus from './ReportLinkStatus';
+import ReportLinkRecorder from './ReportLinkRecorder';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
@@ -166,7 +167,12 @@ function FooterInfobar() {
                         </Tooltip>
                     )}
 
-                    {activeProfilerReportPath && activePerformanceReportPath && <ReportLinkStatus />}
+                    {activeProfilerReportPath && activePerformanceReportPath && (
+                        <>
+                            {!!serverConfig.REPORT_LINKING_ENABLED && <ReportLinkRecorder />}
+                            <ReportLinkStatus />
+                        </>
+                    )}
 
                     {activePerformanceReportPath && (
                         <Tooltip

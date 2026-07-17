@@ -7,16 +7,19 @@ import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
+    isReportSelectionPendingAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
-    successfulReportLinksAtom,
+    releaseReportSelection,
+    reportLinksAtom,
+    tryAcquireReportSelection,
 } from '../../store/app';
-import { linkedPerformancePaths, linkedProfilerPaths } from '../../functions/reportLinks';
+import { pruneReportLinksForReport } from '../../functions/reportLinks';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
@@ -31,6 +34,7 @@ import {
     useReportFolderList,
     useReportMetadata,
 } from '../../hooks/useAPI';
+import useReportLinkBadges, { ReportLinkListScope } from '../../hooks/useReportLinkBadges';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder, ReportLocation } from '../../definitions/Reports';
 import {
@@ -83,6 +87,7 @@ const LocalFolderOptions = () => {
     const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
+    const [isReportSelectionPending, setIsReportSelectionPending] = useAtom(isReportSelectionPendingAtom);
 
     const {
         uploadLocalFolder,
@@ -114,54 +119,64 @@ const LocalFolderOptions = () => {
     const [profilerUploadLabel, setProfilerUploadLabel] = useState('Choose directory...');
     const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
+    // In-flight selection shown on the picker until the backend confirms the active report.
+    const [pendingProfilerFolder, setPendingProfilerFolder] = useState<ReportFolder | null>(null);
+    const [pendingPerformanceFolder, setPendingPerformanceFolder] = useState<ReportFolder | null>(null);
 
     const isProfilerLocal = profilerReportLocation === ReportLocation.LOCAL;
     const isPerformanceLocal = performanceReportLocation === ReportLocation.LOCAL;
+    const isSelectingReport = isReportSelectionPending;
 
-    const folderPickerValue = useMemo(
-        () =>
-            activeProfilerReport &&
+    const beginReportSelection = () => {
+        if (!tryAcquireReportSelection()) {
+            return false;
+        }
+
+        setIsReportSelectionPending(true);
+        return true;
+    };
+
+    const endReportSelection = () => {
+        releaseReportSelection();
+        setIsReportSelectionPending(false);
+    };
+
+    const folderPickerValue = useMemo(() => {
+        if (pendingProfilerFolder) {
+            return pendingProfilerFolder.path;
+        }
+
+        return activeProfilerReport &&
             reportFolderList?.some((folder: ReportFolder) => folder.path.includes(activeProfilerReport.path)) &&
             isProfilerLocal
-                ? activeProfilerReport.path
-                : null,
-        [activeProfilerReport, reportFolderList, isProfilerLocal],
-    );
+            ? activeProfilerReport.path
+            : null;
+    }, [pendingProfilerFolder, activeProfilerReport, reportFolderList, isProfilerLocal]);
 
-    const perfFolderPickerValue = useMemo(
-        () =>
-            activePerformanceReport &&
+    const perfFolderPickerValue = useMemo(() => {
+        if (pendingPerformanceFolder) {
+            return pendingPerformanceFolder.path;
+        }
+
+        return activePerformanceReport &&
             perfFolderList?.some((folder: ReportFolder) => folder.path.includes(activePerformanceReport.path)) &&
             isPerformanceLocal
-                ? activePerformanceReport.path
-                : null,
-        [activePerformanceReport, perfFolderList, isPerformanceLocal],
-    );
+            ? activePerformanceReport.path
+            : null;
+    }, [pendingPerformanceFolder, activePerformanceReport, perfFolderList, isPerformanceLocal]);
 
-    const reportLinks = useAtomValue(successfulReportLinksAtom);
+    const {
+        linkedPerfPaths,
+        unlinkedPerfPaths,
+        linkedProfilerPaths: linkedProfilerReportPaths,
+        unlinkedProfilerPaths: unlinkedProfilerReportPaths,
+    } = useReportLinkBadges(ReportLinkListScope.LOCAL);
+    const setReportLinks = useSetAtom(reportLinksAtom);
 
     const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
-    const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;
-
-    // Performance reports that have linked with the active memory report (and vice versa).
-    // Experimental: only surfaced in development builds.
-    const linkedPerfPaths = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? linkedPerformancePaths(reportLinks, activeProfilerReport?.path, profilerReportLocation)
-                : undefined,
-        [reportLinks, activeProfilerReport, profilerReportLocation, isReportLinkingEnabled],
-    );
-    const linkedProfilerReportPaths = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? linkedProfilerPaths(reportLinks, activePerformanceReport?.path, performanceReportLocation)
-                : undefined,
-        [reportLinks, activePerformanceReport, performanceReportLocation, isReportLinkingEnabled],
-    );
 
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files) {
+        if (!e.target.files || !beginReportSelection()) {
             return;
         }
 
@@ -170,6 +185,7 @@ const LocalFolderOptions = () => {
 
         if (!checkRequiredReportFiles(files)) {
             setProfilerFolder(invalidReportStatus);
+            endReportSelection();
             return;
         }
 
@@ -189,6 +205,7 @@ const LocalFolderOptions = () => {
             const updatedReport = {
                 path: response.data.path,
                 reportName: response.data.reportName,
+                host: null,
             };
 
             setActiveProfilerReport(updatedReport);
@@ -201,11 +218,12 @@ const LocalFolderOptions = () => {
         } finally {
             queryClient.clear();
             setIsUploadingReport(false);
+            endReportSelection();
         }
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files) {
+        if (!e.target.files || !beginReportSelection()) {
             return;
         }
 
@@ -214,6 +232,7 @@ const LocalFolderOptions = () => {
 
         if (!checkRequiredProfilerFiles(files)) {
             setPerformanceFolder(invalidProfilerStatus);
+            endReportSelection();
             return;
         }
 
@@ -229,7 +248,7 @@ const LocalFolderOptions = () => {
                 const fileName = getFolderName(files);
                 setPerformanceDataUploadLabel(`${files.length} files uploaded`);
                 setPerformanceReportLocation(ReportLocation.LOCAL);
-                setActivePerformanceReport({ path: fileName, reportName: fileName });
+                setActivePerformanceReport({ path: fileName, reportName: fileName, host: null });
                 createToastNotification('Active performance report', fileName, ToastType.SUCCESS);
                 setPerformanceFolder(connectionOkStatus);
             }
@@ -239,27 +258,45 @@ const LocalFolderOptions = () => {
         } finally {
             queryClient.clear();
             setIsPerformanceUploading(false);
+            endReportSelection();
         }
     };
 
     const handleSelectProfiler = async (folder: ReportFolder) => {
-        // Backend handles updating only the specific parts of active_report
-        await updateInstance({
-            active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
-        });
-
-        if (hasBeenNormalised(folder)) {
-            createDataIntegrityWarning(folder);
+        if (!beginReportSelection()) {
+            return;
         }
 
-        createToastNotification('Active memory report', folder.reportName ?? '', ToastType.SUCCESS);
-        setActiveProfilerReport(folder);
-        setProfilerReportLocation(ReportLocation.LOCAL);
+        setPendingProfilerFolder(folder);
+
+        try {
+            await updateInstance({
+                active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
+            });
+
+            setActiveProfilerReport({ ...folder, host: null });
+            setProfilerReportLocation(ReportLocation.LOCAL);
+            createToastNotification('Active memory report', folder.reportName ?? '', ToastType.SUCCESS);
+
+            if (hasBeenNormalised(folder)) {
+                createDataIntegrityWarning(folder);
+            }
+        } catch (err: unknown) {
+            createToastNotification(
+                'Unable to activate memory report',
+                getResponseError(err, folder.reportName ?? ''),
+                ToastType.ERROR,
+            );
+        } finally {
+            setPendingProfilerFolder(null);
+            endReportSelection();
+        }
     };
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {
         await deleteProfiler(folder.path);
         await queryClient.invalidateQueries({ queryKey: [PROFILER_FOLDER_QUERY_KEY] });
+        setReportLinks((links) => pruneReportLinksForReport(links, folder.path, ReportLocation.LOCAL, null));
 
         createToastNotification('Memory report deleted', folder.reportName, ToastType.INFO);
 
@@ -271,19 +308,36 @@ const LocalFolderOptions = () => {
     };
 
     const handleSelectPerformance = async (folder: ReportFolder) => {
-        // Backend handles updating only the specific parts of active_report
-        await updateInstance({
-            active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
-        });
+        if (!beginReportSelection()) {
+            return;
+        }
 
-        createToastNotification('Active performance report', folder.reportName, ToastType.SUCCESS);
-        setActivePerformanceReport(folder);
-        setPerformanceReportLocation(ReportLocation.LOCAL);
+        setPendingPerformanceFolder(folder);
+
+        try {
+            await updateInstance({
+                active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
+            });
+
+            setActivePerformanceReport({ ...folder, host: null });
+            setPerformanceReportLocation(ReportLocation.LOCAL);
+            createToastNotification('Active performance report', folder.reportName, ToastType.SUCCESS);
+        } catch (err: unknown) {
+            createToastNotification(
+                'Unable to activate performance report',
+                getResponseError(err, folder.reportName),
+                ToastType.ERROR,
+            );
+        } finally {
+            setPendingPerformanceFolder(null);
+            endReportSelection();
+        }
     };
 
     const handleDeletePerformance = async (folder: ReportFolder) => {
         await deletePerformance(folder.path);
         await queryClient.invalidateQueries({ queryKey: [PERFORMANCE_FOLDER_QUERY_KEY] });
+        setReportLinks((links) => pruneReportLinksForReport(links, folder.path, ReportLocation.LOCAL, null));
 
         createToastNotification(`Performance report deleted`, folder.reportName, ToastType.INFO);
 
@@ -303,11 +357,17 @@ const LocalFolderOptions = () => {
             >
                 <LocalFolderPicker
                     items={reportFolderList}
-                    value={isProfilerLocal ? folderPickerValue : null}
-                    valueLabel={activeProfilerReport?.reportName ?? null}
+                    value={isProfilerLocal || pendingProfilerFolder ? folderPickerValue : null}
+                    valueLabel={
+                        pendingProfilerFolder?.reportName ??
+                        (isProfilerLocal ? (activeProfilerReport?.reportName ?? null) : null)
+                    }
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
+                    loading={pendingProfilerFolder !== null}
+                    disabled={isSelectingReport}
                     linkedPaths={linkedProfilerReportPaths}
+                    unlinkedPaths={unlinkedProfilerReportPaths}
                     showReportName
                 />
             </FormGroup>
@@ -317,6 +377,7 @@ const LocalFolderOptions = () => {
                     <div className='form-container'>
                         <FileInput
                             id='local-upload'
+                            disabled={isSelectingReport}
                             onInputChange={handleReportDirectoryOpen}
                             text={profilerUploadLabel}
                             inputProps={{
@@ -352,11 +413,17 @@ const LocalFolderOptions = () => {
             >
                 <LocalFolderPicker
                     items={perfFolderList}
-                    value={isPerformanceLocal ? perfFolderPickerValue : null}
-                    valueLabel={activePerformanceReport?.reportName ?? null}
+                    value={isPerformanceLocal || pendingPerformanceFolder ? perfFolderPickerValue : null}
+                    valueLabel={
+                        pendingPerformanceFolder?.reportName ??
+                        (isPerformanceLocal ? (activePerformanceReport?.reportName ?? null) : null)
+                    }
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}
+                    loading={pendingPerformanceFolder !== null}
+                    disabled={isSelectingReport}
                     linkedPaths={linkedPerfPaths}
+                    unlinkedPaths={unlinkedPerfPaths}
                 />
             </FormGroup>
 
@@ -365,6 +432,7 @@ const LocalFolderOptions = () => {
                     <div className='form-container'>
                         <FileInput
                             id='local-performance-upload'
+                            disabled={isSelectingReport}
                             onInputChange={handlePerformanceDirectoryOpen}
                             text={performanceDataUploadLabel}
                             inputProps={{

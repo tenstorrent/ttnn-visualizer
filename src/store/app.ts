@@ -11,7 +11,7 @@ import { ListStates } from '../definitions/VirtualLists';
 import { Signpost } from '../functions/perfFunctions';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
-import { ReportLink } from '../functions/reportLinks';
+import { REPORT_LINKS_STORAGE_KEY, ReportLink, readReportLinksFromStorage } from '../functions/reportLinks';
 import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
@@ -20,6 +20,34 @@ import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../functions/topNAnnota
 import { MlirServerConnection } from '../definitions/MlirServer';
 import { GraphBundle, MlirFileResult } from '../model/MLIRJsonModel';
 import { aggregateFileTransferProgress, fileTransferRegistryAtom } from '../functions/fileTransferRegistry';
+
+// Referentially stable cache for atomWithStorage reads — a new array from getItem on
+// every call retriggers jotai subscribers and can wedge the app on "Initializing…".
+let cachedReportLinksFromStorage: ReportLink[] | null = null;
+
+const reportLinksStorage = {
+    ...createJSONStorage<ReportLink[]>(() => localStorage),
+    getItem: (_key: string, initialValue: ReportLink[]): ReportLink[] => {
+        if (typeof localStorage === 'undefined') {
+            return initialValue;
+        }
+
+        if (cachedReportLinksFromStorage !== null) {
+            return cachedReportLinksFromStorage;
+        }
+
+        cachedReportLinksFromStorage = readReportLinksFromStorage(localStorage);
+        return cachedReportLinksFromStorage;
+    },
+    setItem: (key: string, value: ReportLink[]): void => {
+        cachedReportLinksFromStorage = value;
+        localStorage.setItem(key, JSON.stringify(value));
+    },
+    removeItem: (key: string): void => {
+        cachedReportLinksFromStorage = null;
+        localStorage.removeItem(key);
+    },
+};
 
 // App state
 export const activeToastAtom = atom<Id | null>(null);
@@ -53,9 +81,26 @@ export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceReportLocationAtom = atom<ReportLocation | null>(null);
 export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
-// Persisted memory<->performance report pairs observed to link successfully. Many-to-many
-// by design; surfaced as badges against the active report in the report selection lists.
-export const successfulReportLinksAtom = atomWithStorage<ReportLink[]>('successfulReportLinks', []);
+// True while a local or remote report is being activated — disables all report pickers.
+export const isReportSelectionPendingAtom = atom(false);
+
+/** Sync gate so local and remote selectors cannot both start before React re-renders. */
+let reportSelectionGateHeld = false;
+
+export const tryAcquireReportSelection = (): boolean => {
+    if (reportSelectionGateHeld) {
+        return false;
+    }
+
+    reportSelectionGateHeld = true;
+    return true;
+};
+
+export const releaseReportSelection = (): void => {
+    reportSelectionGateHeld = false;
+};
+// Persisted memory↔performance pairs with status (linked | unlinked).
+export const reportLinksAtom = atomWithStorage<ReportLink[]>(REPORT_LINKS_STORAGE_KEY, [], reportLinksStorage);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);

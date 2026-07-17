@@ -12,16 +12,16 @@ import {
     performanceReportLocationAtom,
     profilerReportLocationAtom,
 } from '../store/app';
-import { useInstance, useReportFolderList } from './useAPI';
+import { useInstance } from './useAPI';
 import useRemoteConnection from './useRemote';
 import { ReportLocation } from '../definitions/Reports';
 import type { RemoteFolder } from '../definitions/RemoteConnection';
+import { resolveRemoteReportIdentity } from '../functions/reportLinks';
 import { useResetMemoryListStates } from './useRestoreScrollPosition';
 
 const useRestoreInstance = () => {
     const { data: instance, isLoading } = useInstance();
     const remote = useRemoteConnection();
-    const { data: reports } = useReportFolderList();
     const { resetMemoryListStates } = useResetMemoryListStates();
 
     const [hasRestoredInstance, setHasRestoredInstance] = useState<boolean>(false);
@@ -36,33 +36,68 @@ const useRestoreInstance = () => {
     const previousProfilerPathRef = useRef<string | null | undefined>(undefined);
 
     useEffect(() => {
-        if (!instance || reports === null || hasRestoredInstance) {
+        if (!instance || hasRestoredInstance) {
             return;
         }
 
         const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
-        const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
+        const isPerformanceRemote = instance?.active_report?.performance_location === ReportLocation.REMOTE;
+        const { selectedConnection } = remote.persistentState;
+        const remoteFolders = remote.persistentState.getSavedReportFolders(selectedConnection);
+        const remotePerformanceFolders = remote.persistentState.getSavedPerformanceFolders(selectedConnection);
+        const remoteHost = selectedConnection?.host ?? instance?.remote_connection?.host ?? null;
 
         const profilerReportPath = instance?.active_report?.profiler_name || null;
-        const shouldResolveRemoteProfilerReportName = isProfilerRemote || !!instance?.remote_profiler_folder;
-        const profilerReportName = shouldResolveRemoteProfilerReportName
-            ? getRemoteReportName(remoteFolders, profilerReportPath)
-            : profilerReportPath;
         const perfReportPath = instance?.active_report?.performance_name || null;
 
-        const restoredProfilerReport = profilerReportPath
+        let restoredProfilerIdentity = null;
+        if (isProfilerRemote) {
+            restoredProfilerIdentity = resolveRemoteReportIdentity(remoteFolders, profilerReportPath, remoteHost);
+        } else if (profilerReportPath) {
+            restoredProfilerIdentity = {
+                path: profilerReportPath,
+                location: ReportLocation.LOCAL,
+                host: null as string | null,
+            };
+        }
+
+        const restoredProfilerReport = restoredProfilerIdentity
             ? {
-                  path: profilerReportPath,
-                  reportName: profilerReportName ?? profilerReportPath,
+                  path: restoredProfilerIdentity.path,
+                  reportName: isProfilerRemote
+                      ? (getRemoteReportName(remoteFolders, profilerReportPath) ?? restoredProfilerIdentity.path)
+                      : restoredProfilerIdentity.path,
+                  host: restoredProfilerIdentity.host,
               }
             : null;
+
+        let restoredPerformanceIdentity = null;
+        if (isPerformanceRemote) {
+            restoredPerformanceIdentity = resolveRemoteReportIdentity(
+                remotePerformanceFolders,
+                perfReportPath,
+                remoteHost,
+            );
+        } else if (perfReportPath) {
+            restoredPerformanceIdentity = {
+                path: perfReportPath,
+                location: ReportLocation.LOCAL,
+                host: null as string | null,
+            };
+        }
+
+        const activePerfReport = restoredPerformanceIdentity
+            ? {
+                  path: restoredPerformanceIdentity.path,
+                  reportName: isPerformanceRemote
+                      ? (getRemoteReportName(remotePerformanceFolders, perfReportPath) ??
+                        restoredPerformanceIdentity.path)
+                      : restoredPerformanceIdentity.path,
+                  host: restoredPerformanceIdentity.host,
+              }
+            : null;
+
         const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
-        const activePerfReport = perfReportPath
-            ? {
-                  path: perfReportPath,
-                  reportName: perfReportPath,
-              }
-            : null;
         const activePerfLocation = instance?.active_report?.performance_location ?? null;
 
         const activeReports = {
@@ -87,6 +122,10 @@ const useRestoreInstance = () => {
             setActiveNpe(activeReports.npe);
             setActiveMlirJson(activeReports.mlir);
         });
+        // Intentionally omit `reports` and `remote.persistentState` — waiting on the
+        // folder-list query blocked restore (lengthy "Initializing instance…"), and
+        // persistentState is a new object every render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once per instance
     }, [
         setActiveProfilerReport,
         setProfilerReportLocation,
@@ -96,8 +135,6 @@ const useRestoreInstance = () => {
         setActiveMlirJson,
         instance,
         hasRestoredInstance,
-        reports,
-        remote.persistentState,
     ]);
 
     useEffect(() => {
@@ -127,6 +164,13 @@ const useRestoreInstance = () => {
 };
 
 const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null): string | undefined =>
-    folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : undefined;
+    folderName
+        ? remoteFolders?.find(
+              (report) =>
+                  report.remotePath === folderName ||
+                  report.remotePath.endsWith(`/${folderName}`) ||
+                  report.reportName === folderName,
+          )?.reportName
+        : undefined;
 
 export default useRestoreInstance;

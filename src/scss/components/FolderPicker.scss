@@ -50,4 +50,8 @@ $folder-text-size: 15px;
         line-height: 1.1;
         color: $tt-grey-5;
     }
+
+    .folder-link-status-unknown {
+        opacity: 0.2;
+    }
 }

@@ -8,6 +8,9 @@ export enum ReportLocation {
 }
 
 export interface ReportFolder {
+    /** Canonical report key: local folder name/path, or full remotePath for remote. */
     path: string;
     reportName: string;
+    /** SSH host when remote; `null`/omitted for local. */
+    host?: string | null;
 }

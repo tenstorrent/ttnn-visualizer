@@ -16,11 +16,15 @@ import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import notifyFolderSyncError from '../../functions/notifyFolderSyncError';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import useRemoteConnection from '../../hooks/useRemote';
+import useReportLinkBadges, { ReportLinkListScope } from '../../hooks/useReportLinkBadges';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
+    isReportSelectionPendingAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
+    releaseReportSelection,
+    tryAcquireReportSelection,
 } from '../../store/app';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
@@ -40,6 +44,7 @@ const RemoteSyncConfigurator = () => {
     const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
+    const [isReportSelectionPending, setIsReportSelectionPending] = useAtom(isReportSelectionPendingAtom);
 
     const { data: reportMetadata, error: reportMetadataError } = useReportMetadata();
     useEffect(() => {
@@ -60,6 +65,7 @@ const RemoteSyncConfigurator = () => {
         remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection),
     );
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
+    const [isActivatingProfiler, setIsActivatingProfiler] = useState(false);
     const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
         activeProfilerReport
             ? reportFolderList.find((folder) => folder.remotePath?.includes(activeProfilerReport.path))
@@ -69,6 +75,7 @@ const RemoteSyncConfigurator = () => {
         remote.persistentState.getSavedPerformanceFolders(remote.persistentState.selectedConnection),
     );
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
+    const [isActivatingPerformance, setIsActivatingPerformance] = useState(false);
     const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
         activePerformanceReport
             ? remotePerformanceFolderList.find((folder) =>
@@ -76,6 +83,20 @@ const RemoteSyncConfigurator = () => {
               )
             : remotePerformanceFolderList[0],
     );
+
+    const beginReportSelection = () => {
+        if (!tryAcquireReportSelection()) {
+            return false;
+        }
+
+        setIsReportSelectionPending(true);
+        return true;
+    };
+
+    const endReportSelection = () => {
+        releaseReportSelection();
+        setIsReportSelectionPending(false);
+    };
 
     const updateSelectedConnection = async (connection: RemoteConnection) => {
         setPersistentSelectedConnection(connection);
@@ -156,21 +177,23 @@ const RemoteSyncConfigurator = () => {
     };
 
     const updateReportSelection = (folder: RemoteFolder) => {
-        queryClient.clear();
+        setSelectedReportFolder(folder);
         setProfilerReportLocation(ReportLocation.REMOTE);
         setActiveProfilerReport({
             path: folder.remotePath,
             reportName: folder.reportName,
+            host: remote.persistentState.selectedConnection?.host ?? null,
         });
         createToastNotification('Active memory report', folder.reportName, ToastType.SUCCESS);
     };
 
     const updatePerformanceSelection = (folder: RemoteFolder) => {
-        queryClient.clear();
+        setSelectedPerformanceFolder(folder);
         setPerformanceReportLocation(ReportLocation.REMOTE);
         setActivePerformanceReport({
             path: folder.remotePath,
             reportName: folder.reportName,
+            host: remote.persistentState.selectedConnection?.host ?? null,
         });
         createToastNotification('Active performance report', folder.reportName, ToastType.SUCCESS);
     };
@@ -269,10 +292,35 @@ const RemoteSyncConfigurator = () => {
         }
     };
 
+    const handleSyncReportFolder = async (folder?: RemoteFolder) => {
+        if (!beginReportSelection()) {
+            return;
+        }
+
+        try {
+            await syncSelectedReportFolder(folder);
+        } finally {
+            endReportSelection();
+        }
+    };
+
+    const handleSyncPerfReportFolder = async (folder?: RemoteFolder) => {
+        if (!beginReportSelection()) {
+            return;
+        }
+
+        try {
+            await syncSelectedPerfReportFolder(folder);
+        } finally {
+            endReportSelection();
+        }
+    };
+
     const isProfilerRemote = profilerReportLocation === ReportLocation.REMOTE;
     const isPerformanceRemote = performanceReportLocation === ReportLocation.REMOTE;
-    const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
-    const isDisabled = isFetching || isLoading || disableRemoteSync;
+    const isActivatingReport = isActivatingProfiler || isActivatingPerformance;
+    const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder || isActivatingReport;
+    const isDisabled = isFetching || isLoading || disableRemoteSync || isReportSelectionPending;
 
     // Populates the selectedReportFolder if there is a stored activeProfilerReport
     useEffect(() => {
@@ -312,6 +360,13 @@ const RemoteSyncConfigurator = () => {
         () => (selectedPerformanceFolder ? isRemoteFolderOutdated(selectedPerformanceFolder) : false),
         [selectedPerformanceFolder],
     );
+
+    const {
+        linkedPerfPaths,
+        unlinkedPerfPaths,
+        linkedProfilerPaths: linkedProfilerReportPaths,
+        unlinkedProfilerPaths: unlinkedProfilerReportPaths,
+    } = useReportLinkBadges(ReportLinkListScope.REMOTE);
 
     return (
         <>
@@ -422,33 +477,61 @@ const RemoteSyncConfigurator = () => {
                 subLabel='Select a memory report'
             >
                 <RemoteFolderSelector
-                    remoteFolder={isProfilerRemote ? selectedReportFolder : undefined}
+                    remoteFolder={isProfilerRemote || isActivatingProfiler ? selectedReportFolder : undefined}
                     remoteFolderList={reportFolderList}
-                    loading={isLoading || isFetching}
+                    loading={isActivatingProfiler || isSyncingReportFolder || isFetching}
                     disabled={isDisabled}
                     onSelectFolder={async (folder) => {
-                        if (remote.persistentState.selectedConnection) {
+                        if (isDisabled || !remote.persistentState.selectedConnection || !beginReportSelection()) {
+                            return;
+                        }
+
+                        const previousFolder = selectedReportFolder;
+                        setSelectedReportFolder(folder);
+
+                        try {
                             if (isRemoteFolderOutdated(folder)) {
-                                setSelectedReportFolder(folder);
                                 await syncSelectedReportFolder(folder);
-                            } else {
-                                const response = await remote.mountRemoteFolder(
-                                    remote.persistentState.selectedConnection,
-                                    folder,
-                                );
-
-                                if (response.status === 200) {
-                                    updateReportSelection(folder);
-
-                                    if (hasBeenNormalised(folder)) {
-                                        createDataIntegrityWarning(folder);
-                                    }
-                                }
+                                return;
                             }
+
+                            setIsActivatingProfiler(true);
+
+                            const response = await remote.mountRemoteFolder(
+                                remote.persistentState.selectedConnection,
+                                folder,
+                            );
+
+                            if (response.status === 200) {
+                                updateReportSelection(folder);
+
+                                if (hasBeenNormalised(folder)) {
+                                    createDataIntegrityWarning(folder);
+                                }
+                            } else {
+                                setSelectedReportFolder(previousFolder);
+                                createToastNotification(
+                                    'Unable to activate memory report',
+                                    folder.reportName,
+                                    ToastType.ERROR,
+                                );
+                            }
+                        } catch (err: unknown) {
+                            setSelectedReportFolder(previousFolder);
+                            createToastNotification(
+                                'Unable to activate memory report',
+                                getResponseError(err, folder.reportName),
+                                ToastType.ERROR,
+                            );
+                        } finally {
+                            setIsActivatingProfiler(false);
+                            endReportSelection();
                         }
                     }}
                     type='profiler'
                     showReportName
+                    linkedPaths={linkedProfilerReportPaths}
+                    unlinkedPaths={unlinkedProfilerReportPaths}
                 >
                     {(isProfilerRemote || isSyncingReportFolder) && selectedReportFolder && (
                         <RemoteSyncButton
@@ -456,7 +539,7 @@ const RemoteSyncConfigurator = () => {
                             selectedReportFolder={selectedReportFolder}
                             isSyncingReportFolder={isSyncingReportFolder}
                             isSelectedReportFolderOutdated={isSelectedReportFolderOutdated}
-                            handleClick={syncSelectedReportFolder}
+                            handleClick={handleSyncReportFolder}
                         />
                     )}
                 </RemoteFolderSelector>
@@ -468,33 +551,63 @@ const RemoteSyncConfigurator = () => {
                 subLabel='Select a performance report'
             >
                 <RemoteFolderSelector
-                    remoteFolder={isPerformanceRemote ? selectedPerformanceFolder : undefined}
+                    remoteFolder={
+                        isPerformanceRemote || isActivatingPerformance ? selectedPerformanceFolder : undefined
+                    }
                     remoteFolderList={remotePerformanceFolderList}
-                    loading={isLoading || isFetching}
+                    loading={isActivatingPerformance || isSyncingPerformanceFolder || isFetching}
                     disabled={isDisabled}
                     onSelectFolder={async (folder) => {
-                        if (remote.persistentState.selectedConnection) {
+                        if (isDisabled || !remote.persistentState.selectedConnection || !beginReportSelection()) {
+                            return;
+                        }
+
+                        const previousFolder = selectedPerformanceFolder;
+                        setSelectedPerformanceFolder(folder);
+
+                        try {
                             if (isRemoteFolderOutdated(folder)) {
-                                setSelectedPerformanceFolder(folder);
                                 await syncSelectedPerfReportFolder(folder);
-                            } else {
-                                const response = await remote.mountRemoteFolder(
-                                    remote.persistentState.selectedConnection,
-                                    undefined,
-                                    folder,
-                                );
-
-                                if (response.status === 200) {
-                                    updatePerformanceSelection(folder);
-
-                                    if (hasBeenNormalised(folder)) {
-                                        createDataIntegrityWarning(folder);
-                                    }
-                                }
+                                return;
                             }
+
+                            setIsActivatingPerformance(true);
+
+                            const response = await remote.mountRemoteFolder(
+                                remote.persistentState.selectedConnection,
+                                undefined,
+                                folder,
+                            );
+
+                            if (response.status === 200) {
+                                updatePerformanceSelection(folder);
+
+                                if (hasBeenNormalised(folder)) {
+                                    createDataIntegrityWarning(folder);
+                                }
+                            } else {
+                                setSelectedPerformanceFolder(previousFolder);
+                                createToastNotification(
+                                    'Unable to activate performance report',
+                                    folder.reportName,
+                                    ToastType.ERROR,
+                                );
+                            }
+                        } catch (err: unknown) {
+                            setSelectedPerformanceFolder(previousFolder);
+                            createToastNotification(
+                                'Unable to activate performance report',
+                                getResponseError(err, folder.reportName),
+                                ToastType.ERROR,
+                            );
+                        } finally {
+                            setIsActivatingPerformance(false);
+                            endReportSelection();
                         }
                     }}
                     type='performance'
+                    linkedPaths={linkedPerfPaths}
+                    unlinkedPaths={unlinkedPerfPaths}
                 >
                     {(isPerformanceRemote || isSyncingPerformanceFolder) && selectedPerformanceFolder && (
                         <RemoteSyncButton
@@ -502,7 +615,7 @@ const RemoteSyncConfigurator = () => {
                             selectedReportFolder={selectedPerformanceFolder}
                             isSyncingReportFolder={isSyncingPerformanceFolder}
                             isSelectedReportFolderOutdated={isSelectedPerfFolderOutdated}
-                            handleClick={syncSelectedPerfReportFolder}
+                            handleClick={handleSyncPerfReportFolder}
                         />
                     )}
                 </RemoteFolderSelector>
