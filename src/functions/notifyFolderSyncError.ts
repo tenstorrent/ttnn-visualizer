@@ -7,6 +7,7 @@ import createToastNotification, { ToastType } from './createToastNotification';
 import getResponseError from './getResponseError';
 
 export const FOLDER_LIST_SYNC_ERROR_TOAST_TITLE = 'Folder list sync error';
+export const FOLDER_SYNC_ERROR_TOAST_TITLE = 'Folder sync error';
 export const REMOTE_FOLDER_MOUNT_ERROR_TOAST_TITLE = 'Unable to open report';
 
 /**
@@ -17,7 +18,7 @@ export default function notifyFolderSyncError(err: unknown): void {
         return;
     }
 
-    createToastNotification('Folder sync error', getResponseError(err), ToastType.ERROR);
+    createToastNotification(FOLDER_SYNC_ERROR_TOAST_TITLE, getResponseError(err), ToastType.ERROR);
 }
 
 /** Surfaces failures when listing remote folders (SSH or transport errors). */

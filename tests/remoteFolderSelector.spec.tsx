@@ -11,7 +11,11 @@ import Endpoints from '../src/definitions/Endpoints';
 import { RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
-import { FOLDER_LIST_SYNC_ERROR_TOAST_TITLE } from '../src/functions/notifyFolderSyncError';
+import {
+    FOLDER_LIST_SYNC_ERROR_TOAST_TITLE,
+    FOLDER_SYNC_ERROR_TOAST_TITLE,
+    REMOTE_FOLDER_MOUNT_ERROR_TOAST_TITLE,
+} from '../src/functions/notifyFolderSyncError';
 import {
     FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE,
     LOCAL_SYNCED_REPORTS_TOAST_TITLE,
@@ -359,7 +363,7 @@ it('mounts the local copy and warns when Sync fails for a previously synced fold
 
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(true);
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
-    expect(screen.queryByText('Folder sync error')).toBeNull();
+    expect(screen.queryByText(FOLDER_SYNC_ERROR_TOAST_TITLE)).toBeNull();
 });
 
 it('shows Folder sync error when Sync and local mount both fail', async () => {
@@ -406,7 +410,7 @@ it('shows Folder sync error when Sync and local mount both fail', async () => {
     syncButton.click();
 
     await waitFor(() => {
-        expect(screen.getByText('Folder sync error')).not.toBeNull();
+        expect(screen.getByText(FOLDER_SYNC_ERROR_TOAST_TITLE)).not.toBeNull();
         expect(screen.queryByText(FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE)).toBeNull();
     }, WAIT_FOR_OPTIONS);
 });
@@ -537,6 +541,85 @@ it('seeds folder selects from local synced reports on mount without Fetch', asyn
     }, WAIT_FOR_OPTIONS);
 
     expect(mockPost.mock.calls.some(([url]) => url === Endpoints.REMOTE_PERFORMANCE_REPORTS)).toBe(false);
+});
+
+it('clears cached performance folders when local mount scan returns empty', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const staleFolder: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
+    };
+
+    mockPost.mockImplementation((url: string) => {
+        if (url === Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS || url === Endpoints.REMOTE_LOCAL_PROFILER_REPORTS) {
+            return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+        }
+
+        return Promise.resolve({ status: 200, data: {} } as AxiosResponse);
+    });
+
+    setupConnection(remoteConnection);
+    window.localStorage.setItem(`${remoteConnection[0].name} - performanceFolders`, JSON.stringify([staleFolder]));
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    // Cached folders enable the selector until the empty local scan replaces them.
+    expect(
+        screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON).some((btn) => !btn.hasAttribute(HTML_DISABLED)),
+    ).toBe(true);
+
+    await waitFor(() => {
+        expect(mockPost.mock.calls.some(([url]) => url === Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS)).toBe(true);
+    }, WAIT_FOR_OPTIONS);
+
+    await waitFor(() => {
+        const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+        expect(selectButtons.every((btn) => btn.hasAttribute(HTML_DISABLED))).toBe(true);
+        expect(
+            JSON.parse(window.localStorage.getItem(`${remoteConnection[0].name} - performanceFolders`) ?? '[]'),
+        ).toEqual([]);
+    }, WAIT_FOR_OPTIONS);
+});
+
+it('toasts Unable to open report when select mount fails without Sync', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const selectedReport: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
+    };
+
+    mockPost.mockImplementation((url: string) => {
+        if (url.includes('/api/remote/use')) {
+            return Promise.reject(new Error('Report is not synced locally'));
+        }
+
+        return mockRemoteFolderApis(url, selectedReport);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await selectPerformanceFolder(selectedReport.remotePath);
+
+    await waitFor(() => {
+        expect(screen.getByText(REMOTE_FOLDER_MOUNT_ERROR_TOAST_TITLE)).not.toBeNull();
+    }, WAIT_FOR_OPTIONS);
+
+    expect(screen.queryByText('Active performance report')).toBeNull();
+    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(false);
 });
 
 it('handles connection with default port (22)', () => {

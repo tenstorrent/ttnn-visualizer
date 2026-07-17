@@ -64,6 +64,7 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     ReportLocation,
     StatusMessage,
+    sanitise_path_segment,
     sanitise_remote_host_segment,
 )
 from ttnn_visualizer.queries import DatabaseQueries
@@ -2038,6 +2039,22 @@ def sync_remote_folder():
         )
 
 
+_REPORT_NOT_SYNCED_LOCALLY = (
+    "Report is not synced locally. Use Sync to download it first."
+)
+
+
+def _safe_report_folder_name(
+    *, report_name: Optional[str] = None, remote_path: Optional[str] = None
+) -> Optional[str]:
+    """Single-segment folder name for paths under REMOTE_DATA_DIRECTORY."""
+    candidate = report_name or (Path(remote_path).name if remote_path else "")
+    try:
+        return sanitise_path_segment(candidate)
+    except (TypeError, ValueError):
+        return None
+
+
 @api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
     data = request.get_json(force=True)
@@ -2060,12 +2077,15 @@ def use_remote_folder():
             profiler,
             strict=False,
         )
-        profiler_name = remote_profiler_folder.remotePath.split("/")[-1]
+        profiler_name = _safe_report_folder_name(
+            report_name=remote_profiler_folder.reportName,
+            remote_path=remote_profiler_folder.remotePath,
+        )
+        if not profiler_name:
+            return response_bad_request("Invalid report name")
         local_db_path = Path(get_profiler_path(profiler_name, current_app, connection))
         if not is_valid_profiler_report_dir(local_db_path.parent):
-            return response_not_found(
-                "Report is not synced locally. Use Sync to download it first."
-            )
+            return response_not_found(_REPORT_NOT_SYNCED_LOCALLY)
         kwargs["remote_profiler_folder"] = remote_profiler_folder
         kwargs["profiler_name"] = profiler_name
         kwargs["profiler_location"] = ReportLocation.REMOTE.value
@@ -2075,14 +2095,17 @@ def use_remote_folder():
             performance,
             strict=False,
         )
-        performance_name = remote_performance_folder.reportName
+        performance_name = _safe_report_folder_name(
+            report_name=remote_performance_folder.reportName,
+            remote_path=remote_performance_folder.remotePath,
+        )
+        if not performance_name:
+            return response_bad_request("Invalid report name")
         local_perf_path = Path(
             get_performance_path(performance_name, current_app, connection)
         )
         if not is_valid_performance_report_dir(local_perf_path):
-            return response_not_found(
-                "Report is not synced locally. Use Sync to download it first."
-            )
+            return response_not_found(_REPORT_NOT_SYNCED_LOCALLY)
         kwargs["remote_performance_folder"] = remote_performance_folder
         kwargs["performance_name"] = performance_name
         kwargs["performance_location"] = ReportLocation.REMOTE.value

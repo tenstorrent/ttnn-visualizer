@@ -15,6 +15,7 @@ import getRemoteSyncFailureAction, { RemoteSyncFailureAction } from '../../funct
 import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import mergeRemoteFolders from '../../functions/mergeRemoteFolders';
 import notifyFolderSyncError, {
     notifyFolderListSyncError,
     notifyRemoteFolderMountError,
@@ -37,20 +38,6 @@ import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
-
-function mergeRemoteFolders(savedFolders: RemoteFolder[] | undefined, updatedFolders: RemoteFolder[]): RemoteFolder[] {
-    return (updatedFolders ?? []).map((updatedFolder) => {
-        const existingFolder = savedFolders?.find((f) => f.reportName === updatedFolder.reportName);
-
-        return {
-            ...existingFolder,
-            ...updatedFolder,
-            // Prefer fresh stamp from disk; keep cache only when the response omitted the key.
-            // Explicit null means "not synced" and must clear a stale cached stamp.
-            lastSynced: updatedFolder.lastSynced !== undefined ? updatedFolder.lastSynced : existingFolder?.lastSynced,
-        };
-    });
-}
 
 const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
@@ -167,14 +154,22 @@ const RemoteSyncConfigurator = () => {
         }
     };
 
+    const isCurrentLocalScan = (abortController: AbortController, signal: AbortSignal) =>
+        !signal.aborted && localSyncedFoldersAbortRef.current === abortController;
+
     const applyRemoteOrLocalFolderList = async (
         remoteResult: PromiseSettledResult<RemoteFolder[]>,
         connection: RemoteConnection,
         pathPresent: boolean,
-        listLocal: (connection: RemoteConnection) => Promise<RemoteFolder[]>,
+        listLocal: (connection: RemoteConnection, signal?: AbortSignal) => Promise<RemoteFolder[]>,
         updateSaved: (connection: RemoteConnection, folders: RemoteFolder[]) => void,
+        abortController: AbortController,
+        signal: AbortSignal,
     ): Promise<{ usedLocalFallback: boolean; error: string | null }> => {
         if (remoteResult.status === 'fulfilled') {
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return { usedLocalFallback: false, error: null };
+            }
             updateSaved(connection, remoteResult.value);
             return { usedLocalFallback: false, error: null };
         }
@@ -184,7 +179,10 @@ const RemoteSyncConfigurator = () => {
         }
 
         try {
-            const localFolders = await listLocal(connection);
+            const localFolders = await listLocal(connection, signal);
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return { usedLocalFallback: false, error: null };
+            }
             updateSaved(connection, localFolders);
 
             if (localFolders.length > 0) {
@@ -193,18 +191,30 @@ const RemoteSyncConfigurator = () => {
 
             return { usedLocalFallback: false, error: getResponseError(remoteResult.reason) };
         } catch {
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return { usedLocalFallback: false, error: null };
+            }
             return { usedLocalFallback: false, error: getResponseError(remoteResult.reason) };
         }
     };
 
     const fetchRemoteFolderLists = async (connection: RemoteConnection) => {
+        localSyncedFoldersAbortRef.current?.abort();
+        const abortController = new AbortController();
+        localSyncedFoldersAbortRef.current = abortController;
+        const { signal } = abortController;
+
         try {
             setIsFetching(true);
 
             const [reportFolders, performanceFolders] = await Promise.allSettled([
-                connection.profilerPath ? remote.listProfilerReports(connection) : Promise.resolve([]),
-                connection.performancePath ? remote.listPerformanceReports(connection) : Promise.resolve([]),
+                connection.profilerPath ? remote.listProfilerReports(connection, signal) : Promise.resolve([]),
+                connection.performancePath ? remote.listPerformanceReports(connection, signal) : Promise.resolve([]),
             ]);
+
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return;
+            }
 
             // Run local fallbacks in parallel when both SSH lists fail (same dual-failure cost).
             const [profilerOutcome, performanceOutcome] = await Promise.all([
@@ -214,6 +224,8 @@ const RemoteSyncConfigurator = () => {
                     Boolean(connection.profilerPath),
                     remote.listLocalProfilerReports,
                     updateSavedReportFolders,
+                    abortController,
+                    signal,
                 ),
                 applyRemoteOrLocalFolderList(
                     performanceFolders,
@@ -221,8 +233,14 @@ const RemoteSyncConfigurator = () => {
                     Boolean(connection.performancePath),
                     remote.listLocalPerformanceReports,
                     updateSavedPerformanceFolders,
+                    abortController,
+                    signal,
                 ),
             ]);
+
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return;
+            }
 
             if (profilerOutcome.usedLocalFallback || performanceOutcome.usedLocalFallback) {
                 notifyLocalSyncedReportsListFallback();
@@ -236,8 +254,13 @@ const RemoteSyncConfigurator = () => {
                 notifyFolderListSyncError(fetchErrors.join('; '));
             }
         } catch (err: unknown) {
-            notifyFolderListSyncError(getResponseError(err));
+            if (isCurrentLocalScan(abortController, signal)) {
+                notifyFolderListSyncError(getResponseError(err));
+            }
         } finally {
+            if (localSyncedFoldersAbortRef.current === abortController) {
+                localSyncedFoldersAbortRef.current = null;
+            }
             setIsFetching(false);
         }
     };

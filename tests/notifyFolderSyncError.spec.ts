@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToastType } from '../src/functions/createToastNotification';
 import notifyFolderSyncError, {
     FOLDER_LIST_SYNC_ERROR_TOAST_TITLE,
+    FOLDER_SYNC_ERROR_TOAST_TITLE,
     REMOTE_FOLDER_MOUNT_ERROR_TOAST_TITLE,
     notifyFolderListSyncError,
     notifyRemoteFolderMountError,
@@ -41,7 +42,7 @@ describe('notifyFolderSyncError', () => {
         notifyFolderSyncError(new Error('connection refused'));
 
         expect(createToastNotification).toHaveBeenCalledWith(
-            'Folder sync error',
+            FOLDER_SYNC_ERROR_TOAST_TITLE,
             'connection refused',
             ToastType.ERROR,
         );
