@@ -1449,8 +1449,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // unhighlighted op-node fill now lives in SCSS (`.react-flow__node-mlirOp`),
     // so without this callback the minimap would fall back to its CSS var —
     // which is the same `$tt-grey-2` as the minimap pane background, making
-    // nodes invisible. Group wrappers stay transparent in the minimap because
-    // their visible chrome is the inner `.mlir-group-body`, not the wrapper.
+    // nodes invisible. Group wrappers carry no inline background (their chrome
+    // is the inner `.mlir-group-body`), so we paint them with the shared group
+    // identity colour here.
     const minimapNodeColor = useCallback((node: Node): string => {
         const inlineBg = (node.style as { background?: string } | undefined)?.background;
         if (typeof inlineBg === 'string' && inlineBg !== 'transparent') {

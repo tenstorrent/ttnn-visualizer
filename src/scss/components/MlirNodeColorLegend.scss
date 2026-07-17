@@ -8,7 +8,7 @@
  * controls while the expanded list grows upward. */
 .mlir-node-color-legend {
     position: absolute;
-    bottom: 44px;
+    bottom: 28px;
     left: 60px;
     z-index: 6;
     display: flex;
@@ -18,7 +18,7 @@
     max-width: 240px;
 }
 
-.mlir-node-color-legend-toggle.bp5-button {
+.mlir-node-color-legend-toggle.bp6-button {
     background: rgb(30 30 30 / 88%);
     border: 1px solid rgb(255 255 255 / 12%);
     border-radius: 6px;

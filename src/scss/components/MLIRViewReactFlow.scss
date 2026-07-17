@@ -27,10 +27,10 @@
         right: -15px;
     }
 
-    /* Lift the zoom Controls off the bottom edge so the colour legend can sit
-     * beside them (see MlirNodeColorLegend.scss). */
+    /* Keep the zoom Controls near the bottom edge, with the colour legend
+     * sitting beside them (see MlirNodeColorLegend.scss). */
     .react-flow__panel.bottom.left {
-        bottom: 32px;
+        bottom: 16px;
         left: 12px;
     }
 }
@@ -74,14 +74,14 @@
     font-size: 12px;
 
     &.selected {
-        box-shadow: 0 0 0 3px $tt-blue-accent;
+        box-shadow: 0 0 0 3px var(--graph-selected);
         outline: none;
     }
 }
 
 .react-flow__node-group.selected,
 .react-flow__node-mlirGroup.selected {
-    box-shadow: 0 0 0 3px $tt-blue-accent;
+    box-shadow: 0 0 0 3px var(--graph-selected);
     outline: none;
 }
 
@@ -124,7 +124,7 @@
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    border: 2px dashed rgb(125 125 125 / 80%);
+    border: 2px dashed var(--graph-group);
     border-radius: 16px;
     background: rgb(90 90 90 / 14%);
     color: #ddd;
