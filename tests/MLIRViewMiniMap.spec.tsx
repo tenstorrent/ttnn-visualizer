@@ -46,6 +46,9 @@ vi.mock('../src/components/mlir/useMlirLayoutWorker', () => ({
     useMlirLayoutWorker: () => ({ interactionIndex: null, runBuild: vi.fn() }),
 }));
 
+// The component under test is imported here, after the `vi.mock` factories above, so the
+// mocked `@xyflow/react` and layout-worker modules are registered before it loads. That
+// ordering is deliberate and required, which is why `import/first` is disabled for this line.
 // eslint-disable-next-line import/first
 import MLIRViewReactFlow from '../src/components/mlir/MLIRViewReactFlow';
 
