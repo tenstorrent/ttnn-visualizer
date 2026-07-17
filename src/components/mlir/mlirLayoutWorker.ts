@@ -64,13 +64,17 @@ function processLatestBuild(graphId: string): void {
             if (cached) {
                 touchGraphCache(cache, request.cacheKey, cached);
                 if (!latestBuildByGraphId.has(graphId)) {
-                    postMessage({
-                        type: 'built',
-                        requestId: request.requestId,
-                        graphId,
-                        cacheKey: request.cacheKey,
-                        graph: cached,
-                    });
+                    try {
+                        postMessage({
+                            type: 'built',
+                            requestId: request.requestId,
+                            graphId,
+                            cacheKey: request.cacheKey,
+                            graph: cached,
+                        });
+                    } catch (error) {
+                        postWorkerError(request.requestId, error);
+                    }
                 }
                 continue;
             }

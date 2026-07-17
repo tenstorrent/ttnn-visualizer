@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { memo } from 'react';
-import { Button, ButtonVariant, Size, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Size, Spinner, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirExpandCollapseControls.scss';
 
@@ -12,6 +12,9 @@ export interface MlirExpandCollapseControlsProps {
     expandedCount: number;
     onExpandAll: () => void;
     onCollapseAll: () => void;
+    // Worker rebuild in flight: lock the buttons and show progress.
+    isBuilding?: boolean;
+    nodeCount?: number;
 }
 
 const MlirExpandCollapseControlsInner = ({
@@ -19,9 +22,11 @@ const MlirExpandCollapseControlsInner = ({
     expandedCount,
     onExpandAll,
     onCollapseAll,
+    isBuilding = false,
+    nodeCount,
 }: MlirExpandCollapseControlsProps) => {
-    const canExpand = namespaceCount > 0 && expandedCount < namespaceCount;
-    const canCollapse = expandedCount > 0;
+    const canExpand = !isBuilding && namespaceCount > 0 && expandedCount < namespaceCount;
+    const canCollapse = !isBuilding && expandedCount > 0;
     return (
         <div className='mlir-expand-collapse-controls'>
             <Tooltip
@@ -52,6 +57,15 @@ const MlirExpandCollapseControlsInner = ({
                     onClick={onCollapseAll}
                 />
             </Tooltip>
+            {isBuilding && (
+                <span
+                    className='mlir-layout-status'
+                    role='status'
+                >
+                    <Spinner size={14} />
+                    <span>Laying out{typeof nodeCount === 'number' ? ` ${nodeCount} nodes` : ''}…</span>
+                </span>
+            )}
         </div>
     );
 };

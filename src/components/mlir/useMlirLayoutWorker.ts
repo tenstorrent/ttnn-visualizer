@@ -34,6 +34,7 @@ export function useMlirLayoutWorker(
 ): {
     interactionIndex: WorkerInteractionIndex | null;
     runBuild: (expanded: Set<string>) => void;
+    isBuilding: boolean;
 } {
     const workerRef = useRef<Worker | null>(null);
     const nextRequestIdRef = useRef(0);
@@ -41,10 +42,18 @@ export function useMlirLayoutWorker(
     const postedGraphIdRef = useRef<string | null>(null);
     const [indexReadyGraphId, setIndexReadyGraphId] = useState<string | null>(null);
     const [interactionIndex, setInteractionIndex] = useState<WorkerInteractionIndex | null>(null);
+    // True between a `build` dispatch and its `built`/`error` reply.
+    const [isBuilding, setIsBuilding] = useState(false);
 
     useEffect(() => {
         const worker = new Worker(new URL('./mlirLayoutWorker.ts', import.meta.url), { type: 'module' });
         workerRef.current = worker;
+        // A worker-level crash (uncaught throw, structured-clone failure on
+        // post) emits no terminal reply, which would strand `isBuilding` true
+        // and lock the expand/collapse controls with no recovery.
+        worker.onerror = () => {
+            setIsBuilding(false);
+        };
         return () => {
             worker.terminate();
             workerRef.current = null;
@@ -70,6 +79,7 @@ export function useMlirLayoutWorker(
                 if (message.requestId !== 0 && message.requestId !== activeRequestIdRef.current) {
                     return;
                 }
+                setIsBuilding(false);
                 // eslint-disable-next-line no-console
                 console.error('mlir layout worker:', message.error);
                 return;
@@ -80,6 +90,7 @@ export function useMlirLayoutWorker(
             if (message.graphId !== graphId) {
                 return;
             }
+            setIsBuilding(false);
             onBuilt(message.graph);
         };
     }, [graphId, onBuilt]);
@@ -122,9 +133,10 @@ export function useMlirLayoutWorker(
                 expandedNamespaces: expandedSorted,
                 cacheKey: `${graphId}:${expandedSorted.join('|')}`,
             });
+            setIsBuilding(true);
         },
         [graphId, indexReadyGraphId],
     );
 
-    return { interactionIndex, runBuild };
+    return { interactionIndex, runBuild, isBuilding };
 }
