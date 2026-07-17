@@ -101,6 +101,10 @@ from ttnn_visualizer.stack_trace_source import (
 from ttnn_visualizer.utils import (
     create_path_resolver,
     get_mlir_path,
+    get_performance_path,
+    get_profiler_path,
+    is_valid_performance_report_dir,
+    is_valid_profiler_report_dir,
     pick_cluster_descriptor_path,
     pick_mesh_descriptor_path,
     pick_profiler_config_paths,
@@ -951,18 +955,12 @@ def get_profiler_data_list(instance: Instance):
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
-        if not dir_path.is_dir():
+        if not dir_path.is_dir() or not is_valid_profiler_report_dir(dir_path):
             continue
-        files = list(dir_path.glob("**/*"))
-        report_name = None
         if pick_profiler_config_paths(dir_path):
             report_name = read_profiler_report_name(dir_path)
         else:
             report_name = dir_path.name
-
-        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
-        if not any(file.name == "db.sqlite" for file in files):
-            continue
 
         valid_dirs.append({"path": dir_path.name, "reportName": report_name})
 
@@ -1069,14 +1067,7 @@ def get_performance_data_list(instance: Instance):
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
-        files = list(dir_path.glob("**/*"))
-
-        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
-        if not any(file.name == "profile_log_device.csv" for file in files):
-            continue
-        if not any(file.name == "tracy_profile_log_host.tracy" for file in files):
-            continue
-        if not any(file.name.startswith("ops_perf_results") for file in files):
+        if not dir_path.is_dir() or not is_valid_performance_report_dir(dir_path):
             continue
 
         valid_dirs.append(
@@ -2069,8 +2060,14 @@ def use_remote_folder():
             profiler,
             strict=False,
         )
+        profiler_name = remote_profiler_folder.remotePath.split("/")[-1]
+        local_db_path = Path(get_profiler_path(profiler_name, current_app, connection))
+        if not is_valid_profiler_report_dir(local_db_path.parent):
+            return response_not_found(
+                "Report is not synced locally. Use Sync to download it first."
+            )
         kwargs["remote_profiler_folder"] = remote_profiler_folder
-        kwargs["profiler_name"] = remote_profiler_folder.remotePath.split("/")[-1]
+        kwargs["profiler_name"] = profiler_name
         kwargs["profiler_location"] = ReportLocation.REMOTE.value
 
     if performance:
@@ -2078,8 +2075,16 @@ def use_remote_folder():
             performance,
             strict=False,
         )
+        performance_name = remote_performance_folder.reportName
+        local_perf_path = Path(
+            get_performance_path(performance_name, current_app, connection)
+        )
+        if not is_valid_performance_report_dir(local_perf_path):
+            return response_not_found(
+                "Report is not synced locally. Use Sync to download it first."
+            )
         kwargs["remote_performance_folder"] = remote_performance_folder
-        kwargs["performance_name"] = remote_performance_folder.reportName
+        kwargs["performance_name"] = performance_name
         kwargs["performance_location"] = ReportLocation.REMOTE.value
 
     update_instance(**kwargs)

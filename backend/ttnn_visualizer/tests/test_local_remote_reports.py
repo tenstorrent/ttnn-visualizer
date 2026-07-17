@@ -62,7 +62,26 @@ def test_list_local_uses_mtime_when_last_synced_missing(tmp_path: Path):
     )
 
     assert len(folders) == 1
-    assert folders[0].lastSynced is None
+    # Local-only rows without a marker use mtime for both stamps so the Sync
+    # badge does not treat them as never-synced / always-outdated.
+    assert folders[0].lastSynced == expected_mtime
+    assert folders[0].lastModified == expected_mtime
+
+
+def test_list_local_tolerates_corrupt_last_synced_marker(tmp_path: Path):
+    host = "bh-lb-01"
+    report_dir = tmp_path / host / "profiler-reports" / "resnet50"
+    report_dir.mkdir(parents=True)
+    (report_dir / "db.sqlite").write_text("x")
+    (report_dir / ".last-synced").write_text("not-a-timestamp")
+    expected_mtime = int(report_dir.stat().st_mtime)
+
+    folders = list_local_synced_profiler_folders(
+        _connection(host), tmp_path, "profiler-reports"
+    )
+
+    assert len(folders) == 1
+    assert folders[0].lastSynced == expected_mtime
     assert folders[0].lastModified == expected_mtime
 
 

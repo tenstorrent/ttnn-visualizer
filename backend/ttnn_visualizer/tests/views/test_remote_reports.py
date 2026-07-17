@@ -118,3 +118,72 @@ def test_remote_performance_returns_json_when_reports_exist(app, client):
     assert data[0]["lastModified"] == 200
     assert data[0]["lastSynced"] == 456
     read_last_synced.assert_called_once_with(expected_local_path)
+
+
+def test_remote_use_returns_404_when_profiler_not_synced_locally(app, client, tmp_path):
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+    app.config["SERVER_MODE"] = False
+
+    response = client.post(
+        "/api/remote/use",
+        json={
+            "connection": _remote_connection_payload(),
+            "profiler": {
+                "reportName": "resnet50",
+                "remotePath": "/remote/profiler/reports/resnet50",
+                "lastModified": 1,
+            },
+        },
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert "not synced locally" in response.get_json()["error"]
+
+
+def test_remote_use_returns_404_when_performance_not_synced_locally(
+    app, client, tmp_path
+):
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+    app.config["SERVER_MODE"] = False
+
+    response = client.post(
+        "/api/remote/use",
+        json={
+            "connection": _remote_connection_payload(),
+            "performance": {
+                "reportName": "bert",
+                "remotePath": "/remote/performance/reports/bert",
+                "lastModified": 1,
+            },
+        },
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert "not synced locally" in response.get_json()["error"]
+
+
+def test_remote_use_ok_when_profiler_synced_locally(app, client, tmp_path):
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+    app.config["SERVER_MODE"] = False
+    report_dir = (
+        tmp_path
+        / "remote.example.com"
+        / app.config["PROFILER_DIRECTORY_NAME"]
+        / "resnet50"
+    )
+    report_dir.mkdir(parents=True)
+    (report_dir / "db.sqlite").write_text("x")
+
+    response = client.post(
+        "/api/remote/use",
+        json={
+            "connection": _remote_connection_payload(),
+            "profiler": {
+                "reportName": "resnet50",
+                "remotePath": "/remote/profiler/reports/resnet50",
+                "lastModified": 1,
+            },
+        },
+    )
+
+    assert response.status_code == HTTPStatus.OK

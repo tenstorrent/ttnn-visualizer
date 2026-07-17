@@ -6,15 +6,16 @@ import { Classes } from '@blueprintjs/core';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { AxiosResponse } from 'axios';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import RemoteSyncConfigurator, {
-    FOLDER_LIST_SYNC_ERROR_TOAST_TITLE,
-    LOCAL_SYNCED_REPORTS_TOAST_TITLE,
-} from '../src/components/report-selection/RemoteSyncConfigurator';
+import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
 import Endpoints from '../src/definitions/Endpoints';
 import { RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
-import { FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE } from '../src/functions/notifyFolderSyncLocalFallback';
+import { FOLDER_LIST_SYNC_ERROR_TOAST_TITLE } from '../src/functions/notifyFolderSyncError';
+import {
+    FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE,
+    LOCAL_SYNCED_REPORTS_TOAST_TITLE,
+} from '../src/functions/notifyFolderSyncLocalFallback';
 import mockInstance from './data/mockInstance.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';

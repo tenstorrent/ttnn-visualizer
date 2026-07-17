@@ -15,8 +15,13 @@ import getRemoteSyncFailureAction, { RemoteSyncFailureAction } from '../../funct
 import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
-import notifyFolderSyncError from '../../functions/notifyFolderSyncError';
-import notifyFolderSyncLocalFallback from '../../functions/notifyFolderSyncLocalFallback';
+import notifyFolderSyncError, {
+    notifyFolderListSyncError,
+    notifyRemoteFolderMountError,
+} from '../../functions/notifyFolderSyncError';
+import notifyFolderSyncLocalFallback, {
+    notifyLocalSyncedReportsListFallback,
+} from '../../functions/notifyFolderSyncLocalFallback';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import useRemoteConnection from '../../hooks/useRemote';
 import {
@@ -32,11 +37,6 @@ import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
-
-export const LOCAL_SYNCED_REPORTS_TOAST_TITLE = 'Loaded local synced reports';
-export const LOCAL_SYNCED_REPORTS_TOAST_DETAIL =
-    'Remote host unreachable; showing reports already synced on this machine.';
-export const FOLDER_LIST_SYNC_ERROR_TOAST_TITLE = 'Folder list sync error';
 
 function mergeRemoteFolders(savedFolders: RemoteFolder[] | undefined, updatedFolders: RemoteFolder[]): RemoteFolder[] {
     return (updatedFolders ?? []).map((updatedFolder) => {
@@ -146,7 +146,7 @@ const RemoteSyncConfigurator = () => {
                     : Promise.resolve([]),
             ]);
 
-            if (signal.aborted) {
+            if (signal.aborted || localSyncedFoldersAbortRef.current !== abortController) {
                 return;
             }
 
@@ -224,11 +224,7 @@ const RemoteSyncConfigurator = () => {
             ]);
 
             if (profilerOutcome.usedLocalFallback || performanceOutcome.usedLocalFallback) {
-                createToastNotification(
-                    LOCAL_SYNCED_REPORTS_TOAST_TITLE,
-                    LOCAL_SYNCED_REPORTS_TOAST_DETAIL,
-                    ToastType.WARNING,
-                );
+                notifyLocalSyncedReportsListFallback();
             }
 
             const fetchErrors = [profilerOutcome.error, performanceOutcome.error].filter(
@@ -236,10 +232,10 @@ const RemoteSyncConfigurator = () => {
             );
 
             if (fetchErrors.length > 0) {
-                createToastNotification(FOLDER_LIST_SYNC_ERROR_TOAST_TITLE, fetchErrors.join('; '), ToastType.ERROR);
+                notifyFolderListSyncError(fetchErrors.join('; '));
             }
         } catch (err: unknown) {
-            createToastNotification(FOLDER_LIST_SYNC_ERROR_TOAST_TITLE, getResponseError(err), ToastType.ERROR);
+            notifyFolderListSyncError(getResponseError(err));
         } finally {
             setIsFetching(false);
         }
@@ -615,17 +611,21 @@ const RemoteSyncConfigurator = () => {
                         if (remote.persistentState.selectedConnection) {
                             setSelectedReportFolder(folder);
 
-                            const response = await remote.mountRemoteFolder(
-                                remote.persistentState.selectedConnection,
-                                folder,
-                            );
+                            try {
+                                const response = await remote.mountRemoteFolder(
+                                    remote.persistentState.selectedConnection,
+                                    folder,
+                                );
 
-                            if (response.status === HttpStatusCode.Ok) {
-                                updateReportSelection(folder);
+                                if (response.status === HttpStatusCode.Ok) {
+                                    updateReportSelection(folder);
 
-                                if (hasBeenNormalised(folder)) {
-                                    createDataIntegrityWarning(folder);
+                                    if (hasBeenNormalised(folder)) {
+                                        createDataIntegrityWarning(folder);
+                                    }
                                 }
+                            } catch (err: unknown) {
+                                notifyRemoteFolderMountError(err);
                             }
                         }
                     }}
@@ -660,18 +660,22 @@ const RemoteSyncConfigurator = () => {
                         if (remote.persistentState.selectedConnection) {
                             setSelectedPerformanceFolder(folder);
 
-                            const response = await remote.mountRemoteFolder(
-                                remote.persistentState.selectedConnection,
-                                undefined,
-                                folder,
-                            );
+                            try {
+                                const response = await remote.mountRemoteFolder(
+                                    remote.persistentState.selectedConnection,
+                                    undefined,
+                                    folder,
+                                );
 
-                            if (response.status === HttpStatusCode.Ok) {
-                                updatePerformanceSelection(folder);
+                                if (response.status === HttpStatusCode.Ok) {
+                                    updatePerformanceSelection(folder);
 
-                                if (hasBeenNormalised(folder)) {
-                                    createDataIntegrityWarning(folder);
+                                    if (hasBeenNormalised(folder)) {
+                                        createDataIntegrityWarning(folder);
+                                    }
                                 }
+                            } catch (err: unknown) {
+                                notifyRemoteFolderMountError(err);
                             }
                         }
                     }}

@@ -11,51 +11,17 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
-from ttnn_visualizer.utils import read_last_synced_file
+from ttnn_visualizer.utils import (
+    is_valid_performance_report_dir,
+    is_valid_profiler_report_dir,
+    read_last_synced_file,
+    remote_host_report_path,
+)
 
 logger = logging.getLogger(__name__)
 
-PROFILER_REQUIRED_FILES = frozenset({"db.sqlite"})
-PERFORMANCE_REQUIRED_FILES = frozenset(
-    {"profile_log_device.csv", "tracy_profile_log_host.tracy"}
-)
-PERFORMANCE_OPS_PERF_PREFIX = "ops_perf_results"
-
-
-def local_synced_report_path(
-    remote_data_directory: Path,
-    host: str,
-    report_directory_name: str,
-    report_name: Optional[str] = None,
-) -> Path:
-    """REMOTE_DATA_DIRECTORY/<host>/<report_directory_name>[/<report_name>].
-
-    Must match sync_remote_*_folders / PathResolver remote layout.
-    """
-    base = remote_data_directory / host / report_directory_name
-    return base / report_name if report_name is not None else base
-
-
-def _is_valid_local_profiler_report_dir(directory: Path) -> bool:
-    """True when the folder has the files needed to load a memory/profiler report."""
-    return all((directory / name).is_file() for name in PROFILER_REQUIRED_FILES)
-
-
-def _is_valid_local_performance_report_dir(directory: Path) -> bool:
-    """True when the folder has the files needed to load a performance report.
-
-    Matches local performance folder listing / upload validation:
-    profile_log_device.csv, tracy_profile_log_host.tracy, and ops_perf_results*.
-    """
-    if not all((directory / name).is_file() for name in PERFORMANCE_REQUIRED_FILES):
-        return False
-    try:
-        # Require a matching file — a directory named ops_perf_results* is not enough.
-        return any(
-            path.is_file() for path in directory.glob(f"{PERFORMANCE_OPS_PERF_PREFIX}*")
-        )
-    except OSError:
-        return False
+# Re-export under the historical name used by views / tests.
+local_synced_report_path = remote_host_report_path
 
 
 def _synthetic_remote_path(configured_path: Optional[str], report_name: str) -> str:
@@ -79,7 +45,7 @@ def list_local_synced_report_folders(
     Matches the layout written by sync_remote_*_folders / PathResolver.
     Only directories that pass ``is_valid_report_dir`` are included.
     """
-    host_reports_dir = local_synced_report_path(
+    host_reports_dir = remote_host_report_path(
         remote_data_directory, host, report_directory_name
     )
     if not host_reports_dir.is_dir():
@@ -101,22 +67,28 @@ def list_local_synced_report_folders(
             continue
 
         last_synced = read_last_synced_file(str(entry))
-        # Without a remote lastModified, treat synced copies as current so select
-        # does not force an SSH refresh while offline.
+        try:
+            mtime = int(entry.stat().st_mtime)
+        except OSError:
+            mtime = 0
+
+        # Without a remote lastModified, treat the local copy as current so the
+        # Sync badge does not claim "needs refresh" for an offline-only row.
+        # Prefer the .last-synced marker when present; otherwise use mtime for
+        # both stamps so isRemoteFolderOutdated sees a consistent pair.
         if last_synced is not None:
             last_modified = last_synced
+            effective_last_synced = last_synced
         else:
-            try:
-                last_modified = int(entry.stat().st_mtime)
-            except OSError:
-                last_modified = 0
+            last_modified = mtime
+            effective_last_synced = mtime
 
         folders.append(
             RemoteReportFolder(
                 reportName=entry.name,
                 remotePath=_synthetic_remote_path(configured_remote_path, entry.name),
                 lastModified=last_modified,
-                lastSynced=last_synced,
+                lastSynced=effective_last_synced,
             )
         )
 
@@ -136,7 +108,7 @@ def list_local_synced_profiler_folders(
         host=connection.host,
         report_directory_name=profiler_directory_name,
         configured_remote_path=connection.profilerPath,
-        is_valid_report_dir=_is_valid_local_profiler_report_dir,
+        is_valid_report_dir=is_valid_profiler_report_dir,
     )
 
 
@@ -152,5 +124,5 @@ def list_local_synced_performance_folders(
         host=connection.host,
         report_directory_name=performance_directory_name,
         configured_remote_path=connection.performancePath,
-        is_valid_report_dir=_is_valid_local_performance_report_dir,
+        is_valid_report_dir=is_valid_performance_report_dir,
     )

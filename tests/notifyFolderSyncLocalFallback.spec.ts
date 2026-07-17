@@ -7,6 +7,9 @@ import { ToastType } from '../src/functions/createToastNotification';
 import notifyFolderSyncLocalFallback, {
     FOLDER_SYNC_LOCAL_FALLBACK_TOAST_DETAIL_PREFIX,
     FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE,
+    LOCAL_SYNCED_REPORTS_TOAST_DETAIL,
+    LOCAL_SYNCED_REPORTS_TOAST_TITLE,
+    notifyLocalSyncedReportsListFallback,
 } from '../src/functions/notifyFolderSyncLocalFallback';
 
 const { createToastNotification } = vi.hoisted(() => ({
@@ -34,6 +37,18 @@ describe('notifyFolderSyncLocalFallback', () => {
         expect(createToastNotification).toHaveBeenCalledWith(
             FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE,
             `${FOLDER_SYNC_LOCAL_FALLBACK_TOAST_DETAIL_PREFIX} Unable to establish SSH connection`,
+            ToastType.WARNING,
+        );
+    });
+});
+
+describe('notifyLocalSyncedReportsListFallback', () => {
+    it('warns that the folder list fell back to on-disk copies', () => {
+        notifyLocalSyncedReportsListFallback();
+
+        expect(createToastNotification).toHaveBeenCalledWith(
+            LOCAL_SYNCED_REPORTS_TOAST_TITLE,
+            LOCAL_SYNCED_REPORTS_TOAST_DETAIL,
             ToastType.WARNING,
         );
     });

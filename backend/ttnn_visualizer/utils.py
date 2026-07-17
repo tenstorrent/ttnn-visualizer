@@ -587,6 +587,51 @@ def find_gunicorn_path() -> tuple[str, Optional[str]]:
     return "gunicorn", warning_message
 
 
+PROFILER_REPORT_REQUIRED_FILES = frozenset({"db.sqlite"})
+PERFORMANCE_REPORT_REQUIRED_FILES = frozenset(
+    {"profile_log_device.csv", "tracy_profile_log_host.tracy"}
+)
+PERFORMANCE_OPS_PERF_PREFIX = "ops_perf_results"
+
+
+def remote_host_report_path(
+    remote_data_directory: Path,
+    host: str,
+    report_directory_name: str,
+    report_name: Optional[str] = None,
+) -> Path:
+    """REMOTE_DATA_DIRECTORY/<host>/<report_directory_name>[/<report_name>].
+
+    Canonical on-disk layout for synced remote reports. PathResolver, sync
+    destinations, and offline listing must all go through this helper.
+    """
+    base = Path(remote_data_directory) / host / report_directory_name
+    return base / report_name if report_name is not None else base
+
+
+def is_valid_profiler_report_dir(directory: Path) -> bool:
+    """True when the folder has the files needed to load a memory/profiler report."""
+    return all((directory / name).is_file() for name in PROFILER_REPORT_REQUIRED_FILES)
+
+
+def is_valid_performance_report_dir(directory: Path) -> bool:
+    """True when the folder has the files needed to load a performance report.
+
+    Requires profile_log_device.csv, tracy_profile_log_host.tracy, and at least
+    one ops_perf_results* *file* (a directory with that name is not enough).
+    """
+    if not all(
+        (directory / name).is_file() for name in PERFORMANCE_REPORT_REQUIRED_FILES
+    ):
+        return False
+    try:
+        return any(
+            path.is_file() for path in directory.glob(f"{PERFORMANCE_OPS_PERF_PREFIX}*")
+        )
+    except OSError:
+        return False
+
+
 class PathResolver:
     """Centralized path resolution for both TT-Metal and upload/sync modes."""
 
@@ -619,17 +664,18 @@ class PathResolver:
             local_dir = Path(self.current_app.config["LOCAL_DATA_DIRECTORY"])
             remote_dir = Path(self.current_app.config["REMOTE_DATA_DIRECTORY"])
 
-            if remote_connection:
-                base_dir = remote_dir / remote_connection.host
-            else:
-                base_dir = local_dir
-
             if report_type == "profiler":
-                return base_dir / self.current_app.config["PROFILER_DIRECTORY_NAME"]
+                dir_name = self.current_app.config["PROFILER_DIRECTORY_NAME"]
             elif report_type == "performance":
-                return base_dir / self.current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+                dir_name = self.current_app.config["PERFORMANCE_DIRECTORY_NAME"]
             else:
                 raise ValueError(f"Unknown report type: {report_type}")
+
+            if remote_connection:
+                return remote_host_report_path(
+                    remote_dir, remote_connection.host, dir_name
+                )
+            return local_dir / dir_name
 
     def get_profiler_path(self, profiler_name: str, remote_connection=None):
         """Get the full path to a profiler report's db.sqlite file."""
@@ -849,16 +895,14 @@ def get_available_reports(current_app):
         profiler_base = resolver.get_base_report_path("profiler")
         if profiler_base.exists():
             for report_dir in profiler_base.iterdir():
-                if report_dir.is_dir():
-                    db_file = report_dir / current_app.config["SQLITE_DB_PATH"]
-                    if db_file.exists():
-                        reports["profiler"].append(
-                            {
-                                "name": report_dir.name,
-                                "path": str(report_dir),
-                                "modified": report_dir.stat().st_mtime,
-                            }
-                        )
+                if report_dir.is_dir() and is_valid_profiler_report_dir(report_dir):
+                    reports["profiler"].append(
+                        {
+                            "name": report_dir.name,
+                            "path": str(report_dir),
+                            "modified": report_dir.stat().st_mtime,
+                        }
+                    )
     except Exception as e:
         logger.warning(f"Error reading profiler reports: {e}")
 
@@ -867,24 +911,14 @@ def get_available_reports(current_app):
         performance_base = resolver.get_base_report_path("performance")
         if performance_base.exists():
             for report_dir in performance_base.iterdir():
-                if report_dir.is_dir():
-                    # Check for typical performance files
-                    has_perf_files = any(
-                        (report_dir / filename).exists()
-                        for filename in [
-                            "profile_log_device.csv",
-                            "tracy_profile_log_host.tracy",
-                        ]
-                    ) or any(report_dir.glob("ops_perf_results*.csv"))
-
-                    if has_perf_files:
-                        reports["performance"].append(
-                            {
-                                "name": report_dir.name,
-                                "path": str(report_dir),
-                                "modified": report_dir.stat().st_mtime,
-                            }
-                        )
+                if report_dir.is_dir() and is_valid_performance_report_dir(report_dir):
+                    reports["performance"].append(
+                        {
+                            "name": report_dir.name,
+                            "path": str(report_dir),
+                            "modified": report_dir.stat().st_mtime,
+                        }
+                    )
     except Exception as e:
         logger.warning(f"Error reading performance reports: {e}")
 
@@ -1022,11 +1056,14 @@ def read_last_synced_file(directory: str) -> Optional[int]:
     if not last_synced_path.exists():
         return None
 
-    # Read and return the timestamp as an integer
-    with last_synced_path.open("r") as file:
-        timestamp = int(file.read().strip())
-
-    return timestamp
+    # Corrupt / empty / unreadable markers must not fail the whole listing —
+    # callers fall back to mtime when this returns None.
+    try:
+        with last_synced_path.open("r") as file:
+            return int(file.read().strip())
+    except (ValueError, OSError):
+        logger.warning("Unable to read last-synced marker at %s", last_synced_path)
+        return None
 
 
 def update_last_synced(directory: Path) -> None:
