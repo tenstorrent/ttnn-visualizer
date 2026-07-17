@@ -103,16 +103,23 @@ def test_list_local_synced_performance_folders(tmp_path: Path):
     assert folders[0].lastSynced is not None
 
 
-def test_list_local_skips_dirs_without_marker(tmp_path: Path):
+def test_list_local_performance_uses_mtime_when_last_synced_missing(
+    tmp_path: Path,
+):
     host = "bh-lb-01"
-    empty = tmp_path / host / "performance-reports" / "empty"
-    empty.mkdir(parents=True)
+    report_dir = tmp_path / host / "performance-reports" / "2026_07_14_18_51_53"
+    _write_valid_performance_report(report_dir)
+    expected_mtime = int(report_dir.stat().st_mtime)
 
     folders = list_local_synced_performance_folders(
         _connection(host), tmp_path, "performance-reports"
     )
 
-    assert folders == []
+    assert len(folders) == 1
+    # Local-only rows without a marker use mtime for both stamps so the Sync
+    # badge does not treat them as never-synced / always-outdated.
+    assert folders[0].lastSynced == expected_mtime
+    assert folders[0].lastModified == expected_mtime
 
 
 def test_list_local_skips_incomplete_performance_folder(tmp_path: Path):

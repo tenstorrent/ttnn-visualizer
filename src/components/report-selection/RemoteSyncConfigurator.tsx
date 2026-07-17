@@ -45,8 +45,9 @@ function mergeRemoteFolders(savedFolders: RemoteFolder[] | undefined, updatedFol
         return {
             ...existingFolder,
             ...updatedFolder,
-            // Prefer fresh stamp from disk; keep cached value if the list response omitted it.
-            lastSynced: updatedFolder.lastSynced ?? existingFolder?.lastSynced,
+            // Prefer fresh stamp from disk; keep cache only when the response omitted the key.
+            // Explicit null means "not synced" and must clear a stale cached stamp.
+            lastSynced: updatedFolder.lastSynced !== undefined ? updatedFolder.lastSynced : existingFolder?.lastSynced,
         };
     });
 }
