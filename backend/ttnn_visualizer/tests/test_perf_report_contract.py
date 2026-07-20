@@ -22,7 +22,7 @@ Chain of trust: tt-perf-report  ->  this golden  ->  the frontend.
 
 To refresh the golden after an intentional tt-perf-report change:
 
-    EXPECTED_TT_PERF_REPORT_VERSION  <- bump the constant below to the new version
+    MIN_TT_PERF_REPORT_VERSION       <- bump the floor below if needed
     pnpm run perf:golden             <- regenerates tests/data/perfReportColourContract.json
 
 then run the frontend suite and reconcile any TypeScript differences.
@@ -33,6 +33,7 @@ import os
 from importlib.metadata import version
 from pathlib import Path
 
+from packaging.version import Version
 from tt_perf_report.perf_report import (
     Cell,
     color_row,
@@ -40,9 +41,9 @@ from tt_perf_report.perf_report import (
     evaluate_fidelity,
 )
 
-# Keep in lockstep with the tt-perf-report pin in pyproject.toml. Bumping the pin without
-# bumping this constant fails the version assertion below, forcing a deliberate parity review.
-EXPECTED_TT_PERF_REPORT_VERSION = "1.2.4"
+# Keep in lockstep with the lower bound in pyproject.toml. The golden comparison below
+# still catches behavioural drift when a newer compatible tt-perf-report is installed.
+MIN_TT_PERF_REPORT_VERSION = "1.2.4"
 
 # tt-perf-report defaults (perf_report.py): --min-percentage and the Op-to-Op Gap threshold.
 MIN_PERCENTAGE = 0.5
@@ -385,11 +386,10 @@ def _generate_golden():
     }
 
 
-def test_installed_version_matches_pin():
-    assert version("tt-perf-report") == EXPECTED_TT_PERF_REPORT_VERSION, (
-        "Installed tt-perf-report differs from the version this contract was generated against. "
-        "Bump EXPECTED_TT_PERF_REPORT_VERSION (and the pyproject.toml pin), then regenerate the "
-        "golden with UPDATE_PERF_GOLDEN=1 and reconcile the frontend parity tests."
+def test_installed_version_satisfies_supported_range():
+    assert Version(version("tt-perf-report")) >= Version(MIN_TT_PERF_REPORT_VERSION), (
+        "Installed tt-perf-report is older than the supported minimum. "
+        "Install a compatible version from pyproject.toml."
     )
 
 
