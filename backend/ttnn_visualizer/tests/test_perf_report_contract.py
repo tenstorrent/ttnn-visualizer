@@ -42,7 +42,7 @@ from tt_perf_report.perf_report import (
 
 # Keep in lockstep with the tt-perf-report pin in pyproject.toml. Bumping the pin without
 # bumping this constant fails the version assertion below, forcing a deliberate parity review.
-EXPECTED_TT_PERF_REPORT_VERSION = "1.2.4"
+EXPECTED_TT_PERF_REPORT_VERSION = "1.2.8"
 
 # tt-perf-report defaults (perf_report.py): --min-percentage and the Op-to-Op Gap threshold.
 MIN_PERCENTAGE = 0.5
