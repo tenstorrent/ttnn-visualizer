@@ -4,12 +4,6 @@
 
 @use '../definitions/colours' as *;
 
-.mlir-view-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 8px;
-}
-
 /* Split-pane container reserves the same vertical room as a single pane (see
  * .mlir-view-pane offsets in MLIRViewReactFlow.scss), then lays the two panes
  * out side by side with a draggable divider between them. */

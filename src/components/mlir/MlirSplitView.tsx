@@ -88,7 +88,7 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
                     size={Size.SMALL}
                     variant={ButtonVariant.MINIMAL}
                     icon={IconNames.CROSS}
-                    aria-label={`Close ${side} pane`}
+                    aria-label='Close split view'
                     onClick={onExit}
                 />
             </Tooltip>
