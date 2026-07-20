@@ -416,7 +416,7 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/54/eb9bfc647b19f2009dd5c7f5ec51c4e6ca831725f1aea7a993034f483147/contourpy-1.3.2.tar.gz", hash = "sha256:b6945942715a034c671b7fc54f9588126b0b8bf23db2696e3ca8328f3ff0ab54", size = 13466130, upload-time = "2025-04-15T17:47:53.79Z" }
 wheels = [
@@ -488,7 +488,7 @@ resolution-markers = [
     "python_full_version == '3.11.*'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/58/01/1253e6698a07380cd31a736d248a3f2a50a7c88779a1813da27503cadc2a/contourpy-1.3.3.tar.gz", hash = "sha256:083e12155b210502d0bca491432bb04d56dc3432f95a979b429f2848c3dbe880", size = 13466174, upload-time = "2025-07-26T12:03:12.549Z" }
 wheels = [
@@ -597,7 +597,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -3232,15 +3232,15 @@ wheels = [
 
 [[package]]
 name = "tt-perf-report"
-version = "1.2.4"
+version = "1.2.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
     { name = "pandas" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/25/c9821fb479ed372aa8fbe679ac3979c217f649ad571b18a0957b4f0ceb18/tt_perf_report-1.2.4.tar.gz", hash = "sha256:f3c2b13c8bace25d3bdca33acfa2c8882f5e7baa219db295eb23c3f588dea7c9", size = 38864, upload-time = "2026-04-27T18:13:31.311Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6e/b5/602539d0bdf36ee6f9ec6a5f8658ea83afc70ca5e305b49005232a9fc638/tt_perf_report-1.2.8.tar.gz", hash = "sha256:c1ee314bd8e2c8212e293f5f11f4aae406f03cba22e7013fd3e3fcb45df1f640", size = 44634, upload-time = "2026-07-16T16:54:42.233Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/2f/10c6c9a04a7754c7954b30d89e359dbd644bec671e0bc38e96999a03eff4/tt_perf_report-1.2.4-py3-none-any.whl", hash = "sha256:225989b5ab2b59c883212a91b9c3017d85566360c042be27c3ef40dade2d5c31", size = 33286, upload-time = "2026-04-27T18:13:29.831Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/fe/2414b1575c950c01a264e125221d9446e3ab006561d2217da9c3d30f2b12/tt_perf_report-1.2.8-py3-none-any.whl", hash = "sha256:17d1c2a40fd1f47158ec61fecf6ebe3ea6d6d3d8bdd0a46685858f4d00e3459d", size = 35528, upload-time = "2026-07-16T16:54:40.851Z" },
 ]
 
 [[package]]
@@ -3300,7 +3300,7 @@ requires-dist = [
     { name = "pydantic-core", specifier = "==2.41.5" },
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.0,<7.0" },
-    { name = "tt-perf-report", specifier = "==1.2.4" },
+    { name = "tt-perf-report", specifier = "==1.2.8" },
     { name = "zstd", specifier = ">=1.5.7,<2.0" },
 ]
 
