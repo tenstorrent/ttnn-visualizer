@@ -48,6 +48,7 @@ import type {
     WorkerNode,
 } from './mlirGraphTypes';
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
+import { MLIR_FIT_VIEW_OPTIONS } from '../../definitions/MlirFitView';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
@@ -604,12 +605,12 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 // isn't in the build (e.g. synthetic id that never reaches the
                 // canvas) — a missing fitView is preferable to a noisy error.
                 requestAnimationFrame(() => {
-                    void fitView({ nodes: [{ id: pendingFocusId }], padding: 0.3, duration: 200 });
+                    void fitView({ nodes: [{ id: pendingFocusId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
                 });
             } else if (shouldFitAll || !hasFitInitiallyRef.current) {
                 hasFitInitiallyRef.current = true;
                 requestAnimationFrame(() => {
-                    void fitView({ padding: 0.2, duration: 200 });
+                    void fitView({ ...MLIR_FIT_VIEW_OPTIONS.bulk });
                 });
             }
         },
@@ -644,7 +645,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
         }
         return result;
     }, [sourceNodes]);
-    const { interactionIndex, runBuild } = useMlirLayoutWorker(graph.id, sourceNodes, applyBuiltGraph);
+    const { interactionIndex, runBuild, isBuilding } = useMlirLayoutWorker(graph.id, sourceNodes, applyBuiltGraph);
 
     useEffect(() => {
         runBuild(expandedNamespaces);
@@ -739,7 +740,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
             }
             const targetId = matchedNodesInOrder[nextIdx];
             if (targetId) {
-                void fitView({ nodes: [{ id: targetId }], padding: 0.3, duration: 200 });
+                void fitView({ nodes: [{ id: targetId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
             }
             setCurrentMatchIndex(nextIdx);
         },
@@ -1188,7 +1189,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
         if (!selectedNodeId) {
             return;
         }
-        void fitView({ nodes: [{ id: selectedNodeId }], padding: 0.3, duration: 200 });
+        void fitView({ nodes: [{ id: selectedNodeId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
     }, [fitView, selectedNodeId]);
 
     // Click handler for the "locate" affordance next to each producer /
@@ -1221,7 +1222,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 }
             }
             if (prefixesToAdd.length === 0) {
-                void fitView({ nodes: [{ id: targetNodeId }], padding: 0.3, duration: 200 });
+                void fitView({ nodes: [{ id: targetNodeId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
                 return;
             }
             viewportAnchorRef.current = null;
@@ -1558,6 +1559,8 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 <MlirExpandCollapseControls
                     namespaceCount={allExpandableNamespaces.length}
                     expandedCount={expandedNamespaces.size}
+                    isBuilding={isBuilding}
+                    nodeCount={sourceNodes.length}
                     onExpandAll={expandAllNamespaces}
                     onCollapseAll={collapseAllNamespaces}
                 />
