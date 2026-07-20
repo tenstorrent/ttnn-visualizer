@@ -7,7 +7,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-import MlirExpandCollapseControls from '../src/components/mlir/MlirExpandCollapseControls';
+import MlirExpandCollapseControls, { layoutStatusLabel } from '../src/components/mlir/MlirExpandCollapseControls';
 
 afterEach(cleanup);
 
@@ -102,12 +102,12 @@ describe('MlirExpandCollapseControls', () => {
         );
         expect(screen.getByRole('button', { name: /expand all subgraphs/i })).toBeDisabled();
         expect(screen.getByRole('button', { name: /collapse all subgraphs/i })).toBeDisabled();
-        expect(screen.getByRole('status')).toHaveTextContent('Laying out 42 nodes…');
+        expect(screen.getByRole('status')).toHaveTextContent(layoutStatusLabel(42));
     });
 
     it('omits the count from the status when nodeCount is not provided', () => {
         render(<MlirExpandCollapseControls {...buildProps({ isBuilding: true })} />);
-        expect(screen.getByRole('status')).toHaveTextContent('Laying out…');
+        expect(screen.getByRole('status')).toHaveTextContent(layoutStatusLabel());
     });
 
     it('does not render the layout status when idle', () => {

@@ -21,6 +21,10 @@ import type { BuiltGraph, SourceNode, WorkerInteractionIndex, WorkerOutboundMess
  *    expand/collapse behaviour.
  * 5. Hand back a stable `runBuild(expanded)` dispatcher that the consumer
  *    triggers from a `useEffect([expandedNamespaces, runBuild])`.
+ * 6. Own the `isBuilding` flag that gates the expand/collapse controls: set on
+ *    every `build` dispatch and cleared on the matching `built`/`error` reply,
+ *    on a `worker.onerror` crash, and on a synchronous `postMessage` failure —
+ *    so a dead or crashed worker can never strand the controls disabled.
  *
  * `onBuilt` is invoked on the React event loop when a fresh `built` message
  * arrives for the current `graphId`. It deliberately stays in the consumer so

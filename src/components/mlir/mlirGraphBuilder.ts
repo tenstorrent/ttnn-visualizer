@@ -21,7 +21,7 @@ const GROUP_PADDING_X = 24;
 const GROUP_PADDING_TOP = 36;
 const GROUP_PADDING_BOTTOM = 20;
 
-const DAGRE_NODE_LIMIT = 2000;
+export const DAGRE_NODE_LIMIT = 2000;
 
 const ARROW_MARKER = { type: 'arrowclosed', height: 20, width: 20 } as const;
 
@@ -44,7 +44,7 @@ type DagreOptions = {
     ranker?: string;
 };
 
-function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+export function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
     if (nodes.length === 0) {
         return nodes;
     }

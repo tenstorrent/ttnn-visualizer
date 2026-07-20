@@ -12,10 +12,17 @@ export interface MlirExpandCollapseControlsProps {
     expandedCount: number;
     onExpandAll: () => void;
     onCollapseAll: () => void;
-    // Worker rebuild in flight: lock the buttons and show progress.
     isBuilding?: boolean;
     nodeCount?: number;
 }
+
+// Single source of truth for the rebuild-in-flight status copy, shared with the
+// specs so the visible text and the assertions cannot drift apart. Co-located
+// with its only consumer; the exported helper is an HMR-only concern, not a
+// second component.
+// eslint-disable-next-line react-refresh/only-export-components
+export const layoutStatusLabel = (nodeCount?: number): string =>
+    `Laying out${typeof nodeCount === 'number' ? ` ${nodeCount} nodes` : ''}…`;
 
 const MlirExpandCollapseControlsInner = ({
     namespaceCount,
@@ -63,7 +70,7 @@ const MlirExpandCollapseControlsInner = ({
                     role='status'
                 >
                     <Spinner size={14} />
-                    <span>Laying out{typeof nodeCount === 'number' ? ` ${nodeCount} nodes` : ''}…</span>
+                    <span>{layoutStatusLabel(nodeCount)}</span>
                 </span>
             )}
         </div>
