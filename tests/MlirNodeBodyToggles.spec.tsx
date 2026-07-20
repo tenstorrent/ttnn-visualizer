@@ -67,4 +67,31 @@ describe('MlirNodeBodyToggles', () => {
         expect(screen.getByLabelText('Show source location')).not.toBeChecked();
         expect(screen.getByLabelText('Show shapes')).not.toBeChecked();
     });
+
+    it('shows the count of active overlays on the collapsed trigger', () => {
+        const { rerender } = render(
+            <MlirNodeBodyToggles
+                value={bothOff}
+                onChange={() => {}}
+            />,
+        );
+        const trigger = () => screen.getByRole('button', { name: 'Node body overlays' });
+        expect(trigger()).not.toHaveTextContent(/[12]/);
+
+        rerender(
+            <MlirNodeBodyToggles
+                value={{ location: true, shapes: false }}
+                onChange={() => {}}
+            />,
+        );
+        expect(trigger()).toHaveTextContent('1');
+
+        rerender(
+            <MlirNodeBodyToggles
+                value={{ location: true, shapes: true }}
+                onChange={() => {}}
+            />,
+        );
+        expect(trigger()).toHaveTextContent('2');
+    });
 });
