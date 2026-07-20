@@ -1485,76 +1485,16 @@ def create_npe_files():
 
 @api.route("/remote/profiler-reports", methods=["POST"])
 def list_remote_reports_profiler():
-    connection_data = request.get_json()
-
-    if not connection_data:
-        return response_bad_request("Missing connection data")
-
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
-
-    try:
-        remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
-            connection
-        )
-        if not remote_folders:
-            return Response(status=HTTPStatus.NO_CONTENT)
-
-        for rf in remote_folders:
-            directory_name = Path(rf.remotePath).name
-            local_path = local_synced_report_path(
-                Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
-                connection.host,
-                current_app.config["PROFILER_DIRECTORY_NAME"],
-                directory_name,
-            )
-            logger.info(f"Checking last synced for {directory_name}")
-            rf.lastSynced = read_last_synced_file(str(local_path))
-            if not rf.lastSynced:
-                logger.info(f"{directory_name} not yet synced")
-
-        return Response(
-            orjson.dumps([r.model_dump() for r in remote_folders]),
-            mimetype="application/json",
-        )
-    except RemoteConnectionException as e:
-        return error_response(e.http_status, e.message)
+    return _respond_remote_report_list(
+        get_remote_profiler_folders, "PROFILER_DIRECTORY_NAME"
+    )
 
 
 @api.route("/remote/performance-reports", methods=["POST"])
 def list_remote_reports_performance():
-    connection_data = request.get_json()
-
-    if not connection_data:
-        return response_bad_request("Missing connection data")
-
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
-
-    try:
-        remote_performance_folders: List[RemoteReportFolder] = (
-            get_remote_performance_folders(connection)
-        )
-        if not remote_performance_folders:
-            return Response(status=HTTPStatus.NO_CONTENT)
-
-        for rf in remote_performance_folders:
-            performance_name = Path(rf.remotePath).name
-            local_path = local_synced_report_path(
-                Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
-                connection.host,
-                current_app.config["PERFORMANCE_DIRECTORY_NAME"],
-                performance_name,
-            )
-            logger.info(f"Checking last synced for {performance_name}")
-            rf.lastSynced = read_last_synced_file(str(local_path))
-            if not rf.lastSynced:
-                logger.info(f"{performance_name} not yet synced")
-
-        return Response(
-            orjson.dumps([r.model_dump() for r in remote_performance_folders]),
-            mimetype="application/json",
-        )
-    except RemoteConnectionException as e:
-        return error_response(e.http_status, e.message)
+    return _respond_remote_report_list(
+        get_remote_performance_folders, "PERFORMANCE_DIRECTORY_NAME"
+    )
 
 
 @api.route("/remote/local-profiler-reports", methods=["POST"])
@@ -1575,6 +1515,48 @@ def list_local_remote_reports_performance():
         list_local_synced_performance_folders,
         "PERFORMANCE_DIRECTORY_NAME",
     )
+
+
+def _annotate_last_synced(
+    folders: List[RemoteReportFolder], host: str, directory_config_key: str
+) -> None:
+    remote_data = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
+    dir_name = current_app.config[directory_config_key]
+    for rf in folders:
+        directory_name = Path(rf.remotePath).name
+        local_path = local_synced_report_path(
+            remote_data, host, dir_name, directory_name
+        )
+        logger.info("Checking last synced for %s", directory_name)
+        rf.lastSynced = read_last_synced_file(str(local_path))
+        if not rf.lastSynced:
+            logger.info("%s not yet synced", directory_name)
+
+
+def _respond_remote_report_list(fetch_fn, directory_config_key: str):
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return response_bad_request("Missing connection data")
+
+    try:
+        connection = RemoteConnection.model_validate(connection_data, strict=False)
+    except ValidationError:
+        return response_bad_request("Invalid connection data")
+
+    try:
+        remote_folders: List[RemoteReportFolder] = fetch_fn(connection)
+        if not remote_folders:
+            return Response(status=HTTPStatus.NO_CONTENT)
+
+        _annotate_last_synced(remote_folders, connection.host, directory_config_key)
+
+        return Response(
+            orjson.dumps([folder.model_dump() for folder in remote_folders]),
+            mimetype="application/json",
+        )
+    except RemoteConnectionException as e:
+        return error_response(e.http_status, e.message)
 
 
 def _respond_local_synced_folders(list_fn, directory_config_key: str):
