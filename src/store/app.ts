@@ -8,18 +8,18 @@ import { NumberRange, TabId } from '@blueprintjs/core';
 import { Id } from 'react-toastify';
 import { TAB_IDS } from '../definitions/BufferSummary';
 import { ListStates } from '../definitions/VirtualLists';
-import { Signpost } from '../functions/perfFunctions';
+import { Signpost } from '../definitions/PerfSignpost';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
-import { REPORT_LINKS_STORAGE_KEY, ReportLink } from '../functions/reportLinks';
+import { REPORT_LINKS_STORAGE_KEY, ReportLink } from '../definitions/ReportLinks';
 import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
-import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../functions/topNAnnotations';
+import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../definitions/TopNAnnotations';
 import { MlirServerConnection } from '../definitions/MlirServer';
 import { GraphBundle, MlirFileResult } from '../model/MLIRJsonModel';
-import { aggregateFileTransferProgress, fileTransferRegistryAtom } from '../functions/fileTransferRegistry';
+import { aggregateFileTransferProgress, fileTransferRegistryAtom } from './fileTransferRegistry';
 
 // App state
 export const activeToastAtom = atom<Id | null>(null);
@@ -27,7 +27,7 @@ export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
 export const listStatesAtom = atom<ListStates | null>(null);
 export const selectedBufferColourAtom = atom<string | null>(null);
-// File transfer registry atoms — defined in fileTransferRegistry.ts (see comment there);
+// File transfer registry atoms — defined in store/fileTransferRegistry.ts (see comment there);
 // re-exported here so shared atoms remain discoverable via store/app.ts.
 export {
     clearAllFileTransferProgress,
@@ -38,7 +38,7 @@ export {
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,
     setFileTransferProgressForSource,
-} from '../functions/fileTransferRegistry';
+} from './fileTransferRegistry';
 
 export const fileTransferProgressAtom = atom((get) => aggregateFileTransferProgress(get(fileTransferRegistryAtom)));
 export const showDeallocationReportAtom = atom(false);

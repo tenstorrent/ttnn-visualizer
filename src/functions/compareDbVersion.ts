@@ -3,13 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { SemVer } from './semverParse';
-import { TARGET_DB_VERSION_MAX, TARGET_DB_VERSION_MIN } from '../definitions/Versions';
+import { DBVersionValidation, TARGET_DB_VERSION_MAX, TARGET_DB_VERSION_MIN } from '../definitions/Versions';
 
-export enum DBVersionValidation {
-    OK,
-    DB_OLD,
-    DB_NEW,
-}
 const semverToString = (version: SemVer) => {
     return `${version.major}.${version.minor}.${version.patch}`;
 };

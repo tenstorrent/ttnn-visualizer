@@ -5,7 +5,7 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
-import { RouteRequirements } from '../definitions/RouteObjectList';
+import { RouteRequirements } from '../routes/routeObjectList';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ProtectedRoute.scss';
 import useRestoreInstance from '../hooks/useRestoreInstance';

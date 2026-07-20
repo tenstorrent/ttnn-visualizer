@@ -27,10 +27,12 @@ import {
     defaultOperation,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
-import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
+import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemoryConfig';
+import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
-import { L1PressureResult, buildL1PressureResult } from '../functions/l1Pressure';
+import { L1PressureResult } from '../model/L1Pressure';
+import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
@@ -61,13 +63,14 @@ import {
 } from '../functions/clusterTopology';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
-import { Signpost } from '../functions/perfFunctions';
+import { Signpost } from '../definitions/PerfSignpost';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import Endpoints from '../definitions/Endpoints';
 import { ReportFolder } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
-import createToastNotification, { ToastType } from '../functions/createToastNotification';
+import createToastNotification from '../functions/createToastNotification';
+import { ToastType } from '../definitions/ToastType';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';

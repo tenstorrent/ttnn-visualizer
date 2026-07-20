@@ -22,7 +22,7 @@ import { useDevices } from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import { getBufferColor } from '../../functions/colorGenerator';
-import { CBAllocationSummary, CBPressureSnapshot } from '../../functions/processMemoryAllocations';
+import { CBAllocationSummary, CBPressureSnapshot } from '../../model/MemoryAllocations';
 import 'styles/components/CircularBufferPressureModal.scss';
 
 const CORE_KEY = (x: number, y: number) => `${x},${y}`;

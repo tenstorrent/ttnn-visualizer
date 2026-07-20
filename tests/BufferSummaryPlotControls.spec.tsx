@@ -14,7 +14,7 @@ import {
     topNAnnotationModeAtom,
 } from '../src/store/app';
 import { TAB_IDS } from '../src/definitions/BufferSummary';
-import { TopNAnnotationMode, TopNAnnotationStatus } from '../src/functions/topNAnnotations';
+import { TopNAnnotationMode, TopNAnnotationStatus } from '../src/definitions/TopNAnnotations';
 import { AtomProvider, AtomProviderInitialValues } from './helpers/atomProvider';
 
 const availabilityMock = vi.fn();

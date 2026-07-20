@@ -12,7 +12,7 @@ import {
     getFolderLinkState,
     shouldShowFolderLinkStatus,
     sortByFolderLinkState,
-} from '../../definitions/FolderLinkStatus';
+} from '../../functions/folderLinkStatus';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import { getReportId } from '../../functions/reportLinks';

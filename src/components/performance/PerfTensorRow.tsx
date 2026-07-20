@@ -4,10 +4,10 @@
 
 import { useAtomValue } from 'jotai';
 import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
-import { getLastConsumerLink, getOperationLink } from '../../functions/getOperationLink';
+import { getLastConsumerLink, getOperationLink } from '../getOperationLink';
 import isValidNumber from '../../functions/isValidNumber';
 import { formatMemorySize, getMemoryAddress } from '../../functions/math';
-import { ShardSpec } from '../../functions/parseMemoryConfig';
+import { ShardSpec } from '../../model/MemoryConfig';
 import { OperationDescription, Tensor } from '../../model/APIData';
 import { BufferTypeLabel } from '../../model/BufferType';
 import { showHexAtom } from '../../store/app';

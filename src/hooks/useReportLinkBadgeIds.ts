@@ -5,8 +5,8 @@
 import { useAtomValue } from 'jotai';
 import { useMemo } from 'react';
 import getServerConfig from '../functions/getServerConfig';
+import { LinkedReportIdOptions } from '../definitions/ReportLinks';
 import {
-    LinkedReportIdOptions,
     getReportId,
     linkedPerformanceIds,
     linkedProfilerIds,

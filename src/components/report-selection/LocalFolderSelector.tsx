@@ -20,7 +20,8 @@ import {
     ACTIVE_MEMORY_REPORT_TOAST_TITLE,
     ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE,
 } from '../../definitions/notifyActiveReport';
-import createToastNotification, { ToastType } from '../../functions/createToastNotification';
+import createToastNotification from '../../functions/createToastNotification';
+import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import {
@@ -43,7 +44,8 @@ import {
     normaliseReportFolder,
 } from '../../functions/validateReportFolder';
 import { TEST_IDS } from '../../definitions/TestIds';
-import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
+import { DBVersionValidation } from '../../definitions/Versions';
+import { evaluateDbVersion } from '../../functions/compareDbVersion';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,

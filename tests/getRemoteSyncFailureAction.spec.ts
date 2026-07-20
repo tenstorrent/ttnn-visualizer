@@ -5,7 +5,8 @@
 import { CanceledError } from 'axios';
 import { describe, expect, it } from 'vitest';
 import { RemoteFolder } from '../src/definitions/RemoteConnection';
-import getRemoteSyncFailureAction, { RemoteSyncFailureAction } from '../src/functions/getRemoteSyncFailureAction';
+import getRemoteSyncFailureAction from '../src/functions/getRemoteSyncFailureAction';
+import { RemoteSyncFailureAction } from '../src/definitions/RemoteSync';
 
 const NEVER_SYNCED: RemoteFolder = {
     reportName: 'never',

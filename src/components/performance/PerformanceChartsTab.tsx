@@ -9,7 +9,7 @@ import PerfCharts from './PerfCharts';
 import PerfChartsIndex from './PerfChartsIndex';
 import NonFilterablePerfCharts from './NonFilterablePerfCharts';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
-import { buildChartIndexEntries } from '../../definitions/PerformanceCharts';
+import { buildChartIndexEntries } from '../../functions/buildChartIndexEntries';
 import { useActiveSection } from '../../hooks/useActiveSection';
 import { usePrefilterPerfTableByOpCode } from '../../hooks/usePrefilterPerfTableByOpCode';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';

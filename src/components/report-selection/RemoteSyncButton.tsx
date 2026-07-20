@@ -7,7 +7,7 @@ import { useAtomValue } from 'jotai';
 import React from 'react';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { FileTransferSource } from '../../definitions/FileTransferSource';
-import { fileTransferProgressBySourceAtom } from '../../functions/fileTransferRegistry';
+import { fileTransferProgressBySourceAtom } from '../../store/fileTransferRegistry';
 import { FileProgress, FileStatus } from '../../model/APIData';
 import {
     NEVER_SYNCED_LABEL,
@@ -15,9 +15,9 @@ import {
     REPORT_UP_TO_DATE_LABEL,
     RemoteFolder,
     SYNC_DATE_FORMATTER,
-    getUTCFromEpoch,
 } from '../../definitions/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
+import { getUTCFromEpoch } from '../../functions/formatting';
 
 interface RemoteSyncButtonProps {
     selectedReportFolder: RemoteFolder | undefined;

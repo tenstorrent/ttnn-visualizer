@@ -6,7 +6,7 @@ import { PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
 import { HIGH_DISPATCH_THRESHOLD_US } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
-import { L1PressureMetrics } from './l1Pressure';
+import { L1PressureMetrics } from '../model/L1Pressure';
 import { nsToUs } from './math';
 import { parsePerfRowTensorAttributes } from './parsePerfRowTensorAttributes';
 

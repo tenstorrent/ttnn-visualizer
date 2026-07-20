@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { ColumnKeys, PerfTableFilters, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { OpType } from '../../definitions/Performance';
 import alignByOpCode from '../../functions/normalisePerformanceData';
-import { Signpost } from '../../functions/perfFunctions';
+import { Signpost } from '../../definitions/PerfSignpost';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 
 interface UsePerfReportFilteringParams {

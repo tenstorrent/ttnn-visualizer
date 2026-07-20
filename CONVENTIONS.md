@@ -490,7 +490,8 @@ try {
 `src/functions/createToastNotification.tsx` is the single entry point. It wraps `react-toastify`'s `toast` with the `ToastFileChange` template the rest of the app uses, and it delegates to `toast[type](...)` so the same call site can produce info/success/warning/error toasts.
 
 ```ts
-import createToastNotification, { ToastType } from '../functions/createToastNotification';
+import createToastNotification from '../functions/createToastNotification';
+import { ToastType } from '../definitions/ToastType';
 
 createToastNotification('MLIR', file.name, ToastType.SUCCESS);
 ```
@@ -539,7 +540,7 @@ Frontend route paths live in `src/definitions/Routes.ts` (a `Object.freeze`'d co
 
 ### Frontend route definitions go through `routeObjectList`
 
-`ROUTES` (`src/definitions/Routes.ts`) holds absolute paths so that `<Link to={ROUTES.OPERATIONS} />` reads naturally. React Router's nested-route children take **relative** paths, so `stripFirstSlash` in `src/definitions/RouteObjectList.tsx` bridges the two and keeps `ROUTES` as the single source of truth:
+`ROUTES` (`src/definitions/Routes.ts`) holds absolute paths so that `<Link to={ROUTES.OPERATIONS} />` reads naturally. React Router's nested-route children take **relative** paths, so `stripFirstSlash` in `src/routes/routeObjectList.tsx` bridges the two and keeps `ROUTES` as the single source of truth:
 
 ```tsx
 export const routeObjectList = [
@@ -650,7 +651,7 @@ When literals come in a *related set* — status values, mode kinds, validation 
 **Good** (string-valued enum, used at every call site):
 
 ```ts
-// src/functions/createToastNotification.tsx
+// src/definitions/ToastType.ts
 export enum ToastType {
     INFO = 'info',
     SUCCESS = 'success',

@@ -21,7 +21,7 @@ import {
     usePerformanceRange,
     usePerformanceReport,
 } from '../src/hooks/useAPI';
-import { L1PressureStatus } from '../src/functions/l1Pressure';
+import { L1PressureStatus } from '../src/model/L1Pressure';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { activePerformanceReportAtom, selectedPerformanceRangeAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';

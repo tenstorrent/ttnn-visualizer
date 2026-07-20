@@ -26,11 +26,8 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
-import {
-    AllocationDetails,
-    CBPressureSnapshot,
-    processMemoryAllocations,
-} from '../../functions/processMemoryAllocations';
+import { AllocationDetails, CBPressureSnapshot } from '../../model/MemoryAllocations';
+import { processMemoryAllocations } from '../../functions/processMemoryAllocations';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import CircularBufferPressureModal from './CircularBufferPressureModal';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1MemorySize';
@@ -41,8 +38,8 @@ import { BufferTypeToStringBufferType, StringBufferType } from '../../model/Buff
 import {
     DEVICE_OPERATION_ANALYSIS_RESULT,
     DEVICE_OPERATION_ANALYSIS_RESULT_LABEL,
-    analyseDeviceOperation,
-} from '../../functions/analyseDeviceOperation';
+} from '../../definitions/DeviceOperationAnalysis';
+import { analyseDeviceOperation } from '../../functions/analyseDeviceOperation';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;

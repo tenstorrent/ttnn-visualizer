@@ -10,15 +10,10 @@ import {
     topNAnnotationEnabledAtom,
     topNAnnotationModeAtom,
 } from '../store/app';
-import {
-    RankedAnnotation,
-    TopNAnnotationMode,
-    TopNAnnotationStatus,
-    isPerfMode,
-    selectTopNAnnotations,
-} from '../functions/topNAnnotations';
+import { TopNAnnotationMode, TopNAnnotationStatus } from '../definitions/TopNAnnotations';
+import { RankedAnnotation, isPerfMode, selectTopNAnnotations } from '../functions/topNAnnotations';
 import { OpPerfAggregate, PerfOverlaySource, aggregatePerfByOp } from '../functions/perfOverlay';
-import { L1PressureMetrics, L1PressureStatus } from '../functions/l1Pressure';
+import { L1PressureMetrics, L1PressureStatus } from '../model/L1Pressure';
 import { useGetDeviceOperationListPerf, useL1PressureByOperation, usePerformanceReport } from './useAPI';
 
 export interface UseTopNAnnotationAvailabilityParams {

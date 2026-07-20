@@ -2,20 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { DEVICE_OPERATION_ANALYSIS_RESULT } from '../definitions/DeviceOperationAnalysis';
 import { DeviceOperationNode, TensorNode } from '../model/APIData';
 
 const DEVICE_OPERATION_NAME = {
     RESHAPE: 'tensor::reshape',
-};
-
-export enum DEVICE_OPERATION_ANALYSIS_RESULT {
-    OK,
-    NOOP,
-}
-
-export const DEVICE_OPERATION_ANALYSIS_RESULT_LABEL = {
-    [DEVICE_OPERATION_ANALYSIS_RESULT.OK]: '',
-    [DEVICE_OPERATION_ANALYSIS_RESULT.NOOP]: 'Operation appears to be a no-op and may be removable',
 };
 
 export const analyseDeviceOperation = (operation?: DeviceOperationNode) => {

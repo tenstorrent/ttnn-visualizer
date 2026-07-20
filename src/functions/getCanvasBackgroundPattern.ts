@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { TensorMemoryLayout } from './parseMemoryConfig';
+import { TensorMemoryLayout } from '../model/MemoryConfig';
 
 const FG_COLOUR = 'rgba(0, 0, 0, 0.7)';
 

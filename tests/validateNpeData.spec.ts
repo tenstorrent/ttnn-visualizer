@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { NPEValidationError, validateNpeData } from '../src/definitions/NPEData';
+import { NPEValidationError } from '../src/definitions/NPEData';
+import { validateNpeData } from '../src/functions/validateNpeData';
 
 const validData = {
     common_info: { version: '1.0.0' },

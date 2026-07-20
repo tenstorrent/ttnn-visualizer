@@ -11,7 +11,7 @@ import {
     getFolderLinkState,
     shouldShowFolderLinkStatus,
     sortByFolderLinkState,
-} from '../../definitions/FolderLinkStatus';
+} from '../../functions/folderLinkStatus';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';

@@ -4,9 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { ReportLocation } from '../src/definitions/Reports';
+import { ReportLink, ReportPairLinkStatus } from '../src/definitions/ReportLinks';
 import {
-    ReportLink,
-    ReportPairLinkStatus,
     getReportId,
     linkedPerformanceIds,
     linkedProfilerIds,
@@ -14,13 +13,13 @@ import {
     unlinkedProfilerIds,
     upsertReportLink,
 } from '../src/functions/reportLinks';
+import { FolderLinkState } from '../src/definitions/FolderLinkStatus';
 import {
-    FolderLinkState,
     compareByFolderLinkState,
     getFolderLinkState,
     shouldShowFolderLinkStatus,
     sortByFolderLinkState,
-} from '../src/definitions/FolderLinkStatus';
+} from '../src/functions/folderLinkStatus';
 
 const link = (
     profilerId: string,

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useLocation, useRoutes } from 'react-router-dom';
-import { routeObjectList } from '../definitions/RouteObjectList';
+import { routeObjectList } from '../routes/routeObjectList';
 
 export function ModalAwareOutlet() {
     const location = useLocation();

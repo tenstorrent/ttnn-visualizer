@@ -50,7 +50,8 @@ import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHan
 import { altCongestionColorsAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import NPEZoneFilterComponent from './NPEZoneFilterComponent';
-import createToastNotification, { ToastType } from '../../functions/createToastNotification';
+import createToastNotification from '../../functions/createToastNotification';
+import { ToastType } from '../../definitions/ToastType';
 
 interface NPEViewProps {
     npeData: NPEData;

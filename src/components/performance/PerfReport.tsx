@@ -23,7 +23,8 @@ import {
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { ColumnKeys, Columns, TypedPerfTableRow } from '../../definitions/PerfTable';
-import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
+import { Signpost } from '../../definitions/PerfSignpost';
+import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
 import {

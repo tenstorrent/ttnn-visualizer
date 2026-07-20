@@ -5,7 +5,7 @@
 import { ColumnKeys, PerfTableFilters, TypedPerfTableRow, signpostRowDefaults } from '../definitions/PerfTable';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
-import { Signpost } from './perfFunctions';
+import { Signpost } from '../definitions/PerfSignpost';
 
 const SIGNPOST_MARKER = '(signpost)';
 

@@ -5,7 +5,7 @@
 import { useAtomValue } from 'jotai';
 import { useDevices, useGetDeviceOperationListPerf, useOperationsList, usePerformanceReport } from './useAPI';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
-import { ReportLinkMatchResult } from '../functions/reportLinks';
+import { ReportLinkMatchResult } from '../definitions/ReportLinks';
 
 /**
  * Live memory↔performance match outcome. PENDING while underlying queries are in
