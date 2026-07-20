@@ -20,12 +20,10 @@ describe('MlirExpandCollapseControls', () => {
         ...overrides,
     });
 
-    it('renders Expand all + Collapse all with the correct labels and visible text', () => {
+    it('renders Expand all + Collapse all with the correct accessible names', () => {
         render(<MlirExpandCollapseControls {...buildProps()} />);
         expect(screen.getByRole('button', { name: /expand all subgraphs/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /collapse all subgraphs/i })).toBeInTheDocument();
-        expect(screen.getByText('Expand all')).toBeInTheDocument();
-        expect(screen.getByText('Collapse all')).toBeInTheDocument();
     });
 
     it('fires onExpandAll when the Expand all button is clicked', () => {

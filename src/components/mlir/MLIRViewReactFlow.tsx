@@ -1551,19 +1551,21 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     onNext={goToNextMatch}
                 />
 
-                <MlirNodeBodyToggles
-                    value={nodeBodyToggles}
-                    onChange={setNodeBodyToggles}
-                />
+                <div className='mlir-controls-row'>
+                    <MlirNodeBodyToggles
+                        value={nodeBodyToggles}
+                        onChange={setNodeBodyToggles}
+                    />
 
-                <MlirExpandCollapseControls
-                    namespaceCount={allExpandableNamespaces.length}
-                    expandedCount={expandedNamespaces.size}
-                    isBuilding={isBuilding}
-                    nodeCount={sourceNodes.length}
-                    onExpandAll={expandAllNamespaces}
-                    onCollapseAll={collapseAllNamespaces}
-                />
+                    <MlirExpandCollapseControls
+                        namespaceCount={allExpandableNamespaces.length}
+                        expandedCount={expandedNamespaces.size}
+                        isBuilding={isBuilding}
+                        nodeCount={sourceNodes.length}
+                        onExpandAll={expandAllNamespaces}
+                        onCollapseAll={collapseAllNamespaces}
+                    />
+                </div>
             </div>
 
             <MlirNodeColorLegend />

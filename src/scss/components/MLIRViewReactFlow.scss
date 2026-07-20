@@ -46,6 +46,20 @@
     gap: 8px;
 }
 
+/* Node-body popover trigger + expand/collapse share one compact toolbar so the
+ * cluster stays two rows tall (filter above, this below) in either pane. */
+.mlir-controls-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: $tt-grey-2;
+    border: 1px solid $tt-grey-3;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+}
+
 .react-flow__edge-text {
     font-size: 10px;
     font-family: monospace;
