@@ -7,7 +7,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-import MlirExpandCollapseControls from '../src/components/mlir/MlirExpandCollapseControls';
+import MlirExpandCollapseControls, { layoutStatusLabel } from '../src/components/mlir/MlirExpandCollapseControls';
 
 afterEach(cleanup);
 
@@ -91,6 +91,41 @@ describe('MlirExpandCollapseControls', () => {
         const onCollapseAll = vi.fn();
         render(<MlirExpandCollapseControls {...buildProps({ namespaceCount: 4, expandedCount: 0, onCollapseAll })} />);
         fireEvent.click(screen.getByRole('button', { name: /collapse all subgraphs/i }));
+        expect(onCollapseAll).not.toHaveBeenCalled();
+    });
+
+    it('locks both buttons and shows the layout status with the node count while building', () => {
+        render(
+            <MlirExpandCollapseControls
+                {...buildProps({ namespaceCount: 4, expandedCount: 2, isBuilding: true, nodeCount: 42 })}
+            />,
+        );
+        expect(screen.getByRole('button', { name: /expand all subgraphs/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /collapse all subgraphs/i })).toBeDisabled();
+        expect(screen.getByRole('status')).toHaveTextContent(layoutStatusLabel(42));
+    });
+
+    it('omits the count from the status when nodeCount is not provided', () => {
+        render(<MlirExpandCollapseControls {...buildProps({ isBuilding: true })} />);
+        expect(screen.getByRole('status')).toHaveTextContent(layoutStatusLabel());
+    });
+
+    it('does not render the layout status when idle', () => {
+        render(<MlirExpandCollapseControls {...buildProps()} />);
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('does not fire callbacks while a rebuild is in flight', () => {
+        const onExpandAll = vi.fn();
+        const onCollapseAll = vi.fn();
+        render(
+            <MlirExpandCollapseControls
+                {...buildProps({ namespaceCount: 4, expandedCount: 2, isBuilding: true, onExpandAll, onCollapseAll })}
+            />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: /expand all subgraphs/i }));
+        fireEvent.click(screen.getByRole('button', { name: /collapse all subgraphs/i }));
+        expect(onExpandAll).not.toHaveBeenCalled();
         expect(onCollapseAll).not.toHaveBeenCalled();
     });
 });

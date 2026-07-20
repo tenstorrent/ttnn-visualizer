@@ -11,6 +11,12 @@ export const GRAPH_COLORS = {
     outputEdge: cssVar(`--graph-output-edge`),
     normal: cssVar(`--graph-normal`),
     focusedNode: cssVar(`--graph-focused-node`),
+    // MLIR node identity colours, shared by the SCSS, the minimap callback and
+    // the on-canvas legend so none of them drift.
+    opNode: cssVar(`--graph-op-node`),
+    group: cssVar(`--graph-group`),
+    sectionGroup: cssVar(`--graph-section-group`),
+    selected: cssVar(`--graph-selected`),
 };
 
 // Perf overlay bins (#1515). Hardcoded hex — these are tuned for the dark

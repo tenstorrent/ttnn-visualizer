@@ -21,6 +21,10 @@ import type { BuiltGraph, SourceNode, WorkerInteractionIndex, WorkerOutboundMess
  *    expand/collapse behaviour.
  * 5. Hand back a stable `runBuild(expanded)` dispatcher that the consumer
  *    triggers from a `useEffect([expandedNamespaces, runBuild])`.
+ * 6. Own the `isBuilding` flag that gates the expand/collapse controls: set on
+ *    every `build` dispatch and cleared on the matching `built`/`error` reply,
+ *    on a `worker.onerror` crash, and on a synchronous `postMessage` failure —
+ *    so a dead or crashed worker can never strand the controls disabled.
  *
  * `onBuilt` is invoked on the React event loop when a fresh `built` message
  * arrives for the current `graphId`. It deliberately stays in the consumer so
@@ -34,6 +38,7 @@ export function useMlirLayoutWorker(
 ): {
     interactionIndex: WorkerInteractionIndex | null;
     runBuild: (expanded: Set<string>) => void;
+    isBuilding: boolean;
 } {
     const workerRef = useRef<Worker | null>(null);
     const nextRequestIdRef = useRef(0);
@@ -41,10 +46,18 @@ export function useMlirLayoutWorker(
     const postedGraphIdRef = useRef<string | null>(null);
     const [indexReadyGraphId, setIndexReadyGraphId] = useState<string | null>(null);
     const [interactionIndex, setInteractionIndex] = useState<WorkerInteractionIndex | null>(null);
+    // True between a `build` dispatch and its `built`/`error` reply.
+    const [isBuilding, setIsBuilding] = useState(false);
 
     useEffect(() => {
         const worker = new Worker(new URL('./mlirLayoutWorker.ts', import.meta.url), { type: 'module' });
         workerRef.current = worker;
+        // A worker-level crash (uncaught throw, structured-clone failure on
+        // post) emits no terminal reply, which would strand `isBuilding` true
+        // and lock the expand/collapse controls with no recovery.
+        worker.onerror = () => {
+            setIsBuilding(false);
+        };
         return () => {
             worker.terminate();
             workerRef.current = null;
@@ -70,6 +83,7 @@ export function useMlirLayoutWorker(
                 if (message.requestId !== 0 && message.requestId !== activeRequestIdRef.current) {
                     return;
                 }
+                setIsBuilding(false);
                 // eslint-disable-next-line no-console
                 console.error('mlir layout worker:', message.error);
                 return;
@@ -80,6 +94,7 @@ export function useMlirLayoutWorker(
             if (message.graphId !== graphId) {
                 return;
             }
+            setIsBuilding(false);
             onBuilt(message.graph);
         };
     }, [graphId, onBuilt]);
@@ -115,16 +130,25 @@ export function useMlirLayoutWorker(
             nextRequestIdRef.current = requestId;
             activeRequestIdRef.current = requestId;
             const expandedSorted = Array.from(expanded).sort((a, b) => a.localeCompare(b));
-            worker.postMessage({
-                type: 'build' as const,
-                requestId,
-                graphId,
-                expandedNamespaces: expandedSorted,
-                cacheKey: `${graphId}:${expandedSorted.join('|')}`,
-            });
+            setIsBuilding(true);
+            try {
+                worker.postMessage({
+                    type: 'build' as const,
+                    requestId,
+                    graphId,
+                    expandedNamespaces: expandedSorted,
+                    cacheKey: `${graphId}:${expandedSorted.join('|')}`,
+                });
+            } catch (error) {
+                // A crashed/terminated worker throws synchronously on post; keep the
+                // React tree alive and release the controls rather than propagating.
+                setIsBuilding(false);
+                // eslint-disable-next-line no-console
+                console.error('mlir layout worker: build dispatch failed', error);
+            }
         },
         [graphId, indexReadyGraphId],
     );
 
-    return { interactionIndex, runBuild };
+    return { interactionIndex, runBuild, isBuilding };
 }

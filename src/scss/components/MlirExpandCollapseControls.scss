@@ -19,3 +19,14 @@
         line-height: 1.2;
     }
 }
+
+.mlir-layout-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 1.2;
+    color: $tt-grey-6;
+    white-space: nowrap;
+}
