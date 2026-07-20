@@ -53,6 +53,8 @@ export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceReportLocationAtom = atom<ReportLocation | null>(null);
 export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
+/** True while a report select/mount is awaiting confirmation of the active report. */
+export const isActivatingReportAtom = atom(false);
 // Persisted memory↔performance report pairs (linked and unlinked). Many-to-many
 // by canonical folder id; surfaced as linked/unknown/unlinked badges in pickers.
 // Storage key bumped so pre-status / pre-id-scheme entries are discarded (no migration).

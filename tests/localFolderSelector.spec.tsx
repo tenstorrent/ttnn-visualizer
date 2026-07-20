@@ -12,17 +12,20 @@ import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.js
 import { ReportFolder } from '../src/definitions/Reports';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { isActivatingReportAtom } from '../src/store/app';
 import testForPortal from './helpers/testForPortal';
 import createMockFile, { MOCK_FOLDER } from './helpers/createMockFile';
 
 // Scrub the markup after each test
-afterEach(cleanup);
-
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
 const SELECT_REPORT_TEXT = 'Select a report...';
 
 // Data is mutated in the mock of useLocal - eventually this should be set per test as needed
 const mockPerfFolderList = [...mockPerformanceReportFolders];
+
+const { mockUpdateInstance } = vi.hoisted(() => ({
+    mockUpdateInstance: vi.fn(),
+}));
 
 vi.mock('../src/hooks/useLocal', async () => {
     const actual = await import('../src/hooks/useLocal');
@@ -59,29 +62,42 @@ vi.mock('../src/hooks/useAPI', async () => {
         usePerfFolderList: () => ({ data: mockPerfFolderList }),
         useInstance: () => ({ data: mockInstanceEmpty }),
         useReportFolderList: () => ({ data: mockProfilerFolderList }),
-        updateInstance: vi.fn().mockImplementation((updates) => {
-            // Return instance with the updates applied
-            const updatedInstance = {
-                ...mockInstanceEmpty,
-                ...updates,
-            };
-
-            // If it's a profiler report, set the profiler_path
-            if (updates.active_report?.profiler_name) {
-                updatedInstance.profiler_path = `/data/local/profiler-reports/${updates.active_report.profiler_name.path}`;
-            }
-
-            // If it's a performance report, set the performance_path
-            if (updates.active_report?.performance_name) {
-                updatedInstance.performance_path = `/data/local/performance-reports/${updates.active_report.performance_name.path}`;
-            }
-
-            return Promise.resolve(updatedInstance);
-        }),
+        updateInstance: (...args: unknown[]) => mockUpdateInstance(...args),
         deleteProfiler: vi.fn().mockResolvedValue({ success: true }),
         deletePerformance: vi.fn().mockResolvedValue({ success: true }),
     };
 });
+
+const defaultUpdateInstance = (updates: {
+    active_report?: { profiler_name?: string | { path: string }; performance_name?: string | { path: string } };
+}) => {
+    const updatedInstance: Record<string, unknown> = {
+        ...mockInstanceEmpty,
+        ...updates,
+    };
+
+    if (updates.active_report?.profiler_name) {
+        const profilerName = updates.active_report.profiler_name;
+        const path = typeof profilerName === 'string' ? profilerName : profilerName.path;
+        updatedInstance.profiler_path = `/data/local/profiler-reports/${path}`;
+    }
+
+    if (updates.active_report?.performance_name) {
+        const performanceName = updates.active_report.performance_name;
+        const path = typeof performanceName === 'string' ? performanceName : performanceName.path;
+        updatedInstance.performance_path = `/data/local/performance-reports/${path}`;
+    }
+
+    return Promise.resolve(updatedInstance);
+};
+
+afterEach(() => {
+    cleanup();
+    mockUpdateInstance.mockReset();
+    mockUpdateInstance.mockImplementation(defaultUpdateInstance);
+});
+
+mockUpdateInstance.mockImplementation(defaultUpdateInstance);
 
 it('renders the initial folder selector upload field states', async () => {
     render(
@@ -102,6 +118,58 @@ it('renders the initial folder selector upload field states', async () => {
         expect(screen.getByText(folder.reportName)).not.toBeNull();
         expect(screen.getByText(`/${folder.path}`)).not.toBeNull();
     });
+});
+
+it('disables local report selectors while an active report is being confirmed', () => {
+    render(
+        <TestProviders initialAtomValues={[[isActivatingReportAtom, true]]}>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+
+    getAllButtonsWithText(SELECT_REPORT_TEXT).forEach((button) => {
+        expect(button).toHaveProperty('disabled', true);
+    });
+});
+
+it('disables pickers while updateInstance is pending then re-enables', async () => {
+    let resolveUpdate: ((value: unknown) => void) | undefined;
+    mockUpdateInstance.mockImplementationOnce(
+        () =>
+            new Promise((resolve) => {
+                resolveUpdate = resolve;
+            }),
+    );
+
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+
+    getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const { reportName } = mockProfilerFolderList[0];
+    screen.getByText(reportName).click();
+
+    await waitFor(() => {
+        getAllButtonsWithText(SELECT_REPORT_TEXT).forEach((button) => {
+            expect(button).toHaveProperty('disabled', true);
+        });
+    }, WAIT_FOR_OPTIONS);
+
+    expect(resolveUpdate).toBeDefined();
+    resolveUpdate!(mockInstanceEmpty);
+
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(reportName),
+        WAIT_FOR_OPTIONS,
+    );
+
+    await waitFor(() => {
+        expect(getAllButtonsWithText(reportName)[0]).toHaveProperty('disabled', false);
+    }, WAIT_FOR_OPTIONS);
 });
 
 it('updates the instance when a profiler report is selected and creates toast message', async () => {

@@ -1484,6 +1484,7 @@ def create_npe_files():
 
 
 @api.route("/remote/profiler-reports", methods=["POST"])
+@local_only
 def list_remote_reports_profiler():
     return _respond_remote_report_list(
         get_remote_profiler_folders, "PROFILER_DIRECTORY_NAME"
@@ -1491,6 +1492,7 @@ def list_remote_reports_profiler():
 
 
 @api.route("/remote/performance-reports", methods=["POST"])
+@local_only
 def list_remote_reports_performance():
     return _respond_remote_report_list(
         get_remote_performance_folders, "PERFORMANCE_DIRECTORY_NAME"
@@ -1527,10 +1529,10 @@ def _annotate_last_synced(
         local_path = local_synced_report_path(
             remote_data, host, dir_name, directory_name
         )
-        logger.info("Checking last synced for %s", directory_name)
+        logger.debug("Checking last synced for %s", directory_name)
         rf.lastSynced = read_last_synced_file(str(local_path))
         if not rf.lastSynced:
-            logger.info("%s not yet synced", directory_name)
+            logger.debug("%s not yet synced", directory_name)
 
 
 def _respond_remote_report_list(fetch_fn, directory_config_key: str):
@@ -1668,6 +1670,7 @@ def get_mesh_descriptor(instance: Instance):
 
 
 @api.route("/remote/test", methods=["POST"])
+@local_only
 def test_remote_folder():
     connection_data = request.json
 
@@ -1947,6 +1950,7 @@ def remote_stack_trace_read(instance: Instance):
 
 
 @api.route("/remote/sync", methods=["POST"])
+@local_only
 def sync_remote_folder():
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
     request_body = request.get_json()

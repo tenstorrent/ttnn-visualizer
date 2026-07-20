@@ -8,7 +8,11 @@ import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
-import { compareByFolderLinkState, getFolderLinkState } from '../../definitions/FolderLinkStatus';
+import {
+    getFolderLinkState,
+    shouldShowFolderLinkStatus,
+    sortByFolderLinkState,
+} from '../../definitions/FolderLinkStatus';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import { getReportId } from '../../functions/reportLinks';
@@ -23,10 +27,12 @@ interface LocalFolderPickerProps {
     defaultLabel?: string;
     valueLabel?: string | null;
     showReportName?: boolean;
+    /** When true, the picker cannot open or change selection. */
+    disabled?: boolean;
     /** Canonical ids previously observed to link with the active counterpart. */
-    linkedIds?: Set<string>;
+    linkedIds?: Set<string> | null;
     /** Canonical ids previously observed to fail linking with the active counterpart. */
-    unlinkedIds?: Set<string>;
+    unlinkedIds?: Set<string> | null;
 }
 
 const LocalFolderPicker = ({
@@ -37,6 +43,7 @@ const LocalFolderPicker = ({
     defaultLabel = 'Select a report...',
     valueLabel,
     showReportName,
+    disabled = false,
     linkedIds,
     unlinkedIds,
 }: LocalFolderPickerProps) => {
@@ -44,27 +51,23 @@ const LocalFolderPicker = ({
 
     const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
 
-    const isDisabled = !items || items.length === 0;
+    const isDisabled = disabled || !items || items.length === 0 || !instance;
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
-    const showLinkStatus = linkedIds !== undefined || unlinkedIds !== undefined;
+    const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 
     // Linked first, unknown next, failed links last — preserve server order within each group.
-    const sortedItems = useMemo(() => {
-        if (!items || (!linkedIds?.size && !unlinkedIds?.size)) {
-            return items ?? [];
-        }
-
-        return [...items].sort((a, b) =>
-            compareByFolderLinkState(
-                getReportId(a.path, a.reportName),
-                getReportId(b.path, b.reportName),
+    const sortedItems = useMemo(
+        () =>
+            sortByFolderLinkState(
+                items ?? [],
+                (folder) => getReportId(folder.path, folder.reportName),
                 linkedIds,
                 unlinkedIds,
             ),
-        );
-    }, [items, linkedIds, unlinkedIds]);
+        [items, linkedIds, unlinkedIds],
+    );
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
@@ -151,7 +154,7 @@ const LocalFolderPicker = ({
                 />
             }
             onItemSelect={handleSelect}
-            disabled={!items || !instance}
+            disabled={isDisabled}
         >
             <Tooltip
                 content={`/${activePath}`}
@@ -162,7 +165,7 @@ const LocalFolderPicker = ({
                 <Button
                     className='folder-picker-button'
                     text={activeName || defaultLabel}
-                    disabled={isDisabled || !instance}
+                    disabled={isDisabled}
                     alignText='start'
                     icon={IconNames.DOCUMENT_OPEN}
                     endIcon={IconNames.CARET_DOWN}

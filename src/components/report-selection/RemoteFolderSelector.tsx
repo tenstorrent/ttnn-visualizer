@@ -7,7 +7,11 @@ import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { type ReactNode, useMemo } from 'react';
 import 'styles/components/FolderPicker.scss';
-import { compareByFolderLinkState, getFolderLinkState } from '../../definitions/FolderLinkStatus';
+import {
+    getFolderLinkState,
+    shouldShowFolderLinkStatus,
+    sortByFolderLinkState,
+} from '../../definitions/FolderLinkStatus';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';
@@ -23,8 +27,8 @@ interface RemoteFolderRendererOptions {
     connection?: RemoteConnection;
     showReportName?: boolean;
     showLinkStatus?: boolean;
-    linkedIds?: Set<string>;
-    unlinkedIds?: Set<string>;
+    linkedIds?: Set<string> | null;
+    unlinkedIds?: Set<string> | null;
 }
 
 const remoteFolderRenderer =
@@ -84,8 +88,8 @@ interface RemoteFolderSelectorProps {
     onSelectFolder: (folder: RemoteFolder) => void;
     type: FolderTypes;
     showReportName?: boolean;
-    linkedIds?: Set<string>;
-    unlinkedIds?: Set<string>;
+    linkedIds?: Set<string> | null;
+    unlinkedIds?: Set<string> | null;
     children?: ReactNode;
 }
 
@@ -105,24 +109,20 @@ const RemoteFolderSelector = ({
 }: RemoteFolderSelectorProps) => {
     const { persistentState } = useRemoteConnection();
     const remoteConnection = persistentState.selectedConnection;
-    const showLinkStatus = linkedIds !== undefined || unlinkedIds !== undefined;
+    const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 
     const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
 
-    const sortedFolderList = useMemo(() => {
-        if (!linkedIds?.size && !unlinkedIds?.size) {
-            return remoteFolderList ?? [];
-        }
-
-        return [...(remoteFolderList ?? [])].sort((a, b) =>
-            compareByFolderLinkState(
-                getReportId(a.remotePath, a.reportName),
-                getReportId(b.remotePath, b.reportName),
+    const sortedFolderList = useMemo(
+        () =>
+            sortByFolderLinkState(
+                remoteFolderList ?? [],
+                (folder) => getReportId(folder.remotePath, folder.reportName),
                 linkedIds,
                 unlinkedIds,
             ),
-        );
-    }, [remoteFolderList, linkedIds, unlinkedIds]);
+        [remoteFolderList, linkedIds, unlinkedIds],
+    );
 
     return (
         <div className='form-container'>

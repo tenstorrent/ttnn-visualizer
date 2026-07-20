@@ -8,6 +8,7 @@ import { AxiosResponse } from 'axios';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
 import Endpoints from '../src/definitions/Endpoints';
+import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
 import { RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
@@ -271,7 +272,7 @@ it('sets active performance report by mounting local copy on selection without s
     await selectPerformanceFolder(selectedReport.remotePath);
 
     const { remotePath } = selectedReport;
-    const formattedPath = remotePath.split('/').slice(-1);
+    const formattedPath = remotePath.split('/').filter(Boolean).at(-1) ?? remotePath;
 
     await waitFor(
         () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(formattedPath),
@@ -283,6 +284,106 @@ it('sets active performance report by mounting local copy on selection without s
 
     const syncButton = await screen.findByTestId(TEST_IDS.REMOTE_SYNC_BUTTON, undefined, WAIT_FOR_OPTIONS);
     expect(syncButton.classList.contains(Classes.INTENT_SUCCESS)).toBe(true);
+});
+
+it('disables remote report selectors while mount is confirming the active report', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const selectedReport: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
+    };
+
+    let resolveMount: ((value: AxiosResponse) => void) | undefined;
+    mockPost.mockImplementation((url: string) => {
+        if (url.includes('/api/remote/use')) {
+            return new Promise<AxiosResponse>((resolve) => {
+                resolveMount = resolve;
+            });
+        }
+
+        return mockRemoteFolderApis(url, selectedReport);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await selectPerformanceFolder(selectedReport.remotePath);
+
+    await waitFor(() => {
+        const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+        expect(selectButtons.length).toBeGreaterThan(0);
+        selectButtons.forEach((button) => {
+            expect(button).toHaveProperty(HTML_DISABLED, true);
+        });
+    }, WAIT_FOR_OPTIONS);
+
+    expect(resolveMount).toBeDefined();
+    resolveMount!({ status: 200, data: {} } as AxiosResponse);
+
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(selectedReport.reportName),
+        WAIT_FOR_OPTIONS,
+    );
+
+    await waitFor(() => {
+        const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+        const enabledButtons = selectButtons.filter((btn) => !btn.hasAttribute(HTML_DISABLED));
+        expect(enabledButtons.length).toBeGreaterThan(0);
+    }, WAIT_FOR_OPTIONS);
+});
+
+it('re-enables remote report selectors when mount fails', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const selectedReport: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
+    };
+
+    let rejectMount: ((reason?: unknown) => void) | undefined;
+    mockPost.mockImplementation((url: string) => {
+        if (url.includes('/api/remote/use')) {
+            return new Promise<AxiosResponse>((_resolve, reject) => {
+                rejectMount = reject;
+            });
+        }
+
+        return mockRemoteFolderApis(url, selectedReport);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await selectPerformanceFolder(selectedReport.remotePath);
+
+    await waitFor(() => {
+        const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+        selectButtons.forEach((button) => {
+            expect(button).toHaveProperty(HTML_DISABLED, true);
+        });
+    }, WAIT_FOR_OPTIONS);
+
+    expect(rejectMount).toBeDefined();
+    rejectMount!(new Error('Unable to establish SSH connection'));
+
+    await waitFor(() => {
+        const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+        const enabledButtons = selectButtons.filter((btn) => !btn.hasAttribute(HTML_DISABLED));
+        expect(enabledButtons.length).toBeGreaterThan(0);
+    }, WAIT_FOR_OPTIONS);
 });
 
 it('mounts an outdated performance folder on selection without SSH sync', async () => {
@@ -618,7 +719,7 @@ it('toasts Unable to open report when select mount fails without Sync', async ()
         expect(screen.getByText(REMOTE_FOLDER_MOUNT_ERROR_TOAST_TITLE)).not.toBeNull();
     }, WAIT_FOR_OPTIONS);
 
-    expect(screen.queryByText('Active performance report')).toBeNull();
+    expect(screen.queryByText(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE)).toBeNull();
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(false);
 });
 

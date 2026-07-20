@@ -78,7 +78,8 @@ export const getReportId = (...candidates: Array<string | null | undefined>): st
 const pathBasename = (value: string): string => {
     const normalised = value.replace(/\\/g, '/');
     const segments = normalised.split('/').filter(Boolean);
-    return segments.length > 0 ? segments[segments.length - 1]! : normalised.trim();
+    // Empty after stripping separators (e.g. '/', '\\') — not a usable report id.
+    return segments.length > 0 ? segments[segments.length - 1]! : '';
 };
 
 const isSamePair = (a: ReportLink, b: ReportLink): boolean =>
@@ -88,9 +89,11 @@ export const capReportLinks = (links: ReportLink[]): ReportLink[] =>
     links.length <= MAX_REPORT_LINKS ? links : links.slice(links.length - MAX_REPORT_LINKS);
 
 /**
- * Insert or update a pair (identity ignores status). Moves the pair to the end so
- * recency-based capping keeps actively compared pairs. Returns the same reference
- * when the pair already exists with the same status (avoids jotai update loops).
+ * Insert or update a pair (identity ignores status). On insert or status change,
+ * appends the pair at the end so recency-based capping keeps actively compared
+ * pairs. Returns the same array reference when the pair already exists with the
+ * same status (avoids jotai update loops) — that path does not bump recency or
+ * recordedAt.
  */
 export const upsertReportLink = (links: ReportLink[], next: ReportLink): ReportLink[] => {
     const existing = links.find((link) => isSamePair(link, next));

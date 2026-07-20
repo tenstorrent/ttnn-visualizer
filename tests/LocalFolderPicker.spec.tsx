@@ -51,6 +51,21 @@ describe('LocalFolderPicker link badges', () => {
         expect(labels).toEqual(['/linked-run', '/unknown-run', '/unlinked-run']);
     });
 
+    it('disables the picker when disabled is set', () => {
+        render(
+            <TestProviders>
+                <LocalFolderPicker
+                    items={folders}
+                    value={null}
+                    handleSelect={vi.fn()}
+                    disabled
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.getByText('Select a report...').closest('button')).toHaveProperty('disabled', true);
+    });
+
     it('shows a warning unlink icon on unlinked folders', async () => {
         render(
             <TestProviders>
