@@ -3,14 +3,17 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useMemo, useState } from 'react';
-import { Alert, Button, ButtonVariant, Icon, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
+import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
+import { compareByFolderLinkState, getFolderLinkState } from '../../definitions/FolderLinkStatus';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
+import { getReportId } from '../../functions/reportLinks';
 import HighlightedText from '../HighlightedText';
+import FolderLinkStatusIcon from './FolderLinkStatusIcon';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -20,8 +23,10 @@ interface LocalFolderPickerProps {
     defaultLabel?: string;
     valueLabel?: string | null;
     showReportName?: boolean;
-    /** Paths of items previously observed to link with the active counterpart report. */
-    linkedPaths?: Set<string>;
+    /** Canonical ids previously observed to link with the active counterpart. */
+    linkedIds?: Set<string>;
+    /** Canonical ids previously observed to fail linking with the active counterpart. */
+    unlinkedIds?: Set<string>;
 }
 
 const LocalFolderPicker = ({
@@ -32,7 +37,8 @@ const LocalFolderPicker = ({
     defaultLabel = 'Select a report...',
     valueLabel,
     showReportName,
-    linkedPaths,
+    linkedIds,
+    unlinkedIds,
 }: LocalFolderPickerProps) => {
     const { data: instance } = useInstance();
 
@@ -42,23 +48,30 @@ const LocalFolderPicker = ({
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
+    const showLinkStatus = linkedIds !== undefined || unlinkedIds !== undefined;
 
-    // Surface reports that linked with the active counterpart first, preserving the
-    // server-provided order (most-recently-modified) within each group.
+    // Linked first, unknown next, failed links last — preserve server order within each group.
     const sortedItems = useMemo(() => {
-        if (!items || !linkedPaths?.size) {
+        if (!items || (!linkedIds?.size && !unlinkedIds?.size)) {
             return items ?? [];
         }
 
-        return [...items].sort((a, b) => Number(linkedPaths.has(b.path)) - Number(linkedPaths.has(a.path)));
-    }, [items, linkedPaths]);
+        return [...items].sort((a, b) =>
+            compareByFolderLinkState(
+                getReportId(a.path, a.reportName),
+                getReportId(b.path, b.reportName),
+                linkedIds,
+                unlinkedIds,
+            ),
+        );
+    }, [items, linkedIds, unlinkedIds]);
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
 
-        const isLinked = linkedPaths?.has(folder.path) ?? false;
+        const folderId = getReportId(folder.path, folder.reportName);
 
         return (
             <div
@@ -82,16 +95,8 @@ const LocalFolderPicker = ({
                     onFocus={handleFocus}
                     icon={folder.path === activePath ? IconNames.SAVED : IconNames.DOCUMENT}
                     labelElement={
-                        isLinked ? (
-                            <Tooltip
-                                content='Previously linked with the active report'
-                                position={Position.RIGHT}
-                            >
-                                <Icon
-                                    icon={IconNames.LINK}
-                                    intent={Intent.SUCCESS}
-                                />
-                            </Tooltip>
+                        showLinkStatus ? (
+                            <FolderLinkStatusIcon linkState={getFolderLinkState(folderId, linkedIds, unlinkedIds)} />
                         ) : undefined
                     }
                 />

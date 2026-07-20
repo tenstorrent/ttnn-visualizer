@@ -16,7 +16,13 @@ import {
     profilerReportLocationAtom,
     successfulReportLinksAtom,
 } from '../../store/app';
-import { linkedPerformancePaths, linkedProfilerPaths } from '../../functions/reportLinks';
+import {
+    getReportId,
+    linkedPerformanceIds,
+    linkedProfilerIds,
+    unlinkedPerformanceIds,
+    unlinkedProfilerIds,
+} from '../../functions/reportLinks';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
@@ -143,21 +149,47 @@ const LocalFolderOptions = () => {
     const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
     const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;
 
-    // Performance reports that have linked with the active memory report (and vice versa).
-    // Experimental: only surfaced in development builds.
-    const linkedPerfPaths = useMemo(
+    // Performance reports that have linked / failed to link with the active memory report
+    // (and vice versa). Empty Sets still enable UNKNOWN badges when the feature is on.
+    const linkedPerfIds = useMemo(
         () =>
             isReportLinkingEnabled
-                ? linkedPerformancePaths(reportLinks, activeProfilerReport?.path, profilerReportLocation)
+                ? linkedPerformanceIds(
+                      reportLinks,
+                      getReportId(activeProfilerReport?.path, activeProfilerReport?.reportName),
+                  )
                 : undefined,
-        [reportLinks, activeProfilerReport, profilerReportLocation, isReportLinkingEnabled],
+        [reportLinks, activeProfilerReport, isReportLinkingEnabled],
     );
-    const linkedProfilerReportPaths = useMemo(
+    const unlinkedPerfIds = useMemo(
         () =>
             isReportLinkingEnabled
-                ? linkedProfilerPaths(reportLinks, activePerformanceReport?.path, performanceReportLocation)
+                ? unlinkedPerformanceIds(
+                      reportLinks,
+                      getReportId(activeProfilerReport?.path, activeProfilerReport?.reportName),
+                  )
                 : undefined,
-        [reportLinks, activePerformanceReport, performanceReportLocation, isReportLinkingEnabled],
+        [reportLinks, activeProfilerReport, isReportLinkingEnabled],
+    );
+    const linkedProfilerReportIds = useMemo(
+        () =>
+            isReportLinkingEnabled
+                ? linkedProfilerIds(
+                      reportLinks,
+                      getReportId(activePerformanceReport?.path, activePerformanceReport?.reportName),
+                  )
+                : undefined,
+        [reportLinks, activePerformanceReport, isReportLinkingEnabled],
+    );
+    const unlinkedProfilerReportIds = useMemo(
+        () =>
+            isReportLinkingEnabled
+                ? unlinkedProfilerIds(
+                      reportLinks,
+                      getReportId(activePerformanceReport?.path, activePerformanceReport?.reportName),
+                  )
+                : undefined,
+        [reportLinks, activePerformanceReport, isReportLinkingEnabled],
     );
 
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -307,7 +339,8 @@ const LocalFolderOptions = () => {
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
-                    linkedPaths={linkedProfilerReportPaths}
+                    linkedIds={linkedProfilerReportIds}
+                    unlinkedIds={unlinkedProfilerReportIds}
                     showReportName
                 />
             </FormGroup>
@@ -356,7 +389,8 @@ const LocalFolderOptions = () => {
                     valueLabel={activePerformanceReport?.reportName ?? null}
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}
-                    linkedPaths={linkedPerfPaths}
+                    linkedIds={linkedPerfIds}
+                    unlinkedIds={unlinkedPerfIds}
                 />
             </FormGroup>
 

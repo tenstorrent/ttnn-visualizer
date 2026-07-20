@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { AxiosResponse, HttpStatusCode } from 'axios';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
@@ -23,6 +23,13 @@ import notifyFolderSyncError, {
 import notifyFolderSyncLocalFallback, {
     notifyLocalSyncedReportsListFallback,
 } from '../../functions/notifyFolderSyncLocalFallback';
+import {
+    getReportId,
+    linkedPerformanceIds,
+    linkedProfilerIds,
+    unlinkedPerformanceIds,
+    unlinkedProfilerIds,
+} from '../../functions/reportLinks';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import useRemoteConnection from '../../hooks/useRemote';
 import {
@@ -30,6 +37,7 @@ import {
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
+    successfulReportLinksAtom,
 } from '../../store/app';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
@@ -513,6 +521,55 @@ const RemoteSyncConfigurator = () => {
     const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
     const isDisabled = isFetching || isLoading || disableRemoteSync;
 
+    const reportLinks = useAtomValue(successfulReportLinksAtom);
+    const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;
+    const selectedRemoteHost = remote.persistentState.selectedConnection?.host ?? null;
+
+    const linkedPerfIds = useMemo(
+        () =>
+            isReportLinkingEnabled
+                ? linkedPerformanceIds(
+                      reportLinks,
+                      getReportId(activeProfilerReport?.path, activeProfilerReport?.reportName),
+                      { remoteHost: selectedRemoteHost },
+                  )
+                : undefined,
+        [reportLinks, activeProfilerReport, isReportLinkingEnabled, selectedRemoteHost],
+    );
+    const unlinkedPerfIds = useMemo(
+        () =>
+            isReportLinkingEnabled
+                ? unlinkedPerformanceIds(
+                      reportLinks,
+                      getReportId(activeProfilerReport?.path, activeProfilerReport?.reportName),
+                      { remoteHost: selectedRemoteHost },
+                  )
+                : undefined,
+        [reportLinks, activeProfilerReport, isReportLinkingEnabled, selectedRemoteHost],
+    );
+    const linkedProfilerReportIds = useMemo(
+        () =>
+            isReportLinkingEnabled
+                ? linkedProfilerIds(
+                      reportLinks,
+                      getReportId(activePerformanceReport?.path, activePerformanceReport?.reportName),
+                      { remoteHost: selectedRemoteHost },
+                  )
+                : undefined,
+        [reportLinks, activePerformanceReport, isReportLinkingEnabled, selectedRemoteHost],
+    );
+    const unlinkedProfilerReportIds = useMemo(
+        () =>
+            isReportLinkingEnabled
+                ? unlinkedProfilerIds(
+                      reportLinks,
+                      getReportId(activePerformanceReport?.path, activePerformanceReport?.reportName),
+                      { remoteHost: selectedRemoteHost },
+                  )
+                : undefined,
+        [reportLinks, activePerformanceReport, isReportLinkingEnabled, selectedRemoteHost],
+    );
+
     // On mount (and when SERVER_MODE is off), seed dropdowns from on-disk synced copies
     // for the currently selected host so offline use works without clicking Fetch.
     // Cleanup aborts any in-flight scan so unmount cannot call setState after teardown.
@@ -644,6 +701,8 @@ const RemoteSyncConfigurator = () => {
                     remoteFolderList={reportFolderList}
                     loading={isLoading || isFetching}
                     disabled={isDisabled}
+                    linkedIds={linkedProfilerReportIds}
+                    unlinkedIds={unlinkedProfilerReportIds}
                     onSelectFolder={(folder) =>
                         mountAndActivateFolder(folder, {
                             setSelected: setSelectedReportFolder,
@@ -676,6 +735,8 @@ const RemoteSyncConfigurator = () => {
                     remoteFolderList={remotePerformanceFolderList}
                     loading={isLoading || isFetching}
                     disabled={isDisabled}
+                    linkedIds={linkedPerfIds}
+                    unlinkedIds={unlinkedPerfIds}
                     onSelectFolder={(folder) =>
                         mountAndActivateFolder(folder, {
                             setSelected: setSelectedPerformanceFolder,
