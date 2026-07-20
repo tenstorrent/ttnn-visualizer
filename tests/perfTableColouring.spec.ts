@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { MathFidelity } from '../src/definitions/PerfSignpost';
+import { MathFidelity } from '../src/definitions/MathFidelity';
 import { evaluateFidelity, getCellColour } from '../src/functions/perfFunctions';
 import { ColumnKeys, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';

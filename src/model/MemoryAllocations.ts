@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { NodeType } from './APIData';
-import { CoreCoord } from '../functions/math';
+import { CoreCoord } from './CoreCoord';
 
 export type AllocationDetails = {
     id: number;

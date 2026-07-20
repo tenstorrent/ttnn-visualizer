@@ -54,3 +54,15 @@ export const DEFAULT_TOP_N_COUNT = 10;
 /** Inclusive bounds on the numeric input; chosen so the rail stays legible without scrolling. */
 export const TOP_N_COUNT_MIN = 1;
 export const TOP_N_COUNT_MAX = 50;
+
+/**
+ * User-facing mode label. Used in both the dropdown label and the per-row tooltip
+ * ("#3 slowest by …").
+ */
+export const TOP_N_MODE_LABEL: Record<TopNAnnotationMode, string> = {
+    [TopNAnnotationMode.PERF_TIME]: 'kernel duration',
+    [TopNAnnotationMode.PERF_OP_TO_OP_GAP]: 'op-to-op gap',
+    [TopNAnnotationMode.PERF_DRAM_PERCENT]: 'DRAM utilization',
+    [TopNAnnotationMode.PERF_FLOPS_PERCENT]: 'FLOPS utilization',
+    [TopNAnnotationMode.L1_FULLNESS]: 'L1 fullness',
+};

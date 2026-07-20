@@ -2,6 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { CoreCoord } from '../model/CoreCoord';
+
+export type { CoreCoord } from '../model/CoreCoord';
+
 const LOCALE = 'en-US';
 
 const NS_PER_US = 1000;
@@ -128,11 +132,6 @@ export const isEqual = <T>(value: T, other: T): boolean => {
         return isEqual(valueObj[key], otherObj[key]);
     });
 };
-
-export interface CoreCoord {
-    x: number;
-    y: number;
-}
 
 const CORE_RANGE_RECT_RE = /\[([^\]]+)\]/g;
 const CORE_COORD_RE = /\(x=(\d+),y=(\d+)\)|(\d+)-(\d+)/g;

@@ -252,16 +252,3 @@ export const selectTopNAnnotations = ({
 
     return annotationsByOpId;
 };
-
-/**
- * User-facing mode label, kept next to the enum so the controls UI doesn't
- * have to hand-maintain a parallel mapping. Used in both the dropdown label
- * and the per-row tooltip ("#3 slowest by …").
- */
-export const TOP_N_MODE_LABEL: Record<TopNAnnotationMode, string> = {
-    [TopNAnnotationMode.PERF_TIME]: 'kernel duration',
-    [TopNAnnotationMode.PERF_OP_TO_OP_GAP]: 'op-to-op gap',
-    [TopNAnnotationMode.PERF_DRAM_PERCENT]: 'DRAM utilization',
-    [TopNAnnotationMode.PERF_FLOPS_PERCENT]: 'FLOPS utilization',
-    [TopNAnnotationMode.L1_FULLNESS]: 'L1 fullness',
-};

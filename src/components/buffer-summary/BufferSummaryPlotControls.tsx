@@ -20,10 +20,10 @@ import { TAB_IDS } from '../../definitions/BufferSummary';
 import {
     TOP_N_COUNT_MAX,
     TOP_N_COUNT_MIN,
+    TOP_N_MODE_LABEL,
     TopNAnnotationMode,
     TopNAnnotationStatus,
 } from '../../definitions/TopNAnnotations';
-import { TOP_N_MODE_LABEL } from '../../functions/topNAnnotations';
 import { useTopNAnnotationAvailability } from '../../hooks/useTopNAnnotations';
 import 'styles/components/BufferSummaryControls.scss';
 

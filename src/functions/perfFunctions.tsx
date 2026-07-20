@@ -20,7 +20,7 @@ import MemoryTag from '../components/MemoryTag';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import L1FullnessBar from '../components/performance/L1FullnessBar';
 import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
-import { MathFidelity } from '../definitions/PerfSignpost';
+import { MathFidelity } from '../definitions/MathFidelity';
 import { CellColour } from '../definitions/CellColour';
 import { isSlowDramDominant } from './perfBoundPredicates';
 

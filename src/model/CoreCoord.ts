@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-export interface Signpost {
-    id: number;
-    op_code: string;
+export interface CoreCoord {
+    x: number;
+    y: number;
 }

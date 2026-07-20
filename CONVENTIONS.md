@@ -258,13 +258,15 @@ The alias resolves `styles/` to `src/scss/` so the path inside the import maps 1
 
 ## State management (Jotai)
 
-### All shared atoms live in `src/store/app.ts`
+### Shared atoms live under `src/store/`
 
-The file is organized into commented sections (`// App state`, `// Reports`, `// Operations route`, etc.) — add new atoms to the section that matches their feature area. **Components don't declare module-scope atoms.** If you need component-local state, use `useState`.
+Prefer declaring atoms in **`src/store/app.ts`**, organized into commented sections (`// App state`, `// Reports`, `// Operations route`, etc.) — add new atoms to the section that matches their feature area. **Components don't declare module-scope atoms.** If you need component-local state, use `useState`.
+
+When atoms must be co-located with mutators in another `store/` module (e.g. `store/fileTransferRegistry.ts`, to avoid a circular import with `app.ts`), still **re-export them from `app.ts`** so shared atoms remain discoverable there. Consumers may import atoms from `app.ts` or the owning module; prefer `app.ts` for reads.
 
 ### Atom names end with `Atom`
 
-Every export in `src/store/app.ts` follows this:
+Every shared atom export follows this:
 
 `src/store/app.ts`
 
