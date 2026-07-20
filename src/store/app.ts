@@ -11,7 +11,7 @@ import { ListStates } from '../definitions/VirtualLists';
 import { Signpost } from '../functions/perfFunctions';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
-import { ReportLink } from '../functions/reportLinks';
+import { REPORT_LINKS_STORAGE_KEY, ReportLink } from '../functions/reportLinks';
 import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
@@ -53,9 +53,12 @@ export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceReportLocationAtom = atom<ReportLocation | null>(null);
 export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
-// Persisted memory<->performance report pairs observed to link successfully. Many-to-many
-// by design; surfaced as badges against the active report in the report selection lists.
-export const successfulReportLinksAtom = atomWithStorage<ReportLink[]>('successfulReportLinks', []);
+/** True while a report select/mount is awaiting confirmation of the active report. */
+export const isActivatingReportAtom = atom(false);
+// Persisted memory↔performance report pairs (linked and unlinked). Many-to-many
+// by canonical folder id; surfaced as linked/unknown/unlinked badges in pickers.
+// Storage key bumped so pre-status / pre-id-scheme entries are discarded (no migration).
+export const reportLinksAtom = atomWithStorage<ReportLink[]>(REPORT_LINKS_STORAGE_KEY, []);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);

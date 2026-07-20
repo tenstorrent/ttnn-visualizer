@@ -238,14 +238,19 @@ class SerializeableModel(BaseModel):
         use_enum_values = True
 
 
-def sanitise_remote_host_segment(value: object) -> str:
-    """Normalise a user-provided host to a single safe path segment."""
+def sanitise_path_segment(value: object) -> str:
+    """Collapse a user-provided path-ish string to a single safe path segment."""
     if not isinstance(value, str):
         return value  # type: ignore[return-value]
-    safe_host = Path(value.replace("\\", "/")).name.strip()
-    if not safe_host or safe_host in {".", ".."}:
+    safe_segment = Path(value.replace("\\", "/")).name.strip()
+    if not safe_segment or safe_segment in {".", ".."}:
         raise ValueError("must not be empty")
-    return safe_host
+    return safe_segment
+
+
+def sanitise_remote_host_segment(value: object) -> str:
+    """Normalise a user-provided host to a single safe path segment."""
+    return sanitise_path_segment(value)
 
 
 class RemoteConnection(SerializeableModel):
