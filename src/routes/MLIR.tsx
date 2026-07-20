@@ -3,15 +3,18 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Navigate } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
+import { Button, ButtonVariant, Size } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { activeMlirDataAtom, activeMlirJsonAtom } from '../store/app';
 import { MLIRValidationError } from '../definitions/MLIRData';
 import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
 import MlGraph from '../components/mlir/MLIRViewReactFlow';
+import MlirSplitView from '../components/mlir/MlirSplitView';
 import MlirProcessingStatus from '../components/MlirProcessingStatus';
 import { useMlir } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
@@ -20,6 +23,7 @@ const MLIR = () => {
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
     const activeMlirData = useAtomValue(activeMlirDataAtom);
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
+    const [splitView, setSplitView] = useState(false);
 
     // On a fresh page load the in-memory graph is gone but the instance may
     // still reference a persisted MLIR report — fetch it back by name. Skip the
@@ -60,6 +64,39 @@ const MLIR = () => {
         );
     }
 
+    let graphContent;
+    if (!mlirData || errorCode !== MLIRValidationError.OK) {
+        graphContent = (
+            <MlirProcessingStatus
+                errorCode={errorCode}
+                isLoading={isLoading}
+                hasUploadedFile={!!mlirJsonFilename}
+            />
+        );
+    } else if (splitView) {
+        graphContent = (
+            <MlirSplitView
+                data={mlirData}
+                onExit={() => setSplitView(false)}
+            />
+        );
+    } else {
+        graphContent = (
+            <>
+                <div className='mlir-view-toolbar'>
+                    <Button
+                        size={Size.SMALL}
+                        variant={ButtonVariant.MINIMAL}
+                        icon={IconNames.PANEL_STATS}
+                        text='Split view'
+                        onClick={() => setSplitView(true)}
+                    />
+                </div>
+                <MlGraph data={mlirData} />
+            </>
+        );
+    }
+
     return (
         <>
             <Helmet>
@@ -78,15 +115,7 @@ const MLIR = () => {
                 </div>
             )}
 
-            {mlirData && errorCode === MLIRValidationError.OK ? (
-                <MlGraph data={mlirData} />
-            ) : (
-                <MlirProcessingStatus
-                    errorCode={errorCode}
-                    isLoading={isLoading}
-                    hasUploadedFile={!!mlirJsonFilename}
-                />
-            )}
+            {graphContent}
         </>
     );
 };

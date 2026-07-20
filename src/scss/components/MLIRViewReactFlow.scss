@@ -298,6 +298,7 @@
  * loaders row (~56px), and the page's bottom padding (~40px). Tweak these
  * offsets together if any of those chrome bands change height. */
 .mlir-view-pane {
+    position: relative;
     width: 100%;
     height: calc(100vh - 92px - 30px - 56px - 40px);
 }
