@@ -272,3 +272,22 @@ def test_remote_use_rejects_dotdot_report_name(app, client, tmp_path):
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert "Invalid report name" in response.get_json()["error"]
+
+
+def test_remote_use_forbidden_when_server_mode(app, client):
+    """Mounting a locally synced remote report is @local_only under SERVER_MODE."""
+    assert app.config["SERVER_MODE"] is True
+
+    response = client.post(
+        "/api/remote/use",
+        json={
+            "connection": _remote_connection_payload(),
+            "performance": {
+                "reportName": "bert",
+                "remotePath": "/remote/performance/reports/bert",
+                "lastModified": 1,
+            },
+        },
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN

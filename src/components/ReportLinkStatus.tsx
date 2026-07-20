@@ -17,7 +17,7 @@ import {
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
-    successfulReportLinksAtom,
+    reportLinksAtom,
 } from '../store/app';
 
 const ReportLinkStatus = () => {
@@ -28,7 +28,7 @@ const ReportLinkStatus = () => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const profilerLocation = useAtomValue(profilerReportLocationAtom);
     const performanceLocation = useAtomValue(performanceReportLocationAtom);
-    const setReportLinks = useSetAtom(successfulReportLinksAtom);
+    const setReportLinks = useSetAtom(reportLinksAtom);
     const { persistentState } = useRemoteConnection();
 
     const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;

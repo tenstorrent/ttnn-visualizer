@@ -7,22 +7,14 @@ import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
-    successfulReportLinksAtom,
 } from '../../store/app';
-import {
-    getReportId,
-    linkedPerformanceIds,
-    linkedProfilerIds,
-    unlinkedPerformanceIds,
-    unlinkedProfilerIds,
-} from '../../functions/reportLinks';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
 import getResponseError from '../../functions/getResponseError';
@@ -37,6 +29,7 @@ import {
     useReportFolderList,
     useReportMetadata,
 } from '../../hooks/useAPI';
+import { useReportLinkBadgeIds } from '../../hooks/useReportLinkBadgeIds';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder, ReportLocation } from '../../definitions/Reports';
 import {
@@ -144,53 +137,9 @@ const LocalFolderOptions = () => {
         [activePerformanceReport, perfFolderList, isPerformanceLocal],
     );
 
-    const reportLinks = useAtomValue(successfulReportLinksAtom);
-
     const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
-    const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;
-
-    // Performance reports that have linked / failed to link with the active memory report
-    // (and vice versa). Empty Sets still enable UNKNOWN badges when the feature is on.
-    const linkedPerfIds = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? linkedPerformanceIds(
-                      reportLinks,
-                      getReportId(activeProfilerReport?.path, activeProfilerReport?.reportName),
-                  )
-                : undefined,
-        [reportLinks, activeProfilerReport, isReportLinkingEnabled],
-    );
-    const unlinkedPerfIds = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? unlinkedPerformanceIds(
-                      reportLinks,
-                      getReportId(activeProfilerReport?.path, activeProfilerReport?.reportName),
-                  )
-                : undefined,
-        [reportLinks, activeProfilerReport, isReportLinkingEnabled],
-    );
-    const linkedProfilerReportIds = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? linkedProfilerIds(
-                      reportLinks,
-                      getReportId(activePerformanceReport?.path, activePerformanceReport?.reportName),
-                  )
-                : undefined,
-        [reportLinks, activePerformanceReport, isReportLinkingEnabled],
-    );
-    const unlinkedProfilerReportIds = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? unlinkedProfilerIds(
-                      reportLinks,
-                      getReportId(activePerformanceReport?.path, activePerformanceReport?.reportName),
-                  )
-                : undefined,
-        [reportLinks, activePerformanceReport, isReportLinkingEnabled],
-    );
+    const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
+        useReportLinkBadgeIds();
 
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {

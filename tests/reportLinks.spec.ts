@@ -14,7 +14,7 @@ import {
     unlinkedProfilerIds,
     upsertReportLink,
 } from '../src/functions/reportLinks';
-import { FolderLinkState, getFolderLinkState } from '../src/definitions/FolderLinkStatus';
+import { FolderLinkState, compareByFolderLinkState, getFolderLinkState } from '../src/definitions/FolderLinkStatus';
 
 const link = (
     profilerId: string,
@@ -47,6 +47,10 @@ describe('getReportId', () => {
     it('falls back to later candidates when earlier are empty', () => {
         expect(getReportId(null, undefined, '/a/b/perf-run')).toBe('perf-run');
     });
+
+    it('prefers path basename over a differing display name', () => {
+        expect(getReportId('/remote/profiler/reports/resnet50', 'Pretty Display Name')).toBe('resnet50');
+    });
 });
 
 describe('getFolderLinkState', () => {
@@ -54,6 +58,22 @@ describe('getFolderLinkState', () => {
         expect(getFolderLinkState('a', new Set(['a']), new Set())).toBe(FolderLinkState.LINKED);
         expect(getFolderLinkState('b', new Set(), new Set(['b']))).toBe(FolderLinkState.UNLINKED);
         expect(getFolderLinkState('c', new Set(['a']), new Set(['b']))).toBe(FolderLinkState.UNKNOWN);
+    });
+
+    it('treats linked as winning over unlinked for the same id', () => {
+        expect(getFolderLinkState('a', new Set(['a']), new Set(['a']))).toBe(FolderLinkState.LINKED);
+    });
+});
+
+describe('compareByFolderLinkState', () => {
+    it('orders linked before unknown before unlinked', () => {
+        const linkedIds = new Set(['linked']);
+        const unlinkedIds = new Set(['unlinked']);
+
+        expect(compareByFolderLinkState('linked', 'unknown', linkedIds, unlinkedIds)).toBeLessThan(0);
+        expect(compareByFolderLinkState('unknown', 'unlinked', linkedIds, unlinkedIds)).toBeLessThan(0);
+        expect(compareByFolderLinkState('linked', 'unlinked', linkedIds, unlinkedIds)).toBeLessThan(0);
+        expect(compareByFolderLinkState('unlinked', 'linked', linkedIds, unlinkedIds)).toBeGreaterThan(0);
     });
 });
 

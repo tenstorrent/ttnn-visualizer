@@ -2038,6 +2038,7 @@ def _safe_report_folder_name(
 
 
 @api.route("/remote/use", methods=["POST"])
+@local_only
 def use_remote_folder():
     data = request.get_json(force=True)
     connection_data = data.get("connection")

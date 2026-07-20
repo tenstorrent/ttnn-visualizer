@@ -43,7 +43,7 @@ const remoteFolderRenderer =
         }
 
         const { lastSynced, lastModified, reportName, remotePath } = folder;
-        const folderId = getReportId(reportName, remotePath);
+        const folderId = getReportId(remotePath, reportName);
 
         return (
             <div
@@ -116,8 +116,8 @@ const RemoteFolderSelector = ({
 
         return [...(remoteFolderList ?? [])].sort((a, b) =>
             compareByFolderLinkState(
-                getReportId(a.reportName, a.remotePath),
-                getReportId(b.reportName, b.remotePath),
+                getReportId(a.remotePath, a.reportName),
+                getReportId(b.remotePath, b.reportName),
                 linkedIds,
                 unlinkedIds,
             ),

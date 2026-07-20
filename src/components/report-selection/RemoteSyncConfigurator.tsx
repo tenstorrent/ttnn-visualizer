@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { AxiosResponse, HttpStatusCode } from 'axios';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import createToastNotification, { ToastType } from '../../functions/createToastNotification';
@@ -23,21 +23,14 @@ import notifyFolderSyncError, {
 import notifyFolderSyncLocalFallback, {
     notifyLocalSyncedReportsListFallback,
 } from '../../functions/notifyFolderSyncLocalFallback';
-import {
-    getReportId,
-    linkedPerformanceIds,
-    linkedProfilerIds,
-    unlinkedPerformanceIds,
-    unlinkedProfilerIds,
-} from '../../functions/reportLinks';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import useRemoteConnection from '../../hooks/useRemote';
+import { useReportLinkBadgeIds } from '../../hooks/useReportLinkBadgeIds';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
-    successfulReportLinksAtom,
 } from '../../store/app';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
@@ -521,54 +514,9 @@ const RemoteSyncConfigurator = () => {
     const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
     const isDisabled = isFetching || isLoading || disableRemoteSync;
 
-    const reportLinks = useAtomValue(successfulReportLinksAtom);
-    const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;
     const selectedRemoteHost = remote.persistentState.selectedConnection?.host ?? null;
-
-    const linkedPerfIds = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? linkedPerformanceIds(
-                      reportLinks,
-                      getReportId(activeProfilerReport?.path, activeProfilerReport?.reportName),
-                      { remoteHost: selectedRemoteHost },
-                  )
-                : undefined,
-        [reportLinks, activeProfilerReport, isReportLinkingEnabled, selectedRemoteHost],
-    );
-    const unlinkedPerfIds = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? unlinkedPerformanceIds(
-                      reportLinks,
-                      getReportId(activeProfilerReport?.path, activeProfilerReport?.reportName),
-                      { remoteHost: selectedRemoteHost },
-                  )
-                : undefined,
-        [reportLinks, activeProfilerReport, isReportLinkingEnabled, selectedRemoteHost],
-    );
-    const linkedProfilerReportIds = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? linkedProfilerIds(
-                      reportLinks,
-                      getReportId(activePerformanceReport?.path, activePerformanceReport?.reportName),
-                      { remoteHost: selectedRemoteHost },
-                  )
-                : undefined,
-        [reportLinks, activePerformanceReport, isReportLinkingEnabled, selectedRemoteHost],
-    );
-    const unlinkedProfilerReportIds = useMemo(
-        () =>
-            isReportLinkingEnabled
-                ? unlinkedProfilerIds(
-                      reportLinks,
-                      getReportId(activePerformanceReport?.path, activePerformanceReport?.reportName),
-                      { remoteHost: selectedRemoteHost },
-                  )
-                : undefined,
-        [reportLinks, activePerformanceReport, isReportLinkingEnabled, selectedRemoteHost],
-    );
+    const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
+        useReportLinkBadgeIds({ remoteHost: selectedRemoteHost });
 
     // On mount (and when SERVER_MODE is off), seed dropdowns from on-disk synced copies
     // for the currently selected host so offline use works without clicking Fetch.
