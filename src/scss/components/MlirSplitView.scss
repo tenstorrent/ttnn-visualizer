@@ -42,8 +42,9 @@
     flex: 0 0 auto;
     align-items: center;
     gap: 8px;
-    padding: 2px 6px;
-    border-bottom: 1px solid $tt-grey-2;
+    padding: 4px;
+    background: $tt-grey-3;
+    border-bottom: 1px solid $tt-grey-4;
 }
 
 .mlir-split-pane-header-spacer {
