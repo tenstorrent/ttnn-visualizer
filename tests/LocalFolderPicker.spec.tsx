@@ -66,6 +66,45 @@ describe('LocalFolderPicker link badges', () => {
         expect(screen.getByText('Select a report...').closest('button')).toHaveProperty('disabled', true);
     });
 
+    it('does not delete when the confirm Alert is confirmed while loading', async () => {
+        const handleDelete = vi.fn();
+        const { rerender } = render(
+            <TestProviders>
+                <LocalFolderPicker
+                    items={folders}
+                    value={null}
+                    handleSelect={vi.fn()}
+                    handleDelete={handleDelete}
+                />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByText('Select a report...'));
+        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+        fireEvent.click(screen.getAllByLabelText('Delete report')[0]);
+        expect(screen.getAllByText(/Are you sure you want to delete/).length).toBeGreaterThan(0);
+
+        rerender(
+            <TestProviders>
+                <LocalFolderPicker
+                    items={folders}
+                    value={null}
+                    handleSelect={vi.fn()}
+                    handleDelete={handleDelete}
+                    loading
+                />
+            </TestProviders>,
+        );
+
+        // Select may close the menu (and unmount Alerts) when loading; if an Alert
+        // remains, confirm must still be a no-op.
+        screen.queryAllByRole('button', { name: 'Delete' }).forEach((button) => {
+            fireEvent.click(button);
+        });
+        expect(handleDelete).not.toHaveBeenCalled();
+    });
+
     it('shows a warning unlink icon on unlinked folders', async () => {
         render(
             <TestProviders>

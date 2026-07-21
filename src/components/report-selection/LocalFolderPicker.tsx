@@ -57,9 +57,10 @@ const LocalFolderPicker = ({
     const isDisabled = disabled || loading || !items || items.length === 0 || !instance;
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
-    // SERVER_MODE hides delete entirely; loading also blocks trash while an open
-    // Select popover can still render items after the trigger disables.
-    const isDeleteDisabled = !!getServerConfig()?.SERVER_MODE || loading;
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    // Loading also blocks trash while an open Select popover can still render
+    // items after the trigger disables.
+    const isDeleteDisabled = isServerMode || loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 
     // Linked first, unknown next, failed links last — preserve server order within each group.
@@ -109,7 +110,7 @@ const LocalFolderPicker = ({
                     }
                 />
 
-                {handleDelete && !getServerConfig()?.SERVER_MODE && (
+                {handleDelete && !isServerMode && (
                     <>
                         <Button
                             aria-label='Delete report'
@@ -128,7 +129,12 @@ const LocalFolderPicker = ({
                                 intent={Intent.DANGER}
                                 onCancel={() => setFolderToDelete(null)}
                                 onClose={() => setFolderToDelete(null)}
-                                onConfirm={() => handleDelete(folderToDelete)}
+                                onConfirm={() => {
+                                    if (!loading) {
+                                        handleDelete(folderToDelete);
+                                    }
+                                    setFolderToDelete(null);
+                                }}
                                 cancelButtonText='Cancel'
                                 confirmButtonText='Delete'
                                 // @ts-expect-error BackdropClassName is not defined in AlertProps
