@@ -13,6 +13,7 @@ import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notify
 import { RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
+import { isActivatingReportAtom } from '../src/store/app';
 import {
     FOLDER_LIST_SYNC_ERROR_TOAST_TITLE,
     FOLDER_SYNC_ERROR_TOAST_TITLE,
@@ -98,6 +99,23 @@ it('shows a loading spinner on the remote folder selector button when loading', 
     const button = screen.getByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
     expect(button.classList.contains(Classes.LOADING)).toBe(true);
     expect(button).toHaveProperty('disabled', true);
+});
+
+it('shows a loading spinner on remote selectors while an active report is being confirmed', () => {
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders initialAtomValues={[[isActivatingReportAtom, true]]}>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+    expect(selectButtons.length).toBeGreaterThan(0);
+    selectButtons.forEach((button) => {
+        expect(button.classList.contains(Classes.LOADING)).toBe(true);
+        expect(button).toHaveProperty(HTML_DISABLED, true);
+    });
 });
 
 it('renders the initial form state when there is no data', () => {
@@ -339,6 +357,7 @@ it('disables remote report selectors while mount is confirming the active report
         expect(selectButtons.length).toBeGreaterThan(0);
         selectButtons.forEach((button) => {
             expect(button).toHaveProperty(HTML_DISABLED, true);
+            expect(button.classList.contains(Classes.LOADING)).toBe(true);
         });
     }, WAIT_FOR_OPTIONS);
 
@@ -354,6 +373,9 @@ it('disables remote report selectors while mount is confirming the active report
         const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
         const enabledButtons = selectButtons.filter((btn) => !btn.hasAttribute(HTML_DISABLED));
         expect(enabledButtons.length).toBeGreaterThan(0);
+        enabledButtons.forEach((button) => {
+            expect(button.classList.contains(Classes.LOADING)).toBe(false);
+        });
     }, WAIT_FOR_OPTIONS);
 });
 

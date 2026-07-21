@@ -35,6 +35,7 @@ const MLIRFileSelector = () => {
 
     const activeServer = servers.find((server) => isSameMlirServer(server, selectedServer)) ?? servers[0] ?? null;
     const isServerSelectDisabled = isActivatingReport || servers.length === 0;
+    const isServerActionDisabled = isActivatingReport || !activeServer;
 
     const renderServer: ItemRenderer<MlirServerConnection> = (server, { handleClick, modifiers }) => {
         if (!modifiers.matchesPredicate) {
@@ -114,7 +115,7 @@ const MLIRFileSelector = () => {
                         <Button
                             aria-label={EDIT_SERVER_LABEL}
                             icon={IconNames.EDIT}
-                            disabled={isActivatingReport || !activeServer}
+                            disabled={isServerActionDisabled}
                             onClick={() => setIsEditDialogOpen(true)}
                         />
                     </Tooltip>
@@ -126,7 +127,7 @@ const MLIRFileSelector = () => {
                         <Button
                             aria-label={REMOVE_SERVER_LABEL}
                             icon={IconNames.TRASH}
-                            disabled={isActivatingReport || !activeServer}
+                            disabled={isServerActionDisabled}
                             onClick={() => {
                                 const remaining = servers.filter((server) => !isSameMlirServer(server, activeServer));
                                 setServers(remaining);
