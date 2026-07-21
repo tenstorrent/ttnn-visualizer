@@ -14,6 +14,7 @@ import {
     useCallback,
     useContext,
     useEffect,
+    useId,
     useMemo,
     useRef,
     useState,
@@ -409,6 +410,9 @@ function builtGraphToReactFlow(built: BuiltGraph): { nodes: MLNode[]; edges: Edg
 
 const MlGraphInner = ({ data }: ViewProps) => {
     const { fitView, getViewport, setViewport, updateNode } = useReactFlow<MLNode, Edge>();
+    // Unique per instance so two side-by-side panes don't emit colliding React
+    // Flow marker/DOM ids (both panes can show the same graph.id).
+    const rfId = useId();
     const graph = data.graphs[0];
     const [nodes, setNodes, onNodesChange] = useNodesState<MLNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -1513,6 +1517,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
         <div className='mlir-view-pane'>
             <MlirGroupContext.Provider value={groupContextValue}>
                 <ReactFlow
+                    id={rfId}
                     nodes={styledNodes}
                     edges={styledEdges}
                     onNodeClick={onSubgraphNodeClick}
@@ -1551,19 +1556,22 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     onNext={goToNextMatch}
                 />
 
-                <MlirNodeBodyToggles
-                    value={nodeBodyToggles}
-                    onChange={setNodeBodyToggles}
-                />
+                <div className='mlir-controls-row'>
+                    <MlirNodeBodyToggles
+                        value={nodeBodyToggles}
+                        onChange={setNodeBodyToggles}
+                        disabled={isBuilding}
+                    />
 
-                <MlirExpandCollapseControls
-                    namespaceCount={allExpandableNamespaces.length}
-                    expandedCount={expandedNamespaces.size}
-                    isBuilding={isBuilding}
-                    nodeCount={sourceNodes.length}
-                    onExpandAll={expandAllNamespaces}
-                    onCollapseAll={collapseAllNamespaces}
-                />
+                    <MlirExpandCollapseControls
+                        namespaceCount={allExpandableNamespaces.length}
+                        expandedCount={expandedNamespaces.size}
+                        isBuilding={isBuilding}
+                        nodeCount={sourceNodes.length}
+                        onExpandAll={expandAllNamespaces}
+                        onCollapseAll={collapseAllNamespaces}
+                    />
+                </div>
             </div>
 
             <MlirNodeColorLegend />
@@ -1596,4 +1604,6 @@ const MlGraphWithProvider = (props: ViewProps) => (
     </ReactFlowProvider>
 );
 
-export default MlGraphWithProvider;
+// Memoised so a parent re-render with a referentially-stable `data` (e.g. the
+// split view's per-pane bundle during a divider drag) skips both panes.
+export default memo(MlGraphWithProvider);

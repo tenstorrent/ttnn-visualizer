@@ -18,6 +18,7 @@ export const TEST_IDS = Object.freeze({
 
     // MLIR
     MLIR_DISABLED: 'mlir-disabled',
+    MLIR_GRAPH: 'mlir-graph',
 
     // Comparison components
     COMPARISON_REPORT_SELECTOR: 'comparison-report-selector',

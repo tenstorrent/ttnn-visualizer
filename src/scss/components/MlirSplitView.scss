@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as *;
+
+/* Split-pane container reserves the same vertical room as a single pane (shared
+ * $mlir-view-pane-height), then lays the two panes out side by side with a
+ * draggable divider between them. */
+.mlir-split-view {
+    display: flex;
+    width: 100%;
+    height: $mlir-view-pane-height;
+    overflow: hidden;
+}
+
+.mlir-split-pane {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid $tt-grey-2;
+}
+
+.mlir-split-pane-right {
+    flex: 1 1 0;
+}
+
+/* Fill the pane below its header, overriding the single-view 100vh height. */
+.mlir-split-pane .mlir-view-pane {
+    flex: 1 1 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.mlir-split-pane-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    padding: 4px;
+    background: $tt-grey-3;
+    border-bottom: 1px solid $tt-grey-4;
+}
+
+.mlir-split-pane-header-spacer {
+    flex: 1 1 auto;
+}
+
+.mlir-split-pane-select {
+    max-width: 260px;
+}
+
+.mlir-split-divider {
+    position: relative;
+    flex: 0 0 6px;
+    cursor: col-resize;
+    touch-action: none;
+
+    // Thin visible line centred in the wider (grab-friendly) hit area. Rest
+    // state stays legible against the $tt-grey-2 canvas (which the full-width
+    // divider previously matched, making it invisible until hover).
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0 auto 0 50%;
+        width: 2px;
+        background: $tt-grey-4;
+        transform: translateX(-50%);
+    }
+
+    &:hover::before {
+        background: $tt-grey-5;
+    }
+}

@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as *;
 
 /* stylelint-disable selector-class-pattern */
 .react-flow {
@@ -44,6 +45,20 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
+}
+
+/* Node-body popover trigger + expand/collapse share one compact toolbar so the
+ * cluster stays two rows tall (filter above, this below) in either pane. */
+.mlir-controls-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: $tt-grey-2;
+    border: 1px solid $tt-grey-3;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
 }
 
 .react-flow__edge-text {
@@ -293,13 +308,20 @@
     white-space: nowrap;
 }
 
+/* Single-view toolbar above the graph (holds the "Split view" toggle). Lives
+ * here rather than in MlirSplitView.scss so it loads on the plain MLIR route. */
+.mlir-view-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+}
+
 /* MLIR viewport pane: fills the available width and reserves vertical room for
- * the surrounding app chrome — navbar (~92px), page heading (~30px), the inline
- * loaders row (~56px), and the page's bottom padding (~40px). Tweak these
- * offsets together if any of those chrome bands change height. */
+ * the surrounding app chrome (see $mlir-view-pane-height in _variables.scss). */
 .mlir-view-pane {
+    position: relative;
     width: 100%;
-    height: calc(100vh - 92px - 30px - 56px - 40px);
+    height: $mlir-view-pane-height;
 }
 
 /* stylelint-enable selector-class-pattern */

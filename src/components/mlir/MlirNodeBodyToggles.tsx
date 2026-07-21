@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { memo } from 'react';
-import { Switch } from '@blueprintjs/core';
+import { Button, ButtonVariant, Popover, PopoverInteractionKind, Position, Size, Switch } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/MlirNodeBodyToggles.scss';
 
 export interface MlirNodeBodyTogglesState {
@@ -14,22 +15,45 @@ export interface MlirNodeBodyTogglesState {
 interface MlirNodeBodyTogglesProps {
     value: MlirNodeBodyTogglesState;
     onChange: (next: MlirNodeBodyTogglesState) => void;
+    disabled?: boolean;
 }
 
-const MlirNodeBodyTogglesInner = ({ value, onChange }: MlirNodeBodyTogglesProps) => (
-    <div className='mlir-node-body-toggles'>
-        <Switch
-            checked={value.location}
-            label='Show source location'
-            onChange={(event) => onChange({ ...value, location: event.currentTarget.checked })}
-        />
-        <Switch
-            checked={value.shapes}
-            label='Show shapes'
-            onChange={(event) => onChange({ ...value, shapes: event.currentTarget.checked })}
-        />
-    </div>
-);
+const MlirNodeBodyTogglesInner = ({ value, onChange, disabled = false }: MlirNodeBodyTogglesProps) => {
+    const activeCount = Number(value.location) + Number(value.shapes);
+    return (
+        <Popover
+            minimal
+            disabled={disabled}
+            interactionKind={PopoverInteractionKind.CLICK}
+            position={Position.BOTTOM_LEFT}
+            content={
+                <div className='mlir-node-body-toggles-menu'>
+                    <Switch
+                        checked={value.location}
+                        label='Show source location'
+                        onChange={(event) => onChange({ ...value, location: event.currentTarget.checked })}
+                    />
+                    <Switch
+                        checked={value.shapes}
+                        label='Show shapes'
+                        onChange={(event) => onChange({ ...value, shapes: event.currentTarget.checked })}
+                    />
+                </div>
+            }
+        >
+            <Button
+                size={Size.SMALL}
+                variant={ButtonVariant.MINIMAL}
+                icon={IconNames.PROPERTIES}
+                endIcon={IconNames.CARET_DOWN}
+                active={activeCount > 0}
+                disabled={disabled}
+                text={activeCount > 0 ? String(activeCount) : undefined}
+                aria-label='Node body overlays'
+            />
+        </Popover>
+    );
+};
 
 const MlirNodeBodyToggles = memo(MlirNodeBodyTogglesInner);
 MlirNodeBodyToggles.displayName = 'MlirNodeBodyToggles';
