@@ -29,6 +29,8 @@ interface LocalFolderPickerProps {
     showReportName?: boolean;
     /** When true, the picker cannot open or change selection. */
     disabled?: boolean;
+    /** When true, shows a spinner on the trigger button and blocks interaction. */
+    loading?: boolean;
     /** Canonical ids previously observed to link with the active counterpart. */
     linkedIds?: Set<string> | null;
     /** Canonical ids previously observed to fail linking with the active counterpart. */
@@ -44,6 +46,7 @@ const LocalFolderPicker = ({
     valueLabel,
     showReportName,
     disabled = false,
+    loading = false,
     linkedIds,
     unlinkedIds,
 }: LocalFolderPickerProps) => {
@@ -51,7 +54,7 @@ const LocalFolderPicker = ({
 
     const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
 
-    const isDisabled = disabled || !items || items.length === 0 || !instance;
+    const isDisabled = disabled || loading || !items || items.length === 0 || !instance;
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
@@ -166,6 +169,7 @@ const LocalFolderPicker = ({
                     className='folder-picker-button'
                     text={activeName || defaultLabel}
                     disabled={isDisabled}
+                    loading={loading}
                     alignText='start'
                     icon={IconNames.DOCUMENT_OPEN}
                     endIcon={IconNames.CARET_DOWN}

@@ -7,6 +7,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { AxiosResponse } from 'axios';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
+import RemoteFolderSelector from '../src/components/report-selection/RemoteFolderSelector';
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
 import { RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
@@ -80,6 +81,23 @@ beforeEach(() => {
     mockUseReportMetadata.mockReturnValue({ data: undefined, error: undefined });
     // Clean up localStorage between tests
     window.localStorage.clear();
+});
+
+it('shows a loading spinner on the remote folder selector button when loading', () => {
+    render(
+        <TestProviders>
+            <RemoteFolderSelector
+                remoteFolderList={mockRemoteProfilerFolderList as RemoteFolder[]}
+                loading
+                onSelectFolder={() => undefined}
+                type='profiler'
+            />
+        </TestProviders>,
+    );
+
+    const button = screen.getByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+    expect(button.classList.contains(Classes.LOADING)).toBe(true);
+    expect(button).toHaveProperty('disabled', true);
 });
 
 it('renders the initial form state when there is no data', () => {

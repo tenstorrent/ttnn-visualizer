@@ -300,7 +300,7 @@ const LocalFolderOptions = () => {
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
-                    disabled={isActivatingReport}
+                    loading={isActivatingReport}
                     linkedIds={linkedProfilerReportIds}
                     unlinkedIds={unlinkedProfilerReportIds}
                     showReportName
@@ -351,7 +351,7 @@ const LocalFolderOptions = () => {
                     valueLabel={activePerformanceReport?.reportName ?? null}
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}
-                    disabled={isActivatingReport}
+                    loading={isActivatingReport}
                     linkedIds={linkedPerfIds}
                     unlinkedIds={unlinkedPerfIds}
                 />

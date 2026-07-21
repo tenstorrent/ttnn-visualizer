@@ -9,6 +9,7 @@ import { useAtom } from 'jotai';
 import { useState } from 'react';
 import { MlirServerConnection } from '../../definitions/MlirServer';
 import { isSameMlirServer, mlirServerKey } from '../../functions/mlirServer';
+import { useActivatingReport } from '../../hooks/useActivatingReport';
 import { mlirServersAtom, selectedMlirServerAtom } from '../../store/app';
 import MlirJsonFileLoader from '../mlir/MlirJsonFileLoader';
 import MlirServerDialog from './MlirServerDialog';
@@ -30,8 +31,10 @@ const MLIRFileSelector = () => {
     const [selectedServer, setSelectedServer] = useAtom(selectedMlirServerAtom);
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+    const { isActivatingReport } = useActivatingReport();
 
     const activeServer = servers.find((server) => isSameMlirServer(server, selectedServer)) ?? servers[0] ?? null;
+    const isServerSelectDisabled = isActivatingReport || servers.length === 0;
 
     const renderServer: ItemRenderer<MlirServerConnection> = (server, { handleClick, modifiers }) => {
         if (!modifiers.matchesPredicate) {
@@ -60,6 +63,7 @@ const MLIRFileSelector = () => {
                     <Button
                         icon={IconNames.PLUS}
                         text='Add new server'
+                        disabled={isActivatingReport}
                         onClick={() => setIsAddDialogOpen(true)}
                     />
                 </div>
@@ -83,7 +87,7 @@ const MLIRFileSelector = () => {
                     <Select<MlirServerConnection>
                         items={servers}
                         itemRenderer={renderServer}
-                        disabled={servers.length === 0}
+                        disabled={isServerSelectDisabled}
                         filterable={false}
                         noResults={
                             <MenuItem
@@ -98,7 +102,7 @@ const MLIRFileSelector = () => {
                             className='mlir-server-select-button'
                             icon={IconNames.CLOUD}
                             endIcon={IconNames.CARET_DOWN}
-                            disabled={servers.length === 0}
+                            disabled={isServerSelectDisabled}
                             text={formatServerString(activeServer)}
                         />
                     </Select>
@@ -110,7 +114,7 @@ const MLIRFileSelector = () => {
                         <Button
                             aria-label={EDIT_SERVER_LABEL}
                             icon={IconNames.EDIT}
-                            disabled={!activeServer}
+                            disabled={isActivatingReport || !activeServer}
                             onClick={() => setIsEditDialogOpen(true)}
                         />
                     </Tooltip>
@@ -122,7 +126,7 @@ const MLIRFileSelector = () => {
                         <Button
                             aria-label={REMOVE_SERVER_LABEL}
                             icon={IconNames.TRASH}
-                            disabled={!activeServer}
+                            disabled={isActivatingReport || !activeServer}
                             onClick={() => {
                                 const remaining = servers.filter((server) => !isSameMlirServer(server, activeServer));
                                 setServers(remaining);
@@ -155,7 +159,10 @@ const MLIRFileSelector = () => {
                 subLabel='Upload one or more model files (.mlir, .mlirbc, .pb, .pbtxt, .graphdef, .tflite, .json, .pt2)'
             >
                 {activeServer ? (
-                    <MlirJsonFileLoader server={activeServer} />
+                    <MlirJsonFileLoader
+                        server={activeServer}
+                        disabled={isActivatingReport}
+                    />
                 ) : (
                     <Callout
                         intent={Intent.NONE}
