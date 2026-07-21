@@ -14,8 +14,10 @@ import {
     ACTIVE_MEMORY_REPORT_TOAST_TITLE,
     ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE,
 } from '../../definitions/notifyActiveReport';
-import createToastNotification, { ToastType } from '../../functions/createToastNotification';
-import getRemoteSyncFailureAction, { RemoteSyncFailureAction } from '../../functions/getRemoteSyncFailureAction';
+import createToastNotification from '../../functions/createToastNotification';
+import { ToastType } from '../../definitions/ToastType';
+import getRemoteSyncFailureAction from '../../functions/getRemoteSyncFailureAction';
+import { RemoteSyncFailureAction } from '../../definitions/RemoteSync';
 import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
@@ -43,7 +45,8 @@ import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
 import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
-import { DBVersionValidation, evaluateDbVersion } from '../../functions/compareDbVersion';
+import { DBVersionValidation } from '../../definitions/Versions';
+import { evaluateDbVersion } from '../../functions/compareDbVersion';
 
 const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();

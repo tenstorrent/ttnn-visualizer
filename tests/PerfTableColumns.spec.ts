@@ -4,13 +4,8 @@
 
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, it } from 'vitest';
-import {
-    ColumnKeys,
-    Columns,
-    getEligiblePerfColumns,
-    getFooterColumns,
-    getVisiblePerfColumns,
-} from '../src/definitions/PerfTable';
+import { ColumnKeys, Columns } from '../src/definitions/PerfTable';
+import { getEligiblePerfColumns, getFooterColumns, getVisiblePerfColumns } from '../src/functions/perfTableColumns';
 
 describe('PerfTable column helpers', () => {
     it('builds eligible columns from feature flags', () => {

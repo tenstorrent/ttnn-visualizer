@@ -26,11 +26,8 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
-import {
-    AllocationDetails,
-    CBPressureSnapshot,
-    processMemoryAllocations,
-} from '../../functions/processMemoryAllocations';
+import { AllocationDetails, CBPressureSnapshot } from '../../model/MemoryAllocations';
+import { processMemoryAllocations } from '../../functions/processMemoryAllocations';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import CircularBufferPressureModal from './CircularBufferPressureModal';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1MemorySize';
@@ -39,10 +36,10 @@ import MemoryTag from '../MemoryTag';
 import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { BufferTypeToStringBufferType, StringBufferType } from '../../model/BufferType';
 import {
-    DEVICE_OPERATION_ANALYSIS_RESULT,
     DEVICE_OPERATION_ANALYSIS_RESULT_LABEL,
-    analyseDeviceOperation,
-} from '../../functions/analyseDeviceOperation';
+    DeviceOperationAnalysisResult,
+} from '../../definitions/DeviceOperationAnalysis';
+import { analyseDeviceOperation } from '../../functions/analyseDeviceOperation';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
@@ -276,7 +273,7 @@ function useDeviceOperationsFullRenderModel(args: {
                     const opAnalysisResult = analyseDeviceOperation(node.operation);
                     const opAnalysisLabel = DEVICE_OPERATION_ANALYSIS_RESULT_LABEL[opAnalysisResult];
                     const labelClass = classNames('device-operation-label', {
-                        'failed-op-analysis': opAnalysisResult !== DEVICE_OPERATION_ANALYSIS_RESULT.OK,
+                        'failed-op-analysis': opAnalysisResult !== DeviceOperationAnalysisResult.OK,
                     });
                     const label = (
                         <h4 className={labelClass}>
@@ -285,7 +282,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     className='operation-icon'
                                     size={13}
                                     intent={
-                                        opAnalysisResult === DEVICE_OPERATION_ANALYSIS_RESULT.NOOP
+                                        opAnalysisResult === DeviceOperationAnalysisResult.NOOP
                                             ? Intent.WARNING
                                             : Intent.SUCCESS
                                     }

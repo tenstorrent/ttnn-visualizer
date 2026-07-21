@@ -13,7 +13,8 @@ import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from
 import PerfDeviceTimeChart from './PerfDeviceTimeChart';
 import { resolveMaxCores } from '../../functions/getCoreCount';
 import { usePerfMeta } from '../../hooks/useAPI';
-import { OnOpCodeClick, PerfChartId, getOperationTypesChartId } from '../../definitions/PerformanceCharts';
+import { OnOpCodeClick, PerfChartId } from '../../definitions/PerformanceCharts';
+import { getOperationTypesChartId } from '../../functions/buildChartIndexEntries';
 
 interface NonFilterablePerfChartsProps {
     chartData: TypedPerfTableRow[];

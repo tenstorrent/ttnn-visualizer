@@ -7,10 +7,12 @@ import {
     CONV_CHART_ENTRIES,
     FILTERABLE_CHART_ENTRIES,
     MATMUL_CHART_ENTRIES,
+} from '../src/definitions/PerformanceCharts';
+import {
     buildChartIndexEntries,
     getOperationTypesChartId,
     getOperationTypesChartLabel,
-} from '../src/definitions/PerformanceCharts';
+} from '../src/functions/buildChartIndexEntries';
 
 const idsOf = (entries: { id: string }[]): string[] => entries.map((entry) => entry.id);
 

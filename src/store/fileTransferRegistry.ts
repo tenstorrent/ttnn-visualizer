@@ -8,8 +8,8 @@ import { getDefaultStore } from 'jotai/vanilla';
 import { FileTransferSource } from '../definitions/FileTransferSource';
 import { REMOTE_SYNC_PROGRESS_STALE_MS } from '../definitions/RemoteSync';
 import { FileProgress, FileStatus } from '../model/APIData';
-import { isActiveTransferStatus } from './getFileStatusLabel';
-import { abortActiveRemoteSyncRequest } from './remoteSyncRequest';
+import { isActiveTransferStatus } from '../functions/getFileStatusLabel';
+import { abortActiveRemoteSyncRequest } from '../functions/remoteSyncRequest';
 
 export interface ClearFileTransferIfInactiveOptions {
     /**

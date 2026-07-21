@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { MathFidelity, evaluateFidelity, getCellColour } from '../src/functions/perfFunctions';
+import { MathFidelity } from '../src/definitions/MathFidelity';
+import { evaluateFidelity, getCellColour } from '../src/functions/perfFunctions';
 import { ColumnKeys, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import golden from './data/perfReportColourContract.json';

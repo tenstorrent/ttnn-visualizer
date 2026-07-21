@@ -20,7 +20,7 @@ import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
 import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { showHexAtom } from '../../store/app';
-import { BufferMemoryLayout } from '../../functions/parseMemoryConfig';
+import { BufferMemoryLayout } from '../../model/MemoryConfig';
 import isValidNumber from '../../functions/isValidNumber';
 import { toReadableShape, toReadableType } from '../../functions/formatting';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';

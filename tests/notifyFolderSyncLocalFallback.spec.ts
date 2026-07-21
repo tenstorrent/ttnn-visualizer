@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ToastType } from '../src/functions/createToastNotification';
+import { ToastType } from '../src/definitions/ToastType';
 import notifyFolderSyncLocalFallback, {
     FOLDER_SYNC_LOCAL_FALLBACK_TOAST_DETAIL_PREFIX,
     FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE,

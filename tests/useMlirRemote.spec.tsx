@@ -21,7 +21,7 @@ import {
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,
     setFileTransferProgressForSource,
-} from '../src/functions/fileTransferRegistry';
+} from '../src/store/fileTransferRegistry';
 import {
     fileTransferProgressAtom,
     mlirFileResultsAtom,

@@ -23,7 +23,7 @@ import {
     TOP_N_MODE_LABEL,
     TopNAnnotationMode,
     TopNAnnotationStatus,
-} from '../../functions/topNAnnotations';
+} from '../../definitions/TopNAnnotations';
 import { useTopNAnnotationAvailability } from '../../hooks/useTopNAnnotations';
 import 'styles/components/BufferSummaryControls.scss';
 

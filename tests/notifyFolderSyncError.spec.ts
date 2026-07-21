@@ -4,7 +4,7 @@
 
 import { CanceledError } from 'axios';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ToastType } from '../src/functions/createToastNotification';
+import { ToastType } from '../src/definitions/ToastType';
 import notifyFolderSyncError, {
     FOLDER_LIST_SYNC_ERROR_TOAST_TITLE,
     FOLDER_SYNC_ERROR_TOAST_TITLE,

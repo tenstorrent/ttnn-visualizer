@@ -9,7 +9,7 @@ import {
     clearFileTransferProgressForSource,
     getInactiveFileTransferProgress,
     setFileTransferProgressForSource,
-} from '../functions/fileTransferRegistry';
+} from '../store/fileTransferRegistry';
 import { FileStatus } from '../model/APIData';
 import Endpoints from '../definitions/Endpoints';
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';

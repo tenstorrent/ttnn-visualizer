@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import OperationList from '../components/OperationList';
-import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 
 export default function Operations() {
     useClearSelectedBuffer();

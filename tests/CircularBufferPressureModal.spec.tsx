@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CircularBufferPressureModal from '../src/components/operation-details/CircularBufferPressureModal';
-import { CBPressureSnapshot } from '../src/functions/processMemoryAllocations';
+import { CBPressureSnapshot } from '../src/model/MemoryAllocations';
 import { TestProviders } from './helpers/TestProviders';
 
 // useDevices is the only API hook this modal touches; stub it so we don't

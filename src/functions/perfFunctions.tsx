@@ -20,13 +20,9 @@ import MemoryTag from '../components/MemoryTag';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import L1FullnessBar from '../components/performance/L1FullnessBar';
 import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
+import { MathFidelity } from '../definitions/MathFidelity';
 import { CellColour } from '../definitions/CellColour';
 import { isSlowDramDominant } from './perfBoundPredicates';
-
-export interface Signpost {
-    id: number;
-    op_code: string;
-}
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
@@ -499,12 +495,6 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
         </div>
     );
 };
-
-export enum MathFidelity {
-    HiFi4 = 'HiFi4',
-    HiFi2 = 'HiFi2',
-    LoFi = 'LoFi',
-}
 
 // Mirrors tt-perf-report evaluate_fidelity() (perf_report.py:535-556).
 const INTEGER_DATATYPES = ['UINT8', 'UINT16', 'INT32', 'UINT32'];

@@ -4,12 +4,7 @@
 
 import axios from 'axios';
 import { RemoteFolder } from '../definitions/RemoteConnection';
-
-export enum RemoteSyncFailureAction {
-    IGNORE_CANCEL = 'ignore-cancel',
-    FALLBACK_LOCAL = 'fallback-local',
-    SHOW_ERROR = 'show-error',
-}
+import { RemoteSyncFailureAction } from '../definitions/RemoteSync';
 
 /**
  * Decides how to handle a failed remote sync.

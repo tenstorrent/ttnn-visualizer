@@ -5,7 +5,8 @@
 import { expect, test } from 'vitest';
 import { BufferType } from '../src/model/BufferType';
 import { Buffer } from '../src/model/APIData';
-import { L1PressureStatus, buildL1PressureResult, computeL1PressureForOperation } from '../src/functions/l1Pressure';
+import { L1PressureStatus } from '../src/model/L1Pressure';
+import { buildL1PressureResult, computeL1PressureForOperation } from '../src/functions/l1Pressure';
 
 const L1_START = 0;
 const L1_END = 1000;

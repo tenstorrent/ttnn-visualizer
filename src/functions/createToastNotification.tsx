@@ -4,13 +4,7 @@
 
 import { ToastOptions, toast } from 'react-toastify';
 import ToastFileChange from '../components/ToastFileChange';
-
-export enum ToastType {
-    INFO = 'info',
-    SUCCESS = 'success',
-    WARNING = 'warning',
-    ERROR = 'error',
-}
+import { ToastType } from '../definitions/ToastType';
 
 export default function createToastNotification(message: string, fileName: string, type?: ToastType) {
     const template = (

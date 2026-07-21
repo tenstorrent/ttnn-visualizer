@@ -5,7 +5,7 @@
 import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ReportLinkMatchResult } from '../src/functions/reportLinks';
+import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
 import { useReportLinkMatch } from '../src/hooks/useReportLinkMatch';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
 import { AtomProvider, type AtomProviderInitialValues } from './helpers/atomProvider';
