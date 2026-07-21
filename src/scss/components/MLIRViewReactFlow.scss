@@ -3,7 +3,6 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
-@use '../definitions/variables' as *;
 
 /* stylelint-disable selector-class-pattern */
 .react-flow {
@@ -308,20 +307,13 @@
     white-space: nowrap;
 }
 
-/* Single-view toolbar above the graph (holds the "Split view" toggle). Lives
- * here rather than in MlirSplitView.scss so it loads on the plain MLIR route. */
-.mlir-view-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 8px;
-}
-
-/* MLIR viewport pane: fills the available width and reserves vertical room for
- * the surrounding app chrome (see $mlir-view-pane-height in _variables.scss). */
+/* MLIR viewport pane: flexes to fill the remaining height of its flex-column
+ * parent (`.mlir-page-graph` in single view, `.mlir-split-pane` in split view). */
 .mlir-view-pane {
     position: relative;
+    flex: 1 1 auto;
     width: 100%;
-    height: $mlir-view-pane-height;
+    min-height: 0;
 }
 
 /* stylelint-enable selector-class-pattern */
