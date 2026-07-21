@@ -18,6 +18,11 @@ const MIN_PANE_PCT = 20;
 const MAX_PANE_PCT = 80;
 const clampPct = (pct: number): number => Math.min(MAX_PANE_PCT, Math.max(MIN_PANE_PCT, pct));
 
+// Keep a pane's selected index in range: the route doesn't remount on data
+// change, so a smaller re-upload could otherwise leave an index dangling past
+// the new graph list and feed `undefined` into MlGraph.
+const clampIndex = (index: number, count: number): number => Math.min(Math.max(index, 0), Math.max(count - 1, 0));
+
 type PaneSide = 'left' | 'right';
 
 const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
@@ -29,10 +34,15 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const draggingRef = useRef(false);
 
-    // Derived single-graph bundles keep MlGraph unchanged (it renders graphs[0]);
-    // memoised so a pane only remounts when its own selection changes.
-    const leftBundle = useMemo<GraphBundle>(() => ({ graphs: [graphs[leftIndex]] }), [graphs, leftIndex]);
-    const rightBundle = useMemo<GraphBundle>(() => ({ graphs: [graphs[rightIndex]] }), [graphs, rightIndex]);
+    const safeLeftIndex = clampIndex(leftIndex, graphs.length);
+    const safeRightIndex = clampIndex(rightIndex, graphs.length);
+
+    // Per-pane single-graph bundles keep MlGraph unchanged (it renders graphs[0]).
+    // useMemo stabilises each bundle's identity so memo(MlGraph) skips re-rendering
+    // on unrelated parent updates (e.g. a divider drag); switching graphs still
+    // remounts the pane via MlGraph's internal `key={graphs[0].id}`.
+    const leftBundle = useMemo<GraphBundle>(() => ({ graphs: [graphs[safeLeftIndex]] }), [graphs, safeLeftIndex]);
+    const rightBundle = useMemo<GraphBundle>(() => ({ graphs: [graphs[safeRightIndex]] }), [graphs, safeRightIndex]);
 
     const onDividerPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
         draggingRef.current = true;
@@ -49,13 +59,17 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
 
     const onDividerPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
         draggingRef.current = false;
-        event.currentTarget.releasePointerCapture(event.pointerId);
+        // releasePointerCapture throws if this element never captured the pointer
+        // (e.g. a stray pointerup or a capture that silently failed).
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }
     }, []);
 
     const swapPanes = useCallback(() => {
-        setLeftIndex(rightIndex);
-        setRightIndex(leftIndex);
-    }, [leftIndex, rightIndex]);
+        setLeftIndex(safeRightIndex);
+        setRightIndex(safeLeftIndex);
+    }, [safeLeftIndex, safeRightIndex]);
 
     const renderHeader = (side: PaneSide, index: number, setIndex: (next: number) => void) => (
         <header className='mlir-split-pane-header'>
@@ -104,7 +118,7 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
                 className='mlir-split-pane'
                 style={{ flexBasis: `${leftPct}%` }}
             >
-                {renderHeader('left', leftIndex, setLeftIndex)}
+                {renderHeader('left', safeLeftIndex, setLeftIndex)}
                 <MlGraph data={leftBundle} />
             </section>
 
@@ -119,7 +133,7 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
             />
 
             <section className='mlir-split-pane mlir-split-pane-right'>
-                {renderHeader('right', rightIndex, setRightIndex)}
+                {renderHeader('right', safeRightIndex, setRightIndex)}
                 <MlGraph data={rightBundle} />
             </section>
         </div>

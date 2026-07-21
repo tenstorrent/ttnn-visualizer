@@ -3,14 +3,15 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as *;
 
-/* Split-pane container reserves the same vertical room as a single pane (see
- * .mlir-view-pane offsets in MLIRViewReactFlow.scss), then lays the two panes
- * out side by side with a draggable divider between them. */
+/* Split-pane container reserves the same vertical room as a single pane (shared
+ * $mlir-view-pane-height), then lays the two panes out side by side with a
+ * draggable divider between them. */
 .mlir-split-view {
     display: flex;
     width: 100%;
-    height: calc(100vh - 92px - 30px - 56px - 40px);
+    height: $mlir-view-pane-height;
     overflow: hidden;
 }
 

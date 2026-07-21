@@ -36,3 +36,9 @@ $z-index-3-overlay: 1000;
 
 // Component-specific variables
 $active-transfer-width: 380px;
+
+// MLIR viewport height: full height minus the surrounding app chrome — navbar
+// (~92px), page heading (~30px), inline loaders row (~56px), and page bottom
+// padding (~40px). Shared by the single-view pane and the split-view container
+// so those chrome offsets only need editing in one place.
+$mlir-view-pane-height: calc(100vh - 92px - 30px - 56px - 40px);

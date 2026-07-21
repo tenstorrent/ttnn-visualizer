@@ -3,9 +3,10 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { GraphBundle } from '../src/model/MLIRJsonModel';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import MlirSplitView from '../src/components/mlir/MlirSplitView';
 
 // jsdom implements neither PointerEvent nor element pointer capture, so back
@@ -20,6 +21,11 @@ class FakePointerEvent extends MouseEvent {
     }
 }
 
+const originalPointerEvent = (window as { PointerEvent?: typeof MouseEvent }).PointerEvent;
+const originalSetPointerCapture = Element.prototype.setPointerCapture;
+const originalReleasePointerCapture = Element.prototype.releasePointerCapture;
+const originalHasPointerCapture = Element.prototype.hasPointerCapture;
+
 beforeAll(() => {
     if (!('PointerEvent' in window)) {
         (window as unknown as { PointerEvent: typeof MouseEvent }).PointerEvent =
@@ -27,6 +33,20 @@ beforeAll(() => {
     }
     Element.prototype.setPointerCapture = vi.fn();
     Element.prototype.releasePointerCapture = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn(() => true);
+});
+
+// Restore the globals we monkey-patched so this suite can't leak pointer
+// behaviour into unrelated tests sharing the jsdom environment.
+afterAll(() => {
+    if (originalPointerEvent) {
+        (window as { PointerEvent?: typeof MouseEvent }).PointerEvent = originalPointerEvent;
+    } else {
+        delete (window as { PointerEvent?: typeof MouseEvent }).PointerEvent;
+    }
+    Element.prototype.setPointerCapture = originalSetPointerCapture;
+    Element.prototype.releasePointerCapture = originalReleasePointerCapture;
+    Element.prototype.hasPointerCapture = originalHasPointerCapture;
 });
 
 const stubRect = (element: HTMLElement, width: number): void => {
@@ -34,10 +54,14 @@ const stubRect = (element: HTMLElement, width: number): void => {
         ({ left: 0, width, top: 0, right: width, bottom: 600, height: 600, x: 0, y: 0, toJSON: () => {} }) as DOMRect;
 };
 
+// Hoisted so the vi.mock factory (itself hoisted above imports) can read it; a
+// guard test below pins it to TEST_IDS.MLIR_GRAPH so the two can't drift.
+const { MLIR_GRAPH_TEST_ID } = vi.hoisted(() => ({ MLIR_GRAPH_TEST_ID: 'mlir-graph' }));
+
 // The real MlGraph spins up a layout worker + React Flow; stub it to just echo
 // the graph id it was handed so the test can assert per-pane wiring.
 vi.mock('../src/components/mlir/MLIRViewReactFlow', () => ({
-    default: ({ data }: { data: GraphBundle }) => <div data-testid='ml-graph'>{data.graphs[0]?.id}</div>,
+    default: ({ data }: { data: GraphBundle }) => <div data-testid={MLIR_GRAPH_TEST_ID}>{data.graphs[0]?.id}</div>,
 }));
 
 afterEach(cleanup);
@@ -45,11 +69,15 @@ afterEach(cleanup);
 const makeData = (ids: string[]): GraphBundle => ({ graphs: ids.map((id) => ({ id })) }) as unknown as GraphBundle;
 
 const paneGraphIds = (): [string, string] => {
-    const [left, right] = screen.getAllByTestId('ml-graph');
+    const [left, right] = screen.getAllByTestId(TEST_IDS.MLIR_GRAPH);
     return [left.textContent ?? '', right.textContent ?? ''];
 };
 
 describe('MlirSplitView', () => {
+    it('keeps the MlGraph stub test id in sync with the shared constant', () => {
+        expect(MLIR_GRAPH_TEST_ID).toBe(TEST_IDS.MLIR_GRAPH);
+    });
+
     it('opens both panes on the same (first) graph', () => {
         render(
             <MlirSplitView
@@ -158,5 +186,27 @@ describe('MlirSplitView', () => {
         // No preceding pointerdown → the 50/50 split must stay put.
         fireEvent.pointerMove(divider, { pointerId: 1, clientX: 300 });
         expect(leftPane.style.flexBasis).toBe('50%');
+    });
+
+    it('clamps stale pane indices when the graph list shrinks', () => {
+        const { rerender } = render(
+            <MlirSplitView
+                data={makeData(['g0', 'g1', 'g2'])}
+                onExit={() => {}}
+            />,
+        );
+        fireEvent.change(screen.getByLabelText('right pane graph'), { target: { value: '2' } });
+        expect(paneGraphIds()).toEqual(['g0', 'g2']);
+
+        // A smaller re-upload while split view stays mounted must not feed an
+        // out-of-range index (undefined graph) into either pane.
+        rerender(
+            <MlirSplitView
+                data={makeData(['g0'])}
+                onExit={() => {}}
+            />,
+        );
+        expect(paneGraphIds()).toEqual(['g0', 'g0']);
+        expect((screen.getByLabelText('right pane graph') as HTMLSelectElement).value).toBe('0');
     });
 });

@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as *;
 
 /* stylelint-disable selector-class-pattern */
 .react-flow {
@@ -316,13 +317,11 @@
 }
 
 /* MLIR viewport pane: fills the available width and reserves vertical room for
- * the surrounding app chrome — navbar (~92px), page heading (~30px), the inline
- * loaders row (~56px), and the page's bottom padding (~40px). Tweak these
- * offsets together if any of those chrome bands change height. */
+ * the surrounding app chrome (see $mlir-view-pane-height in _variables.scss). */
 .mlir-view-pane {
     position: relative;
     width: 100%;
-    height: calc(100vh - 92px - 30px - 56px - 40px);
+    height: $mlir-view-pane-height;
 }
 
 /* stylelint-enable selector-class-pattern */
