@@ -7,7 +7,7 @@ import { useAtomValue } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportLinkStatus from '../src/components/ReportLinkStatus';
 import { ReportLocation } from '../src/definitions/Reports';
-import { ReportLinkMatchResult, ReportPairLinkStatus } from '../src/functions/reportLinks';
+import { ReportLinkMatchResult, ReportPairLinkStatus } from '../src/definitions/ReportLinks';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,

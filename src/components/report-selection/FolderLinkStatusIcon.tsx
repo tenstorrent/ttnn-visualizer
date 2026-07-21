@@ -2,8 +2,27 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Icon, Position, Tooltip } from '@blueprintjs/core';
-import { FOLDER_LINK_STATUS, FolderLinkState } from '../../definitions/FolderLinkStatus';
+import { Icon, Intent, Position, Tooltip } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import { FolderLinkState } from '../../definitions/FolderLinkStatus';
+
+const FOLDER_LINK_STATUS = {
+    [FolderLinkState.LINKED]: {
+        tooltip: 'Successfully linked with the active report',
+        icon: IconNames.LINK,
+        intent: Intent.SUCCESS,
+    },
+    [FolderLinkState.UNLINKED]: {
+        tooltip: 'Failed to link with the active report',
+        icon: IconNames.UNLINK,
+        intent: Intent.WARNING,
+    },
+    [FolderLinkState.UNKNOWN]: {
+        tooltip: 'Link status unknown',
+        icon: IconNames.LINK,
+        intent: Intent.NONE,
+    },
+} as const;
 
 interface FolderLinkStatusIconProps {
     linkState: FolderLinkState;

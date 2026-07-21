@@ -14,7 +14,7 @@ import ErrorPage from './ErrorPage';
 import Layout from './components/Layout';
 import getServerConfig from './functions/getServerConfig';
 import { SocketProvider } from './libs/SocketProvider';
-import { routeObjectList } from './definitions/RouteObjectList';
+import { routeObjectList } from './routes/routeObjectList';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const router = createBrowserRouter(

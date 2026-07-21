@@ -16,15 +16,13 @@ import {
     PerfTableFilters,
     TypedPerfTableRow,
     comparisonKeys,
-    getEligiblePerfColumns,
-    getFooterColumns,
-    getVisiblePerfColumns,
 } from '../../definitions/PerfTable';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
 import isValidNumber from '../../functions/isValidNumber';
 import { formatPercentage, formatSize } from '../../functions/math';
 import { formatCell, isHostOp } from '../../functions/perfFunctions';
+import { getEligiblePerfColumns, getFooterColumns, getVisiblePerfColumns } from '../../functions/perfTableColumns';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';

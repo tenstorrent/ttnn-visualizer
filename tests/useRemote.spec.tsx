@@ -15,7 +15,7 @@ import {
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,
     setFileTransferProgressForSource,
-} from '../src/functions/fileTransferRegistry';
+} from '../src/store/fileTransferRegistry';
 import { abortActiveRemoteSyncRequest } from '../src/functions/remoteSyncRequest';
 import useRemoteConnection from '../src/hooks/useRemote';
 import { FileStatus } from '../src/model/APIData';

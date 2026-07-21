@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import TensorList from '../components/TensorList';
-import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 
 export default function Tensors() {
     useClearSelectedBuffer();

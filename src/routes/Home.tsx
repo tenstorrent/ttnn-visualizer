@@ -7,7 +7,7 @@ import LocalFolderSelector from '../components/report-selection/LocalFolderSelec
 import MLIRFileSelector from '../components/report-selection/MLIRFileSelector';
 import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
 import 'styles/routes/Home.scss';
-import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 import getServerConfig from '../functions/getServerConfig';
 import InitialMessage from '../components/InitialMessage';
 import FolderFieldset from '../components/report-selection/FolderFieldset';

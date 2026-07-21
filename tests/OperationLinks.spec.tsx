@@ -5,7 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { getLastConsumerLink, getOperationLink } from '../src/functions/getOperationLink';
+import { getLastConsumerLink, getOperationLink } from '../src/components/OperationLinks';
 import ROUTES from '../src/definitions/Routes';
 import { Operation, Tensor } from '../src/model/APIData';
 import { TestProviders } from './helpers/TestProviders';

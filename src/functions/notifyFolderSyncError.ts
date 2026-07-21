@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import axios from 'axios';
-import createToastNotification, { ToastType } from './createToastNotification';
+import createToastNotification from './createToastNotification';
+import { ToastType } from '../definitions/ToastType';
 import getResponseError from './getResponseError';
 
 export const FOLDER_LIST_SYNC_ERROR_TOAST_TITLE = 'Folder list sync error';

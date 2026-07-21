@@ -14,7 +14,7 @@ import {
     clearAllFileTransferProgress,
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,
-} from '../src/functions/fileTransferRegistry';
+} from '../src/store/fileTransferRegistry';
 import { FileStatus } from '../src/model/APIData';
 import { TestProviders } from './helpers/TestProviders';
 

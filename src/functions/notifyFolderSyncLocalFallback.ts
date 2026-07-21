@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import createToastNotification, { ToastType } from './createToastNotification';
+import createToastNotification from './createToastNotification';
+import { ToastType } from '../definitions/ToastType';
 import getResponseError from './getResponseError';
 
 export const FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE = 'Loaded local copy';

@@ -22,7 +22,8 @@ import {
     mlirRetryServerAtom,
 } from '../../store/app';
 import useMlirRemote from '../../hooks/useMlirRemote';
-import createToastNotification, { ToastType } from '../../functions/createToastNotification';
+import createToastNotification from '../../functions/createToastNotification';
+import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
 import 'styles/components/MlirFileResultsOverlay.scss';
 

@@ -29,7 +29,7 @@ import {
 } from '../src/store/app';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
-import { L1PressureStatus } from '../src/functions/l1Pressure';
+import { L1PressureStatus } from '../src/model/L1Pressure';
 import { PerfTableRow } from '../src/definitions/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';

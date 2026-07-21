@@ -10,7 +10,7 @@ import { BufferType } from '../src/model/BufferType';
 import BufferSummaryVirtualizedList from '../src/components/buffer-summary/BufferSummaryVirtualizedList';
 import { ScrollLocations } from '../src/definitions/VirtualLists';
 import { BufferSummaryAxisConfiguration } from '../src/definitions/PlotConfigurations';
-import { RankedAnnotation, TopNAnnotationMode } from '../src/functions/topNAnnotations';
+import { RankedAnnotation, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
 
 const memoryPlotRendererMock = vi.fn();
 const bufferSummaryRowMock = vi.fn();

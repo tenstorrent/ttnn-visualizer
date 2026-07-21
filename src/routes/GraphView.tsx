@@ -10,7 +10,7 @@ import { useAtomValue } from 'jotai';
 import { useGetDeviceOperationListPerf, useOperationsList, usePerformanceReport } from '../hooks/useAPI';
 import OperationGraph from '../components/OperationGraphComponent';
 import LoadingSpinner from '../components/LoadingSpinner';
-import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 import { activePerformanceReportAtom, selectedOperationRangeAtom } from '../store/app';
 import { PerfOverlaySource } from '../functions/perfOverlay';
 

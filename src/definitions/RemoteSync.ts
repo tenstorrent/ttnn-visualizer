@@ -17,3 +17,9 @@ export const REMOTE_SYNC_PROGRESS_STALE_MS = 8 * 60 * 1000;
  * leave axios (and the overlay) hanging indefinitely.
  */
 export const REMOTE_SYNC_REQUEST_TIMEOUT_MS = 30 * 60 * 1000;
+
+export enum RemoteSyncFailureAction {
+    IGNORE_CANCEL = 'ignore-cancel',
+    FALLBACK_LOCAL = 'fallback-local',
+    SHOW_ERROR = 'show-error',
+}

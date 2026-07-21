@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { formatSize } from './math';
-import { TensorMemoryLayout } from './parseMemoryConfig';
+import { TensorMemoryLayout } from '../model/MemoryConfig';
 
 export const toReadableShape = (input: string) => {
     const match = input.match(/(?:Shape|torch\.Size)\((\[.*\])\)/);
@@ -99,3 +99,6 @@ export const formatDuration = (ns: number): string => {
     }
     return `${formatSize(ns / 1_000_000_000, 2)} s`;
 };
+
+/** Remote folder sync timestamps are Unix epoch seconds. */
+export const getUTCFromEpoch = (epoch: number): Date => new Date(epoch * 1000);
