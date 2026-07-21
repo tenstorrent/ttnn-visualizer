@@ -68,6 +68,21 @@ describe('MlirNodeBodyToggles', () => {
         expect(screen.getByLabelText('Show shapes')).not.toBeChecked();
     });
 
+    it('disables the trigger and keeps the popover shut while a layout is building', () => {
+        render(
+            <MlirNodeBodyToggles
+                value={bothOff}
+                onChange={() => {}}
+                disabled
+            />,
+        );
+        const trigger = screen.getByRole('button', { name: 'Node body overlays' });
+        expect(trigger).toBeDisabled();
+
+        openMenu();
+        expect(screen.queryByLabelText('Show source location')).not.toBeInTheDocument();
+    });
+
     it('shows the count of active overlays on the collapsed trigger', () => {
         const { rerender } = render(
             <MlirNodeBodyToggles

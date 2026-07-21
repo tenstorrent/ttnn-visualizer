@@ -15,13 +15,15 @@ export interface MlirNodeBodyTogglesState {
 interface MlirNodeBodyTogglesProps {
     value: MlirNodeBodyTogglesState;
     onChange: (next: MlirNodeBodyTogglesState) => void;
+    disabled?: boolean;
 }
 
-const MlirNodeBodyTogglesInner = ({ value, onChange }: MlirNodeBodyTogglesProps) => {
+const MlirNodeBodyTogglesInner = ({ value, onChange, disabled = false }: MlirNodeBodyTogglesProps) => {
     const activeCount = Number(value.location) + Number(value.shapes);
     return (
         <Popover
             minimal
+            disabled={disabled}
             interactionKind={PopoverInteractionKind.CLICK}
             position={Position.BOTTOM_LEFT}
             content={
@@ -45,6 +47,7 @@ const MlirNodeBodyTogglesInner = ({ value, onChange }: MlirNodeBodyTogglesProps)
                 icon={IconNames.PROPERTIES}
                 endIcon={IconNames.CARET_DOWN}
                 active={activeCount > 0}
+                disabled={disabled}
                 text={activeCount > 0 ? String(activeCount) : undefined}
                 aria-label='Node body overlays'
             />

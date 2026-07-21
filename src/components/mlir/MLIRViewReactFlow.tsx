@@ -1560,6 +1560,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     <MlirNodeBodyToggles
                         value={nodeBodyToggles}
                         onChange={setNodeBodyToggles}
+                        disabled={isBuilding}
                     />
 
                     <MlirExpandCollapseControls
