@@ -2,6 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import type { OpPerfAggregate } from '../functions/perfOverlay';
+import type { L1PressureMetrics } from '../model/L1Pressure';
+
 /**
  * Annotation mode for top-N op highlighting on the Buffer Summary view.
  * String-valued because the selected mode persists to `localStorage` through
@@ -66,3 +69,32 @@ export const TOP_N_MODE_LABEL: Record<TopNAnnotationMode, string> = {
     [TopNAnnotationMode.PERF_FLOPS_PERCENT]: 'FLOPS utilization',
     [TopNAnnotationMode.L1_FULLNESS]: 'L1 fullness',
 };
+
+/**
+ * One ranked op annotation. `t` is the colour-ramp position in `[0, 1]`,
+ * normalised within the top-N slice (not across all ops) so the badge
+ * colours visually distinguish #1 from #N even when the overall distribution
+ * dwarfs the highlighted slice.
+ *
+ * `rowIndex` is the position of the op inside the *rendered* `operations`
+ * array passed to `selectTopNAnnotations` — that array may be a filtered or
+ * segmented subset (the DRAM tab's zoom segmentation is the main case), so
+ * the rail and badge align with what the user actually sees, not with raw
+ * op-id ordering.
+ */
+export interface RankedAnnotation {
+    opId: number;
+    rowIndex: number;
+    rank: number;
+    t: number;
+    valueLabel: string;
+    rawValue: number;
+}
+
+export interface SelectTopNParams {
+    mode: TopNAnnotationMode;
+    n: number;
+    operations: readonly { id: number }[];
+    perfAggregatesByOpId?: Map<number, OpPerfAggregate>;
+    l1PressureByOpId?: Map<number, L1PressureMetrics>;
+}

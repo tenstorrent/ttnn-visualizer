@@ -2,14 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import {
-    LinkedReportIdOptions,
-    MAX_REPORT_LINKS,
-    ReportLink,
-    ReportLinkAccess,
-    ReportPairLinkStatus,
-} from '../definitions/ReportLinks';
+import { LinkedReportIdOptions, MAX_REPORT_LINKS, ReportPairLinkStatus } from '../definitions/ReportLinks';
 import { ReportLocation } from '../definitions/Reports';
+import { ReportLink, ReportLinkAccess } from '../model/ReportLinks';
 
 /**
  * Stable report identity: final path segment (folder basename).

@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { TOP_N_MODE_LABEL, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
-import { RankedAnnotation, selectTopNAnnotations } from '../src/functions/topNAnnotations';
+import { RankedAnnotation, TOP_N_MODE_LABEL, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
+import { selectTopNAnnotations } from '../src/functions/topNAnnotations';
 import { OpPerfAggregate } from '../src/functions/perfOverlay';
 import { L1PressureMetrics } from '../src/model/L1Pressure';
 

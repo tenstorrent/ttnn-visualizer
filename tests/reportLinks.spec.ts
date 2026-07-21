@@ -4,7 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { ReportLocation } from '../src/definitions/Reports';
-import { ReportLink, ReportPairLinkStatus } from '../src/definitions/ReportLinks';
+import { ReportPairLinkStatus } from '../src/definitions/ReportLinks';
+import { ReportLink } from '../src/model/ReportLinks';
 import {
     getReportId,
     linkedPerformanceIds,

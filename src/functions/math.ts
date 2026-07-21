@@ -4,8 +4,6 @@
 
 import { CoreCoord } from '../model/CoreCoord';
 
-export type { CoreCoord } from '../model/CoreCoord';
-
 const LOCALE = 'en-US';
 
 const NS_PER_US = 1000;

@@ -63,7 +63,7 @@ import {
 } from '../functions/clusterTopology';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
-import { Signpost } from '../definitions/PerfSignpost';
+import { Signpost } from '../model/Signpost';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import Endpoints from '../definitions/Endpoints';

@@ -12,7 +12,7 @@ import ROUTES from '../definitions/Routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
-import { getLastConsumerLink, getOperationLink } from './getOperationLink';
+import { getLastConsumerLink, getOperationLink } from './OperationLinks';
 import isValidNumber from '../functions/isValidNumber';
 import { ShardSpec } from '../model/MemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';

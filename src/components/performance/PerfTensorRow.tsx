@@ -4,7 +4,7 @@
 
 import { useAtomValue } from 'jotai';
 import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
-import { getLastConsumerLink, getOperationLink } from '../getOperationLink';
+import { getLastConsumerLink, getOperationLink } from '../OperationLinks';
 import isValidNumber from '../../functions/isValidNumber';
 import { formatMemorySize, getMemoryAddress } from '../../functions/math';
 import { ShardSpec } from '../../model/MemoryConfig';

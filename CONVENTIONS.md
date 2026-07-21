@@ -262,7 +262,7 @@ The alias resolves `styles/` to `src/scss/` so the path inside the import maps 1
 
 Prefer declaring atoms in **`src/store/app.ts`**, organized into commented sections (`// App state`, `// Reports`, `// Operations route`, etc.) — add new atoms to the section that matches their feature area. **Components don't declare module-scope atoms.** If you need component-local state, use `useState`.
 
-When atoms must be co-located with mutators in another `store/` module (e.g. `store/fileTransferRegistry.ts`, to avoid a circular import with `app.ts`), still **re-export them from `app.ts`** so shared atoms remain discoverable there. Consumers may import atoms from `app.ts` or the owning module; prefer `app.ts` for reads.
+When atoms must be co-located with mutators in another `store/` module (e.g. `store/fileTransferRegistry.ts`, to avoid a circular import with `app.ts`), still **re-export the atoms and mutators from `app.ts`**. Call sites **import from `app.ts`**, not from the co-located module — that file exists only to break the cycle; it is not a second public API. Existing direct imports from `fileTransferRegistry` (and similar) are on-touch cleanup, not a pattern to copy.
 
 ### Atom names end with `Atom`
 
@@ -506,10 +506,16 @@ createToastNotification('MLIR', file.name, ToastType.SUCCESS);
 
 ### `src/definitions/` vs `src/model/`
 
-- **`src/definitions/`** holds *primitives* — enums, route/endpoint maps, plot/colour configs, plain interfaces with no behaviour. Examples: `Endpoints.ts`, `Routes.ts`, `TestIds.ts`, `GraphColors.ts`, `BufferSummary.ts`.
-- **`src/model/`** holds *domain types* — API response shapes (often interfaces that mirror a backend model), sometimes classes with methods. Examples: `APIData.ts`, `BufferType.ts`, `MLIRJsonModel.ts`, `NPEModel.ts`, `ClusterModel.ts`.
+- **`src/definitions/`** holds *primitives* — enums, route/endpoint maps, plot/colour configs, plain interfaces with no behaviour. Examples: `Endpoints.ts`, `Routes.ts`, `TestIds.ts`, `GraphColors.ts`, `BufferSummary.ts`, `TopNAnnotations.ts` (enums / labels / shared annotation result shapes).
+- **`src/model/`** holds *domain types* — API response shapes (often interfaces that mirror a backend model), persisted app-domain records, sometimes classes with methods. Examples: `APIData.ts`, `BufferType.ts`, `MLIRJsonModel.ts`, `NPEModel.ts`, `ClusterModel.ts`, `MemoryConfig.ts`, `L1Pressure.ts`, `ReportLinks.ts` (`ReportLink` / `ReportLinkAccess`), `Signpost.ts`, `CoreCoord.ts`.
 
-Rule of thumb: **if it mirrors a backend response, it's a model.** If it's a constant, mapping, or enum used purely on the frontend, it's a definition.
+Rule of thumb: **if it mirrors a backend response (or a persisted domain record), it's a model.** If it's a constant, mapping, or enum used purely on the frontend, it's a definition.
+
+**Scope.** This split is mandatory for **new modules and files you touch**. The tree still has older domain-shaped types under `definitions/` (e.g. parts of `PerfTable.ts`, `RemoteConnection.ts`, `MlirServer.ts`, `PlotConfigurations.ts`); migrate them when you edit those areas, don't treat every leftover as a reason to ignore the rule. See [Known inconsistencies](#known-inconsistencies).
+
+### `src/routes/`
+
+Page components and React Router configuration live under **`src/routes/`** (`Home.tsx`, `Operations.tsx`, `routeObjectList.tsx`, …). Absolute path strings stay in **`src/definitions/Routes.ts`** (`ROUTES`); `routeObjectList` maps those paths to page elements and `RouteRequirements`. Don't put page modules under `definitions/` or inline router trees in `main.tsx` outside `routeObjectList`.
 
 ### Centralize URLs in `Endpoints`
 
@@ -1084,6 +1090,8 @@ Don't `raise Exception("...")` — there's an existing class for almost every ca
 
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both:
 
+- **`definitions/` still holds some domain-shaped types.** The `definitions/` vs `model/` boundary is the target layout; leftovers such as rich shapes in `PerfTable.ts`, `RemoteConnection.ts`, `MlirServer.ts`, and `PlotConfigurations.ts` migrate **on-touch**, not in a big-bang move. New types follow the boundary; don't add more domain records under `definitions/`.
+- **Direct imports from `store/fileTransferRegistry.ts`.** Atoms and mutators are re-exported from `app.ts`; new call sites should import from there. Older hooks/components that still import the co-located module are on-touch cleanup.
 - **`extract_npe_name` is a misnomer.** It's used by both NPE and MLIR upload handlers. Rename to `extract_uploaded_name` is tracked as a follow-up; don't perpetuate the NPE-specific name in new helpers.
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload a state field called `errorMessage` with both success and failure text. A rename to `statusMessage` is pending.
 - **Upload size cap.** No `MAX_CONTENT_LENGTH` is set on the Flask app; large uploads succeed until they exhaust memory. Tracked as a separate hardening task.

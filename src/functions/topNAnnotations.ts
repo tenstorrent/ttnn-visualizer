@@ -4,7 +4,7 @@
 
 import { OpPerfAggregate } from './perfOverlay';
 import { formatDuration } from './formatting';
-import { TopNAnnotationMode } from '../definitions/TopNAnnotations';
+import { RankedAnnotation, SelectTopNParams, TopNAnnotationMode } from '../definitions/TopNAnnotations';
 import { L1PressureMetrics } from '../model/L1Pressure';
 
 /**
@@ -15,37 +15,8 @@ import { L1PressureMetrics } from '../model/L1Pressure';
  */
 export const isPerfMode = (mode: TopNAnnotationMode): boolean => mode !== TopNAnnotationMode.L1_FULLNESS;
 
-/**
- * One ranked op annotation. `t` is the colour-ramp position in `[0, 1]`,
- * normalised within the top-N slice (not across all ops) so the badge
- * colours visually distinguish #1 from #N even when the overall distribution
- * dwarfs the highlighted slice.
- *
- * `rowIndex` is the position of the op inside the *rendered* `operations`
- * array passed to `selectTopNAnnotations` — that array may be a filtered or
- * segmented subset (the DRAM tab's zoom segmentation is the main case), so
- * the rail and badge align with what the user actually sees, not with raw
- * op-id ordering.
- */
-export interface RankedAnnotation {
-    opId: number;
-    rowIndex: number;
-    rank: number;
-    t: number;
-    valueLabel: string;
-    rawValue: number;
-}
-
 interface OperationsLike {
     id: number;
-}
-
-export interface SelectTopNParams {
-    mode: TopNAnnotationMode;
-    n: number;
-    operations: readonly OperationsLike[];
-    perfAggregatesByOpId?: Map<number, OpPerfAggregate>;
-    l1PressureByOpId?: Map<number, L1PressureMetrics>;
 }
 
 // Op-id rendered before its metric is computed — sort tiebreaker, deterministic. Always
