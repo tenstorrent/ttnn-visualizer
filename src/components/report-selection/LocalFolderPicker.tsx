@@ -57,7 +57,9 @@ const LocalFolderPicker = ({
     const isDisabled = disabled || loading || !items || items.length === 0 || !instance;
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
-    const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
+    // SERVER_MODE hides delete entirely; loading also blocks trash while an open
+    // Select popover can still render items after the trigger disables.
+    const isDeleteDisabled = !!getServerConfig()?.SERVER_MODE || loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 
     // Linked first, unknown next, failed links last — preserve server order within each group.
@@ -96,7 +98,7 @@ const LocalFolderPicker = ({
                     }
                     roleStructure='listoption'
                     active={folder.path === activePath}
-                    disabled={modifiers.disabled}
+                    disabled={modifiers.disabled || loading}
                     onClick={handleClick}
                     onFocus={handleFocus}
                     icon={folder.path === activePath ? IconNames.SAVED : IconNames.DOCUMENT}
@@ -107,12 +109,13 @@ const LocalFolderPicker = ({
                     }
                 />
 
-                {handleDelete && !isDeleteDisabled && (
+                {handleDelete && !getServerConfig()?.SERVER_MODE && (
                     <>
                         <Button
                             aria-label='Delete report'
                             icon={IconNames.TRASH}
                             onClick={() => setFolderToDelete(folder)}
+                            disabled={isDeleteDisabled}
                             variant={ButtonVariant.MINIMAL}
                             intent={Intent.DANGER}
                         />
