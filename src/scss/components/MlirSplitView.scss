@@ -55,12 +55,24 @@
 }
 
 .mlir-split-divider {
+    position: relative;
     flex: 0 0 6px;
     cursor: col-resize;
-    background: $tt-grey-2;
     touch-action: none;
 
-    &:hover {
-        background: $tt-grey-3;
+    // Thin visible line centred in the wider (grab-friendly) hit area. Rest
+    // state stays legible against the $tt-grey-2 canvas (which the full-width
+    // divider previously matched, making it invisible until hover).
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0 auto 0 50%;
+        width: 2px;
+        background: $tt-grey-4;
+        transform: translateX(-50%);
+    }
+
+    &:hover::before {
+        background: $tt-grey-5;
     }
 }
