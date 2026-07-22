@@ -180,6 +180,10 @@ const MlirNodeDetailsPanelInner = ({
 }: MlirNodeDetailsPanelProps) => {
     const [collapsed, setCollapsed] = useAtom(mlirNodeDetailsCollapsedAtom);
 
+    // Collapsing needs a toggle handler to be useful; without one, fall back to
+    // the full panel rather than render a dead rail / collapse control.
+    const canCollapse = collapsible && onToggleExpand != null;
+
     const toggleSection = (key: SectionKey) => {
         setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
     };
@@ -220,7 +224,7 @@ const MlirNodeDetailsPanelInner = ({
         return ports;
     }, [outputsMetadata, outgoingEdges]);
 
-    if (collapsible && !expanded) {
+    if (canCollapse && !expanded) {
         return (
             <aside
                 className='mlir-node-details-panel mlir-node-details-rail'
@@ -277,7 +281,7 @@ const MlirNodeDetailsPanelInner = ({
                     </p>
                 </div>
                 <div className='mlir-node-details-actions'>
-                    {collapsible && (
+                    {canCollapse && (
                         <Tooltip content='Collapse details'>
                             <Button
                                 size={Size.SMALL}
