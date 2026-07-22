@@ -306,9 +306,7 @@ const MlirFileResultsOverlay = () => {
                     MLIR uploads
                 </h2>
 
-                <p className='mlir-file-results-hint'>
-                    Select up to two converted files. First is primary; second opens in split view.
-                </p>
+                <p className='mlir-file-results-hint'>Select up to two converted files.</p>
 
                 <MlirFileList
                     results={results ?? []}
