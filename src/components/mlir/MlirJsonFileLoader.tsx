@@ -15,7 +15,6 @@ import {
     mlirFileResultsOpenAtom,
     mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
-    mlirRetryServerAtom,
 } from '../../store/app';
 import { GraphBundle, MlirFileResult } from '../../model/MLIRJsonModel';
 import getResponseError from '../../functions/getResponseError';
@@ -50,7 +49,6 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const [mlirFileResults, setMlirFileResults] = useAtom(mlirFileResultsAtom);
     const setMlirFileResultsOpen = useSetAtom(mlirFileResultsOpenAtom);
     const setMlirRetryFiles = useSetAtom(mlirRetryFilesAtom);
-    const setMlirRetryServer = useSetAtom(mlirRetryServerAtom);
     const setMlirLoadedReports = useSetAtom(mlirLoadedReportsAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
@@ -116,7 +114,6 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
         try {
             if (server) {
                 setMlirRetryFiles(selectedFiles);
-                setMlirRetryServer(server);
 
                 // Files upload as one batch then convert in parallel on the
                 // server. Publish a pending row per file (without opening the
@@ -156,7 +153,6 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                     // permanently-converting entries behind the View button.
                     setMlirFileResults(null);
                     setMlirRetryFiles(null);
-                    setMlirRetryServer(null);
                     setUploadStatus(ConnectionTestStates.FAILED);
                     setErrorMessage('Upload failed');
                     return;
@@ -168,13 +164,11 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 const hasRetryableFailures = results.some((result) => result.status === ConnectionTestStates.FAILED);
                 if (!hasRetryableFailures) {
                     setMlirRetryFiles(null);
-                    setMlirRetryServer(null);
                 }
 
                 showResults(results);
             } else {
                 setMlirRetryFiles(null);
-                setMlirRetryServer(null);
                 showResults(await loadLocalFiles(files));
             }
         } catch (err: unknown) {
@@ -182,7 +176,6 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
             // permanently-converting entries behind the View button.
             setMlirFileResults(null);
             setMlirRetryFiles(null);
-            setMlirRetryServer(null);
             setUploadStatus(ConnectionTestStates.FAILED);
             setErrorMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));
         }

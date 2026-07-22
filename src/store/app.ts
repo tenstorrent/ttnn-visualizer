@@ -141,7 +141,6 @@ export const activeMlirJsonAtom = atom(
 export const mlirFileResultsAtom = atom<MlirFileResult[] | null>(null);
 export const mlirFileResultsOpenAtom = atom(false);
 export const mlirRetryFilesAtom = atom<File[] | null>(null);
-export const mlirRetryServerAtom = atom<MlirServerConnection | null>(null);
 export const mlirServersAtom = atomWithStorage<MlirServerConnection[]>('mlirServers', []);
 export const selectedMlirServerAtom = atomWithStorage<MlirServerConnection | null>('selectedMlirServer', null);
 export const mlirNodeDetailsCollapsedAtom = atomWithStorage<{ attrs: boolean; inputs: boolean; outputs: boolean }>(

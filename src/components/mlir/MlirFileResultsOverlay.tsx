@@ -18,7 +18,7 @@ import {
     mlirFileResultsOpenAtom,
     mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
-    mlirRetryServerAtom,
+    selectedMlirServerAtom,
 } from '../../store/app';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import createToastNotification from '../../functions/createToastNotification';
@@ -40,7 +40,8 @@ const MlirFileResultsOverlay = () => {
     const [results, setResults] = useAtom(mlirFileResultsAtom);
     const [isOpen, setIsOpen] = useAtom(mlirFileResultsOpenAtom);
     const retryFiles = useAtomValue(mlirRetryFilesAtom);
-    const retryServer = useAtomValue(mlirRetryServerAtom);
+    // Retries use the currently selected server (same constraint as uploads).
+    const retryServer = useAtomValue(selectedMlirServerAtom);
     const setMlirLoadedReports = useSetAtom(mlirLoadedReportsAtom);
     const { setActiveMlir, uploadMlirFileToServer } = useMlirRemote();
     const navigate = useNavigate();

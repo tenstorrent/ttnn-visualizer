@@ -16,7 +16,7 @@ import {
     mlirFileResultsOpenAtom,
     mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
-    mlirRetryServerAtom,
+    selectedMlirServerAtom,
 } from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
 import { MlirServerConnection } from '../src/definitions/MlirServer';
@@ -60,7 +60,7 @@ beforeEach(() => {
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
     getDefaultStore().set(mlirRetryFilesAtom, null);
-    getDefaultStore().set(mlirRetryServerAtom, null);
+    getDefaultStore().set(selectedMlirServerAtom, null);
     getDefaultStore().set(mlirLoadedReportsAtom, []);
 });
 
@@ -276,7 +276,7 @@ describe('MlirFileResultsOverlay', () => {
     it('retries conversion for a failed server file', async () => {
         const failedFile = new File(['module {}'], 'failed.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
-        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        getDefaultStore().set(selectedMlirServerAtom, SERVER);
         uploadMlirFileToServer.mockResolvedValueOnce({
             data: {
                 results: [
@@ -323,7 +323,7 @@ describe('MlirFileResultsOverlay', () => {
     it('keeps View disabled for failed rows while allowing Retry', async () => {
         const failedFile = new File(['module {}'], 'failed.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
-        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        getDefaultStore().set(selectedMlirServerAtom, SERVER);
         uploadMlirFileToServer.mockResolvedValueOnce({
             data: {
                 results: [
@@ -392,7 +392,7 @@ describe('MlirFileResultsOverlay', () => {
         const fileA = new File(['module {}'], 'failed-a.mlir');
         const fileB = new File(['module {}'], 'failed-b.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [fileA, fileB]);
-        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        getDefaultStore().set(selectedMlirServerAtom, SERVER);
 
         const retryDeferred: { resolve: ((value: unknown) => void) | null } = { resolve: null };
 
