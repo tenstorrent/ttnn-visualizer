@@ -1,0 +1,52 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/variables' as *;
+
+.mlir-page {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 0;
+
+    > .page-title {
+        flex: 0 0 auto;
+    }
+}
+
+// Once a graph is present, claim the space below the fixed app chrome (navbar +
+// footer bar) and let children span the width, so the title/loader take natural
+// height and the canvas flexes to fill the rest. The initial upload screen has
+// no graph, so it stays content-sized instead of reserving the full viewport.
+.mlir-page-graph {
+    align-items: stretch;
+    height: $mlir-page-height;
+}
+
+.mlir-loader-bar {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 5px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
+// Single-view graph slot: the graph fills the flex column and the toolbar floats
+// over its top-right corner instead of reserving its own row.
+.mlir-single-view {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.mlir-view-toolbar {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 5;
+    display: flex;
+    justify-content: flex-end;
+}

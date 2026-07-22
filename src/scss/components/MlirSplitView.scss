@@ -3,15 +3,14 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
-@use '../definitions/variables' as *;
 
-/* Split-pane container reserves the same vertical room as a single pane (shared
- * $mlir-view-pane-height), then lays the two panes out side by side with a
- * draggable divider between them. */
+/* Fills the graph slot in the `.mlir-page` flex column, then lays the two panes
+ * out side by side with a draggable divider between them. */
 .mlir-split-view {
     display: flex;
+    flex: 1 1 auto;
     width: 100%;
-    height: $mlir-view-pane-height;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -29,7 +28,8 @@
     flex: 1 1 0;
 }
 
-/* Fill the pane below its header, overriding the single-view 100vh height. */
+/* Fill the pane below its header; the shared `.mlir-view-pane` flex rule already
+ * grows, this pins width/height inside the split-pane column. */
 .mlir-split-pane .mlir-view-pane {
     flex: 1 1 0;
     width: 100%;

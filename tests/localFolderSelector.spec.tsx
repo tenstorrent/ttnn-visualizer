@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
@@ -120,7 +121,7 @@ it('renders the initial folder selector upload field states', async () => {
     });
 });
 
-it('disables local report selectors while an active report is being confirmed', () => {
+it('disables local report selectors and shows a loading spinner while an active report is being confirmed', () => {
     render(
         <TestProviders initialAtomValues={[[isActivatingReportAtom, true]]}>
             <LocalFolderSelector />
@@ -129,10 +130,11 @@ it('disables local report selectors while an active report is being confirmed', 
 
     getAllButtonsWithText(SELECT_REPORT_TEXT).forEach((button) => {
         expect(button).toHaveProperty('disabled', true);
+        expect(button.classList.contains(Classes.LOADING)).toBe(true);
     });
 });
 
-it('disables pickers while updateInstance is pending then re-enables', async () => {
+it('shows a loading spinner while updateInstance is pending then clears it', async () => {
     let resolveUpdate: ((value: unknown) => void) | undefined;
     mockUpdateInstance.mockImplementationOnce(
         () =>
@@ -156,6 +158,7 @@ it('disables pickers while updateInstance is pending then re-enables', async () 
     await waitFor(() => {
         getAllButtonsWithText(SELECT_REPORT_TEXT).forEach((button) => {
             expect(button).toHaveProperty('disabled', true);
+            expect(button.classList.contains(Classes.LOADING)).toBe(true);
         });
     }, WAIT_FOR_OPTIONS);
 
@@ -168,7 +171,9 @@ it('disables pickers while updateInstance is pending then re-enables', async () 
     );
 
     await waitFor(() => {
-        expect(getAllButtonsWithText(reportName)[0]).toHaveProperty('disabled', false);
+        const activeButton = getAllButtonsWithText(reportName)[0];
+        expect(activeButton).toHaveProperty('disabled', false);
+        expect(activeButton.classList.contains(Classes.LOADING)).toBe(false);
     }, WAIT_FOR_OPTIONS);
 });
 
