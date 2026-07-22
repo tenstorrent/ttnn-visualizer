@@ -18,7 +18,12 @@
     position: absolute;
     top: 0;
     right: 0;
-    width: 450px;
+
+    // Pane-relative width: caps the panel so a narrow split pane keeps a usable
+    // canvas, while a full-width single-view pane still lands at the 450px max.
+    // max-width pins it to the pane when it's narrower than the 280px floor.
+    width: clamp(280px, 40%, 450px);
+    max-width: 100%;
     height: 100%;
     z-index: 10;
     background: rgb(52 52 52 / 95%);
@@ -28,6 +33,15 @@
     display: flex;
     flex-direction: column;
     font-size: 12px;
+}
+
+// Collapsed form (split view): a compact top-right chip showing just the header
+// (selected op + expand/close) so the pane's canvas stays mostly uncovered.
+.mlir-node-details-rail {
+    width: auto;
+    max-width: min(280px, 100%);
+    height: auto;
+    overflow: hidden;
 }
 
 .mlir-node-details-header {
@@ -353,10 +367,4 @@
     word-break: break-all;
 }
 
-/* On narrower viewports, shrink the panel so the canvas remains usable. */
-@media screen and (width <= 1200px) {
-    .mlir-node-details-panel {
-        width: 360px;
-    }
-}
 /* stylelint-enable selector-class-pattern */

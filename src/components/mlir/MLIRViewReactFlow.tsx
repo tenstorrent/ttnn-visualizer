@@ -91,6 +91,9 @@ type MLNodeData = WorkerNode['data'] & {
 
 interface ViewProps {
     data: GraphBundle;
+    // Enables the details panel's collapse-to-rail affordance; the split view
+    // opts in because reclaiming a half-pane's width is worthwhile there.
+    detailsCollapsible?: boolean;
 }
 
 type MLNode = Node<MLNodeData>;
@@ -408,7 +411,7 @@ function builtGraphToReactFlow(built: BuiltGraph): { nodes: MLNode[]; edges: Edg
     return { nodes, edges };
 }
 
-const MlGraphInner = ({ data }: ViewProps) => {
+const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
     const { fitView, getViewport, setViewport, updateNode } = useReactFlow<MLNode, Edge>();
     // Unique per instance so two side-by-side panes don't emit colliding React
     // Flow marker/DOM ids (both panes can show the same graph.id).
@@ -418,6 +421,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    // Persists across selections (the panel remounts per node) but resets on
+    // graph switch via the keyed remount and on close (a full dismissal).
+    const [detailsExpanded, setDetailsExpanded] = useState(true);
     // Live op-name filter. `filterQuery` drives the input for instant visual
     // feedback; `appliedFilterQuery` is what the memo chain reads and lags
     // by `FILTER_DEBOUNCE_MS` on non-empty queries.
@@ -1187,6 +1193,13 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
     const closeDetailsPanel = useCallback(() => {
         setSelectedNodeId(null);
+        // Reopen expanded next time: close is a full dismissal, unlike moving
+        // the selection to another node (which keeps the collapse preference).
+        setDetailsExpanded(true);
+    }, []);
+
+    const toggleDetailsExpanded = useCallback(() => {
+        setDetailsExpanded((open) => !open);
     }, []);
 
     const recenterOnSelected = useCallback(() => {
@@ -1585,6 +1598,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     onClose={closeDetailsPanel}
                     onRecenter={recenterOnSelected}
                     onNavigateToNode={navigateToNode}
+                    collapsible={detailsCollapsible}
+                    expanded={detailsExpanded}
+                    onToggleExpand={toggleDetailsExpanded}
                 />
             )}
         </div>
