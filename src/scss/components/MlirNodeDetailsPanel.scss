@@ -34,7 +34,7 @@
 }
 
 // Collapsed form (split view): a compact top-right chip showing just the header
-// (selected op + expand/close) so the pane's canvas stays visible by default.
+// (selected op + expand/close) so the pane's canvas stays mostly uncovered.
 .mlir-node-details-rail {
     width: auto;
     max-width: 280px;

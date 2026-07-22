@@ -121,7 +121,7 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
                 {renderHeader('left', safeLeftIndex, setLeftIndex)}
                 <MlGraph
                     data={leftBundle}
-                    splitView
+                    detailsCollapsible
                 />
             </section>
 
@@ -139,7 +139,7 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
                 {renderHeader('right', safeRightIndex, setRightIndex)}
                 <MlGraph
                     data={rightBundle}
-                    splitView
+                    detailsCollapsible
                 />
             </section>
         </div>

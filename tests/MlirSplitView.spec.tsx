@@ -58,10 +58,18 @@ const stubRect = (element: HTMLElement, width: number): void => {
 // guard test below pins it to TEST_IDS.MLIR_GRAPH so the two can't drift.
 const { MLIR_GRAPH_TEST_ID } = vi.hoisted(() => ({ MLIR_GRAPH_TEST_ID: 'mlir-graph' }));
 
-// The real MlGraph spins up a layout worker + React Flow; stub it to just echo
-// the graph id it was handed so the test can assert per-pane wiring.
+// The real MlGraph spins up a layout worker + React Flow; stub it to echo the
+// graph id and the collapsible flag it was handed so the test can assert
+// per-pane wiring.
 vi.mock('../src/components/mlir/MLIRViewReactFlow', () => ({
-    default: ({ data }: { data: GraphBundle }) => <div data-testid={MLIR_GRAPH_TEST_ID}>{data.graphs[0]?.id}</div>,
+    default: ({ data, detailsCollapsible }: { data: GraphBundle; detailsCollapsible?: boolean }) => (
+        <div
+            data-testid={MLIR_GRAPH_TEST_ID}
+            data-details-collapsible={String(!!detailsCollapsible)}
+        >
+            {data.graphs[0]?.id}
+        </div>
+    ),
 }));
 
 afterEach(cleanup);
@@ -76,6 +84,18 @@ const paneGraphIds = (): [string, string] => {
 describe('MlirSplitView', () => {
     it('keeps the MlGraph stub test id in sync with the shared constant', () => {
         expect(MLIR_GRAPH_TEST_ID).toBe(TEST_IDS.MLIR_GRAPH);
+    });
+
+    it('marks both panes details-collapsible so the panel can collapse to a rail', () => {
+        render(
+            <MlirSplitView
+                data={makeData(['g0', 'g1'])}
+                onExit={() => {}}
+            />,
+        );
+        const panes = screen.getAllByTestId(TEST_IDS.MLIR_GRAPH);
+        expect(panes).toHaveLength(2);
+        panes.forEach((pane) => expect(pane).toHaveAttribute('data-details-collapsible', 'true'));
     });
 
     it('opens both panes on the same (first) graph', () => {
