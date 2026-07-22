@@ -4,10 +4,10 @@
 
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { GraphBundle } from '../src/model/MLIRJsonModel';
-import { mlirLoadedReportsAtom } from '../src/store/app';
+import { mlirLoadedReportsAtom, mlirSplitViewEpochAtom } from '../src/store/app';
 
 // Route wiring only: stub the heavy leaves (graph view, split view, loaders) so
 // the test can assert the Split-view toggle mounts/unmounts the right subtree.
@@ -97,6 +97,20 @@ describe('MLIR route split-view wiring', () => {
         expect(screen.getByRole('button', { name: 'Split view' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Split view' }));
+        expect(screen.getByTestId('mlir-split-view')).toBeInTheDocument();
+    });
+
+    it('re-opens auto-split after dismiss when a new two-file View bumps the epoch', () => {
+        mockUseMlir.mockReturnValue({ data: null, isLoading: false, error: undefined });
+        const { store } = renderRoute(sampleData, peerData);
+
+        fireEvent.click(screen.getByRole('button', { name: 'close split' }));
+        expect(screen.getByTestId('mlir-single-graph')).toBeInTheDocument();
+
+        // Same peer names as before — without bumping the epoch, dismiss would stick.
+        act(() => {
+            store.set(mlirSplitViewEpochAtom, store.get(mlirSplitViewEpochAtom) + 1);
+        });
         expect(screen.getByTestId('mlir-split-view')).toBeInTheDocument();
     });
 

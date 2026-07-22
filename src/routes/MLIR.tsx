@@ -9,7 +9,7 @@ import { useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import { Button, ButtonVariant, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { mlirLoadedReportsAtom } from '../store/app';
+import { mlirLoadedReportsAtom, mlirSplitViewEpochAtom } from '../store/app';
 import { MLIRValidationError } from '../definitions/MLIRData';
 import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
@@ -22,6 +22,7 @@ import getServerConfig from '../functions/getServerConfig';
 const MLIR = () => {
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
     const loadedReports = useAtomValue(mlirLoadedReportsAtom);
+    const splitViewEpoch = useAtomValue(mlirSplitViewEpochAtom);
     const primaryReport = loadedReports[0] ?? null;
     const peerReport = loadedReports[1] ?? null;
     const mlirJsonFilename = primaryReport?.name ?? null;
@@ -29,7 +30,7 @@ const MLIR = () => {
     // Toolbar / explicit open. Auto-open from a two-file View is separate so
     // closing split can dismiss without dropping the peer report.
     const [manualSplitView, setManualSplitView] = useState(false);
-    const [dismissedPeerKey, setDismissedPeerKey] = useState<string | null>(null);
+    const [dismissedSplitEpoch, setDismissedSplitEpoch] = useState<number | null>(null);
 
     // On a fresh page load the in-memory graph is gone but the instance may
     // still reference a persisted MLIR report — fetch it back by name. Skip the
@@ -74,7 +75,7 @@ const MLIR = () => {
     }, [isLoading, httpError, mlirJsonFilename, mlirData]);
 
     const peerKey = peerReport?.name ?? null;
-    const autoSplitView = !!peerReport?.data && peerKey !== null && peerKey !== dismissedPeerKey;
+    const autoSplitView = !!peerReport?.data && peerKey !== null && dismissedSplitEpoch !== splitViewEpoch;
     const splitView = manualSplitView || autoSplitView;
 
     if (isServerMode) {
@@ -89,7 +90,7 @@ const MLIR = () => {
     const handleExitSplit = () => {
         setManualSplitView(false);
         if (peerKey) {
-            setDismissedPeerKey(peerKey);
+            setDismissedSplitEpoch(splitViewEpoch);
         }
     };
 

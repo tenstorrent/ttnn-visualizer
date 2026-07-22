@@ -16,6 +16,7 @@ import {
     mlirFileResultsOpenAtom,
     mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
+    mlirSplitViewEpochAtom,
     selectedMlirServerAtom,
 } from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
@@ -62,6 +63,7 @@ beforeEach(() => {
     getDefaultStore().set(mlirRetryFilesAtom, null);
     getDefaultStore().set(selectedMlirServerAtom, null);
     getDefaultStore().set(mlirLoadedReportsAtom, []);
+    getDefaultStore().set(mlirSplitViewEpochAtom, 0);
 });
 
 afterEach(() => cleanup());
@@ -224,6 +226,7 @@ describe('MlirFileResultsOverlay', () => {
                 { name: 'b', data: graphB },
             ]);
         });
+        expect(getDefaultStore().get(mlirSplitViewEpochAtom)).toBe(1);
         expect(getDefaultStore().get(activeMlirJsonAtom)).toBe('a');
         // Persist index 0 only — peer is session-scoped.
         expect(setActiveMlir).toHaveBeenCalledTimes(1);

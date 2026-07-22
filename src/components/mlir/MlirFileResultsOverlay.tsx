@@ -18,6 +18,7 @@ import {
     mlirFileResultsOpenAtom,
     mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
+    mlirSplitViewEpochAtom,
     selectedMlirServerAtom,
 } from '../../store/app';
 import useMlirRemote from '../../hooks/useMlirRemote';
@@ -43,6 +44,7 @@ const MlirFileResultsOverlay = () => {
     // Retries use the currently selected server (same constraint as uploads).
     const retryServer = useAtomValue(selectedMlirServerAtom);
     const setMlirLoadedReports = useSetAtom(mlirLoadedReportsAtom);
+    const setSplitViewEpoch = useSetAtom(mlirSplitViewEpochAtom);
     const { setActiveMlir, uploadMlirFileToServer } = useMlirRemote();
     const navigate = useNavigate();
     const location = useLocation();
@@ -240,6 +242,9 @@ const MlirFileResultsOverlay = () => {
         const loadedReports: MlirLoadedReport[] = [{ name: primary.name, data: primary.graph }];
         if (comparison) {
             loadedReports.push({ name: comparison.name, data: comparison.graph });
+            // Force auto-split even if the user previously dismissed split for
+            // the same peer name while staying on the MLIR route.
+            setSplitViewEpoch((epoch) => epoch + 1);
         }
         setMlirLoadedReports(loadedReports);
 

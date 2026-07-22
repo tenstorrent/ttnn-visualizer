@@ -130,9 +130,15 @@ export const mlirLoadedReportsAtom = atom<MlirLoadedReport[]>([]);
 // a name-only primary (reload fetch) or clears it.
 export const activeMlirJsonAtom = atom(
     (get) => get(mlirLoadedReportsAtom)[0]?.name ?? null,
-    (_get, set, name: string | null) => {
+    (get, set, name: string | null) => {
         if (name === null) {
             set(mlirLoadedReportsAtom, []);
+            return;
+        }
+        const current = get(mlirLoadedReportsAtom);
+        // Keep in-memory primary data and split peers when re-asserting the same
+        // active name (restore used to replace the list with `{ data: null }`).
+        if (current[0]?.name === name && current[0]?.data) {
             return;
         }
         set(mlirLoadedReportsAtom, [{ name, data: null }]);
@@ -141,6 +147,9 @@ export const activeMlirJsonAtom = atom(
 export const mlirFileResultsAtom = atom<MlirFileResult[] | null>(null);
 export const mlirFileResultsOpenAtom = atom(false);
 export const mlirRetryFilesAtom = atom<File[] | null>(null);
+// Bumped on each two-file View so the MLIR route can auto-open split again
+// after the user previously dismissed it for the same peer.
+export const mlirSplitViewEpochAtom = atom(0);
 export const mlirServersAtom = atomWithStorage<MlirServerConnection[]>('mlirServers', []);
 export const selectedMlirServerAtom = atomWithStorage<MlirServerConnection | null>('selectedMlirServer', null);
 export const mlirNodeDetailsCollapsedAtom = atomWithStorage<{ attrs: boolean; inputs: boolean; outputs: boolean }>(
