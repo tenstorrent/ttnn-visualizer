@@ -24,6 +24,14 @@ export interface MlirFileResult {
     persisted: boolean;
 }
 
+// Session-loaded MLIR reports for the viewer (max two). Index 0 is the
+// instance-persisted / nav-active report; further entries are split-pane peers.
+export interface MlirLoadedReport {
+    name: string;
+    // Null while restoring a persisted name before `/api/mlir` returns.
+    data: GraphBundle | null;
+}
+
 export interface GraphDocument {
     id: string; // e.g. "stablehlo_sdy.mlir"
     nodes: GraphNode[];

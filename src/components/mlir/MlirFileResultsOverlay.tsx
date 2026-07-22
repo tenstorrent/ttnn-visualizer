@@ -14,19 +14,17 @@ import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { OVERLAY_HEADING_ICON_SIZE } from '../../definitions/UiConfig';
 import ROUTES from '../../definitions/Routes';
 import {
-    activeMlirDataAtom,
-    activeMlirJsonAtom,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
+    mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
     mlirRetryServerAtom,
-    setComparisonMlirAtom,
 } from '../../store/app';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
-import { MlirFileResult } from '../../model/MLIRJsonModel';
+import { MlirFileResult, MlirLoadedReport } from '../../model/MLIRJsonModel';
 import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
 import 'styles/components/MlirFileResultsOverlay.scss';
 
@@ -43,9 +41,7 @@ const MlirFileResultsOverlay = () => {
     const [isOpen, setIsOpen] = useAtom(mlirFileResultsOpenAtom);
     const retryFiles = useAtomValue(mlirRetryFilesAtom);
     const retryServer = useAtomValue(mlirRetryServerAtom);
-    const setActiveMlirData = useSetAtom(activeMlirDataAtom);
-    const setActiveMlirJson = useSetAtom(activeMlirJsonAtom);
-    const setComparisonMlir = useSetAtom(setComparisonMlirAtom);
+    const setMlirLoadedReports = useSetAtom(mlirLoadedReportsAtom);
     const { setActiveMlir, uploadMlirFileToServer } = useMlirRemote();
     const navigate = useNavigate();
     const location = useLocation();
@@ -253,20 +249,16 @@ const MlirFileResultsOverlay = () => {
 
         const [primary, comparison] = selectedResults;
         // Graphs are already relabelled at results ingest (loader / retry).
-        setActiveMlirData(primary.graph);
-        setActiveMlirJson(primary.name);
-
+        // Index 0 is the instance-persisted report; optional peer is for split.
+        const loadedReports: MlirLoadedReport[] = [{ name: primary.name, data: primary.graph }];
         if (comparison) {
-            setComparisonMlir({ data: comparison.graph, name: comparison.name });
-        } else {
-            // Single-file View must drop any prior cross-file comparison so the
-            // route does not reopen in split with a stale right pane.
-            setComparisonMlir(null);
+            loadedReports.push({ name: comparison.name, data: comparison.graph });
         }
+        setMlirLoadedReports(loadedReports);
 
         // Local JSON loads live only in memory; only server uploads are stored
         // on disk and can be recorded as the instance's active MLIR so a reload
-        // restores them. Persist primary only — comparison is session-scoped.
+        // restores them. Persist index 0 only.
         if (primary.persisted) {
             try {
                 await setActiveMlir(primary.name, primary.host);

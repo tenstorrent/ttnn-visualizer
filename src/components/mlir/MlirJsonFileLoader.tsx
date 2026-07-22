@@ -13,9 +13,9 @@ import {
     activeMlirJsonAtom,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
+    mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
     mlirRetryServerAtom,
-    setComparisonMlirAtom,
 } from '../../store/app';
 import { GraphBundle, MlirFileResult } from '../../model/MLIRJsonModel';
 import getResponseError from '../../functions/getResponseError';
@@ -51,13 +51,18 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const setMlirFileResultsOpen = useSetAtom(mlirFileResultsOpenAtom);
     const setMlirRetryFiles = useSetAtom(mlirRetryFilesAtom);
     const setMlirRetryServer = useSetAtom(mlirRetryServerAtom);
-    const setComparisonMlir = useSetAtom(setComparisonMlirAtom);
+    const setMlirLoadedReports = useSetAtom(mlirLoadedReportsAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
-    // Publish a fresh batch of results and open the overlay. Clearing comparison
-    // here (and before pending server rows) avoids a stale cross-file right pane.
+    // Drop split peers on a new results batch so a stale second report cannot
+    // linger under a previous primary. Keep index 0 if present.
+    const clearSplitPeers = () => {
+        setMlirLoadedReports((current) => current.slice(0, 1));
+    };
+
+    // Publish a fresh batch of results and open the overlay.
     const showResults = (results: MlirFileResult[]) => {
-        setComparisonMlir(null);
+        clearSplitPeers();
         setMlirFileResults(results);
         setMlirFileResultsOpen(true);
     };
@@ -118,7 +123,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 // results overlay) so the processing overlay can show each file
                 // with a spinner; replaced with outcomes once the request
                 // resolves.
-                setComparisonMlir(null);
+                clearSplitPeers();
                 setMlirFileResults(
                     selectedFiles.map((file) => ({
                         filename: file.name,

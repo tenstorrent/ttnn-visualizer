@@ -7,12 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { GraphBundle } from '../src/model/MLIRJsonModel';
-import {
-    activeMlirDataAtom,
-    activeMlirJsonAtom,
-    comparisonMlirDataAtom,
-    comparisonMlirJsonAtom,
-} from '../src/store/app';
+import { mlirLoadedReportsAtom } from '../src/store/app';
 
 // Route wiring only: stub the heavy leaves (graph view, split view, loaders) so
 // the test can assert the Split-view toggle mounts/unmounts the right subtree.
@@ -41,17 +36,16 @@ vi.mock('../src/components/mlir/MlirSplitView', () => ({
 import MLIR from '../src/routes/MLIR';
 
 const sampleData = { graphs: [{ id: 'g0', nodes: [] }] } as unknown as GraphBundle;
-const comparisonData = { graphs: [{ id: 'g1', nodes: [] }] } as unknown as GraphBundle;
+const peerData = { graphs: [{ id: 'g1', nodes: [] }] } as unknown as GraphBundle;
 
-const renderRoute = (data: GraphBundle | null, comparison: GraphBundle | null = null) => {
+const renderRoute = (data: GraphBundle | null, peer: GraphBundle | null = null) => {
     const store = createStore();
     if (data) {
-        store.set(activeMlirDataAtom, data);
-        store.set(activeMlirJsonAtom, 'primary');
-    }
-    if (comparison) {
-        store.set(comparisonMlirDataAtom, comparison);
-        store.set(comparisonMlirJsonAtom, 'compare');
+        const reports = [{ name: 'primary', data }];
+        if (peer) {
+            reports.push({ name: 'compare', data: peer });
+        }
+        store.set(mlirLoadedReportsAtom, reports);
     }
     return {
         store,
@@ -85,18 +79,20 @@ describe('MLIR route split-view wiring', () => {
         expect(screen.getByRole('button', { name: 'Split view' })).toBeInTheDocument();
     });
 
-    it('opens cross-file split when comparison data is present and keeps it on close', () => {
+    it('opens split when a peer report is present and keeps it on close', () => {
         mockUseMlir.mockReturnValue({ data: null, isLoading: false, error: undefined });
-        const { store } = renderRoute(sampleData, comparisonData);
+        const { store } = renderRoute(sampleData, peerData);
 
         expect(screen.getByTestId('mlir-split-view')).toBeInTheDocument();
         expect(screen.queryByTestId('mlir-single-graph')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Split view' })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'close split' }));
-        // Closing only hides split — comparison stays so toolbar split can offer both reports.
-        expect(store.get(comparisonMlirDataAtom)).toEqual(comparisonData);
-        expect(store.get(comparisonMlirJsonAtom)).toBe('compare');
+        // Closing only hides split — peer stays so toolbar split can offer both reports.
+        expect(store.get(mlirLoadedReportsAtom)).toEqual([
+            { name: 'primary', data: sampleData },
+            { name: 'compare', data: peerData },
+        ]);
         expect(screen.getByTestId('mlir-single-graph')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Split view' })).toBeInTheDocument();
 

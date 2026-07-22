@@ -9,7 +9,7 @@ import { useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import { Button, ButtonVariant, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { activeMlirDataAtom, activeMlirJsonAtom, comparisonMlirDataAtom, comparisonMlirJsonAtom } from '../store/app';
+import { mlirLoadedReportsAtom } from '../store/app';
 import { MLIRValidationError } from '../definitions/MLIRData';
 import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
@@ -21,14 +21,15 @@ import getServerConfig from '../functions/getServerConfig';
 
 const MLIR = () => {
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
-    const activeMlirData = useAtomValue(activeMlirDataAtom);
-    const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
-    const comparisonMlirData = useAtomValue(comparisonMlirDataAtom);
-    const comparisonMlirJson = useAtomValue(comparisonMlirJsonAtom);
+    const loadedReports = useAtomValue(mlirLoadedReportsAtom);
+    const primaryReport = loadedReports[0] ?? null;
+    const peerReport = loadedReports[1] ?? null;
+    const mlirJsonFilename = primaryReport?.name ?? null;
+    const activeMlirData = primaryReport?.data ?? null;
     // Toolbar / explicit open. Auto-open from a two-file View is separate so
-    // closing split can dismiss without clearing the comparison reports.
+    // closing split can dismiss without dropping the peer report.
     const [manualSplitView, setManualSplitView] = useState(false);
-    const [dismissedComparisonKey, setDismissedComparisonKey] = useState<string | null>(null);
+    const [dismissedPeerKey, setDismissedPeerKey] = useState<string | null>(null);
 
     // On a fresh page load the in-memory graph is gone but the instance may
     // still reference a persisted MLIR report — fetch it back by name. Skip the
@@ -46,11 +47,11 @@ const MLIR = () => {
             const key = mlirJsonFilename ?? mlirData.graphs[0]?.id ?? 'primary';
             list.push({ key, label: key, data: mlirData });
         }
-        if (comparisonMlirData && comparisonMlirJson) {
-            list.push({ key: comparisonMlirJson, label: comparisonMlirJson, data: comparisonMlirData });
+        if (peerReport?.data) {
+            list.push({ key: peerReport.name, label: peerReport.name, data: peerReport.data });
         }
         return list;
-    }, [mlirData, mlirJsonFilename, comparisonMlirData, comparisonMlirJson]);
+    }, [mlirData, mlirJsonFilename, peerReport]);
 
     const errorCode = useMemo(() => {
         if (isLoading) {
@@ -72,8 +73,8 @@ const MLIR = () => {
         return MLIRValidationError.OK;
     }, [isLoading, httpError, mlirJsonFilename, mlirData]);
 
-    const comparisonKey = comparisonMlirJson;
-    const autoSplitView = !!comparisonMlirData && comparisonKey !== null && comparisonKey !== dismissedComparisonKey;
+    const peerKey = peerReport?.name ?? null;
+    const autoSplitView = !!peerReport?.data && peerKey !== null && peerKey !== dismissedPeerKey;
     const splitView = manualSplitView || autoSplitView;
 
     if (isServerMode) {
@@ -87,8 +88,8 @@ const MLIR = () => {
 
     const handleExitSplit = () => {
         setManualSplitView(false);
-        if (comparisonKey) {
-            setDismissedComparisonKey(comparisonKey);
+        if (peerKey) {
+            setDismissedPeerKey(peerKey);
         }
     };
 

@@ -11,12 +11,10 @@ import MlirFileResultsOverlay from '../src/components/mlir/MlirFileResultsOverla
 import MlirJsonFileLoader from '../src/components/mlir/MlirJsonFileLoader';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import {
-    activeMlirDataAtom,
     activeMlirJsonAtom,
-    comparisonMlirDataAtom,
-    comparisonMlirJsonAtom,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
+    mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
     mlirRetryServerAtom,
 } from '../src/store/app';
@@ -63,10 +61,7 @@ beforeEach(() => {
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
     getDefaultStore().set(mlirRetryFilesAtom, null);
     getDefaultStore().set(mlirRetryServerAtom, null);
-    getDefaultStore().set(activeMlirDataAtom, null);
-    getDefaultStore().set(activeMlirJsonAtom, null);
-    getDefaultStore().set(comparisonMlirDataAtom, null);
-    getDefaultStore().set(comparisonMlirJsonAtom, null);
+    getDefaultStore().set(mlirLoadedReportsAtom, []);
 });
 
 afterEach(() => cleanup());
@@ -125,7 +120,7 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
         await waitFor(() => {
-            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'a', data: GRAPH }]);
         });
         expect(getDefaultStore().get(activeMlirJsonAtom)).toBe('a');
         expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
@@ -166,7 +161,7 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
         await waitFor(() => {
-            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'a', data: GRAPH }]);
         });
         expect(setActiveMlir).not.toHaveBeenCalled();
     });
@@ -191,13 +186,14 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
         await waitFor(() => {
-            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([
+                { name: 'a', data: GRAPH },
+                { name: 'b', data: graphB },
+            ]);
         });
-        expect(getDefaultStore().get(comparisonMlirDataAtom)).toEqual(graphB);
-        expect(getDefaultStore().get(comparisonMlirJsonAtom)).toBe('b');
     });
 
-    it('opens two selected files as primary + comparison via View', async () => {
+    it('opens two selected files as primary + peer via View', async () => {
         const graphB: GraphBundle = { graphs: [{ id: 'gb', nodes: [] }] };
         renderOverlay([
             {
@@ -223,21 +219,24 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
         await waitFor(() => {
-            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([
+                { name: 'a', data: GRAPH },
+                { name: 'b', data: graphB },
+            ]);
         });
         expect(getDefaultStore().get(activeMlirJsonAtom)).toBe('a');
-        expect(getDefaultStore().get(comparisonMlirDataAtom)).toEqual(graphB);
-        expect(getDefaultStore().get(comparisonMlirJsonAtom)).toBe('b');
-        // Persist primary only — comparison is session-scoped.
+        // Persist index 0 only — peer is session-scoped.
         expect(setActiveMlir).toHaveBeenCalledTimes(1);
         expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
         expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'a.mlir / b.mlir', 'success');
     });
 
-    it('clears a prior comparison when View commits a single file', async () => {
+    it('replaces a prior peer when View commits a single file', async () => {
         const graphB: GraphBundle = { graphs: [{ id: 'gb', nodes: [] }] };
-        getDefaultStore().set(comparisonMlirDataAtom, graphB);
-        getDefaultStore().set(comparisonMlirJsonAtom, 'b');
+        getDefaultStore().set(mlirLoadedReportsAtom, [
+            { name: 'a', data: GRAPH },
+            { name: 'b', data: graphB },
+        ]);
 
         renderOverlay([
             { filename: 'a.json', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: false },
@@ -247,10 +246,8 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
         await waitFor(() => {
-            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'a', data: GRAPH }]);
         });
-        expect(getDefaultStore().get(comparisonMlirDataAtom)).toBeNull();
-        expect(getDefaultStore().get(comparisonMlirJsonAtom)).toBeNull();
     });
 
     it('does not show a success toast when persisting active MLIR fails', async () => {
