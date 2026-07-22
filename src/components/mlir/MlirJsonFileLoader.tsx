@@ -21,6 +21,7 @@ import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
 import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
 import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
+import uniqueMlirName from '../../functions/uniqueMlirName';
 import 'styles/components/FileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -71,12 +72,20 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
     // Parse already-processed MLIR JSON files in the browser, bypassing the
     // Model Explorer conversion backend. Each file is parsed independently so
     // one malformed file doesn't sink the rest.
-    const loadLocalFiles = async (files: FileList): Promise<MlirFileResult[]> =>
-        Promise.all(
-            Array.from(files).map(async (file): Promise<MlirFileResult> => {
+    const loadLocalFiles = async (files: FileList): Promise<MlirFileResult[]> => {
+        // Pre-assign unique names synchronously before starting async I/O so
+        // the within-batch de-duplication mirrors the backend `_unique_mlir_name`
+        // scheme: first file keeps the stem, subsequent same-stem files become
+        // `stem (2)`, `stem (3)`, …  Name assignment must run before the async
+        // reads to guarantee ordering even when multiple awaits are in flight.
+        const usedNames = new Set<string>();
+        const names = Array.from(files).map((file) => uniqueMlirName(sanitiseFileName(file.name), usedNames));
+
+        return Promise.all(
+            Array.from(files).map(async (file, index): Promise<MlirFileResult> => {
+                const name = names[index];
                 try {
                     const graph = JSON.parse(await file.text()) as GraphBundle;
-                    const name = sanitiseFileName(file.name);
                     return {
                         filename: file.name,
                         name,
@@ -96,6 +105,7 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                 }
             }),
         );
+    };
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         // Guard *before* mutating state so cancelling the OS file dialog
