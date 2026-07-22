@@ -20,6 +20,7 @@ import {
 import { GraphBundle, MlirFileResult } from '../../model/MLIRJsonModel';
 import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
+import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
 import 'styles/components/FileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -69,11 +70,12 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
             Array.from(files).map(async (file): Promise<MlirFileResult> => {
                 try {
                     const graph = JSON.parse(await file.text()) as GraphBundle;
+                    const name = sanitiseFileName(file.name);
                     return {
                         filename: file.name,
-                        name: sanitiseFileName(file.name),
+                        name,
                         status: ConnectionTestStates.OK,
-                        graph,
+                        graph: relabelMlirGraphIds(graph, name),
                         persisted: false,
                     };
                 } catch {
@@ -137,7 +139,10 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                     name: result.name,
                     status: result.status,
                     message: result.message ?? result.detail,
-                    graph: result.graph ?? null,
+                    graph:
+                        result.graph && result.name
+                            ? relabelMlirGraphIds(result.graph, result.name)
+                            : (result.graph ?? null),
                     persisted: true,
                 }));
 

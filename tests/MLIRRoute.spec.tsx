@@ -7,7 +7,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { GraphBundle } from '../src/model/MLIRJsonModel';
-import { activeMlirDataAtom, comparisonMlirDataAtom, comparisonMlirJsonAtom } from '../src/store/app';
+import {
+    activeMlirDataAtom,
+    activeMlirJsonAtom,
+    comparisonMlirDataAtom,
+    comparisonMlirJsonAtom,
+} from '../src/store/app';
 
 // Route wiring only: stub the heavy leaves (graph view, split view, loaders) so
 // the test can assert the Split-view toggle mounts/unmounts the right subtree.
@@ -42,6 +47,7 @@ const renderRoute = (data: GraphBundle | null, comparison: GraphBundle | null = 
     const store = createStore();
     if (data) {
         store.set(activeMlirDataAtom, data);
+        store.set(activeMlirJsonAtom, 'primary');
     }
     if (comparison) {
         store.set(comparisonMlirDataAtom, comparison);
@@ -79,7 +85,7 @@ describe('MLIR route split-view wiring', () => {
         expect(screen.getByRole('button', { name: 'Split view' })).toBeInTheDocument();
     });
 
-    it('opens cross-file split when comparison data is present', () => {
+    it('opens cross-file split when comparison data is present and keeps it on close', () => {
         mockUseMlir.mockReturnValue({ data: null, isLoading: false, error: undefined });
         const { store } = renderRoute(sampleData, comparisonData);
 
@@ -88,10 +94,14 @@ describe('MLIR route split-view wiring', () => {
         expect(screen.queryByRole('button', { name: 'Split view' })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'close split' }));
-        expect(store.get(comparisonMlirDataAtom)).toBeNull();
-        expect(store.get(comparisonMlirJsonAtom)).toBeNull();
+        // Closing only hides split — comparison stays so toolbar split can offer both reports.
+        expect(store.get(comparisonMlirDataAtom)).toEqual(comparisonData);
+        expect(store.get(comparisonMlirJsonAtom)).toBe('compare');
         expect(screen.getByTestId('mlir-single-graph')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Split view' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Split view' }));
+        expect(screen.getByTestId('mlir-split-view')).toBeInTheDocument();
     });
 
     it('hides the split-view toggle while a report is loading', () => {

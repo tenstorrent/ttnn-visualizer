@@ -5,22 +5,16 @@
 import { Helmet } from 'react-helmet-async';
 import { useMemo, useState } from 'react';
 import { Navigate } from 'react-router';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import { Button, ButtonVariant, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import {
-    activeMlirDataAtom,
-    activeMlirJsonAtom,
-    comparisonMlirDataAtom,
-    comparisonMlirJsonAtom,
-    setComparisonMlirAtom,
-} from '../store/app';
+import { activeMlirDataAtom, activeMlirJsonAtom, comparisonMlirDataAtom, comparisonMlirJsonAtom } from '../store/app';
 import { MLIRValidationError } from '../definitions/MLIRData';
 import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
 import MlGraph from '../components/mlir/MLIRViewReactFlow';
-import MlirSplitView from '../components/mlir/MlirSplitView';
+import MlirSplitView, { type MlirSplitReport } from '../components/mlir/MlirSplitView';
 import MlirProcessingStatus from '../components/MlirProcessingStatus';
 import { useMlir } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
@@ -31,9 +25,10 @@ const MLIR = () => {
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
     const comparisonMlirData = useAtomValue(comparisonMlirDataAtom);
     const comparisonMlirJson = useAtomValue(comparisonMlirJsonAtom);
-    const setComparisonMlir = useSetAtom(setComparisonMlirAtom);
-    // In-file split only; cross-file split is derived from comparisonMlirData.
-    const [inFileSplitView, setInFileSplitView] = useState(false);
+    // Toolbar / explicit open. Auto-open from a two-file View is separate so
+    // closing split can dismiss without clearing the comparison reports.
+    const [manualSplitView, setManualSplitView] = useState(false);
+    const [dismissedComparisonKey, setDismissedComparisonKey] = useState<string | null>(null);
 
     // On a fresh page load the in-memory graph is gone but the instance may
     // still reference a persisted MLIR report — fetch it back by name. Skip the
@@ -44,6 +39,18 @@ const MLIR = () => {
         error: httpError,
     } = useMlir(isServerMode || activeMlirData ? null : mlirJsonFilename);
     const mlirData = activeMlirData ?? restoredMlirData ?? null;
+
+    const reports = useMemo<MlirSplitReport[]>(() => {
+        const list: MlirSplitReport[] = [];
+        if (mlirData) {
+            const key = mlirJsonFilename ?? mlirData.graphs[0]?.id ?? 'primary';
+            list.push({ key, label: key, data: mlirData });
+        }
+        if (comparisonMlirData && comparisonMlirJson) {
+            list.push({ key: comparisonMlirJson, label: comparisonMlirJson, data: comparisonMlirData });
+        }
+        return list;
+    }, [mlirData, mlirJsonFilename, comparisonMlirData, comparisonMlirJson]);
 
     const errorCode = useMemo(() => {
         if (isLoading) {
@@ -63,7 +70,11 @@ const MLIR = () => {
         }
 
         return MLIRValidationError.OK;
-    }, [isLoading, httpError?.status, mlirJsonFilename, mlirData]);
+    }, [isLoading, httpError, mlirJsonFilename, mlirData]);
+
+    const comparisonKey = comparisonMlirJson;
+    const autoSplitView = !!comparisonMlirData && comparisonKey !== null && comparisonKey !== dismissedComparisonKey;
+    const splitView = manualSplitView || autoSplitView;
 
     if (isServerMode) {
         return (
@@ -74,8 +85,15 @@ const MLIR = () => {
         );
     }
 
+    const handleExitSplit = () => {
+        setManualSplitView(false);
+        if (comparisonKey) {
+            setDismissedComparisonKey(comparisonKey);
+        }
+    };
+
     let graphContent;
-    if (!mlirData || errorCode !== MLIRValidationError.OK) {
+    if (!mlirData || errorCode !== MLIRValidationError.OK || reports.length === 0) {
         graphContent = (
             <MlirProcessingStatus
                 errorCode={errorCode}
@@ -83,22 +101,14 @@ const MLIR = () => {
                 hasUploadedFile={!!mlirJsonFilename}
             />
         );
-    } else if (comparisonMlirData) {
+    } else if (splitView) {
         graphContent = (
             <MlirSplitView
-                leftData={mlirData}
-                rightData={comparisonMlirData}
-                leftLabel={mlirJsonFilename}
-                rightLabel={comparisonMlirJson}
-                onExit={() => setComparisonMlir(null)}
-            />
-        );
-    } else if (inFileSplitView) {
-        graphContent = (
-            <MlirSplitView
-                leftData={mlirData}
-                rightData={mlirData}
-                onExit={() => setInFileSplitView(false)}
+                key={reports.map((report) => report.key).join('|')}
+                reports={reports}
+                initialLeftKey={reports[0].key}
+                initialRightKey={reports[reports.length > 1 ? 1 : 0].key}
+                onExit={handleExitSplit}
             />
         );
     } else {
@@ -110,7 +120,7 @@ const MLIR = () => {
                         variant={ButtonVariant.MINIMAL}
                         icon={IconNames.PANEL_STATS}
                         text='Split view'
-                        onClick={() => setInFileSplitView(true)}
+                        onClick={() => setManualSplitView(true)}
                     />
                 </div>
                 <MlGraph data={mlirData} />

@@ -25,6 +25,7 @@ from ttnn_visualizer.mlir import (
     _is_extension_missing,
     _normalise_convert_response,
     is_supported_mlir_server_file,
+    relabel_graph_ids,
     upload_and_convert_mlir,
 )
 from ttnn_visualizer.models import (
@@ -197,6 +198,55 @@ def test_normalise_rejects_response_without_graphs():
     assert "no graphs" in error
 
 
+# ---- relabel_graph_ids ----------------------------------------------------
+
+
+def test_relabel_replaces_single_graph_temp_id_with_upload_stem():
+    graph_json = json.dumps(
+        {
+            "graphs": [
+                {"id": "ttnn_viz_upload_123_abcdef.mlir", "nodes": []},
+            ]
+        }
+    )
+    relabelled = relabel_graph_ids(graph_json, "stablehlo_sdy")
+    assert json.loads(relabelled) == {"graphs": [{"id": "stablehlo_sdy", "nodes": []}]}
+
+
+def test_relabel_preserves_non_temp_single_graph_id():
+    graph_json = json.dumps({"graphs": [{"id": "stablehlo_sdy", "nodes": []}]})
+    assert json.loads(relabel_graph_ids(graph_json, "upload_stem")) == {
+        "graphs": [{"id": "stablehlo_sdy", "nodes": []}]
+    }
+
+
+def test_relabel_rewrites_only_temp_ids_in_multi_graph_bundle():
+    graph_json = json.dumps(
+        {
+            "graphs": [
+                {"id": "/tmp/ttnn_viz_upload_1.mlir", "nodes": []},
+                {"id": "microsoft_phi-2_stablehlo", "nodes": []},
+                {"id": "/tmp/other_tool/stablehlo_sdy.mlir", "nodes": []},
+            ]
+        }
+    )
+    relabelled = relabel_graph_ids(graph_json, "uploaded_file")
+    assert json.loads(relabelled) == {
+        "graphs": [
+            {"id": "uploaded_file", "nodes": []},
+            {"id": "microsoft_phi-2_stablehlo", "nodes": []},
+            # Non-upload /tmp paths keep their basename identity — do not
+            # collapse valid report names into the upload stem.
+            {"id": "/tmp/other_tool/stablehlo_sdy.mlir", "nodes": []},
+        ]
+    }
+
+
+def test_relabel_leaves_payload_unchanged_when_display_name_empty():
+    graph_json = json.dumps({"graphs": [{"id": "ttnn_viz_upload_x.mlir"}]})
+    assert relabel_graph_ids(graph_json, "") == graph_json
+
+
 # ---- _convert_model_on_server: adapter fallback ---------------------------
 
 
@@ -365,6 +415,9 @@ def test_upload_endpoint_returns_graph_and_persists_json(app, client, make_repor
 
     mlir_root = _mlir_remote_root(app).resolve()
     assert (mlir_root / "my_model.json").is_file()
+    assert json.loads((mlir_root / "my_model.json").read_text(encoding="utf-8")) == {
+        "graphs": [{"id": "g", "nodes": []}]
+    }
 
 
 def test_upload_endpoint_does_not_retarget_existing_remote_report_context(

@@ -27,6 +27,7 @@ import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
 import { MlirFileResult } from '../../model/MLIRJsonModel';
+import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
 import 'styles/components/MlirFileResultsOverlay.scss';
 
 const MAX_MLIR_FILE_SELECTION = 2;
@@ -247,11 +248,14 @@ const MlirFileResultsOverlay = () => {
         }
 
         const [primary, comparison] = selectedResults;
-        setActiveMlirData(primary.graph);
+        setActiveMlirData(relabelMlirGraphIds(primary.graph, primary.name));
         setActiveMlirJson(primary.name);
 
         if (comparison) {
-            setComparisonMlir({ data: comparison.graph, name: comparison.name });
+            setComparisonMlir({
+                data: relabelMlirGraphIds(comparison.graph, comparison.name),
+                name: comparison.name,
+            });
         } else {
             // Single-file View must drop any prior cross-file comparison so the
             // route does not reopen in split with a stale right pane.

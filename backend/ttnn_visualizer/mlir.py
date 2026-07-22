@@ -307,6 +307,45 @@ def _normalise_convert_response(
     return json.dumps({"graphs": graphs}), None
 
 
+def relabel_graph_ids(graph_json: str, display_name: str) -> str:
+    """Replace Model Explorer temp-path graph ids with the uploaded file stem.
+
+    Files are SCP'd to ``/tmp/ttnn_viz_upload_<pid>_<uuid>.…`` before convert;
+    Model Explorer uses that remote basename as ``graph.id``. Only that pattern
+    is rewritten — other ``/tmp/…`` ids (and real report names) are left alone
+    so multi-graph bundles keep distinct valid entries in the pane select.
+    """
+    if not display_name:
+        return graph_json
+
+    try:
+        data = json.loads(graph_json)
+    except json.JSONDecodeError:
+        return graph_json
+
+    graphs = data.get("graphs") if isinstance(data, dict) else None
+    if not isinstance(graphs, list) or not graphs:
+        return graph_json
+
+    def _is_temp_upload_id(graph_id: object) -> bool:
+        return "ttnn_viz_upload_" in str(graph_id or "")
+
+    if len(graphs) == 1:
+        if isinstance(graphs[0], dict) and _is_temp_upload_id(graphs[0].get("id")):
+            graphs[0]["id"] = display_name
+        return json.dumps(data)
+
+    for index, graph in enumerate(graphs):
+        if not isinstance(graph, dict):
+            continue
+        if _is_temp_upload_id(graph.get("id")):
+            graph["id"] = (
+                display_name if index == 0 else f"{display_name} ({index + 1})"
+            )
+
+    return json.dumps(data)
+
+
 def _is_extension_missing(error: str) -> bool:
     """True when ``send_command`` rejected the adapter id (so we try the next)."""
     return _EXTENSION_NOT_FOUND_RE.search(error) is not None
