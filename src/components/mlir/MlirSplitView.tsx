@@ -119,7 +119,10 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
                 style={{ flexBasis: `${leftPct}%` }}
             >
                 {renderHeader('left', safeLeftIndex, setLeftIndex)}
-                <MlGraph data={leftBundle} />
+                <MlGraph
+                    data={leftBundle}
+                    splitView
+                />
             </section>
 
             <div
@@ -134,7 +137,10 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
 
             <section className='mlir-split-pane mlir-split-pane-right'>
                 {renderHeader('right', safeRightIndex, setRightIndex)}
-                <MlGraph data={rightBundle} />
+                <MlGraph
+                    data={rightBundle}
+                    splitView
+                />
             </section>
         </div>
     );

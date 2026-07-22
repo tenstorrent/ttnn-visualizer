@@ -36,6 +36,11 @@ interface MlirNodeDetailsPanelProps {
      * I/O while peeking at where its neighbours live.
      */
     onNavigateToNode: (nodeId: string) => void;
+    // When true (split view), the panel can collapse to a rail; otherwise it
+    // always renders full and the collapse control is hidden.
+    collapsible?: boolean;
+    expanded?: boolean;
+    onToggleExpand?: () => void;
 }
 
 interface OutputPortView {
@@ -169,6 +174,9 @@ const MlirNodeDetailsPanelInner = ({
     onClose,
     onRecenter,
     onNavigateToNode: handleNavigateToNode,
+    collapsible = false,
+    expanded = true,
+    onToggleExpand,
 }: MlirNodeDetailsPanelProps) => {
     const [collapsed, setCollapsed] = useAtom(mlirNodeDetailsCollapsedAtom);
 
@@ -212,6 +220,47 @@ const MlirNodeDetailsPanelInner = ({
         return ports;
     }, [outputsMetadata, outgoingEdges]);
 
+    if (collapsible && !expanded) {
+        return (
+            <aside
+                className='mlir-node-details-panel mlir-node-details-rail'
+                aria-label='Selected node (collapsed)'
+            >
+                <header className='mlir-node-details-header'>
+                    <div className='mlir-node-details-titles'>
+                        <h2 className='mlir-node-details-label'>{node.label}</h2>
+                        <p
+                            className='mlir-node-details-id'
+                            title={node.id}
+                        >
+                            {node.id}
+                        </p>
+                    </div>
+                    <div className='mlir-node-details-actions'>
+                        <Tooltip content='Expand details'>
+                            <Button
+                                size={Size.SMALL}
+                                variant={ButtonVariant.MINIMAL}
+                                icon={IconNames.MAXIMIZE}
+                                aria-label='Expand node details'
+                                onClick={onToggleExpand}
+                            />
+                        </Tooltip>
+                        <Tooltip content='Close'>
+                            <Button
+                                size={Size.SMALL}
+                                variant={ButtonVariant.MINIMAL}
+                                icon={IconNames.CROSS}
+                                aria-label='Close node details'
+                                onClick={onClose}
+                            />
+                        </Tooltip>
+                    </div>
+                </header>
+            </aside>
+        );
+    }
+
     return (
         <aside
             className='mlir-node-details-panel'
@@ -228,6 +277,17 @@ const MlirNodeDetailsPanelInner = ({
                     </p>
                 </div>
                 <div className='mlir-node-details-actions'>
+                    {collapsible && (
+                        <Tooltip content='Collapse details'>
+                            <Button
+                                size={Size.SMALL}
+                                variant={ButtonVariant.MINIMAL}
+                                icon={IconNames.MINIMIZE}
+                                aria-label='Collapse node details'
+                                onClick={onToggleExpand}
+                            />
+                        </Tooltip>
+                    )}
                     <Tooltip content='Recenter'>
                         <Button
                             size={Size.SMALL}
