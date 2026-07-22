@@ -10,10 +10,11 @@
  * in the same batch sees it.
  */
 const uniqueMlirName = (base: string, used: Set<string>): string => {
-    let name = base || 'model';
+    const stem = base || 'model';
+    let name = stem;
     let counter = 2;
     while (used.has(name)) {
-        name = `${base} (${counter})`;
+        name = `${stem} (${counter})`;
         counter += 1;
     }
     used.add(name);

@@ -60,4 +60,9 @@ describe('uniqueMlirName', () => {
         const used = new Set<string>();
         expect(uniqueMlirName('', used)).toBe('model');
     });
+
+    it('generates "model (2)" when empty base collides with an existing "model" entry', () => {
+        const used = new Set(['model']);
+        expect(uniqueMlirName('', used)).toBe('model (2)');
+    });
 });
