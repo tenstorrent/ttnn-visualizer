@@ -8,7 +8,7 @@ import { ItemRenderer, Select } from '@blueprintjs/select';
 import { useAtom } from 'jotai';
 import { useState } from 'react';
 import { MlirServerConnection } from '../../definitions/MlirServer';
-import { isSameMlirServer, mlirServerKey } from '../../functions/mlirServer';
+import { getActiveMlirServer, isSameMlirServer, mlirServerKey } from '../../functions/mlirServer';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
 import { mlirServersAtom, selectedMlirServerAtom } from '../../store/app';
 import MlirJsonFileLoader from '../mlir/MlirJsonFileLoader';
@@ -33,7 +33,7 @@ const MLIRFileSelector = () => {
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const { isActivatingReport } = useActivatingReport();
 
-    const activeServer = servers.find((server) => isSameMlirServer(server, selectedServer)) ?? servers[0] ?? null;
+    const activeServer = getActiveMlirServer(servers, selectedServer);
     const isServerSelectDisabled = isActivatingReport || servers.length === 0;
     const isServerActionDisabled = isActivatingReport || !activeServer;
 

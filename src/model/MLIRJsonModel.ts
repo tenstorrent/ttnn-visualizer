@@ -10,8 +10,8 @@ export interface GraphBundle {
 }
 
 // One entry per file in a multi-file MLIR upload/load, surfaced in the results
-// overlay so the user can see which files converted and pick one to make
-// active. `name` and `graph` are populated only on success.
+// overlay so the user can see which files converted and pick up to two (primary
+// + optional split peer). `name` and `graph` are populated only on success.
 export interface MlirFileResult {
     filename: string;
     host?: string | null;
@@ -22,6 +22,14 @@ export interface MlirFileResult {
     // Server uploads are stored on disk and can be set active on the instance
     // (restored after reload). Local JSON loads live only in memory.
     persisted: boolean;
+}
+
+// Session-loaded MLIR reports for the viewer (max two). Index 0 is the
+// instance-persisted / nav-active report; further entries are split-pane peers.
+export interface MlirLoadedReport {
+    name: string;
+    // Null while restoring a persisted name before `/api/mlir` returns.
+    data: GraphBundle | null;
 }
 
 export interface GraphDocument {

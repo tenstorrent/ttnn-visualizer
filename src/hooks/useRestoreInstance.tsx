@@ -3,12 +3,13 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect, useRef, useState } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import {
     activeMlirJsonAtom,
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
+    mlirLoadedReportsAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
 } from '../store/app';
@@ -19,6 +20,7 @@ import type { RemoteFolder } from '../definitions/RemoteConnection';
 import { useResetMemoryListStates } from './useRestoreScrollPosition';
 
 const useRestoreInstance = () => {
+    const store = useStore();
     const { data: instance, isLoading } = useInstance();
     const remote = useRemoteConnection();
     const { data: reports } = useReportFolderList();
@@ -85,7 +87,11 @@ const useRestoreInstance = () => {
             setPerformanceReportLocation(activeReports.performanceLocation);
 
             setActiveNpe(activeReports.npe);
-            setActiveMlirJson(activeReports.mlir);
+            // Writing activeMlirJsonAtom replaces the whole loaded-reports list.
+            // Skip when a View (including multi-file split) already seeded memory.
+            if (store.get(mlirLoadedReportsAtom).length === 0) {
+                setActiveMlirJson(activeReports.mlir);
+            }
         });
     }, [
         setActiveProfilerReport,
@@ -98,6 +104,7 @@ const useRestoreInstance = () => {
         hasRestoredInstance,
         reports,
         remote.persistentState,
+        store,
     ]);
 
     useEffect(() => {

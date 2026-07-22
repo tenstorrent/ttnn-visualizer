@@ -13,12 +13,15 @@ import {
     activeMlirJsonAtom,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
+    mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
-    mlirRetryServerAtom,
 } from '../../store/app';
 import { GraphBundle, MlirFileResult } from '../../model/MLIRJsonModel';
 import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
+import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
+import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
+import uniqueMlirName from '../../functions/uniqueMlirName';
 import 'styles/components/FileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -50,11 +53,18 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
     const [mlirFileResults, setMlirFileResults] = useAtom(mlirFileResultsAtom);
     const setMlirFileResultsOpen = useSetAtom(mlirFileResultsOpenAtom);
     const setMlirRetryFiles = useSetAtom(mlirRetryFilesAtom);
-    const setMlirRetryServer = useSetAtom(mlirRetryServerAtom);
+    const setMlirLoadedReports = useSetAtom(mlirLoadedReportsAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
+
+    // Drop split peers on a new results batch so a stale second report cannot
+    // linger under a previous primary. Keep index 0 if present.
+    const clearSplitPeers = () => {
+        setMlirLoadedReports((current) => current.slice(0, 1));
+    };
 
     // Publish a fresh batch of results and open the overlay.
     const showResults = (results: MlirFileResult[]) => {
+        clearSplitPeers();
         setMlirFileResults(results);
         setMlirFileResultsOpen(true);
     };
@@ -62,16 +72,25 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
     // Parse already-processed MLIR JSON files in the browser, bypassing the
     // Model Explorer conversion backend. Each file is parsed independently so
     // one malformed file doesn't sink the rest.
-    const loadLocalFiles = async (files: FileList): Promise<MlirFileResult[]> =>
-        Promise.all(
-            Array.from(files).map(async (file): Promise<MlirFileResult> => {
+    const loadLocalFiles = async (files: FileList): Promise<MlirFileResult[]> => {
+        // Pre-assign unique names synchronously before starting async I/O so
+        // the within-batch de-duplication mirrors the backend `_unique_mlir_name`
+        // scheme: first file keeps the stem, subsequent same-stem files become
+        // `stem (2)`, `stem (3)`, …  Name assignment must run before the async
+        // reads to guarantee ordering even when multiple awaits are in flight.
+        const usedNames = new Set<string>();
+        const names = Array.from(files).map((file) => uniqueMlirName(sanitiseFileName(file.name), usedNames));
+
+        return Promise.all(
+            Array.from(files).map(async (file, index): Promise<MlirFileResult> => {
+                const name = names[index];
                 try {
                     const graph = JSON.parse(await file.text()) as GraphBundle;
                     return {
                         filename: file.name,
-                        name: sanitiseFileName(file.name),
+                        name,
                         status: ConnectionTestStates.OK,
-                        graph,
+                        graph: relabelMlirGraphIds(graph, name),
                         persisted: false,
                     };
                 } catch {
@@ -86,6 +105,7 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                 }
             }),
         );
+    };
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         // Guard *before* mutating state so cancelling the OS file dialog
@@ -107,13 +127,13 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
         try {
             if (server) {
                 setMlirRetryFiles(selectedFiles);
-                setMlirRetryServer(server);
 
                 // Files upload as one batch then convert in parallel on the
                 // server. Publish a pending row per file (without opening the
                 // results overlay) so the processing overlay can show each file
                 // with a spinner; replaced with outcomes once the request
                 // resolves.
+                clearSplitPeers();
                 setMlirFileResults(
                     selectedFiles.map((file) => ({
                         filename: file.name,
@@ -128,22 +148,15 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                 // Server uploads report transfer progress through the shared
                 // FileStatusOverlay; the results overlay opens once converted.
                 const response = await uploadMlirFileToServer(selectedFiles, server);
-                const results: MlirFileResult[] = (response?.data?.results ?? []).map((result) => ({
-                    filename: result.filename,
-                    host: result.host ?? server.host,
-                    name: result.name,
-                    status: result.status,
-                    message: result.message ?? result.detail,
-                    graph: result.graph ?? null,
-                    persisted: true,
-                }));
+                const results: MlirFileResult[] = (response?.data?.results ?? []).map((result) =>
+                    mapConvertedMlirServerResult(result, server.host),
+                );
 
                 if (!results.length) {
                     // Drop the pending spinner rows so they don't linger as
                     // permanently-converting entries behind the View button.
                     setMlirFileResults(null);
                     setMlirRetryFiles(null);
-                    setMlirRetryServer(null);
                     setUploadStatus(ConnectionTestStates.FAILED);
                     setErrorMessage('Upload failed');
                     return;
@@ -155,13 +168,11 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                 const hasRetryableFailures = results.some((result) => result.status === ConnectionTestStates.FAILED);
                 if (!hasRetryableFailures) {
                     setMlirRetryFiles(null);
-                    setMlirRetryServer(null);
                 }
 
                 showResults(results);
             } else {
                 setMlirRetryFiles(null);
-                setMlirRetryServer(null);
                 showResults(await loadLocalFiles(files));
             }
         } catch (err: unknown) {
@@ -169,7 +180,6 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
             // permanently-converting entries behind the View button.
             setMlirFileResults(null);
             setMlirRetryFiles(null);
-            setMlirRetryServer(null);
             setUploadStatus(ConnectionTestStates.FAILED);
             setErrorMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));
         }

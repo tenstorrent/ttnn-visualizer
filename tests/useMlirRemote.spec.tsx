@@ -27,7 +27,6 @@ import {
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
     mlirRetryFilesAtom,
-    mlirRetryServerAtom,
 } from '../src/store/app';
 import { FileStatus } from '../src/model/APIData';
 
@@ -64,7 +63,6 @@ beforeEach(() => {
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
     getDefaultStore().set(mlirRetryFilesAtom, null);
-    getDefaultStore().set(mlirRetryServerAtom, null);
 });
 
 afterEach(() => {
@@ -73,7 +71,6 @@ afterEach(() => {
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
     getDefaultStore().set(mlirRetryFilesAtom, null);
-    getDefaultStore().set(mlirRetryServerAtom, null);
 });
 
 describe('useMlirRemote progress lifecycle', () => {
@@ -264,7 +261,6 @@ describe('useMlirRemote progress lifecycle', () => {
             expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeEnabled();
         });
         expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
-        expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
     });
 
     it('uses detail as fallback message when upload result omits message', async () => {
@@ -322,7 +318,6 @@ describe('useMlirRemote progress lifecycle', () => {
             expect(getDefaultStore().get(mlirFileResultsAtom)).toBeNull();
         });
         expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
-        expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
         expect(getDefaultStore().get(fileTransferRegistryAtom)[FileTransferSource.MLIR_UPLOAD]).toBeUndefined();
         expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
     });
@@ -348,7 +343,6 @@ describe('useMlirRemote progress lifecycle', () => {
             expect(screen.getByText('Upload failed')).toBeInTheDocument();
         });
         expect(getDefaultStore().get(mlirRetryFilesAtom)).toBeNull();
-        expect(getDefaultStore().get(mlirRetryServerAtom)).toBeNull();
         expect(screen.getByRole('button', { name: /view mlir uploads/i })).toBeDisabled();
     });
 
