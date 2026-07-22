@@ -55,6 +55,9 @@ interface RenderPanelOverrides {
     onClose?: () => void;
     onRecenter?: () => void;
     onNavigateToNode?: (nodeId: string) => void;
+    collapsible?: boolean;
+    expanded?: boolean;
+    onToggleExpand?: () => void;
 }
 
 function renderPanel(overrides: RenderPanelOverrides = {}) {
@@ -69,6 +72,9 @@ function renderPanel(overrides: RenderPanelOverrides = {}) {
                 onClose={overrides.onClose ?? (() => {})}
                 onRecenter={overrides.onRecenter ?? (() => {})}
                 onNavigateToNode={overrides.onNavigateToNode ?? (() => {})}
+                collapsible={overrides.collapsible}
+                expanded={overrides.expanded}
+                onToggleExpand={overrides.onToggleExpand ?? (() => {})}
             />
         </TestProviders>,
     );
@@ -327,5 +333,46 @@ describe('MlirNodeDetailsPanel Outputs section', () => {
         expect(within(outputsBody as HTMLElement).getByText('port 1')).toBeInTheDocument();
         expect(outputsBody?.querySelector('.mlir-port-attrs-compact')).toBeNull();
         expect(outputsBody?.querySelector('.mlir-node-details-consumer-list')).toBeNull();
+    });
+});
+
+describe('MlirNodeDetailsPanel collapsible (split view)', () => {
+    it('renders the full panel with a collapse control when collapsible and expanded', () => {
+        const { container } = renderPanel({ collapsible: true, expanded: true });
+        expect(screen.getByRole('button', { name: 'Collapse node details' })).toBeInTheDocument();
+        expect(container.querySelector('.mlir-node-details-rail')).toBeNull();
+        expect(container.querySelector('.mlir-node-details-attrs')).not.toBeNull();
+    });
+
+    it('renders only the compact rail (label + expand + close) when collapsed', () => {
+        const { container } = renderPanel({ collapsible: true, expanded: false });
+        expect(container.querySelector('.mlir-node-details-rail')).not.toBeNull();
+        expect(screen.getByRole('heading', { name: 'stablehlo.dot_general' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Expand node details' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Close node details' })).toBeInTheDocument();
+        // The rail drops the body: no sections and no recenter affordance.
+        expect(screen.queryByRole('button', { name: 'Recenter' })).toBeNull();
+        expect(container.querySelector('.mlir-node-details-attrs')).toBeNull();
+    });
+
+    it('calls onToggleExpand from the rail expand button', () => {
+        const onToggleExpand = vi.fn();
+        renderPanel({ collapsible: true, expanded: false, onToggleExpand });
+        fireEvent.click(screen.getByRole('button', { name: 'Expand node details' }));
+        expect(onToggleExpand).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls onToggleExpand from the full-panel collapse button', () => {
+        const onToggleExpand = vi.fn();
+        renderPanel({ collapsible: true, expanded: true, onToggleExpand });
+        fireEvent.click(screen.getByRole('button', { name: 'Collapse node details' }));
+        expect(onToggleExpand).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows no collapse control in single view (not collapsible)', () => {
+        const { container } = renderPanel();
+        expect(screen.queryByRole('button', { name: 'Collapse node details' })).toBeNull();
+        expect(container.querySelector('.mlir-node-details-rail')).toBeNull();
+        expect(container.querySelector('.mlir-node-details-attrs')).not.toBeNull();
     });
 });
