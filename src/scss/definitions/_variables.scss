@@ -37,8 +37,10 @@ $z-index-3-overlay: 1000;
 // Component-specific variables
 $active-transfer-width: 380px;
 
-// MLIR viewport height: full height minus the surrounding app chrome — navbar
-// (~92px), page heading (~30px), inline loaders row (~56px), and page bottom
-// padding (~40px). Shared by the single-view pane and the split-view container
-// so those chrome offsets only need editing in one place.
-$mlir-view-pane-height: calc(100vh - 92px - 30px - 56px - 40px);
+// Fixed app chrome bracketing the MLIR page: the content-sized navbar above and
+// the footer info bar below. The title and (optional) loader rows sit inside
+// `.mlir-page` and are laid out by flex, so the graph reclaims their space when
+// absent — these two are the only remaining structural offsets.
+$mlir-navbar-height: 92px;
+$mlir-footer-clearance: 40px;
+$mlir-page-height: calc(100vh - #{$mlir-navbar-height} - #{$mlir-footer-clearance});

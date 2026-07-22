@@ -10,6 +10,7 @@ import { HttpStatusCode } from 'axios';
 import { Button, ButtonVariant, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { activeMlirDataAtom, activeMlirJsonAtom } from '../store/app';
+import type { GraphBundle } from '../model/MLIRJsonModel';
 import { MLIRValidationError } from '../definitions/MLIRData';
 import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
@@ -18,12 +19,15 @@ import MlirSplitView from '../components/mlir/MlirSplitView';
 import MlirProcessingStatus from '../components/MlirProcessingStatus';
 import { useMlir } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
+import 'styles/components/MlirPage.scss';
 
 const MLIR = () => {
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
     const activeMlirData = useAtomValue(activeMlirDataAtom);
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
     const [splitView, setSplitView] = useState(false);
+    const [loaderExpanded, setLoaderExpanded] = useState(false);
+    const [prevGraph, setPrevGraph] = useState<GraphBundle | null>(null);
 
     // On a fresh page load the in-memory graph is gone but the instance may
     // still reference a persisted MLIR report — fetch it back by name. Skip the
@@ -34,6 +38,14 @@ const MLIR = () => {
         error: httpError,
     } = useMlir(isServerMode || activeMlirData ? null : mlirJsonFilename);
     const mlirData = activeMlirData ?? restoredMlirData ?? null;
+
+    // Re-collapse the loader whenever the active graph changes, so a manual
+    // reveal followed by loading/switching a file doesn't leave it open.
+    // Adjusting state during render (not in an effect) avoids an extra commit.
+    if (mlirData !== prevGraph) {
+        setPrevGraph(mlirData);
+        setLoaderExpanded(false);
+    }
 
     const errorCode = useMemo(() => {
         if (isLoading) {
@@ -64,6 +76,11 @@ const MLIR = () => {
         );
     }
 
+    const hasGraph = !!mlirData && errorCode === MLIRValidationError.OK;
+    // Once a graph is up, the upload chrome collapses to reclaim vertical space;
+    // the toggle reveals it to load/switch files. No graph yet → keep it open.
+    const loaderVisible = !hasGraph || loaderExpanded;
+
     let graphContent;
     if (!mlirData || errorCode !== MLIRValidationError.OK) {
         graphContent = (
@@ -82,7 +99,8 @@ const MLIR = () => {
         );
     } else {
         graphContent = (
-            <>
+            <div className='mlir-single-view'>
+                <MlGraph data={mlirData} />
                 <div className='mlir-view-toolbar'>
                     <Button
                         size={Size.SMALL}
@@ -92,8 +110,7 @@ const MLIR = () => {
                         onClick={() => setSplitView(true)}
                     />
                 </div>
-                <MlGraph data={mlirData} />
-            </>
+            </div>
         );
     }
 
@@ -107,15 +124,31 @@ const MLIR = () => {
                 />
             </Helmet>
 
-            <h1 className='page-title'>MLIR model viewer</h1>
+            <div className={hasGraph ? 'mlir-page mlir-page-graph' : 'mlir-page'}>
+                <h1 className='page-title'>MLIR model viewer</h1>
 
-            {import.meta.env.DEV && (
-                <div className='inline-loaders'>
-                    <MlirJsonFileLoader />
-                </div>
-            )}
+                {import.meta.env.DEV && (
+                    <div className='mlir-loader-bar'>
+                        {hasGraph && (
+                            <Button
+                                size={Size.SMALL}
+                                variant={ButtonVariant.MINIMAL}
+                                icon={loaderExpanded ? IconNames.CHEVRON_UP : IconNames.CHEVRON_DOWN}
+                                text='Load / switch file'
+                                aria-expanded={loaderExpanded}
+                                onClick={() => setLoaderExpanded((open) => !open)}
+                            />
+                        )}
+                        {loaderVisible && (
+                            <div className='inline-loaders'>
+                                <MlirJsonFileLoader />
+                            </div>
+                        )}
+                    </div>
+                )}
 
-            {graphContent}
+                {graphContent}
+            </div>
         </>
     );
 };
