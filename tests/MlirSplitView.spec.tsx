@@ -68,6 +68,17 @@ afterEach(cleanup);
 
 const makeData = (ids: string[]): GraphBundle => ({ graphs: ids.map((id) => ({ id })) }) as unknown as GraphBundle;
 
+const renderInFileSplit = (ids: string[], onExit: () => void = () => {}) => {
+    const data = makeData(ids);
+    return render(
+        <MlirSplitView
+            leftData={data}
+            rightData={data}
+            onExit={onExit}
+        />,
+    );
+};
+
 const paneGraphIds = (): [string, string] => {
     const [left, right] = screen.getAllByTestId(TEST_IDS.MLIR_GRAPH);
     return [left.textContent ?? '', right.textContent ?? ''];
@@ -79,44 +90,24 @@ describe('MlirSplitView', () => {
     });
 
     it('opens both panes on the same (first) graph', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1', 'g2']);
         expect(paneGraphIds()).toEqual(['g0', 'g0']);
     });
 
     it('re-points the right pane without touching the left', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1', 'g2']);
         fireEvent.change(screen.getByLabelText('right pane graph'), { target: { value: '1' } });
         expect(paneGraphIds()).toEqual(['g0', 'g1']);
     });
 
     it('re-points the left pane without touching the right', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1', 'g2']);
         fireEvent.change(screen.getByLabelText('left pane graph'), { target: { value: '2' } });
         expect(paneGraphIds()).toEqual(['g2', 'g0']);
     });
 
     it('swaps the two panes', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1', 'g2']);
         fireEvent.change(screen.getByLabelText('right pane graph'), { target: { value: '2' } });
         // Each pane header carries its own swap button; either performs the swap.
         fireEvent.click(screen.getAllByRole('button', { name: 'Swap panes' })[0]);
@@ -125,33 +116,18 @@ describe('MlirSplitView', () => {
 
     it('exits the split view from a pane close button', () => {
         const onExit = vi.fn();
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1'])}
-                onExit={onExit}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1'], onExit);
         fireEvent.click(screen.getAllByRole('button', { name: 'Close split view' })[0]);
         expect(onExit).toHaveBeenCalledTimes(1);
     });
 
     it('renders a resizable divider between the panes', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1']);
         expect(screen.getByRole('separator', { name: 'Resize panes' })).toBeInTheDocument();
     });
 
     it('resizes the left pane on divider drag, clamped to 20–80%', () => {
-        const { container } = render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1'])}
-                onExit={() => {}}
-            />,
-        );
+        const { container } = renderInFileSplit(['g0', 'g1']);
         stubRect(container.querySelector('.mlir-split-view') as HTMLElement, 1000);
 
         const divider = screen.getByRole('separator', { name: 'Resize panes' });
@@ -172,12 +148,7 @@ describe('MlirSplitView', () => {
     });
 
     it('ignores pointer movement that is not part of an active drag', () => {
-        const { container } = render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1'])}
-                onExit={() => {}}
-            />,
-        );
+        const { container } = renderInFileSplit(['g0', 'g1']);
         stubRect(container.querySelector('.mlir-split-view') as HTMLElement, 1000);
 
         const divider = screen.getByRole('separator', { name: 'Resize panes' });
@@ -189,9 +160,11 @@ describe('MlirSplitView', () => {
     });
 
     it('clamps stale pane indices when the graph list shrinks', () => {
+        const data = makeData(['g0', 'g1', 'g2']);
         const { rerender } = render(
             <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
+                leftData={data}
+                rightData={data}
                 onExit={() => {}}
             />,
         );
@@ -200,13 +173,63 @@ describe('MlirSplitView', () => {
 
         // A smaller re-upload while split view stays mounted must not feed an
         // out-of-range index (undefined graph) into either pane.
+        const shrunk = makeData(['g0']);
         rerender(
             <MlirSplitView
-                data={makeData(['g0'])}
+                leftData={shrunk}
+                rightData={shrunk}
                 onExit={() => {}}
             />,
         );
         expect(paneGraphIds()).toEqual(['g0', 'g0']);
         expect((screen.getByLabelText('right pane graph') as HTMLSelectElement).value).toBe('0');
+    });
+
+    it('scopes each pane select to its own bundle and shows filename labels', () => {
+        const left = makeData(['left-a', 'left-b']);
+        const right = makeData(['right-only']);
+        render(
+            <MlirSplitView
+                leftData={left}
+                rightData={right}
+                leftLabel='primary.mlir'
+                rightLabel='compare.mlir'
+                onExit={() => {}}
+            />,
+        );
+
+        expect(screen.getByText('primary.mlir')).toBeInTheDocument();
+        expect(screen.getByText('compare.mlir')).toBeInTheDocument();
+        expect(paneGraphIds()).toEqual(['left-a', 'right-only']);
+
+        fireEvent.change(screen.getByLabelText('left pane graph'), { target: { value: '1' } });
+        expect(paneGraphIds()).toEqual(['left-b', 'right-only']);
+
+        // Right pane has a single graph — changing left must not invent options on right.
+        expect((screen.getByLabelText('right pane graph') as HTMLSelectElement).options).toHaveLength(1);
+    });
+
+    it('swaps dual-bundle panes without changing which props are primary', () => {
+        const left = makeData(['L0', 'L1']);
+        const right = makeData(['R0']);
+        render(
+            <MlirSplitView
+                leftData={left}
+                rightData={right}
+                leftLabel='primary.mlir'
+                rightLabel='compare.mlir'
+                onExit={() => {}}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText('left pane graph'), { target: { value: '1' } });
+        fireEvent.click(screen.getAllByRole('button', { name: 'Swap panes' })[0]);
+
+        expect(paneGraphIds()).toEqual(['R0', 'L1']);
+        // Labels move with the display swap.
+        const leftHeader = screen.getByLabelText('left pane graph').closest('.mlir-split-pane-header');
+        const rightHeader = screen.getByLabelText('right pane graph').closest('.mlir-split-pane-header');
+        expect(leftHeader).toHaveTextContent('compare.mlir');
+        expect(rightHeader).toHaveTextContent('primary.mlir');
     });
 });

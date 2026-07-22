@@ -65,6 +65,14 @@ export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const activeMlirJsonAtom = atom<string | null>(null);
 export const activeMlirDataAtom = atom<GraphBundle | null>(null);
+// Session-only right-hand graph for cross-file split; null means single / in-file view.
+export const comparisonMlirJsonAtom = atom<string | null>(null);
+export const comparisonMlirDataAtom = atom<GraphBundle | null>(null);
+// Write both comparison atoms together so call sites cannot leave them half-cleared.
+export const setComparisonMlirAtom = atom(null, (_get, set, next: { data: GraphBundle; name: string } | null) => {
+    set(comparisonMlirDataAtom, next?.data ?? null);
+    set(comparisonMlirJsonAtom, next?.name ?? null);
+});
 export const mlirFileResultsAtom = atom<MlirFileResult[] | null>(null);
 export const mlirFileResultsOpenAtom = atom(false);
 export const mlirRetryFilesAtom = atom<File[] | null>(null);

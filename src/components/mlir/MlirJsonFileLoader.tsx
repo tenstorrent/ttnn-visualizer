@@ -15,6 +15,7 @@ import {
     mlirFileResultsOpenAtom,
     mlirRetryFilesAtom,
     mlirRetryServerAtom,
+    setComparisonMlirAtom,
 } from '../../store/app';
 import { GraphBundle, MlirFileResult } from '../../model/MLIRJsonModel';
 import getResponseError from '../../functions/getResponseError';
@@ -49,10 +50,13 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
     const setMlirFileResultsOpen = useSetAtom(mlirFileResultsOpenAtom);
     const setMlirRetryFiles = useSetAtom(mlirRetryFilesAtom);
     const setMlirRetryServer = useSetAtom(mlirRetryServerAtom);
+    const setComparisonMlir = useSetAtom(setComparisonMlirAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
-    // Publish a fresh batch of results and open the overlay.
+    // Publish a fresh batch of results and open the overlay. Clearing comparison
+    // here (and before pending server rows) avoids a stale cross-file right pane.
     const showResults = (results: MlirFileResult[]) => {
+        setComparisonMlir(null);
         setMlirFileResults(results);
         setMlirFileResultsOpen(true);
     };
@@ -112,6 +116,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 // results overlay) so the processing overlay can show each file
                 // with a spinner; replaced with outcomes once the request
                 // resolves.
+                setComparisonMlir(null);
                 setMlirFileResults(
                     selectedFiles.map((file) => ({
                         filename: file.name,

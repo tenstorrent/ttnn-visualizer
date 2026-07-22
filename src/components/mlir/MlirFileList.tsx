@@ -12,7 +12,11 @@ import 'styles/components/MlirFileList.scss';
 interface MlirFileListProps {
     results: MlirFileResult[];
     className?: string;
-    selectedIndex?: number | null;
+    // Ordered selection (1st = primary/left, 2nd = comparison/right). Empty when
+    // nothing is selected. Omit with onSelect for a read-only list.
+    selectedIndices?: number[];
+    // When true, unselected success rows are not clickable (selection is at cap).
+    selectionLimitReached?: boolean;
     retryingIndices?: Set<number>;
     // When provided the list is selectable: successfully-converted rows become
     // clickable. Omit it for a read-only list (e.g. the in-progress spinner
@@ -28,22 +32,29 @@ interface MlirFileListProps {
 const MlirFileList = ({
     results,
     className,
-    selectedIndex = null,
+    selectedIndices = [],
+    selectionLimitReached = false,
     retryingIndices = new Set<number>(),
     onSelect,
     onRetry,
     canRetry,
 }: MlirFileListProps) => (
-    <Menu className={classNames('mlir-file-list', className)}>
+    <Menu
+        className={classNames('mlir-file-list', className)}
+        aria-multiselectable={onSelect ? true : undefined}
+        aria-label={onSelect ? 'MLIR upload results' : undefined}
+    >
         {results.map((result, index) => {
             const isPending = result.status === ConnectionTestStates.PROGRESS;
             const isSuccess = result.status === ConnectionTestStates.OK && !!result.graph;
             const isFailedServerFile = result.status === ConnectionTestStates.FAILED && result.persisted;
             const shouldShowEyeIcon = !isPending && result.status !== ConnectionTestStates.FAILED;
-            const selectable = !!onSelect && isSuccess;
+            const isSelected = !!onSelect && selectedIndices.includes(index);
+            // At the selection cap, already-selected rows stay clickable so the
+            // user can deselect; others must look and behave disabled.
+            const selectable = !!onSelect && isSuccess && (isSelected || !selectionLimitReached);
             const retryAvailable = canRetry ? canRetry(index) : true;
             const hasRetryAction = isFailedServerFile && !!onRetry && retryAvailable;
-            const isSelected = !!onSelect && index === selectedIndex;
             const retryInFlight = retryingIndices.has(index);
 
             // Right-hand element: shows Processing during conversion/retry,
@@ -104,6 +115,7 @@ const MlirFileList = ({
                     labelElement={labelElement}
                     disabled={!selectable && !hasRetryAction}
                     active={isSelected}
+                    aria-selected={onSelect ? isSelected : undefined}
                     onClick={selectable && onSelect ? () => onSelect(index) : undefined}
                     roleStructure='listoption'
                 />

@@ -51,6 +51,15 @@
     flex: 1 1 auto;
 }
 
+.mlir-split-pane-label {
+    flex: 0 1 auto;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
 .mlir-split-pane-select {
     max-width: 260px;
 }

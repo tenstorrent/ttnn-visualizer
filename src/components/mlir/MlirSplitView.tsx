@@ -10,7 +10,10 @@ import MlGraph from './MLIRViewReactFlow';
 import 'styles/components/MlirSplitView.scss';
 
 interface MlirSplitViewProps {
-    data: GraphBundle;
+    leftData: GraphBundle;
+    rightData: GraphBundle;
+    leftLabel?: string | null;
+    rightLabel?: string | null;
     onExit: () => void;
 }
 
@@ -25,24 +28,40 @@ const clampIndex = (index: number, count: number): number => Math.min(Math.max(i
 
 type PaneSide = 'left' | 'right';
 
-const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
-    const { graphs } = data;
-    const [leftIndex, setLeftIndex] = useState(0);
-    // Both panes open on the same graph; the header select re-points either side.
-    const [rightIndex, setRightIndex] = useState(0);
+const MlirSplitView = ({ leftData, rightData, leftLabel = null, rightLabel = null, onExit }: MlirSplitViewProps) => {
+    // Display-only swap: flips which prop side is shown left/right without
+    // touching persisted primary / comparison atoms.
+    const [swapped, setSwapped] = useState(false);
+    const [propLeftIndex, setPropLeftIndex] = useState(0);
+    const [propRightIndex, setPropRightIndex] = useState(0);
     const [leftPct, setLeftPct] = useState(50);
     const containerRef = useRef<HTMLDivElement>(null);
     const draggingRef = useRef(false);
 
-    const safeLeftIndex = clampIndex(leftIndex, graphs.length);
-    const safeRightIndex = clampIndex(rightIndex, graphs.length);
+    const displayLeftData = swapped ? rightData : leftData;
+    const displayRightData = swapped ? leftData : rightData;
+    const displayLeftLabel = swapped ? rightLabel : leftLabel;
+    const displayRightLabel = swapped ? leftLabel : rightLabel;
+    const displayLeftIndex = swapped ? propRightIndex : propLeftIndex;
+    const displayRightIndex = swapped ? propLeftIndex : propRightIndex;
+    const setDisplayLeftIndex = swapped ? setPropRightIndex : setPropLeftIndex;
+    const setDisplayRightIndex = swapped ? setPropLeftIndex : setPropRightIndex;
+
+    const safeLeftIndex = clampIndex(displayLeftIndex, displayLeftData.graphs.length);
+    const safeRightIndex = clampIndex(displayRightIndex, displayRightData.graphs.length);
 
     // Per-pane single-graph bundles keep MlGraph unchanged (it renders graphs[0]).
     // useMemo stabilises each bundle's identity so memo(MlGraph) skips re-rendering
     // on unrelated parent updates (e.g. a divider drag); switching graphs still
     // remounts the pane via MlGraph's internal `key={graphs[0].id}`.
-    const leftBundle = useMemo<GraphBundle>(() => ({ graphs: [graphs[safeLeftIndex]] }), [graphs, safeLeftIndex]);
-    const rightBundle = useMemo<GraphBundle>(() => ({ graphs: [graphs[safeRightIndex]] }), [graphs, safeRightIndex]);
+    const leftBundle = useMemo<GraphBundle>(
+        () => ({ graphs: [displayLeftData.graphs[safeLeftIndex]] }),
+        [displayLeftData.graphs, safeLeftIndex],
+    );
+    const rightBundle = useMemo<GraphBundle>(
+        () => ({ graphs: [displayRightData.graphs[safeRightIndex]] }),
+        [displayRightData.graphs, safeRightIndex],
+    );
 
     const onDividerPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
         draggingRef.current = true;
@@ -67,18 +86,24 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
     }, []);
 
     const swapPanes = useCallback(() => {
-        setLeftIndex(safeRightIndex);
-        setRightIndex(safeLeftIndex);
-    }, [safeLeftIndex, safeRightIndex]);
+        setSwapped((current) => !current);
+    }, []);
 
-    const renderHeader = (side: PaneSide, index: number, setIndex: (next: number) => void) => (
+    const renderHeader = (
+        side: PaneSide,
+        data: GraphBundle,
+        index: number,
+        setIndex: (next: number) => void,
+        label: string | null,
+    ) => (
         <header className='mlir-split-pane-header'>
+            {label ? <span className='mlir-split-pane-label'>{label}</span> : null}
             <HTMLSelect
                 className='mlir-split-pane-select'
                 aria-label={`${side} pane graph`}
                 value={index}
                 onChange={(event) => setIndex(Number(event.currentTarget.value))}
-                options={graphs.map((graph, i) => ({ value: i, label: graph.id }))}
+                options={data.graphs.map((graph, i) => ({ value: i, label: graph.id }))}
                 minimal
             />
             <span className='mlir-split-pane-header-spacer' />
@@ -118,7 +143,7 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
                 className='mlir-split-pane'
                 style={{ flexBasis: `${leftPct}%` }}
             >
-                {renderHeader('left', safeLeftIndex, setLeftIndex)}
+                {renderHeader('left', displayLeftData, safeLeftIndex, setDisplayLeftIndex, displayLeftLabel)}
                 <MlGraph data={leftBundle} />
             </section>
 
@@ -133,7 +158,7 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
             />
 
             <section className='mlir-split-pane mlir-split-pane-right'>
-                {renderHeader('right', safeRightIndex, setRightIndex)}
+                {renderHeader('right', displayRightData, safeRightIndex, setDisplayRightIndex, displayRightLabel)}
                 <MlGraph data={rightBundle} />
             </section>
         </div>

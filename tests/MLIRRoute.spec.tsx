@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { GraphBundle } from '../src/model/MLIRJsonModel';
-import { activeMlirDataAtom } from '../src/store/app';
+import { activeMlirDataAtom, comparisonMlirDataAtom, comparisonMlirJsonAtom } from '../src/store/app';
 
 // Route wiring only: stub the heavy leaves (graph view, split view, loaders) so
 // the test can assert the Split-view toggle mounts/unmounts the right subtree.
@@ -36,17 +36,25 @@ vi.mock('../src/components/mlir/MlirSplitView', () => ({
 import MLIR from '../src/routes/MLIR';
 
 const sampleData = { graphs: [{ id: 'g0', nodes: [] }] } as unknown as GraphBundle;
+const comparisonData = { graphs: [{ id: 'g1', nodes: [] }] } as unknown as GraphBundle;
 
-const renderRoute = (data: GraphBundle | null) => {
+const renderRoute = (data: GraphBundle | null, comparison: GraphBundle | null = null) => {
     const store = createStore();
     if (data) {
         store.set(activeMlirDataAtom, data);
     }
-    return render(
-        <Provider store={store}>
-            <MLIR />
-        </Provider>,
-    );
+    if (comparison) {
+        store.set(comparisonMlirDataAtom, comparison);
+        store.set(comparisonMlirJsonAtom, 'compare');
+    }
+    return {
+        store,
+        ...render(
+            <Provider store={store}>
+                <MLIR />
+            </Provider>,
+        ),
+    };
 };
 
 afterEach(() => {
@@ -67,6 +75,21 @@ describe('MLIR route split-view wiring', () => {
         expect(screen.queryByRole('button', { name: 'Split view' })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'close split' }));
+        expect(screen.getByTestId('mlir-single-graph')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Split view' })).toBeInTheDocument();
+    });
+
+    it('opens cross-file split when comparison data is present', () => {
+        mockUseMlir.mockReturnValue({ data: null, isLoading: false, error: undefined });
+        const { store } = renderRoute(sampleData, comparisonData);
+
+        expect(screen.getByTestId('mlir-split-view')).toBeInTheDocument();
+        expect(screen.queryByTestId('mlir-single-graph')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Split view' })).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'close split' }));
+        expect(store.get(comparisonMlirDataAtom)).toBeNull();
+        expect(store.get(comparisonMlirJsonAtom)).toBeNull();
         expect(screen.getByTestId('mlir-single-graph')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Split view' })).toBeInTheDocument();
     });

@@ -13,6 +13,8 @@ import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import {
     activeMlirDataAtom,
     activeMlirJsonAtom,
+    comparisonMlirDataAtom,
+    comparisonMlirJsonAtom,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
     mlirRetryFilesAtom,
@@ -63,6 +65,8 @@ beforeEach(() => {
     getDefaultStore().set(mlirRetryServerAtom, null);
     getDefaultStore().set(activeMlirDataAtom, null);
     getDefaultStore().set(activeMlirJsonAtom, null);
+    getDefaultStore().set(comparisonMlirDataAtom, null);
+    getDefaultStore().set(comparisonMlirJsonAtom, null);
 });
 
 afterEach(() => cleanup());
@@ -165,6 +169,88 @@ describe('MlirFileResultsOverlay', () => {
             expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
         });
         expect(setActiveMlir).not.toHaveBeenCalled();
+    });
+
+    it('allows selecting up to two successful files and ignores a third', async () => {
+        const graphB: GraphBundle = { graphs: [{ id: 'gb', nodes: [] }] };
+        const graphC: GraphBundle = { graphs: [{ id: 'gc', nodes: [] }] };
+        renderOverlay([
+            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: false },
+            { filename: 'b.mlir', name: 'b', status: ConnectionTestStates.OK, graph: graphB, persisted: false },
+            { filename: 'c.mlir', name: 'c', status: ConnectionTestStates.OK, graph: graphC, persisted: false },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlir'));
+        fireEvent.click(screen.getByText('b.mlir'));
+
+        expect(screen.getByText('a.mlir').closest('a')).toHaveClass('bp6-active');
+        expect(screen.getByText('b.mlir').closest('a')).toHaveClass('bp6-active');
+        // At the cap, unselected success rows are disabled (not a silent no-op).
+        expect(screen.getByText('c.mlir').closest('a')).toHaveAttribute('aria-disabled', 'true');
+
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+        });
+        expect(getDefaultStore().get(comparisonMlirDataAtom)).toEqual(graphB);
+        expect(getDefaultStore().get(comparisonMlirJsonAtom)).toBe('b');
+    });
+
+    it('opens two selected files as primary + comparison via View', async () => {
+        const graphB: GraphBundle = { graphs: [{ id: 'gb', nodes: [] }] };
+        renderOverlay([
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
+            {
+                filename: 'b.mlir',
+                host: 'worker-01',
+                name: 'b',
+                status: ConnectionTestStates.OK,
+                graph: graphB,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlir'));
+        fireEvent.click(screen.getByText('b.mlir'));
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+        });
+        expect(getDefaultStore().get(activeMlirJsonAtom)).toBe('a');
+        expect(getDefaultStore().get(comparisonMlirDataAtom)).toEqual(graphB);
+        expect(getDefaultStore().get(comparisonMlirJsonAtom)).toBe('b');
+        // Persist primary only — comparison is session-scoped.
+        expect(setActiveMlir).toHaveBeenCalledTimes(1);
+        expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
+        expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'a.mlir / b.mlir', 'success');
+    });
+
+    it('clears a prior comparison when View commits a single file', async () => {
+        const graphB: GraphBundle = { graphs: [{ id: 'gb', nodes: [] }] };
+        getDefaultStore().set(comparisonMlirDataAtom, graphB);
+        getDefaultStore().set(comparisonMlirJsonAtom, 'b');
+
+        renderOverlay([
+            { filename: 'a.json', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: false },
+        ]);
+
+        fireEvent.click(screen.getByText('a.json'));
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+        });
+        expect(getDefaultStore().get(comparisonMlirDataAtom)).toBeNull();
+        expect(getDefaultStore().get(comparisonMlirJsonAtom)).toBeNull();
     });
 
     it('does not show a success toast when persisting active MLIR fails', async () => {

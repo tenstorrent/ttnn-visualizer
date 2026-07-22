@@ -5,11 +5,17 @@
 import { Helmet } from 'react-helmet-async';
 import { useMemo, useState } from 'react';
 import { Navigate } from 'react-router';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import { Button, ButtonVariant, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { activeMlirDataAtom, activeMlirJsonAtom } from '../store/app';
+import {
+    activeMlirDataAtom,
+    activeMlirJsonAtom,
+    comparisonMlirDataAtom,
+    comparisonMlirJsonAtom,
+    setComparisonMlirAtom,
+} from '../store/app';
 import { MLIRValidationError } from '../definitions/MLIRData';
 import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
@@ -23,7 +29,11 @@ const MLIR = () => {
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
     const activeMlirData = useAtomValue(activeMlirDataAtom);
     const mlirJsonFilename = useAtomValue(activeMlirJsonAtom);
-    const [splitView, setSplitView] = useState(false);
+    const comparisonMlirData = useAtomValue(comparisonMlirDataAtom);
+    const comparisonMlirJson = useAtomValue(comparisonMlirJsonAtom);
+    const setComparisonMlir = useSetAtom(setComparisonMlirAtom);
+    // In-file split only; cross-file split is derived from comparisonMlirData.
+    const [inFileSplitView, setInFileSplitView] = useState(false);
 
     // On a fresh page load the in-memory graph is gone but the instance may
     // still reference a persisted MLIR report — fetch it back by name. Skip the
@@ -73,11 +83,22 @@ const MLIR = () => {
                 hasUploadedFile={!!mlirJsonFilename}
             />
         );
-    } else if (splitView) {
+    } else if (comparisonMlirData) {
         graphContent = (
             <MlirSplitView
-                data={mlirData}
-                onExit={() => setSplitView(false)}
+                leftData={mlirData}
+                rightData={comparisonMlirData}
+                leftLabel={mlirJsonFilename}
+                rightLabel={comparisonMlirJson}
+                onExit={() => setComparisonMlir(null)}
+            />
+        );
+    } else if (inFileSplitView) {
+        graphContent = (
+            <MlirSplitView
+                leftData={mlirData}
+                rightData={mlirData}
+                onExit={() => setInFileSplitView(false)}
             />
         );
     } else {
@@ -89,7 +110,7 @@ const MLIR = () => {
                         variant={ButtonVariant.MINIMAL}
                         icon={IconNames.PANEL_STATS}
                         text='Split view'
-                        onClick={() => setSplitView(true)}
+                        onClick={() => setInFileSplitView(true)}
                     />
                 </div>
                 <MlGraph data={mlirData} />
