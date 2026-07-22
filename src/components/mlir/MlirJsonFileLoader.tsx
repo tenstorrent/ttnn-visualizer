@@ -39,9 +39,11 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 
 interface MlirJsonFileLoaderProps {
     server?: MlirServerConnection | null;
+    /** When true, the file input cannot open or change selection. */
+    disabled?: boolean;
 }
 
-const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
+const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoaderProps) => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { uploadMlirFileToServer } = useMlirRemote();
     const mlirJsonFileName = useAtomValue(activeMlirJsonAtom);
@@ -182,6 +184,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
             <FileInput
                 text={mlirJsonFileName ?? placeholder}
                 onInputChange={handleFileChange}
+                disabled={disabled}
                 inputProps={{ accept: acceptedExtensions, multiple: true }}
             />
 
@@ -191,7 +194,7 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 icon={IconNames.LIST}
                 text='View MLIR uploads'
                 onClick={() => setMlirFileResultsOpen(true)}
-                disabled={!hasSettledResults}
+                disabled={disabled || !hasSettledResults}
             />
 
             <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>
