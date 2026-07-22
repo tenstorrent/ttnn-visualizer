@@ -452,3 +452,70 @@ describe('MlirFileResultsOverlay', () => {
         });
     });
 });
+
+describe('MlirJsonFileLoader clearSplitPeers', () => {
+    it('drops loaded split peers when a new local results batch starts', async () => {
+        getDefaultStore().set(mlirLoadedReportsAtom, [
+            { name: 'primary', data: GRAPH },
+            { name: 'peer', data: GRAPH },
+        ]);
+
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader />
+            </MemoryRouter>,
+        );
+
+        const file = new File([JSON.stringify(GRAPH)], 'next.json', { type: 'application/json' });
+        // jsdom File blobs are not always readable via `.text()`; stub the
+        // content so the local JSON path exercises clearSplitPeers.
+        file.text = () => Promise.resolve(JSON.stringify(GRAPH));
+
+        const fileInput = container.querySelector('input[type="file"]');
+        fireEvent.change(fileInput as HTMLInputElement, {
+            target: { files: [file] },
+        });
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'primary', data: GRAPH }]);
+            expect(getDefaultStore().get(mlirFileResultsAtom)?.[0]?.name).toBe('next');
+        });
+    });
+
+    it('drops loaded split peers when a server upload starts', async () => {
+        getDefaultStore().set(mlirLoadedReportsAtom, [
+            { name: 'primary', data: GRAPH },
+            { name: 'peer', data: GRAPH },
+        ]);
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'model.mlir',
+                        name: 'model',
+                        status: ConnectionTestStates.OK,
+                        graph: GRAPH,
+                    },
+                ],
+            },
+        });
+
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+            </MemoryRouter>,
+        );
+
+        const fileInput = container.querySelector('input[type="file"]');
+        fireEvent.change(fileInput as HTMLInputElement, {
+            target: { files: [new File(['module {}'], 'model.mlir')] },
+        });
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'primary', data: GRAPH }]);
+        });
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirFileResultsAtom)?.[0]?.name).toBe('model');
+        });
+    });
+});

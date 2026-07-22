@@ -14,8 +14,8 @@ const isTempUploadGraphId = (id: string): boolean => id.includes(TEMP_UPLOAD_GRA
 
 // Model Explorer often sets graph.id from the remote temp upload path
 // (`ttnn_viz_upload_<pid>_<uuid>.mlir`). Prefer the uploaded file stem for
-// selects, keys, and headers. Own this rewrite at results ingest (loader /
-// retry) — do not re-apply on View.
+// selects, keys, and headers. Canonical rewrite for server uploads lives in
+// the backend (`relabel_graph_ids`); this helper is for local JSON ingest only.
 const relabelMlirGraphIds = (bundle: GraphBundle, displayName: string): GraphBundle => {
     if (!displayName || bundle.graphs.length === 0) {
         return bundle;

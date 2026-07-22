@@ -10,8 +10,8 @@ export interface GraphBundle {
 }
 
 // One entry per file in a multi-file MLIR upload/load, surfaced in the results
-// overlay so the user can see which files converted and pick one to make
-// active. `name` and `graph` are populated only on success.
+// overlay so the user can see which files converted and pick up to two (primary
+// + optional split peer). `name` and `graph` are populated only on success.
 export interface MlirFileResult {
     filename: string;
     host?: string | null;

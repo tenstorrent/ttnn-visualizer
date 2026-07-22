@@ -237,4 +237,24 @@ describe('MlirSplitView', () => {
         expect([...leftSelect.options].map((option) => option.text)).toHaveLength(2);
         expect(leftSelect.value).toBe('microsoft_phi-2_stablehlo');
     });
+
+    it('shows a nested graph select for cross-file reports with multiple graphs', () => {
+        const primary = makeReport('report-a', ['a0', 'a1']);
+        const compare = makeReport('report-b', ['b0', 'b1', 'b2']);
+        renderCrossFileSplit(primary, compare);
+
+        expect(screen.getByLabelText('left pane report')).toBeInTheDocument();
+        expect(screen.getByLabelText('right pane report')).toBeInTheDocument();
+        expect(screen.getByLabelText('left pane graph')).toBeInTheDocument();
+        expect(screen.getByLabelText('right pane graph')).toBeInTheDocument();
+        expect(paneGraphIds()).toEqual(['a0', 'b0']);
+
+        fireEvent.change(screen.getByLabelText('left pane graph'), { target: { value: '1' } });
+        expect(paneGraphIds()).toEqual(['a1', 'b0']);
+
+        // Changing report resets that pane's graph index to 0.
+        fireEvent.change(screen.getByLabelText('left pane report'), { target: { value: 'report-b' } });
+        expect(paneGraphIds()).toEqual(['b0', 'b0']);
+        expect((screen.getByLabelText('left pane graph') as HTMLSelectElement).value).toBe('0');
+    });
 });

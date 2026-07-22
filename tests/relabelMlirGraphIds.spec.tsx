@@ -38,4 +38,16 @@ describe('relabelMlirGraphIds', () => {
             '/tmp/other_tool/stablehlo_sdy.mlir',
         ]);
     });
+
+    it('rewrites multiple temp ids with stem suffixes', () => {
+        const bundle = {
+            graphs: [
+                { id: `/tmp/${TEMP_UPLOAD_GRAPH_ID_MARKER}a.mlir`, nodes: [] },
+                { id: `/tmp/${TEMP_UPLOAD_GRAPH_ID_MARKER}b.mlir`, nodes: [] },
+                { id: `/tmp/${TEMP_UPLOAD_GRAPH_ID_MARKER}c.mlir`, nodes: [] },
+            ],
+        } as unknown as GraphBundle;
+
+        expect(relabelMlirGraphIds(bundle, 'stem').graphs.map((g) => g.id)).toEqual(['stem', 'stem (2)', 'stem (3)']);
+    });
 });

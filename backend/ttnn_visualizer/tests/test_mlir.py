@@ -158,11 +158,11 @@ def test_is_extension_missing_ignores_unrelated_not_found():
 
 
 def test_normalise_passes_through_graphs_shape():
-    graph_json, error = _normalise_convert_response(
+    graphs, error = _normalise_convert_response(
         json.dumps({"graphs": [{"id": "g", "nodes": []}]})
     )
     assert error is None
-    assert json.loads(graph_json) == {"graphs": [{"id": "g", "nodes": []}]}
+    assert graphs == [{"id": "g", "nodes": []}]
 
 
 def test_normalise_flattens_graph_collections():
@@ -174,28 +174,28 @@ def test_normalise_flattens_graph_collections():
             ]
         }
     )
-    graph_json, error = _normalise_convert_response(payload)
+    graphs, error = _normalise_convert_response(payload)
     assert error is None
-    assert json.loads(graph_json) == {"graphs": [{"id": "g1"}, {"id": "g2"}]}
+    assert graphs == [{"id": "g1"}, {"id": "g2"}]
 
 
 def test_normalise_surfaces_server_error():
-    graph_json, error = _normalise_convert_response(
+    graphs, error = _normalise_convert_response(
         json.dumps({"error": "Extension not found"})
     )
-    assert graph_json is None
+    assert graphs is None
     assert error == "Extension not found"
 
 
 def test_normalise_rejects_non_json():
-    graph_json, error = _normalise_convert_response("<html>500</html>")
-    assert graph_json is None
+    graphs, error = _normalise_convert_response("<html>500</html>")
+    assert graphs is None
     assert "non-JSON" in error
 
 
 def test_normalise_rejects_response_without_graphs():
-    graph_json, error = _normalise_convert_response(json.dumps({"unexpected": 1}))
-    assert graph_json is None
+    graphs, error = _normalise_convert_response(json.dumps({"unexpected": 1}))
+    assert graphs is None
     assert "no graphs" in error
 
 
@@ -203,51 +203,50 @@ def test_normalise_rejects_response_without_graphs():
 
 
 def test_relabel_replaces_single_graph_temp_id_with_upload_stem():
-    graph_json = json.dumps(
-        {
-            "graphs": [
-                {"id": f"{_TEMP_UPLOAD_BASENAME_PREFIX}123_abcdef.mlir", "nodes": []},
-            ]
-        }
-    )
-    relabelled = relabel_graph_ids(graph_json, "stablehlo_sdy")
-    assert json.loads(relabelled) == {"graphs": [{"id": "stablehlo_sdy", "nodes": []}]}
+    graphs = [
+        {"id": f"{_TEMP_UPLOAD_BASENAME_PREFIX}123_abcdef.mlir", "nodes": []},
+    ]
+    assert relabel_graph_ids(graphs, "stablehlo_sdy") is True
+    assert graphs == [{"id": "stablehlo_sdy", "nodes": []}]
 
 
 def test_relabel_preserves_non_temp_single_graph_id():
-    graph_json = json.dumps({"graphs": [{"id": "stablehlo_sdy", "nodes": []}]})
-    assert json.loads(relabel_graph_ids(graph_json, "upload_stem")) == {
-        "graphs": [{"id": "stablehlo_sdy", "nodes": []}]
-    }
+    graphs = [{"id": "stablehlo_sdy", "nodes": []}]
+    assert relabel_graph_ids(graphs, "upload_stem") is False
+    assert graphs == [{"id": "stablehlo_sdy", "nodes": []}]
 
 
 def test_relabel_rewrites_only_temp_ids_in_multi_graph_bundle():
-    graph_json = json.dumps(
-        {
-            "graphs": [
-                {"id": f"/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}1.mlir", "nodes": []},
-                {"id": "microsoft_phi-2_stablehlo", "nodes": []},
-                {"id": "/tmp/other_tool/stablehlo_sdy.mlir", "nodes": []},
-            ]
-        }
-    )
-    relabelled = relabel_graph_ids(graph_json, "uploaded_file")
-    assert json.loads(relabelled) == {
-        "graphs": [
-            {"id": "uploaded_file", "nodes": []},
-            {"id": "microsoft_phi-2_stablehlo", "nodes": []},
-            # Non-upload /tmp paths keep their basename identity — do not
-            # collapse valid report names into the upload stem.
-            {"id": "/tmp/other_tool/stablehlo_sdy.mlir", "nodes": []},
-        ]
-    }
+    graphs = [
+        {"id": f"/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}1.mlir", "nodes": []},
+        {"id": "microsoft_phi-2_stablehlo", "nodes": []},
+        {"id": "/tmp/other_tool/stablehlo_sdy.mlir", "nodes": []},
+    ]
+    assert relabel_graph_ids(graphs, "uploaded_file") is True
+    assert graphs == [
+        {"id": "uploaded_file", "nodes": []},
+        {"id": "microsoft_phi-2_stablehlo", "nodes": []},
+        # Non-upload /tmp paths keep their basename identity — do not
+        # collapse valid report names into the upload stem.
+        {"id": "/tmp/other_tool/stablehlo_sdy.mlir", "nodes": []},
+    ]
+
+
+def test_relabel_rewrites_multiple_temp_ids_with_stem_suffixes():
+    graphs = [
+        {"id": f"/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}a.mlir", "nodes": []},
+        {"id": f"/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}b.mlir", "nodes": []},
+        {"id": f"/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}c.mlir", "nodes": []},
+    ]
+    assert relabel_graph_ids(graphs, "stem") is True
+    assert [graph["id"] for graph in graphs] == ["stem", "stem (2)", "stem (3)"]
 
 
 def test_relabel_leaves_payload_unchanged_when_display_name_empty():
-    graph_json = json.dumps(
-        {"graphs": [{"id": f"{_TEMP_UPLOAD_BASENAME_PREFIX}x.mlir"}]}
-    )
-    assert relabel_graph_ids(graph_json, "") == graph_json
+    graphs = [{"id": f"{_TEMP_UPLOAD_BASENAME_PREFIX}x.mlir"}]
+    original = list(graphs)
+    assert relabel_graph_ids(graphs, "") is False
+    assert graphs == original
 
 
 # ---- _convert_model_on_server: adapter fallback ---------------------------
@@ -263,7 +262,7 @@ def test_convert_falls_through_to_next_adapter_on_not_found(
         calls.append(extension_id)
         if extension_id == "tt_adapter":
             return None, 'Extension "tt_adapter" not found'
-        return json.dumps({"graphs": []}), None
+        return [], None
 
     with patch(
         "ttnn_visualizer.mlir._convert_with_extension", side_effect=fake_convert
@@ -275,7 +274,7 @@ def test_convert_falls_through_to_next_adapter_on_not_found(
     # `StatusMessage` coerces the enum to its int value, so compare against
     # `.value` (the same contract the views and frontend rely on).
     assert result.status.status == ConnectionTestStates.OK.value
-    assert result.graph_json == json.dumps({"graphs": []})
+    assert result.graphs == []
     assert calls == ["tt_adapter", "builtin_mlir"]
 
 
@@ -322,7 +321,7 @@ def test_upload_and_convert_rejects_unsupported_file_before_upload(
 def _ok_conversion(graph_id: str = "g") -> MlirConversionResult:
     return MlirConversionResult(
         status=StatusMessage(status=ConnectionTestStates.OK, message="Success"),
-        graph_json=json.dumps({"graphs": [{"id": graph_id, "nodes": []}]}),
+        graphs=[{"id": graph_id, "nodes": []}],
     )
 
 

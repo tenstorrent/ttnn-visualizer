@@ -25,7 +25,7 @@ import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
 import { MlirFileResult, MlirLoadedReport } from '../../model/MLIRJsonModel';
-import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
+import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
 import 'styles/components/MlirFileResultsOverlay.scss';
 
 const MAX_MLIR_FILE_SELECTION = 2;
@@ -170,21 +170,7 @@ const MlirFileResultsOverlay = () => {
             setResults(
                 (current) =>
                     current?.map((entry, entryIndex) =>
-                        entryIndex === index
-                            ? {
-                                  filename: retried.filename,
-                                  host: retried.host ?? entry.host ?? null,
-                                  name: retried.name,
-                                  status: retried.status,
-                                  message: retried.message ?? retried.detail,
-                                  // Relabel at ingest (same boundary as MlirJsonFileLoader).
-                                  graph:
-                                      retried.graph && retried.name
-                                          ? relabelMlirGraphIds(retried.graph, retried.name)
-                                          : (retried.graph ?? null),
-                                  persisted: true,
-                              }
-                            : entry,
+                        entryIndex === index ? mapConvertedMlirServerResult(retried, entry.host ?? null) : entry,
                     ) ?? current,
             );
         } catch (err: unknown) {
@@ -249,7 +235,7 @@ const MlirFileResultsOverlay = () => {
         }
 
         const [primary, comparison] = selectedResults;
-        // Graphs are already relabelled at results ingest (loader / retry).
+        // Server graphs are relabelled on the backend; local JSON at load time.
         // Index 0 is the instance-persisted report; optional peer is for split.
         const loadedReports: MlirLoadedReport[] = [{ name: primary.name, data: primary.graph }];
         if (comparison) {
@@ -305,7 +291,7 @@ const MlirFileResultsOverlay = () => {
                     MLIR uploads
                 </h2>
 
-                <p className='mlir-file-results-hint'>Select up to two converted files.</p>
+                <p className='mlir-file-results-hint'>Select up to {MAX_MLIR_FILE_SELECTION} converted files.</p>
 
                 <MlirFileList
                     results={results ?? []}

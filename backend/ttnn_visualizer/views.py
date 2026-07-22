@@ -54,6 +54,7 @@ from ttnn_visualizer.local_remote_reports import (
     local_synced_report_path,
 )
 from ttnn_visualizer.mlir import (
+    dumps_graph_bundle,
     relabel_graph_ids,
     test_mlir_server_connection,
     upload_and_convert_mlir,
@@ -1848,7 +1849,7 @@ def upload_mlir_server():
 
         if (
             result.status.status == ConnectionTestStates.OK.value
-            and result.graph_json is not None
+            and result.graphs is not None
         ):
             base_name = Path(Path(filename).name).stem
             unavailable_names = existing_names | used_names
@@ -1860,8 +1861,9 @@ def upload_mlir_server():
             mlir_name = _unique_mlir_name(base_name, unavailable_names)
             used_names.add(mlir_name)
             # Model Explorer labels graphs with the temp remote upload path;
-            # rewrite to the stored report stem before persist + response.
-            labelled_graph_json = relabel_graph_ids(result.graph_json, mlir_name)
+            # rewrite to the stored report stem before the single serialise.
+            relabel_graph_ids(result.graphs, mlir_name)
+            labelled_graph_json = dumps_graph_bundle(result.graphs)
             mlir_path = target_directory / f"{mlir_name}.json"
             mlir_path.write_text(labelled_graph_json, encoding="utf-8")
 

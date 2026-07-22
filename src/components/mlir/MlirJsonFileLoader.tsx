@@ -19,6 +19,7 @@ import {
 import { GraphBundle, MlirFileResult } from '../../model/MLIRJsonModel';
 import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
+import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
 import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
 import 'styles/components/FileLoader.scss';
 
@@ -135,18 +136,9 @@ const MlirJsonFileLoader = ({ server = null }: MlirJsonFileLoaderProps) => {
                 // Server uploads report transfer progress through the shared
                 // FileStatusOverlay; the results overlay opens once converted.
                 const response = await uploadMlirFileToServer(selectedFiles, server);
-                const results: MlirFileResult[] = (response?.data?.results ?? []).map((result) => ({
-                    filename: result.filename,
-                    host: result.host ?? server.host,
-                    name: result.name,
-                    status: result.status,
-                    message: result.message ?? result.detail,
-                    graph:
-                        result.graph && result.name
-                            ? relabelMlirGraphIds(result.graph, result.name)
-                            : (result.graph ?? null),
-                    persisted: true,
-                }));
+                const results: MlirFileResult[] = (response?.data?.results ?? []).map((result) =>
+                    mapConvertedMlirServerResult(result, server.host),
+                );
 
                 if (!results.length) {
                     // Drop the pending spinner rows so they don't linger as
