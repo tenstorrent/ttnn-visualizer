@@ -19,7 +19,7 @@ import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../definitions/TopNAnnotations';
 import { MlirServerConnection } from '../definitions/MlirServer';
-import { GraphBundle, MlirFileResult } from '../model/MLIRJsonModel';
+import { MlirFileResult, MlirLoadedReport } from '../model/MLIRJsonModel';
 import { aggregateFileTransferProgress, fileTransferRegistryAtom } from './fileTransferRegistry';
 
 // App state
@@ -47,7 +47,7 @@ export const showHexAtom = atomWithStorage('showHex', false); // Used in Buffers
 export const showMemoryRegionsAtom = atomWithStorage('showMemoryRegions', true); // Used in Buffers and Operation Details
 export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', false); // Used in Buffers and Operation Details
 
-// Reports
+// Reports (excluding NPE/MLIR)
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
 export const activeProfilerReportAtom = atom<ReportFolder | null>(null);
 export const operationRangeAtom = atom<NumberRange | null>(null);
@@ -62,27 +62,6 @@ export const isActivatingReportAtom = atom(false);
 export const reportLinksAtom = atomWithStorage<ReportLink[]>(REPORT_LINKS_STORAGE_KEY, []);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
-export const activeNpeOpTraceAtom = atom<string | null>(null);
-export const activeMlirJsonAtom = atom<string | null>(null);
-export const activeMlirDataAtom = atom<GraphBundle | null>(null);
-export const mlirFileResultsAtom = atom<MlirFileResult[] | null>(null);
-export const mlirFileResultsOpenAtom = atom(false);
-export const mlirRetryFilesAtom = atom<File[] | null>(null);
-export const mlirRetryServerAtom = atom<MlirServerConnection | null>(null);
-export const mlirServersAtom = atomWithStorage<MlirServerConnection[]>('mlirServers', []);
-export const selectedMlirServerAtom = atomWithStorage<MlirServerConnection | null>('selectedMlirServer', null);
-export const mlirNodeDetailsCollapsedAtom = atomWithStorage<{ attrs: boolean; inputs: boolean; outputs: boolean }>(
-    'mlirNodeDetailsCollapsed',
-    { attrs: false, inputs: true, outputs: true },
-);
-// Session-scoped so the view opens uncluttered after a browser restart —
-// deliberately different lifetime from the neighbouring `mlirNodeDetailsCollapsed`
-// (which is a stable structural preference that survives sessions).
-export const mlirNodeBodyTogglesAtom = atomWithStorage<{ location: boolean; shapes: boolean }>(
-    'mlirNodeBodyToggles',
-    { location: false, shapes: false },
-    createJSONStorage(() => sessionStorage),
-);
 export const hasClusterDescriptionAtom = atom(false);
 
 // Operations route
@@ -141,4 +120,47 @@ export const selectedPerfRowIdAtom = atom<number | null>(null);
 export const hiddenPerfTableColumnsAtom = atomWithStorage<ColumnKeys[]>('hiddenPerfTableColumns', []);
 
 // NPE
+export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const altCongestionColorsAtom = atomWithStorage('altCongestionColors', false);
+
+// MLIR
+// Session-loaded MLIR reports (0–2). Index 0 is persisted/nav-active.
+export const mlirLoadedReportsAtom = atom<MlirLoadedReport[]>([]);
+// Derived for nav, restore, and FileInput label. Writing replaces the list with
+// a name-only primary (reload fetch) or clears it.
+export const activeMlirJsonAtom = atom(
+    (get) => get(mlirLoadedReportsAtom)[0]?.name ?? null,
+    (get, set, name: string | null) => {
+        if (name === null) {
+            set(mlirLoadedReportsAtom, []);
+            return;
+        }
+        const current = get(mlirLoadedReportsAtom);
+        // Keep in-memory primary data and split peers when re-asserting the same
+        // active name (restore used to replace the list with `{ data: null }`).
+        if (current[0]?.name === name && current[0]?.data) {
+            return;
+        }
+        set(mlirLoadedReportsAtom, [{ name, data: null }]);
+    },
+);
+export const mlirFileResultsAtom = atom<MlirFileResult[] | null>(null);
+export const mlirFileResultsOpenAtom = atom(false);
+export const mlirRetryFilesAtom = atom<File[] | null>(null);
+// Bumped on each two-file View so the MLIR route can auto-open split again
+// after the user previously dismissed it for the same peer.
+export const mlirSplitViewEpochAtom = atom(0);
+export const mlirServersAtom = atomWithStorage<MlirServerConnection[]>('mlirServers', []);
+export const selectedMlirServerAtom = atomWithStorage<MlirServerConnection | null>('selectedMlirServer', null);
+export const mlirNodeDetailsCollapsedAtom = atomWithStorage<{ attrs: boolean; inputs: boolean; outputs: boolean }>(
+    'mlirNodeDetailsCollapsed',
+    { attrs: false, inputs: true, outputs: true },
+);
+// Session-scoped so the view opens uncluttered after a browser restart —
+// deliberately different lifetime from the neighbouring `mlirNodeDetailsCollapsed`
+// (which is a stable structural preference that survives sessions).
+export const mlirNodeBodyTogglesAtom = atomWithStorage<{ location: boolean; shapes: boolean }>(
+    'mlirNodeBodyToggles',
+    { location: false, shapes: false },
+    createJSONStorage(() => sessionStorage),
+);

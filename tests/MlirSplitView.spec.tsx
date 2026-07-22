@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { GraphBundle } from '../src/model/MLIRJsonModel';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import MlirSplitView from '../src/components/mlir/MlirSplitView';
+import MlirSplitView, { type MlirSplitReport } from '../src/components/mlir/MlirSplitView';
 
 // jsdom implements neither PointerEvent nor element pointer capture, so back
 // PointerEvent with MouseEvent (carries clientX) and stub the capture calls;
@@ -76,6 +76,34 @@ afterEach(cleanup);
 
 const makeData = (ids: string[]): GraphBundle => ({ graphs: ids.map((id) => ({ id })) }) as unknown as GraphBundle;
 
+const makeReport = (key: string, ids: string[]): MlirSplitReport => ({
+    key,
+    label: key,
+    data: makeData(ids),
+});
+
+const renderInFileSplit = (ids: string[], onExit: () => void = () => {}) => {
+    const report = makeReport('only', ids);
+    return render(
+        <MlirSplitView
+            reports={[report]}
+            initialLeftKey={report.key}
+            initialRightKey={report.key}
+            onExit={onExit}
+        />,
+    );
+};
+
+const renderCrossFileSplit = (left: MlirSplitReport, right: MlirSplitReport, onExit: () => void = () => {}) =>
+    render(
+        <MlirSplitView
+            reports={[left, right]}
+            initialLeftKey={left.key}
+            initialRightKey={right.key}
+            onExit={onExit}
+        />,
+    );
+
 const paneGraphIds = (): [string, string] => {
     const [left, right] = screen.getAllByTestId(TEST_IDS.MLIR_GRAPH);
     return [left.textContent ?? '', right.textContent ?? ''];
@@ -87,56 +115,31 @@ describe('MlirSplitView', () => {
     });
 
     it('marks both panes details-collapsible so the panel can collapse to a rail', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1']);
         const panes = screen.getAllByTestId(TEST_IDS.MLIR_GRAPH);
         expect(panes).toHaveLength(2);
         panes.forEach((pane) => expect(pane).toHaveAttribute('data-details-collapsible', 'true'));
     });
 
-    it('opens both panes on the same (first) graph', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
-                onExit={() => {}}
-            />,
-        );
+    it('opens both panes on the same (first) graph for a single report', () => {
+        renderInFileSplit(['g0', 'g1', 'g2']);
         expect(paneGraphIds()).toEqual(['g0', 'g0']);
     });
 
     it('re-points the right pane without touching the left', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1', 'g2']);
         fireEvent.change(screen.getByLabelText('right pane graph'), { target: { value: '1' } });
         expect(paneGraphIds()).toEqual(['g0', 'g1']);
     });
 
     it('re-points the left pane without touching the right', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1', 'g2']);
         fireEvent.change(screen.getByLabelText('left pane graph'), { target: { value: '2' } });
         expect(paneGraphIds()).toEqual(['g2', 'g0']);
     });
 
     it('swaps the two panes', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1', 'g2']);
         fireEvent.change(screen.getByLabelText('right pane graph'), { target: { value: '2' } });
         // Each pane header carries its own swap button; either performs the swap.
         fireEvent.click(screen.getAllByRole('button', { name: 'Swap panes' })[0]);
@@ -145,33 +148,18 @@ describe('MlirSplitView', () => {
 
     it('exits the split view from a pane close button', () => {
         const onExit = vi.fn();
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1'])}
-                onExit={onExit}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1'], onExit);
         fireEvent.click(screen.getAllByRole('button', { name: 'Close split view' })[0]);
         expect(onExit).toHaveBeenCalledTimes(1);
     });
 
     it('renders a resizable divider between the panes', () => {
-        render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1'])}
-                onExit={() => {}}
-            />,
-        );
+        renderInFileSplit(['g0', 'g1']);
         expect(screen.getByRole('separator', { name: 'Resize panes' })).toBeInTheDocument();
     });
 
     it('resizes the left pane on divider drag, clamped to 20–80%', () => {
-        const { container } = render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1'])}
-                onExit={() => {}}
-            />,
-        );
+        const { container } = renderInFileSplit(['g0', 'g1']);
         stubRect(container.querySelector('.mlir-split-view') as HTMLElement, 1000);
 
         const divider = screen.getByRole('separator', { name: 'Resize panes' });
@@ -192,12 +180,7 @@ describe('MlirSplitView', () => {
     });
 
     it('ignores pointer movement that is not part of an active drag', () => {
-        const { container } = render(
-            <MlirSplitView
-                data={makeData(['g0', 'g1'])}
-                onExit={() => {}}
-            />,
-        );
+        const { container } = renderInFileSplit(['g0', 'g1']);
         stubRect(container.querySelector('.mlir-split-view') as HTMLElement, 1000);
 
         const divider = screen.getByRole('separator', { name: 'Resize panes' });
@@ -209,9 +192,12 @@ describe('MlirSplitView', () => {
     });
 
     it('clamps stale pane indices when the graph list shrinks', () => {
+        const report = makeReport('only', ['g0', 'g1', 'g2']);
         const { rerender } = render(
             <MlirSplitView
-                data={makeData(['g0', 'g1', 'g2'])}
+                reports={[report]}
+                initialLeftKey={report.key}
+                initialRightKey={report.key}
                 onExit={() => {}}
             />,
         );
@@ -220,13 +206,70 @@ describe('MlirSplitView', () => {
 
         // A smaller re-upload while split view stays mounted must not feed an
         // out-of-range index (undefined graph) into either pane.
+        const shrunk = makeReport('only', ['g0']);
         rerender(
             <MlirSplitView
-                data={makeData(['g0'])}
+                reports={[shrunk]}
+                initialLeftKey={shrunk.key}
+                initialRightKey={shrunk.key}
                 onExit={() => {}}
             />,
         );
         expect(paneGraphIds()).toEqual(['g0', 'g0']);
         expect((screen.getByLabelText('right pane graph') as HTMLSelectElement).value).toBe('0');
+    });
+
+    it('lists every loaded report in each pane select for cross-file split', () => {
+        const primary = makeReport('stablehlo_sdy', ['g-a']);
+        const compare = makeReport('microsoft_phi-2_stablehlo', ['g-b']);
+        renderCrossFileSplit(primary, compare);
+
+        const leftSelect = screen.getByLabelText('left pane report') as HTMLSelectElement;
+        const rightSelect = screen.getByLabelText('right pane report') as HTMLSelectElement;
+        expect([...leftSelect.options].map((option) => option.text)).toEqual([
+            'stablehlo_sdy',
+            'microsoft_phi-2_stablehlo',
+        ]);
+        expect([...rightSelect.options].map((option) => option.text)).toEqual([
+            'stablehlo_sdy',
+            'microsoft_phi-2_stablehlo',
+        ]);
+        expect(paneGraphIds()).toEqual(['g-a', 'g-b']);
+
+        fireEvent.change(leftSelect, { target: { value: 'microsoft_phi-2_stablehlo' } });
+        expect(paneGraphIds()).toEqual(['g-b', 'g-b']);
+    });
+
+    it('swaps cross-file panes without dropping either report from the selects', () => {
+        const primary = makeReport('stablehlo_sdy', ['g-a']);
+        const compare = makeReport('microsoft_phi-2_stablehlo', ['g-b']);
+        renderCrossFileSplit(primary, compare);
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Swap panes' })[0]);
+        expect(paneGraphIds()).toEqual(['g-b', 'g-a']);
+
+        const leftSelect = screen.getByLabelText('left pane report') as HTMLSelectElement;
+        expect([...leftSelect.options].map((option) => option.text)).toHaveLength(2);
+        expect(leftSelect.value).toBe('microsoft_phi-2_stablehlo');
+    });
+
+    it('shows a nested graph select for cross-file reports with multiple graphs', () => {
+        const primary = makeReport('report-a', ['a0', 'a1']);
+        const compare = makeReport('report-b', ['b0', 'b1', 'b2']);
+        renderCrossFileSplit(primary, compare);
+
+        expect(screen.getByLabelText('left pane report')).toBeInTheDocument();
+        expect(screen.getByLabelText('right pane report')).toBeInTheDocument();
+        expect(screen.getByLabelText('left pane graph')).toBeInTheDocument();
+        expect(screen.getByLabelText('right pane graph')).toBeInTheDocument();
+        expect(paneGraphIds()).toEqual(['a0', 'b0']);
+
+        fireEvent.change(screen.getByLabelText('left pane graph'), { target: { value: '1' } });
+        expect(paneGraphIds()).toEqual(['a1', 'b0']);
+
+        // Changing report resets that pane's graph index to 0.
+        fireEvent.change(screen.getByLabelText('left pane report'), { target: { value: 'report-b' } });
+        expect(paneGraphIds()).toEqual(['b0', 'b0']);
+        expect((screen.getByLabelText('left pane graph') as HTMLSelectElement).value).toBe('0');
     });
 });

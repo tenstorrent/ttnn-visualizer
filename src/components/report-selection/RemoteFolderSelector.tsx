@@ -154,6 +154,7 @@ const RemoteFolderSelector = ({
                     icon={icon}
                     endIcon={sortedFolderList.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
+                    loading={loading}
                     text={remoteFolder?.reportName ?? fallbackLabel}
                     data-testid={TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON}
                 />

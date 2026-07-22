@@ -11,12 +11,14 @@ import MlirFileResultsOverlay from '../src/components/mlir/MlirFileResultsOverla
 import MlirJsonFileLoader from '../src/components/mlir/MlirJsonFileLoader';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import {
-    activeMlirDataAtom,
     activeMlirJsonAtom,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
+    mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
-    mlirRetryServerAtom,
+    mlirServersAtom,
+    mlirSplitViewEpochAtom,
+    selectedMlirServerAtom,
 } from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
 import { MlirServerConnection } from '../src/definitions/MlirServer';
@@ -60,9 +62,10 @@ beforeEach(() => {
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
     getDefaultStore().set(mlirRetryFilesAtom, null);
-    getDefaultStore().set(mlirRetryServerAtom, null);
-    getDefaultStore().set(activeMlirDataAtom, null);
-    getDefaultStore().set(activeMlirJsonAtom, null);
+    getDefaultStore().set(mlirServersAtom, []);
+    getDefaultStore().set(selectedMlirServerAtom, null);
+    getDefaultStore().set(mlirLoadedReportsAtom, []);
+    getDefaultStore().set(mlirSplitViewEpochAtom, 0);
 });
 
 afterEach(() => cleanup());
@@ -121,7 +124,7 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
         await waitFor(() => {
-            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'a', data: GRAPH }]);
         });
         expect(getDefaultStore().get(activeMlirJsonAtom)).toBe('a');
         expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
@@ -162,9 +165,94 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
         await waitFor(() => {
-            expect(getDefaultStore().get(activeMlirDataAtom)).toEqual(GRAPH);
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'a', data: GRAPH }]);
         });
         expect(setActiveMlir).not.toHaveBeenCalled();
+    });
+
+    it('allows selecting up to two successful files and ignores a third', async () => {
+        const graphB: GraphBundle = { graphs: [{ id: 'gb', nodes: [] }] };
+        const graphC: GraphBundle = { graphs: [{ id: 'gc', nodes: [] }] };
+        renderOverlay([
+            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: false },
+            { filename: 'b.mlir', name: 'b', status: ConnectionTestStates.OK, graph: graphB, persisted: false },
+            { filename: 'c.mlir', name: 'c', status: ConnectionTestStates.OK, graph: graphC, persisted: false },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlir'));
+        fireEvent.click(screen.getByText('b.mlir'));
+
+        expect(screen.getByText('a.mlir').closest('a')).toHaveClass('bp6-active');
+        expect(screen.getByText('b.mlir').closest('a')).toHaveClass('bp6-active');
+        // At the cap, unselected success rows are disabled (not a silent no-op).
+        expect(screen.getByText('c.mlir').closest('a')).toHaveAttribute('aria-disabled', 'true');
+
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([
+                { name: 'a', data: GRAPH },
+                { name: 'b', data: graphB },
+            ]);
+        });
+    });
+
+    it('opens two selected files as primary + peer via View', async () => {
+        const graphB: GraphBundle = { graphs: [{ id: 'gb', nodes: [] }] };
+        renderOverlay([
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
+            {
+                filename: 'b.mlir',
+                host: 'worker-01',
+                name: 'b',
+                status: ConnectionTestStates.OK,
+                graph: graphB,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlir'));
+        fireEvent.click(screen.getByText('b.mlir'));
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([
+                { name: 'a', data: GRAPH },
+                { name: 'b', data: graphB },
+            ]);
+        });
+        expect(getDefaultStore().get(mlirSplitViewEpochAtom)).toBe(1);
+        expect(getDefaultStore().get(activeMlirJsonAtom)).toBe('a');
+        // Persist index 0 only — peer is session-scoped.
+        expect(setActiveMlir).toHaveBeenCalledTimes(1);
+        expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
+        expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'a.mlir / b.mlir', 'success');
+    });
+
+    it('replaces a prior peer when View commits a single file', async () => {
+        const graphB: GraphBundle = { graphs: [{ id: 'gb', nodes: [] }] };
+        getDefaultStore().set(mlirLoadedReportsAtom, [
+            { name: 'a', data: GRAPH },
+            { name: 'b', data: graphB },
+        ]);
+
+        renderOverlay([
+            { filename: 'a.json', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: false },
+        ]);
+
+        fireEvent.click(screen.getByText('a.json'));
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'a', data: GRAPH }]);
+        });
     });
 
     it('does not show a success toast when persisting active MLIR fails', async () => {
@@ -193,7 +281,8 @@ describe('MlirFileResultsOverlay', () => {
     it('retries conversion for a failed server file', async () => {
         const failedFile = new File(['module {}'], 'failed.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
-        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        getDefaultStore().set(mlirServersAtom, [SERVER]);
+        getDefaultStore().set(selectedMlirServerAtom, SERVER);
         uploadMlirFileToServer.mockResolvedValueOnce({
             data: {
                 results: [
@@ -240,7 +329,8 @@ describe('MlirFileResultsOverlay', () => {
     it('keeps View disabled for failed rows while allowing Retry', async () => {
         const failedFile = new File(['module {}'], 'failed.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
-        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        getDefaultStore().set(mlirServersAtom, [SERVER]);
+        getDefaultStore().set(selectedMlirServerAtom, SERVER);
         uploadMlirFileToServer.mockResolvedValueOnce({
             data: {
                 results: [
@@ -305,11 +395,56 @@ describe('MlirFileResultsOverlay', () => {
         expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
     });
 
+    it('retries using the first listed server when selection is still null', async () => {
+        const failedFile = new File(['module {}'], 'failed.mlir');
+        getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
+        // Mirrors MLIRFileSelector: uploads use servers[0] when selected is unset.
+        getDefaultStore().set(mlirServersAtom, [SERVER]);
+        getDefaultStore().set(selectedMlirServerAtom, null);
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'failed.mlir',
+                        name: 'failed',
+                        status: ConnectionTestStates.OK,
+                        graph: GRAPH,
+                    },
+                ],
+            },
+        });
+
+        renderOverlay([
+            {
+                filename: 'failed.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+        await waitFor(() => {
+            expect(uploadMlirFileToServer).toHaveBeenCalledWith(
+                [failedFile],
+                SERVER,
+                expect.objectContaining({
+                    signal: expect.any(AbortSignal),
+                    suppressProgressOverlay: true,
+                }),
+            );
+        });
+    });
+
     it('keeps other Retry buttons enabled while a retry is in flight', async () => {
         const fileA = new File(['module {}'], 'failed-a.mlir');
         const fileB = new File(['module {}'], 'failed-b.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [fileA, fileB]);
-        getDefaultStore().set(mlirRetryServerAtom, SERVER);
+        getDefaultStore().set(mlirServersAtom, [SERVER]);
+        getDefaultStore().set(selectedMlirServerAtom, SERVER);
 
         const retryDeferred: { resolve: ((value: unknown) => void) | null } = { resolve: null };
 
@@ -366,6 +501,73 @@ describe('MlirFileResultsOverlay', () => {
             expect(retryButtons).toHaveLength(2);
             expect(retryButtons[0]).toBeEnabled();
             expect(retryButtons[1]).toBeEnabled();
+        });
+    });
+});
+
+describe('MlirJsonFileLoader clearSplitPeers', () => {
+    it('drops loaded split peers when a new local results batch starts', async () => {
+        getDefaultStore().set(mlirLoadedReportsAtom, [
+            { name: 'primary', data: GRAPH },
+            { name: 'peer', data: GRAPH },
+        ]);
+
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader />
+            </MemoryRouter>,
+        );
+
+        const file = new File([JSON.stringify(GRAPH)], 'next.json', { type: 'application/json' });
+        // jsdom File blobs are not always readable via `.text()`; stub the
+        // content so the local JSON path exercises clearSplitPeers.
+        file.text = () => Promise.resolve(JSON.stringify(GRAPH));
+
+        const fileInput = container.querySelector('input[type="file"]');
+        fireEvent.change(fileInput as HTMLInputElement, {
+            target: { files: [file] },
+        });
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'primary', data: GRAPH }]);
+            expect(getDefaultStore().get(mlirFileResultsAtom)?.[0]?.name).toBe('next');
+        });
+    });
+
+    it('drops loaded split peers when a server upload starts', async () => {
+        getDefaultStore().set(mlirLoadedReportsAtom, [
+            { name: 'primary', data: GRAPH },
+            { name: 'peer', data: GRAPH },
+        ]);
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'model.mlir',
+                        name: 'model',
+                        status: ConnectionTestStates.OK,
+                        graph: GRAPH,
+                    },
+                ],
+            },
+        });
+
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+            </MemoryRouter>,
+        );
+
+        const fileInput = container.querySelector('input[type="file"]');
+        fireEvent.change(fileInput as HTMLInputElement, {
+            target: { files: [new File(['module {}'], 'model.mlir')] },
+        });
+
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'primary', data: GRAPH }]);
+        });
+        await waitFor(() => {
+            expect(getDefaultStore().get(mlirFileResultsAtom)?.[0]?.name).toBe('model');
         });
     });
 });

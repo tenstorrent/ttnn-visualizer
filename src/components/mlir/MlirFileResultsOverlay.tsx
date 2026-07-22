@@ -14,21 +14,28 @@ import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { OVERLAY_HEADING_ICON_SIZE } from '../../definitions/UiConfig';
 import ROUTES from '../../definitions/Routes';
 import {
-    activeMlirDataAtom,
-    activeMlirJsonAtom,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
+    mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
-    mlirRetryServerAtom,
+    mlirServersAtom,
+    mlirSplitViewEpochAtom,
+    selectedMlirServerAtom,
 } from '../../store/app';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
+import { getActiveMlirServer } from '../../functions/mlirServer';
+import { MlirFileResult, MlirLoadedReport } from '../../model/MLIRJsonModel';
+import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
 import 'styles/components/MlirFileResultsOverlay.scss';
 
+const MAX_MLIR_FILE_SELECTION = 2;
+
 // Lists the per-file outcome of the most recent MLIR upload/load and lets the
-// user pick which successfully-converted file to make the active graph.
+// user pick up to two successfully-converted files. One file opens single view;
+// two open cross-file split (1st = primary/left, 2nd = comparison/right).
 // Visibility is controlled by `mlirFileResultsOpenAtom`; `mlirFileResultsAtom`
 // holds the rows and is retained after closing so the overlay can be reopened.
 // Selecting a file only highlights it; the View button commits the choice.
@@ -36,13 +43,16 @@ const MlirFileResultsOverlay = () => {
     const [results, setResults] = useAtom(mlirFileResultsAtom);
     const [isOpen, setIsOpen] = useAtom(mlirFileResultsOpenAtom);
     const retryFiles = useAtomValue(mlirRetryFilesAtom);
-    const retryServer = useAtomValue(mlirRetryServerAtom);
-    const setActiveMlirData = useSetAtom(activeMlirDataAtom);
-    const setActiveMlirJson = useSetAtom(activeMlirJsonAtom);
+    const servers = useAtomValue(mlirServersAtom);
+    const selectedServer = useAtomValue(selectedMlirServerAtom);
+    // Same resolution as MLIRFileSelector / uploads (selected, else first listed).
+    const retryServer = getActiveMlirServer(servers, selectedServer);
+    const setMlirLoadedReports = useSetAtom(mlirLoadedReportsAtom);
+    const setSplitViewEpoch = useSetAtom(mlirSplitViewEpochAtom);
     const { setActiveMlir, uploadMlirFileToServer } = useMlirRemote();
     const navigate = useNavigate();
     const location = useLocation();
-    const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
     const [retryingIndices, setRetryingIndices] = useState<Set<number>>(new Set<number>());
     const retrySessionRef = useRef(0);
     const retryAbortControllersRef = useRef<Map<number, AbortController>>(new Map<number, AbortController>());
@@ -89,9 +99,21 @@ const MlirFileResultsOverlay = () => {
                 ToastType.WARNING,
             );
         }
-        setSelectedIndex(null);
+        setSelectedIndices([]);
         setRetryingIndices(new Set<number>());
         setIsOpen(false);
+    };
+
+    const handleSelect = (index: number) => {
+        setSelectedIndices((current) => {
+            if (current.includes(index)) {
+                return current.filter((selected) => selected !== index);
+            }
+            if (current.length >= MAX_MLIR_FILE_SELECTION) {
+                return current;
+            }
+            return [...current, index];
+        });
     };
 
     const handleRetry = async (index: number) => {
@@ -154,17 +176,7 @@ const MlirFileResultsOverlay = () => {
             setResults(
                 (current) =>
                     current?.map((entry, entryIndex) =>
-                        entryIndex === index
-                            ? {
-                                  filename: retried.filename,
-                                  host: retried.host ?? entry.host ?? null,
-                                  name: retried.name,
-                                  status: retried.status,
-                                  message: retried.message ?? retried.detail,
-                                  graph: retried.graph ?? null,
-                                  persisted: true,
-                              }
-                            : entry,
+                        entryIndex === index ? mapConvertedMlirServerResult(retried, entry.host ?? null) : entry,
                     ) ?? current,
             );
         } catch (err: unknown) {
@@ -213,27 +225,47 @@ const MlirFileResultsOverlay = () => {
     };
 
     const handleView = async () => {
-        const result = selectedIndex === null ? null : results?.[selectedIndex];
-        if (!result?.graph || !result.name) {
+        if (!results || selectedIndices.length === 0) {
             return;
         }
 
-        setActiveMlirData(result.graph);
-        setActiveMlirJson(result.name);
+        const selectedResults = selectedIndices
+            .map((index) => results[index])
+            .filter(
+                (result): result is MlirFileResult & { graph: NonNullable<MlirFileResult['graph']>; name: string } =>
+                    !!result?.graph && !!result.name,
+            );
+
+        if (selectedResults.length === 0 || selectedResults.length !== selectedIndices.length) {
+            return;
+        }
+
+        const [primary, comparison] = selectedResults;
+        // Server graphs are relabelled on the backend; local JSON at load time.
+        // Index 0 is the instance-persisted report; optional peer is for split.
+        const loadedReports: MlirLoadedReport[] = [{ name: primary.name, data: primary.graph }];
+        if (comparison) {
+            loadedReports.push({ name: comparison.name, data: comparison.graph });
+            // Force auto-split even if the user previously dismissed split for
+            // the same peer name while staying on the MLIR route.
+            setSplitViewEpoch((epoch) => epoch + 1);
+        }
+        setMlirLoadedReports(loadedReports);
 
         // Local JSON loads live only in memory; only server uploads are stored
         // on disk and can be recorded as the instance's active MLIR so a reload
-        // restores them.
-        if (result.persisted) {
+        // restores them. Persist index 0 only.
+        if (primary.persisted) {
             try {
-                await setActiveMlir(result.name, result.host);
+                await setActiveMlir(primary.name, primary.host);
             } catch (err: unknown) {
                 createToastNotification('MLIR', getResponseError(err, 'Unable to set active MLIR'), ToastType.ERROR);
                 return;
             }
         }
 
-        createToastNotification('MLIR', result.filename, ToastType.SUCCESS);
+        const toastDetail = comparison ? `${primary.filename} / ${comparison.filename}` : primary.filename;
+        createToastNotification('MLIR', toastDetail, ToastType.SUCCESS);
         handleClose();
 
         if (location.pathname !== ROUTES.MLIR) {
@@ -268,12 +300,14 @@ const MlirFileResultsOverlay = () => {
                     MLIR uploads
                 </h2>
 
+                <p className='mlir-file-results-hint'>Select up to {MAX_MLIR_FILE_SELECTION} converted files.</p>
+
                 <MlirFileList
                     results={results ?? []}
-                    selectedIndex={selectedIndex}
+                    selectedIndices={selectedIndices}
+                    selectionLimitReached={selectedIndices.length >= MAX_MLIR_FILE_SELECTION}
                     retryingIndices={retryingIndices}
-                    // Clicking the already-selected file deselects it.
-                    onSelect={(index) => setSelectedIndex((current) => (current === index ? null : index))}
+                    onSelect={handleSelect}
                     onRetry={handleRetry}
                     canRetry={(index) => !!retryServer && !!retryFiles?.[index]}
                 />
@@ -282,7 +316,7 @@ const MlirFileResultsOverlay = () => {
             <div className={Classes.DIALOG_FOOTER_ACTIONS}>
                 <Button
                     intent={Intent.PRIMARY}
-                    disabled={selectedIndex === null}
+                    disabled={selectedIndices.length === 0}
                     onClick={handleView}
                 >
                     View

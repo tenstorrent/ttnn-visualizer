@@ -17,3 +17,9 @@ export const isSameMlirServer = (a?: MlirServerConnection | null, b?: MlirServer
     a.sshPort === b.sshPort &&
     a.port === b.port &&
     (a.identityFile ?? '') === (b.identityFile ?? '');
+
+/** Same resolution as the MLIR server picker: selected match, else first listed. */
+export const getActiveMlirServer = (
+    servers: MlirServerConnection[],
+    selected: MlirServerConnection | null,
+): MlirServerConnection | null => servers.find((server) => isSameMlirServer(server, selected)) ?? servers[0] ?? null;

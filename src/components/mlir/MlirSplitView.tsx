@@ -9,8 +9,16 @@ import type { GraphBundle } from '../../model/MLIRJsonModel';
 import MlGraph from './MLIRViewReactFlow';
 import 'styles/components/MlirSplitView.scss';
 
-interface MlirSplitViewProps {
+export interface MlirSplitReport {
+    key: string;
+    label: string;
     data: GraphBundle;
+}
+
+interface MlirSplitViewProps {
+    reports: MlirSplitReport[];
+    initialLeftKey: string;
+    initialRightKey: string;
     onExit: () => void;
 }
 
@@ -23,26 +31,38 @@ const clampPct = (pct: number): number => Math.min(MAX_PANE_PCT, Math.max(MIN_PA
 // the new graph list and feed `undefined` into MlGraph.
 const clampIndex = (index: number, count: number): number => Math.min(Math.max(index, 0), Math.max(count - 1, 0));
 
+const getReport = (reports: MlirSplitReport[], key: string): MlirSplitReport =>
+    reports.find((report) => report.key === key) ?? reports[0];
+
 type PaneSide = 'left' | 'right';
 
-const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
-    const { graphs } = data;
-    const [leftIndex, setLeftIndex] = useState(0);
-    // Both panes open on the same graph; the header select re-points either side.
-    const [rightIndex, setRightIndex] = useState(0);
+const MlirSplitView = ({ reports, initialLeftKey, initialRightKey, onExit }: MlirSplitViewProps) => {
+    const isMultiReport = reports.length > 1;
+    const [leftKey, setLeftKey] = useState(initialLeftKey);
+    const [rightKey, setRightKey] = useState(initialRightKey);
+    const [leftGraphIndex, setLeftGraphIndex] = useState(0);
+    const [rightGraphIndex, setRightGraphIndex] = useState(0);
     const [leftPct, setLeftPct] = useState(50);
     const containerRef = useRef<HTMLDivElement>(null);
     const draggingRef = useRef(false);
 
-    const safeLeftIndex = clampIndex(leftIndex, graphs.length);
-    const safeRightIndex = clampIndex(rightIndex, graphs.length);
+    const leftReport = getReport(reports, leftKey);
+    const rightReport = getReport(reports, rightKey);
+    const safeLeftGraphIndex = clampIndex(leftGraphIndex, leftReport.data.graphs.length);
+    const safeRightGraphIndex = clampIndex(rightGraphIndex, rightReport.data.graphs.length);
 
     // Per-pane single-graph bundles keep MlGraph unchanged (it renders graphs[0]).
     // useMemo stabilises each bundle's identity so memo(MlGraph) skips re-rendering
     // on unrelated parent updates (e.g. a divider drag); switching graphs still
     // remounts the pane via MlGraph's internal `key={graphs[0].id}`.
-    const leftBundle = useMemo<GraphBundle>(() => ({ graphs: [graphs[safeLeftIndex]] }), [graphs, safeLeftIndex]);
-    const rightBundle = useMemo<GraphBundle>(() => ({ graphs: [graphs[safeRightIndex]] }), [graphs, safeRightIndex]);
+    const leftBundle = useMemo<GraphBundle>(
+        () => ({ graphs: [leftReport.data.graphs[safeLeftGraphIndex]] }),
+        [leftReport.data.graphs, safeLeftGraphIndex],
+    );
+    const rightBundle = useMemo<GraphBundle>(
+        () => ({ graphs: [rightReport.data.graphs[safeRightGraphIndex]] }),
+        [rightReport.data.graphs, safeRightGraphIndex],
+    );
 
     const onDividerPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
         draggingRef.current = true;
@@ -67,47 +87,91 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
     }, []);
 
     const swapPanes = useCallback(() => {
-        setLeftIndex(safeRightIndex);
-        setRightIndex(safeLeftIndex);
-    }, [safeLeftIndex, safeRightIndex]);
+        setLeftKey(rightKey);
+        setRightKey(leftKey);
+        setLeftGraphIndex(safeRightGraphIndex);
+        setRightGraphIndex(safeLeftGraphIndex);
+    }, [leftKey, rightKey, safeLeftGraphIndex, safeRightGraphIndex]);
 
-    const renderHeader = (side: PaneSide, index: number, setIndex: (next: number) => void) => (
-        <header className='mlir-split-pane-header'>
-            <HTMLSelect
-                className='mlir-split-pane-select'
-                aria-label={`${side} pane graph`}
-                value={index}
-                onChange={(event) => setIndex(Number(event.currentTarget.value))}
-                options={graphs.map((graph, i) => ({ value: i, label: graph.id }))}
-                minimal
-            />
-            <span className='mlir-split-pane-header-spacer' />
-            <Tooltip
-                content='Swap the two panes'
-                compact
-            >
-                <Button
-                    size={Size.SMALL}
-                    variant={ButtonVariant.MINIMAL}
-                    icon={IconNames.SWAP_HORIZONTAL}
-                    aria-label='Swap panes'
-                    onClick={swapPanes}
+    const handleReportChange = (side: PaneSide, nextKey: string) => {
+        if (side === 'left') {
+            setLeftKey(nextKey);
+            setLeftGraphIndex(0);
+        } else {
+            setRightKey(nextKey);
+            setRightGraphIndex(0);
+        }
+    };
+
+    const renderHeader = (
+        side: PaneSide,
+        report: MlirSplitReport,
+        graphIndex: number,
+        setGraphIndex: (next: number) => void,
+    ) => {
+        // Cross-file: each pane can pick any loaded report. In-file (one report):
+        // the select lists graphs inside that bundle.
+        const selectOptions = isMultiReport
+            ? reports.map((entry) => ({ value: entry.key, label: entry.label }))
+            : report.data.graphs.map((graph, i) => ({ value: String(i), label: graph.id }));
+        const selectValue = isMultiReport ? report.key : String(graphIndex);
+        const selectAriaLabel = isMultiReport ? `${side} pane report` : `${side} pane graph`;
+
+        return (
+            <header className='mlir-split-pane-header'>
+                <HTMLSelect
+                    className='mlir-split-pane-select'
+                    aria-label={selectAriaLabel}
+                    value={selectValue}
+                    onChange={(event) => {
+                        const { value } = event.currentTarget;
+                        if (isMultiReport) {
+                            handleReportChange(side, value);
+                        } else {
+                            setGraphIndex(Number(value));
+                        }
+                    }}
+                    options={selectOptions}
+                    minimal
                 />
-            </Tooltip>
-            <Tooltip
-                content='Close split view'
-                compact
-            >
-                <Button
-                    size={Size.SMALL}
-                    variant={ButtonVariant.MINIMAL}
-                    icon={IconNames.CROSS}
-                    aria-label='Close split view'
-                    onClick={onExit}
-                />
-            </Tooltip>
-        </header>
-    );
+                {isMultiReport && report.data.graphs.length > 1 ? (
+                    <HTMLSelect
+                        className='mlir-split-pane-select'
+                        aria-label={`${side} pane graph`}
+                        value={graphIndex}
+                        onChange={(event) => setGraphIndex(Number(event.currentTarget.value))}
+                        options={report.data.graphs.map((graph, i) => ({ value: i, label: graph.id }))}
+                        minimal
+                    />
+                ) : null}
+                <span className='mlir-split-pane-header-spacer' />
+                <Tooltip
+                    content='Swap the two panes'
+                    compact
+                >
+                    <Button
+                        size={Size.SMALL}
+                        variant={ButtonVariant.MINIMAL}
+                        icon={IconNames.SWAP_HORIZONTAL}
+                        aria-label='Swap panes'
+                        onClick={swapPanes}
+                    />
+                </Tooltip>
+                <Tooltip
+                    content='Close split view'
+                    compact
+                >
+                    <Button
+                        size={Size.SMALL}
+                        variant={ButtonVariant.MINIMAL}
+                        icon={IconNames.CROSS}
+                        aria-label='Close split view'
+                        onClick={onExit}
+                    />
+                </Tooltip>
+            </header>
+        );
+    };
 
     return (
         <div
@@ -118,7 +182,7 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
                 className='mlir-split-pane'
                 style={{ flexBasis: `${leftPct}%` }}
             >
-                {renderHeader('left', safeLeftIndex, setLeftIndex)}
+                {renderHeader('left', leftReport, safeLeftGraphIndex, setLeftGraphIndex)}
                 <MlGraph
                     data={leftBundle}
                     detailsCollapsible
@@ -136,7 +200,7 @@ const MlirSplitView = ({ data, onExit }: MlirSplitViewProps) => {
             />
 
             <section className='mlir-split-pane mlir-split-pane-right'>
-                {renderHeader('right', safeRightIndex, setRightIndex)}
+                {renderHeader('right', rightReport, safeRightGraphIndex, setRightGraphIndex)}
                 <MlGraph
                     data={rightBundle}
                     detailsCollapsible
