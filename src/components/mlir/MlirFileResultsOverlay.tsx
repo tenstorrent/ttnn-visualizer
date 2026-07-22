@@ -18,6 +18,7 @@ import {
     mlirFileResultsOpenAtom,
     mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
+    mlirServersAtom,
     mlirSplitViewEpochAtom,
     selectedMlirServerAtom,
 } from '../../store/app';
@@ -25,6 +26,7 @@ import useMlirRemote from '../../hooks/useMlirRemote';
 import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
+import { getActiveMlirServer } from '../../functions/mlirServer';
 import { MlirFileResult, MlirLoadedReport } from '../../model/MLIRJsonModel';
 import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
 import 'styles/components/MlirFileResultsOverlay.scss';
@@ -41,8 +43,10 @@ const MlirFileResultsOverlay = () => {
     const [results, setResults] = useAtom(mlirFileResultsAtom);
     const [isOpen, setIsOpen] = useAtom(mlirFileResultsOpenAtom);
     const retryFiles = useAtomValue(mlirRetryFilesAtom);
-    // Retries use the currently selected server (same constraint as uploads).
-    const retryServer = useAtomValue(selectedMlirServerAtom);
+    const servers = useAtomValue(mlirServersAtom);
+    const selectedServer = useAtomValue(selectedMlirServerAtom);
+    // Same resolution as MLIRFileSelector / uploads (selected, else first listed).
+    const retryServer = getActiveMlirServer(servers, selectedServer);
     const setMlirLoadedReports = useSetAtom(mlirLoadedReportsAtom);
     const setSplitViewEpoch = useSetAtom(mlirSplitViewEpochAtom);
     const { setActiveMlir, uploadMlirFileToServer } = useMlirRemote();

@@ -16,6 +16,7 @@ import {
     mlirFileResultsOpenAtom,
     mlirLoadedReportsAtom,
     mlirRetryFilesAtom,
+    mlirServersAtom,
     mlirSplitViewEpochAtom,
     selectedMlirServerAtom,
 } from '../src/store/app';
@@ -61,6 +62,7 @@ beforeEach(() => {
     getDefaultStore().set(mlirFileResultsAtom, null);
     getDefaultStore().set(mlirFileResultsOpenAtom, false);
     getDefaultStore().set(mlirRetryFilesAtom, null);
+    getDefaultStore().set(mlirServersAtom, []);
     getDefaultStore().set(selectedMlirServerAtom, null);
     getDefaultStore().set(mlirLoadedReportsAtom, []);
     getDefaultStore().set(mlirSplitViewEpochAtom, 0);
@@ -279,6 +281,7 @@ describe('MlirFileResultsOverlay', () => {
     it('retries conversion for a failed server file', async () => {
         const failedFile = new File(['module {}'], 'failed.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
+        getDefaultStore().set(mlirServersAtom, [SERVER]);
         getDefaultStore().set(selectedMlirServerAtom, SERVER);
         uploadMlirFileToServer.mockResolvedValueOnce({
             data: {
@@ -326,6 +329,7 @@ describe('MlirFileResultsOverlay', () => {
     it('keeps View disabled for failed rows while allowing Retry', async () => {
         const failedFile = new File(['module {}'], 'failed.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
+        getDefaultStore().set(mlirServersAtom, [SERVER]);
         getDefaultStore().set(selectedMlirServerAtom, SERVER);
         uploadMlirFileToServer.mockResolvedValueOnce({
             data: {
@@ -391,10 +395,55 @@ describe('MlirFileResultsOverlay', () => {
         expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
     });
 
+    it('retries using the first listed server when selection is still null', async () => {
+        const failedFile = new File(['module {}'], 'failed.mlir');
+        getDefaultStore().set(mlirRetryFilesAtom, [failedFile]);
+        // Mirrors MLIRFileSelector: uploads use servers[0] when selected is unset.
+        getDefaultStore().set(mlirServersAtom, [SERVER]);
+        getDefaultStore().set(selectedMlirServerAtom, null);
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'failed.mlir',
+                        name: 'failed',
+                        status: ConnectionTestStates.OK,
+                        graph: GRAPH,
+                    },
+                ],
+            },
+        });
+
+        renderOverlay([
+            {
+                filename: 'failed.mlir',
+                name: null,
+                status: ConnectionTestStates.FAILED,
+                message: 'Conversion failed',
+                graph: null,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+        await waitFor(() => {
+            expect(uploadMlirFileToServer).toHaveBeenCalledWith(
+                [failedFile],
+                SERVER,
+                expect.objectContaining({
+                    signal: expect.any(AbortSignal),
+                    suppressProgressOverlay: true,
+                }),
+            );
+        });
+    });
+
     it('keeps other Retry buttons enabled while a retry is in flight', async () => {
         const fileA = new File(['module {}'], 'failed-a.mlir');
         const fileB = new File(['module {}'], 'failed-b.mlir');
         getDefaultStore().set(mlirRetryFilesAtom, [fileA, fileB]);
+        getDefaultStore().set(mlirServersAtom, [SERVER]);
         getDefaultStore().set(selectedMlirServerAtom, SERVER);
 
         const retryDeferred: { resolve: ((value: unknown) => void) | null } = { resolve: null };
