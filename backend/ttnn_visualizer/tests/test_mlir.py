@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.mlir import (
+    _TEMP_UPLOAD_BASENAME_PREFIX,
     MlirConversionResult,
     _convert_model_on_server,
     _is_extension_missing,
@@ -205,7 +206,7 @@ def test_relabel_replaces_single_graph_temp_id_with_upload_stem():
     graph_json = json.dumps(
         {
             "graphs": [
-                {"id": "ttnn_viz_upload_123_abcdef.mlir", "nodes": []},
+                {"id": f"{_TEMP_UPLOAD_BASENAME_PREFIX}123_abcdef.mlir", "nodes": []},
             ]
         }
     )
@@ -224,7 +225,7 @@ def test_relabel_rewrites_only_temp_ids_in_multi_graph_bundle():
     graph_json = json.dumps(
         {
             "graphs": [
-                {"id": "/tmp/ttnn_viz_upload_1.mlir", "nodes": []},
+                {"id": f"/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}1.mlir", "nodes": []},
                 {"id": "microsoft_phi-2_stablehlo", "nodes": []},
                 {"id": "/tmp/other_tool/stablehlo_sdy.mlir", "nodes": []},
             ]
@@ -243,7 +244,9 @@ def test_relabel_rewrites_only_temp_ids_in_multi_graph_bundle():
 
 
 def test_relabel_leaves_payload_unchanged_when_display_name_empty():
-    graph_json = json.dumps({"graphs": [{"id": "ttnn_viz_upload_x.mlir"}]})
+    graph_json = json.dumps(
+        {"graphs": [{"id": f"{_TEMP_UPLOAD_BASENAME_PREFIX}x.mlir"}]}
+    )
     assert relabel_graph_ids(graph_json, "") == graph_json
 
 

@@ -3,13 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import relabelMlirGraphIds from '../src/functions/relabelMlirGraphIds';
+import relabelMlirGraphIds, { TEMP_UPLOAD_GRAPH_ID_MARKER } from '../src/functions/relabelMlirGraphIds';
 import type { GraphBundle } from '../src/model/MLIRJsonModel';
 
 describe('relabelMlirGraphIds', () => {
     it('replaces a single temp upload graph id with the upload stem', () => {
         const bundle = {
-            graphs: [{ id: 'ttnn_viz_upload_9_abcdef.mlir', nodes: [] }],
+            graphs: [{ id: `${TEMP_UPLOAD_GRAPH_ID_MARKER}9_abcdef.mlir`, nodes: [] }],
         } as unknown as GraphBundle;
 
         expect(relabelMlirGraphIds(bundle, 'stablehlo_sdy').graphs[0].id).toBe('stablehlo_sdy');
@@ -26,7 +26,7 @@ describe('relabelMlirGraphIds', () => {
     it('rewrites only ttnn_viz_upload ids and leaves other /tmp paths alone', () => {
         const bundle = {
             graphs: [
-                { id: '/tmp/ttnn_viz_upload_1.mlir', nodes: [] },
+                { id: `/tmp/${TEMP_UPLOAD_GRAPH_ID_MARKER}1.mlir`, nodes: [] },
                 { id: 'microsoft_phi-2_stablehlo', nodes: [] },
                 { id: '/tmp/other_tool/stablehlo_sdy.mlir', nodes: [] },
             ],

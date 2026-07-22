@@ -4,14 +4,18 @@
 
 import type { GraphBundle, GraphDocument } from '../model/MLIRJsonModel';
 
+// Must stay aligned with backend `mlir._TEMP_UPLOAD_BASENAME_PREFIX` (SCP path).
+export const TEMP_UPLOAD_GRAPH_ID_MARKER = 'ttnn_viz_upload_';
+
 // Only our SCP basename — not every `/tmp/…` path. Model Explorer often keeps
 // meaningful report names under other temp locations; rewriting those drops
 // valid entries from the split-pane select.
-const isTempUploadGraphId = (id: string): boolean => id.includes('ttnn_viz_upload_');
+const isTempUploadGraphId = (id: string): boolean => id.includes(TEMP_UPLOAD_GRAPH_ID_MARKER);
 
 // Model Explorer often sets graph.id from the remote temp upload path
 // (`ttnn_viz_upload_<pid>_<uuid>.mlir`). Prefer the uploaded file stem for
-// selects, keys, and headers.
+// selects, keys, and headers. Own this rewrite at results ingest (loader /
+// retry) — do not re-apply on View.
 const relabelMlirGraphIds = (bundle: GraphBundle, displayName: string): GraphBundle => {
     if (!displayName || bundle.graphs.length === 0) {
         return bundle;

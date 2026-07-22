@@ -78,6 +78,9 @@ _CONVERT_TIMEOUT_SECONDS = 60  # TODO: Ensure this is sufficient with larger mod
 _CURL_TIMEOUT_GRACE_SECONDS = 10
 # curl prints this when it never received an HTTP response (e.g. connection refused).
 _CURL_NO_RESPONSE_CODE = "000"
+# Basename marker for the remote SCP path; Model Explorer uses it as graph.id.
+# Must stay aligned with frontend `TEMP_UPLOAD_GRAPH_ID_MARKER`.
+_TEMP_UPLOAD_BASENAME_PREFIX = "ttnn_viz_upload_"
 # Model Explorer rejects unknown adapter ids with ``Extension "<id>" not found``.
 _EXTENSION_NOT_FOUND_RE = re.compile(r'Extension\s+"[^"]+"\s+not found', re.IGNORECASE)
 
@@ -205,7 +208,10 @@ def _upload_file_to_server(
         tmp.write(file_bytes)
         local_path = tmp.name
 
-    remote_path = f"/tmp/ttnn_viz_upload_{os.getpid()}_{uuid.uuid4().hex}{Path(safe_filename).suffix}"
+    remote_path = (
+        f"/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}"
+        f"{os.getpid()}_{uuid.uuid4().hex}{Path(safe_filename).suffix}"
+    )
     upload_form_arg = shlex.quote(f"{MLIR_UPLOAD_FIELD}=@{remote_path}")
     curl_cmd = (
         "curl -sS -H 'Expect:' -w '\\n%{http_code}' "
@@ -310,10 +316,11 @@ def _normalise_convert_response(
 def relabel_graph_ids(graph_json: str, display_name: str) -> str:
     """Replace Model Explorer temp-path graph ids with the uploaded file stem.
 
-    Files are SCP'd to ``/tmp/ttnn_viz_upload_<pid>_<uuid>.…`` before convert;
-    Model Explorer uses that remote basename as ``graph.id``. Only that pattern
-    is rewritten — other ``/tmp/…`` ids (and real report names) are left alone
-    so multi-graph bundles keep distinct valid entries in the pane select.
+    Files are SCP'd under ``/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}<pid>_<uuid>.…``
+    before convert; Model Explorer uses that remote basename as ``graph.id``.
+    Only that pattern is rewritten — other ``/tmp/…`` ids (and real report
+    names) are left alone so multi-graph bundles keep distinct valid entries
+    in the pane select.
     """
     if not display_name:
         return graph_json
@@ -328,7 +335,7 @@ def relabel_graph_ids(graph_json: str, display_name: str) -> str:
         return graph_json
 
     def _is_temp_upload_id(graph_id: object) -> bool:
-        return "ttnn_viz_upload_" in str(graph_id or "")
+        return _TEMP_UPLOAD_BASENAME_PREFIX in str(graph_id or "")
 
     if len(graphs) == 1:
         if isinstance(graphs[0], dict) and _is_temp_upload_id(graphs[0].get("id")):

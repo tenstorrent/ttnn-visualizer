@@ -180,7 +180,11 @@ const MlirFileResultsOverlay = () => {
                                   name: retried.name,
                                   status: retried.status,
                                   message: retried.message ?? retried.detail,
-                                  graph: retried.graph ?? null,
+                                  // Relabel at ingest (same boundary as MlirJsonFileLoader).
+                                  graph:
+                                      retried.graph && retried.name
+                                          ? relabelMlirGraphIds(retried.graph, retried.name)
+                                          : (retried.graph ?? null),
                                   persisted: true,
                               }
                             : entry,
@@ -248,14 +252,12 @@ const MlirFileResultsOverlay = () => {
         }
 
         const [primary, comparison] = selectedResults;
-        setActiveMlirData(relabelMlirGraphIds(primary.graph, primary.name));
+        // Graphs are already relabelled at results ingest (loader / retry).
+        setActiveMlirData(primary.graph);
         setActiveMlirJson(primary.name);
 
         if (comparison) {
-            setComparisonMlir({
-                data: relabelMlirGraphIds(comparison.graph, comparison.name),
-                name: comparison.name,
-            });
+            setComparisonMlir({ data: comparison.graph, name: comparison.name });
         } else {
             // Single-file View must drop any prior cross-file comparison so the
             // route does not reopen in split with a stale right pane.
