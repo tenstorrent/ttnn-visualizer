@@ -4,7 +4,7 @@
 
 import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import { ReportLocation } from '../definitions/Reports';
-import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
+import { BufferMemoryLayout, MemoryConfig } from './MemoryConfig';
 import { BufferType, StringBufferType } from './BufferType';
 
 interface OperationError {

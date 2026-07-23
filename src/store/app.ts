@@ -8,18 +8,19 @@ import { NumberRange, TabId } from '@blueprintjs/core';
 import { Id } from 'react-toastify';
 import { TAB_IDS } from '../definitions/BufferSummary';
 import { ListStates } from '../definitions/VirtualLists';
-import { Signpost } from '../functions/perfFunctions';
+import { Signpost } from '../model/Signpost';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
-import { ReportLink } from '../functions/reportLinks';
+import { REPORT_LINKS_STORAGE_KEY } from '../definitions/ReportLinks';
+import { ReportLink } from '../model/ReportLinks';
 import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
-import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../functions/topNAnnotations';
+import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../definitions/TopNAnnotations';
 import { MlirServerConnection } from '../definitions/MlirServer';
-import { GraphBundle, MlirFileResult } from '../model/MLIRJsonModel';
-import { aggregateFileTransferProgress, fileTransferRegistryAtom } from '../functions/fileTransferRegistry';
+import { MlirFileResult, MlirLoadedReport } from '../model/MLIRJsonModel';
+import { aggregateFileTransferProgress, fileTransferRegistryAtom } from './fileTransferRegistry';
 
 // App state
 export const activeToastAtom = atom<Id | null>(null);
@@ -27,7 +28,7 @@ export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
 export const listStatesAtom = atom<ListStates | null>(null);
 export const selectedBufferColourAtom = atom<string | null>(null);
-// File transfer registry atoms — defined in fileTransferRegistry.ts (see comment there);
+// File transfer registry atoms — defined in store/fileTransferRegistry.ts (see comment there);
 // re-exported here so shared atoms remain discoverable via store/app.ts.
 export {
     clearAllFileTransferProgress,
@@ -38,7 +39,7 @@ export {
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,
     setFileTransferProgressForSource,
-} from '../functions/fileTransferRegistry';
+} from './fileTransferRegistry';
 
 export const fileTransferProgressAtom = atom((get) => aggregateFileTransferProgress(get(fileTransferRegistryAtom)));
 export const showDeallocationReportAtom = atom(false);
@@ -46,39 +47,21 @@ export const showHexAtom = atomWithStorage('showHex', false); // Used in Buffers
 export const showMemoryRegionsAtom = atomWithStorage('showMemoryRegions', true); // Used in Buffers and Operation Details
 export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', false); // Used in Buffers and Operation Details
 
-// Reports
+// Reports (excluding NPE/MLIR)
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
 export const activeProfilerReportAtom = atom<ReportFolder | null>(null);
 export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceReportLocationAtom = atom<ReportLocation | null>(null);
 export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
-// Persisted memory<->performance report pairs observed to link successfully. Many-to-many
-// by design; surfaced as badges against the active report in the report selection lists.
-export const successfulReportLinksAtom = atomWithStorage<ReportLink[]>('successfulReportLinks', []);
+/** True while a report select/mount is awaiting confirmation of the active report. */
+export const isActivatingReportAtom = atom(false);
+// Persisted memory↔performance report pairs (linked and unlinked). Many-to-many
+// by canonical folder id; surfaced as linked/unknown/unlinked badges in pickers.
+// Storage key bumped so pre-status / pre-id-scheme entries are discarded (no migration).
+export const reportLinksAtom = atomWithStorage<ReportLink[]>(REPORT_LINKS_STORAGE_KEY, []);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
-export const activeNpeOpTraceAtom = atom<string | null>(null);
-export const activeMlirJsonAtom = atom<string | null>(null);
-export const activeMlirDataAtom = atom<GraphBundle | null>(null);
-export const mlirFileResultsAtom = atom<MlirFileResult[] | null>(null);
-export const mlirFileResultsOpenAtom = atom(false);
-export const mlirRetryFilesAtom = atom<File[] | null>(null);
-export const mlirRetryServerAtom = atom<MlirServerConnection | null>(null);
-export const mlirServersAtom = atomWithStorage<MlirServerConnection[]>('mlirServers', []);
-export const selectedMlirServerAtom = atomWithStorage<MlirServerConnection | null>('selectedMlirServer', null);
-export const mlirNodeDetailsCollapsedAtom = atomWithStorage<{ attrs: boolean; inputs: boolean; outputs: boolean }>(
-    'mlirNodeDetailsCollapsed',
-    { attrs: false, inputs: true, outputs: true },
-);
-// Session-scoped so the view opens uncluttered after a browser restart —
-// deliberately different lifetime from the neighbouring `mlirNodeDetailsCollapsed`
-// (which is a stable structural preference that survives sessions).
-export const mlirNodeBodyTogglesAtom = atomWithStorage<{ location: boolean; shapes: boolean }>(
-    'mlirNodeBodyToggles',
-    { location: false, shapes: false },
-    createJSONStorage(() => sessionStorage),
-);
 export const hasClusterDescriptionAtom = atom(false);
 
 // Operations route
@@ -137,4 +120,47 @@ export const selectedPerfRowIdAtom = atom<number | null>(null);
 export const hiddenPerfTableColumnsAtom = atomWithStorage<ColumnKeys[]>('hiddenPerfTableColumns', []);
 
 // NPE
+export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const altCongestionColorsAtom = atomWithStorage('altCongestionColors', false);
+
+// MLIR
+// Session-loaded MLIR reports (0–2). Index 0 is persisted/nav-active.
+export const mlirLoadedReportsAtom = atom<MlirLoadedReport[]>([]);
+// Derived for nav, restore, and FileInput label. Writing replaces the list with
+// a name-only primary (reload fetch) or clears it.
+export const activeMlirJsonAtom = atom(
+    (get) => get(mlirLoadedReportsAtom)[0]?.name ?? null,
+    (get, set, name: string | null) => {
+        if (name === null) {
+            set(mlirLoadedReportsAtom, []);
+            return;
+        }
+        const current = get(mlirLoadedReportsAtom);
+        // Keep in-memory primary data and split peers when re-asserting the same
+        // active name (restore used to replace the list with `{ data: null }`).
+        if (current[0]?.name === name && current[0]?.data) {
+            return;
+        }
+        set(mlirLoadedReportsAtom, [{ name, data: null }]);
+    },
+);
+export const mlirFileResultsAtom = atom<MlirFileResult[] | null>(null);
+export const mlirFileResultsOpenAtom = atom(false);
+export const mlirRetryFilesAtom = atom<File[] | null>(null);
+// Bumped on each two-file View so the MLIR route can auto-open split again
+// after the user previously dismissed it for the same peer.
+export const mlirSplitViewEpochAtom = atom(0);
+export const mlirServersAtom = atomWithStorage<MlirServerConnection[]>('mlirServers', []);
+export const selectedMlirServerAtom = atomWithStorage<MlirServerConnection | null>('selectedMlirServer', null);
+export const mlirNodeDetailsCollapsedAtom = atomWithStorage<{ attrs: boolean; inputs: boolean; outputs: boolean }>(
+    'mlirNodeDetailsCollapsed',
+    { attrs: false, inputs: true, outputs: true },
+);
+// Session-scoped so the view opens uncluttered after a browser restart —
+// deliberately different lifetime from the neighbouring `mlirNodeDetailsCollapsed`
+// (which is a stable structural preference that survives sessions).
+export const mlirNodeBodyTogglesAtom = atomWithStorage<{ location: boolean; shapes: boolean }>(
+    'mlirNodeBodyToggles',
+    { location: false, shapes: false },
+    createJSONStorage(() => sessionStorage),
+);

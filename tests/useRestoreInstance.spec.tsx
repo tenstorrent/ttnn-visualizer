@@ -4,10 +4,11 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { TestProviders } from './helpers/TestProviders';
 import useRestoreInstance from '../src/hooks/useRestoreInstance';
-import { activeProfilerReportAtom } from '../src/store/app';
+import { activeProfilerReportAtom, mlirLoadedReportsAtom } from '../src/store/app';
+import type { GraphBundle } from '../src/model/MLIRJsonModel';
 
 const mockResetMemoryListStates = vi.fn();
 
@@ -40,9 +41,16 @@ vi.mock('../src/hooks/useRestoreScrollPosition', async () => {
     };
 });
 
+const SAMPLE_GRAPH = { graphs: [{ id: 'g0', nodes: [] }] } as unknown as GraphBundle;
+
 const HookHarness = () => {
     const { hasRestoredInstance } = useRestoreInstance();
     return <div>{hasRestoredInstance ? 'restored' : 'pending'}</div>;
+};
+
+const MlirReportsProbe = () => {
+    const reports = useAtomValue(mlirLoadedReportsAtom);
+    return <pre data-testid='mlir-loaded-reports'>{JSON.stringify(reports)}</pre>;
 };
 
 const SetProfilerReportButton = ({ path }: { path: string }) => {
@@ -147,4 +155,73 @@ it('does not reset when report path remains unchanged', async () => {
     await waitFor(() => {
         expect(mockResetMemoryListStates).toHaveBeenCalledTimes(0);
     });
+});
+
+it('does not overwrite an in-memory MLIR session when restoring the instance', async () => {
+    const seededReports = [
+        { name: 'primary', data: SAMPLE_GRAPH },
+        { name: 'peer', data: SAMPLE_GRAPH },
+    ];
+
+    mockUseInstance.mockReturnValue({
+        data: {
+            active_report: {
+                profiler_name: null,
+                profiler_location: null,
+                performance_name: null,
+                performance_location: null,
+                npe_name: null,
+                mlir_name: 'instance-mlir',
+            },
+            remote_profiler_folder: null,
+        },
+        isLoading: false,
+    });
+
+    render(
+        <TestProviders initialAtomValues={[[mlirLoadedReportsAtom, seededReports]]}>
+            <HookHarness />
+            <MlirReportsProbe />
+        </TestProviders>,
+    );
+
+    await waitFor(() => {
+        expect(screen.getByText('restored')).toBeTruthy();
+    });
+
+    // Restore must skip setActiveMlirJson when reports are already seeded —
+    // otherwise a two-file View would lose its peer (and graph data).
+    expect(JSON.parse(screen.getByTestId('mlir-loaded-reports').textContent ?? '[]')).toEqual(seededReports);
+});
+
+it('seeds the active MLIR name from the instance when memory is empty', async () => {
+    mockUseInstance.mockReturnValue({
+        data: {
+            active_report: {
+                profiler_name: null,
+                profiler_location: null,
+                performance_name: null,
+                performance_location: null,
+                npe_name: null,
+                mlir_name: 'instance-mlir',
+            },
+            remote_profiler_folder: null,
+        },
+        isLoading: false,
+    });
+
+    render(
+        <TestProviders>
+            <HookHarness />
+            <MlirReportsProbe />
+        </TestProviders>,
+    );
+
+    await waitFor(() => {
+        expect(screen.getByText('restored')).toBeTruthy();
+    });
+
+    expect(JSON.parse(screen.getByTestId('mlir-loaded-reports').textContent ?? '[]')).toEqual([
+        { name: 'instance-mlir', data: null },
+    ]);
 });

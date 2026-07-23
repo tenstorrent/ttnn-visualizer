@@ -10,7 +10,7 @@ import { FileTransferSource } from '../definitions/FileTransferSource';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/RemoteSync';
 import { StackSourceOrigin } from '../definitions/StackTrace';
-import { clearFileTransferProgressForSource } from '../functions/fileTransferRegistry';
+import { clearFileTransferProgressForSource } from '../store/fileTransferRegistry';
 import { beginRemoteSyncRequest, endRemoteSyncRequest } from '../functions/remoteSyncRequest';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import axiosInstance from '../libs/axiosInstance';
@@ -37,6 +37,39 @@ const FAILED_NO_PATH = {
 export const LOCAL_STORAGE_KEY_CONNECTIONS = 'remoteConnections';
 export const LOCAL_STORAGE_KEY_SELECTED = 'selectedConnection';
 
+type RemoteFolderPathKey = 'profilerPath' | 'performancePath';
+
+const fetchRemoteFolderList = async (
+    endpoint: Endpoints,
+    connection: RemoteConnection | undefined,
+    options: {
+        requirePort?: boolean;
+        pathKey: RemoteFolderPathKey;
+        normalise?: boolean;
+        signal?: AbortSignal;
+    },
+): Promise<RemoteFolder[]> => {
+    const { requirePort = false, pathKey, normalise = false, signal } = options;
+
+    if (!connection || !connection.host || (requirePort && !connection.port)) {
+        throw new Error('No connection provided');
+    }
+
+    if (!connection[pathKey]) {
+        return [];
+    }
+
+    const response = await axiosInstance.post<RemoteFolder[]>(endpoint, connection, { signal });
+
+    if (response.status === HttpStatusCode.NoContent) {
+        return [];
+    }
+
+    const folders = Array.isArray(response.data) ? response.data : [];
+
+    return normalise ? (folders.map(normaliseReportFolder) as RemoteFolder[]) : folders;
+};
+
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
@@ -54,60 +87,63 @@ const useRemoteConnection = () => {
         return connectionTestStates;
     };
 
-    const listProfilerReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
-        if (!connection || !connection.host || !connection.port) {
-            throw new Error('No connection provided');
-        }
+    const listProfilerReports = async (connection?: RemoteConnection, signal?: AbortSignal): Promise<RemoteFolder[]> =>
+        fetchRemoteFolderList(Endpoints.REMOTE_PROFILER_REPORTS, connection, {
+            requirePort: true,
+            pathKey: 'profilerPath',
+            normalise: true,
+            signal,
+        });
 
-        if (!connection.profilerPath) {
-            return [];
-        }
+    const listPerformanceReports = async (
+        connection?: RemoteConnection,
+        signal?: AbortSignal,
+    ): Promise<RemoteFolder[]> =>
+        fetchRemoteFolderList(Endpoints.REMOTE_PERFORMANCE_REPORTS, connection, {
+            requirePort: true,
+            pathKey: 'performancePath',
+            signal,
+        });
 
-        const response = await axiosInstance.post<RemoteFolder[]>(`${Endpoints.REMOTE}/profiler-reports`, connection);
+    const listLocalProfilerReports = async (
+        connection?: RemoteConnection,
+        signal?: AbortSignal,
+    ): Promise<RemoteFolder[]> =>
+        fetchRemoteFolderList(Endpoints.REMOTE_LOCAL_PROFILER_REPORTS, connection, {
+            pathKey: 'profilerPath',
+            normalise: true,
+            signal,
+        });
 
-        if (response.status === HttpStatusCode.NoContent) {
-            return [];
-        }
-
-        const reportFolders = Array.isArray(response.data) ? response.data : [];
-
-        return reportFolders.map(normaliseReportFolder) as RemoteFolder[];
-    };
-
-    const listPerformanceReports = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
-        if (!connection || !connection.host || !connection.port) {
-            throw new Error('No connection provided');
-        }
-
-        if (!connection.performancePath) {
-            return [];
-        }
-
-        const response = await axiosInstance.post<RemoteFolder[]>(
-            `${Endpoints.REMOTE}/performance-reports`,
-            connection,
-        );
-
-        if (response.status === HttpStatusCode.NoContent) {
-            return [];
-        }
-
-        const performanceFolders = Array.isArray(response.data) ? response.data : [];
-
-        return performanceFolders;
-    };
+    const listLocalPerformanceReports = async (
+        connection?: RemoteConnection,
+        signal?: AbortSignal,
+    ): Promise<RemoteFolder[]> =>
+        fetchRemoteFolderList(Endpoints.REMOTE_LOCAL_PERFORMANCE_REPORTS, connection, {
+            pathKey: 'performancePath',
+            signal,
+        });
 
     const syncRemoteFolder = async (
         connection?: RemoteConnection,
         profilerRemoteFolder?: RemoteFolder,
         performanceRemoteFolder?: RemoteFolder,
     ) => {
-        if (!connection || !connection.host || !connection.port || !connection.profilerPath) {
+        if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
 
         if (!profilerRemoteFolder && !performanceRemoteFolder) {
             throw new Error('No remote folder provided');
+        }
+
+        // Performance-only connections use empty profilerPath; require a path for the folder being synced.
+        if (profilerRemoteFolder && !connection.profilerPath) {
+            throw new Error('No profiler path provided');
+        }
+
+        if (performanceRemoteFolder && !connection.performancePath) {
+            throw new Error('No performance path provided');
         }
 
         // Bound the hang and guarantee REMOTE_SYNC cleanup for every caller —
@@ -299,6 +335,8 @@ const useRemoteConnection = () => {
         syncRemoteFolder,
         listProfilerReports,
         listPerformanceReports,
+        listLocalProfilerReports,
+        listLocalPerformanceReports,
         mountRemoteFolder,
         persistentState,
         setPersistentSelectedConnection,

@@ -14,6 +14,7 @@ import {
     useCallback,
     useContext,
     useEffect,
+    useId,
     useMemo,
     useRef,
     useState,
@@ -48,12 +49,14 @@ import type {
     WorkerNode,
 } from './mlirGraphTypes';
 import { GRAPH_COLORS } from '../../definitions/GraphColors';
+import { MLIR_FIT_VIEW_OPTIONS } from '../../definitions/MlirFitView';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
 import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
 import { MlirFilterMode, buildFilterMatcher, resolveFilterMatches } from './mlirFilter';
 import MlirNodeBodyToggles from './MlirNodeBodyToggles';
 import MlirExpandCollapseControls from './MlirExpandCollapseControls';
+import MlirNodeColorLegend from './MlirNodeColorLegend';
 import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
 import { createMoveGroupBatcher } from './mlirMoveGroupBatch';
 import { getNamespaceSegments } from './mlirGraphHelpers';
@@ -88,6 +91,9 @@ type MLNodeData = WorkerNode['data'] & {
 
 interface ViewProps {
     data: GraphBundle;
+    // Enables the details panel's collapse-to-rail affordance; the split view
+    // opts in because reclaiming a half-pane's width is worthwhile there.
+    detailsCollapsible?: boolean;
 }
 
 type MLNode = Node<MLNodeData>;
@@ -405,13 +411,19 @@ function builtGraphToReactFlow(built: BuiltGraph): { nodes: MLNode[]; edges: Edg
     return { nodes, edges };
 }
 
-const MlGraphInner = ({ data }: ViewProps) => {
+const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
     const { fitView, getViewport, setViewport, updateNode } = useReactFlow<MLNode, Edge>();
+    // Unique per instance so two side-by-side panes don't emit colliding React
+    // Flow marker/DOM ids (both panes can show the same graph.id).
+    const rfId = useId();
     const graph = data.graphs[0];
     const [nodes, setNodes, onNodesChange] = useNodesState<MLNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    // Persists across selections (the panel remounts per node) but resets on
+    // graph switch via the keyed remount and on close (a full dismissal).
+    const [detailsExpanded, setDetailsExpanded] = useState(true);
     // Live op-name filter. `filterQuery` drives the input for instant visual
     // feedback; `appliedFilterQuery` is what the memo chain reads and lags
     // by `FILTER_DEBOUNCE_MS` on non-empty queries.
@@ -603,12 +615,12 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 // isn't in the build (e.g. synthetic id that never reaches the
                 // canvas) — a missing fitView is preferable to a noisy error.
                 requestAnimationFrame(() => {
-                    void fitView({ nodes: [{ id: pendingFocusId }], padding: 0.3, duration: 200 });
+                    void fitView({ nodes: [{ id: pendingFocusId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
                 });
             } else if (shouldFitAll || !hasFitInitiallyRef.current) {
                 hasFitInitiallyRef.current = true;
                 requestAnimationFrame(() => {
-                    void fitView({ padding: 0.2, duration: 200 });
+                    void fitView({ ...MLIR_FIT_VIEW_OPTIONS.bulk });
                 });
             }
         },
@@ -643,7 +655,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
         }
         return result;
     }, [sourceNodes]);
-    const { interactionIndex, runBuild } = useMlirLayoutWorker(graph.id, sourceNodes, applyBuiltGraph);
+    const { interactionIndex, runBuild, isBuilding } = useMlirLayoutWorker(graph.id, sourceNodes, applyBuiltGraph);
 
     useEffect(() => {
         runBuild(expandedNamespaces);
@@ -738,7 +750,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
             }
             const targetId = matchedNodesInOrder[nextIdx];
             if (targetId) {
-                void fitView({ nodes: [{ id: targetId }], padding: 0.3, duration: 200 });
+                void fitView({ nodes: [{ id: targetId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
             }
             setCurrentMatchIndex(nextIdx);
         },
@@ -1181,13 +1193,20 @@ const MlGraphInner = ({ data }: ViewProps) => {
 
     const closeDetailsPanel = useCallback(() => {
         setSelectedNodeId(null);
+        // Reopen expanded next time: close is a full dismissal, unlike moving
+        // the selection to another node (which keeps the collapse preference).
+        setDetailsExpanded(true);
+    }, []);
+
+    const toggleDetailsExpanded = useCallback(() => {
+        setDetailsExpanded((open) => !open);
     }, []);
 
     const recenterOnSelected = useCallback(() => {
         if (!selectedNodeId) {
             return;
         }
-        void fitView({ nodes: [{ id: selectedNodeId }], padding: 0.3, duration: 200 });
+        void fitView({ nodes: [{ id: selectedNodeId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
     }, [fitView, selectedNodeId]);
 
     // Click handler for the "locate" affordance next to each producer /
@@ -1220,7 +1239,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
                 }
             }
             if (prefixesToAdd.length === 0) {
-                void fitView({ nodes: [{ id: targetNodeId }], padding: 0.3, duration: 200 });
+                void fitView({ nodes: [{ id: targetNodeId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
                 return;
             }
             viewportAnchorRef.current = null;
@@ -1448,17 +1467,18 @@ const MlGraphInner = ({ data }: ViewProps) => {
     // unhighlighted op-node fill now lives in SCSS (`.react-flow__node-mlirOp`),
     // so without this callback the minimap would fall back to its CSS var —
     // which is the same `$tt-grey-2` as the minimap pane background, making
-    // nodes invisible. Group wrappers stay transparent in the minimap because
-    // their visible chrome is the inner `.mlir-group-body`, not the wrapper.
+    // nodes invisible. Group wrappers carry no inline background (their chrome
+    // is the inner `.mlir-group-body`), so we paint them with the shared group
+    // identity colour here.
     const minimapNodeColor = useCallback((node: Node): string => {
         const inlineBg = (node.style as { background?: string } | undefined)?.background;
         if (typeof inlineBg === 'string' && inlineBg !== 'transparent') {
             return inlineBg;
         }
         if (node.type === 'mlirGroup') {
-            return 'rgba(125, 125, 125, 0.35)';
+            return GRAPH_COLORS.group;
         }
-        return '#f5f5f5';
+        return GRAPH_COLORS.opNode;
     }, []);
 
     // Selection incoming green / outgoing yellow, then dim when a filter is
@@ -1510,6 +1530,7 @@ const MlGraphInner = ({ data }: ViewProps) => {
         <div className='mlir-view-pane'>
             <MlirGroupContext.Provider value={groupContextValue}>
                 <ReactFlow
+                    id={rfId}
                     nodes={styledNodes}
                     edges={styledEdges}
                     onNodeClick={onSubgraphNodeClick}
@@ -1523,7 +1544,11 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     connectionLineType={ConnectionLineType.SmoothStep}
                     selectNodesOnDrag={false}
                 >
-                    <MiniMap nodeColor={minimapNodeColor} />
+                    <MiniMap
+                        nodeColor={minimapNodeColor}
+                        pannable
+                        zoomable
+                    />
                     <Controls />
                     <Background />
                 </ReactFlow>
@@ -1544,18 +1569,25 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     onNext={goToNextMatch}
                 />
 
-                <MlirNodeBodyToggles
-                    value={nodeBodyToggles}
-                    onChange={setNodeBodyToggles}
-                />
+                <div className='mlir-controls-row'>
+                    <MlirNodeBodyToggles
+                        value={nodeBodyToggles}
+                        onChange={setNodeBodyToggles}
+                        disabled={isBuilding}
+                    />
 
-                <MlirExpandCollapseControls
-                    namespaceCount={allExpandableNamespaces.length}
-                    expandedCount={expandedNamespaces.size}
-                    onExpandAll={expandAllNamespaces}
-                    onCollapseAll={collapseAllNamespaces}
-                />
+                    <MlirExpandCollapseControls
+                        namespaceCount={allExpandableNamespaces.length}
+                        expandedCount={expandedNamespaces.size}
+                        isBuilding={isBuilding}
+                        nodeCount={sourceNodes.length}
+                        onExpandAll={expandAllNamespaces}
+                        onCollapseAll={collapseAllNamespaces}
+                    />
+                </div>
             </div>
+
+            <MlirNodeColorLegend />
 
             {selectedSourceNode && (
                 <MlirNodeDetailsPanel
@@ -1566,6 +1598,9 @@ const MlGraphInner = ({ data }: ViewProps) => {
                     onClose={closeDetailsPanel}
                     onRecenter={recenterOnSelected}
                     onNavigateToNode={navigateToNode}
+                    collapsible={detailsCollapsible}
+                    expanded={detailsExpanded}
+                    onToggleExpand={toggleDetailsExpanded}
                 />
             )}
         </div>
@@ -1585,4 +1620,6 @@ const MlGraphWithProvider = (props: ViewProps) => (
     </ReactFlowProvider>
 );
 
-export default MlGraphWithProvider;
+// Memoised so a parent re-render with a referentially-stable `data` (e.g. the
+// split view's per-pane bundle during a divider drag) skips both panes.
+export default memo(MlGraphWithProvider);

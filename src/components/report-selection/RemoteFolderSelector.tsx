@@ -2,61 +2,52 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, MenuItem } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
-import { type ReactNode } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import 'styles/components/FolderPicker.scss';
 import {
-    NEVER_SYNCED_LABEL,
-    REPORT_OUTDATED_LABEL,
-    REPORT_UP_TO_DATE_LABEL,
-    RemoteConnection,
-    RemoteFolder,
-    SYNC_DATE_FORMATTER,
-    getUTCFromEpoch,
-} from '../../definitions/RemoteConnection';
+    getFolderLinkState,
+    shouldShowFolderLinkStatus,
+    sortByFolderLinkState,
+} from '../../functions/folderLinkStatus';
+import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
-import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import { getReportId } from '../../functions/reportLinks';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
+import FolderLinkStatusIcon from './FolderLinkStatusIcon';
 
 type FolderTypes = 'performance' | 'profiler';
 
+interface RemoteFolderRendererOptions {
+    type: FolderTypes;
+    selectedFolder?: RemoteFolder;
+    connection?: RemoteConnection;
+    showReportName?: boolean;
+    showLinkStatus?: boolean;
+    linkedIds?: Set<string> | null;
+    unlinkedIds?: Set<string> | null;
+}
+
 const remoteFolderRenderer =
-    (
-        type: FolderTypes,
-        selectedFolder?: RemoteFolder,
-        connection?: RemoteConnection,
-        showReportName?: boolean,
-    ): ItemRenderer<RemoteFolder> =>
+    ({
+        type,
+        selectedFolder,
+        connection,
+        showReportName,
+        showLinkStatus,
+        linkedIds,
+        unlinkedIds,
+    }: RemoteFolderRendererOptions): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
 
         const { lastSynced, lastModified, reportName, remotePath } = folder;
-        const isReportOutdated = isRemoteFolderOutdated(folder);
-
-        const statusIcon = (
-            <Tooltip
-                content={
-                    <>
-                        {isReportOutdated ? REPORT_OUTDATED_LABEL : REPORT_UP_TO_DATE_LABEL}
-                        <br />
-                        <strong>
-                            {lastSynced ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(lastSynced)) : NEVER_SYNCED_LABEL}
-                        </strong>
-                    </>
-                }
-                placement={PopoverPosition.TOP}
-            >
-                <Icon
-                    icon={isReportOutdated ? IconNames.UPDATED : IconNames.HISTORY}
-                    intent={isReportOutdated ? Intent.WARNING : Intent.SUCCESS}
-                />
-            </Tooltip>
-        );
+        const folderId = getReportId(remotePath, reportName);
 
         return (
             <div
@@ -77,7 +68,11 @@ const remoteFolderRenderer =
                         </>
                     }
                     icon={selectedFolder?.remotePath === remotePath ? IconNames.SAVED : IconNames.DOCUMENT}
-                    labelElement={<span className='status-icon'>{statusIcon}</span>}
+                    labelElement={
+                        showLinkStatus ? (
+                            <FolderLinkStatusIcon linkState={getFolderLinkState(folderId, linkedIds, unlinkedIds)} />
+                        ) : undefined
+                    }
                 />
             </div>
         );
@@ -93,6 +88,8 @@ interface RemoteFolderSelectorProps {
     onSelectFolder: (folder: RemoteFolder) => void;
     type: FolderTypes;
     showReportName?: boolean;
+    linkedIds?: Set<string> | null;
+    unlinkedIds?: Set<string> | null;
     children?: ReactNode;
 }
 
@@ -107,18 +104,40 @@ const RemoteFolderSelector = ({
     icon = IconNames.DOCUMENT_OPEN,
     type,
     showReportName,
+    linkedIds,
+    unlinkedIds,
 }: RemoteFolderSelectorProps) => {
     const { persistentState } = useRemoteConnection();
     const remoteConnection = persistentState.selectedConnection;
+    const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 
     const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
+
+    const sortedFolderList = useMemo(
+        () =>
+            sortByFolderLinkState(
+                remoteFolderList ?? [],
+                (folder) => getReportId(folder.remotePath, folder.reportName),
+                linkedIds,
+                unlinkedIds,
+            ),
+        [remoteFolderList, linkedIds, unlinkedIds],
+    );
 
     return (
         <div className='form-container'>
             <Select
                 className='remote-select'
-                items={remoteFolderList ?? []}
-                itemRenderer={remoteFolderRenderer(type, remoteFolder, remoteConnection, showReportName)}
+                items={sortedFolderList}
+                itemRenderer={remoteFolderRenderer({
+                    type,
+                    selectedFolder: remoteFolder,
+                    connection: remoteConnection,
+                    showReportName,
+                    showLinkStatus,
+                    linkedIds,
+                    unlinkedIds,
+                })}
                 filterable
                 itemPredicate={filterFolders(type, remoteConnection)}
                 noResults={
@@ -133,8 +152,9 @@ const RemoteFolderSelector = ({
             >
                 <Button
                     icon={icon}
-                    endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
+                    endIcon={sortedFolderList.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
+                    loading={loading}
                     text={remoteFolder?.reportName ?? fallbackLabel}
                     data-testid={TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON}
                 />

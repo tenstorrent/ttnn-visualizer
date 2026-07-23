@@ -11,6 +11,9 @@ afterEach(cleanup);
 
 const bothOff: MlirNodeBodyTogglesState = { location: false, shapes: false };
 
+// Switches now live behind a click-popover; open it before querying them.
+const openMenu = () => fireEvent.click(screen.getByRole('button', { name: 'Node body overlays' }));
+
 describe('MlirNodeBodyToggles', () => {
     it('reflects the given state on both switches', () => {
         render(
@@ -19,6 +22,7 @@ describe('MlirNodeBodyToggles', () => {
                 onChange={() => {}}
             />,
         );
+        openMenu();
         expect(screen.getByLabelText('Show source location')).toBeChecked();
         expect(screen.getByLabelText('Show shapes')).not.toBeChecked();
     });
@@ -34,6 +38,7 @@ describe('MlirNodeBodyToggles', () => {
                 onChange={onChange}
             />,
         );
+        openMenu();
         fireEvent.click(screen.getByLabelText('Show source location'));
         expect(onChange).toHaveBeenCalledWith({ location: true, shapes: true });
     });
@@ -46,6 +51,7 @@ describe('MlirNodeBodyToggles', () => {
                 onChange={onChange}
             />,
         );
+        openMenu();
         fireEvent.click(screen.getByLabelText('Show shapes'));
         expect(onChange).toHaveBeenCalledWith({ location: true, shapes: true });
     });
@@ -57,7 +63,50 @@ describe('MlirNodeBodyToggles', () => {
                 onChange={() => {}}
             />,
         );
+        openMenu();
         expect(screen.getByLabelText('Show source location')).not.toBeChecked();
         expect(screen.getByLabelText('Show shapes')).not.toBeChecked();
+    });
+
+    it('disables the trigger and keeps the popover shut while a layout is building', () => {
+        render(
+            <MlirNodeBodyToggles
+                value={bothOff}
+                onChange={() => {}}
+                disabled
+            />,
+        );
+        const trigger = screen.getByRole('button', { name: 'Node body overlays' });
+        expect(trigger).toBeDisabled();
+
+        openMenu();
+        expect(screen.queryByLabelText('Show source location')).not.toBeInTheDocument();
+    });
+
+    it('shows the count of active overlays on the collapsed trigger', () => {
+        const { rerender } = render(
+            <MlirNodeBodyToggles
+                value={bothOff}
+                onChange={() => {}}
+            />,
+        );
+        const trigger = () => screen.getByRole('button', { name: 'Node body overlays' });
+        expect(trigger()).not.toHaveTextContent(/[12]/);
+
+        rerender(
+            <MlirNodeBodyToggles
+                value={{ location: true, shapes: false }}
+                onChange={() => {}}
+            />,
+        );
+        expect(trigger()).toHaveTextContent('1');
+
+        rerender(
+            <MlirNodeBodyToggles
+                value={{ location: true, shapes: true }}
+                onChange={() => {}}
+            />,
+        );
+        expect(trigger()).toHaveTextContent('2');
     });
 });

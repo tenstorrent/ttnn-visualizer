@@ -2,17 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import Home from '../routes/Home';
-import Operations from '../routes/Operations';
-import OperationDetails from '../routes/OperationDetails';
-import Tensors from '../routes/Tensors';
-import BufferSummary from '../routes/BufferSummary';
-import Styleguide from '../routes/Styleguide';
-import GraphView from '../routes/GraphView';
-import Performance from '../routes/Performance';
-import NPE from '../routes/NPE';
-import ROUTES from './Routes';
-import MLIR from '../routes/MLIR';
+import Home from './Home';
+import Operations from './Operations';
+import OperationDetails from './OperationDetails';
+import Tensors from './Tensors';
+import BufferSummary from './BufferSummary';
+import Styleguide from './Styleguide';
+import GraphView from './GraphView';
+import Performance from './Performance';
+import NPE from './NPE';
+import ROUTES from '../definitions/Routes';
+import MLIR from './MLIR';
 
 // Allows us to keep absolute paths in ROUTES while using relative paths in route objects
 const stripFirstSlash = (path: string) => {

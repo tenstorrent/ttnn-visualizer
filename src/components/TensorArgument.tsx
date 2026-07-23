@@ -5,7 +5,7 @@
 import { Switch } from '@blueprintjs/core';
 import { useState } from 'react';
 import 'styles/components/TensorArgument.scss';
-import { MemoryConfig, ShardSpec } from '../functions/parseMemoryConfig';
+import { MemoryConfig, ShardSpec } from '../model/MemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 
 interface TensorArgumentProps {

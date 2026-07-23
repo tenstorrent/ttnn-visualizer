@@ -5,10 +5,7 @@
 import { AxiosProgressEvent } from 'axios';
 import axiosInstance from '../libs/axiosInstance';
 import { FileTransferSource } from '../definitions/FileTransferSource';
-import {
-    clearFileTransferProgressForSource,
-    setFileTransferProgressForSource,
-} from '../functions/fileTransferRegistry';
+import { clearFileTransferProgressForSource, setFileTransferProgressForSource } from '../store/fileTransferRegistry';
 import { FileStatus } from '../model/APIData';
 import Endpoints from '../definitions/Endpoints';
 

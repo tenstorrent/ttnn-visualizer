@@ -7,7 +7,7 @@ import { formatMemorySize, getMemoryAddress } from './math';
 import { toReadableShape, toReadableType } from './formatting';
 import { Chunk, ColoredChunk, DecoratedBufferChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
-import { TensorMemoryLayout } from './parseMemoryConfig';
+import { TensorMemoryLayout } from '../model/MemoryConfig';
 
 // Half-opacity tint + solid border; fill keeps the bar readable when the stroke clips at plot edges. #1652
 const OUTLINE_FILL_ALPHA = 0.5;

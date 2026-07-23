@@ -18,7 +18,7 @@ import useBufferNavigation from '../../hooks/useBufferNavigation';
 import BufferSummaryPlotControls from './BufferSummaryPlotControls';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { CHART_DATA, OPERATION_EL_HEIGHT, TOTAL_SHADE_HEIGHT } from '../../definitions/BufferSummary';
-import { RankedAnnotation, TOP_N_MODE_LABEL, TopNAnnotationMode } from '../../functions/topNAnnotations';
+import { RankedAnnotation, TOP_N_MODE_LABEL, TopNAnnotationMode } from '../../definitions/TopNAnnotations';
 import { perfColorScale } from '../../functions/perfOverlay';
 
 interface BufferSummaryVirtualizedListProps {

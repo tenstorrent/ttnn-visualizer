@@ -194,7 +194,7 @@ test('buildVisibleGraph runs dagre layout and assigns distinct positions per ran
 });
 
 // 4.2.12 — large graph: above DAGRE_NODE_LIMIT (2000) doesn't crash, all
-// invariants still hold. Uses the high-density density fallback path.
+// invariants still hold. Exercises the size-gated single network-simplex pass.
 test('buildVisibleGraph handles graphs larger than the dagre limit without violating invariants', () => {
     // 2500 root-level ops, no edges. Each one will be its own visible op node.
     const nodes = Array.from({ length: 2500 }, (_, i) => ({

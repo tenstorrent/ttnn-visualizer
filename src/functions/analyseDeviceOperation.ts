@@ -2,25 +2,16 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { DeviceOperationAnalysisResult } from '../definitions/DeviceOperationAnalysis';
 import { DeviceOperationNode, TensorNode } from '../model/APIData';
 
 const DEVICE_OPERATION_NAME = {
     RESHAPE: 'tensor::reshape',
 };
 
-export enum DEVICE_OPERATION_ANALYSIS_RESULT {
-    OK,
-    NOOP,
-}
-
-export const DEVICE_OPERATION_ANALYSIS_RESULT_LABEL = {
-    [DEVICE_OPERATION_ANALYSIS_RESULT.OK]: '',
-    [DEVICE_OPERATION_ANALYSIS_RESULT.NOOP]: 'Operation appears to be a no-op and may be removable',
-};
-
 export const analyseDeviceOperation = (operation?: DeviceOperationNode) => {
     if (!operation) {
-        return DEVICE_OPERATION_ANALYSIS_RESULT.OK;
+        return DeviceOperationAnalysisResult.OK;
     }
     const { params, inputs, outputs } = operation;
     const { name } = params;
@@ -30,9 +21,9 @@ export const analyseDeviceOperation = (operation?: DeviceOperationNode) => {
         const outputTensor = outputs?.[0] as TensorNode;
         if (inputTensor && outputTensor && inputTensor.params.shape && outputTensor.params.shape) {
             if (inputTensor.params.shape === outputTensor.params.shape) {
-                return DEVICE_OPERATION_ANALYSIS_RESULT.NOOP;
+                return DeviceOperationAnalysisResult.NOOP;
             }
         }
     }
-    return DEVICE_OPERATION_ANALYSIS_RESULT.OK;
+    return DeviceOperationAnalysisResult.OK;
 };

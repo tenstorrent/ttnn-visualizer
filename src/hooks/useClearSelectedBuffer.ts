@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect } from 'react';
-import useBufferFocus from '../hooks/useBufferFocus';
+import useBufferFocus from './useBufferFocus';
 
 function useClearSelectedBuffer() {
     const { resetToasts } = useBufferFocus();

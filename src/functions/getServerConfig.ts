@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { DEFAULT_SSH_PORT } from '../definitions/RemoteConnection';
+import { ServerConfig } from '../definitions/ServerConfig';
 
 declare global {
     interface Window {
@@ -12,18 +13,6 @@ declare global {
 
 const MIN_SSH_PORT = 1;
 const MAX_SSH_PORT = 65535;
-
-export interface ServerConfig {
-    SERVER_MODE?: boolean;
-    BASE_PATH?: string;
-    TT_METAL_HOME?: string;
-    REPORT_DATA_DIRECTORY?: string;
-    REPORT_LINKING_ENABLED?: boolean;
-    USERNAME?: string;
-    SSH_DEFAULT_PORT: number;
-    SSH_DEFAULT_PROFILER_PATH: string;
-    SSH_DEFAULT_PERFORMANCE_PATH: string;
-}
 
 export function getValidSshDefaultPort(value: unknown): number {
     const parsedPort = Number(value);

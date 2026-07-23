@@ -21,7 +21,7 @@ const GROUP_PADDING_X = 24;
 const GROUP_PADDING_TOP = 36;
 const GROUP_PADDING_BOTTOM = 20;
 
-const DAGRE_NODE_LIMIT = 2000;
+export const DAGRE_NODE_LIMIT = 2000;
 
 const ARROW_MARKER = { type: 'arrowclosed', height: 20, width: 20 } as const;
 
@@ -44,16 +44,18 @@ type DagreOptions = {
     ranker?: string;
 };
 
-function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
+export function dagreLayout(nodes: WorkerNode[], edges: WorkerEdge[]): WorkerNode[] {
     if (nodes.length === 0) {
         return nodes;
     }
-    const opts: DagreOptions =
-        nodes.length > DAGRE_NODE_LIMIT
-            ? { nodesep: 10, ranksep: 50, edgesep: 5, ranker: 'tight-tree' }
-            : { ranker: 'tight-tree' };
+    // Large graphs: single network-simplex pass — tight-tree can throw, and a
+    // retry would double the layout cost at exactly the size that hurts most.
+    if (nodes.length > DAGRE_NODE_LIMIT) {
+        return dagreLayoutCore(nodes, edges, { nodesep: 10, ranksep: 50, edgesep: 5 });
+    }
+    // Smaller graphs: tight-tree for compactness, cheap fallback if it throws.
     try {
-        return dagreLayoutCore(nodes, edges, opts);
+        return dagreLayoutCore(nodes, edges, { ranker: 'tight-tree' });
     } catch {
         return dagreLayoutCore(nodes, edges, { nodesep: 12, ranksep: 50, edgesep: 5 });
     }

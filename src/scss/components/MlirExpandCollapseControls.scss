@@ -7,15 +7,22 @@
 .mlir-expand-collapse-controls {
     display: flex;
     flex-direction: row;
+    align-items: center;
     gap: 4px;
-    padding: 4px;
-    background: $tt-grey-2;
-    border: 1px solid $tt-grey-3;
-    border-radius: 4px;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
 
     .bp6-button {
         font-size: 11px;
         line-height: 1.2;
     }
+}
+
+.mlir-layout-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 1.2;
+    color: $tt-grey-6;
+    white-space: nowrap;
 }

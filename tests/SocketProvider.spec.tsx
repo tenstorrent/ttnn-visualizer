@@ -51,9 +51,9 @@ vi.mock('../src/libs/axiosInstance', () => ({
     getOrCreateInstanceId: vi.fn(() => socketTestContext.TEST_INSTANCE_ID),
 }));
 
-vi.mock('../src/functions/fileTransferRegistry', async () => {
-    const actual = await vi.importActual<typeof import('../src/functions/fileTransferRegistry')>(
-        '../src/functions/fileTransferRegistry',
+vi.mock('../src/store/fileTransferRegistry', async () => {
+    const actual = await vi.importActual<typeof import('../src/store/fileTransferRegistry')>(
+        '../src/store/fileTransferRegistry',
     );
     return {
         ...actual,
@@ -65,7 +65,7 @@ vi.mock('../src/functions/fileTransferRegistry', async () => {
 });
 
 let SocketProvider: typeof import('../src/libs/SocketProvider').SocketProvider;
-let actualRegistry: typeof import('../src/functions/fileTransferRegistry');
+let actualRegistry: typeof import('../src/store/fileTransferRegistry');
 
 async function mountSocketProvider() {
     render(
@@ -92,8 +92,8 @@ async function mountSocketProviderWithProgressHandler() {
 }
 
 beforeAll(async () => {
-    actualRegistry = await vi.importActual<typeof import('../src/functions/fileTransferRegistry')>(
-        '../src/functions/fileTransferRegistry',
+    actualRegistry = await vi.importActual<typeof import('../src/store/fileTransferRegistry')>(
+        '../src/store/fileTransferRegistry',
     );
     ({ SocketProvider } = await import('../src/libs/SocketProvider'));
 });

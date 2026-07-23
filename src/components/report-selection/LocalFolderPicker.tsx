@@ -3,14 +3,21 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useMemo, useState } from 'react';
-import { Alert, Button, ButtonVariant, Icon, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
+import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
+import {
+    getFolderLinkState,
+    shouldShowFolderLinkStatus,
+    sortByFolderLinkState,
+} from '../../functions/folderLinkStatus';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
+import { getReportId } from '../../functions/reportLinks';
 import HighlightedText from '../HighlightedText';
+import FolderLinkStatusIcon from './FolderLinkStatusIcon';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -20,8 +27,14 @@ interface LocalFolderPickerProps {
     defaultLabel?: string;
     valueLabel?: string | null;
     showReportName?: boolean;
-    /** Paths of items previously observed to link with the active counterpart report. */
-    linkedPaths?: Set<string>;
+    /** When true, the picker cannot open or change selection. */
+    disabled?: boolean;
+    /** When true, shows a spinner on the trigger button and blocks interaction. */
+    loading?: boolean;
+    /** Canonical ids previously observed to link with the active counterpart. */
+    linkedIds?: Set<string> | null;
+    /** Canonical ids previously observed to fail linking with the active counterpart. */
+    unlinkedIds?: Set<string> | null;
 }
 
 const LocalFolderPicker = ({
@@ -32,33 +45,42 @@ const LocalFolderPicker = ({
     defaultLabel = 'Select a report...',
     valueLabel,
     showReportName,
-    linkedPaths,
+    disabled = false,
+    loading = false,
+    linkedIds,
+    unlinkedIds,
 }: LocalFolderPickerProps) => {
     const { data: instance } = useInstance();
 
     const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
 
-    const isDisabled = !items || items.length === 0;
+    const isDisabled = disabled || loading || !items || items.length === 0 || !instance;
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
-    const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    // Loading also blocks trash while an open Select popover can still render
+    // items after the trigger disables.
+    const isDeleteDisabled = isServerMode || loading;
+    const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 
-    // Surface reports that linked with the active counterpart first, preserving the
-    // server-provided order (most-recently-modified) within each group.
-    const sortedItems = useMemo(() => {
-        if (!items || !linkedPaths?.size) {
-            return items ?? [];
-        }
-
-        return [...items].sort((a, b) => Number(linkedPaths.has(b.path)) - Number(linkedPaths.has(a.path)));
-    }, [items, linkedPaths]);
+    // Linked first, unknown next, failed links last — preserve server order within each group.
+    const sortedItems = useMemo(
+        () =>
+            sortByFolderLinkState(
+                items ?? [],
+                (folder) => getReportId(folder.path, folder.reportName),
+                linkedIds,
+                unlinkedIds,
+            ),
+        [items, linkedIds, unlinkedIds],
+    );
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
 
-        const isLinked = linkedPaths?.has(folder.path) ?? false;
+        const folderId = getReportId(folder.path, folder.reportName);
 
         return (
             <div
@@ -77,31 +99,24 @@ const LocalFolderPicker = ({
                     }
                     roleStructure='listoption'
                     active={folder.path === activePath}
-                    disabled={modifiers.disabled}
+                    disabled={modifiers.disabled || loading}
                     onClick={handleClick}
                     onFocus={handleFocus}
                     icon={folder.path === activePath ? IconNames.SAVED : IconNames.DOCUMENT}
                     labelElement={
-                        isLinked ? (
-                            <Tooltip
-                                content='Previously linked with the active report'
-                                position={Position.RIGHT}
-                            >
-                                <Icon
-                                    icon={IconNames.LINK}
-                                    intent={Intent.SUCCESS}
-                                />
-                            </Tooltip>
+                        showLinkStatus ? (
+                            <FolderLinkStatusIcon linkState={getFolderLinkState(folderId, linkedIds, unlinkedIds)} />
                         ) : undefined
                     }
                 />
 
-                {handleDelete && !isDeleteDisabled && (
+                {handleDelete && !isServerMode && (
                     <>
                         <Button
                             aria-label='Delete report'
                             icon={IconNames.TRASH}
                             onClick={() => setFolderToDelete(folder)}
+                            disabled={isDeleteDisabled}
                             variant={ButtonVariant.MINIMAL}
                             intent={Intent.DANGER}
                         />
@@ -114,7 +129,12 @@ const LocalFolderPicker = ({
                                 intent={Intent.DANGER}
                                 onCancel={() => setFolderToDelete(null)}
                                 onClose={() => setFolderToDelete(null)}
-                                onConfirm={() => handleDelete(folderToDelete)}
+                                onConfirm={() => {
+                                    if (!loading) {
+                                        handleDelete(folderToDelete);
+                                    }
+                                    setFolderToDelete(null);
+                                }}
                                 cancelButtonText='Cancel'
                                 confirmButtonText='Delete'
                                 // @ts-expect-error BackdropClassName is not defined in AlertProps
@@ -146,7 +166,7 @@ const LocalFolderPicker = ({
                 />
             }
             onItemSelect={handleSelect}
-            disabled={!items || !instance}
+            disabled={isDisabled}
         >
             <Tooltip
                 content={`/${activePath}`}
@@ -157,7 +177,8 @@ const LocalFolderPicker = ({
                 <Button
                     className='folder-picker-button'
                     text={activeName || defaultLabel}
-                    disabled={isDisabled || !instance}
+                    disabled={isDisabled}
+                    loading={loading}
                     alignText='start'
                     icon={IconNames.DOCUMENT_OPEN}
                     endIcon={IconNames.CARET_DOWN}

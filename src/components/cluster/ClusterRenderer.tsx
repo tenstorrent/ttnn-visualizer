@@ -8,7 +8,7 @@ import classNames from 'classnames';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import 'styles/components/ClusterView.scss';
-import { stringToArchitecture } from '../../definitions/DeviceArchitecture';
+import { stringToArchitecture } from '../../functions/stringToArchitecture';
 import { useArchitecture, useGetClusterTopology } from '../../hooks/useAPI';
 import {
     FALLBACK_PER_HOST_COLS,

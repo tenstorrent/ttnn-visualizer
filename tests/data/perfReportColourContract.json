@@ -1,6 +1,6 @@
 {
     "_comment": "GENERATED from tt-perf-report by backend/ttnn_visualizer/tests/test_perf_report_contract.py. Do not edit by hand; run UPDATE_PERF_GOLDEN=1 pytest to refresh.",
-    "ttPerfReportVersion": "1.2.4",
+    "ttPerfReportVersion": "1.2.8",
     "minPercentage": 0.5,
     "highDispatchThresholdUs": 6.5,
     "colours": [

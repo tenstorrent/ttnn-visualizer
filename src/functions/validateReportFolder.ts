@@ -4,7 +4,8 @@
 
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import { ReportFolder } from '../definitions/Reports';
-import createToastNotification, { ToastType } from './createToastNotification';
+import createToastNotification from './createToastNotification';
+import { ToastType } from '../definitions/ToastType';
 
 const getErroredReportFolderLabel = (folder: ReportFolder | RemoteFolder): string => {
     if (folder.reportName) {

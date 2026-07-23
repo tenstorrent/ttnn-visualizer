@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { toReadableLayout } from '../functions/formatting';
-import { MEMORY_CONFIG_HEADERS, MemoryKeys, ShardSpec, getMemoryConfigHeader } from '../functions/parseMemoryConfig';
+import { MemoryKeys, ShardSpec } from '../model/MemoryConfig';
+import { MEMORY_CONFIG_HEADERS, getMemoryConfigHeader } from '../functions/parseMemoryConfig';
 
 interface MemoryConfigRowProps {
     header: string;

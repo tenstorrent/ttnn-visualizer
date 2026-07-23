@@ -7,35 +7,38 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect } from 'react';
-import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
+import { ReportLocation } from '../definitions/Reports';
+import { ReportLinkMatchResult, ReportPairLinkStatus } from '../definitions/ReportLinks';
+import { getReportId, upsertReportLink } from '../functions/reportLinks';
+import getServerConfig from '../functions/getServerConfig';
+import useRemoteConnection from '../hooks/useRemote';
+import { useReportLinkMatch } from '../hooks/useReportLinkMatch';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
-    successfulReportLinksAtom,
+    reportLinksAtom,
 } from '../store/app';
-import { addReportLink } from '../functions/reportLinks';
-import getServerConfig from '../functions/getServerConfig';
 
 const ReportLinkStatus = () => {
-    const useGetDeviceOperationListPerfResult = useGetDeviceOperationListPerf();
-    const canMatchOperations = useGetDeviceOperationListPerfResult.length > 0;
+    const matchResult = useReportLinkMatch();
+    const isLinked = matchResult === ReportLinkMatchResult.LINKED;
 
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const profilerLocation = useAtomValue(profilerReportLocationAtom);
     const performanceLocation = useAtomValue(performanceReportLocationAtom);
-    const setReportLinks = useSetAtom(successfulReportLinksAtom);
+    const setReportLinks = useSetAtom(reportLinksAtom);
+    const { persistentState } = useRemoteConnection();
 
     const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;
 
-    // Lazily record the active pair whenever it links successfully, so the report
-    // selection lists can later badge known counterparts of the active report.
+    // Persist LINKED / UNLINKED once the live comparison settles so pickers can
+    // badge known counterparts (including failed pairs).
     useEffect(() => {
         if (
             !isReportLinkingEnabled ||
-            !canMatchOperations ||
             !activeProfilerReport ||
             !activePerformanceReport ||
             !profilerLocation ||
@@ -44,26 +47,52 @@ const ReportLinkStatus = () => {
             return;
         }
 
+        if (matchResult !== ReportLinkMatchResult.LINKED && matchResult !== ReportLinkMatchResult.UNLINKED) {
+            return;
+        }
+
+        const profilerId = getReportId(activeProfilerReport.path, activeProfilerReport.reportName);
+        const performanceId = getReportId(activePerformanceReport.path, activePerformanceReport.reportName);
+
+        if (!profilerId || !performanceId) {
+            return;
+        }
+
+        const remoteHost = persistentState.selectedConnection?.host ?? null;
+
         setReportLinks((links) =>
-            addReportLink(links, {
-                profilerPath: activeProfilerReport.path,
-                profilerLocation,
-                performancePath: activePerformanceReport.path,
-                performanceLocation,
+            upsertReportLink(links, {
+                profilerId,
+                performanceId,
+                status:
+                    matchResult === ReportLinkMatchResult.LINKED
+                        ? ReportPairLinkStatus.LINKED
+                        : ReportPairLinkStatus.UNLINKED,
+                recordedAt: Date.now(),
+                profilerAccess: {
+                    location: profilerLocation,
+                    path: activeProfilerReport.path,
+                    host: profilerLocation === ReportLocation.REMOTE ? remoteHost : null,
+                },
+                performanceAccess: {
+                    location: performanceLocation,
+                    path: activePerformanceReport.path,
+                    host: performanceLocation === ReportLocation.REMOTE ? remoteHost : null,
+                },
             }),
         );
     }, [
-        canMatchOperations,
+        matchResult,
         activeProfilerReport,
         activePerformanceReport,
         profilerLocation,
         performanceLocation,
         setReportLinks,
         isReportLinkingEnabled,
+        persistentState.selectedConnection?.host,
     ]);
 
-    // Compute icon and messaging
-    const tooltipContent = canMatchOperations ? (
+    const tooltipContent = isLinked ? (
         'Data linked between memory and performance reports'
     ) : (
         <>
@@ -72,8 +101,6 @@ const ReportLinkStatus = () => {
             Please select reports generated from the same run to see additional data across the visualizer
         </>
     );
-    const icon = canMatchOperations ? IconNames.LINK : IconNames.UNLINK;
-    const intent = canMatchOperations ? Intent.SUCCESS : Intent.NONE;
 
     return (
         <Tooltip
@@ -81,9 +108,9 @@ const ReportLinkStatus = () => {
             position={Position.TOP}
         >
             <Icon
-                className={classNames({ 'no-sync-status-icon': !canMatchOperations })}
-                icon={icon}
-                intent={intent}
+                className={classNames({ 'no-sync-status-icon': !isLinked })}
+                icon={isLinked ? IconNames.LINK : IconNames.UNLINK}
+                intent={isLinked ? Intent.SUCCESS : Intent.NONE}
             />
         </Tooltip>
     );

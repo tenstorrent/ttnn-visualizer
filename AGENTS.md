@@ -137,7 +137,7 @@ Open pull requests with **`dev`** as the base branch by default.
 
 ### State management (Jotai)
 
-- All shared atoms live in **`src/store/app.ts`** and end with the `Atom` suffix (e.g. `activeProfilerReportAtom`). Components and hooks consume atoms — they do not declare new ones inline. Add new atoms in the section comment block matching their feature area.
+- Shared atoms live under **`src/store/`**, end with the `Atom` suffix (e.g. `activeProfilerReportAtom`), and are discoverable via **`src/store/app.ts`**. Prefer declaring new atoms in `app.ts` in the section comment block matching their feature area. When co-locating atoms with mutators in another `store/` module (e.g. `store/fileTransferRegistry.ts` to avoid a circular import), **re-export atoms and mutators from `app.ts`** and **import from `app.ts` at call sites** — the co-located module is an implementation detail, not a second public API. Components and hooks consume atoms — they do not declare new ones inline.
 - Prefer **`useAtomValue`** for read-only consumers and **`useSetAtom`** for write-only consumers; use **`useAtom`** when a component both reads and writes the same atom. Don't subscribe via `useAtom` if you only need one half of the tuple.
 - Use **`atomWithStorage`** from `jotai/utils` for user-preference flags that need to survive reloads — never reach for `localStorage` directly.
 
@@ -150,11 +150,12 @@ Open pull requests with **`dev`** as the base branch by default.
 ### Errors and toasts
 
 - Funnel error-string extraction through **`getResponseError(error, fallback?)`** (`src/functions/getResponseError.ts`). Don't reach into `error.response.data.error` ad-hoc — the helper handles AxiosError, Error, and string fallbacks consistently.
-- Emit toasts via **`createToastNotification(message, fileName, ToastType.X)`** (`src/functions/createToastNotification.tsx`). Don't import `toast` from `react-toastify` directly in components. The `<ToastContainer>` is mounted once in `Layout.tsx`.
+- Emit toasts via **`createToastNotification(message, fileName, ToastType.X)`** (`src/functions/createToastNotification.tsx`; `ToastType` lives in `src/definitions/ToastType.ts`). Don't import `toast` from `react-toastify` directly in components. The `<ToastContainer>` is mounted once in `Layout.tsx`.
 
 ### File organization and modules
 
-- **`src/definitions/`** holds *primitives*: enums, route/endpoint maps, plot/colour configs, plain interfaces. **`src/model/`** holds richer domain types — usually API response shapes, sometimes classes with methods. If it mirrors a backend response, it's a model.
+- **`src/definitions/`** holds *primitives*: enums, route/endpoint maps, plot/colour configs, plain interfaces. **`src/model/`** holds richer domain types — usually API response shapes, sometimes classes with methods. If it mirrors a backend response, it's a model. Apply this split for **new code and files you touch**; older domain-shaped types still under `definitions/` migrate on-touch (see CONVENTIONS.md Known inconsistencies).
+- **`src/routes/`** holds page components and React Router wiring (`routeObjectList.tsx`). Path *strings* stay in `definitions/Routes.ts` (`ROUTES`); route *config* and page modules live under `routes/`.
 - URL endpoints are centralized in the **`Endpoints` enum** (`src/definitions/Endpoints.ts`); routes in the **`ROUTES` frozen const** (`src/definitions/Routes.ts`). Never inline a URL string in a component.
 - Test IDs are centralized in **`TEST_IDS`** (`src/definitions/TestIds.ts`, `Object.freeze`'d) and referenced from both component `data-testid` attributes and test queries. No hardcoded test-id strings.
 - General value formatters (`toReadableShape`, `formatDuration`, `stripEnum`, etc.) live in **`src/functions/formatting.ts`**. Add new pure formatters there instead of redefining ad-hoc helpers inside feature modules.

@@ -30,7 +30,7 @@ import {
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
 import { Marker, MarkerColours, TypedPerfTableRow } from '../definitions/PerfTable';
-import { L1PressureStatus } from '../functions/l1Pressure';
+import { L1PressureStatus } from '../model/L1Pressure';
 import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
 import { resolveMaxCores } from '../functions/getCoreCount';
 import { enrichRowData } from '../functions/enrichPerfRowData';

@@ -15,7 +15,8 @@ import { NPEData } from '../model/NPEModel';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
-import { NPEValidationError, validateNpeData } from '../definitions/NPEData';
+import { NPEValidationError } from '../definitions/NPEData';
+import { validateNpeData } from '../functions/validateNpeData';
 
 const NPE = () => {
     const { filepath } = useParams<{ filepath?: string }>();

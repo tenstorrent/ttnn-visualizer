@@ -32,7 +32,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
@@ -78,16 +78,19 @@ _CONVERT_TIMEOUT_SECONDS = 60  # TODO: Ensure this is sufficient with larger mod
 _CURL_TIMEOUT_GRACE_SECONDS = 10
 # curl prints this when it never received an HTTP response (e.g. connection refused).
 _CURL_NO_RESPONSE_CODE = "000"
+# Basename marker for the remote SCP path; Model Explorer uses it as graph.id.
+# Must stay aligned with frontend `TEMP_UPLOAD_GRAPH_ID_MARKER`.
+_TEMP_UPLOAD_BASENAME_PREFIX = "ttnn_viz_upload_"
 # Model Explorer rejects unknown adapter ids with ``Extension "<id>" not found``.
 _EXTENSION_NOT_FOUND_RE = re.compile(r'Extension\s+"[^"]+"\s+not found', re.IGNORECASE)
 
 
 @dataclass
 class MlirConversionResult:
-    """Outcome of upload+convert. ``graph_json`` is set only on success."""
+    """Outcome of upload+convert. ``graphs`` is set only on success."""
 
     status: StatusMessage
-    graph_json: Optional[str] = None
+    graphs: Optional[List[Any]] = None
 
 
 def is_supported_mlir_server_file(filename: str) -> bool:
@@ -205,7 +208,10 @@ def _upload_file_to_server(
         tmp.write(file_bytes)
         local_path = tmp.name
 
-    remote_path = f"/tmp/ttnn_viz_upload_{os.getpid()}_{uuid.uuid4().hex}{Path(safe_filename).suffix}"
+    remote_path = (
+        f"/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}"
+        f"{os.getpid()}_{uuid.uuid4().hex}{Path(safe_filename).suffix}"
+    )
     upload_form_arg = shlex.quote(f"{MLIR_UPLOAD_FIELD}=@{remote_path}")
     curl_cmd = (
         "curl -sS -H 'Expect:' -w '\\n%{http_code}' "
@@ -275,12 +281,13 @@ def _upload_file_to_server(
 
 def _normalise_convert_response(
     response_text: str,
-) -> Tuple[Optional[str], Optional[str]]:
-    """Map a Model Explorer convert response to a ``GraphBundle`` JSON string.
+) -> Tuple[Optional[List[Any]], Optional[str]]:
+    """Map a Model Explorer convert response to a ``graphs`` list.
 
-    Returns ``(graph_json, error)``. The adapter returns ``{"graphs": [...]}`` or
+    Returns ``(graphs, error)``. The adapter returns ``{"graphs": [...]}`` or
     ``{"graphCollections": [{"label", "graphs"}]}``; ``send_command`` returns
-    ``{"error": ...}`` when the command raises.
+    ``{"error": ...}`` when the command raises. Callers dump once after
+    ``relabel_graph_ids`` so large payloads are not serialised twice.
     """
     try:
         data = json.loads(response_text)
@@ -304,7 +311,54 @@ def _normalise_convert_response(
     else:
         return None, "Conversion response had no graphs"
 
-    return json.dumps({"graphs": graphs}), None
+    if not isinstance(graphs, list):
+        return None, "Unexpected conversion response"
+
+    return graphs, None
+
+
+def relabel_graph_ids(graphs: List[Any], display_name: str) -> bool:
+    """Replace Model Explorer temp-path graph ids with the uploaded file stem.
+
+    Mutates ``graphs`` in place. Returns whether any id changed.
+
+    Files are SCP'd under ``/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}<pid>_<uuid>.…``
+    before convert; Model Explorer uses that remote basename as ``graph.id``.
+    Only that pattern is rewritten — other ``/tmp/…`` ids (and real report
+    names) are left alone so multi-graph bundles keep distinct valid entries
+    in the pane select.
+    """
+    if not display_name or not graphs:
+        return False
+
+    def _is_temp_upload_id(graph_id: object) -> bool:
+        return _TEMP_UPLOAD_BASENAME_PREFIX in str(graph_id or "")
+
+    changed = False
+
+    if len(graphs) == 1:
+        graph = graphs[0]
+        if isinstance(graph, dict) and _is_temp_upload_id(graph.get("id")):
+            if graph.get("id") != display_name:
+                graph["id"] = display_name
+                changed = True
+        return changed
+
+    for index, graph in enumerate(graphs):
+        if not isinstance(graph, dict):
+            continue
+        if _is_temp_upload_id(graph.get("id")):
+            new_id = display_name if index == 0 else f"{display_name} ({index + 1})"
+            if graph.get("id") != new_id:
+                graph["id"] = new_id
+                changed = True
+
+    return changed
+
+
+def dumps_graph_bundle(graphs: List[Any]) -> str:
+    """Serialise a ``GraphBundle`` once after convert + optional relabel."""
+    return json.dumps({"graphs": graphs})
 
 
 def _is_extension_missing(error: str) -> bool:
@@ -318,8 +372,8 @@ def _convert_with_extension(
     port: int,
     server_path: str,
     extension_id: str,
-) -> Tuple[Optional[str], Optional[str]]:
-    """POST a single ``convert`` command on the remote host. Returns ``(graph_json, error)``."""
+) -> Tuple[Optional[List[Any]], Optional[str]]:
+    """POST a single ``convert`` command on the remote host. Returns ``(graphs, error)``."""
     payload = json.dumps(
         {
             "cmdId": MLIR_CONVERT_CMD_ID,
@@ -370,13 +424,13 @@ def _convert_model_on_server(
     last_error: Optional[str] = None
 
     for extension_id in MLIR_CONVERT_EXTENSION_IDS:
-        graph_json, error = _convert_with_extension(
+        graphs, error = _convert_with_extension(
             client, connection, port, server_path, extension_id
         )
         if error is None:
             return MlirConversionResult(
                 status=StatusMessage(status=ConnectionTestStates.OK, message="Success"),
-                graph_json=graph_json,
+                graphs=graphs,
             )
 
         last_error = error

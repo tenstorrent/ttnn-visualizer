@@ -48,7 +48,14 @@ from ttnn_visualizer.file_uploads import (
     validate_files,
 )
 from ttnn_visualizer.instances import get_instances, update_instance
+from ttnn_visualizer.local_remote_reports import (
+    list_local_synced_performance_folders,
+    list_local_synced_profiler_folders,
+    local_synced_report_path,
+)
 from ttnn_visualizer.mlir import (
+    dumps_graph_bundle,
+    relabel_graph_ids,
     test_mlir_server_connection,
     upload_and_convert_mlir,
 )
@@ -59,6 +66,7 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     ReportLocation,
     StatusMessage,
+    sanitise_path_segment,
     sanitise_remote_host_segment,
 )
 from ttnn_visualizer.queries import DatabaseQueries
@@ -96,6 +104,10 @@ from ttnn_visualizer.stack_trace_source import (
 from ttnn_visualizer.utils import (
     create_path_resolver,
     get_mlir_path,
+    get_performance_path,
+    get_profiler_path,
+    is_valid_performance_report_dir,
+    is_valid_profiler_report_dir,
     pick_cluster_descriptor_path,
     pick_mesh_descriptor_path,
     pick_profiler_config_paths,
@@ -946,18 +958,12 @@ def get_profiler_data_list(instance: Instance):
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
-        if not dir_path.is_dir():
+        if not dir_path.is_dir() or not is_valid_profiler_report_dir(dir_path):
             continue
-        files = list(dir_path.glob("**/*"))
-        report_name = None
         if pick_profiler_config_paths(dir_path):
             report_name = read_profiler_report_name(dir_path)
         else:
             report_name = dir_path.name
-
-        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
-        if not any(file.name == "db.sqlite" for file in files):
-            continue
 
         valid_dirs.append({"path": dir_path.name, "reportName": report_name})
 
@@ -1064,14 +1070,7 @@ def get_performance_data_list(instance: Instance):
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
-        files = list(dir_path.glob("**/*"))
-
-        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
-        if not any(file.name == "profile_log_device.csv" for file in files):
-            continue
-        if not any(file.name == "tracy_profile_log_host.tracy" for file in files):
-            continue
-        if not any(file.name.startswith("ops_perf_results") for file in files):
+        if not dir_path.is_dir() or not is_valid_performance_report_dir(dir_path):
             continue
 
         valid_dirs.append(
@@ -1487,79 +1486,106 @@ def create_npe_files():
 
 
 @api.route("/remote/profiler-reports", methods=["POST"])
+@local_only
 def list_remote_reports_profiler():
-    connection_data = request.get_json()
-
-    if not connection_data:
-        return response_bad_request("Missing connection data")
-
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
-
-    try:
-        remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
-            connection
-        )
-        if not remote_folders:
-            return Response(status=HTTPStatus.NO_CONTENT)
-
-        for rf in remote_folders:
-            directory_name = Path(rf.remotePath).name
-            remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-            local_path = (
-                remote_data_directory
-                / current_app.config["PROFILER_DIRECTORY_NAME"]
-                / connection.host
-                / directory_name
-            )
-            logger.info(f"Checking last synced for {directory_name}")
-            rf.lastSynced = read_last_synced_file(str(local_path))
-            if not rf.lastSynced:
-                logger.info(f"{directory_name} not yet synced")
-
-        return Response(
-            orjson.dumps([r.model_dump() for r in remote_folders]),
-            mimetype="application/json",
-        )
-    except RemoteConnectionException as e:
-        return error_response(e.http_status, e.message)
+    return _respond_remote_report_list(
+        get_remote_profiler_folders, "PROFILER_DIRECTORY_NAME"
+    )
 
 
 @api.route("/remote/performance-reports", methods=["POST"])
+@local_only
 def list_remote_reports_performance():
+    return _respond_remote_report_list(
+        get_remote_performance_folders, "PERFORMANCE_DIRECTORY_NAME"
+    )
+
+
+@api.route("/remote/local-profiler-reports", methods=["POST"])
+@local_only
+def list_local_remote_reports_profiler():
+    """List profiler reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
+    return _respond_local_synced_folders(
+        list_local_synced_profiler_folders,
+        "PROFILER_DIRECTORY_NAME",
+    )
+
+
+@api.route("/remote/local-performance-reports", methods=["POST"])
+@local_only
+def list_local_remote_reports_performance():
+    """List performance reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
+    return _respond_local_synced_folders(
+        list_local_synced_performance_folders,
+        "PERFORMANCE_DIRECTORY_NAME",
+    )
+
+
+def _annotate_last_synced(
+    folders: List[RemoteReportFolder], host: str, directory_config_key: str
+) -> None:
+    remote_data = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
+    dir_name = current_app.config[directory_config_key]
+    for rf in folders:
+        directory_name = Path(rf.remotePath).name
+        local_path = local_synced_report_path(
+            remote_data, host, dir_name, directory_name
+        )
+        logger.debug("Checking last synced for %s", directory_name)
+        rf.lastSynced = read_last_synced_file(str(local_path))
+        if not rf.lastSynced:
+            logger.debug("%s not yet synced", directory_name)
+
+
+def _respond_remote_report_list(fetch_fn, directory_config_key: str):
     connection_data = request.get_json()
 
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
+    try:
+        connection = RemoteConnection.model_validate(connection_data, strict=False)
+    except ValidationError:
+        return response_bad_request("Invalid connection data")
 
     try:
-        remote_performance_folders: List[RemoteReportFolder] = (
-            get_remote_performance_folders(connection)
-        )
-        if not remote_performance_folders:
+        remote_folders: List[RemoteReportFolder] = fetch_fn(connection)
+        if not remote_folders:
             return Response(status=HTTPStatus.NO_CONTENT)
 
-        for rf in remote_performance_folders:
-            performance_name = Path(rf.remotePath).name
-            remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-            local_path = (
-                remote_data_directory
-                / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-                / connection.host
-                / performance_name
-            )
-            logger.info(f"Checking last synced for {performance_name}")
-            rf.lastSynced = read_last_synced_file(str(local_path))
-            if not rf.lastSynced:
-                logger.info(f"{performance_name} not yet synced")
+        _annotate_last_synced(remote_folders, connection.host, directory_config_key)
 
         return Response(
-            orjson.dumps([r.model_dump() for r in remote_performance_folders]),
+            orjson.dumps([folder.model_dump() for folder in remote_folders]),
             mimetype="application/json",
         )
     except RemoteConnectionException as e:
         return error_response(e.http_status, e.message)
+
+
+def _respond_local_synced_folders(list_fn, directory_config_key: str):
+    connection_data = request.get_json()
+
+    if not connection_data:
+        return response_bad_request("Missing connection data")
+
+    try:
+        connection = RemoteConnection.model_validate(connection_data, strict=False)
+    except ValidationError:
+        return response_bad_request("Invalid connection data")
+
+    folders = list_fn(
+        connection,
+        Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
+        current_app.config[directory_config_key],
+    )
+    if not folders:
+        return Response(status=HTTPStatus.NO_CONTENT)
+
+    return Response(
+        orjson.dumps([folder.model_dump() for folder in folders]),
+        mimetype="application/json",
+    )
 
 
 @api.route("/cluster-descriptor", methods=["GET"])
@@ -1646,6 +1672,7 @@ def get_mesh_descriptor(instance: Instance):
 
 
 @api.route("/remote/test", methods=["POST"])
+@local_only
 def test_remote_folder():
     connection_data = request.json
 
@@ -1822,7 +1849,7 @@ def upload_mlir_server():
 
         if (
             result.status.status == ConnectionTestStates.OK.value
-            and result.graph_json is not None
+            and result.graphs is not None
         ):
             base_name = Path(Path(filename).name).stem
             unavailable_names = existing_names | used_names
@@ -1833,14 +1860,17 @@ def upload_mlir_server():
                 unavailable_names.discard(base_name)
             mlir_name = _unique_mlir_name(base_name, unavailable_names)
             used_names.add(mlir_name)
+            # Model Explorer labels graphs with the temp remote upload path;
+            # rewrite to the stored report stem before the single serialise.
+            relabel_graph_ids(result.graphs, mlir_name)
+            labelled_graph_json = dumps_graph_bundle(result.graphs)
             mlir_path = target_directory / f"{mlir_name}.json"
-            mlir_path.write_text(result.graph_json, encoding="utf-8")
+            mlir_path.write_text(labelled_graph_json, encoding="utf-8")
 
             entry["name"] = mlir_name
-            # `graph_json` is already a JSON string, so embed it verbatim rather
-            # than re-serialising — the caller renders it without a follow-up
-            # `/mlir` fetch.
-            entry["graph"] = orjson.Fragment(result.graph_json.encode("utf-8"))
+            # Embed the labelled JSON verbatim rather than re-serialising —
+            # the caller renders it without a follow-up `/mlir` fetch.
+            entry["graph"] = orjson.Fragment(labelled_graph_json.encode("utf-8"))
 
         results.append(entry)
 
@@ -1925,6 +1955,7 @@ def remote_stack_trace_read(instance: Instance):
 
 
 @api.route("/remote/sync", methods=["POST"])
+@local_only
 def sync_remote_folder():
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
     request_body = request.get_json()
@@ -1999,7 +2030,24 @@ def sync_remote_folder():
         )
 
 
+_REPORT_NOT_SYNCED_LOCALLY = (
+    "Report is not synced locally. Use Sync to download it first."
+)
+
+
+def _safe_report_folder_name(
+    *, report_name: Optional[str] = None, remote_path: Optional[str] = None
+) -> Optional[str]:
+    """Single-segment folder name for paths under REMOTE_DATA_DIRECTORY."""
+    candidate = report_name or (Path(remote_path).name if remote_path else "")
+    try:
+        return sanitise_path_segment(candidate)
+    except (TypeError, ValueError):
+        return None
+
+
 @api.route("/remote/use", methods=["POST"])
+@local_only
 def use_remote_folder():
     data = request.get_json(force=True)
     connection_data = data.get("connection")
@@ -2021,8 +2069,17 @@ def use_remote_folder():
             profiler,
             strict=False,
         )
+        profiler_name = _safe_report_folder_name(
+            report_name=remote_profiler_folder.reportName,
+            remote_path=remote_profiler_folder.remotePath,
+        )
+        if not profiler_name:
+            return response_bad_request("Invalid report name")
+        local_db_path = Path(get_profiler_path(profiler_name, current_app, connection))
+        if not is_valid_profiler_report_dir(local_db_path.parent):
+            return response_not_found(_REPORT_NOT_SYNCED_LOCALLY)
         kwargs["remote_profiler_folder"] = remote_profiler_folder
-        kwargs["profiler_name"] = remote_profiler_folder.remotePath.split("/")[-1]
+        kwargs["profiler_name"] = profiler_name
         kwargs["profiler_location"] = ReportLocation.REMOTE.value
 
     if performance:
@@ -2030,8 +2087,19 @@ def use_remote_folder():
             performance,
             strict=False,
         )
+        performance_name = _safe_report_folder_name(
+            report_name=remote_performance_folder.reportName,
+            remote_path=remote_performance_folder.remotePath,
+        )
+        if not performance_name:
+            return response_bad_request("Invalid report name")
+        local_perf_path = Path(
+            get_performance_path(performance_name, current_app, connection)
+        )
+        if not is_valid_performance_report_dir(local_perf_path):
+            return response_not_found(_REPORT_NOT_SYNCED_LOCALLY)
         kwargs["remote_performance_folder"] = remote_performance_folder
-        kwargs["performance_name"] = remote_performance_folder.reportName
+        kwargs["performance_name"] = performance_name
         kwargs["performance_location"] = ReportLocation.REMOTE.value
 
     update_instance(**kwargs)

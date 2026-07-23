@@ -20,7 +20,7 @@ import SourceFileButton from './operation-details/SourceFileButton';
 import { extractOperationSourceData } from '../functions/stackTraceSource';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 import MemoryConfigRow from './MemoryConfigRow';
-import { ShardSpec } from '../functions/parseMemoryConfig';
+import { ShardSpec } from '../model/MemoryConfig';
 import { BufferType } from '../model/BufferType';
 import { formatDuration, toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';

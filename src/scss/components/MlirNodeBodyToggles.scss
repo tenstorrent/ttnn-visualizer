@@ -4,15 +4,12 @@
 
 @use '../definitions/colours' as *;
 
-.mlir-node-body-toggles {
+.mlir-node-body-toggles-menu {
     display: flex;
     flex-direction: column;
     gap: 6px;
     padding: 8px 10px;
     background: $tt-grey-2;
-    border: 1px solid $tt-grey-3;
-    border-radius: 4px;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
 
     .bp6-control {
         margin: 0;
