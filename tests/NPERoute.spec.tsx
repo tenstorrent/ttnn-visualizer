@@ -330,6 +330,62 @@ describe('NPE route loading and error wiring', () => {
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_PROCESSING_LABEL);
     });
 
+    it('clears sticky timeout UI when the same report starts fetching again', () => {
+        vi.useFakeTimers();
+
+        const TickHarness = () => {
+            const [tick, setTick] = useState(0);
+            return (
+                <>
+                    <button
+                        type='button'
+                        onClick={() => setTick((value) => value + 1)}
+                    >
+                        tick-{tick}
+                    </button>
+                    <NPE />
+                </>
+            );
+        };
+
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
+        render(
+            <TestProviders initialAtomValues={[[activeNpeOpTraceAtom, 'trace.json']]}>
+                <TickHarness />
+            </TestProviders>,
+        );
+
+        act(() => {
+            vi.advanceTimersByTime(NPE_FETCH_TIMEOUT_MS);
+        });
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
+
+        // Simulate post-discard idle, then same-report refetch (focus/retry) without identity change.
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: null });
+        act(() => {
+            screen.getByRole('button', { name: /tick-/ }).click();
+        });
+
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
+        act(() => {
+            screen.getByRole('button', { name: /tick-/ }).click();
+        });
+
+        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).not.toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_PROCESSING_LABEL);
+
+        mockUseNpe.mockReturnValue(settledNpe);
+        act(() => {
+            screen.getByRole('button', { name: /tick-/ }).click();
+        });
+        act(() => {
+            vi.advanceTimersByTime(0);
+        });
+
+        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).not.toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
+    });
+
     it('does not stay on Processing when the disabled sibling query is still loading', () => {
         mockUseParams.mockReturnValue({ filepath: 'timeline.json' });
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });

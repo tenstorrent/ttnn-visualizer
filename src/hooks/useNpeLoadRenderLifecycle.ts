@@ -67,21 +67,37 @@ const useNpeLoadRenderLifecycle = ({
         discardNpeQueries(queryClient);
     };
 
+    const resetGates = () => {
+        hasRenderedViewRef.current = false;
+        loadStartedAtRef.current = null;
+        renderStartedAtRef.current = null;
+        setHasRenderedView(false);
+        setMountView(false);
+        setLoadTimedOut(false);
+        setRenderTimedOut(false);
+    };
+
     useEffect(() => {
         isFetchingDataRef.current = isFetchingData;
     }, [isFetchingData]);
 
     // Reset load/render gates whenever the active report identity changes.
     useEffect(() => {
-        hasRenderedViewRef.current = false;
-        loadStartedAtRef.current = null;
-        renderStartedAtRef.current = null;
         // eslint-disable-next-line react-hooks/set-state-in-effect -- reset gates when report identity changes
-        setHasRenderedView(false);
-        setMountView(false);
-        setLoadTimedOut(false);
-        setRenderTimedOut(false);
+        resetGates();
     }, [npeFileName, filepath, selectedDemoKey]);
+
+    // Same-report refetch (window focus, post-discard retry) must clear sticky timeouts;
+    // only rising-edge on isFetchingData so a timeout while still fetching is not cleared immediately.
+    const wasFetchingDataRef = useRef(false);
+    useEffect(() => {
+        const startedFetch = isFetchingData && !wasFetchingDataRef.current;
+        wasFetchingDataRef.current = isFetchingData;
+        if (!startedFetch || (!loadTimedOut && !renderTimedOut)) {
+            return;
+        }
+        resetGates();
+    }, [isFetchingData, loadTimedOut, renderTimedOut]);
 
     // Wall-clock bound for Processing (download + parse). Axios timeout only
     // covers the HTTP wait; JSON.parse of a huge body is sync and can hang the
