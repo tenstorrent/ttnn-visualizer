@@ -15,6 +15,7 @@ import { NPEData } from '../model/NPEModel';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
+import NpeWindowedProof from '../components/npe/NpeWindowedProof';
 import { NPEValidationError } from '../definitions/NPEData';
 import { validateNpeData } from '../functions/validateNpeData';
 
@@ -92,6 +93,8 @@ const NPE = () => {
                     </>
                 )}
             </div>
+
+            {import.meta.env.DEV && <NpeWindowedProof fileName={filepath ? null : npeFileName} />}
 
             {errorCode !== NPEValidationError.OK ? (
                 <NPEProcessingStatus

@@ -69,6 +69,7 @@ from ttnn_visualizer.models import (
     sanitise_path_segment,
     sanitise_remote_host_segment,
 )
+from ttnn_visualizer.npe_index import ensure_index, read_summary, read_window
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.report_source_file import (
     read_report_source_file,
@@ -2214,6 +2215,50 @@ def get_npe_data(instance: Instance):
         return response_unprocessable_entity()
 
     return Response(npe_data, mimetype="application/json")
+
+
+@api.route("/npe/summary", methods=["GET"])
+@with_instance
+@timer
+def get_npe_summary(instance: Instance):
+    if not instance.npe_path or not Path(instance.npe_path).exists():
+        logger.error("NPE path is not set or file missing for summary.")
+        return response_not_found()
+
+    try:
+        db_path = ensure_index(instance.npe_path)
+        summary = read_summary(db_path)
+    except Exception as e:
+        logger.error(f"Error building/reading NPE index: {e}")
+        return response_unprocessable_entity()
+
+    return Response(orjson.dumps(summary), mimetype="application/json")
+
+
+@api.route("/npe/window", methods=["GET"])
+@with_instance
+@timer
+def get_npe_window(instance: Instance):
+    if not instance.npe_path or not Path(instance.npe_path).exists():
+        logger.error("NPE path is not set or file missing for window.")
+        return response_not_found()
+
+    try:
+        timestep = int(request.args.get("t", ""))
+    except ValueError:
+        return response_bad_request("Query param 't' must be an integer timestep.")
+
+    try:
+        db_path = ensure_index(instance.npe_path)
+        window = read_window(db_path, timestep)
+    except Exception as e:
+        logger.error(f"Error reading NPE window: {e}")
+        return response_unprocessable_entity()
+
+    if window is None:
+        return response_not_found()
+
+    return Response(orjson.dumps(window), mimetype="application/json")
 
 
 @api.route("/mlir", methods=["GET"])

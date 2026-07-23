@@ -52,7 +52,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { NPEData, NPEManifestEntry } from '../model/NPEModel';
+import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
 import {
@@ -599,6 +599,40 @@ export const useNpe = (fileName: string | null) => {
         retry: false,
         staleTime: 30000,
         enabled: fileName !== null,
+    });
+};
+
+const fetchNpeSummary = async (): Promise<NpeSummary> => {
+    const { data } = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY);
+    return data;
+};
+
+// #861 windowed loading: per-step aggregates for the whole trace, small enough
+// to load once; transfers/link_demand come from useNpeWindow per visited step.
+export const useNpeSummary = (fileName: string | null) => {
+    return useQuery<NpeSummary, AxiosError>({
+        queryFn: fetchNpeSummary,
+        queryKey: ['npe-summary', fileName],
+        retry: false,
+        staleTime: Infinity,
+        enabled: fileName !== null,
+    });
+};
+
+const fetchNpeWindow = async (t: number): Promise<NpeWindow> => {
+    const { data } = await axiosInstance.get<NpeWindow>(Endpoints.NPE_WINDOW, {
+        params: { t },
+    });
+    return data;
+};
+
+export const useNpeWindow = (fileName: string | null, t: number | null) => {
+    return useQuery<NpeWindow, AxiosError>({
+        queryFn: () => fetchNpeWindow(t!),
+        queryKey: ['npe-window', fileName, t],
+        retry: false,
+        staleTime: Infinity,
+        enabled: fileName !== null && t !== null,
     });
 };
 

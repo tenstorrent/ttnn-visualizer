@@ -190,6 +190,33 @@ export interface TimestepData {
     };
 }
 
+// Per-step aggregates for the timeline heat bar / scrubber. Small enough to send
+// for every step up front; `link_demand` and transfers are fetched per window.
+export interface NpeTimestepSummary {
+    t: number;
+    start_cycle: number;
+    end_cycle: number;
+    avg_link_demand: number;
+    avg_link_util: number;
+    max_link_demand: number;
+    active_count: number;
+}
+
+export interface NpeSummary {
+    common_info: CommonInfo;
+    chips: NPEData['chips'];
+    n_timesteps: number;
+    timesteps: NpeTimestepSummary[];
+}
+
+export type NpeWindowTimestep = Omit<TimestepData, 'start_cycle' | 'end_cycle'>;
+
+export interface NpeWindow {
+    t: number;
+    timestep: NpeWindowTimestep;
+    transfers: NoCTransfer[];
+}
+
 export interface NPEData {
     common_info: CommonInfo;
     noc_transfers: NoCTransfer[];
