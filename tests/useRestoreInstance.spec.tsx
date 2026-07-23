@@ -104,6 +104,22 @@ it('does not restore while the folder list is still on its null initialData', ()
     expect(screen.queryByText('restored')).toBeNull();
 });
 
+it('stays pending while the first instance payload has not arrived', () => {
+    mockUseInstance.mockReturnValue({
+        data: undefined,
+        isLoading: true,
+    });
+
+    render(
+        <TestProviders>
+            <HookHarness />
+        </TestProviders>,
+    );
+
+    expect(screen.getByText('pending')).toBeTruthy();
+    expect(screen.queryByText('restored')).toBeNull();
+});
+
 it('restores when the folder list fails so the loader cannot hang with no request in flight', async () => {
     mockUseReportFolderList.mockReturnValue({ data: null, isError: true });
 

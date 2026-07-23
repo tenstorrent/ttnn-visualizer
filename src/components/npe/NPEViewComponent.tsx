@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import 'styles/components/NPEZoneFilterComponent.scss';
-import { useEffect, useMemo, useState } from 'react';
+import { startTransition, useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Classes, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -80,6 +80,40 @@ const getRootZoneKey = (proc: KERNEL_PROCESS, address: NPE_COORDINATES): Rootzon
 };
 
 const NPEView = ({ npeData, onRendered }: NPEViewProps) => {
+    // Yield once so the route spinner can paint and the render-budget timer can
+    // fire before sync chip/timeline work begins. Co-mounting the spinner with
+    // an empty shell is cheap; the heavy body mounts on the next frame.
+    const [mountBody, setMountBody] = useState(false);
+
+    useEffect(() => {
+        const frameId = window.requestAnimationFrame(() => {
+            startTransition(() => {
+                setMountBody(true);
+            });
+        });
+        return () => {
+            window.cancelAnimationFrame(frameId);
+        };
+    }, []);
+
+    if (!mountBody) {
+        return (
+            <div
+                className='npe npe--deferred-shell'
+                aria-busy='true'
+            />
+        );
+    }
+
+    return (
+        <NPEViewBody
+            npeData={npeData}
+            onRendered={onRendered}
+        />
+    );
+};
+
+const NPEViewBody = ({ npeData, onRendered }: NPEViewProps) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);

@@ -11,6 +11,15 @@ export const NPE_FETCH_TIMEOUT_MS = 30_000;
 /** Bound for first paint of NPEView after data is ready (wall clock, including sync work). */
 export const NPE_RENDER_TIMEOUT_MS = 30_000;
 
+/**
+ * Cap buffered NPE response size (Chromium string limit is roughly 512 MiB).
+ * Applied on NPE GETs so we fail closed before holding an unbounded body.
+ */
+export const NPE_MAX_CONTENT_LENGTH = 512 * 1024 * 1024;
+
+export const NPE_PROCESSING_LABEL = 'Processing NPE…';
+export const NPE_RENDERING_LABEL = 'Rendering NPE…';
+
 /** Axios `error.code` values thrown by `parseNpeAxiosResponseData`. */
 export enum NpeAxiosErrorCode {
     PAYLOAD_TOO_LARGE = 'NPE_PAYLOAD_TOO_LARGE',

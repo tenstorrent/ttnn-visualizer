@@ -6,11 +6,18 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { AxiosError, HttpStatusCode } from 'axios';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useSetAtom } from 'jotai';
 import { TestProviders } from './helpers/TestProviders';
 import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { NPE_FETCH_TIMEOUT_MS, NPE_RENDER_TIMEOUT_MS, NpeAxiosErrorCode } from '../src/definitions/NPEData';
+import {
+    NPE_FETCH_TIMEOUT_MS,
+    NPE_PROCESSING_LABEL,
+    NPE_RENDERING_LABEL,
+    NPE_RENDER_TIMEOUT_MS,
+    NpeAxiosErrorCode,
+} from '../src/definitions/NPEData';
 import type { NPEData } from '../src/model/NPEModel';
 
 const { mockUseNpe, mockUseNPETimelineFile, mockUseParams, mockDiscardNpeQueries } = vi.hoisted(() => ({
@@ -42,22 +49,26 @@ vi.mock('../src/hooks/useAPI', async () => {
     };
 });
 vi.mock('../src/components/npe/NPEFileLoader', () => ({
-    default: () => <div data-testid='npe-file-loader' />,
+    default: () => <div data-testid={TEST_IDS.NPE_FILE_LOADER} />,
 }));
 vi.mock('../src/components/npe/NPEDemoSelect', () => ({
     default: () => null,
 }));
 
 let callOnRendered = true;
+let capturedOnRendered: (() => void) | null = null;
 
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
     default: function MockNPEView({ onRendered }: { onRendered?: () => void }) {
+        // Match production: fire once on mount, not when the parent recreates onRendered.
         useEffect(() => {
+            capturedOnRendered = onRendered ?? null;
             if (callOnRendered) {
                 onRendered?.();
             }
-        }, [onRendered]);
-        return <div data-testid='npe-view' />;
+            // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only ready signal
+        }, []);
+        return <div data-testid={TEST_IDS.NPE_VIEW} />;
     },
 }));
 
@@ -82,15 +93,29 @@ const settledNpe = {
     error: null,
 };
 
+const SwitchNpeFileButton = ({ fileName }: { fileName: string }) => {
+    const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
+    return (
+        <button
+            type='button'
+            onClick={() => setActiveNpe(fileName)}
+        >
+            switch-npe-file
+        </button>
+    );
+};
+
 const renderRoute = (fileName: string | null = 'trace.json') =>
     render(
         <TestProviders initialAtomValues={[[activeNpeOpTraceAtom, fileName]]}>
             <NPE />
+            <SwitchNpeFileButton fileName='other-trace.json' />
         </TestProviders>,
     );
 
 beforeEach(() => {
     callOnRendered = true;
+    capturedOnRendered = null;
     mockUseParams.mockReturnValue({});
     mockUseNpe.mockReturnValue(settledNpe);
     mockUseNPETimelineFile.mockReturnValue(idleTimeline);
@@ -100,6 +125,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
 });
 
@@ -108,8 +134,8 @@ describe('NPE route loading and error wiring', () => {
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
         renderRoute();
 
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain('Processing NPE');
-        expect(screen.queryByTestId('npe-view')).not.toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_PROCESSING_LABEL);
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
     });
 
     it('shows Rendering after data is ready and before onRendered', () => {
@@ -117,13 +143,13 @@ describe('NPE route loading and error wiring', () => {
         vi.useFakeTimers();
         renderRoute();
 
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain('Rendering NPE');
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_RENDERING_LABEL);
 
         act(() => {
             vi.advanceTimersByTime(0);
         });
 
-        const view = screen.getByTestId('npe-view');
+        const view = screen.getByTestId(TEST_IDS.NPE_VIEW);
         expect(view.closest('[aria-hidden="true"]')).not.toBeNull();
     });
 
@@ -136,7 +162,7 @@ describe('NPE route loading and error wiring', () => {
         });
 
         expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).not.toBeInTheDocument();
-        expect(screen.getByTestId('npe-view').closest('[aria-hidden="false"]')).not.toBeNull();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW).closest('[aria-hidden="false"]')).not.toBeNull();
     });
 
     it('maps PAYLOAD_TOO_LARGE to the payload-too-large status', () => {
@@ -157,13 +183,29 @@ describe('NPE route loading and error wiring', () => {
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
     });
 
-    it('maps INVALID_JSON and 422 to the invalid-json status', () => {
+    it('maps ETIMEDOUT to the load-timeout status', () => {
+        const error = new AxiosError('timed out');
+        error.code = AxiosError.ETIMEDOUT;
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error });
+        renderRoute();
+
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
+    });
+
+    it('maps INVALID_JSON, ERR_BAD_RESPONSE, and 422 to the invalid-json status', () => {
         const invalidJson = new AxiosError('bad json');
         invalidJson.code = NpeAxiosErrorCode.INVALID_JSON;
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: invalidJson });
         const { unmount } = renderRoute();
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
         unmount();
+
+        const badResponse = new AxiosError('bad response');
+        badResponse.code = AxiosError.ERR_BAD_RESPONSE;
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: badResponse });
+        const second = renderRoute();
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
+        second.unmount();
 
         const unprocessable = new AxiosError('422');
         unprocessable.status = HttpStatusCode.UnprocessableEntity;
@@ -187,6 +229,45 @@ describe('NPE route loading and error wiring', () => {
         expect(mockDiscardNpeQueries).toHaveBeenCalled();
     });
 
+    it('times out when fetch settles after the wall-clock budget (sync parse path)', () => {
+        vi.useFakeTimers();
+        let now = 1_000;
+        vi.stubGlobal('performance', { now: () => now });
+
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
+
+        const TickHarness = () => {
+            const [tick, setTick] = useState(0);
+            return (
+                <>
+                    <button
+                        type='button'
+                        onClick={() => setTick((value) => value + 1)}
+                    >
+                        tick-{tick}
+                    </button>
+                    <NPE />
+                </>
+            );
+        };
+
+        render(
+            <TestProviders initialAtomValues={[[activeNpeOpTraceAtom, 'trace.json']]}>
+                <TickHarness />
+            </TestProviders>,
+        );
+
+        now += NPE_FETCH_TIMEOUT_MS + 1;
+        mockUseNpe.mockReturnValue(settledNpe);
+        act(() => {
+            screen.getByRole('button', { name: /tick-/ }).click();
+        });
+
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
+        expect(mockDiscardNpeQueries).toHaveBeenCalled();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
+    });
+
     it('times out when onRendered never fires and discards NPE queries', () => {
         callOnRendered = false;
         vi.useFakeTimers();
@@ -195,15 +276,58 @@ describe('NPE route loading and error wiring', () => {
         act(() => {
             vi.advanceTimersByTime(0);
         });
-        expect(screen.getByTestId('npe-view')).toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
 
         act(() => {
             vi.advanceTimersByTime(NPE_RENDER_TIMEOUT_MS);
         });
 
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_RENDER_TIMEOUT)).toBeInTheDocument();
-        expect(screen.queryByTestId('npe-view')).not.toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
         expect(mockDiscardNpeQueries).toHaveBeenCalled();
+    });
+
+    it('times out when onRendered fires after the render budget', () => {
+        callOnRendered = false;
+        vi.useFakeTimers();
+        let now = 5_000;
+        vi.stubGlobal('performance', { now: () => now });
+
+        renderRoute();
+
+        act(() => {
+            vi.advanceTimersByTime(0);
+        });
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
+        expect(capturedOnRendered).not.toBeNull();
+
+        now += NPE_RENDER_TIMEOUT_MS + 1;
+        act(() => {
+            capturedOnRendered?.();
+        });
+
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_RENDER_TIMEOUT)).toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
+        expect(mockDiscardNpeQueries).toHaveBeenCalled();
+    });
+
+    it('clears timeout UI when the active report identity changes', () => {
+        vi.useFakeTimers();
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
+        renderRoute('trace.json');
+
+        act(() => {
+            vi.advanceTimersByTime(NPE_FETCH_TIMEOUT_MS);
+        });
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
+
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
+        act(() => {
+            screen.getByRole('button', { name: 'switch-npe-file' }).click();
+        });
+
+        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).not.toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_PROCESSING_LABEL);
     });
 
     it('does not stay on Processing when the disabled sibling query is still loading', () => {
@@ -218,12 +342,12 @@ describe('NPE route loading and error wiring', () => {
         vi.useFakeTimers();
         renderRoute(null);
 
-        expect(screen.queryByText(/Processing NPE/)).not.toBeInTheDocument();
+        expect(screen.queryByText(NPE_PROCESSING_LABEL)).not.toBeInTheDocument();
 
         act(() => {
             vi.advanceTimersByTime(0);
         });
 
-        expect(screen.getByTestId('npe-view')).toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
     });
 });

@@ -4,7 +4,13 @@
 
 import { Callout, Intent } from '@blueprintjs/core';
 import 'styles/components/NPEProcessingStatus.scss';
-import { LEGACY_VISUALIZER_VERSION, MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
+import {
+    LEGACY_VISUALIZER_VERSION,
+    MIN_SUPPORTED_VERSION,
+    NPEValidationError,
+    NPE_PROCESSING_LABEL,
+    NPE_RENDERING_LABEL,
+} from '../definitions/NPEData';
 import { TEST_IDS } from '../definitions/TestIds';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -58,7 +64,7 @@ interface NPEProcessingStatusProps {
     hasUploadedFile?: boolean;
     errorCode: NPEValidationError;
     isLoading: boolean;
-    /** True once fetch has finished and NPEView is mounting. */
+    /** True once fetch has finished and the route is waiting for first paint (before or during NPEView mount). */
     isRendering?: boolean;
 }
 
@@ -76,7 +82,7 @@ const NPEProcessingStatus = ({
                 data-testid={TEST_IDS.NPE_PROCESSING_LOADING}
             >
                 <LoadingSpinner />
-                <p>{isRendering ? 'Rendering NPE…' : 'Processing NPE…'}</p>
+                <p>{isRendering ? NPE_RENDERING_LABEL : NPE_PROCESSING_LABEL}</p>
             </div>
         );
     }

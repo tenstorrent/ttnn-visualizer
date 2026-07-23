@@ -65,7 +65,7 @@ import { Signpost } from '../model/Signpost';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import Endpoints from '../definitions/Endpoints';
-import { NPE_FETCH_TIMEOUT_MS } from '../definitions/NPEData';
+import { NPE_FETCH_TIMEOUT_MS, NPE_MAX_CONTENT_LENGTH } from '../definitions/NPEData';
 import { ReportFolder } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
@@ -438,6 +438,8 @@ export const useGetNPEManifest = () => {
 export const NPE_OP_TRACE_QUERY_KEY = ['fetch-npe'] as const;
 export const NPE_TIMELINE_QUERY_KEY = ['get-npe-timeline'] as const;
 
+const NPE_QUERY_KEYS = [NPE_OP_TRACE_QUERY_KEY, NPE_TIMELINE_QUERY_KEY] as const;
+
 // Own AbortController (not React Query's signal): Strict Mode remount must not
 // abort a multi-hundred-MB download. Timeout / report switch call abortActiveNpeRequest.
 let activeNpeRequestAbort: AbortController | null = null;
@@ -450,31 +452,38 @@ export const abortActiveNpeRequest = (): void => {
 /** Cancel in-flight NPE downloads and drop cached payloads after a UI timeout. */
 export const discardNpeQueries = (queryClient: QueryClient): void => {
     abortActiveNpeRequest();
-    queryClient.cancelQueries({ queryKey: NPE_OP_TRACE_QUERY_KEY }).catch(() => undefined);
-    queryClient.cancelQueries({ queryKey: NPE_TIMELINE_QUERY_KEY }).catch(() => undefined);
-    queryClient.removeQueries({ queryKey: NPE_OP_TRACE_QUERY_KEY });
-    queryClient.removeQueries({ queryKey: NPE_TIMELINE_QUERY_KEY });
+    for (const queryKey of NPE_QUERY_KEYS) {
+        queryClient.cancelQueries({ queryKey }).catch(() => undefined);
+        queryClient.removeQueries({ queryKey });
+    }
 };
 
 const NPE_TEXT_GET_OPTIONS = {
     timeout: NPE_FETCH_TIMEOUT_MS,
     responseType: 'text' as const,
     transitional: { forcedJSONParsing: false },
+    // Fail before buffering past Chromium's approximate string ceiling.
+    maxContentLength: NPE_MAX_CONTENT_LENGTH,
+    maxBodyLength: NPE_MAX_CONTENT_LENGTH,
 };
 
-const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
+/** Exported for contract tests; prefer useNpe / useNPETimelineFile at call sites. */
+export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
     // Abort any prior NPE download before starting a new one (key change / refetch).
     // Do not wire React Query's AbortSignal — Strict Mode remount must join in-flight work.
     abortActiveNpeRequest();
     const abortController = new AbortController();
     activeNpeRequestAbort = abortController;
     try {
-        const { data } = await axiosInstance.get<string>(url, {
+        const response = await axiosInstance.get<string>(url, {
             ...NPE_TEXT_GET_OPTIONS,
             ...config,
             signal: abortController.signal,
         });
-        return parseNpeAxiosResponseData(data);
+        // Parse then drop the text body so RQ caches only the object graph.
+        const parsed = parseNpeAxiosResponseData(response.data);
+        (response as { data: string | null }).data = null;
+        return parsed;
     } finally {
         if (activeNpeRequestAbort === abortController) {
             activeNpeRequestAbort = null;

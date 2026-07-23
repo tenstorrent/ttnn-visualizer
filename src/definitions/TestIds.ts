@@ -51,6 +51,8 @@ export const TEST_IDS = Object.freeze({
     TOAST_FILENAME: 'toast-filename',
 
     // NPE
+    NPE_FILE_LOADER: 'npe-file-loader',
+    NPE_VIEW: 'npe-view',
     NPE_PROCESSING_INITIAL: 'npe-processing-initial',
     NPE_PROCESSING_LOADING: 'npe-processing-loading',
     NPE_PROCESSING_INVALID_VERSION: 'npe-processing-invalid-version',

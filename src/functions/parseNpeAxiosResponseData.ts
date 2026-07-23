@@ -6,6 +6,12 @@ import { AxiosError } from 'axios';
 import { NpeAxiosErrorCode } from '../definitions/NPEData';
 import { NPEData } from '../model/NPEModel';
 
+const throwNpeAxiosError = (message: string, code: NpeAxiosErrorCode): never => {
+    const error = new AxiosError(message);
+    error.code = code;
+    throw error;
+};
+
 /**
  * Turn an axios NPE response body into `NPEData`.
  *
@@ -16,11 +22,10 @@ import { NPEData } from '../model/NPEModel';
  */
 export const parseNpeAxiosResponseData = (data: unknown): NPEData => {
     if (data === null || data === undefined || data === '') {
-        const error = new AxiosError(
+        throwNpeAxiosError(
             "NPE response body was empty. The file may exceed this browser's maximum string size.",
+            NpeAxiosErrorCode.PAYLOAD_TOO_LARGE,
         );
-        error.code = NpeAxiosErrorCode.PAYLOAD_TOO_LARGE;
-        throw error;
     }
 
     if (typeof data === 'string') {
@@ -29,16 +34,12 @@ export const parseNpeAxiosResponseData = (data: unknown): NPEData => {
         } catch {
             // Truncated downloads and oversize Chromium bodies often look like
             // a mid-string SyntaxError rather than a clean empty body.
-            const error = new AxiosError('Failed to parse NPE response as JSON');
-            error.code = NpeAxiosErrorCode.INVALID_JSON;
-            throw error;
+            throwNpeAxiosError('Failed to parse NPE response as JSON', NpeAxiosErrorCode.INVALID_JSON);
         }
     }
 
     if (typeof data !== 'object') {
-        const error = new AxiosError(`Unexpected NPE response type: ${typeof data}`);
-        error.code = NpeAxiosErrorCode.INVALID_JSON;
-        throw error;
+        throwNpeAxiosError(`Unexpected NPE response type: ${typeof data}`, NpeAxiosErrorCode.INVALID_JSON);
     }
 
     return data as NPEData;
