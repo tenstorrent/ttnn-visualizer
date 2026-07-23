@@ -55,6 +55,8 @@ import { ToastType } from '../../definitions/ToastType';
 
 interface NPEViewProps {
     npeData: NPEData;
+    /** Fired once after the first commit so the route can bound render time. */
+    onRendered?: () => void;
 }
 
 const LABEL_STEP_THRESHOLD = 25;
@@ -77,7 +79,7 @@ const getRootZoneKey = (proc: KERNEL_PROCESS, address: NPE_COORDINATES): Rootzon
     return `${proc}:${address.join(',')}`;
 };
 
-const NPEView = ({ npeData }: NPEViewProps) => {
+const NPEView = ({ npeData, onRendered }: NPEViewProps) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
@@ -121,6 +123,12 @@ const NPEView = ({ npeData }: NPEViewProps) => {
             setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
         }
     }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
+
+    useEffect(() => {
+        onRendered?.();
+        // Intentionally once per mount — parent resets when the active report changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only ready signal
+    }, []);
 
     const selectedZoneList: NPERootZoneUXInfo[] = useMemo(() => {
         if (selectedZoneAddress === null) {

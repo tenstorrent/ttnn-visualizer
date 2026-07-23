@@ -52,9 +52,13 @@ export const TEST_IDS = Object.freeze({
 
     // NPE
     NPE_PROCESSING_INITIAL: 'npe-processing-initial',
+    NPE_PROCESSING_LOADING: 'npe-processing-loading',
     NPE_PROCESSING_INVALID_VERSION: 'npe-processing-invalid-version',
     NPE_PROCESSING_INVALID_DATA: 'npe-processing-invalid-data',
     NPE_PROCESSING_INVALID_JSON: 'npe-processing-invalid-json',
     NPE_PROCESSING_EMPTY_TRACE: 'npe-processing-empty-trace',
+    NPE_PROCESSING_LOAD_TIMEOUT: 'npe-processing-load-timeout',
+    NPE_PROCESSING_PAYLOAD_TOO_LARGE: 'npe-processing-payload-too-large',
+    NPE_PROCESSING_RENDER_TIMEOUT: 'npe-processing-render-timeout',
     NPE_PROCESSING_UNHANDLED_ERROR: 'npe-processing-unhandled-error',
 });

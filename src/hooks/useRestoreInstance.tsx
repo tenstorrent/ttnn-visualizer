@@ -21,9 +21,12 @@ import { useResetMemoryListStates } from './useRestoreScrollPosition';
 
 const useRestoreInstance = () => {
     const store = useStore();
-    const { data: instance, isLoading } = useInstance();
+    const { data: instance, isLoading: isInstanceLoading } = useInstance();
     const remote = useRemoteConnection();
-    const { data: reports } = useReportFolderList();
+    // `useReportFolderList` seeds `initialData: null`, so `data === null` means
+    // "fetch not finished" — but a failed fetch also leaves `null`. Treat error
+    // as settled so restore cannot hang with no request in flight.
+    const { data: reports, isError: isReportsError } = useReportFolderList();
     const { resetMemoryListStates } = useResetMemoryListStates();
 
     const [hasRestoredInstance, setHasRestoredInstance] = useState<boolean>(false);
@@ -37,20 +40,38 @@ const useRestoreInstance = () => {
 
     const previousProfilerPathRef = useRef<string | null | undefined>(undefined);
 
+    const isReportsSettled = Array.isArray(reports) || isReportsError;
+
+    // One-shot hydrate from settled instance/folder queries into jotai. Sync
+    // setState is intentional: ProtectedRoute must flip hasRestoredInstance in
+    // the same commit as the atom writes. Deferring (queueMicrotask) left
+    // isLoading&&!restored hanging under Strict Mode remounts.
+    /* eslint-disable react-hooks/set-state-in-effect -- one-shot restore hydrate; see above */
     useEffect(() => {
-        if (!instance || reports === null || hasRestoredInstance) {
+        if (hasRestoredInstance || !isReportsSettled) {
             return;
         }
 
-        const isProfilerRemote = instance?.active_report?.profiler_location === ReportLocation.REMOTE;
+        // Wait only when the first instance payload has not arrived. Do not block on
+        // background refetch — that was racing Strict Mode remounts after hydrate.
+        if (instance === undefined && isInstanceLoading) {
+            return;
+        }
+
+        if (!instance) {
+            setHasRestoredInstance(true);
+            return;
+        }
+
+        const isProfilerRemote = instance.active_report?.profiler_location === ReportLocation.REMOTE;
         const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
 
-        const profilerReportPath = instance?.active_report?.profiler_name || null;
-        const shouldResolveRemoteProfilerReportName = isProfilerRemote || !!instance?.remote_profiler_folder;
+        const profilerReportPath = instance.active_report?.profiler_name || null;
+        const shouldResolveRemoteProfilerReportName = isProfilerRemote || !!instance.remote_profiler_folder;
         const profilerReportName = shouldResolveRemoteProfilerReportName
             ? getRemoteReportName(remoteFolders, profilerReportPath)
             : profilerReportPath;
-        const perfReportPath = instance?.active_report?.performance_name || null;
+        const perfReportPath = instance.active_report?.performance_name || null;
 
         const restoredProfilerReport = profilerReportPath
             ? {
@@ -58,41 +79,29 @@ const useRestoreInstance = () => {
                   reportName: profilerReportName ?? profilerReportPath,
               }
             : null;
-        const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
+        const activeProfilerLocation = instance.active_report?.profiler_location ?? null;
         const activePerfReport = perfReportPath
             ? {
                   path: perfReportPath,
                   reportName: perfReportPath,
               }
             : null;
-        const activePerfLocation = instance?.active_report?.performance_location ?? null;
+        const activePerfLocation = instance.active_report?.performance_location ?? null;
 
-        const activeReports = {
-            profiler: restoredProfilerReport,
-            profilerLocation: activeProfilerLocation,
-            performance: activePerfReport,
-            performanceLocation: activePerfLocation,
-            npe: instance?.active_report?.npe_name ?? null,
-            mlir: instance?.active_report?.mlir_name ?? null,
-        };
+        setActiveProfilerReport(restoredProfilerReport);
+        setProfilerReportLocation(activeProfilerLocation);
 
-        // Executed at a safe time prior to control returning to the browser's event loop
-        queueMicrotask(() => {
-            setHasRestoredInstance(true);
+        setActivePerformanceReport(activePerfReport);
+        setPerformanceReportLocation(activePerfLocation);
 
-            setActiveProfilerReport(activeReports.profiler);
-            setProfilerReportLocation(activeReports.profilerLocation);
+        setActiveNpe(instance.active_report?.npe_name ?? null);
+        // Writing activeMlirJsonAtom replaces the whole loaded-reports list.
+        // Skip when a View (including multi-file split) already seeded memory.
+        if (store.get(mlirLoadedReportsAtom).length === 0) {
+            setActiveMlirJson(instance.active_report?.mlir_name ?? null);
+        }
 
-            setActivePerformanceReport(activeReports.performance);
-            setPerformanceReportLocation(activeReports.performanceLocation);
-
-            setActiveNpe(activeReports.npe);
-            // Writing activeMlirJsonAtom replaces the whole loaded-reports list.
-            // Skip when a View (including multi-file split) already seeded memory.
-            if (store.get(mlirLoadedReportsAtom).length === 0) {
-                setActiveMlirJson(activeReports.mlir);
-            }
-        });
+        setHasRestoredInstance(true);
     }, [
         setActiveProfilerReport,
         setProfilerReportLocation,
@@ -101,11 +110,13 @@ const useRestoreInstance = () => {
         setActiveNpe,
         setActiveMlirJson,
         instance,
+        isInstanceLoading,
+        isReportsSettled,
         hasRestoredInstance,
-        reports,
         remote.persistentState,
         store,
     ]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     useEffect(() => {
         if (!hasRestoredInstance) {
@@ -128,7 +139,7 @@ const useRestoreInstance = () => {
 
     return {
         instance,
-        isLoading,
+        isLoading: isInstanceLoading,
         hasRestoredInstance,
     };
 };

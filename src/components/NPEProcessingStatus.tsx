@@ -42,6 +42,15 @@ const ProcessingErrors: Record<NPEValidationError, { title: string }> = {
     [NPEValidationError.EMPTY_NPE_TRACE]: {
         title: 'Empty NPE trace',
     },
+    [NPEValidationError.LOAD_TIMEOUT]: {
+        title: 'Loading timed out',
+    },
+    [NPEValidationError.PAYLOAD_TOO_LARGE]: {
+        title: 'NPE file too large for this browser',
+    },
+    [NPEValidationError.RENDER_TIMEOUT]: {
+        title: 'Rendering timed out',
+    },
 };
 
 interface NPEProcessingStatusProps {
@@ -49,13 +58,25 @@ interface NPEProcessingStatusProps {
     hasUploadedFile?: boolean;
     errorCode: NPEValidationError;
     isLoading: boolean;
+    /** True once fetch has finished and NPEView is mounting. */
+    isRendering?: boolean;
 }
 
-const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoading }: NPEProcessingStatusProps) => {
+const NPEProcessingStatus = ({
+    dataVersion,
+    hasUploadedFile,
+    errorCode,
+    isLoading,
+    isRendering = false,
+}: NPEProcessingStatusProps) => {
     if (isLoading) {
         return (
-            <div>
+            <div
+                className='npe-processing-status'
+                data-testid={TEST_IDS.NPE_PROCESSING_LOADING}
+            >
                 <LoadingSpinner />
+                <p>{isRendering ? 'Rendering NPE…' : 'Processing NPE…'}</p>
             </div>
         );
     }
@@ -133,6 +154,39 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
                                     Check the cycle range and instrumented region in your {NPE_REPO_URL} run
                                     configuration, then regenerate the report.
                                 </p>
+                            </>
+                        );
+                    case NPEValidationError.LOAD_TIMEOUT:
+                        return (
+                            <>
+                                <p data-testid={TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT}>
+                                    Loading the NPE report took too long and was stopped. The file may be too large for
+                                    available memory, or the server stopped responding.
+                                </p>
+                                <p>Try loading the report again, or regenerate a smaller trace with {NPE_REPO_URL}.</p>
+                            </>
+                        );
+                    case NPEValidationError.PAYLOAD_TOO_LARGE:
+                        return (
+                            <>
+                                <p data-testid={TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE}>
+                                    This NPE file is too large for the browser to load into memory. Chromium-based
+                                    browsers have roughly a 512&nbsp;MiB string limit.
+                                </p>
+                                <p>
+                                    Try Firefox (which has a higher string limit), or regenerate a smaller trace with{' '}
+                                    {NPE_REPO_URL}.
+                                </p>
+                            </>
+                        );
+                    case NPEValidationError.RENDER_TIMEOUT:
+                        return (
+                            <>
+                                <p data-testid={TEST_IDS.NPE_PROCESSING_RENDER_TIMEOUT}>
+                                    The NPE view did not finish rendering in time. The trace may be too large for this
+                                    browser session.
+                                </p>
+                                <p>Please raise an issue at {NPE_REPO_URL} and include the relevant NPE data.</p>
                             </>
                         );
 

@@ -26,6 +26,37 @@ it('renders an initial message', () => {
     expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INITIAL).textContent).toBeDefined();
 });
 
+it('renders a loading message while the NPE is processing', () => {
+    render(
+        <TestProviders>
+            <NPEProcessingStatus
+                isLoading
+                hasUploadedFile
+                dataVersion={null}
+                errorCode={NPEValidationError.OK}
+            />
+        </TestProviders>,
+    );
+
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain('Processing NPE');
+});
+
+it('renders a rendering message while the NPE view is mounting', () => {
+    render(
+        <TestProviders>
+            <NPEProcessingStatus
+                isLoading
+                isRendering
+                hasUploadedFile
+                dataVersion={null}
+                errorCode={NPEValidationError.OK}
+            />
+        </TestProviders>,
+    );
+
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain('Rendering NPE');
+});
+
 it('handles incorrect NPE data versions', () => {
     render(
         <TestProviders>
@@ -84,6 +115,51 @@ it('handles empty NPE traces', () => {
     );
 
     expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_EMPTY_TRACE).textContent).toBeDefined();
+});
+
+it('handles load timeouts', () => {
+    render(
+        <TestProviders>
+            <NPEProcessingStatus
+                isLoading={false}
+                hasUploadedFile
+                dataVersion={MIN_SUPPORTED_VERSION}
+                errorCode={NPEValidationError.LOAD_TIMEOUT}
+            />
+        </TestProviders>,
+    );
+
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT).textContent).toContain('took too long');
+});
+
+it('handles payloads that exceed the browser size limit', () => {
+    render(
+        <TestProviders>
+            <NPEProcessingStatus
+                isLoading={false}
+                hasUploadedFile
+                dataVersion={MIN_SUPPORTED_VERSION}
+                errorCode={NPEValidationError.PAYLOAD_TOO_LARGE}
+            />
+        </TestProviders>,
+    );
+
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE).textContent).toContain('too large');
+});
+
+it('handles render timeouts', () => {
+    render(
+        <TestProviders>
+            <NPEProcessingStatus
+                isLoading={false}
+                hasUploadedFile
+                dataVersion={MIN_SUPPORTED_VERSION}
+                errorCode={NPEValidationError.RENDER_TIMEOUT}
+            />
+        </TestProviders>,
+    );
+
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_RENDER_TIMEOUT).textContent).toContain('finish rendering');
 });
 
 it('handles unknown errors', () => {

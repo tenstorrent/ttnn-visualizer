@@ -861,6 +861,30 @@ export default function Styleguide() {
                     isLoading={false}
                 />
 
+                <h4>Load timeout</h4>
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorCode={NPEValidationError.LOAD_TIMEOUT}
+                    isLoading={false}
+                />
+
+                <h4>Payload too large for browser</h4>
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorCode={NPEValidationError.PAYLOAD_TOO_LARGE}
+                    isLoading={false}
+                />
+
+                <h4>Render timeout</h4>
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion={MIN_SUPPORTED_VERSION}
+                    errorCode={NPEValidationError.RENDER_TIMEOUT}
+                    isLoading={false}
+                />
+
                 <h4>Unprocessable JSON error (HTTP 422)</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
