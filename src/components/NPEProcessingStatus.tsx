@@ -179,10 +179,7 @@ const NPEProcessingStatus = ({
                                     This NPE file is too large for the browser to load into memory. Chromium-based
                                     browsers have roughly a 512&nbsp;MiB string limit.
                                 </p>
-                                <p>
-                                    Try Firefox (which has a higher string limit), or regenerate a smaller trace with{' '}
-                                    {NPE_REPO_URL}.
-                                </p>
+                                <p>Try another browser or regenerate a smaller trace with {NPE_REPO_URL}.</p>
                             </>
                         );
                     case NPEValidationError.RENDER_TIMEOUT:
