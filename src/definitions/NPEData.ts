@@ -12,8 +12,8 @@ export const NPE_FETCH_TIMEOUT_MS = 30_000;
 export const NPE_RENDER_TIMEOUT_MS = 30_000;
 
 /**
- * Cap buffered NPE response size (Chromium string limit is roughly 512 MiB).
- * Applied on NPE GETs so we fail closed before holding an unbounded body.
+ * Intended Axios response/body size cap (~Chromium 512 MiB string limit).
+ * Passed on NPE GETs for http/fetch adapter parity; the SPA xhr adapter does not enforce it.
  */
 export const NPE_MAX_CONTENT_LENGTH = 512 * 1024 * 1024;
 
