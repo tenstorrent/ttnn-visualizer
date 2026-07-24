@@ -346,6 +346,35 @@ def test_remote_use_rejects_dotdot_remote_path_segment(app, client, tmp_path):
     assert "Invalid report name" in response.get_json()["error"]
 
 
+def test_remote_sync_rejects_dotdot_remote_path_segment(app, client, tmp_path):
+    """Sync must refuse ``..`` before mkdir — same segment boundary as /remote/use."""
+    app.config["SERVER_MODE"] = False
+    app.config["REPORT_DATA_DIRECTORY"] = str(tmp_path)
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path / "remote")
+
+    with patch(
+        "ttnn_visualizer.sftp_operations.sync_files_and_directories"
+    ) as sync_files:
+        response = client.post(
+            "/api/remote/sync",
+            json={
+                "connection": _remote_connection_payload(),
+                "performance": {
+                    "reportName": "bert",
+                    "remotePath": "/remote/performance/reports/..",
+                    "lastModified": 1,
+                },
+            },
+        )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert "Invalid report path" in response.get_json()["error"]
+    sync_files.assert_not_called()
+
+    host_root = tmp_path / "remote" / "remote.example.com"
+    assert not host_root.exists()
+
+
 def test_remote_use_forbidden_when_server_mode(app, client):
     """Mounting a locally synced remote report is @local_only under SERVER_MODE."""
     assert app.config["SERVER_MODE"] is True

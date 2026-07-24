@@ -397,6 +397,38 @@ const RemoteSyncConfigurator = () => {
         notifyFolderSyncError(err);
     };
 
+    const mountAndActivateFolder = async (
+        folder: RemoteFolder,
+        {
+            mount,
+            activateWithToast,
+        }: {
+            mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
+            activateWithToast: (folder: RemoteFolder) => void;
+        },
+    ) => {
+        const connection = remote.persistentState.selectedConnection;
+        if (!connection) {
+            return;
+        }
+
+        await withActivatingReport(async () => {
+            try {
+                const response = await mount(connection, folder);
+
+                if (response.status === HttpStatusCode.Ok) {
+                    activateWithToast(folder);
+
+                    if (hasBeenNormalised(folder)) {
+                        createDataIntegrityWarning(folder);
+                    }
+                }
+            } catch (err: unknown) {
+                notifyRemoteFolderMountError(err);
+            }
+        });
+    };
+
     const syncSelectedFolder = async ({
         selected,
         setSyncing,
@@ -429,10 +461,6 @@ const RemoteSyncConfigurator = () => {
                 // report pickers spin for the whole SSH sync (progress is FileStatusOverlay).
                 const { data: updatedFolder } = await sync(connection, selected);
 
-                if (hasBeenNormalised(updatedFolder)) {
-                    createDataIntegrityWarning(updatedFolder);
-                }
-
                 const updatedFolders = getSaved(connection).map((f) =>
                     f.remotePath === updatedFolder?.remotePath ? updatedFolder : f,
                 );
@@ -440,13 +468,7 @@ const RemoteSyncConfigurator = () => {
                 updateSaved(connection, updatedFolders);
 
                 if (updatedFolder) {
-                    await withActivatingReport(async () => {
-                        const mountResponse = await mount(connection, updatedFolder);
-
-                        if (mountResponse.status === HttpStatusCode.Ok) {
-                            activateWithToast(updatedFolder);
-                        }
-                    });
+                    await mountAndActivateFolder(updatedFolder, { mount, activateWithToast });
                 }
             } catch (err: unknown) {
                 await handleSyncFailure(err, selected, (report, syncErr) =>
@@ -484,38 +506,6 @@ const RemoteSyncConfigurator = () => {
             activateWithToast: updatePerformanceSelection,
             applySelection: applyPerformanceReportSelection,
         });
-
-    const mountAndActivateFolder = async (
-        folder: RemoteFolder,
-        {
-            mount,
-            activateWithToast,
-        }: {
-            mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
-            activateWithToast: (folder: RemoteFolder) => void;
-        },
-    ) => {
-        const connection = remote.persistentState.selectedConnection;
-        if (!connection) {
-            return;
-        }
-
-        await withActivatingReport(async () => {
-            try {
-                const response = await mount(connection, folder);
-
-                if (response.status === HttpStatusCode.Ok) {
-                    activateWithToast(folder);
-
-                    if (hasBeenNormalised(folder)) {
-                        createDataIntegrityWarning(folder);
-                    }
-                }
-            } catch (err: unknown) {
-                notifyRemoteFolderMountError(err);
-            }
-        });
-    };
 
     /**
      * Outdated / never-synced folders sync on select when the host is reachable.

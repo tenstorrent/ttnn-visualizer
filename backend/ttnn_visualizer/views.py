@@ -102,6 +102,8 @@ from ttnn_visualizer.stack_trace_source import (
     stack_source_response,
 )
 from ttnn_visualizer.utils import (
+    PERFORMANCE_OPS_PERF_PREFIX,
+    PERFORMANCE_REPORT_REQUIRED_FILES,
     create_path_resolver,
     get_mlir_path,
     get_performance_path,
@@ -1390,8 +1392,8 @@ def create_performance_files():
 
     if not validate_files(
         files,
-        {"profile_log_device.csv"},
-        pattern="ops_perf_results",
+        PERFORMANCE_REPORT_REQUIRED_FILES,
+        pattern=PERFORMANCE_OPS_PERF_PREFIX,
         folder_name=folder_name,
     ):
         return StatusMessage(
@@ -2040,8 +2042,9 @@ def _safe_report_folder_name(
 ) -> Optional[str]:
     """Local folder segment under REMOTE_DATA_DIRECTORY — must match sync destinations.
 
-    Sync writes to ``Path(remotePath).name``; ``reportName`` is display-only
-    (e.g. config.json ``report_name``) and often differs from the directory.
+    Sync writes under ``sanitise_path_segment(Path(remotePath).name)``;
+    ``reportName`` is display-only (e.g. config.json ``report_name``) and
+    often differs from the directory.
     """
     candidate = (Path(remote_path).name if remote_path else "") or (report_name or "")
     try:
