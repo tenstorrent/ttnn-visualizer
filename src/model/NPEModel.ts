@@ -193,17 +193,18 @@ export interface TimestepData {
     };
 }
 
-// Per-step aggregates for the timeline heat bar / scrubber. Small enough to send
-// for every step up front; `link_demand` and transfers are fetched per window.
-export interface NpeTimestepSummary {
-    t: number;
-    start_cycle: number;
-    end_cycle: number;
-    avg_link_demand: number;
-    avg_link_util: number;
-    max_link_demand: number;
-    mcast_write_link_util: number;
-    active_count: number;
+// Per-step aggregates for the timeline heat bar / scrubber, sent as parallel
+// arrays (columnar) rather than one object per step so the ~54k-step summary
+// stays small (#861). Index each array by timestep `t`; `link_demand` and
+// transfers are fetched per window.
+export interface NpeTimestepColumns {
+    start_cycle: number[];
+    end_cycle: number[];
+    avg_link_demand: number[];
+    avg_link_util: number[];
+    max_link_demand: number[];
+    mcast_write_link_util: number[];
+    active_count: number[];
 }
 
 export interface NpeSummary {
@@ -211,7 +212,7 @@ export interface NpeSummary {
     chips: NPEData['chips'];
     zones?: NPERootZone[];
     n_timesteps: number;
-    timesteps: NpeTimestepSummary[];
+    timesteps: NpeTimestepColumns;
 }
 
 export type NpeWindowTimestep = Omit<TimestepData, 'start_cycle' | 'end_cycle'>;

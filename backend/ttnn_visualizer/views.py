@@ -2228,9 +2228,14 @@ def get_npe_summary(instance: Instance):
     try:
         db_path = ensure_index(instance.npe_path)
         summary = read_summary(db_path)
-    except Exception as e:
-        logger.error(f"Error building/reading NPE index: {e}")
+    except FileNotFoundError:
+        return response_not_found()
+    except orjson.JSONDecodeError:
+        logger.exception("Malformed NPE report while building index")
         return response_unprocessable_entity()
+    except Exception:
+        logger.exception("Unexpected error building/reading NPE index")
+        return response_internal_server_error()
 
     return Response(orjson.dumps(summary), mimetype="application/json")
 
@@ -2251,9 +2256,14 @@ def get_npe_window(instance: Instance):
     try:
         db_path = ensure_index(instance.npe_path)
         window = read_window(db_path, timestep)
-    except Exception as e:
-        logger.error(f"Error reading NPE window: {e}")
+    except FileNotFoundError:
+        return response_not_found()
+    except orjson.JSONDecodeError:
+        logger.exception("Malformed NPE report while building index")
         return response_unprocessable_entity()
+    except Exception:
+        logger.exception("Unexpected error reading NPE window")
+        return response_internal_server_error()
 
     if window is None:
         return response_not_found()

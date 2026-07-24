@@ -8,7 +8,7 @@ import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import Ajv from 'ajv';
-import axiosInstance from '../libs/axiosInstance';
+import axiosInstance, { getOrCreateInstanceId } from '../libs/axiosInstance';
 import {
     Buffer,
     BufferChunk,
@@ -609,10 +609,12 @@ const fetchNpeSummary = async (): Promise<NpeSummary> => {
 
 // #861 windowed loading: per-step aggregates for the whole trace, small enough
 // to load once; transfers/link_demand come from useNpeWindow per visited step.
+// instanceId is part of the key because staleTime is Infinity — a bare basename
+// key would serve one instance's cached report to another on a name collision.
 export const useNpeSummary = (fileName: string | null) => {
     return useQuery<NpeSummary, AxiosError>({
         queryFn: fetchNpeSummary,
-        queryKey: ['npe-summary', fileName],
+        queryKey: ['npe-summary', getOrCreateInstanceId(), fileName],
         retry: false,
         staleTime: Infinity,
         enabled: fileName !== null,
@@ -629,7 +631,7 @@ const fetchNpeWindow = async (t: number): Promise<NpeWindow> => {
 export const useNpeWindow = (fileName: string | null, t: number | null) => {
     return useQuery<NpeWindow, AxiosError>({
         queryFn: () => fetchNpeWindow(t!),
-        queryKey: ['npe-window', fileName, t],
+        queryKey: ['npe-window', getOrCreateInstanceId(), fileName, t],
         retry: false,
         staleTime: Infinity,
         // Keep the previous window visible while a seek's fetch is in flight so

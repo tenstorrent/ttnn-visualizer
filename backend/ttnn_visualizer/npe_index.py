@@ -46,6 +46,10 @@ INDEX_VERSION = 3
 
 _TRANSFER_INSERT_BATCH = 5000
 
+# Kept under SQLITE_MAX_VARIABLE_NUMBER (999 on sqlite < 3.32) so a busy timestep's
+# active-transfer IN-list is chunked rather than overflowing the bind-var limit.
+_TRANSFER_QUERY_CHUNK = 900
+
 # link_demand rows are [chip_id, y, x, noc_id, demand] — mirrors NPE_LINK.DEMAND
 # in the frontend model. Used to precompute each step's worst-link demand for the
 # timeline heat bar, since the source JSON doesn't carry a per-step scalar.
@@ -294,25 +298,27 @@ def read_summary(db_path: Path) -> dict:
     conn = sqlite3.connect(db_path)
     try:
         meta = dict(conn.execute("SELECT key, value FROM meta").fetchall())
-        timesteps = [
-            {
-                "t": row[0],
-                "start_cycle": row[1],
-                "end_cycle": row[2],
-                "avg_link_demand": row[3],
-                "avg_link_util": row[4],
-                "max_link_demand": row[5],
-                "mcast_write_link_util": row[6],
-                "active_count": row[7],
-            }
-            for row in conn.execute(
-                "SELECT t, start_cycle, end_cycle, avg_link_demand, avg_link_util, "
-                "max_link_demand, mcast_write_link_util, active_count "
-                "FROM timestep ORDER BY t"
-            )
-        ]
+        rows = conn.execute(
+            "SELECT start_cycle, end_cycle, avg_link_demand, avg_link_util, "
+            "max_link_demand, mcast_write_link_util, active_count "
+            "FROM timestep ORDER BY t"
+        ).fetchall()
     finally:
         conn.close()
+
+    # Columnar wire format: 7 arrays instead of one dict-per-step, so the ~54k-step
+    # summary drops from ~9 MB to ~2.6 MB (repeated JSON keys were the bulk). `t` is
+    # the array index (timesteps are contiguous 0..n-1), so it isn't sent.
+    columns = list(zip(*rows)) if rows else [()] * 7
+    timesteps = {
+        "start_cycle": columns[0],
+        "end_cycle": columns[1],
+        "avg_link_demand": columns[2],
+        "avg_link_util": columns[3],
+        "max_link_demand": columns[4],
+        "mcast_write_link_util": columns[5],
+        "active_count": columns[6],
+    }
 
     return {
         "common_info": orjson.loads(meta["common_info"]),
@@ -336,16 +342,20 @@ def read_window(db_path: Path, t: int) -> Optional[dict]:
             return None
 
         active_ids = orjson.loads(row[5])
-        transfers = []
-        if active_ids:
-            placeholders = ",".join("?" * len(active_ids))
-            transfers = [
+        transfers: list = []
+        # Chunk the IN-list: a busy timestep can have more active transfers than
+        # SQLITE_MAX_VARIABLE_NUMBER (999 on sqlite < 3.32), which would otherwise
+        # raise OperationalError and make that window permanently un-viewable.
+        for start in range(0, len(active_ids), _TRANSFER_QUERY_CHUNK):
+            chunk = active_ids[start : start + _TRANSFER_QUERY_CHUNK]
+            placeholders = ",".join("?" * len(chunk))
+            transfers.extend(
                 orjson.loads(blob)
                 for (blob,) in conn.execute(
                     f"SELECT blob FROM transfer WHERE id IN ({placeholders})",
-                    active_ids,
+                    chunk,
                 )
-            ]
+            )
     finally:
         conn.close()
 

@@ -31,17 +31,19 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
     useEffect(() => {
         if (summary && !didInitTimestep.current) {
             didInitTimestep.current = true;
-            const firstActive = summary.timesteps.find((step) => step.active_count > 0);
-            if (firstActive && firstActive.t !== 0) {
+            const firstActive = summary.timesteps.active_count.findIndex((count) => count > 0);
+            if (firstActive > 0) {
                 // eslint-disable-next-line react-hooks/set-state-in-effect
-                setSelectedTimestep(firstActive.t);
+                setSelectedTimestep(firstActive);
             }
         }
     }, [summary]);
 
+    // Assemble at `selectedTimestep` (not `npeWindow.t`) so an in-flight seek keeps
+    // the previous frame on the rendered step instead of flashing empty.
     const npeData = useMemo(
-        () => (summary && npeWindow ? assembleWindowedNpeData(summary, npeWindow) : null),
-        [summary, npeWindow],
+        () => (summary && npeWindow ? assembleWindowedNpeData(summary, npeWindow, selectedTimestep) : null),
+        [summary, npeWindow, selectedTimestep],
     );
 
     if (!fileName) {
