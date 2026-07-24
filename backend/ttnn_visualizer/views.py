@@ -25,6 +25,7 @@ from ttnn_visualizer.csv_queries import (
     NPEQueries,
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
+    PerformanceManifestQueries,
 )
 from ttnn_visualizer.decorators import local_only, with_instance
 from ttnn_visualizer.enums import ConnectionTestStates, StackSourceOrigin
@@ -1269,6 +1270,19 @@ def get_performance_device_meta(instance: Instance):
     except Exception as e:
         logger.exception("Failed to parse device meta")
         return response_internal_server_error(str(e))
+
+
+@api.route("/performance/manifest", methods=["GET"])
+@with_instance
+@timer
+def get_performance_manifest(instance: Instance):
+    """Return the performance report root ``manifest.json`` (e.g. ``run_id``)."""
+    try:
+        content = PerformanceManifestQueries.get_manifest(instance)
+    except FileNotFoundError:
+        return response_not_found(message="Performance report manifest.json not found.")
+
+    return Response(orjson.dumps(content), mimetype="application/json")
 
 
 @api.route("/performance/npe/manifest", methods=["GET"])

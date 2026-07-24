@@ -112,6 +112,23 @@ class LocalCSVQueryRunner:
         return sanitized_df.values.tolist()
 
 
+class PerformanceManifestQueries:
+    """Report-root ``manifest.json`` (run identity), not NPE's ``npe_viz/manifest.json``."""
+
+    MANIFEST_FILE = "manifest.json"
+
+    @staticmethod
+    def get_manifest(instance: Instance):
+        if not instance.performance_path:
+            raise PerformanceReportNotLoadedException()
+        file_path = Path(
+            instance.performance_path,
+            PerformanceManifestQueries.MANIFEST_FILE,
+        )
+        with open(file_path, "r") as f:
+            return json.load(f)
+
+
 class NPEQueries:
     NPE_FOLDER = "npe_viz"
     MANIFEST_FILE = "manifest.json"

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError } from 'axios';
+import { AxiosError, HttpStatusCode } from 'axios';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -21,6 +21,7 @@ import {
     Operation,
     OperationDescription,
     OperationDetailsData,
+    PerformanceManifestResponse,
     ReportMetadataResponse,
     Tensor,
     defaultBuffer,
@@ -860,6 +861,11 @@ interface ReportMetadata {
     duration: number;
     gitUrl: string | null;
     gitSha: string | null;
+    runId: string | null;
+}
+
+export interface PerformanceManifest {
+    runId: string | null;
 }
 
 export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
@@ -873,6 +879,7 @@ export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
         version: parsedSchemaVersion,
         gitUrl: data?.git_url ?? null,
         gitSha: data?.git_sha ?? null,
+        runId: data?.run_id ?? null,
     } as ReportMetadata;
 };
 
@@ -884,6 +891,31 @@ export const useReportMetadata = () => {
         queryKey: ['get-report-metadata', activeProfilerReport?.path],
         queryFn: fetchReportMetadata,
         enabled: activeProfilerReport !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
+
+export const fetchPerformanceManifest = async (): Promise<PerformanceManifest> => {
+    try {
+        const { data } = await axiosInstance.get<PerformanceManifestResponse>(Endpoints.PERFORMANCE_MANIFEST);
+        return { runId: data?.run_id ?? null };
+    } catch (error) {
+        // Legacy performance reports omit root manifest.json — treat as absent, not hard failure.
+        if (error instanceof AxiosError && error.response?.status === HttpStatusCode.NotFound) {
+            return { runId: null };
+        }
+        throw error;
+    }
+};
+
+export const usePerformanceManifest = () => {
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+
+    return useQuery<PerformanceManifest, AxiosError>({
+        queryKey: ['get-performance-manifest', activePerformanceReport?.path],
+        queryFn: fetchPerformanceManifest,
+        enabled: activePerformanceReport !== null,
         retry: false,
         staleTime: Infinity,
     });

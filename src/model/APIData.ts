@@ -233,7 +233,14 @@ export interface ReportMetadataResponse {
     total_duration_ns?: string;
     git_url?: string;
     git_sha?: string;
+    run_id?: string;
 }
+
+/** Performance report root ``manifest.json`` (not NPE's npe_viz/manifest.json). */
+export interface PerformanceManifestResponse {
+    run_id?: string;
+}
+
 export interface OperationDescription extends Operation {
     duration: number;
     arguments: {
