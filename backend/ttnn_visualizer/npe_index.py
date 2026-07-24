@@ -14,15 +14,30 @@ The build parses the whole object in memory (matches the current read path); a
 streaming parse to bound peak RSS is a follow-up for the multi-user hosted path.
 """
 
+import contextlib
 import logging
+import os
 import sqlite3
+import tempfile
+import threading
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 import orjson
 import zstd
 
+try:
+    import fcntl
+except (
+    ImportError
+):  # Windows local installs lack fcntl; single-user, in-process lock suffices.
+    fcntl = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
+
+# Serialises index builds within a single process; the file lock below extends
+# that across gunicorn worker processes.
+_BUILD_LOCK = threading.Lock()
 
 INDEX_SUFFIX = ".npeidx.sqlite"
 
@@ -78,6 +93,28 @@ def get_index_path(npe_path: str) -> Path:
     return Path(f"{npe_path}{INDEX_SUFFIX}")
 
 
+@contextlib.contextmanager
+def _build_guard(db_path: Path) -> Iterator[None]:
+    # gunicorn runs multiple worker processes, so a threading lock alone can't
+    # serialise cold-cache builds — two workers would each parse the whole report
+    # (~5 GB transient RSS apiece) and race on the output file. Layer an advisory
+    # file lock (POSIX flock) on top of the in-process lock. On platforms without
+    # fcntl (Windows local installs, single-user) the threading lock is enough.
+    with _BUILD_LOCK:
+        if fcntl is None:
+            yield
+            return
+        lock_path = Path(f"{db_path}.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+
 def _load_npe_object(npe_path: Path) -> dict:
     if npe_path.suffix == ".zst":
         return orjson.loads(zstd.uncompress(npe_path.read_bytes()))
@@ -113,11 +150,30 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
     transfers = obj.get("noc_transfers", [])
     timesteps = obj.get("timestep_data", [])
 
-    tmp_path = db_path.with_suffix(db_path.suffix + ".tmp")
-    if tmp_path.exists():
-        tmp_path.unlink()
+    # Unique tmp path per build so a concurrent build can never unlink or clobber
+    # ours (the build lock should prevent concurrency, but this stays correct even
+    # if the lock is bypassed). Swapped into place atomically once complete.
+    tmp_fd, tmp_name = tempfile.mkstemp(
+        prefix=f"{db_path.name}.", suffix=".tmp", dir=db_path.parent
+    )
+    os.close(tmp_fd)
+    tmp_path = Path(tmp_name)
 
-    conn = sqlite3.connect(tmp_path)
+    try:
+        conn = sqlite3.connect(tmp_path)
+        _write_index(conn, obj, transfers, timesteps, source_mtime_ns)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    # Atomic swap so a crashed build never leaves a half-written cache in place.
+    tmp_path.replace(db_path)
+    logger.info(
+        f"NPE index built: {len(transfers)} transfers, {len(timesteps)} timesteps"
+    )
+
+
+def _write_index(conn, obj, transfers, timesteps, source_mtime_ns) -> None:
     try:
         # PoC build-time pragmas: durability is irrelevant for a derived cache.
         conn.execute("PRAGMA journal_mode = OFF")
@@ -213,12 +269,6 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
     finally:
         conn.close()
 
-    # Atomic swap so a crashed build never leaves a half-written cache in place.
-    tmp_path.replace(db_path)
-    logger.info(
-        f"NPE index built: {len(transfers)} transfers, {len(timesteps)} timesteps"
-    )
-
 
 def ensure_index(npe_path: str) -> Path:
     source = Path(npe_path)
@@ -227,8 +277,16 @@ def ensure_index(npe_path: str) -> Path:
 
     db_path = get_index_path(npe_path)
     source_mtime_ns = source.stat().st_mtime_ns
-    if not _is_index_fresh(db_path, source_mtime_ns):
-        _build_index(source, db_path, source_mtime_ns)
+    if _is_index_fresh(db_path, source_mtime_ns):
+        return db_path
+
+    # Single-flight the expensive build. NpeWindowedView fires summary + window(0)
+    # on mount, so two workers hit a cold cache concurrently; without this guard
+    # both parse the whole report and race on the output file.
+    with _build_guard(db_path):
+        # Re-check under the guard — another worker may have built it while we waited.
+        if not _is_index_fresh(db_path, source_mtime_ns):
+            _build_index(source, db_path, source_mtime_ns)
     return db_path
 
 

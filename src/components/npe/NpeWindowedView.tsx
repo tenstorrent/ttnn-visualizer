@@ -3,9 +3,10 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Spinner } from '@blueprintjs/core';
+import { Callout, Intent, Spinner } from '@blueprintjs/core';
 import { useNpeSummary, useNpeWindow } from '../../hooks/useAPI';
 import assembleWindowedNpeData from '../../functions/assembleWindowedNpeData';
+import getResponseError from '../../functions/getResponseError';
 import NPEView from './NPEViewComponent';
 
 interface NpeWindowedViewProps {
@@ -18,8 +19,13 @@ interface NpeWindowedViewProps {
 const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
     const [selectedTimestep, setSelectedTimestep] = useState(0);
     const didInitTimestep = useRef(false);
-    const { data: summary, isLoading: isLoadingSummary } = useNpeSummary(fileName);
-    const { data: npeWindow } = useNpeWindow(fileName, selectedTimestep);
+    const {
+        data: summary,
+        isLoading: isLoadingSummary,
+        isError: isSummaryError,
+        error: summaryError,
+    } = useNpeSummary(fileName);
+    const { data: npeWindow, isError: isWindowError, error: windowError } = useNpeWindow(fileName, selectedTimestep);
 
     // Open on the first populated timestep (t=0 is commonly idle).
     useEffect(() => {
@@ -40,6 +46,19 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
 
     if (!fileName) {
         return null;
+    }
+
+    // Surface index-build / window failures instead of trapping the user on an
+    // infinite "Building index…" spinner.
+    if (isSummaryError || isWindowError) {
+        return (
+            <Callout
+                intent={Intent.DANGER}
+                title='Unable to load NPE report'
+            >
+                {getResponseError(summaryError ?? windowError)}
+            </Callout>
+        );
     }
 
     if (!npeData) {

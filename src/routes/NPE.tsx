@@ -25,6 +25,11 @@ const NPE = () => {
     // #861 PoC: in DEV the windowed view replaces the whole-file path for
     // uploaded reports, so we skip `useNpe` (its full /api/npe fetch is exactly
     // what fails on large files) and render NPEView from windowed fetches.
+    // Gated to DEV on purpose: prod/hosted still uses the whole-file path until
+    // the windowed backend is hardened (single-flight build lock is in, but the
+    // endpoints are not yet @local_only). Exit criterion for removing the fork:
+    // decide hosted-safety of /api/npe/{summary,window}, then either drop the
+    // whole-file /api/npe path or keep both behind an explicit size/flag switch.
     const isWindowedView = import.meta.env.DEV && !filepath && !!npeFileName;
     const {
         data: loadedData,
@@ -103,7 +108,13 @@ const NPE = () => {
             </div>
 
             {isWindowedView ? (
-                <NpeWindowedView fileName={npeFileName} />
+                // key on the report so a report switch fully remounts: resets the
+                // selected timestep + auto-jump ref and gives fresh query observers
+                // (no keepPreviousData bleed from the previous report's window).
+                <NpeWindowedView
+                    key={npeFileName}
+                    fileName={npeFileName}
+                />
             ) : (
                 <>
                     {errorCode !== NPEValidationError.OK ? (
