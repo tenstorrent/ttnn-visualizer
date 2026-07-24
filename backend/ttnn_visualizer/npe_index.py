@@ -27,9 +27,14 @@ logger = logging.getLogger(__name__)
 INDEX_SUFFIX = ".npeidx.sqlite"
 
 # Bump when the schema or build logic changes so stale caches are rebuilt.
-INDEX_VERSION = 1
+INDEX_VERSION = 2
 
 _TRANSFER_INSERT_BATCH = 5000
+
+# link_demand rows are [chip_id, y, x, noc_id, demand] — mirrors NPE_LINK.DEMAND
+# in the frontend model. Used to precompute each step's worst-link demand for the
+# timeline heat bar, since the source JSON doesn't carry a per-step scalar.
+_LINK_DEMAND_INDEX = 4
 
 
 def get_index_path(npe_path: str) -> Path:
@@ -126,6 +131,17 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
         timestep_rows = []
         for t, step in enumerate(timesteps):
             active_ids = step.get("active_transfers", [])
+            link_demand = step.get("link_demand", [])
+            max_link_demand = step.get("max_link_demand")
+            if max_link_demand is None and link_demand:
+                max_link_demand = max(
+                    (
+                        entry[_LINK_DEMAND_INDEX]
+                        for entry in link_demand
+                        if len(entry) > _LINK_DEMAND_INDEX
+                    ),
+                    default=None,
+                )
             timestep_rows.append(
                 (
                     t,
@@ -133,12 +149,12 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
                     step.get("end_cycle"),
                     step.get("avg_link_demand"),
                     step.get("avg_link_util"),
-                    step.get("max_link_demand"),
+                    max_link_demand,
                     step.get("mcast_write_link_util"),
                     len(active_ids),
                     orjson.dumps(step.get("noc", {})),
                     orjson.dumps(active_ids),
-                    orjson.dumps(step.get("link_demand", [])),
+                    orjson.dumps(link_demand),
                 )
             )
             if len(timestep_rows) >= _TRANSFER_INSERT_BATCH:
@@ -188,11 +204,13 @@ def read_summary(db_path: Path) -> dict:
                 "avg_link_demand": row[3],
                 "avg_link_util": row[4],
                 "max_link_demand": row[5],
-                "active_count": row[6],
+                "mcast_write_link_util": row[6],
+                "active_count": row[7],
             }
             for row in conn.execute(
                 "SELECT t, start_cycle, end_cycle, avg_link_demand, avg_link_util, "
-                "max_link_demand, active_count FROM timestep ORDER BY t"
+                "max_link_demand, mcast_write_link_util, active_count "
+                "FROM timestep ORDER BY t"
             )
         ]
     finally:
@@ -201,6 +219,7 @@ def read_summary(db_path: Path) -> dict:
     return {
         "common_info": orjson.loads(meta["common_info"]),
         "chips": orjson.loads(meta["chips"]),
+        "zones": orjson.loads(meta["zones"]),
         "n_timesteps": int(meta["n_timesteps"]),
         "timesteps": timesteps,
     }

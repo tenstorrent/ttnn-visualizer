@@ -15,22 +15,22 @@ import { NPEData } from '../model/NPEModel';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
-import NpeWindowedProof from '../components/npe/NpeWindowedProof';
+import NpeWindowedView from '../components/npe/NpeWindowedView';
 import { NPEValidationError } from '../definitions/NPEData';
 import { validateNpeData } from '../functions/validateNpeData';
 
 const NPE = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    // #861 PoC: in DEV the windowed proof panel replaces the whole-file path for
+    // #861 PoC: in DEV the windowed view replaces the whole-file path for
     // uploaded reports, so we skip `useNpe` (its full /api/npe fetch is exactly
-    // what fails on large files) and render only the proof.
-    const isWindowedProof = import.meta.env.DEV && !filepath && !!npeFileName;
+    // what fails on large files) and render NPEView from windowed fetches.
+    const isWindowedView = import.meta.env.DEV && !filepath && !!npeFileName;
     const {
         data: loadedData,
         isLoading: isLoadingNPE,
         error: httpError,
-    } = useNpe(filepath || isWindowedProof ? null : npeFileName);
+    } = useNpe(filepath || isWindowedView ? null : npeFileName);
     const {
         data: loadedTimeline,
         isLoading: isLoadingTimeline,
@@ -102,8 +102,8 @@ const NPE = () => {
                 )}
             </div>
 
-            {isWindowedProof ? (
-                <NpeWindowedProof fileName={npeFileName} />
+            {isWindowedView ? (
+                <NpeWindowedView fileName={npeFileName} />
             ) : (
                 <>
                     {errorCode !== NPEValidationError.OK ? (

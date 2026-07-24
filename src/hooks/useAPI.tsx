@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { AxiosError } from 'axios';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
@@ -632,6 +632,9 @@ export const useNpeWindow = (fileName: string | null, t: number | null) => {
         queryKey: ['npe-window', fileName, t],
         retry: false,
         staleTime: Infinity,
+        // Keep the previous window visible while a seek's fetch is in flight so
+        // the graph doesn't flash empty on every scrub.
+        placeholderData: keepPreviousData,
         enabled: fileName !== null && t !== null,
     });
 };

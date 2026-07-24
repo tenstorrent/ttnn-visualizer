@@ -179,6 +179,9 @@ export interface TimestepData {
     end_cycle: number;
     active_transfers: NoCTransferId[];
     link_demand: LinkUtilization[];
+    // Present in the raw NPE JSON per step; used as the timeline "worst" row
+    // fallback when `link_demand` is windowed-out (#861).
+    max_link_demand?: number;
     avg_link_demand: number; // percentage
     avg_link_util: number; // percentage
     mcast_write_link_util: number;
@@ -199,12 +202,14 @@ export interface NpeTimestepSummary {
     avg_link_demand: number;
     avg_link_util: number;
     max_link_demand: number;
+    mcast_write_link_util: number;
     active_count: number;
 }
 
 export interface NpeSummary {
     common_info: CommonInfo;
     chips: NPEData['chips'];
+    zones?: NPERootZone[];
     n_timesteps: number;
     timesteps: NpeTimestepSummary[];
 }

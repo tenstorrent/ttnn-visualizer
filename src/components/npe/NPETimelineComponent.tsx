@@ -116,7 +116,11 @@ const NPETimelineComponent = ({
                 ? timestep.link_demand.filter((linkData) => linkData[NPE_LINK.NOC_ID].startsWith(nocType))
                 : timestep.link_demand;
 
-            const worst = Math.max(-1, ...links.map((linkData) => linkData[NPE_LINK.DEMAND]));
+            // Windowed loading (#861) supplies `link_demand` only for the visited
+            // step; other steps fall back to the per-step scalar from the summary.
+            const worst = links.length
+                ? Math.max(-1, ...links.map((linkData) => linkData[NPE_LINK.DEMAND]))
+                : (timestep.max_link_demand ?? -1);
 
             result.worst.push({
                 value: worst,
