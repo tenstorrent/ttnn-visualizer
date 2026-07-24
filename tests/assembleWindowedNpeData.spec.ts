@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import assembleWindowedNpeData from '../src/functions/assembleWindowedNpeData';
+import assembleWindowedNpeData, { buildTimestepSkeleton } from '../src/functions/assembleWindowedNpeData';
 import { CommonInfo, NPERootZone, NoCID, NoCTransfer, NoCType, NpeSummary, NpeWindow } from '../src/model/NPEModel';
 
 const makeSummary = (overrides: Partial<NpeSummary> = {}): NpeSummary => ({
@@ -40,22 +40,26 @@ const makeWindow = (t = 1): NpeWindow => ({
     transfers: [{ id: 0 }, { id: 1 }] as unknown as NoCTransfer[],
 });
 
-describe('assembleWindowedNpeData', () => {
-    it('expands columnar summary into per-step aggregates', () => {
-        const data = assembleWindowedNpeData(makeSummary(), makeWindow());
+describe('buildTimestepSkeleton', () => {
+    it('expands the columnar summary into per-step aggregates with no heavy payload', () => {
+        const skeleton = buildTimestepSkeleton(makeSummary());
 
-        expect(data.timestep_data).toHaveLength(3);
-        const idle = data.timestep_data[2];
+        expect(skeleton).toHaveLength(3);
+        const idle = skeleton[2];
         expect(idle.start_cycle).toBe(20);
         expect(idle.avg_link_demand).toBe(3);
         expect(idle.max_link_demand).toBe(9);
-        // Non-visited steps carry no heavy per-link payload.
         expect(idle.active_transfers).toEqual([]);
         expect(idle.link_demand).toEqual([]);
     });
+});
+
+describe('assembleWindowedNpeData', () => {
+    const skeletonFor = (summary = makeSummary()) => buildTimestepSkeleton(summary);
 
     it('patches the visited step with the window payload by default', () => {
-        const data = assembleWindowedNpeData(makeSummary(), makeWindow(1));
+        const summary = makeSummary();
+        const data = assembleWindowedNpeData(summary, makeWindow(1), skeletonFor(summary));
         const visited = data.timestep_data[1];
 
         expect(visited.active_transfers).toEqual([0, 1]);
@@ -65,10 +69,21 @@ describe('assembleWindowedNpeData', () => {
         expect(data.noc_transfers).toHaveLength(2);
     });
 
+    it('does not mutate the shared skeleton (safe to reuse across scrubs)', () => {
+        const summary = makeSummary();
+        const skeleton = skeletonFor(summary);
+        assembleWindowedNpeData(summary, makeWindow(1), skeleton);
+
+        // The reused skeleton keeps step 1 empty despite the patch on the result.
+        expect(skeleton[1].active_transfers).toEqual([]);
+        expect(skeleton[1].link_demand).toEqual([]);
+    });
+
     it('patches at the requested render index when the window is stale (keeps the prior frame)', () => {
         // Seek to step 2 while the in-flight window still holds step 1's data:
         // the rendered step (2) shows the previous transfers instead of empty.
-        const data = assembleWindowedNpeData(makeSummary(), makeWindow(1), 2);
+        const summary = makeSummary();
+        const data = assembleWindowedNpeData(summary, makeWindow(1), skeletonFor(summary), 2);
 
         expect(data.timestep_data[2].active_transfers).toEqual([0, 1]);
         // The window's own index is not double-patched.
@@ -76,9 +91,11 @@ describe('assembleWindowedNpeData', () => {
     });
 
     it('emits undefined zones when the summary has none, and passes them through otherwise', () => {
-        expect(assembleWindowedNpeData(makeSummary({ zones: [] }), makeWindow()).zones).toBeUndefined();
+        const empty = makeSummary({ zones: [] });
+        expect(assembleWindowedNpeData(empty, makeWindow(), skeletonFor(empty)).zones).toBeUndefined();
 
         const zones = [{ zones: [], proc: 'BRISC', core: [0, 0, 0] }] as unknown as NPERootZone[];
-        expect(assembleWindowedNpeData(makeSummary({ zones }), makeWindow()).zones).toBe(zones);
+        const withZones = makeSummary({ zones });
+        expect(assembleWindowedNpeData(withZones, makeWindow(), skeletonFor(withZones)).zones).toBe(zones);
     });
 });

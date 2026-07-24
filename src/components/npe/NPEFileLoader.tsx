@@ -4,6 +4,7 @@
 
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
+import { useQueryClient } from '@tanstack/react-query';
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
@@ -34,6 +35,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 const NPEFileLoader = () => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { uploadNpeFile } = useLocalConnection();
+    const queryClient = useQueryClient();
     const [npeFileName, setActiveNpe] = useAtom(activeNpeOpTraceAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
@@ -55,6 +57,13 @@ const NPEFileLoader = () => {
                 setErrorMessage(response?.data?.message ?? 'Upload failed');
             } else {
                 const fileName = file.name;
+                // Re-uploading a same-named file reuses the NPE query keys, and the
+                // windowed hooks are staleTime: Infinity — drop the cached summary /
+                // windows so the freshly-rebuilt server index is refetched instead of
+                // serving the previous report's data.
+                queryClient.removeQueries({ queryKey: ['npe-summary'] });
+                queryClient.removeQueries({ queryKey: ['npe-window'] });
+                queryClient.removeQueries({ queryKey: ['fetch-npe'] });
                 setActiveNpe(sanitiseFileName(fileName));
                 createToastNotification('Active NPE', fileName, ToastType.SUCCESS);
                 setUploadStatus(ConnectionTestStates.OK);

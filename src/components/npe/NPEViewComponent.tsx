@@ -28,6 +28,7 @@ import {
     NoCTransfer,
     NoCType,
     SelectedNode,
+    TimestepData,
 } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import {
@@ -62,6 +63,11 @@ interface NPEViewProps {
     selectedTimestep?: number;
     onSelectedTimestepChange?: Dispatch<SetStateAction<number>>;
     reportKey?: string;
+    // #861 windowed loading: a stable per-step aggregate array for the timeline
+    // heat bar. Windowed mode passes this so the timeline keeps one reference
+    // across scrubs (its O(n_timesteps) memo runs once per report); whole-file
+    // mode omits it and the timeline falls back to `npeData.timestep_data`.
+    timelineData?: TimestepData[];
 }
 
 const LABEL_STEP_THRESHOLD = 25;
@@ -89,6 +95,7 @@ const NPEView = ({
     selectedTimestep: controlledTimestep,
     onSelectedTimestepChange,
     reportKey,
+    timelineData,
 }: NPEViewProps) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
@@ -588,7 +595,7 @@ const NPEView = ({
                     />
                 </div>
                 <NPETimelineComponent
-                    timestepList={npeData.timestep_data}
+                    timestepList={timelineData ?? npeData.timestep_data}
                     canvasWidth={canvasWidth}
                     currentTimestep={selectedTimestep}
                     useTimesteps={timestepsScale}

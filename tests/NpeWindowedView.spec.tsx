@@ -110,4 +110,47 @@ describe('NpeWindowedView', () => {
         // active_count = [0, 2, 0] → first active step is index 1.
         expect(screen.getByTestId('npe-view').textContent).toBe('step:1');
     });
+
+    it('degrades in place on a window error when a previous frame is available', () => {
+        // keepPreviousData keeps the last good window, so the view stays up and a
+        // non-blocking notice appears instead of replacing everything with an error.
+        mockedSummary.mockReturnValue({
+            data: summary,
+            isLoading: false,
+            isError: false,
+            error: null,
+        } as SummaryHook);
+        mockedWindow.mockReturnValue({
+            data: npeWindow,
+            isError: true,
+            error: new Error('timestep 42 out of range') as AxiosError,
+        } as WindowHook);
+
+        render(<NpeWindowedView fileName='trace.json' />);
+
+        expect(screen.getByText('Timestep failed to load')).toBeDefined();
+        expect(screen.getByText(/timestep 42 out of range/)).toBeDefined();
+        // The scrubber-bearing view is still rendered so the user can recover.
+        expect(screen.getByTestId('npe-view')).toBeDefined();
+    });
+
+    it('surfaces a first-window error when no frame has loaded yet', () => {
+        mockedSummary.mockReturnValue({
+            data: summary,
+            isLoading: false,
+            isError: false,
+            error: null,
+        } as SummaryHook);
+        mockedWindow.mockReturnValue({
+            data: undefined,
+            isError: true,
+            error: new Error('window fetch failed') as AxiosError,
+        } as WindowHook);
+
+        render(<NpeWindowedView fileName='trace.json' />);
+
+        expect(screen.getByText('Unable to load NPE timestep')).toBeDefined();
+        expect(screen.getByText('window fetch failed')).toBeDefined();
+        expect(screen.queryByTestId('npe-view')).toBeNull();
+    });
 });

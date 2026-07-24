@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Callout, Intent, Spinner } from '@blueprintjs/core';
 import { useNpeSummary, useNpeWindow } from '../../hooks/useAPI';
-import assembleWindowedNpeData from '../../functions/assembleWindowedNpeData';
+import assembleWindowedNpeData, { buildTimestepSkeleton } from '../../functions/assembleWindowedNpeData';
 import getResponseError from '../../functions/getResponseError';
 import NPEView from './NPEViewComponent';
 
@@ -39,31 +39,50 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
         }
     }, [summary]);
 
+    // Stable per-step aggregate skeleton for the timeline, built once per summary
+    // so scrubbing neither rebuilds ~54k step objects nor churns the timeline's
+    // O(n_timesteps) heat-bar memo.
+    const baseTimestepData = useMemo(() => (summary ? buildTimestepSkeleton(summary) : null), [summary]);
+
     // Assemble at `selectedTimestep` (not `npeWindow.t`) so an in-flight seek keeps
     // the previous frame on the rendered step instead of flashing empty.
     const npeData = useMemo(
-        () => (summary && npeWindow ? assembleWindowedNpeData(summary, npeWindow, selectedTimestep) : null),
-        [summary, npeWindow, selectedTimestep],
+        () =>
+            summary && npeWindow && baseTimestepData
+                ? assembleWindowedNpeData(summary, npeWindow, baseTimestepData, selectedTimestep)
+                : null,
+        [summary, npeWindow, baseTimestepData, selectedTimestep],
     );
 
     if (!fileName) {
         return null;
     }
 
-    // Surface index-build / window failures instead of trapping the user on an
-    // infinite "Building index…" spinner.
-    if (isSummaryError || isWindowError) {
+    // A failed summary (index build) is fatal — there is no trace to render.
+    if (isSummaryError) {
         return (
             <Callout
                 intent={Intent.DANGER}
                 title='Unable to load NPE report'
             >
-                {getResponseError(summaryError ?? windowError)}
+                {getResponseError(summaryError)}
             </Callout>
         );
     }
 
+    // No frame yet: surface a first-window failure instead of trapping the user on
+    // an infinite spinner; otherwise the index/first window is still loading.
     if (!npeData) {
+        if (isWindowError) {
+            return (
+                <Callout
+                    intent={Intent.DANGER}
+                    title='Unable to load NPE timestep'
+                >
+                    {getResponseError(windowError)}
+                </Callout>
+            );
+        }
         return (
             <div className='npe-windowed-loading'>
                 <Spinner size={20} />
@@ -72,13 +91,28 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
         );
     }
 
+    // A frame is available. If the current seek's window failed, degrade in place:
+    // keep the summary + scrubber (so the user can seek elsewhere and recover) and
+    // show a non-blocking notice rather than replacing the whole view with an
+    // unrecoverable error box.
     return (
-        <NPEView
-            npeData={npeData}
-            selectedTimestep={selectedTimestep}
-            onSelectedTimestepChange={setSelectedTimestep}
-            reportKey={fileName}
-        />
+        <>
+            {isWindowError && (
+                <Callout
+                    intent={Intent.WARNING}
+                    title='Timestep failed to load'
+                >
+                    Showing the last loaded timestep. {getResponseError(windowError)}
+                </Callout>
+            )}
+            <NPEView
+                npeData={npeData}
+                timelineData={baseTimestepData ?? undefined}
+                selectedTimestep={selectedTimestep}
+                onSelectedTimestepChange={setSelectedTimestep}
+                reportKey={fileName}
+            />
+        </>
     );
 };
 
