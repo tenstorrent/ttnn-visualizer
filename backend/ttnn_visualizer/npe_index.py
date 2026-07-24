@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 INDEX_SUFFIX = ".npeidx.sqlite"
 
 # Bump when the schema or build logic changes so stale caches are rebuilt.
-INDEX_VERSION = 2
+INDEX_VERSION = 3
 
 _TRANSFER_INSERT_BATCH = 5000
 
@@ -35,6 +35,43 @@ _TRANSFER_INSERT_BATCH = 5000
 # in the frontend model. Used to precompute each step's worst-link demand for the
 # timeline heat bar, since the source JSON doesn't carry a per-step scalar.
 _LINK_DEMAND_INDEX = 4
+
+# The UI never renders more than 3 fractional digits (formatPercentage(..., 3)),
+# so store floats truncated to match — this trims the up-front summary payload by
+# ~36% and each window's link_demand by ~34% (#861). Truncation is ~3x cheaper
+# than round() at index-build scale and yields an identical short JSON repr.
+_TRUNCATE_DECIMALS = 3
+_TRUNCATE_SCALE = 10**_TRUNCATE_DECIMALS
+
+
+def _truncate(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    return int(value * _TRUNCATE_SCALE) / _TRUNCATE_SCALE
+
+
+def _as_int(value: Optional[float]) -> Optional[int]:
+    # Cycle counts are integers stored as `X.0` floats; drop the redundant ".0".
+    return int(value) if value is not None else None
+
+
+def _truncate_link_demand(link_demand: list) -> list:
+    # Mutates in place — the parsed object is discarded after the build. Only the
+    # trailing demand (index 4) is a float; coords / noc-id are left untouched.
+    for entry in link_demand:
+        if len(entry) > _LINK_DEMAND_INDEX and type(entry[_LINK_DEMAND_INDEX]) is float:
+            entry[_LINK_DEMAND_INDEX] = (
+                int(entry[_LINK_DEMAND_INDEX] * _TRUNCATE_SCALE) / _TRUNCATE_SCALE
+            )
+    return link_demand
+
+
+def _truncate_noc(noc: dict) -> dict:
+    for noc_data in noc.values():
+        for key, value in noc_data.items():
+            if type(value) is float:
+                noc_data[key] = int(value * _TRUNCATE_SCALE) / _TRUNCATE_SCALE
+    return noc
 
 
 def get_index_path(npe_path: str) -> Path:
@@ -131,9 +168,12 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
         timestep_rows = []
         for t, step in enumerate(timesteps):
             active_ids = step.get("active_transfers", [])
-            link_demand = step.get("link_demand", [])
+            link_demand = _truncate_link_demand(step.get("link_demand", []))
+            noc = _truncate_noc(step.get("noc", {}))
             max_link_demand = step.get("max_link_demand")
             if max_link_demand is None and link_demand:
+                # link_demand is already truncated above, so the worst-link scalar
+                # stays consistent with the per-link values the window serves.
                 max_link_demand = max(
                     (
                         entry[_LINK_DEMAND_INDEX]
@@ -145,14 +185,14 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
             timestep_rows.append(
                 (
                     t,
-                    step.get("start_cycle"),
-                    step.get("end_cycle"),
-                    step.get("avg_link_demand"),
-                    step.get("avg_link_util"),
-                    max_link_demand,
-                    step.get("mcast_write_link_util"),
+                    _as_int(step.get("start_cycle")),
+                    _as_int(step.get("end_cycle")),
+                    _truncate(step.get("avg_link_demand")),
+                    _truncate(step.get("avg_link_util")),
+                    _truncate(max_link_demand),
+                    _truncate(step.get("mcast_write_link_util")),
                     len(active_ids),
-                    orjson.dumps(step.get("noc", {})),
+                    orjson.dumps(noc),
                     orjson.dumps(active_ids),
                     orjson.dumps(link_demand),
                 )
