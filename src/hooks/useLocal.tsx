@@ -54,7 +54,7 @@ const useLocalConnection = () => {
         return dataTransfer.files;
     }
 
-    const checkRequiredProfilerFiles = (files: FileList): boolean => {
+    const checkRequiredPerformanceFiles = (files: FileList): boolean => {
         // Tracy is optional — some TT-Metal runs omit tracy_profile_log_host.tracy.
         const requiredFiles = ['profile_log_device.csv'];
         const opsPerfPrefix = 'ops_perf_results';
@@ -183,7 +183,7 @@ const useLocalConnection = () => {
     return {
         getUploadedFolderName,
         checkRequiredReportFiles,
-        checkRequiredProfilerFiles,
+        checkRequiredPerformanceFiles,
         uploadLocalFolder,
         uploadLocalPerformanceFolder,
         uploadNpeFile,
