@@ -248,6 +248,20 @@ def sanitise_path_segment(value: object) -> str:
     return safe_segment
 
 
+def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]:
+    """Sanitised basename of a remote report path, or None if missing/invalid.
+
+    Sync destinations and mount lookups must use this so write and read segments
+    stay aligned (``sftp_operations`` ↔ ``views``).
+    """
+    if remote_path is None:
+        return None
+    try:
+        return sanitise_path_segment(Path(remote_path).name)
+    except (TypeError, ValueError):
+        return None
+
+
 def sanitise_remote_host_segment(value: object) -> str:
     """Normalise a user-provided host to a single safe path segment."""
     return sanitise_path_segment(value)

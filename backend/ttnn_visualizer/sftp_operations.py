@@ -29,7 +29,7 @@ from ttnn_visualizer.models import (
     Instance,
     RemoteConnection,
     RemoteReportFolder,
-    sanitise_path_segment,
+    folder_segment_from_remote_path,
 )
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
@@ -1163,14 +1163,14 @@ def get_remote_profiler_folders(
 
 def _safe_sync_destination_segment(remote_folder_path: str) -> str:
     """Collapse remotePath to a single local folder segment; reject ``.`` / ``..`` / empty."""
-    try:
-        return sanitise_path_segment(Path(remote_folder_path).name)
-    except (TypeError, ValueError) as err:
+    segment = folder_segment_from_remote_path(remote_folder_path)
+    if not segment:
         raise RemoteConnectionException(
             message="Invalid report path",
             status=ConnectionTestStates.FAILED,
             http_status_code=HTTPStatus.BAD_REQUEST,
-        ) from err
+        )
+    return segment
 
 
 @remote_exception_handler

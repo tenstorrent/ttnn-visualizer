@@ -6,7 +6,8 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
-from ttnn_visualizer.models import RemoteReportFolder
+from ttnn_visualizer.models import RemoteReportFolder, folder_segment_from_remote_path
+from ttnn_visualizer.views import _safe_report_folder_name
 
 
 def _remote_connection_payload():
@@ -343,7 +344,48 @@ def test_remote_use_rejects_dotdot_remote_path_segment(app, client, tmp_path):
     )
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert "Invalid report name" in response.get_json()["error"]
+    assert "Invalid report path" in response.get_json()["error"]
+
+
+def test_remote_use_rejects_empty_remote_path_without_report_name_fallback(
+    app, client, tmp_path
+):
+    """Explicit empty/root remotePath must not mount via display reportName."""
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+    app.config["SERVER_MODE"] = False
+
+    response = client.post(
+        "/api/remote/use",
+        json={
+            "connection": _remote_connection_payload(),
+            "performance": {
+                "reportName": "bert",
+                "remotePath": "/",
+                "lastModified": 1,
+            },
+        },
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert "Invalid report path" in response.get_json()["error"]
+
+
+def test_folder_segment_parity_between_sync_and_mount():
+    """Sync write segment and mount lookup must agree after sanitiser rewrites."""
+    cases = [
+        r"/remote/reports/foo\bar",
+        "/remote/reports/ spaced ",
+        "/remote/reports/café",
+        "/remote/reports/normal_name",
+    ]
+    for remote_path in cases:
+        sync_segment = folder_segment_from_remote_path(remote_path)
+        mount_segment = _safe_report_folder_name(
+            report_name="display-only",
+            remote_path=remote_path,
+        )
+        assert sync_segment is not None
+        assert sync_segment == mount_segment
 
 
 def test_remote_sync_rejects_dotdot_remote_path_segment(app, client, tmp_path):

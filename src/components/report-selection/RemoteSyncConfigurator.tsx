@@ -8,6 +8,7 @@ import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { AxiosResponse, HttpStatusCode } from 'axios';
 import { useAtom } from 'jotai';
+import { getDefaultStore } from 'jotai/vanilla';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import {
@@ -438,6 +439,7 @@ const RemoteSyncConfigurator = () => {
         mount,
         activateWithToast,
         applySelection,
+        getActivePath,
     }: {
         selected: RemoteFolder | undefined;
         setSyncing: (syncing: boolean) => void;
@@ -447,6 +449,7 @@ const RemoteSyncConfigurator = () => {
         mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
         activateWithToast: (folder: RemoteFolder) => void;
         applySelection: (folder: RemoteFolder) => void;
+        getActivePath: () => string | null | undefined;
     }) => {
         setSyncing(true);
 
@@ -455,6 +458,15 @@ const RemoteSyncConfigurator = () => {
             if (!connection || !selected) {
                 return;
             }
+
+            // Snapshot before transfer — local pickers stay usable while syncing.
+            const activePathAtSyncStart = getActivePath() ?? null;
+
+            const shouldActivateAfterSync = () => {
+                const currentActivePath = getActivePath() ?? null;
+                // User activated a different report during the transfer; keep their choice.
+                return currentActivePath === activePathAtSyncStart || currentActivePath === selected.remotePath;
+            };
 
             try {
                 // Transfer only — do not hold isActivatingReportAtom here or local
@@ -467,15 +479,19 @@ const RemoteSyncConfigurator = () => {
 
                 updateSaved(connection, updatedFolders);
 
-                if (updatedFolder) {
+                if (updatedFolder && shouldActivateAfterSync()) {
                     await mountAndActivateFolder(updatedFolder, { mount, activateWithToast });
                 }
             } catch (err: unknown) {
-                await handleSyncFailure(err, selected, (report, syncErr) =>
-                    withActivatingReport(() =>
+                await handleSyncFailure(err, selected, async (report, syncErr) => {
+                    if (!shouldActivateAfterSync()) {
+                        notifyFolderSyncError(syncErr);
+                        return;
+                    }
+                    await withActivatingReport(() =>
                         mountLocalFolderOnSyncFailure(report, syncErr, (conn) => mount(conn, report), applySelection),
-                    ),
-                );
+                    );
+                });
             }
         } finally {
             // REMOTE_SYNC registry clear is owned by syncRemoteFolder's finally.
@@ -493,6 +509,7 @@ const RemoteSyncConfigurator = () => {
             mount: (connection, report) => remote.mountRemoteFolder(connection, report),
             activateWithToast: updateReportSelection,
             applySelection: applyProfilerReportSelection,
+            getActivePath: () => getDefaultStore().get(activeProfilerReportAtom)?.path,
         });
 
     const syncSelectedPerfReportFolder = (folder?: RemoteFolder) =>
@@ -505,12 +522,13 @@ const RemoteSyncConfigurator = () => {
             mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
             activateWithToast: updatePerformanceSelection,
             applySelection: applyPerformanceReportSelection,
+            getActivePath: () => getDefaultStore().get(activePerformanceReportAtom)?.path,
         });
 
     /**
-     * Outdated / never-synced folders sync on select when the host is reachable.
-     * Sync failure falls back to the on-disk copy (offline / unreachable host).
-     * Up-to-date folders mount only.
+     * Never-synced folders sync on select (may fail offline — falls back if a local
+     * copy exists). Previously synced folders mount the on-disk copy even when
+     * stale; refresh via the Sync button.
      */
     const selectAndActivateFolder = async (
         folder: RemoteFolder,
@@ -528,7 +546,7 @@ const RemoteSyncConfigurator = () => {
     ) => {
         setSelected(folder);
 
-        if (isRemoteFolderOutdated(folder)) {
+        if (!folder.lastSynced) {
             await syncFolder(folder);
             return;
         }
@@ -672,7 +690,7 @@ const RemoteSyncConfigurator = () => {
                 subLabel='Select a memory report'
             >
                 <RemoteFolderSelector
-                    remoteFolder={selectedReportFolder}
+                    remoteFolder={isProfilerRemote ? selectedReportFolder : undefined}
                     remoteFolderList={reportFolderList}
                     disabled={isDisabled}
                     linkedIds={linkedProfilerReportIds}
@@ -688,7 +706,7 @@ const RemoteSyncConfigurator = () => {
                     type='profiler'
                     showReportName
                 >
-                    {selectedReportFolder && (
+                    {(isProfilerRemote || isSyncingReportFolder) && selectedReportFolder && (
                         <RemoteSyncButton
                             isDisabled={isDisabled}
                             selectedReportFolder={selectedReportFolder}
@@ -706,7 +724,7 @@ const RemoteSyncConfigurator = () => {
                 subLabel='Select a performance report'
             >
                 <RemoteFolderSelector
-                    remoteFolder={selectedPerformanceFolder}
+                    remoteFolder={isPerformanceRemote ? selectedPerformanceFolder : undefined}
                     remoteFolderList={remotePerformanceFolderList}
                     disabled={isDisabled}
                     linkedIds={linkedPerfIds}
@@ -721,7 +739,7 @@ const RemoteSyncConfigurator = () => {
                     }
                     type='performance'
                 >
-                    {selectedPerformanceFolder && (
+                    {(isPerformanceRemote || isSyncingPerformanceFolder) && selectedPerformanceFolder && (
                         <RemoteSyncButton
                             isDisabled={isDisabled}
                             selectedReportFolder={selectedPerformanceFolder}
