@@ -1390,7 +1390,7 @@ def create_performance_files():
 
     if not validate_files(
         files,
-        {"profile_log_device.csv", "tracy_profile_log_host.tracy"},
+        {"profile_log_device.csv"},
         pattern="ops_perf_results",
         folder_name=folder_name,
     ):
@@ -2038,8 +2038,12 @@ _REPORT_NOT_SYNCED_LOCALLY = (
 def _safe_report_folder_name(
     *, report_name: Optional[str] = None, remote_path: Optional[str] = None
 ) -> Optional[str]:
-    """Single-segment folder name for paths under REMOTE_DATA_DIRECTORY."""
-    candidate = report_name or (Path(remote_path).name if remote_path else "")
+    """Local folder segment under REMOTE_DATA_DIRECTORY — must match sync destinations.
+
+    Sync writes to ``Path(remotePath).name``; ``reportName`` is display-only
+    (e.g. config.json ``report_name``) and often differs from the directory.
+    """
+    candidate = (Path(remote_path).name if remote_path else "") or (report_name or "")
     try:
         return sanitise_path_segment(candidate)
     except (TypeError, ValueError):

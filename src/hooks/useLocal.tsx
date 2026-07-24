@@ -55,8 +55,8 @@ const useLocalConnection = () => {
     }
 
     const checkRequiredProfilerFiles = (files: FileList): boolean => {
-        // Required profiler files, including a pattern for `ops_perf_results`
-        const requiredFiles = ['profile_log_device.csv', 'tracy_profile_log_host.tracy'];
+        // Tracy is optional — some TT-Metal runs omit tracy_profile_log_host.tracy.
+        const requiredFiles = ['profile_log_device.csv'];
         const opsPerfPrefix = 'ops_perf_results';
 
         const fileSet = new Set<string>();

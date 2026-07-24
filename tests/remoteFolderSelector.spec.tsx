@@ -5,9 +5,11 @@
 import { Classes } from '@blueprintjs/core';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { AxiosResponse } from 'axios';
+import { useAtomValue } from 'jotai';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
 import RemoteFolderSelector from '../src/components/report-selection/RemoteFolderSelector';
+import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
 import { RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
@@ -50,6 +52,14 @@ const CONNECTION_NAME = 'Local - ssh://localhost:2222/';
 const NO_SELECTION = '(No selection)';
 
 const HTML_DISABLED = 'disabled';
+const SELECT_LOCAL_REPORT_TEXT = 'Select a report...';
+const IS_ACTIVATING_REPORT_PROBE_TEST_ID = 'is-activating-report-probe';
+
+const IsActivatingReportProbe = () => {
+    const isActivatingReport = useAtomValue(isActivatingReportAtom);
+
+    return <span data-testid={IS_ACTIVATING_REPORT_PROBE_TEST_ID}>{isActivatingReport ? 'true' : 'false'}</span>;
+};
 
 const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance, mockUseReportMetadata } = vi.hoisted(() => {
     return {
@@ -60,12 +70,20 @@ const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance, mockUse
     };
 });
 
-vi.mock('../src/hooks/useAPI.tsx', () => ({
-    useReportFolderList: () => mockUseReportFolderList(),
-    usePerfFolderList: () => mockUsePerfFolderList(),
-    useInstance: () => mockUseInstance(),
-    useReportMetadata: () => mockUseReportMetadata(),
-}));
+vi.mock('../src/hooks/useAPI.tsx', async () => {
+    const actual = await vi.importActual<typeof import('../src/hooks/useAPI.tsx')>('../src/hooks/useAPI.tsx');
+
+    return {
+        ...actual,
+        useReportFolderList: () => mockUseReportFolderList(),
+        usePerfFolderList: () => mockUsePerfFolderList(),
+        useInstance: () => mockUseInstance(),
+        useReportMetadata: () => mockUseReportMetadata(),
+        updateInstance: vi.fn().mockResolvedValue({}),
+        deleteProfiler: vi.fn().mockResolvedValue({ success: true }),
+        deletePerformance: vi.fn().mockResolvedValue({ success: true }),
+    };
+});
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -101,7 +119,7 @@ it('shows a loading spinner on the remote folder selector button when loading', 
     expect(button).toHaveProperty('disabled', true);
 });
 
-it('shows a loading spinner on remote selectors while an active report is being confirmed', () => {
+it('disables remote selectors while an active report is being confirmed without a spinner', () => {
     setupConnection(remoteConnection);
 
     render(
@@ -113,9 +131,10 @@ it('shows a loading spinner on remote selectors while an active report is being 
     const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
     expect(selectButtons.length).toBeGreaterThan(0);
     selectButtons.forEach((button) => {
-        expect(button.classList.contains(Classes.LOADING)).toBe(true);
+        expect(button.classList.contains(Classes.LOADING)).toBe(false);
         expect(button).toHaveProperty(HTML_DISABLED, true);
     });
+    expect(screen.queryByTestId(TEST_IDS.REMOTE_SYNC_BUTTON)).toBeNull();
 });
 
 it('renders the initial form state when there is no data', () => {
@@ -357,8 +376,10 @@ it('disables remote report selectors while mount is confirming the active report
         expect(selectButtons.length).toBeGreaterThan(0);
         selectButtons.forEach((button) => {
             expect(button).toHaveProperty(HTML_DISABLED, true);
-            expect(button.classList.contains(Classes.LOADING)).toBe(true);
+            expect(button.classList.contains(Classes.LOADING)).toBe(false);
         });
+        const syncButton = screen.getByTestId(TEST_IDS.REMOTE_SYNC_BUTTON);
+        expect(syncButton).toHaveProperty(HTML_DISABLED, true);
     }, WAIT_FOR_OPTIONS);
 
     expect(resolveMount).toBeDefined();
@@ -376,6 +397,7 @@ it('disables remote report selectors while mount is confirming the active report
         enabledButtons.forEach((button) => {
             expect(button.classList.contains(Classes.LOADING)).toBe(false);
         });
+        expect(screen.getByTestId(TEST_IDS.REMOTE_SYNC_BUTTON)).toHaveProperty(HTML_DISABLED, false);
     }, WAIT_FOR_OPTIONS);
 });
 
@@ -426,7 +448,7 @@ it('re-enables remote report selectors when mount fails', async () => {
     }, WAIT_FOR_OPTIONS);
 });
 
-it('mounts an outdated performance folder on selection without SSH sync', async () => {
+it('syncs an outdated performance folder on selection then mounts it', async () => {
     const axiosInstance = await import('../src/libs/axiosInstance');
     const mockPost = vi.mocked(axiosInstance.default.post);
 
@@ -434,8 +456,18 @@ it('mounts an outdated performance folder on selection without SSH sync', async 
         ...mockRemotePerformanceFolderList[0],
         lastSynced: mockRemotePerformanceFolderList[0].lastModified - 1000,
     };
+    const syncedReport: RemoteFolder = {
+        ...selectedReport,
+        lastSynced: selectedReport.lastModified + 1000,
+    };
 
-    mockPost.mockImplementation((url: string) => mockRemoteFolderApis(url, selectedReport));
+    mockPost.mockImplementation((url: string) => {
+        if (url.includes('/api/remote/sync')) {
+            return Promise.resolve({ status: 200, data: syncedReport } as AxiosResponse);
+        }
+
+        return mockRemoteFolderApis(url, selectedReport);
+    });
 
     setupConnection(remoteConnection);
 
@@ -452,11 +484,104 @@ it('mounts an outdated performance folder on selection without SSH sync', async 
         WAIT_FOR_OPTIONS,
     );
 
+    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(true);
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
-    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(false);
+});
 
-    const syncButton = await screen.findByTestId(TEST_IDS.REMOTE_SYNC_BUTTON, undefined, WAIT_FOR_OPTIONS);
-    expect(syncButton.classList.contains(Classes.INTENT_WARNING)).toBe(true);
+it('does not spin local report selectors while a remote sync transfer is in flight', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const selectedReport: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified - 1000,
+    };
+    const syncedReport: RemoteFolder = {
+        ...selectedReport,
+        lastSynced: selectedReport.lastModified + 1000,
+    };
+
+    let resolveSync: ((value: AxiosResponse) => void) | undefined;
+    mockPost.mockImplementation((url: string) => {
+        if (url.includes('/api/remote/sync')) {
+            return new Promise<AxiosResponse>((resolve) => {
+                resolveSync = resolve;
+            });
+        }
+
+        return mockRemoteFolderApis(url, selectedReport);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <IsActivatingReportProbe />
+            <LocalFolderSelector />
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await selectPerformanceFolder(selectedReport.remotePath);
+
+    await waitFor(() => {
+        const remoteButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+        expect(remoteButtons.length).toBeGreaterThan(0);
+        remoteButtons.forEach((button) => {
+            expect(button).toHaveProperty(HTML_DISABLED, true);
+            expect(button.classList.contains(Classes.LOADING)).toBe(false);
+        });
+        expect(screen.getByTestId(IS_ACTIVATING_REPORT_PROBE_TEST_ID).textContent).toBe('false');
+        expect(screen.getByTestId(TEST_IDS.REMOTE_SYNC_BUTTON)).toHaveProperty(HTML_DISABLED, true);
+        getAllButtonsWithText(SELECT_LOCAL_REPORT_TEXT).forEach((button) => {
+            expect(button.classList.contains(Classes.LOADING)).toBe(false);
+            expect(button).toHaveProperty(HTML_DISABLED, false);
+        });
+    }, WAIT_FOR_OPTIONS);
+
+    expect(resolveSync).toBeDefined();
+    resolveSync!({ status: 200, data: syncedReport } as AxiosResponse);
+
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(selectedReport.reportName),
+        WAIT_FOR_OPTIONS,
+    );
+});
+
+it('falls back to the local copy when outdated select sync fails', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const selectedReport: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified - 1000,
+    };
+    const syncErrorMessage = 'Unable to establish SSH connection';
+
+    mockPost.mockImplementation((url: string) => {
+        if (url.includes('/api/remote/sync')) {
+            return Promise.reject(new Error(syncErrorMessage));
+        }
+
+        return mockRemoteFolderApis(url, selectedReport);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await selectPerformanceFolder(selectedReport.remotePath);
+
+    await waitFor(() => {
+        expect(screen.getByText(FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE)).not.toBeNull();
+    }, WAIT_FOR_OPTIONS);
+
+    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(true);
+    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
 });
 
 it('mounts the local copy and warns when Sync fails for a previously synced folder', async () => {
@@ -728,7 +853,7 @@ it('clears cached performance folders when local mount scan returns empty', asyn
     }, WAIT_FOR_OPTIONS);
 });
 
-it('toasts Unable to open report when select mount fails without Sync', async () => {
+it('toasts Unable to open report when up-to-date select mount fails', async () => {
     const axiosInstance = await import('../src/libs/axiosInstance');
     const mockPost = vi.mocked(axiosInstance.default.post);
 
@@ -761,6 +886,46 @@ it('toasts Unable to open report when select mount fails without Sync', async ()
 
     expect(screen.queryByText(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE)).toBeNull();
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(false);
+    expect(screen.getByTestId(TEST_IDS.REMOTE_SYNC_BUTTON)).not.toBeNull();
+});
+
+it('syncs a never-synced report on selection then mounts it', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    const neverSyncedReport: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: null,
+    };
+    const syncedReport: RemoteFolder = {
+        ...neverSyncedReport,
+        lastSynced: neverSyncedReport.lastModified + 1000,
+    };
+
+    mockPost.mockImplementation((url: string) => {
+        if (url.includes('/api/remote/sync')) {
+            return Promise.resolve({ status: 200, data: syncedReport } as AxiosResponse);
+        }
+
+        return mockRemoteFolderApis(url, neverSyncedReport);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await selectPerformanceFolder(neverSyncedReport.remotePath);
+
+    await waitFor(() => {
+        expect(screen.getByText(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE)).not.toBeNull();
+    }, WAIT_FOR_OPTIONS);
+
+    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(true);
+    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
 });
 
 it('handles connection with default port (22)', () => {
