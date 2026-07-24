@@ -22,7 +22,15 @@ import { validateNpeData } from '../functions/validateNpeData';
 const NPE = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    const { data: loadedData, isLoading: isLoadingNPE, error: httpError } = useNpe(filepath ? null : npeFileName);
+    // #861 PoC: in DEV the windowed proof panel replaces the whole-file path for
+    // uploaded reports, so we skip `useNpe` (its full /api/npe fetch is exactly
+    // what fails on large files) and render only the proof.
+    const isWindowedProof = import.meta.env.DEV && !filepath && !!npeFileName;
+    const {
+        data: loadedData,
+        isLoading: isLoadingNPE,
+        error: httpError,
+    } = useNpe(filepath || isWindowedProof ? null : npeFileName);
     const {
         data: loadedTimeline,
         isLoading: isLoadingTimeline,
@@ -94,17 +102,21 @@ const NPE = () => {
                 )}
             </div>
 
-            {import.meta.env.DEV && <NpeWindowedProof fileName={filepath ? null : npeFileName} />}
-
-            {errorCode !== NPEValidationError.OK ? (
-                <NPEProcessingStatus
-                    errorCode={errorCode}
-                    dataVersion={npeData?.common_info?.version || null}
-                    isLoading={isLoading}
-                    hasUploadedFile={hasUploadedFile}
-                />
+            {isWindowedProof ? (
+                <NpeWindowedProof fileName={npeFileName} />
             ) : (
-                npeData && <NPEView npeData={npeData} />
+                <>
+                    {errorCode !== NPEValidationError.OK ? (
+                        <NPEProcessingStatus
+                            errorCode={errorCode}
+                            dataVersion={npeData?.common_info?.version || null}
+                            isLoading={isLoading}
+                            hasUploadedFile={hasUploadedFile}
+                        />
+                    ) : (
+                        npeData && <NPEView npeData={npeData} />
+                    )}
+                </>
             )}
         </>
     );
