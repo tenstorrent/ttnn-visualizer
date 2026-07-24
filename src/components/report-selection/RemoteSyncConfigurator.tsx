@@ -7,8 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { AxiosResponse, HttpStatusCode } from 'axios';
-import { useAtom } from 'jotai';
-import { getDefaultStore } from 'jotai/vanilla';
+import { useAtom, useStore } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import {
@@ -53,6 +52,7 @@ const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
     const { setPersistentSelectedConnection, setPersistentSavedConnectionList } = remote;
     const queryClient = useQueryClient();
+    const jotaiStore = useStore();
     const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
@@ -509,7 +509,7 @@ const RemoteSyncConfigurator = () => {
             mount: (connection, report) => remote.mountRemoteFolder(connection, report),
             activateWithToast: updateReportSelection,
             applySelection: applyProfilerReportSelection,
-            getActivePath: () => getDefaultStore().get(activeProfilerReportAtom)?.path,
+            getActivePath: () => jotaiStore.get(activeProfilerReportAtom)?.path,
         });
 
     const syncSelectedPerfReportFolder = (folder?: RemoteFolder) =>
@@ -522,7 +522,7 @@ const RemoteSyncConfigurator = () => {
             mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
             activateWithToast: updatePerformanceSelection,
             applySelection: applyPerformanceReportSelection,
-            getActivePath: () => getDefaultStore().get(activePerformanceReportAtom)?.path,
+            getActivePath: () => jotaiStore.get(activePerformanceReportAtom)?.path,
         });
 
     /**
