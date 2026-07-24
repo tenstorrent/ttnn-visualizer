@@ -126,7 +126,7 @@ def test_list_local_skips_incomplete_performance_folder(tmp_path: Path):
     host = "bh-lb-01"
     incomplete = tmp_path / host / "performance-reports" / "partial"
     incomplete.mkdir(parents=True)
-    # Device log alone is not enough — need tracy + ops_perf_results* too.
+    # Device log alone is not enough — need ops_perf_results* too.
     (incomplete / "profile_log_device.csv").write_text("x")
 
     folders = list_local_synced_performance_folders(
@@ -134,6 +134,22 @@ def test_list_local_skips_incomplete_performance_folder(tmp_path: Path):
     )
 
     assert folders == []
+
+
+def test_list_local_includes_performance_folder_without_tracy(tmp_path: Path):
+    """Tracy is optional; profile_log + ops_perf is enough to mount."""
+    host = "bh-lb-01"
+    report_dir = tmp_path / host / "performance-reports" / "no-tracy"
+    report_dir.mkdir(parents=True)
+    (report_dir / "profile_log_device.csv").write_text("x")
+    (report_dir / "ops_perf_results_0.csv").write_text("x")
+
+    folders = list_local_synced_performance_folders(
+        _connection(host), tmp_path, "performance-reports"
+    )
+
+    assert len(folders) == 1
+    assert folders[0].reportName == "no-tracy"
 
 
 def test_list_local_skips_ops_perf_results_directory(tmp_path: Path):

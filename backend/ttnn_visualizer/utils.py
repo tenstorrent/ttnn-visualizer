@@ -588,9 +588,9 @@ def find_gunicorn_path() -> tuple[str, Optional[str]]:
 
 
 PROFILER_REPORT_REQUIRED_FILES = frozenset({"db.sqlite"})
-PERFORMANCE_REPORT_REQUIRED_FILES = frozenset(
-    {"profile_log_device.csv", "tracy_profile_log_host.tracy"}
-)
+# Tracy binary is optional — newer TT-Metal runs omit tracy_profile_log_host.tracy
+# (see manifest.json without tracy_file). Device log + ops_perf is enough to load.
+PERFORMANCE_REPORT_REQUIRED_FILES = frozenset({"profile_log_device.csv"})
 PERFORMANCE_OPS_PERF_PREFIX = "ops_perf_results"
 
 
@@ -617,8 +617,8 @@ def is_valid_profiler_report_dir(directory: Path) -> bool:
 def is_valid_performance_report_dir(directory: Path) -> bool:
     """True when the folder has the files needed to load a performance report.
 
-    Requires profile_log_device.csv, tracy_profile_log_host.tracy, and at least
-    one ops_perf_results* *file* (a directory with that name is not enough).
+    Requires profile_log_device.csv and at least one ops_perf_results* *file*
+    (a directory with that name is not enough). Tracy is optional.
     """
     if not all(
         (directory / name).is_file() for name in PERFORMANCE_REPORT_REQUIRED_FILES
