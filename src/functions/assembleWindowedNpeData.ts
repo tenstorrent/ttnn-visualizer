@@ -37,7 +37,7 @@ const assembleWindowedNpeData = (summary: NpeSummary, window: NpeWindow): NPEDat
     return {
         common_info: summary.common_info,
         chips: summary.chips,
-        zones: summary.zones,
+        zones: summary.zones?.length ? summary.zones : undefined,
         noc_transfers: window.transfers,
         timestep_data: timestepData,
     };
