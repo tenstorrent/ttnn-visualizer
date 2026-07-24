@@ -496,6 +496,37 @@ def test_performance_upload_chromium_style_lands_under_report_folder(
     assert not (report_dir / "perf_run").exists()
 
 
+def test_performance_upload_without_tracy_succeeds(app, client, make_report):
+    """Tracy is optional — device log + ops_perf is enough for upload."""
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    perf_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"])
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        "/api/local/upload/performance",
+        query_string={"instanceId": instance_id},
+        data={
+            "files": [
+                (BytesIO(b"csv,bytes\n"), "perf_run/profile_log_device.csv"),
+                (BytesIO(b"op,perf\n"), "perf_run/ops_perf_results_2026.csv"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+
+    report_dir = perf_root / "perf_run"
+    assert (report_dir / "profile_log_device.csv").is_file()
+    assert any(p.name.startswith("ops_perf_results") for p in report_dir.iterdir())
+    assert not (report_dir / "tracy_profile_log_host.tracy").exists()
+
+
 def test_profiler_upload_rejects_traversal_within_folder(app, client, make_report):
     """Folder upload with a `../`-bearing filename must 422 and stay contained.
 

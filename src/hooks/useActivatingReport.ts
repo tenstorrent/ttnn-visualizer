@@ -9,6 +9,7 @@ import { isActivatingReportAtom } from '../store/app';
 /**
  * Shared lock while a report select/mount awaits confirmation of the active report.
  * Always clears in `finally` so a missed path cannot stick selectors disabled.
+ * Do not wrap long-running remote sync transfers — local pickers bind `loading` to this atom.
  */
 export const useActivatingReport = () => {
     const isActivatingReport = useAtomValue(isActivatingReportAtom);

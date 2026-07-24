@@ -66,6 +66,7 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     ReportLocation,
     StatusMessage,
+    folder_segment_from_remote_path,
     sanitise_path_segment,
     sanitise_remote_host_segment,
 )
@@ -102,6 +103,8 @@ from ttnn_visualizer.stack_trace_source import (
     stack_source_response,
 )
 from ttnn_visualizer.utils import (
+    PERFORMANCE_OPS_PERF_PREFIX,
+    PERFORMANCE_REPORT_REQUIRED_FILES,
     create_path_resolver,
     get_mlir_path,
     get_performance_path,
@@ -1390,8 +1393,8 @@ def create_performance_files():
 
     if not validate_files(
         files,
-        {"profile_log_device.csv", "tracy_profile_log_host.tracy"},
-        pattern="ops_perf_results",
+        PERFORMANCE_REPORT_REQUIRED_FILES,
+        pattern=PERFORMANCE_OPS_PERF_PREFIX,
         folder_name=folder_name,
     ):
         return StatusMessage(
@@ -2038,10 +2041,19 @@ _REPORT_NOT_SYNCED_LOCALLY = (
 def _safe_report_folder_name(
     *, report_name: Optional[str] = None, remote_path: Optional[str] = None
 ) -> Optional[str]:
-    """Single-segment folder name for paths under REMOTE_DATA_DIRECTORY."""
-    candidate = report_name or (Path(remote_path).name if remote_path else "")
+    """Local folder segment under REMOTE_DATA_DIRECTORY — must match sync destinations.
+
+    Prefer ``remote_path`` (same segment sync writes). ``reportName`` is
+    display-only and is only used when ``remote_path`` is omitted.
+    """
+    if remote_path is not None:
+        # Explicit remotePath — never fall back to reportName (avoids mounting an
+        # unrelated folder when the basename is empty / ``.`` / ``..``).
+        return folder_segment_from_remote_path(remote_path)
+    if not report_name:
+        return None
     try:
-        return sanitise_path_segment(candidate)
+        return sanitise_path_segment(report_name)
     except (TypeError, ValueError):
         return None
 
@@ -2074,7 +2086,7 @@ def use_remote_folder():
             remote_path=remote_profiler_folder.remotePath,
         )
         if not profiler_name:
-            return response_bad_request("Invalid report name")
+            return response_bad_request("Invalid report path")
         local_db_path = Path(get_profiler_path(profiler_name, current_app, connection))
         if not is_valid_profiler_report_dir(local_db_path.parent):
             return response_not_found(_REPORT_NOT_SYNCED_LOCALLY)
@@ -2092,7 +2104,7 @@ def use_remote_folder():
             remote_path=remote_performance_folder.remotePath,
         )
         if not performance_name:
-            return response_bad_request("Invalid report name")
+            return response_bad_request("Invalid report path")
         local_perf_path = Path(
             get_performance_path(performance_name, current_app, connection)
         )

@@ -58,7 +58,7 @@ const RemoteSyncButton = ({
                 intent={getSyncIntent(selectedReportFolder, isSyncingReportFolder, isSelectedReportFolderOutdated)}
                 variant={ButtonVariant.MINIMAL}
                 loading={isSyncingReportFolder}
-                disabled={isDisabled}
+                disabled={isDisabled || isSyncingReportFolder}
                 onClick={async () => handleClick(selectedReportFolder)}
                 data-testid={TEST_IDS.REMOTE_SYNC_BUTTON}
             />
