@@ -74,6 +74,7 @@ import { ToastType } from '../definitions/ToastType';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
+import validateNpeSummary from '../functions/validateNpeSummary';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -604,6 +605,10 @@ export const useNpe = (fileName: string | null) => {
 
 const fetchNpeSummary = async (): Promise<NpeSummary> => {
     const { data } = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY);
+    const shapeError = validateNpeSummary(data);
+    if (shapeError) {
+        throw new Error(shapeError);
+    }
     return data;
 };
 
