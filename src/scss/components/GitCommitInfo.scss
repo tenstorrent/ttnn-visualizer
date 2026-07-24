@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+.report-git-info {
+    display: block;
+    font-size: 12px;
+    margin-top: 5px;
+
+    .report-git-info-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0;
+    }
+
+    .report-git-info-icon {
+        margin-left: 3px;
+        margin-bottom: 2px;
+        vertical-align: middle;
+    }
+}
