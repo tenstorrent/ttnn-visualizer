@@ -130,6 +130,10 @@ logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__)
 
+# Sent on JSON endpoints that stream report-derived content so browsers can't
+# MIME-sniff the response as HTML and execute embedded markup.
+_NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
+
 
 def _stack_source_request_params():
     """
@@ -2237,7 +2241,13 @@ def get_npe_summary(instance: Instance):
         logger.exception("Unexpected error building/reading NPE index")
         return response_internal_server_error()
 
-    return Response(orjson.dumps(summary), mimetype="application/json")
+    # nosniff: the body echoes report-derived strings; pinning the type stops a
+    # browser from content-sniffing this JSON as HTML (defence-in-depth XSS).
+    return Response(
+        orjson.dumps(summary),
+        mimetype="application/json",
+        headers=_NOSNIFF_HEADERS,
+    )
 
 
 @api.route("/npe/window", methods=["GET"])
@@ -2268,7 +2278,11 @@ def get_npe_window(instance: Instance):
     if window is None:
         return response_not_found()
 
-    return Response(orjson.dumps(window), mimetype="application/json")
+    return Response(
+        orjson.dumps(window),
+        mimetype="application/json",
+        headers=_NOSNIFF_HEADERS,
+    )
 
 
 @api.route("/mlir", methods=["GET"])

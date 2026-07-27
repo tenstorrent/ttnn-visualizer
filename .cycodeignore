@@ -1,0 +1,4 @@
+# Local, non-shipping developer scratch tooling (profiling probes, throwaway
+# scripts). Not part of the served application — its CLI argv/file handling is
+# not a web-facing input, so exclude from Cycode SAST to avoid false positives.
+_tmp/

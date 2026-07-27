@@ -92,6 +92,7 @@ def test_summary_happy_path(client, make_npe_instance):
     resp = client.get(f"{API}/npe/summary", query_string={"instanceId": instance_id})
 
     assert resp.status_code == 200
+    assert resp.headers.get("X-Content-Type-Options") == "nosniff"
     body = resp.get_json()
     assert body["n_timesteps"] == 4
     assert isinstance(body["timesteps"], dict)
@@ -105,6 +106,7 @@ def test_window_happy_path(client, make_npe_instance):
     )
 
     assert resp.status_code == 200
+    assert resp.headers.get("X-Content-Type-Options") == "nosniff"
     body = resp.get_json()
     assert body["t"] == 1
     assert body["timestep"]["active_transfers"] == [0, 1, 2]
