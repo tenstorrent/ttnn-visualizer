@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { NPEData, NoCType, NpeSummary, NpeWindow, TimestepData } from '../model/NPEModel';
+import { LinkUtilization, NPEData, NoCType, NpeSummary, NpeWindow, TimestepData } from '../model/NPEModel';
 
 // #861 windowed loading: builds the per-step aggregate skeleton once from the
 // summary. Every step carries only its heat-bar aggregates (empty link_demand /
@@ -51,7 +51,12 @@ const assembleWindowedNpeData = (
         timestepData[visitedIndex] = {
             ...base,
             active_transfers: window.timestep.active_transfers,
-            link_demand: window.timestep.link_demand,
+            // Row-clone the link_demand tuples: NPEView's `links` memo annotates
+            // FABRIC_EVENT_SCOPE in place, and the window array lives in the
+            // staleTime:Infinity React Query cache — mutating it directly would
+            // persist stale scope across report revisits. The clone is per-scrub
+            // (a few hundred 6-tuples) and negligible next to the paint cost.
+            link_demand: window.timestep.link_demand.map((row) => [...row] as LinkUtilization),
             avg_link_demand: window.timestep.avg_link_demand,
             avg_link_util: window.timestep.avg_link_util,
             mcast_write_link_util: window.timestep.mcast_write_link_util,

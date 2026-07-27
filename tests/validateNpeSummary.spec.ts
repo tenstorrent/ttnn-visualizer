@@ -33,10 +33,15 @@ describe('validateNpeSummary', () => {
         expect(validateNpeSummary('nope')).toMatch(/not an object/);
     });
 
-    it('rejects a missing or zero timestep count', () => {
+    it('accepts an empty (zero-timestep) trace', () => {
+        expect(validateNpeSummary(validSummary(0))).toBeNull();
+    });
+
+    it('rejects a missing or negative timestep count', () => {
         const s = validSummary();
-        expect(validateNpeSummary({ ...s, n_timesteps: 0 })).toMatch(/timestep count/);
+        expect(validateNpeSummary({ ...s, n_timesteps: -1 })).toMatch(/timestep count/);
         expect(validateNpeSummary({ ...s, n_timesteps: undefined })).toMatch(/timestep count/);
+        expect(validateNpeSummary({ ...s, n_timesteps: 1.5 })).toMatch(/timestep count/);
     });
 
     it('rejects missing timestep columns', () => {

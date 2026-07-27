@@ -75,6 +75,7 @@ import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
 import validateNpeSummary from '../functions/validateNpeSummary';
+import validateNpeWindow from '../functions/validateNpeWindow';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -607,7 +608,9 @@ const fetchNpeSummary = async (): Promise<NpeSummary> => {
     const { data } = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY);
     const shapeError = validateNpeSummary(data);
     if (shapeError) {
-        throw new Error(shapeError);
+        // AxiosError (not a plain Error) so the thrown value matches the hook's
+        // typed error param and any status-aware call site.
+        throw new AxiosError(shapeError, 'ERR_INVALID_RESPONSE');
     }
     return data;
 };
@@ -630,6 +633,10 @@ const fetchNpeWindow = async (t: number): Promise<NpeWindow> => {
     const { data } = await axiosInstance.get<NpeWindow>(Endpoints.NPE_WINDOW, {
         params: { t },
     });
+    const shapeError = validateNpeWindow(data);
+    if (shapeError) {
+        throw new AxiosError(shapeError, 'ERR_INVALID_RESPONSE');
+    }
     return data;
 };
 

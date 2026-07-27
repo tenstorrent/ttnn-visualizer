@@ -114,6 +114,26 @@ def test_read_window_resolves_active_transfers(tmp_path):
     assert idle["transfers"] == []
 
 
+def test_read_summary_empty_trace(tmp_path):
+    # A valid but empty trace: the columnar summary must round-trip to 7 empty
+    # arrays + n_timesteps 0 (not raise), so the client can render an empty state.
+    npe_path = _write_npe(tmp_path, _make_npe_object(n_timesteps=0))
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["n_timesteps"] == 0
+    timesteps = summary["timesteps"]
+    for key in (
+        "start_cycle",
+        "end_cycle",
+        "avg_link_demand",
+        "avg_link_util",
+        "max_link_demand",
+        "mcast_write_link_util",
+        "active_count",
+    ):
+        assert len(timesteps[key]) == 0
+
+
 def test_read_window_out_of_range_returns_none(tmp_path):
     npe_path = _write_npe(tmp_path, _make_npe_object(n_timesteps=2))
     db_path = ensure_index(npe_path)

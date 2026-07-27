@@ -79,6 +79,22 @@ describe('assembleWindowedNpeData', () => {
         expect(skeleton[1].link_demand).toEqual([]);
     });
 
+    it('row-clones link_demand so NPEView annotations do not leak into the cached window', () => {
+        const summary = makeSummary();
+        const window = makeWindow(1);
+        const data = assembleWindowedNpeData(summary, window, skeletonFor(summary));
+        const row = data.timestep_data[1].link_demand[0];
+
+        // Distinct tuple instances, equal contents.
+        expect(row).not.toBe(window.timestep.link_demand[0]);
+        expect(row).toEqual(window.timestep.link_demand[0]);
+
+        // Mutating the assembled row (as NPEView's FABRIC_EVENT_SCOPE write does)
+        // leaves the staleTime:Infinity window array untouched.
+        row[5] = 1;
+        expect(window.timestep.link_demand[0][5]).toBeUndefined();
+    });
+
     it('patches at the requested render index when the window is stale (keeps the prior frame)', () => {
         // Seek to step 2 while the in-flight window still holds step 1's data:
         // the rendered step (2) shows the previous transfers instead of empty.

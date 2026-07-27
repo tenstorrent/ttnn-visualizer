@@ -7,6 +7,7 @@ import { Callout, Intent, Spinner } from '@blueprintjs/core';
 import { useNpeSummary, useNpeWindow } from '../../hooks/useAPI';
 import assembleWindowedNpeData, { buildTimestepSkeleton } from '../../functions/assembleWindowedNpeData';
 import getResponseError from '../../functions/getResponseError';
+import { NpeSummary } from '../../model/NPEModel';
 import NPEView from './NPEViewComponent';
 
 interface NpeWindowedViewProps {
@@ -18,7 +19,7 @@ interface NpeWindowedViewProps {
 // updates `selectedTimestep`, which refetches the next window.
 const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
     const [selectedTimestep, setSelectedTimestep] = useState(0);
-    const didInitTimestep = useRef(false);
+    const initialisedSummary = useRef<NpeSummary | null>(null);
     const {
         data: summary,
         isLoading: isLoadingSummary,
@@ -27,15 +28,17 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
     } = useNpeSummary(fileName);
     const { data: npeWindow, isError: isWindowError, error: windowError } = useNpeWindow(fileName, selectedTimestep);
 
-    // Open on the first populated timestep (t=0 is commonly idle).
+    // Reset + open on the first populated timestep whenever a NEW summary arrives
+    // (t=0 is commonly idle). Keying off summary identity — not a one-shot flag —
+    // re-runs on a same-name re-upload (the mount `key` is unchanged, but the
+    // refetched summary is a fresh object), which re-clamps `selectedTimestep`. A
+    // stale index left over from a longer previous report would otherwise point
+    // past the new trace and 404 every window with no way back.
     useEffect(() => {
-        if (summary && !didInitTimestep.current) {
-            didInitTimestep.current = true;
+        if (summary && initialisedSummary.current !== summary) {
+            initialisedSummary.current = summary;
             const firstActive = summary.timesteps.active_count.findIndex((count) => count > 0);
-            if (firstActive > 0) {
-                // eslint-disable-next-line react-hooks/set-state-in-effect
-                setSelectedTimestep(firstActive);
-            }
+            setSelectedTimestep(firstActive > 0 ? firstActive : 0);
         }
     }, [summary]);
 
@@ -66,6 +69,19 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
                 title='Unable to load NPE report'
             >
                 {getResponseError(summaryError)}
+            </Callout>
+        );
+    }
+
+    // A valid but empty trace has nothing to scrub — say so rather than spin
+    // forever waiting on a window that will never resolve (t=0 is out of range).
+    if (summary && summary.n_timesteps === 0) {
+        return (
+            <Callout
+                intent={Intent.PRIMARY}
+                title='Empty NPE report'
+            >
+                This report contains no timesteps to display.
             </Callout>
         );
     }

@@ -193,19 +193,26 @@ export interface TimestepData {
     };
 }
 
+// Columnar summary wire contract (#861): the keys backing NpeTimestepColumns.
+// Single source of truth so the type, the client-side shape guard, and the
+// skeleton builder can't drift apart.
+export const NPE_SUMMARY_COLUMN_KEYS = [
+    'start_cycle',
+    'end_cycle',
+    'avg_link_demand',
+    'avg_link_util',
+    'max_link_demand',
+    'mcast_write_link_util',
+    'active_count',
+] as const;
+
 // Per-step aggregates for the timeline heat bar / scrubber, sent as parallel
 // arrays (columnar) rather than one object per step so the ~54k-step summary
 // stays small (#861). Index each array by timestep `t`; `link_demand` and
 // transfers are fetched per window.
-export interface NpeTimestepColumns {
-    start_cycle: number[];
-    end_cycle: number[];
-    avg_link_demand: number[];
-    avg_link_util: number[];
-    max_link_demand: number[];
-    mcast_write_link_util: number[];
-    active_count: number[];
-}
+export type NpeTimestepColumns = {
+    [K in (typeof NPE_SUMMARY_COLUMN_KEYS)[number]]: number[];
+};
 
 export interface NpeSummary {
     common_info: CommonInfo;

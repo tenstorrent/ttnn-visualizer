@@ -2,17 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { NpeSummary } from '../model/NPEModel';
-
-const SUMMARY_COLUMNS = [
-    'start_cycle',
-    'end_cycle',
-    'avg_link_demand',
-    'avg_link_util',
-    'max_link_demand',
-    'mcast_write_link_util',
-    'active_count',
-] as const;
+import { NPE_SUMMARY_COLUMN_KEYS, NpeSummary } from '../model/NPEModel';
 
 // Guards the columnar wire contract (#861): the windowed summary indexes every
 // column by timestep `t`, so a partial / corrupt / untrusted response with a
@@ -26,7 +16,10 @@ export default function validateNpeSummary(data: unknown): string | null {
     }
 
     const summary = data as Partial<NpeSummary>;
-    if (typeof summary.n_timesteps !== 'number' || !Number.isInteger(summary.n_timesteps) || summary.n_timesteps < 1) {
+    // Allow 0 — an empty (but valid) trace is a legitimate, renderable-as-empty
+    // state that NpeWindowedView surfaces explicitly; only negative / non-integer
+    // counts are malformed.
+    if (typeof summary.n_timesteps !== 'number' || !Number.isInteger(summary.n_timesteps) || summary.n_timesteps < 0) {
         return 'NPE summary is missing a valid timestep count.';
     }
 
@@ -35,7 +28,7 @@ export default function validateNpeSummary(data: unknown): string | null {
         return 'NPE summary is missing timestep columns.';
     }
 
-    for (const key of SUMMARY_COLUMNS) {
+    for (const key of NPE_SUMMARY_COLUMN_KEYS) {
         const column = columns[key];
         if (!Array.isArray(column) || column.length !== summary.n_timesteps) {
             return `NPE summary column "${key}" is missing or length-mismatched (expected ${summary.n_timesteps}).`;
