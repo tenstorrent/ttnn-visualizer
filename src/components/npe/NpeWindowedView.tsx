@@ -86,7 +86,7 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
         return (
             <div className='npe-windowed-loading'>
                 <Spinner size={20} />
-                <span>{isLoadingSummary ? 'Building index…' : 'Loading timestep…'}</span>
+                <span>{isLoadingSummary ? 'Processing…' : 'Loading timestep…'}</span>
             </div>
         );
     }
