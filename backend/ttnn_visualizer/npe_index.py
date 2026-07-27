@@ -42,7 +42,7 @@ _BUILD_LOCK = threading.Lock()
 INDEX_SUFFIX = ".npeidx.sqlite"
 
 # Bump when the schema or build logic changes so stale caches are rebuilt.
-INDEX_VERSION = 3
+INDEX_VERSION = 4
 
 _TRANSFER_INSERT_BATCH = 5000
 
@@ -54,6 +54,10 @@ _TRANSFER_QUERY_CHUNK = 900
 # in the frontend model. Used to precompute each step's worst-link demand for the
 # timeline heat bar, since the source JSON doesn't carry a per-step scalar.
 _LINK_DEMAND_INDEX = 4
+
+# Optional 6th slot: the client-computed fabric-event scope. Real reports omit it
+# (rows are 5-tuples); see _truncate_link_demand for why a trailing null is dropped.
+_FABRIC_EVENT_SCOPE_INDEX = 5
 
 # The UI never renders more than 3 fractional digits (formatPercentage(..., 3)),
 # so store floats truncated to match — this trims the up-front summary payload by
@@ -82,6 +86,16 @@ def _truncate_link_demand(link_demand: list) -> list:
             entry[_LINK_DEMAND_INDEX] = (
                 int(entry[_LINK_DEMAND_INDEX] * _TRUNCATE_SCALE) / _TRUNCATE_SCALE
             )
+        # Drop an absent fabric scope rather than ship a trailing null: the
+        # frontend reads slot 5 as "unset" only when it's `undefined` (a 5-tuple),
+        # so a serialized `null` would wrongly count as a present scope and
+        # mis-annotate FABRIC/LOCAL/BOTH. Real reports are 5-tuples; this guards
+        # one that carries an explicit null.
+        if (
+            len(entry) > _FABRIC_EVENT_SCOPE_INDEX
+            and entry[_FABRIC_EVENT_SCOPE_INDEX] is None
+        ):
+            del entry[_FABRIC_EVENT_SCOPE_INDEX:]
     return link_demand
 
 

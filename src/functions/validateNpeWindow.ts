@@ -2,7 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { NpeWindow } from '../model/NPEModel';
+import { NPE_LINK, NoCTransfer, NpeWindow } from '../model/NPEModel';
+
+// A link_demand row must carry at least [chip, y, x, noc_id, demand]; the 6th
+// fabric-scope slot is optional.
+const MIN_LINK_DEMAND_ROW_LENGTH = NPE_LINK.DEMAND + 1;
 
 // Symmetric guard to validateNpeSummary (#861): the per-timestep window carries
 // the heavy transfers + link_demand that NPEView indexes without null-checks
@@ -35,6 +39,34 @@ export default function validateNpeWindow(data: unknown): string | null {
 
     if (!Array.isArray(timestep.link_demand)) {
         return 'NPE window timestep is missing its link_demand array.';
+    }
+
+    // Per-row shape: NPEView indexes each row positionally and calls string
+    // methods on NOC_ID, so a short row or non-string noc-id throws mid-render
+    // rather than surfacing here as a friendly error.
+    for (const row of timestep.link_demand) {
+        if (!Array.isArray(row) || row.length < MIN_LINK_DEMAND_ROW_LENGTH) {
+            return `NPE window link_demand row is malformed (expected at least ${MIN_LINK_DEMAND_ROW_LENGTH} entries).`;
+        }
+        if (typeof row[NPE_LINK.NOC_ID] !== 'string') {
+            return 'NPE window link_demand row has a non-string NOC id.';
+        }
+        if (typeof row[NPE_LINK.DEMAND] !== 'number') {
+            return 'NPE window link_demand row has a non-numeric demand.';
+        }
+    }
+
+    // Transfers are resolved by id and their route walked without guards.
+    for (const transfer of window.transfers as NoCTransfer[]) {
+        if (!transfer || typeof transfer !== 'object') {
+            return 'NPE window has a malformed transfer entry.';
+        }
+        if (typeof transfer.id !== 'number') {
+            return 'NPE window transfer is missing a numeric id.';
+        }
+        if (!Array.isArray(transfer.route)) {
+            return 'NPE window transfer is missing its route array.';
+        }
     }
 
     return null;

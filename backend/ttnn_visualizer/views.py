@@ -2221,6 +2221,12 @@ def get_npe_data(instance: Instance):
     return Response(npe_data, mimetype="application/json")
 
 
+# NOTE: /npe/summary and /npe/window are intentionally NOT @local_only yet. The
+# windowed path is DEV-gated on the frontend (src/routes/NPE.tsx), so it isn't
+# reachable in the hosted build today. Promoting it to hosted requires an explicit
+# hosted-safety decision — the @local_only boundary plus build/RSS/disk quotas,
+# since ensure_index() parses the whole report and writes a large sidecar. Tracked
+# in #1802. SAST/Copilot flag the missing gate; that's this known deferral.
 @api.route("/npe/summary", methods=["GET"])
 @with_instance
 @timer

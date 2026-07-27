@@ -33,9 +33,7 @@ def _make_npe_object(n_transfers: int = 3, n_timesteps: int = 4) -> dict:
                 "start_cycle": float(t * 10),
                 "end_cycle": float(t * 10 + 9),
                 "active_transfers": active,
-                "link_demand": (
-                    [[0, 0, 0, "NOC0_EAST", 224.8, None]] if active else []
-                ),
+                "link_demand": [[0, 0, 0, "NOC0_EAST", 224.8]] if active else [],
                 "noc": {
                     "NOC0": {"avg_link_demand": 12.3, "avg_link_util": 7.8},
                     "NOC1": {"avg_link_demand": 0.0, "avg_link_util": 0.0},

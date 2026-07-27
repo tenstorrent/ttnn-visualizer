@@ -45,8 +45,10 @@ def _make_npe_object(n_transfers: int = 3, n_timesteps: int = 4) -> dict:
                 "start_cycle": float(t * 10),
                 "end_cycle": float(t * 10 + 9),
                 "active_transfers": active,
+                # Real reports emit 5-tuples [chip, y, x, noc_id, demand]; the
+                # fabric-event scope (slot 5) is computed client-side, not stored.
                 "link_demand": (
-                    [[0, 0, 0, "NOC0_EAST", 224.80001831054688, None]] if active else []
+                    [[0, 0, 0, "NOC0_EAST", 224.80001831054688]] if active else []
                 ),
                 "noc": {
                     "NOC0": {"avg_link_demand": 12.3456, "avg_link_util": 7.891},
@@ -134,6 +136,21 @@ def test_read_summary_empty_trace(tmp_path):
         assert len(timesteps[key]) == 0
 
 
+def test_read_window_strips_trailing_null_scope(tmp_path):
+    # A report that carries an explicit null fabric-scope must reach the wire as a
+    # 5-tuple, not [..., null] — the frontend reads slot 5 as unset only when it's
+    # absent (undefined), and a null would mis-annotate the scope.
+    obj = _make_npe_object(n_transfers=1, n_timesteps=2)
+    obj["timestep_data"][1]["link_demand"] = [[0, 0, 0, "NOC0_EAST", 10.0, None]]
+    db_path = ensure_index(_write_npe(tmp_path, obj))
+
+    window = read_window(db_path, 1)
+    assert window is not None
+    row = window["timestep"]["link_demand"][0]
+    assert len(row) == 5
+    assert row == [0, 0, 0, "NOC0_EAST", 10.0]
+
+
 def test_read_window_out_of_range_returns_none(tmp_path):
     npe_path = _write_npe(tmp_path, _make_npe_object(n_timesteps=2))
     db_path = ensure_index(npe_path)
@@ -147,7 +164,7 @@ def test_read_window_chunks_large_active_id_list(tmp_path):
     n = 2500
     obj = _make_npe_object(n_transfers=n, n_timesteps=1)
     obj["timestep_data"][0]["active_transfers"] = list(range(n))
-    obj["timestep_data"][0]["link_demand"] = [[0, 0, 0, "NOC0_EAST", 10.0, None]]
+    obj["timestep_data"][0]["link_demand"] = [[0, 0, 0, "NOC0_EAST", 10.0]]
     db_path = ensure_index(_write_npe(tmp_path, obj))
 
     window = read_window(db_path, 0)

@@ -7,7 +7,7 @@ import validateNpeWindow from '../src/functions/validateNpeWindow';
 
 const validWindow = () => ({
     t: 3,
-    transfers: [],
+    transfers: [{ id: 0, route: [] }],
     timestep: {
         active_transfers: [1, 2],
         link_demand: [[0, 0, 0, 'NOC0_IN', 12.5, undefined]],
@@ -53,5 +53,30 @@ describe('validateNpeWindow', () => {
         expect(validateNpeWindow({ ...w, timestep: { ...w.timestep, link_demand: 'nope' } })).toMatch(
             /link_demand array/,
         );
+    });
+
+    it('accepts a 5-tuple link_demand row (real report shape, no scope slot)', () => {
+        const w = validWindow();
+        w.timestep.link_demand = [[0, 0, 0, 'NOC0_IN', 12.5]] as never;
+        expect(validateNpeWindow(w)).toBeNull();
+    });
+
+    it('rejects a malformed link_demand row', () => {
+        const w = validWindow();
+        expect(validateNpeWindow({ ...w, timestep: { ...w.timestep, link_demand: [[0, 0, 0, 'NOC0_IN']] } })).toMatch(
+            /link_demand row is malformed/,
+        );
+        expect(validateNpeWindow({ ...w, timestep: { ...w.timestep, link_demand: [[0, 0, 0, 42, 12.5]] } })).toMatch(
+            /non-string NOC id/,
+        );
+        expect(
+            validateNpeWindow({ ...w, timestep: { ...w.timestep, link_demand: [[0, 0, 0, 'NOC0_IN', 'x']] } }),
+        ).toMatch(/non-numeric demand/);
+    });
+
+    it('rejects malformed transfers', () => {
+        const w = validWindow();
+        expect(validateNpeWindow({ ...w, transfers: [{ route: [] }] })).toMatch(/numeric id/);
+        expect(validateNpeWindow({ ...w, transfers: [{ id: 0 }] })).toMatch(/route array/);
     });
 });
