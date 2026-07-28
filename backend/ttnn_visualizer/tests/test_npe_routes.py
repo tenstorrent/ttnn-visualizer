@@ -14,10 +14,22 @@ from pathlib import Path
 
 import orjson
 import pytest
+import zstd
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
 
 API = "/api"
+
+
+@pytest.fixture(autouse=True)
+def local_mode(app):
+    # The windowed routes are @local_only, and the shared test app runs in
+    # SERVER_MODE. Default every case in this module to local mode so the
+    # functional contract is exercised; the 403 case re-enables SERVER_MODE.
+    previous = app.config["SERVER_MODE"]
+    app.config["SERVER_MODE"] = False
+    yield
+    app.config["SERVER_MODE"] = previous
 
 
 def _make_npe_object(n_transfers: int = 3, n_timesteps: int = 4) -> dict:
@@ -147,6 +159,32 @@ def test_summary_malformed_report_is_422(client, make_npe_instance):
     assert resp.status_code == 422
 
 
+def test_summary_corrupt_zst_is_422(client, make_npe_instance):
+    # .zst is the production format; a truncated/corrupt upload raises zstd.Error,
+    # which is NOT a ValueError — without the explicit arm it fell through to 500.
+    instance_id = make_npe_instance(b"not-a-valid-zstd-frame", suffix=".zst")
+    resp = client.get(f"{API}/npe/summary", query_string={"instanceId": instance_id})
+    assert resp.status_code == 422
+
+
+def test_window_corrupt_zst_is_422(client, make_npe_instance):
+    instance_id = make_npe_instance(b"not-a-valid-zstd-frame", suffix=".zst")
+    resp = client.get(
+        f"{API}/npe/window", query_string={"instanceId": instance_id, "t": 0}
+    )
+    assert resp.status_code == 422
+
+
 def test_summary_missing_instance_id_is_400(client):
     resp = client.get(f"{API}/npe/summary")
     assert resp.status_code == 400
+
+
+def test_summary_forbidden_under_server_mode(client, make_npe_instance, app):
+    # @local_only: the windowed routes must refuse SERVER_MODE (the endpoint is
+    # blueprint-registered unconditionally, so the client DEV-gate can't protect
+    # it on a hosted deploy — see views.py comment).
+    instance_id = make_npe_instance(orjson.dumps(_make_npe_object(n_timesteps=2)))
+    app.config["SERVER_MODE"] = True
+    resp = client.get(f"{API}/npe/summary", query_string={"instanceId": instance_id})
+    assert resp.status_code == 403

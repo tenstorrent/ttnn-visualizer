@@ -191,7 +191,13 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
     )
 
 
-def _write_index(conn, obj, transfers, timesteps, source_mtime_ns) -> None:
+def _write_index(
+    conn: sqlite3.Connection,
+    obj: dict,
+    transfers: list,
+    timesteps: list,
+    source_mtime_ns: int,
+) -> None:
     try:
         # PoC build-time pragmas: durability is irrelevant for a derived cache.
         conn.execute("PRAGMA journal_mode = OFF")
@@ -227,8 +233,17 @@ def _write_index(conn, obj, transfers, timesteps, source_mtime_ns) -> None:
         )
 
         batch = []
+        skipped_no_id = 0
         for transfer in transfers:
-            batch.append((transfer["id"], orjson.dumps(transfer)))
+            tid = transfer.get("id")
+            if tid is None:
+                # A transfer with no id can't be resolved (active_transfers are id
+                # lists) and id is the table PK — skip it rather than KeyError the
+                # whole build, which would cache a permanent 500 for the report.
+                # The whole-file path renders such reports, so we match that.
+                skipped_no_id += 1
+                continue
+            batch.append((tid, orjson.dumps(transfer)))
             if len(batch) >= _TRANSFER_INSERT_BATCH:
                 conn.executemany(
                     "INSERT OR REPLACE INTO transfer (id, blob) VALUES (?, ?)", batch
@@ -238,6 +253,8 @@ def _write_index(conn, obj, transfers, timesteps, source_mtime_ns) -> None:
             conn.executemany(
                 "INSERT OR REPLACE INTO transfer (id, blob) VALUES (?, ?)", batch
             )
+        if skipped_no_id:
+            logger.warning(f"NPE index: skipped {skipped_no_id} transfer(s) with no id")
 
         timestep_rows = []
         for t, step in enumerate(timesteps):

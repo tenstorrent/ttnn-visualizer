@@ -9,11 +9,14 @@ shape, freshness/version invalidation, windowed reads, the chunked IN-list for
 busy timesteps, and the single-flight build lock under concurrency.
 """
 
+import os
 import threading
+import time
 from pathlib import Path
 
 import orjson
 import pytest
+import zstd
 from ttnn_visualizer import npe_index
 from ttnn_visualizer.npe_index import (
     INDEX_VERSION,
@@ -71,6 +74,12 @@ def _make_npe_object(n_transfers: int = 3, n_timesteps: int = 4) -> dict:
 def _write_npe(tmp_path: Path, obj: dict, name: str = "trace.json") -> str:
     path = tmp_path / name
     path.write_bytes(orjson.dumps(obj))
+    return str(path)
+
+
+def _write_npe_zst(tmp_path: Path, obj: dict, name: str = "trace.npeviz.zst") -> str:
+    path = tmp_path / name
+    path.write_bytes(zstd.compress(orjson.dumps(obj)))
     return str(path)
 
 
@@ -170,6 +179,51 @@ def test_read_window_chunks_large_active_id_list(tmp_path):
     window = read_window(db_path, 0)
     assert window is not None
     assert len(window["transfers"]) == n
+
+
+def test_zst_source_round_trips(tmp_path):
+    # Production reports are zstd-compressed (.npeviz.zst); the .json fixtures skip
+    # the zstd.uncompress branch of _load_npe_object entirely, so cover it here.
+    npe_path = _write_npe_zst(tmp_path, _make_npe_object(n_transfers=3, n_timesteps=4))
+    db_path = ensure_index(npe_path)
+
+    summary = read_summary(db_path)
+    assert summary["n_timesteps"] == 4
+    window = read_window(db_path, 1)
+    assert window is not None
+    assert len(window["transfers"]) == 3
+
+
+def test_index_rebuilds_on_source_mtime_change(tmp_path):
+    # The re-upload path: same filename, new contents. Freshness keys on
+    # source_mtime_ns, so a rewritten file must invalidate the cache even though
+    # INDEX_VERSION is unchanged.
+    npe_path = _write_npe(tmp_path, _make_npe_object(n_timesteps=3))
+    assert read_summary(ensure_index(npe_path))["n_timesteps"] == 3
+
+    # Rewrite the same path with a different shape; force a strictly newer mtime so
+    # the test doesn't flake when both writes land in the same filesystem tick.
+    Path(npe_path).write_bytes(orjson.dumps(_make_npe_object(n_timesteps=7)))
+    future = time.time() + 10
+    os.utime(npe_path, (future, future))
+
+    assert read_summary(ensure_index(npe_path))["n_timesteps"] == 7
+
+
+def test_build_skips_transfer_without_id(tmp_path):
+    # A transfer missing 'id' must not KeyError the whole build — that failure is
+    # cached and would 500 the report permanently on both routes, while the
+    # whole-file path renders it. Skip the malformed transfer, keep the rest.
+    obj = _make_npe_object(n_transfers=2, n_timesteps=2)
+    obj["noc_transfers"].append(
+        {"src": [0, 0, 0], "dst": [[0, 1, 1]], "total_bytes": 64, "route": []}
+    )
+    db_path = ensure_index(_write_npe(tmp_path, obj))  # must not raise
+
+    assert read_summary(db_path)["n_timesteps"] == 2
+    window = read_window(db_path, 1)
+    assert window is not None
+    assert {tr["id"] for tr in window["transfers"]} == {0, 1}
 
 
 def test_index_rebuilds_on_version_bump(tmp_path, monkeypatch):

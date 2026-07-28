@@ -9,11 +9,30 @@ For the windowed renderer, per-scrub DOM cost scales with:
 This prints the distribution of both plus the busiest step so we can reason
 about the real bottleneck.
 """
+
+import os
 import statistics
 import sys
 
 import orjson
 import zstd
+
+
+def _server_mode_enabled() -> bool:
+    return os.getenv("SERVER_MODE", "false").lower() in ("1", "t", "true", "yes")
+
+
+# Local-only developer tool: it opens an arbitrary caller-supplied report path,
+# which is a legitimate CLI arg on an engineer's own machine but must never run
+# in the hosted/multi-user deployment. Refuse under SERVER_MODE, mirroring the
+# app's @local_only boundary.
+if _server_mode_enabled():
+    sys.exit(
+        "npe_render_probe is a local-only dev tool; it refuses to run under SERVER_MODE."
+    )
+
+if len(sys.argv) < 2:
+    sys.exit("usage: python devtools/npe_render_probe.py <report.(npeviz.)zst>")
 
 path = sys.argv[1]
 raw = zstd.uncompress(open(path, "rb").read())

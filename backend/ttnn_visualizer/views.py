@@ -2221,14 +2221,15 @@ def get_npe_data(instance: Instance):
     return Response(npe_data, mimetype="application/json")
 
 
-# NOTE: /npe/summary and /npe/window are intentionally NOT @local_only yet. The
-# windowed path is DEV-gated on the frontend (src/routes/NPE.tsx), so it isn't
-# reachable in the hosted build today. Promoting it to hosted requires an explicit
-# hosted-safety decision — the @local_only boundary plus build/RSS/disk quotas,
-# since ensure_index() parses the whole report and writes a large sidecar. Tracked
-# in #1802. SAST/Copilot flag the missing gate; that's this known deferral.
+# @local_only: ensure_index() parses the whole report and writes a large sidecar
+# DB. The SPA only calls these routes from a DEV build, but the blueprint registers
+# them unconditionally, so on a hosted (SERVER_MODE) deploy an untrusted caller
+# could still reach ensure_index() directly — a DoS + disk-growth vector. The gate
+# returns 403 under SERVER_MODE, matching the feature's local-only scope; hosted
+# promotion (build/RSS/disk quotas) is tracked in #1802.
 @api.route("/npe/summary", methods=["GET"])
 @with_instance
+@local_only
 @timer
 def get_npe_summary(instance: Instance):
     if not instance.npe_path or not Path(instance.npe_path).exists():
@@ -2240,7 +2241,10 @@ def get_npe_summary(instance: Instance):
         summary = read_summary(db_path)
     except FileNotFoundError:
         return response_not_found()
-    except orjson.JSONDecodeError:
+    except (orjson.JSONDecodeError, zstd.Error):
+        # A corrupt/truncated upload — bad JSON or an undecodable .zst — is a
+        # malformed report (422), not a server fault. zstd.Error is NOT a
+        # ValueError, so it must be named or it falls through to the 500 arm.
         logger.exception("Malformed NPE report while building index")
         return response_unprocessable_entity()
     except Exception:
@@ -2258,6 +2262,7 @@ def get_npe_summary(instance: Instance):
 
 @api.route("/npe/window", methods=["GET"])
 @with_instance
+@local_only
 @timer
 def get_npe_window(instance: Instance):
     if not instance.npe_path or not Path(instance.npe_path).exists():
@@ -2274,7 +2279,9 @@ def get_npe_window(instance: Instance):
         window = read_window(db_path, timestep)
     except FileNotFoundError:
         return response_not_found()
-    except orjson.JSONDecodeError:
+    except (orjson.JSONDecodeError, zstd.Error):
+        # See get_npe_summary: a corrupt/truncated upload is a 422, and zstd.Error
+        # isn't a ValueError so it needs naming to avoid the 500 fall-through.
         logger.exception("Malformed NPE report while building index")
         return response_unprocessable_entity()
     except Exception:
