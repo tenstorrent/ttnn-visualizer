@@ -3,12 +3,12 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { AxiosError, AxiosRequestConfig } from 'axios';
-import { QueryClient, useQueries, useQuery } from '@tanstack/react-query';
+import { QueryClient, keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import Ajv from 'ajv';
-import axiosInstance from '../libs/axiosInstance';
+import axiosInstance, { getOrCreateInstanceId } from '../libs/axiosInstance';
 import {
     Buffer,
     BufferChunk,
@@ -50,7 +50,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { NPEData, NPEManifestEntry } from '../model/NPEModel';
+import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
 import {
@@ -74,6 +74,8 @@ import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
 import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
+import validateNpeSummary from '../functions/validateNpeSummary';
+import validateNpeWindow from '../functions/validateNpeWindow';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -435,7 +437,12 @@ export const useGetNPEManifest = () => {
     });
 };
 
-export const NPE_OP_TRACE_QUERY_KEY = ['fetch-npe'] as const;
+// Exported so the re-upload cache-bust in NPEFileLoader references the same keys
+// as the hooks rather than duplicating magic strings (AGENTS.md). #861.
+export const NPE_QUERY_KEY = 'fetch-npe';
+export const NPE_SUMMARY_QUERY_KEY = 'npe-summary';
+export const NPE_WINDOW_QUERY_KEY = 'npe-window';
+export const NPE_OP_TRACE_QUERY_KEY = [NPE_QUERY_KEY] as const;
 export const NPE_TIMELINE_QUERY_KEY = ['get-npe-timeline'] as const;
 
 const NPE_QUERY_KEYS = [NPE_OP_TRACE_QUERY_KEY, NPE_TIMELINE_QUERY_KEY] as const;
@@ -664,6 +671,59 @@ export const useNpe = (fileName: string | null) => {
         retry: false,
         staleTime: 30000,
         enabled: fileName !== null,
+    });
+};
+
+const fetchNpeSummary = async (signal?: AbortSignal): Promise<NpeSummary> => {
+    const { data } = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY, { signal });
+    const shapeError = validateNpeSummary(data);
+    if (shapeError) {
+        // AxiosError (not a plain Error) so the thrown value matches the hook's
+        // typed error param and any status-aware call site.
+        throw new AxiosError(shapeError, 'ERR_INVALID_RESPONSE');
+    }
+    return data;
+};
+
+// #861 windowed loading: per-step aggregates for the whole trace, small enough
+// to load once; transfers/link_demand come from useNpeWindow per visited step.
+// instanceId is part of the key because staleTime is Infinity — a bare basename
+// key would serve one instance's cached report to another on a name collision.
+export const useNpeSummary = (fileName: string | null) => {
+    return useQuery<NpeSummary, AxiosError>({
+        queryFn: ({ signal }) => fetchNpeSummary(signal),
+        queryKey: [NPE_SUMMARY_QUERY_KEY, getOrCreateInstanceId(), fileName],
+        retry: false,
+        staleTime: Infinity,
+        enabled: fileName !== null,
+    });
+};
+
+const fetchNpeWindow = async (t: number, signal?: AbortSignal): Promise<NpeWindow> => {
+    const { data } = await axiosInstance.get<NpeWindow>(Endpoints.NPE_WINDOW, {
+        params: { t },
+        // React Query aborts this signal when the query is superseded; passing it
+        // lets axios cancel abandoned seeks during play/scrub instead of letting a
+        // storm of in-flight /npe/window requests all resolve and churn the cache.
+        signal,
+    });
+    const shapeError = validateNpeWindow(data);
+    if (shapeError) {
+        throw new AxiosError(shapeError, 'ERR_INVALID_RESPONSE');
+    }
+    return data;
+};
+
+export const useNpeWindow = (fileName: string | null, t: number | null) => {
+    return useQuery<NpeWindow, AxiosError>({
+        queryFn: ({ signal }) => fetchNpeWindow(t!, signal),
+        queryKey: [NPE_WINDOW_QUERY_KEY, getOrCreateInstanceId(), fileName, t],
+        retry: false,
+        staleTime: Infinity,
+        // Keep the previous window visible while a seek's fetch is in flight so
+        // the graph doesn't flash empty on every scrub.
+        placeholderData: keepPreviousData,
+        enabled: fileName !== null && t !== null,
     });
 };
 

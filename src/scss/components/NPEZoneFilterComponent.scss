@@ -78,3 +78,9 @@
         }
     }
 }
+
+// The filter dropdowns portal to <body>, so raise them above the fixed
+// `.zones-renderer` overlay ($z-index-3-overlay) they launch from.
+.npe-zone-filter-portal {
+    z-index: variables.$z-index-4-popover;
+}

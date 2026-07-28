@@ -25,7 +25,12 @@ from ttnn_visualizer.exceptions import (
     RemoteConnectionException,
     SSHException,
 )
-from ttnn_visualizer.models import Instance, RemoteConnection, RemoteReportFolder
+from ttnn_visualizer.models import (
+    Instance,
+    RemoteConnection,
+    RemoteReportFolder,
+    folder_segment_from_remote_path,
+)
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
 from ttnn_visualizer.utils import (
@@ -1156,6 +1161,18 @@ def get_remote_profiler_folders(
     return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
 
 
+def _safe_sync_destination_segment(remote_folder_path: str) -> str:
+    """Collapse remotePath to a single local folder segment; reject ``.`` / ``..`` / empty."""
+    segment = folder_segment_from_remote_path(remote_folder_path)
+    if not segment:
+        raise RemoteConnectionException(
+            message="Invalid report path",
+            status=ConnectionTestStates.FAILED,
+            http_status_code=HTTPStatus.BAD_REQUEST,
+        )
+    return segment
+
+
 @remote_exception_handler
 def sync_remote_profiler_folders(
     remote_connection: RemoteConnection,
@@ -1165,7 +1182,7 @@ def sync_remote_profiler_folders(
     sid=None,
 ) -> SyncMethod:
     """Main function to sync test folders, handles both compressed and individual syncs."""
-    profiler_folder = Path(remote_folder_path).name
+    profiler_folder = _safe_sync_destination_segment(remote_folder_path)
     destination_dir = Path(
         current_app.config["REPORT_DATA_DIRECTORY"],
         path_prefix,
@@ -1189,7 +1206,7 @@ def sync_remote_performance_folders(
     sid=None,
 ) -> SyncMethod:
     remote_folder_path = performance.remotePath
-    profile_folder = Path(remote_folder_path).name
+    profile_folder = _safe_sync_destination_segment(remote_folder_path)
     destination_dir = Path(
         current_app.config["REPORT_DATA_DIRECTORY"],
         path_prefix,

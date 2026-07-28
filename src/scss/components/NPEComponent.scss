@@ -12,6 +12,13 @@
     position: absolute;
 }
 
+.npe-windowed-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 0;
+}
+
 .npe {
     position: relative;
 
@@ -19,6 +26,12 @@
         position: sticky;
         top: 0;
         background-color: $tt-grey-2;
+
+        // Route-arrow SVGs in the top chip row carry $z-index-2-interactive and
+        // overflow their cells, so the sticky header (auto z-index) paints under
+        // them. Sit one level above the interactive layer — but still below the
+        // overlay tier so the metadata panel / zone filter stay on top.
+        z-index: variables.$z-index-2-interactive + 1;
     }
 
     .npe-controls {

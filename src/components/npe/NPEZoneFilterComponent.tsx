@@ -131,6 +131,7 @@ const NPEZoneFilterComponent = ({
                 <ButtonGroup className='zone-filters'>
                     <Select
                         className='device-selector'
+                        popoverProps={{ portalClassName: 'npe-zone-filter-portal' }}
                         items={uniqueDeviceIdList}
                         itemRenderer={deviceItemRenderer}
                         filterable
@@ -155,6 +156,7 @@ const NPEZoneFilterComponent = ({
                     </Select>
                     <Select
                         className='core-selector'
+                        popoverProps={{ portalClassName: 'npe-zone-filter-portal' }}
                         items={coreAddressList}
                         itemRenderer={coreItemRenderer}
                         disabled={selectedDeviceId === null}

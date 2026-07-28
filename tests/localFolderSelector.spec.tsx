@@ -341,6 +341,38 @@ it('handles valid performance report upload', async () => {
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
 });
 
+it('handles valid performance report upload without tracy', async () => {
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+
+    const mockOps = createMockFile('ops_perf_results_2025_05_02_01_23_09.csv', 'text/csv');
+    const mockDevice = createMockFile('profile_log_device.csv', 'text/csv');
+
+    const input = screen.getByTestId(TEST_IDS.LOCAL_PERFORMANCE_UPLOAD);
+
+    fireEvent.change(input, { target: { files: [mockOps, mockDevice] } });
+
+    await waitFor(() => expect(input.nextElementSibling?.textContent).to.equal('2 files selected'), WAIT_FOR_OPTIONS);
+
+    await waitFor(
+        () =>
+            expect(screen.getByTestId(TEST_IDS.LOCAL_PERFORMANCE_STATUS).textContent).to.equal(
+                'Files uploaded successfully',
+            ),
+        WAIT_FOR_OPTIONS,
+    );
+
+    await waitFor(() => expect(input.nextElementSibling?.textContent).to.equal('2 files uploaded'), WAIT_FOR_OPTIONS);
+
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(MOCK_FOLDER),
+        WAIT_FOR_OPTIONS,
+    );
+});
+
 // Skipped test: Deletion test to be fixed in future PR
 it.skip('deletes memory report and updates state', async () => {
     render(

@@ -54,7 +54,7 @@ To generate reports with other codebases using TT-NN, see the [TT-NN Graph Traci
 
 ### Performance reports
 
-TT-NN Visualizer supports the reading of TT-Metalium performance reports. The expected output should be a folder within `${TT_METAL_HOME}/generated/profiler/reports/` containing a `profile_log_device.csv` file, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
+TT-NN Visualizer supports the reading of TT-Metalium performance reports. The expected output should be a folder within `${TT_METAL_HOME}/generated/profiler/reports/` containing a `profile_log_device.csv` file and another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`. A `tracy_profile_log_host.tracy` file is optional — newer TT-Metal runs may omit it.
 
 <img width="916" alt="Performance report files" src="https://github.com/user-attachments/assets/8209f500-7913-41dc-8952-c1307e7720c3" />
 

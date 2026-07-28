@@ -95,7 +95,7 @@ const LocalFolderOptions = () => {
         uploadLocalFolder,
         uploadLocalPerformanceFolder,
         checkRequiredReportFiles,
-        checkRequiredProfilerFiles,
+        checkRequiredPerformanceFiles,
         filterReportFiles,
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
@@ -201,7 +201,7 @@ const LocalFolderOptions = () => {
         const { files: unfilteredFiles } = e.target;
         const files = filterReportFiles(unfilteredFiles);
 
-        if (!checkRequiredProfilerFiles(files)) {
+        if (!checkRequiredPerformanceFiles(files)) {
             setPerformanceFolder(invalidProfilerStatus);
             return;
         }

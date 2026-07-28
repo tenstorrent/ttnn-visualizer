@@ -20,6 +20,15 @@ import {
 } from '../src/definitions/NPEData';
 import type { NPEData } from '../src/model/NPEModel';
 
+// Mutable holders shared with hoisted mock factories so cases can flip
+// SERVER_MODE / route params and inspect how useNpe was gated.
+const h = vi.hoisted(() => ({
+    // Default true so loading/error tests exercise the whole-file path; windowed
+    // gate tests flip this to false (local upload → NpeWindowedView).
+    serverMode: true as boolean,
+    useNpeArgs: [] as (string | null)[],
+}));
+
 const { mockUseNpe, mockUseNPETimelineFile, mockUseParams, mockDiscardNpeQueries } = vi.hoisted(() => ({
     mockUseNpe: vi.fn(),
     mockUseNPETimelineFile: vi.fn(),
@@ -31,7 +40,7 @@ vi.mock('react-helmet-async', () => ({
     Helmet: () => null,
     HelmetProvider: ({ children }: { children: unknown }) => children,
 }));
-vi.mock('../src/functions/getServerConfig', () => ({ default: () => null }));
+vi.mock('../src/functions/getServerConfig', () => ({ default: () => ({ SERVER_MODE: h.serverMode }) }));
 vi.mock('react-router', async () => {
     const actual = await vi.importActual<typeof import('react-router')>('react-router');
     return {
@@ -43,7 +52,10 @@ vi.mock('../src/hooks/useAPI', async () => {
     const actual = await vi.importActual<typeof import('../src/hooks/useAPI')>('../src/hooks/useAPI');
     return {
         ...actual,
-        useNpe: (...args: unknown[]) => mockUseNpe(...args),
+        useNpe: (arg: string | null) => {
+            h.useNpeArgs.push(arg);
+            return mockUseNpe(arg);
+        },
         useNPETimelineFile: (...args: unknown[]) => mockUseNPETimelineFile(...args),
         discardNpeQueries: (...args: unknown[]) => mockDiscardNpeQueries(...args),
     };
@@ -53,6 +65,9 @@ vi.mock('../src/components/npe/NPEFileLoader', () => ({
 }));
 vi.mock('../src/components/npe/NPEDemoSelect', () => ({
     default: () => null,
+}));
+vi.mock('../src/components/npe/NpeWindowedView', () => ({
+    default: () => <div data-testid='windowed-view' />,
 }));
 
 let callOnRendered = true;
@@ -113,9 +128,13 @@ const renderRoute = (fileName: string | null = 'trace.json') =>
         </TestProviders>,
     );
 
+const lastUseNpeArg = () => h.useNpeArgs[h.useNpeArgs.length - 1];
+
 beforeEach(() => {
     callOnRendered = true;
     capturedOnRendered = null;
+    h.serverMode = true;
+    h.useNpeArgs = [];
     mockUseParams.mockReturnValue({});
     mockUseNpe.mockReturnValue(settledNpe);
     mockUseNPETimelineFile.mockReturnValue(idleTimeline);
@@ -127,6 +146,45 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+});
+
+describe('NPE route windowed-view gate', () => {
+    it('mounts the windowed view and skips useNpe for a local upload', () => {
+        h.serverMode = false;
+        renderRoute();
+
+        expect(screen.getByTestId('windowed-view')).toBeDefined();
+        // The whole-file fetch is skipped so it can't choke on the large payload.
+        expect(lastUseNpeArg()).toBeNull();
+    });
+
+    it('keeps the whole-file path under SERVER_MODE (hosted)', () => {
+        h.serverMode = true;
+        renderRoute();
+
+        expect(screen.queryByTestId('windowed-view')).toBeNull();
+        // Hosted still fetches the whole file by name.
+        expect(lastUseNpeArg()).toBe('trace.json');
+    });
+
+    it('keeps the whole-file path when viewing a saved report by filepath', () => {
+        h.serverMode = false;
+        mockUseParams.mockReturnValue({ filepath: 'saved-report.json' });
+        mockUseNPETimelineFile.mockReturnValue({
+            data: validNpeData,
+            isLoading: false,
+            error: null,
+        });
+        renderRoute('trace.json');
+
+        expect(screen.queryByTestId('windowed-view')).toBeNull();
+    });
+
+    it('does not mount the windowed view when there is no uploaded file', () => {
+        h.serverMode = false;
+        renderRoute(null);
+        expect(screen.queryByTestId('windowed-view')).toBeNull();
+    });
 });
 
 describe('NPE route loading and error wiring', () => {

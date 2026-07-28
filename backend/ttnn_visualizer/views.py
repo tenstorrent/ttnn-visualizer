@@ -13,7 +13,7 @@ import urllib
 import urllib.request
 from http import HTTPStatus
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import orjson
 import yaml
@@ -66,9 +66,11 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     ReportLocation,
     StatusMessage,
+    folder_segment_from_remote_path,
     sanitise_path_segment,
     sanitise_remote_host_segment,
 )
+from ttnn_visualizer.npe_index import ensure_index, read_summary, read_window
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.report_source_file import (
     read_report_source_file,
@@ -102,6 +104,8 @@ from ttnn_visualizer.stack_trace_source import (
     stack_source_response,
 )
 from ttnn_visualizer.utils import (
+    PERFORMANCE_OPS_PERF_PREFIX,
+    PERFORMANCE_REPORT_REQUIRED_FILES,
     create_path_resolver,
     get_mlir_path,
     get_performance_path,
@@ -128,6 +132,10 @@ def test_ssh_connection(connection) -> bool:
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__)
+
+# Sent on JSON endpoints that stream report-derived content so browsers can't
+# MIME-sniff the response as HTML and execute embedded markup.
+_NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
 
 
 def _stack_source_request_params():
@@ -1390,8 +1398,8 @@ def create_performance_files():
 
     if not validate_files(
         files,
-        {"profile_log_device.csv", "tracy_profile_log_host.tracy"},
-        pattern="ops_perf_results",
+        PERFORMANCE_REPORT_REQUIRED_FILES,
+        pattern=PERFORMANCE_OPS_PERF_PREFIX,
         folder_name=folder_name,
     ):
         return StatusMessage(
@@ -2038,10 +2046,19 @@ _REPORT_NOT_SYNCED_LOCALLY = (
 def _safe_report_folder_name(
     *, report_name: Optional[str] = None, remote_path: Optional[str] = None
 ) -> Optional[str]:
-    """Single-segment folder name for paths under REMOTE_DATA_DIRECTORY."""
-    candidate = report_name or (Path(remote_path).name if remote_path else "")
+    """Local folder segment under REMOTE_DATA_DIRECTORY — must match sync destinations.
+
+    Prefer ``remote_path`` (same segment sync writes). ``reportName`` is
+    display-only and is only used when ``remote_path`` is omitted.
+    """
+    if remote_path is not None:
+        # Explicit remotePath — never fall back to reportName (avoids mounting an
+        # unrelated folder when the basename is empty / ``.`` / ``..``).
+        return folder_segment_from_remote_path(remote_path)
+    if not report_name:
+        return None
     try:
-        return sanitise_path_segment(candidate)
+        return sanitise_path_segment(report_name)
     except (TypeError, ValueError):
         return None
 
@@ -2074,7 +2091,7 @@ def use_remote_folder():
             remote_path=remote_profiler_folder.remotePath,
         )
         if not profiler_name:
-            return response_bad_request("Invalid report name")
+            return response_bad_request("Invalid report path")
         local_db_path = Path(get_profiler_path(profiler_name, current_app, connection))
         if not is_valid_profiler_report_dir(local_db_path.parent):
             return response_not_found(_REPORT_NOT_SYNCED_LOCALLY)
@@ -2092,7 +2109,7 @@ def use_remote_folder():
             remote_path=remote_performance_folder.remotePath,
         )
         if not performance_name:
-            return response_bad_request("Invalid report name")
+            return response_bad_request("Invalid report path")
         local_perf_path = Path(
             get_performance_path(performance_name, current_app, connection)
         )
@@ -2214,6 +2231,85 @@ def get_npe_data(instance: Instance):
         return response_unprocessable_entity()
 
     return Response(npe_data, mimetype="application/json")
+
+
+def _npe_index_json_response(payload: dict) -> Response:
+    # nosniff: the body echoes report-derived strings; pinning the type stops a
+    # browser from content-sniffing this JSON as HTML (defence-in-depth XSS).
+    return Response(
+        orjson.dumps(payload),
+        mimetype="application/json",
+        headers=_NOSNIFF_HEADERS,
+    )
+
+
+def _resolve_npe_index(
+    instance: Instance, reader: Callable[[Path], Optional[dict]]
+) -> tuple[Optional[dict], Optional[Response]]:
+    """Shared path-check + index build + error mapping for the NPE index routes.
+
+    Returns (payload, None) on success or (None, error_response). Keeping
+    ensure_index() and the read under one except map means /summary and /window
+    can't drift on status handling (they already diverged once on zstd.Error).
+    """
+    if not instance.npe_path or not Path(instance.npe_path).exists():
+        logger.error("NPE path is not set or file missing.")
+        return None, response_not_found()
+
+    try:
+        db_path = ensure_index(instance.npe_path)
+        return reader(db_path), None
+    except FileNotFoundError:
+        return None, response_not_found()
+    except (orjson.JSONDecodeError, zstd.Error):
+        # A corrupt/truncated upload — bad JSON or an undecodable .zst — is a
+        # malformed report (422), not a server fault. zstd.Error is NOT a
+        # ValueError, so it must be named or it falls through to the 500 arm.
+        logger.exception("Malformed NPE report while building index")
+        return None, response_unprocessable_entity()
+    except Exception:
+        logger.exception("Unexpected error building/reading NPE index")
+        return None, response_internal_server_error()
+
+
+# @local_only: ensure_index() parses the whole report and writes a large sidecar
+# DB. The SPA calls these routes from any local (non-SERVER_MODE) build — dev and
+# local prod — behind the same SERVER_MODE gate, but the blueprint registers them
+# unconditionally, so on a hosted (SERVER_MODE) deploy an untrusted caller could
+# still reach ensure_index() directly — a DoS + disk-growth vector. The gate
+# returns 403 under SERVER_MODE, matching the feature's local-only scope; hosted
+# promotion (build/RSS/disk quotas) is tracked in #1802.
+@api.route("/npe/summary", methods=["GET"])
+@with_instance
+@local_only
+@timer
+def get_npe_summary(instance: Instance):
+    summary, error = _resolve_npe_index(instance, read_summary)
+    if error is not None:
+        return error
+    if summary is None:
+        return response_not_found()
+    return _npe_index_json_response(summary)
+
+
+@api.route("/npe/window", methods=["GET"])
+@with_instance
+@local_only
+@timer
+def get_npe_window(instance: Instance):
+    try:
+        timestep = int(request.args.get("t", ""))
+    except ValueError:
+        return response_bad_request("Query param 't' must be an integer timestep.")
+
+    window, error = _resolve_npe_index(
+        instance, lambda db_path: read_window(db_path, timestep)
+    )
+    if error is not None:
+        return error
+    if window is None:
+        return response_not_found()
+    return _npe_index_json_response(window)
 
 
 @api.route("/mlir", methods=["GET"])

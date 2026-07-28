@@ -179,6 +179,9 @@ export interface TimestepData {
     end_cycle: number;
     active_transfers: NoCTransferId[];
     link_demand: LinkUtilization[];
+    // Present in the raw NPE JSON per step; used as the timeline "worst" row
+    // fallback when `link_demand` is windowed-out (#861).
+    max_link_demand?: number;
     avg_link_demand: number; // percentage
     avg_link_util: number; // percentage
     mcast_write_link_util: number;
@@ -188,6 +191,43 @@ export interface TimestepData {
             avg_link_util: number; // percentage
         };
     };
+}
+
+// Columnar summary wire contract (#861): the keys backing NpeTimestepColumns.
+// Single source of truth so the type, the client-side shape guard, and the
+// skeleton builder can't drift apart.
+export const NPE_SUMMARY_COLUMN_KEYS = [
+    'start_cycle',
+    'end_cycle',
+    'avg_link_demand',
+    'avg_link_util',
+    'max_link_demand',
+    'mcast_write_link_util',
+    'active_count',
+] as const;
+
+// Per-step aggregates for the timeline heat bar / scrubber, sent as parallel
+// arrays (columnar) rather than one object per step so the ~54k-step summary
+// stays small (#861). Index each array by timestep `t`; `link_demand` and
+// transfers are fetched per window.
+export type NpeTimestepColumns = {
+    [K in (typeof NPE_SUMMARY_COLUMN_KEYS)[number]]: number[];
+};
+
+export interface NpeSummary {
+    common_info: CommonInfo;
+    chips: NPEData['chips'];
+    zones?: NPERootZone[];
+    n_timesteps: number;
+    timesteps: NpeTimestepColumns;
+}
+
+export type NpeWindowTimestep = Omit<TimestepData, 'start_cycle' | 'end_cycle'>;
+
+export interface NpeWindow {
+    t: number;
+    timestep: NpeWindowTimestep;
+    transfers: NoCTransfer[];
 }
 
 export interface NPEData {

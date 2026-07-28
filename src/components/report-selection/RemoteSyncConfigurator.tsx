@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { AxiosResponse, HttpStatusCode } from 'axios';
-import { useAtom } from 'jotai';
+import { useAtom, useStore } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import {
@@ -52,6 +52,7 @@ const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
     const { setPersistentSelectedConnection, setPersistentSavedConnectionList } = remote;
     const queryClient = useQueryClient();
+    const jotaiStore = useStore();
     const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
@@ -397,115 +398,20 @@ const RemoteSyncConfigurator = () => {
         notifyFolderSyncError(err);
     };
 
-    const syncSelectedFolder = async ({
-        selected,
-        setSyncing,
-        sync,
-        getSaved,
-        updateSaved,
-        mount,
-        activateWithToast,
-        applySelection,
-    }: {
-        selected: RemoteFolder | undefined;
-        setSyncing: (syncing: boolean) => void;
-        sync: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse<RemoteFolder>>;
-        getSaved: (connection: RemoteConnection) => RemoteFolder[];
-        updateSaved: (connection: RemoteConnection, folders: RemoteFolder[]) => RemoteFolder[];
-        mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
-        activateWithToast: (folder: RemoteFolder) => void;
-        applySelection: (folder: RemoteFolder) => void;
-    }) => {
-        setSyncing(true);
-
-        try {
-            await withActivatingReport(async () => {
-                try {
-                    const connection = remote.persistentState.selectedConnection;
-                    if (!connection || !selected) {
-                        return;
-                    }
-
-                    const { data: updatedFolder } = await sync(connection, selected);
-
-                    if (hasBeenNormalised(updatedFolder)) {
-                        createDataIntegrityWarning(updatedFolder);
-                    }
-
-                    const updatedFolders = getSaved(connection).map((f) =>
-                        f.remotePath === updatedFolder?.remotePath ? updatedFolder : f,
-                    );
-
-                    updateSaved(connection, updatedFolders);
-
-                    if (updatedFolder) {
-                        const mountResponse = await mount(connection, updatedFolder);
-
-                        if (mountResponse.status === HttpStatusCode.Ok) {
-                            activateWithToast(updatedFolder);
-                        }
-                    }
-                } catch (err: unknown) {
-                    await handleSyncFailure(err, selected, (report, syncErr) =>
-                        mountLocalFolderOnSyncFailure(
-                            report,
-                            syncErr,
-                            (connection) => mount(connection, report),
-                            applySelection,
-                        ),
-                    );
-                }
-            });
-        } finally {
-            // REMOTE_SYNC registry clear is owned by syncRemoteFolder's finally.
-            setSyncing(false);
-        }
-    };
-
-    const syncSelectedReportFolder = (folder?: RemoteFolder) =>
-        syncSelectedFolder({
-            selected: folder ?? selectedReportFolder,
-            setSyncing: setIsSyncingReportFolder,
-            sync: (connection, report) => remote.syncRemoteFolder(connection, report),
-            getSaved: remote.persistentState.getSavedReportFolders,
-            updateSaved: updateSavedReportFolders,
-            mount: (connection, report) => remote.mountRemoteFolder(connection, report),
-            activateWithToast: updateReportSelection,
-            applySelection: applyProfilerReportSelection,
-        });
-
-    const syncSelectedPerfReportFolder = (folder?: RemoteFolder) =>
-        syncSelectedFolder({
-            selected: folder ?? selectedPerformanceFolder,
-            setSyncing: setIsSyncingPerformanceFolder,
-            sync: (connection, report) => remote.syncRemoteFolder(connection, undefined, report),
-            getSaved: remote.persistentState.getSavedPerformanceFolders,
-            updateSaved: updateSavedPerformanceFolders,
-            mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
-            activateWithToast: updatePerformanceSelection,
-            applySelection: applyPerformanceReportSelection,
-        });
-
     const mountAndActivateFolder = async (
         folder: RemoteFolder,
         {
-            setSelected,
             mount,
             activateWithToast,
         }: {
-            setSelected: (folder: RemoteFolder) => void;
             mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
             activateWithToast: (folder: RemoteFolder) => void;
         },
     ) => {
-        // Mount the local copy only — never SSH-sync on select so offline /
-        // unreachable hosts still load previously synced reports. Refresh via Sync.
         const connection = remote.persistentState.selectedConnection;
         if (!connection) {
             return;
         }
-
-        setSelected(folder);
 
         await withActivatingReport(async () => {
             try {
@@ -522,6 +428,130 @@ const RemoteSyncConfigurator = () => {
                 notifyRemoteFolderMountError(err);
             }
         });
+    };
+
+    const syncSelectedFolder = async ({
+        selected,
+        setSyncing,
+        sync,
+        getSaved,
+        updateSaved,
+        mount,
+        activateWithToast,
+        applySelection,
+        getActivePath,
+    }: {
+        selected: RemoteFolder | undefined;
+        setSyncing: (syncing: boolean) => void;
+        sync: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse<RemoteFolder>>;
+        getSaved: (connection: RemoteConnection) => RemoteFolder[];
+        updateSaved: (connection: RemoteConnection, folders: RemoteFolder[]) => RemoteFolder[];
+        mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
+        activateWithToast: (folder: RemoteFolder) => void;
+        applySelection: (folder: RemoteFolder) => void;
+        getActivePath: () => string | null | undefined;
+    }) => {
+        setSyncing(true);
+
+        try {
+            const connection = remote.persistentState.selectedConnection;
+            if (!connection || !selected) {
+                return;
+            }
+
+            // Snapshot before transfer — local pickers stay usable while syncing.
+            const activePathAtSyncStart = getActivePath() ?? null;
+
+            const shouldActivateAfterSync = () => {
+                const currentActivePath = getActivePath() ?? null;
+                // User activated a different report during the transfer; keep their choice.
+                return currentActivePath === activePathAtSyncStart || currentActivePath === selected.remotePath;
+            };
+
+            try {
+                // Transfer only — do not hold isActivatingReportAtom here or local
+                // report pickers spin for the whole SSH sync (progress is FileStatusOverlay).
+                const { data: updatedFolder } = await sync(connection, selected);
+
+                const updatedFolders = getSaved(connection).map((f) =>
+                    f.remotePath === updatedFolder?.remotePath ? updatedFolder : f,
+                );
+
+                updateSaved(connection, updatedFolders);
+
+                if (updatedFolder && shouldActivateAfterSync()) {
+                    await mountAndActivateFolder(updatedFolder, { mount, activateWithToast });
+                }
+            } catch (err: unknown) {
+                await handleSyncFailure(err, selected, async (report, syncErr) => {
+                    if (!shouldActivateAfterSync()) {
+                        notifyFolderSyncError(syncErr);
+                        return;
+                    }
+                    await withActivatingReport(() =>
+                        mountLocalFolderOnSyncFailure(report, syncErr, (conn) => mount(conn, report), applySelection),
+                    );
+                });
+            }
+        } finally {
+            // REMOTE_SYNC registry clear is owned by syncRemoteFolder's finally.
+            setSyncing(false);
+        }
+    };
+
+    const syncSelectedReportFolder = (folder?: RemoteFolder) =>
+        syncSelectedFolder({
+            selected: folder ?? selectedReportFolder,
+            setSyncing: setIsSyncingReportFolder,
+            sync: (connection, report) => remote.syncRemoteFolder(connection, report),
+            getSaved: remote.persistentState.getSavedReportFolders,
+            updateSaved: updateSavedReportFolders,
+            mount: (connection, report) => remote.mountRemoteFolder(connection, report),
+            activateWithToast: updateReportSelection,
+            applySelection: applyProfilerReportSelection,
+            getActivePath: () => jotaiStore.get(activeProfilerReportAtom)?.path,
+        });
+
+    const syncSelectedPerfReportFolder = (folder?: RemoteFolder) =>
+        syncSelectedFolder({
+            selected: folder ?? selectedPerformanceFolder,
+            setSyncing: setIsSyncingPerformanceFolder,
+            sync: (connection, report) => remote.syncRemoteFolder(connection, undefined, report),
+            getSaved: remote.persistentState.getSavedPerformanceFolders,
+            updateSaved: updateSavedPerformanceFolders,
+            mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
+            activateWithToast: updatePerformanceSelection,
+            applySelection: applyPerformanceReportSelection,
+            getActivePath: () => jotaiStore.get(activePerformanceReportAtom)?.path,
+        });
+
+    /**
+     * Never-synced folders sync on select (may fail offline — falls back if a local
+     * copy exists). Previously synced folders mount the on-disk copy even when
+     * stale; refresh via the Sync button.
+     */
+    const selectAndActivateFolder = async (
+        folder: RemoteFolder,
+        {
+            setSelected,
+            syncFolder,
+            mount,
+            activateWithToast,
+        }: {
+            setSelected: (folder: RemoteFolder) => void;
+            syncFolder: (folder: RemoteFolder) => Promise<void>;
+            mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
+            activateWithToast: (folder: RemoteFolder) => void;
+        },
+    ) => {
+        setSelected(folder);
+
+        if (!folder.lastSynced) {
+            await syncFolder(folder);
+            return;
+        }
+
+        await mountAndActivateFolder(folder, { mount, activateWithToast });
     };
 
     const isProfilerRemote = profilerReportLocation === ReportLocation.REMOTE;
@@ -662,13 +692,13 @@ const RemoteSyncConfigurator = () => {
                 <RemoteFolderSelector
                     remoteFolder={isProfilerRemote ? selectedReportFolder : undefined}
                     remoteFolderList={reportFolderList}
-                    loading={isLoading || isFetching}
                     disabled={isDisabled}
                     linkedIds={linkedProfilerReportIds}
                     unlinkedIds={unlinkedProfilerReportIds}
                     onSelectFolder={(folder) =>
-                        mountAndActivateFolder(folder, {
+                        selectAndActivateFolder(folder, {
                             setSelected: setSelectedReportFolder,
+                            syncFolder: syncSelectedReportFolder,
                             mount: (connection, report) => remote.mountRemoteFolder(connection, report),
                             activateWithToast: updateReportSelection,
                         })
@@ -696,13 +726,13 @@ const RemoteSyncConfigurator = () => {
                 <RemoteFolderSelector
                     remoteFolder={isPerformanceRemote ? selectedPerformanceFolder : undefined}
                     remoteFolderList={remotePerformanceFolderList}
-                    loading={isLoading || isFetching}
                     disabled={isDisabled}
                     linkedIds={linkedPerfIds}
                     unlinkedIds={unlinkedPerfIds}
                     onSelectFolder={(folder) =>
-                        mountAndActivateFolder(folder, {
+                        selectAndActivateFolder(folder, {
                             setSelected: setSelectedPerformanceFolder,
+                            syncFolder: syncSelectedPerfReportFolder,
                             mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
                             activateWithToast: updatePerformanceSelection,
                         })

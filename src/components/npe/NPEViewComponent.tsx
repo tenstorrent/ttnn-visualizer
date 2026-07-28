@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import 'styles/components/NPEZoneFilterComponent.scss';
-import { startTransition, useEffect, useMemo, useState } from 'react';
+import { Dispatch, SetStateAction, startTransition, useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Classes, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -28,6 +28,7 @@ import {
     NoCTransfer,
     NoCType,
     SelectedNode,
+    TimestepData,
 } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import {
@@ -57,6 +58,18 @@ interface NPEViewProps {
     npeData: NPEData;
     /** Fired once after the first commit so the route can bound render time. */
     onRendered?: () => void;
+    // #861 windowed loading: when a container drives the selected timestep (to
+    // refetch per-step windows), it passes both the controlled value and setter,
+    // plus a stable `reportKey` so the per-report reset fires on report switch
+    // rather than on every windowed `npeData` refetch.
+    selectedTimestep?: number;
+    onSelectedTimestepChange?: Dispatch<SetStateAction<number>>;
+    reportKey?: string;
+    // #861 windowed loading: a stable per-step aggregate array for the timeline
+    // heat bar. Windowed mode passes this so the timeline keeps one reference
+    // across scrubs (its O(n_timesteps) memo runs once per report); whole-file
+    // mode omits it and the timeline falls back to `npeData.timestep_data`.
+    timelineData?: TimestepData[];
 }
 
 const LABEL_STEP_THRESHOLD = 25;
@@ -79,7 +92,7 @@ const getRootZoneKey = (proc: KERNEL_PROCESS, address: NPE_COORDINATES): Rootzon
     return `${proc}:${address.join(',')}`;
 };
 
-const NPEView = ({ npeData, onRendered }: NPEViewProps) => {
+const NPEView = (props: NPEViewProps) => {
     // Yield once so the route spinner can paint and the render-budget timer can
     // fire before sync chip/timeline work begins. Co-mounting the spinner with
     // an empty shell is cheap; the heavy body mounts on the next frame.
@@ -105,18 +118,23 @@ const NPEView = ({ npeData, onRendered }: NPEViewProps) => {
         );
     }
 
-    return (
-        <NPEViewBody
-            npeData={npeData}
-            onRendered={onRendered}
-        />
-    );
+    return <NPEViewBody {...props} />;
 };
 
-const NPEViewBody = ({ npeData, onRendered }: NPEViewProps) => {
+const NPEViewBody = ({
+    npeData,
+    onRendered,
+    selectedTimestep: controlledTimestep,
+    onSelectedTimestepChange,
+    reportKey,
+    timelineData,
+}: NPEViewProps) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
-    const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
+    const [internalTimestep, setInternalTimestep] = useState<number>(0);
+    const isTimestepControlled = controlledTimestep !== undefined && onSelectedTimestepChange !== undefined;
+    const selectedTimestep = isTimestepControlled ? controlledTimestep : internalTimestep;
+    const setSelectedTimestep = isTimestepControlled ? onSelectedTimestepChange : setInternalTimestep;
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
@@ -274,16 +292,21 @@ const NPEViewBody = ({ npeData, onRendered }: NPEViewProps) => {
     }, [selectedTimestep, isShowingAllTransfers]);
 
     useEffect(() => {
+        /* eslint-disable react-hooks/set-state-in-effect */
         // eslint-disable-next-line react-hooks/immutability
         stopAnimation();
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSelectedTimestep(0);
+        // In controlled mode the container owns the timestep and resets it on
+        // report switch; resetting here would snap every windowed refetch to 0.
+        if (!isTimestepControlled) {
+            setSelectedTimestep(0);
+        }
         setSelectedNode(null);
         setSelectedTransferList([]);
         setHighlightedTransfer(null);
         setHighlightedRoute(null);
+        /* eslint-enable react-hooks/set-state-in-effect */
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [npeData]);
+    }, [reportKey ?? npeData]);
 
     const { transferListSelectionRendering, groupedTransfersByNoCID } = useSelectedTransferGrouping(
         selectedTransferList,
@@ -610,7 +633,7 @@ const NPEViewBody = ({ npeData, onRendered }: NPEViewProps) => {
                     />
                 </div>
                 <NPETimelineComponent
-                    timestepList={npeData.timestep_data}
+                    timestepList={timelineData ?? npeData.timestep_data}
                     canvasWidth={canvasWidth}
                     currentTimestep={selectedTimestep}
                     useTimesteps={timestepsScale}
