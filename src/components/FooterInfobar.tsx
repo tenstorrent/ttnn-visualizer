@@ -171,7 +171,11 @@ function FooterInfobar() {
                     {activePerformanceReportPath && (
                         <Tooltip
                             disabled={!activePerformanceReportPath}
-                            content={formatPath(activePerformanceReportPath)}
+                            content={
+                                <>
+                                    <strong>Report path:</strong> {formatPath(activePerformanceReportPath)}
+                                </>
+                            }
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
