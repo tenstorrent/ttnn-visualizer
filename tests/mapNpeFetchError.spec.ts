@@ -12,16 +12,6 @@ describe('mapNpeFetchError', () => {
         expect(mapNpeFetchError(null)).toBeNull();
     });
 
-    it('maps ECONNABORTED and ETIMEDOUT to LOAD_TIMEOUT', () => {
-        const aborted = new AxiosError('aborted');
-        aborted.code = AxiosError.ECONNABORTED;
-        expect(mapNpeFetchError(aborted)).toBe(NPEValidationError.LOAD_TIMEOUT);
-
-        const timedOut = new AxiosError('timed out');
-        timedOut.code = AxiosError.ETIMEDOUT;
-        expect(mapNpeFetchError(timedOut)).toBe(NPEValidationError.LOAD_TIMEOUT);
-    });
-
     it('maps PAYLOAD_TOO_LARGE', () => {
         const error = new AxiosError('empty');
         error.code = NPEAxiosErrorCode.PAYLOAD_TOO_LARGE;

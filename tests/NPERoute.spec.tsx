@@ -168,24 +168,6 @@ describe('NPE route error mapping', () => {
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE)).toBeInTheDocument();
     });
 
-    it('maps ECONNABORTED to the load-timeout status', () => {
-        const error = new AxiosError('aborted');
-        error.code = AxiosError.ECONNABORTED;
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error });
-        renderRoute();
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
-    });
-
-    it('maps ETIMEDOUT to the load-timeout status', () => {
-        const error = new AxiosError('timed out');
-        error.code = AxiosError.ETIMEDOUT;
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error });
-        renderRoute();
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
-    });
-
     it('maps INVALID_JSON to the invalid-json status', () => {
         const invalidJson = new AxiosError('bad json');
         invalidJson.code = NPEAxiosErrorCode.INVALID_JSON;
@@ -228,16 +210,6 @@ describe('NPE route timeline path and loading scope', () => {
 
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).toBeInTheDocument();
         expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
-    });
-
-    it('maps timeline ECONNABORTED to the load-timeout status', () => {
-        h.params = { filepath: 'timeline.json' };
-        const error = new AxiosError('aborted');
-        error.code = AxiosError.ECONNABORTED;
-        mockUseNPETimelineFile.mockReturnValue({ data: undefined, isLoading: false, error });
-        renderRoute(null);
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
     });
 
     it('maps timeline PAYLOAD_TOO_LARGE to the payload-too-large status', () => {

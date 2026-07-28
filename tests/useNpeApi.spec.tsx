@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchNpeText, useNPETimelineFile, useNpe, useNpeSummary, useNpeWindow } from '../src/hooks/useAPI';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
-import { NPEAxiosErrorCode, NPE_FETCH_TIMEOUT_MS, NPE_MAX_CONTENT_LENGTH } from '../src/definitions/NPEData';
+import { NPEAxiosErrorCode, NPE_MAX_CONTENT_LENGTH } from '../src/definitions/NPEData';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: { get: vi.fn() },
@@ -109,7 +109,7 @@ const validNpePayload = {
 };
 
 describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
-    it('fetches NPE as text with timeout and content-length options', async () => {
+    it('fetches NPE as text with content-length options', async () => {
         mockedGet.mockResolvedValue({ data: JSON.stringify(validNpePayload) });
         const { result } = renderHook(() => useNpe('trace.json'), { wrapper: makeWrapper() });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -117,7 +117,6 @@ describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
         expect(mockedGet).toHaveBeenCalledWith(
             Endpoints.NPE,
             expect.objectContaining({
-                timeout: NPE_FETCH_TIMEOUT_MS,
                 responseType: 'text',
                 transitional: { forcedJSONParsing: false },
                 maxContentLength: NPE_MAX_CONTENT_LENGTH,
@@ -143,7 +142,6 @@ describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
         expect(mockedGet).toHaveBeenCalledWith(
             `${Endpoints.PERFORMANCE}/npe/timeline`,
             expect.objectContaining({
-                timeout: NPE_FETCH_TIMEOUT_MS,
                 responseType: 'text',
                 params: { filename: 'saved.json' },
                 signal: expect.any(AbortSignal),

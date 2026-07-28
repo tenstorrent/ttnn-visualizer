@@ -15,10 +15,6 @@ export const mapNpeFetchError = (error: AxiosError | null): NPEValidationError |
         return null;
     }
 
-    if (error.code === AxiosError.ECONNABORTED || error.code === AxiosError.ETIMEDOUT) {
-        return NPEValidationError.LOAD_TIMEOUT;
-    }
-
     if (error.code === NPEAxiosErrorCode.PAYLOAD_TOO_LARGE) {
         return NPEValidationError.PAYLOAD_TOO_LARGE;
     }

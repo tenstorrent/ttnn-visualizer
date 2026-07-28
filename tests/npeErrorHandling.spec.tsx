@@ -101,21 +101,6 @@ it('handles empty NPE traces', () => {
     expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_EMPTY_TRACE).textContent).toBeDefined();
 });
 
-it('handles load timeouts', () => {
-    render(
-        <TestProviders>
-            <NPEProcessingStatus
-                isLoading={false}
-                hasUploadedFile
-                dataVersion={MIN_SUPPORTED_VERSION}
-                errorCode={NPEValidationError.LOAD_TIMEOUT}
-            />
-        </TestProviders>,
-    );
-
-    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT).textContent).toContain('took too long');
-});
-
 it('handles payloads that exceed the browser size limit', () => {
     render(
         <TestProviders>

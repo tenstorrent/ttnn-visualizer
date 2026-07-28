@@ -861,14 +861,6 @@ export default function Styleguide() {
                     isLoading={false}
                 />
 
-                <h4>Load timeout</h4>
-                <NPEProcessingStatus
-                    hasUploadedFile
-                    dataVersion={MIN_SUPPORTED_VERSION}
-                    errorCode={NPEValidationError.LOAD_TIMEOUT}
-                    isLoading={false}
-                />
-
                 <h4>Payload too large for browser</h4>
                 <NPEProcessingStatus
                     hasUploadedFile
