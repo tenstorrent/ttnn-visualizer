@@ -159,15 +159,6 @@ describe('NPE route error mapping', () => {
         expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
     });
 
-    it('maps PAYLOAD_TOO_LARGE to the payload-too-large status', () => {
-        const error = new AxiosError('empty');
-        error.code = NPEAxiosErrorCode.PAYLOAD_TOO_LARGE;
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error });
-        renderRoute();
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE)).toBeInTheDocument();
-    });
-
     it('maps INVALID_JSON to the invalid-json status', () => {
         const invalidJson = new AxiosError('bad json');
         invalidJson.code = NPEAxiosErrorCode.INVALID_JSON;
@@ -210,16 +201,6 @@ describe('NPE route timeline path and loading scope', () => {
 
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).toBeInTheDocument();
         expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
-    });
-
-    it('maps timeline PAYLOAD_TOO_LARGE to the payload-too-large status', () => {
-        h.params = { filepath: 'timeline.json' };
-        const error = new AxiosError('empty');
-        error.code = NPEAxiosErrorCode.PAYLOAD_TOO_LARGE;
-        mockUseNPETimelineFile.mockReturnValue({ data: undefined, isLoading: false, error });
-        renderRoute(null);
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE)).toBeInTheDocument();
     });
 
     it('ignores a loading disabled useNpe sibling when the timeline path is active', () => {

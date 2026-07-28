@@ -16,24 +16,19 @@ const throwNpeAxiosError = (message: string, code: NPEAxiosErrorCode): never => 
  * Turn an axios NPE response body into `NPEData`.
  *
  * Axios defaults to silent JSON parsing: on SyntaxError it leaves `data` as the
- * raw string (or Chromium may hand back null/'' once the max string size is
- * hit). That used to surface as a misleading "Invalid NPE data" validation
- * error in Chrome while Firefox (higher string limit) still worked.
+ * raw string. Empty/null bodies and malformed JSON are mapped to INVALID_JSON
+ * so the UI does not fall through to a misleading "Invalid NPE data" validation
+ * error.
  */
 export const parseNpeAxiosResponseData = (data: unknown): NPEData => {
     if (data === null || data === undefined || data === '') {
-        throwNpeAxiosError(
-            "NPE response body was empty. The file may exceed this browser's maximum string size.",
-            NPEAxiosErrorCode.PAYLOAD_TOO_LARGE,
-        );
+        throwNpeAxiosError('NPE response body was empty', NPEAxiosErrorCode.INVALID_JSON);
     }
 
     if (typeof data === 'string') {
         try {
             return JSON.parse(data) as NPEData;
         } catch {
-            // Truncated downloads and oversize Chromium bodies often look like
-            // a mid-string SyntaxError rather than a clean empty body.
             throwNpeAxiosError('Failed to parse NPE response as JSON', NPEAxiosErrorCode.INVALID_JSON);
         }
     }

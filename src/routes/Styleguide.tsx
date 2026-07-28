@@ -861,14 +861,6 @@ export default function Styleguide() {
                     isLoading={false}
                 />
 
-                <h4>Payload too large for browser</h4>
-                <NPEProcessingStatus
-                    hasUploadedFile
-                    dataVersion={MIN_SUPPORTED_VERSION}
-                    errorCode={NPEValidationError.PAYLOAD_TOO_LARGE}
-                    isLoading={false}
-                />
-
                 <h4>Unprocessable JSON error (HTTP 422)</h4>
                 <NPEProcessingStatus
                     hasUploadedFile

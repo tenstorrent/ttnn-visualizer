@@ -22,14 +22,14 @@ describe('parseNpeAxiosResponseData', () => {
         expect(parseNpeAxiosResponseData(JSON.stringify(validPayload))).toEqual(validPayload);
     });
 
-    it('throws PAYLOAD_TOO_LARGE for empty Chromium-style bodies', () => {
+    it('throws INVALID_JSON for empty bodies', () => {
         for (const empty of [null, undefined, '']) {
             try {
                 parseNpeAxiosResponseData(empty);
                 expect.unreachable();
             } catch (error) {
                 expect(error).toBeInstanceOf(AxiosError);
-                expect((error as AxiosError).code).toBe(NPEAxiosErrorCode.PAYLOAD_TOO_LARGE);
+                expect((error as AxiosError).code).toBe(NPEAxiosErrorCode.INVALID_JSON);
             }
         }
     });

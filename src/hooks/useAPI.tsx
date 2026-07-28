@@ -67,7 +67,6 @@ import { Signpost } from '../model/Signpost';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import Endpoints from '../definitions/Endpoints';
-import { NPE_MAX_CONTENT_LENGTH } from '../definitions/NPEData';
 import { ReportFolder } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
@@ -436,11 +435,6 @@ export const NPE_WINDOW_QUERY_KEY = 'npe-window';
 const NPE_TEXT_GET_OPTIONS = {
     responseType: 'text' as const,
     transitional: { forcedJSONParsing: false },
-    // Enforced by Axios http/fetch adapters only — not the browser xhr adapter we
-    // use in the SPA. Kept for Node/fetch parity; browser oversize still relies on
-    // empty-body / Chromium string-limit handling in parseNpeAxiosResponseData.
-    maxContentLength: NPE_MAX_CONTENT_LENGTH,
-    maxBodyLength: NPE_MAX_CONTENT_LENGTH,
 };
 
 // Own AbortController (not React Query's signal): Strict Mode remount must not

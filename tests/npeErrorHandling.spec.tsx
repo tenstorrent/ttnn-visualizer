@@ -101,21 +101,6 @@ it('handles empty NPE traces', () => {
     expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_EMPTY_TRACE).textContent).toBeDefined();
 });
 
-it('handles payloads that exceed the browser size limit', () => {
-    render(
-        <TestProviders>
-            <NPEProcessingStatus
-                isLoading={false}
-                hasUploadedFile
-                dataVersion={MIN_SUPPORTED_VERSION}
-                errorCode={NPEValidationError.PAYLOAD_TOO_LARGE}
-            />
-        </TestProviders>,
-    );
-
-    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE).textContent).toContain('too large');
-});
-
 it('handles unknown errors', () => {
     render(
         <TestProviders>

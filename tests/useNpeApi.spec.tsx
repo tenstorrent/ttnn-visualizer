@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchNpeText, useNPETimelineFile, useNpe, useNpeSummary, useNpeWindow } from '../src/hooks/useAPI';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
-import { NPEAxiosErrorCode, NPE_MAX_CONTENT_LENGTH } from '../src/definitions/NPEData';
+import { NPEAxiosErrorCode } from '../src/definitions/NPEData';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: { get: vi.fn() },
@@ -109,7 +109,7 @@ const validNpePayload = {
 };
 
 describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
-    it('fetches NPE as text with content-length options', async () => {
+    it('fetches NPE as text with forcedJSONParsing disabled', async () => {
         mockedGet.mockResolvedValue({ data: JSON.stringify(validNpePayload) });
         const { result } = renderHook(() => useNpe('trace.json'), { wrapper: makeWrapper() });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -119,19 +119,17 @@ describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
             expect.objectContaining({
                 responseType: 'text',
                 transitional: { forcedJSONParsing: false },
-                maxContentLength: NPE_MAX_CONTENT_LENGTH,
-                maxBodyLength: NPE_MAX_CONTENT_LENGTH,
                 signal: expect.any(AbortSignal),
             }),
         );
         expect(result.current.data?.common_info.version).toBe('1.0.0');
     });
 
-    it('maps an empty body to PAYLOAD_TOO_LARGE on useNpe', async () => {
+    it('maps an empty body to INVALID_JSON on useNpe', async () => {
         mockedGet.mockResolvedValue({ data: null });
         const { result } = renderHook(() => useNpe('trace.json'), { wrapper: makeWrapper() });
         await waitFor(() => expect(result.current.isError).toBe(true));
-        expect(result.current.error?.code).toBe(NPEAxiosErrorCode.PAYLOAD_TOO_LARGE);
+        expect(result.current.error?.code).toBe(NPEAxiosErrorCode.INVALID_JSON);
     });
 
     it('fetches timeline with filename param and the same text options', async () => {

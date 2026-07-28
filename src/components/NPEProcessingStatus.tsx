@@ -4,12 +4,7 @@
 
 import { Callout, Intent } from '@blueprintjs/core';
 import 'styles/components/NPEProcessingStatus.scss';
-import {
-    LEGACY_VISUALIZER_VERSION,
-    MIN_SUPPORTED_VERSION,
-    NPEValidationError,
-    NPE_MAX_CONTENT_LENGTH_MIB,
-} from '../definitions/NPEData';
+import { LEGACY_VISUALIZER_VERSION, MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 import { TEST_IDS } from '../definitions/TestIds';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -46,9 +41,6 @@ const ProcessingErrors: Record<NPEValidationError, { title: string }> = {
     },
     [NPEValidationError.EMPTY_NPE_TRACE]: {
         title: 'Empty NPE trace',
-    },
-    [NPEValidationError.PAYLOAD_TOO_LARGE]: {
-        title: 'NPE file too large for this browser',
     },
 };
 
@@ -144,16 +136,6 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
                                     Check the cycle range and instrumented region in your {NPE_REPO_URL} run
                                     configuration, then regenerate the report.
                                 </p>
-                            </>
-                        );
-                    case NPEValidationError.PAYLOAD_TOO_LARGE:
-                        return (
-                            <>
-                                <p data-testid={TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE}>
-                                    This NPE file is too large for the browser to load into memory. Chromium-based
-                                    browsers have roughly a {NPE_MAX_CONTENT_LENGTH_MIB}&nbsp;MiB string limit.
-                                </p>
-                                <p>Try another browser or regenerate a smaller trace with {NPE_REPO_URL}.</p>
                             </>
                         );
 

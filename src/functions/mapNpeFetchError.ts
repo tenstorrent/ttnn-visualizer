@@ -15,10 +15,6 @@ export const mapNpeFetchError = (error: AxiosError | null): NPEValidationError |
         return null;
     }
 
-    if (error.code === NPEAxiosErrorCode.PAYLOAD_TOO_LARGE) {
-        return NPEValidationError.PAYLOAD_TOO_LARGE;
-    }
-
     if (
         error.code === NPEAxiosErrorCode.INVALID_JSON ||
         error.code === AxiosError.ERR_BAD_RESPONSE ||

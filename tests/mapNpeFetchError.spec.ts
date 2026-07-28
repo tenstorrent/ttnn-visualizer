@@ -12,12 +12,6 @@ describe('mapNpeFetchError', () => {
         expect(mapNpeFetchError(null)).toBeNull();
     });
 
-    it('maps PAYLOAD_TOO_LARGE', () => {
-        const error = new AxiosError('empty');
-        error.code = NPEAxiosErrorCode.PAYLOAD_TOO_LARGE;
-        expect(mapNpeFetchError(error)).toBe(NPEValidationError.PAYLOAD_TOO_LARGE);
-    });
-
     it('maps INVALID_JSON, ERR_BAD_RESPONSE, and 422 to INVALID_JSON', () => {
         const invalidJson = new AxiosError('bad json');
         invalidJson.code = NPEAxiosErrorCode.INVALID_JSON;
