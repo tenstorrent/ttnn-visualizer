@@ -34,6 +34,9 @@ $z-index-1-base: 0;
 $z-index-2-interactive: 1;
 $z-index-3-overlay: 1000;
 
+// Popovers/menus launched from within an overlay must stack above it.
+$z-index-4-popover: 1100;
+
 // Component-specific variables
 $active-transfer-width: 380px;
 

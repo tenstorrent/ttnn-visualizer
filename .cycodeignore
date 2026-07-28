@@ -1,0 +1,5 @@
+# Local-only developer profiling tool. It opens a caller-supplied report path
+# (sys.argv) — a legitimate CLI argument on an engineer's own machine, not a
+# web-facing input — and self-aborts under SERVER_MODE. Excluded from Cycode
+# SAST to avoid a false-positive "unsanitized user input in file path" finding.
+devtools/npe_render_probe.py

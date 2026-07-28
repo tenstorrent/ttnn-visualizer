@@ -13,6 +13,8 @@ enum Endpoints {
     LOCAL = '/api/local',
     MESH_DESCRIPTOR = '/api/mesh-descriptor',
     NPE = '/api/npe',
+    NPE_SUMMARY = '/api/npe/summary',
+    NPE_WINDOW = '/api/npe/window',
     MLIR = '/api/mlir',
     OPERATION_BUFFERS = '/api/operation-buffers',
     OPERATIONS_LIST = '/api/operations',

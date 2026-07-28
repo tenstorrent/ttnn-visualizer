@@ -15,13 +15,27 @@ import { NPEData } from '../model/NPEModel';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
+import NpeWindowedView from '../components/npe/NpeWindowedView';
 import { NPEValidationError } from '../definitions/NPEData';
 import { validateNpeData } from '../functions/validateNpeData';
 
 const NPE = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    const { data: loadedData, isLoading: isLoadingNPE, error: httpError } = useNpe(filepath ? null : npeFileName);
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    // #861: for uploaded reports the windowed view replaces the whole-file path,
+    // skipping `useNpe` (its full /api/npe fetch is exactly what fails on large
+    // files) and rendering NPEView from per-timestep windowed fetches instead.
+    // Enabled in both local dev and local prod, disabled under SERVER_MODE — the
+    // same boundary as the @local_only gate on /api/npe/{summary,window}, whose
+    // sidecar build isn't hosted-safe yet (#1802). Hosted keeps the whole-file
+    // path; exit criterion is deciding hosted-safety, then dropping the fork.
+    const isWindowedView = !isServerMode && !filepath && !!npeFileName;
+    const {
+        data: loadedData,
+        isLoading: isLoadingNPE,
+        error: httpError,
+    } = useNpe(filepath || isWindowedView ? null : npeFileName);
     const {
         data: loadedTimeline,
         isLoading: isLoadingTimeline,
@@ -32,7 +46,7 @@ const NPE = () => {
 
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
 
-    const isDemoEnabled = getServerConfig()?.SERVER_MODE;
+    const isDemoEnabled = isServerMode;
     const isLoading = isLoadingNPE || isLoadingTimeline;
     const hasUploadedFile = !!npeFileName || !!filepath;
 
@@ -93,15 +107,27 @@ const NPE = () => {
                 )}
             </div>
 
-            {errorCode !== NPEValidationError.OK ? (
-                <NPEProcessingStatus
-                    errorCode={errorCode}
-                    dataVersion={npeData?.common_info?.version || null}
-                    isLoading={isLoading}
-                    hasUploadedFile={hasUploadedFile}
+            {isWindowedView ? (
+                // key on the report so a report switch fully remounts: resets the
+                // selected timestep + auto-jump ref and gives fresh query observers
+                // (no keepPreviousData bleed from the previous report's window).
+                <NpeWindowedView
+                    key={npeFileName}
+                    fileName={npeFileName}
                 />
             ) : (
-                npeData && <NPEView npeData={npeData} />
+                <>
+                    {errorCode !== NPEValidationError.OK ? (
+                        <NPEProcessingStatus
+                            errorCode={errorCode}
+                            dataVersion={npeData?.common_info?.version || null}
+                            isLoading={isLoading}
+                            hasUploadedFile={hasUploadedFile}
+                        />
+                    ) : (
+                        npeData && <NPEView npeData={npeData} />
+                    )}
+                </>
             )}
         </>
     );
