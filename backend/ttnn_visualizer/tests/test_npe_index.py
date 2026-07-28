@@ -109,6 +109,20 @@ def test_read_summary_is_columnar(tmp_path):
     assert timesteps["avg_link_demand"][1] == pytest.approx(12.345)
 
 
+def test_summary_max_link_demand_values(tmp_path):
+    # Values, not just array lengths: idle step 0 has no link_demand and no source
+    # scalar → derived None; active steps derive the worst-link scalar from
+    # link_demand (source omits it) and truncate to 3 dp, so the timeline heat-bar
+    # fallback stays consistent with the per-link values the window serves. A broken
+    # derivation would silently paint the fallback rows wrong.
+    npe_path = _write_npe(tmp_path, _make_npe_object(n_timesteps=4))
+    summary = read_summary(ensure_index(npe_path))
+    max_demand = summary["timesteps"]["max_link_demand"]
+
+    assert max_demand[0] is None
+    assert max_demand[1] == pytest.approx(224.8)
+
+
 def test_read_window_resolves_active_transfers(tmp_path):
     npe_path = _write_npe(tmp_path, _make_npe_object(n_transfers=3, n_timesteps=4))
     db_path = ensure_index(npe_path)

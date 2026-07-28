@@ -182,9 +182,20 @@ def test_summary_missing_instance_id_is_400(client):
 
 def test_summary_forbidden_under_server_mode(client, make_npe_instance, app):
     # @local_only: the windowed routes must refuse SERVER_MODE (the endpoint is
-    # blueprint-registered unconditionally, so the client DEV-gate can't protect
-    # it on a hosted deploy — see views.py comment).
+    # blueprint-registered unconditionally, so the client SERVER_MODE gate can't
+    # protect it on a hosted deploy — see views.py comment).
     instance_id = make_npe_instance(orjson.dumps(_make_npe_object(n_timesteps=2)))
     app.config["SERVER_MODE"] = True
     resp = client.get(f"{API}/npe/summary", query_string={"instanceId": instance_id})
+    assert resp.status_code == 403
+
+
+def test_window_forbidden_under_server_mode(client, make_npe_instance, app):
+    # Window shares the same @local_only decorator stack and is the other half of
+    # the index-build DoS/disk surface, so it must 403 under SERVER_MODE too.
+    instance_id = make_npe_instance(orjson.dumps(_make_npe_object(n_timesteps=2)))
+    app.config["SERVER_MODE"] = True
+    resp = client.get(
+        f"{API}/npe/window", query_string={"instanceId": instance_id, "t": 1}
+    )
     assert resp.status_code == 403

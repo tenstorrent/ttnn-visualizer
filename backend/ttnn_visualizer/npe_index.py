@@ -50,6 +50,20 @@ _TRANSFER_INSERT_BATCH = 5000
 # active-transfer IN-list is chunked rather than overflowing the bind-var limit.
 _TRANSFER_QUERY_CHUNK = 900
 
+# Columnar summary column order (single source of truth for the SELECT and the
+# positional dict in read_summary). MUST stay in lock-step with the frontend
+# NPE_SUMMARY_COLUMN_KEYS (src/model/NPEModel.ts) — a reorder on either side
+# silently mismaps the timeline heat bar. `t` is the array index, so it's omitted.
+_SUMMARY_COLUMNS = (
+    "start_cycle",
+    "end_cycle",
+    "avg_link_demand",
+    "avg_link_util",
+    "max_link_demand",
+    "mcast_write_link_util",
+    "active_count",
+)
+
 # link_demand rows are [chip_id, y, x, noc_id, demand] — mirrors NPE_LINK.DEMAND
 # in the frontend model. Used to precompute each step's worst-link demand for the
 # timeline heat bar, since the source JSON doesn't carry a per-step scalar.
@@ -329,27 +343,19 @@ def read_summary(db_path: Path) -> dict:
     conn = sqlite3.connect(db_path)
     try:
         meta = dict(conn.execute("SELECT key, value FROM meta").fetchall())
+        # _SUMMARY_COLUMNS are hardcoded constants, not user input — safe to inline.
         rows = conn.execute(
-            "SELECT start_cycle, end_cycle, avg_link_demand, avg_link_util, "
-            "max_link_demand, mcast_write_link_util, active_count "
-            "FROM timestep ORDER BY t"
+            f"SELECT {', '.join(_SUMMARY_COLUMNS)} FROM timestep ORDER BY t"
         ).fetchall()
     finally:
         conn.close()
 
-    # Columnar wire format: 7 arrays instead of one dict-per-step, so the ~54k-step
-    # summary drops from ~9 MB to ~2.6 MB (repeated JSON keys were the bulk). `t` is
-    # the array index (timesteps are contiguous 0..n-1), so it isn't sent.
-    columns = list(zip(*rows)) if rows else [()] * 7
-    timesteps = {
-        "start_cycle": columns[0],
-        "end_cycle": columns[1],
-        "avg_link_demand": columns[2],
-        "avg_link_util": columns[3],
-        "max_link_demand": columns[4],
-        "mcast_write_link_util": columns[5],
-        "active_count": columns[6],
-    }
+    # Columnar wire format: one array per column instead of a dict-per-step, so the
+    # ~54k-step summary drops from ~9 MB to ~2.6 MB (repeated JSON keys were the
+    # bulk). `t` is the array index (timesteps are contiguous 0..n-1), so it isn't
+    # sent. SELECT + dict share _SUMMARY_COLUMNS so their order can't drift apart.
+    columns = list(zip(*rows)) if rows else [()] * len(_SUMMARY_COLUMNS)
+    timesteps = {col: columns[i] for i, col in enumerate(_SUMMARY_COLUMNS)}
 
     return {
         "common_info": orjson.loads(meta["common_info"]),

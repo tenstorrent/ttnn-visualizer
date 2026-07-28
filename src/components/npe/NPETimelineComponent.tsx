@@ -16,6 +16,7 @@ import {
     getKernelColor,
 } from '../../model/NPEModel';
 import { altCongestionColorsAtom } from '../../store/app';
+import getWorstLinkDemand from '../../functions/getWorstLinkDemand';
 import { formatPercentage } from '../../functions/math';
 
 interface MetricPoint {
@@ -122,9 +123,7 @@ const NPETimelineComponent = ({
             // non-visited `noc` aggregates are stubbed to 0, so with a NOC filter
             // active the heat rows for non-visited steps are approximate until the
             // summary carries per-NOC aggregates. Unfiltered view is exact.
-            const worst = links.length
-                ? Math.max(-1, ...links.map((linkData) => linkData[NPE_LINK.DEMAND]))
-                : (timestep.max_link_demand ?? -1);
+            const worst = getWorstLinkDemand(links, timestep.max_link_demand);
 
             result.worst.push({
                 value: worst,

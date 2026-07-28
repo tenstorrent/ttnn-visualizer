@@ -13,7 +13,7 @@ import urllib
 import urllib.request
 from http import HTTPStatus
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import orjson
 import yaml
@@ -2221,6 +2221,45 @@ def get_npe_data(instance: Instance):
     return Response(npe_data, mimetype="application/json")
 
 
+def _npe_index_json_response(payload: dict) -> Response:
+    # nosniff: the body echoes report-derived strings; pinning the type stops a
+    # browser from content-sniffing this JSON as HTML (defence-in-depth XSS).
+    return Response(
+        orjson.dumps(payload),
+        mimetype="application/json",
+        headers=_NOSNIFF_HEADERS,
+    )
+
+
+def _resolve_npe_index(
+    instance: Instance, reader: Callable[[Path], Optional[dict]]
+) -> tuple[Optional[dict], Optional[Response]]:
+    """Shared path-check + index build + error mapping for the NPE index routes.
+
+    Returns (payload, None) on success or (None, error_response). Keeping
+    ensure_index() and the read under one except map means /summary and /window
+    can't drift on status handling (they already diverged once on zstd.Error).
+    """
+    if not instance.npe_path or not Path(instance.npe_path).exists():
+        logger.error("NPE path is not set or file missing.")
+        return None, response_not_found()
+
+    try:
+        db_path = ensure_index(instance.npe_path)
+        return reader(db_path), None
+    except FileNotFoundError:
+        return None, response_not_found()
+    except (orjson.JSONDecodeError, zstd.Error):
+        # A corrupt/truncated upload — bad JSON or an undecodable .zst — is a
+        # malformed report (422), not a server fault. zstd.Error is NOT a
+        # ValueError, so it must be named or it falls through to the 500 arm.
+        logger.exception("Malformed NPE report while building index")
+        return None, response_unprocessable_entity()
+    except Exception:
+        logger.exception("Unexpected error building/reading NPE index")
+        return None, response_internal_server_error()
+
+
 # @local_only: ensure_index() parses the whole report and writes a large sidecar
 # DB. The SPA calls these routes from any local (non-SERVER_MODE) build — dev and
 # local prod — behind the same SERVER_MODE gate, but the blueprint registers them
@@ -2233,32 +2272,12 @@ def get_npe_data(instance: Instance):
 @local_only
 @timer
 def get_npe_summary(instance: Instance):
-    if not instance.npe_path or not Path(instance.npe_path).exists():
-        logger.error("NPE path is not set or file missing for summary.")
+    summary, error = _resolve_npe_index(instance, read_summary)
+    if error is not None:
+        return error
+    if summary is None:
         return response_not_found()
-
-    try:
-        db_path = ensure_index(instance.npe_path)
-        summary = read_summary(db_path)
-    except FileNotFoundError:
-        return response_not_found()
-    except (orjson.JSONDecodeError, zstd.Error):
-        # A corrupt/truncated upload — bad JSON or an undecodable .zst — is a
-        # malformed report (422), not a server fault. zstd.Error is NOT a
-        # ValueError, so it must be named or it falls through to the 500 arm.
-        logger.exception("Malformed NPE report while building index")
-        return response_unprocessable_entity()
-    except Exception:
-        logger.exception("Unexpected error building/reading NPE index")
-        return response_internal_server_error()
-
-    # nosniff: the body echoes report-derived strings; pinning the type stops a
-    # browser from content-sniffing this JSON as HTML (defence-in-depth XSS).
-    return Response(
-        orjson.dumps(summary),
-        mimetype="application/json",
-        headers=_NOSNIFF_HEADERS,
-    )
+    return _npe_index_json_response(summary)
 
 
 @api.route("/npe/window", methods=["GET"])
@@ -2266,37 +2285,19 @@ def get_npe_summary(instance: Instance):
 @local_only
 @timer
 def get_npe_window(instance: Instance):
-    if not instance.npe_path or not Path(instance.npe_path).exists():
-        logger.error("NPE path is not set or file missing for window.")
-        return response_not_found()
-
     try:
         timestep = int(request.args.get("t", ""))
     except ValueError:
         return response_bad_request("Query param 't' must be an integer timestep.")
 
-    try:
-        db_path = ensure_index(instance.npe_path)
-        window = read_window(db_path, timestep)
-    except FileNotFoundError:
-        return response_not_found()
-    except (orjson.JSONDecodeError, zstd.Error):
-        # See get_npe_summary: a corrupt/truncated upload is a 422, and zstd.Error
-        # isn't a ValueError so it needs naming to avoid the 500 fall-through.
-        logger.exception("Malformed NPE report while building index")
-        return response_unprocessable_entity()
-    except Exception:
-        logger.exception("Unexpected error reading NPE window")
-        return response_internal_server_error()
-
+    window, error = _resolve_npe_index(
+        instance, lambda db_path: read_window(db_path, timestep)
+    )
+    if error is not None:
+        return error
     if window is None:
         return response_not_found()
-
-    return Response(
-        orjson.dumps(window),
-        mimetype="application/json",
-        headers=_NOSNIFF_HEADERS,
-    )
+    return _npe_index_json_response(window)
 
 
 @api.route("/mlir", methods=["GET"])
