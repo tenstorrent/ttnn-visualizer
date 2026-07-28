@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { NPE_LINK, NoCTransfer, NpeWindow } from '../model/NPEModel';
+import { NPE_LINK, NoCRoute, NoCTransfer, NpeWindow } from '../model/NPEModel';
 
 // A link_demand row must carry at least [chip, y, x, noc_id, demand]; the 6th
 // fabric-scope slot is optional.
@@ -66,6 +66,23 @@ export default function validateNpeWindow(data: unknown): string | null {
         }
         if (!Array.isArray(transfer.route)) {
             return 'NPE window transfer is missing its route array.';
+        }
+        // NPEView/ActiveTransferDetails walk each route's links and read
+        // injection_rate + src/dst without guards, so a malformed route entry
+        // throws mid-render rather than surfacing here.
+        for (const route of transfer.route as NoCRoute[]) {
+            if (!route || typeof route !== 'object') {
+                return 'NPE window transfer has a malformed route entry.';
+            }
+            if (!Array.isArray(route.links)) {
+                return 'NPE window route entry is missing its links array.';
+            }
+            if (typeof route.injection_rate !== 'number') {
+                return 'NPE window route entry has a non-numeric injection_rate.';
+            }
+            if (!Array.isArray(route.src) || !Array.isArray(route.dst)) {
+                return 'NPE window route entry is missing src/dst coordinates.';
+            }
         }
     }
 

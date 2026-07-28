@@ -87,9 +87,12 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
     }
 
     // No frame yet: surface a first-window failure instead of trapping the user on
-    // an infinite spinner; otherwise the index/first window is still loading.
+    // an infinite spinner; otherwise the index/first window is still loading. While
+    // the summary is still loading, always show "Processing…" — a window request
+    // that races ahead of the index (e.g. the guaranteed t=0 404 on an empty trace)
+    // must not flash an error before the summary resolves the real state.
     if (!npeData) {
-        if (isWindowError) {
+        if (isWindowError && !isLoadingSummary) {
             return (
                 <Callout
                     intent={Intent.DANGER}

@@ -2222,9 +2222,10 @@ def get_npe_data(instance: Instance):
 
 
 # @local_only: ensure_index() parses the whole report and writes a large sidecar
-# DB. The SPA only calls these routes from a DEV build, but the blueprint registers
-# them unconditionally, so on a hosted (SERVER_MODE) deploy an untrusted caller
-# could still reach ensure_index() directly — a DoS + disk-growth vector. The gate
+# DB. The SPA calls these routes from any local (non-SERVER_MODE) build — dev and
+# local prod — behind the same SERVER_MODE gate, but the blueprint registers them
+# unconditionally, so on a hosted (SERVER_MODE) deploy an untrusted caller could
+# still reach ensure_index() directly — a DoS + disk-growth vector. The gate
 # returns 403 under SERVER_MODE, matching the feature's local-only scope; hosted
 # promotion (build/RSS/disk quotas) is tracked in #1802.
 @api.route("/npe/summary", methods=["GET"])

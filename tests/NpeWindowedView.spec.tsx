@@ -212,4 +212,26 @@ describe('NpeWindowedView', () => {
         expect(screen.getByText('window fetch failed')).toBeDefined();
         expect(screen.queryByTestId('npe-view')).toBeNull();
     });
+
+    it('keeps showing Processing… when a window errors while the summary is still loading', () => {
+        // A window request can race ahead of the index build (e.g. the guaranteed
+        // t=0 404 on an empty trace). Until the summary resolves the real state, the
+        // premature error must not flash — the spinner wins.
+        mockedSummary.mockReturnValue({
+            data: undefined,
+            isLoading: true,
+            isError: false,
+            error: null,
+        } as SummaryHook);
+        mockedWindow.mockReturnValue({
+            data: undefined,
+            isError: true,
+            error: new Error('timestep 0 out of range') as AxiosError,
+        } as WindowHook);
+
+        render(<NpeWindowedView fileName='trace.json' />);
+
+        expect(screen.getByText('Processing…')).toBeDefined();
+        expect(screen.queryByText('Unable to load NPE timestep')).toBeNull();
+    });
 });

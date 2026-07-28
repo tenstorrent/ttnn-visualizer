@@ -79,4 +79,25 @@ describe('validateNpeWindow', () => {
         expect(validateNpeWindow({ ...w, transfers: [{ route: [] }] })).toMatch(/numeric id/);
         expect(validateNpeWindow({ ...w, transfers: [{ id: 0 }] })).toMatch(/route array/);
     });
+
+    it('accepts a well-formed route entry', () => {
+        const w = validWindow();
+        const route = { links: [], injection_rate: 1.5, src: [0, 0, 0], dst: [[0, 1, 1]] };
+        expect(validateNpeWindow({ ...w, transfers: [{ id: 0, route: [route] }] })).toBeNull();
+    });
+
+    it('rejects a malformed route entry (unguarded downstream reads)', () => {
+        const w = validWindow();
+        const base = { links: [], injection_rate: 1.5, src: [0, 0, 0], dst: [[0, 1, 1]] };
+        expect(validateNpeWindow({ ...w, transfers: [{ id: 0, route: [null] }] })).toMatch(/malformed route entry/);
+        expect(validateNpeWindow({ ...w, transfers: [{ id: 0, route: [{ ...base, links: 'nope' }] }] })).toMatch(
+            /links array/,
+        );
+        expect(validateNpeWindow({ ...w, transfers: [{ id: 0, route: [{ ...base, injection_rate: 'x' }] }] })).toMatch(
+            /non-numeric injection_rate/,
+        );
+        expect(validateNpeWindow({ ...w, transfers: [{ id: 0, route: [{ ...base, dst: undefined }] }] })).toMatch(
+            /src\/dst coordinates/,
+        );
+    });
 });
