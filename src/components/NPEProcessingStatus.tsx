@@ -3,7 +3,6 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Callout, Intent } from '@blueprintjs/core';
-import 'styles/components/NPEProcessingStatus.scss';
 import { LEGACY_VISUALIZER_VERSION, MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 import { TEST_IDS } from '../definitions/TestIds';
 import LoadingSpinner from './LoadingSpinner';
@@ -17,11 +16,6 @@ const NPE_REPO_URL = (
         tt-npe
     </a>
 );
-
-const SHARED_PROPS = {
-    className: 'npe-processing-status',
-    compact: true,
-};
 
 const ProcessingErrors: Record<NPEValidationError, { title: string }> = {
     [NPEValidationError.OK]: {
@@ -54,10 +48,7 @@ interface NPEProcessingStatusProps {
 const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoading }: NPEProcessingStatusProps) => {
     if (isLoading) {
         return (
-            <div
-                className='npe-processing-status'
-                data-testid={TEST_IDS.NPE_PROCESSING_LOADING}
-            >
+            <div data-testid={TEST_IDS.NPE_PROCESSING_LOADING}>
                 <LoadingSpinner />
             </div>
         );
@@ -67,7 +58,7 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
         return (
             <Callout
                 data-testid={TEST_IDS.NPE_PROCESSING_INITIAL}
-                {...SHARED_PROPS}
+                compact
             >
                 See {NPE_REPO_URL} for details on how to generate NPE report files.
             </Callout>
@@ -76,7 +67,7 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
 
     return (
         <Callout
-            {...SHARED_PROPS}
+            compact
             intent={Intent.WARNING}
             title={ProcessingErrors?.[errorCode]?.title}
         >
@@ -102,10 +93,7 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
                                 <p>
                                     Use {NPE_REPO_URL} to generate new NPE dataset or install an older version of the
                                     visualizer, e.g.{' '}
-                                    <code className='formatted-code'>
-                                        pip install ttnn-visualizer=={LEGACY_VISUALIZER_VERSION}
-                                    </code>{' '}
-                                    or see{' '}
+                                    <code>pip install ttnn-visualizer=={LEGACY_VISUALIZER_VERSION}</code> or see{' '}
                                     <a
                                         href='https://docs.tenstorrent.com/ttnn-visualizer/src/installing.html#installing-from-pypi'
                                         target='_blank'
