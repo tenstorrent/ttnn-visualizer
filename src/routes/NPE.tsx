@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router';
-import { AxiosError, HttpStatusCode } from 'axios';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
 import NpeWindowedView from '../components/npe/NpeWindowedView';
@@ -16,16 +15,9 @@ import { NPEData } from '../model/NPEModel';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
-import { NPEValidationError, NpeAxiosErrorCode } from '../definitions/NPEData';
+import { NPEValidationError } from '../definitions/NPEData';
+import { mapNpeFetchError } from '../functions/mapNpeFetchError';
 import { validateNpeData } from '../functions/validateNpeData';
-
-const isNpeFetchTimeout = (error: AxiosError | null): boolean =>
-    error?.code === AxiosError.ECONNABORTED || error?.code === AxiosError.ETIMEDOUT;
-
-const isNpePayloadTooLarge = (error: AxiosError | null): boolean => error?.code === NpeAxiosErrorCode.PAYLOAD_TOO_LARGE;
-
-const isNpeInvalidJson = (error: AxiosError | null): boolean =>
-    error?.code === NpeAxiosErrorCode.INVALID_JSON || error?.code === AxiosError.ERR_BAD_RESPONSE;
 
 const NPE = () => {
     const { filepath } = useParams<{ filepath?: string }>();
@@ -73,23 +65,7 @@ const NPE = () => {
             return NPEValidationError.OK;
         }
 
-        if (isNpeFetchTimeout(fetchError)) {
-            return NPEValidationError.LOAD_TIMEOUT;
-        }
-
-        if (isNpePayloadTooLarge(fetchError)) {
-            return NPEValidationError.PAYLOAD_TOO_LARGE;
-        }
-
-        if (isNpeInvalidJson(fetchError) || fetchError?.status === HttpStatusCode.UnprocessableEntity) {
-            return NPEValidationError.INVALID_JSON;
-        }
-
-        if (fetchError?.status !== undefined && fetchError.status >= HttpStatusCode.BadRequest) {
-            return NPEValidationError.DEFAULT;
-        }
-
-        return validateNpeData(npeData);
+        return mapNpeFetchError(fetchError) ?? validateNpeData(npeData);
     }, [isLoading, fetchError, npeData]);
 
     useEffect(() => {

@@ -52,6 +52,7 @@ export const TEST_IDS = Object.freeze({
 
     // NPE
     NPE_VIEW: 'npe-view',
+    NPE_WINDOWED_VIEW: 'npe-windowed-view',
     NPE_PROCESSING_INITIAL: 'npe-processing-initial',
     NPE_PROCESSING_LOADING: 'npe-processing-loading',
     NPE_PROCESSING_INVALID_VERSION: 'npe-processing-invalid-version',

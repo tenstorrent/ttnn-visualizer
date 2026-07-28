@@ -4,7 +4,12 @@
 
 import { Callout, Intent } from '@blueprintjs/core';
 import 'styles/components/NPEProcessingStatus.scss';
-import { LEGACY_VISUALIZER_VERSION, MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
+import {
+    LEGACY_VISUALIZER_VERSION,
+    MIN_SUPPORTED_VERSION,
+    NPEValidationError,
+    NPE_MAX_CONTENT_LENGTH_MIB,
+} from '../definitions/NPEData';
 import { TEST_IDS } from '../definitions/TestIds';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -159,7 +164,7 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
                             <>
                                 <p data-testid={TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE}>
                                     This NPE file is too large for the browser to load into memory. Chromium-based
-                                    browsers have roughly a 512&nbsp;MiB string limit.
+                                    browsers have roughly a {NPE_MAX_CONTENT_LENGTH_MIB}&nbsp;MiB string limit.
                                 </p>
                                 <p>Try another browser or regenerate a smaller trace with {NPE_REPO_URL}.</p>
                             </>

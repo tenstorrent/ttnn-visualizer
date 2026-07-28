@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { NpeAxiosErrorCode } from '../src/definitions/NPEData';
+import { NPEAxiosErrorCode } from '../src/definitions/NPEData';
 import type { NPEData } from '../src/model/NPEModel';
 
 // Mutable holders shared with the hoisted mock factories so each case can flip
@@ -51,7 +51,9 @@ vi.mock('../src/hooks/useAPI', async () => {
         useNPETimelineFile: (...args: unknown[]) => mockUseNPETimelineFile(...args),
     };
 });
-vi.mock('../src/components/npe/NpeWindowedView', () => ({ default: () => <div data-testid='windowed-view' /> }));
+vi.mock('../src/components/npe/NpeWindowedView', () => ({
+    default: () => <div data-testid={TEST_IDS.NPE_WINDOWED_VIEW} />,
+}));
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
     default: () => <div data-testid={TEST_IDS.NPE_VIEW} />,
 }));
@@ -107,7 +109,7 @@ describe('NPE route windowed-view gate', () => {
         h.serverMode = false;
         renderRoute();
 
-        expect(screen.getByTestId('windowed-view')).toBeDefined();
+        expect(screen.getByTestId(TEST_IDS.NPE_WINDOWED_VIEW)).toBeInTheDocument();
         // The whole-file fetch is skipped so it can't choke on the large payload.
         expect(lastUseNpeArg()).toBeNull();
     });
@@ -116,7 +118,7 @@ describe('NPE route windowed-view gate', () => {
         h.serverMode = true;
         renderRoute();
 
-        expect(screen.queryByTestId('windowed-view')).toBeNull();
+        expect(screen.queryByTestId(TEST_IDS.NPE_WINDOWED_VIEW)).toBeNull();
         // Hosted still fetches the whole file by name.
         expect(lastUseNpeArg()).toBe('trace.json');
     });
@@ -131,13 +133,13 @@ describe('NPE route windowed-view gate', () => {
         });
         renderRoute('trace.json');
 
-        expect(screen.queryByTestId('windowed-view')).toBeNull();
+        expect(screen.queryByTestId(TEST_IDS.NPE_WINDOWED_VIEW)).toBeNull();
     });
 
     it('does not mount the windowed view when there is no uploaded file', () => {
         h.serverMode = false;
         renderRoute(null);
-        expect(screen.queryByTestId('windowed-view')).toBeNull();
+        expect(screen.queryByTestId(TEST_IDS.NPE_WINDOWED_VIEW)).toBeNull();
     });
 });
 
@@ -159,7 +161,7 @@ describe('NPE route error mapping', () => {
 
     it('maps PAYLOAD_TOO_LARGE to the payload-too-large status', () => {
         const error = new AxiosError('empty');
-        error.code = NpeAxiosErrorCode.PAYLOAD_TOO_LARGE;
+        error.code = NPEAxiosErrorCode.PAYLOAD_TOO_LARGE;
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error });
         renderRoute();
 
@@ -184,25 +186,90 @@ describe('NPE route error mapping', () => {
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
     });
 
-    it('maps INVALID_JSON, ERR_BAD_RESPONSE, and 422 to the invalid-json status', () => {
+    it('maps INVALID_JSON to the invalid-json status', () => {
         const invalidJson = new AxiosError('bad json');
-        invalidJson.code = NpeAxiosErrorCode.INVALID_JSON;
+        invalidJson.code = NPEAxiosErrorCode.INVALID_JSON;
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: invalidJson });
-        const { unmount } = renderRoute();
+        renderRoute();
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
-        unmount();
+    });
 
+    it('maps ERR_BAD_RESPONSE to the invalid-json status', () => {
         const badResponse = new AxiosError('bad response');
         badResponse.code = AxiosError.ERR_BAD_RESPONSE;
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: badResponse });
-        const second = renderRoute();
+        renderRoute();
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
-        second.unmount();
+    });
 
+    it('maps HTTP 422 to the invalid-json status', () => {
         const unprocessable = new AxiosError('422');
         unprocessable.status = HttpStatusCode.UnprocessableEntity;
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: unprocessable });
         renderRoute();
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
+    });
+
+    it('maps HTTP 500 to the unhandled-error status', () => {
+        const serverError = new AxiosError('500');
+        serverError.status = HttpStatusCode.InternalServerError;
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: serverError });
+        renderRoute();
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_UNHANDLED_ERROR)).toBeInTheDocument();
+    });
+});
+
+describe('NPE route timeline path and loading scope', () => {
+    it('shows a loading spinner while the timeline query is loading', () => {
+        h.params = { filepath: 'timeline.json' };
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: null });
+        mockUseNPETimelineFile.mockReturnValue({ data: undefined, isLoading: true, error: null });
+        renderRoute(null);
+
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
+    });
+
+    it('maps timeline ECONNABORTED to the load-timeout status', () => {
+        h.params = { filepath: 'timeline.json' };
+        const error = new AxiosError('aborted');
+        error.code = AxiosError.ECONNABORTED;
+        mockUseNPETimelineFile.mockReturnValue({ data: undefined, isLoading: false, error });
+        renderRoute(null);
+
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
+    });
+
+    it('maps timeline PAYLOAD_TOO_LARGE to the payload-too-large status', () => {
+        h.params = { filepath: 'timeline.json' };
+        const error = new AxiosError('empty');
+        error.code = NPEAxiosErrorCode.PAYLOAD_TOO_LARGE;
+        mockUseNPETimelineFile.mockReturnValue({ data: undefined, isLoading: false, error });
+        renderRoute(null);
+
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE)).toBeInTheDocument();
+    });
+
+    it('ignores a loading disabled useNpe sibling when the timeline path is active', () => {
+        h.params = { filepath: 'timeline.json' };
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
+        mockUseNPETimelineFile.mockReturnValue({
+            data: validNpeData,
+            isLoading: false,
+            error: null,
+        });
+        renderRoute(null);
+
+        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).not.toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
+    });
+
+    it('ignores a loading disabled timeline sibling when the hosted useNpe path is active', () => {
+        mockUseNpe.mockReturnValue(settledNpe);
+        mockUseNPETimelineFile.mockReturnValue({ data: undefined, isLoading: true, error: null });
+        renderRoute();
+
+        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).not.toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
     });
 });

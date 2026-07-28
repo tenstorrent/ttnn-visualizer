@@ -6,8 +6,10 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useNpeSummary, useNpeWindow } from '../src/hooks/useAPI';
+import { fetchNpeText, useNPETimelineFile, useNpe, useNpeSummary, useNpeWindow } from '../src/hooks/useAPI';
 import axiosInstance from '../src/libs/axiosInstance';
+import Endpoints from '../src/definitions/Endpoints';
+import { NPEAxiosErrorCode, NPE_FETCH_TIMEOUT_MS, NPE_MAX_CONTENT_LENGTH } from '../src/definitions/NPEData';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: { get: vi.fn() },
@@ -97,5 +99,76 @@ describe('useNpeSummary / useNpeWindow fetch-boundary validation', () => {
         await waitFor(() => expect(mockedGet).toHaveBeenCalled());
         const config = mockedGet.mock.calls[0][1] as { signal?: AbortSignal };
         expect(config.signal).toBeInstanceOf(AbortSignal);
+    });
+});
+
+const validNpePayload = {
+    common_info: { version: '1.0.0' },
+    noc_transfers: [{ id: 0 }],
+    timestep_data: [{ active_transfers: [] }],
+};
+
+describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
+    it('fetches NPE as text with timeout and content-length options', async () => {
+        mockedGet.mockResolvedValue({ data: JSON.stringify(validNpePayload) });
+        const { result } = renderHook(() => useNpe('trace.json'), { wrapper: makeWrapper() });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+        expect(mockedGet).toHaveBeenCalledWith(
+            Endpoints.NPE,
+            expect.objectContaining({
+                timeout: NPE_FETCH_TIMEOUT_MS,
+                responseType: 'text',
+                transitional: { forcedJSONParsing: false },
+                maxContentLength: NPE_MAX_CONTENT_LENGTH,
+                maxBodyLength: NPE_MAX_CONTENT_LENGTH,
+                signal: expect.any(AbortSignal),
+            }),
+        );
+        expect(result.current.data?.common_info.version).toBe('1.0.0');
+    });
+
+    it('maps an empty body to PAYLOAD_TOO_LARGE on useNpe', async () => {
+        mockedGet.mockResolvedValue({ data: null });
+        const { result } = renderHook(() => useNpe('trace.json'), { wrapper: makeWrapper() });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error?.code).toBe(NPEAxiosErrorCode.PAYLOAD_TOO_LARGE);
+    });
+
+    it('fetches timeline with filename param and the same text options', async () => {
+        mockedGet.mockResolvedValue({ data: JSON.stringify(validNpePayload) });
+        const { result } = renderHook(() => useNPETimelineFile('saved.json'), { wrapper: makeWrapper() });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+        expect(mockedGet).toHaveBeenCalledWith(
+            `${Endpoints.PERFORMANCE}/npe/timeline`,
+            expect.objectContaining({
+                timeout: NPE_FETCH_TIMEOUT_MS,
+                responseType: 'text',
+                params: { filename: 'saved.json' },
+                signal: expect.any(AbortSignal),
+            }),
+        );
+    });
+
+    it('aborts the prior in-flight fetch when a second fetchNpeText starts', async () => {
+        let resolveFirst: ((value: { data: string }) => void) | undefined;
+        mockedGet.mockImplementationOnce((_url, config) => {
+            return new Promise((resolve, reject) => {
+                resolveFirst = resolve;
+                const signal = config?.signal as AbortSignal | undefined;
+                signal?.addEventListener('abort', () => {
+                    reject(new DOMException('Aborted', 'AbortError'));
+                });
+            });
+        });
+        mockedGet.mockResolvedValueOnce({ data: JSON.stringify(validNpePayload) });
+
+        const first = fetchNpeText(Endpoints.NPE);
+        const second = fetchNpeText(Endpoints.NPE);
+        await expect(second).resolves.toEqual(validNpePayload);
+        await expect(first).rejects.toThrow();
+        // Keep the first promise from hanging if abort listener never fired in the mock.
+        resolveFirst?.({ data: JSON.stringify(validNpePayload) });
     });
 });

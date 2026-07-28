@@ -9,13 +9,16 @@ export const LEGACY_VISUALIZER_VERSION = '0.32.3'; // Version of the visualizer 
 export const NPE_FETCH_TIMEOUT_MS = 30_000;
 
 /**
- * Intended Axios response/body size cap (~Chromium 512 MiB string limit).
+ * Intended Axios response/body size cap (~Chromium string limit).
  * Passed on NPE GETs for http/fetch adapter parity; the SPA xhr adapter does not enforce it.
  */
 export const NPE_MAX_CONTENT_LENGTH = 512 * 1024 * 1024;
 
+/** Display form of `NPE_MAX_CONTENT_LENGTH` for user-facing copy. */
+export const NPE_MAX_CONTENT_LENGTH_MIB = NPE_MAX_CONTENT_LENGTH / (1024 * 1024);
+
 /** Axios `error.code` values thrown by `parseNpeAxiosResponseData`. */
-export enum NpeAxiosErrorCode {
+export enum NPEAxiosErrorCode {
     PAYLOAD_TOO_LARGE = 'NPE_PAYLOAD_TOO_LARGE',
     INVALID_JSON = 'NPE_INVALID_JSON',
 }

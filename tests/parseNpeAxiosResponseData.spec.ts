@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { AxiosError } from 'axios';
-import { NpeAxiosErrorCode } from '../src/definitions/NPEData';
+import { NPEAxiosErrorCode } from '../src/definitions/NPEData';
 import { parseNpeAxiosResponseData } from '../src/functions/parseNpeAxiosResponseData';
 
 const validPayload = {
@@ -29,7 +29,7 @@ describe('parseNpeAxiosResponseData', () => {
                 expect.unreachable();
             } catch (error) {
                 expect(error).toBeInstanceOf(AxiosError);
-                expect((error as AxiosError).code).toBe(NpeAxiosErrorCode.PAYLOAD_TOO_LARGE);
+                expect((error as AxiosError).code).toBe(NPEAxiosErrorCode.PAYLOAD_TOO_LARGE);
             }
         }
     });
@@ -40,7 +40,7 @@ describe('parseNpeAxiosResponseData', () => {
             expect.unreachable();
         } catch (error) {
             expect(error).toBeInstanceOf(AxiosError);
-            expect((error as AxiosError).code).toBe(NpeAxiosErrorCode.INVALID_JSON);
+            expect((error as AxiosError).code).toBe(NPEAxiosErrorCode.INVALID_JSON);
         }
     });
 
@@ -51,7 +51,7 @@ describe('parseNpeAxiosResponseData', () => {
                 expect.unreachable();
             } catch (error) {
                 expect(error).toBeInstanceOf(AxiosError);
-                expect((error as AxiosError).code).toBe(NpeAxiosErrorCode.INVALID_JSON);
+                expect((error as AxiosError).code).toBe(NPEAxiosErrorCode.INVALID_JSON);
             }
         }
     });

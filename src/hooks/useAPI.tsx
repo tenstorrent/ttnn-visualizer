@@ -444,15 +444,32 @@ const NPE_TEXT_GET_OPTIONS = {
     maxBodyLength: NPE_MAX_CONTENT_LENGTH,
 };
 
-const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
-    const response = await axiosInstance.get<string>(url, {
-        ...NPE_TEXT_GET_OPTIONS,
-        ...config,
-    });
-    // Parse then drop the text body so RQ caches only the object graph.
-    const parsed = parseNpeAxiosResponseData(response.data);
-    (response as { data: string | null }).data = null;
-    return parsed;
+// Own AbortController (not React Query's signal): Strict Mode remount must not
+// abort a multi-hundred-MB download. Report switch / overlapping fetch aborts the prior.
+let activeNpeRequestAbort: AbortController | null = null;
+
+/** Exported for contract tests; prefer useNpe / useNPETimelineFile at call sites. */
+export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
+    // Abort any prior NPE download before starting a new one (key change / refetch).
+    // Do not wire React Query's AbortSignal — Strict Mode remount must join in-flight work.
+    activeNpeRequestAbort?.abort();
+    const abortController = new AbortController();
+    activeNpeRequestAbort = abortController;
+    try {
+        const response = await axiosInstance.get<string>(url, {
+            ...NPE_TEXT_GET_OPTIONS,
+            ...config,
+            signal: abortController.signal,
+        });
+        // Parse then drop the text body so RQ caches only the object graph.
+        const parsed = parseNpeAxiosResponseData(response.data);
+        (response as { data: string | null }).data = null;
+        return parsed;
+    } finally {
+        if (activeNpeRequestAbort === abortController) {
+            activeNpeRequestAbort = null;
+        }
+    }
 };
 
 const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
