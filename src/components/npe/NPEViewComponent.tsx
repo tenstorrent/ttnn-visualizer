@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import 'styles/components/NPEZoneFilterComponent.scss';
-import { Dispatch, SetStateAction, startTransition, useEffect, useMemo, useState } from 'react';
+import { Dispatch, SetStateAction, useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Classes, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -56,8 +56,6 @@ import { ToastType } from '../../definitions/ToastType';
 
 interface NPEViewProps {
     npeData: NPEData;
-    /** Fired once after the first commit so the route can bound render time. */
-    onRendered?: () => void;
     // #861 windowed loading: when a container drives the selected timestep (to
     // refetch per-step windows), it passes both the controlled value and setter,
     // plus a stable `reportKey` so the per-report reset fires on report switch
@@ -92,38 +90,8 @@ const getRootZoneKey = (proc: KERNEL_PROCESS, address: NPE_COORDINATES): Rootzon
     return `${proc}:${address.join(',')}`;
 };
 
-const NPEView = (props: NPEViewProps) => {
-    // Yield once so the route spinner can paint and the render-budget timer can
-    // fire before sync chip/timeline work begins. Co-mounting the spinner with
-    // an empty shell is cheap; the heavy body mounts on the next frame.
-    const [mountBody, setMountBody] = useState(false);
-
-    useEffect(() => {
-        const frameId = window.requestAnimationFrame(() => {
-            startTransition(() => {
-                setMountBody(true);
-            });
-        });
-        return () => {
-            window.cancelAnimationFrame(frameId);
-        };
-    }, []);
-
-    if (!mountBody) {
-        return (
-            <div
-                className='npe npe--deferred-shell'
-                aria-busy='true'
-            />
-        );
-    }
-
-    return <NPEViewBody {...props} />;
-};
-
-const NPEViewBody = ({
+const NPEView = ({
     npeData,
-    onRendered,
     selectedTimestep: controlledTimestep,
     onSelectedTimestepChange,
     reportKey,
@@ -175,12 +143,6 @@ const NPEViewBody = ({
             setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
         }
     }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
-
-    useEffect(() => {
-        onRendered?.();
-        // Intentionally once per mount — parent resets when the active report changes.
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only ready signal
-    }, []);
 
     const selectedZoneList: NPERootZoneUXInfo[] = useMemo(() => {
         if (selectedZoneAddress === null) {

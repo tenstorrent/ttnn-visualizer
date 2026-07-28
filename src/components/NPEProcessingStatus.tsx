@@ -9,7 +9,6 @@ import {
     MIN_SUPPORTED_VERSION,
     NPEValidationError,
     NPE_PROCESSING_LABEL,
-    NPE_RENDERING_LABEL,
 } from '../definitions/NPEData';
 import { TEST_IDS } from '../definitions/TestIds';
 import LoadingSpinner from './LoadingSpinner';
@@ -54,9 +53,6 @@ const ProcessingErrors: Record<NPEValidationError, { title: string }> = {
     [NPEValidationError.PAYLOAD_TOO_LARGE]: {
         title: 'NPE file too large for this browser',
     },
-    [NPEValidationError.RENDER_TIMEOUT]: {
-        title: 'Rendering timed out',
-    },
 };
 
 interface NPEProcessingStatusProps {
@@ -64,17 +60,9 @@ interface NPEProcessingStatusProps {
     hasUploadedFile?: boolean;
     errorCode: NPEValidationError;
     isLoading: boolean;
-    /** True once fetch has finished and the route is waiting for first paint (before or during NPEView mount). */
-    isRendering?: boolean;
 }
 
-const NPEProcessingStatus = ({
-    dataVersion,
-    hasUploadedFile,
-    errorCode,
-    isLoading,
-    isRendering = false,
-}: NPEProcessingStatusProps) => {
+const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoading }: NPEProcessingStatusProps) => {
     if (isLoading) {
         return (
             <div
@@ -82,7 +70,7 @@ const NPEProcessingStatus = ({
                 data-testid={TEST_IDS.NPE_PROCESSING_LOADING}
             >
                 <LoadingSpinner />
-                <p>{isRendering ? NPE_RENDERING_LABEL : NPE_PROCESSING_LABEL}</p>
+                <p>{NPE_PROCESSING_LABEL}</p>
             </div>
         );
     }
@@ -180,16 +168,6 @@ const NPEProcessingStatus = ({
                                     browsers have roughly a 512&nbsp;MiB string limit.
                                 </p>
                                 <p>Try another browser or regenerate a smaller trace with {NPE_REPO_URL}.</p>
-                            </>
-                        );
-                    case NPEValidationError.RENDER_TIMEOUT:
-                        return (
-                            <>
-                                <p data-testid={TEST_IDS.NPE_PROCESSING_RENDER_TIMEOUT}>
-                                    The NPE view did not finish rendering in time. The trace may be too large for this
-                                    browser session.
-                                </p>
-                                <p>Please raise an issue at {NPE_REPO_URL} and include the relevant NPE data.</p>
                             </>
                         );
 

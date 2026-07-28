@@ -75,7 +75,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
     vi.clearAllMocks();
-    mockUseReportFolderList.mockReturnValue({ data: [], isError: false });
+    mockUseReportFolderList.mockReturnValue({ data: [] });
     mockUseInstance.mockReturnValue({
         data: {
             active_report: {
@@ -88,93 +88,6 @@ beforeEach(() => {
             remote_profiler_folder: null,
         },
         isLoading: false,
-    });
-});
-
-it('does not restore while the folder list is still on its null initialData', () => {
-    mockUseReportFolderList.mockReturnValue({ data: null, isError: false });
-
-    render(
-        <TestProviders>
-            <HookHarness />
-        </TestProviders>,
-    );
-
-    expect(screen.getByText('pending')).toBeTruthy();
-    expect(screen.queryByText('restored')).toBeNull();
-});
-
-it('stays pending while the first instance payload has not arrived', () => {
-    mockUseInstance.mockReturnValue({
-        data: undefined,
-        isLoading: true,
-    });
-
-    render(
-        <TestProviders>
-            <HookHarness />
-        </TestProviders>,
-    );
-
-    expect(screen.getByText('pending')).toBeTruthy();
-    expect(screen.queryByText('restored')).toBeNull();
-});
-
-it('restores when the folder list fails so the loader cannot hang with no request in flight', async () => {
-    mockUseReportFolderList.mockReturnValue({ data: null, isError: true });
-
-    render(
-        <TestProviders>
-            <HookHarness />
-        </TestProviders>,
-    );
-
-    await waitFor(() => {
-        expect(screen.getByText('restored')).toBeTruthy();
-    });
-});
-
-it('marks restored when instance data is null after the instance query settles', async () => {
-    mockUseInstance.mockReturnValue({
-        data: null,
-        isLoading: false,
-    });
-
-    render(
-        <TestProviders>
-            <HookHarness />
-        </TestProviders>,
-    );
-
-    await waitFor(() => {
-        expect(screen.getByText('restored')).toBeTruthy();
-    });
-});
-
-it('restores even when the instance query is refetching with cached data', async () => {
-    mockUseInstance.mockReturnValue({
-        data: {
-            active_report: {
-                profiler_name: null,
-                profiler_location: null,
-                performance_name: null,
-                performance_location: null,
-                npe_name: null,
-            },
-            remote_profiler_folder: null,
-        },
-        // Simulate a background refetch after hydrate — must not block restore.
-        isLoading: true,
-    });
-
-    render(
-        <TestProviders>
-            <HookHarness />
-        </TestProviders>,
-    );
-
-    await waitFor(() => {
-        expect(screen.getByText('restored')).toBeTruthy();
     });
 });
 

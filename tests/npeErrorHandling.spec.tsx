@@ -7,12 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import NPEProcessingStatus from '../src/components/NPEProcessingStatus';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import {
-    MIN_SUPPORTED_VERSION,
-    NPEValidationError,
-    NPE_PROCESSING_LABEL,
-    NPE_RENDERING_LABEL,
-} from '../src/definitions/NPEData';
+import { MIN_SUPPORTED_VERSION, NPEValidationError, NPE_PROCESSING_LABEL } from '../src/definitions/NPEData';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -44,22 +39,6 @@ it('renders a loading message while the NPE is processing', () => {
     );
 
     expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_PROCESSING_LABEL);
-});
-
-it('renders a rendering message while the NPE view is mounting', () => {
-    render(
-        <TestProviders>
-            <NPEProcessingStatus
-                isLoading
-                isRendering
-                hasUploadedFile
-                dataVersion={null}
-                errorCode={NPEValidationError.OK}
-            />
-        </TestProviders>,
-    );
-
-    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_RENDERING_LABEL);
 });
 
 it('handles incorrect NPE data versions', () => {
@@ -150,21 +129,6 @@ it('handles payloads that exceed the browser size limit', () => {
     );
 
     expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_PAYLOAD_TOO_LARGE).textContent).toContain('too large');
-});
-
-it('handles render timeouts', () => {
-    render(
-        <TestProviders>
-            <NPEProcessingStatus
-                isLoading={false}
-                hasUploadedFile
-                dataVersion={MIN_SUPPORTED_VERSION}
-                errorCode={NPEValidationError.RENDER_TIMEOUT}
-            />
-        </TestProviders>,
-    );
-
-    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_RENDER_TIMEOUT).textContent).toContain('finish rendering');
 });
 
 it('handles unknown errors', () => {

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { AxiosError, AxiosRequestConfig } from 'axios';
-import { QueryClient, keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
@@ -37,6 +37,8 @@ import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable'
 import { isDeviceOperation } from '../functions/filterOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
 import {
+    activeMlirJsonAtom,
+    activeNpeOpTraceAtom,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
@@ -127,18 +129,6 @@ export const fetchInstance = async (): Promise<Instance | null> => {
 export const updateInstance = async (payload: Partial<Instance>): Promise<Instance | null> => {
     const response = await axiosInstance.put<Instance>(Endpoints.INSTANCE, payload);
     return response?.data ?? null;
-};
-
-export const INSTANCE_QUERY_KEY = ['fetch-instance'] as const;
-
-/** Prefer this over bare `updateInstance` so callers cannot forget to refresh the stable instance query. */
-export const updateInstanceAndInvalidate = async (
-    queryClient: QueryClient,
-    payload: Partial<Instance>,
-): Promise<Instance | null> => {
-    const instance = await updateInstance(payload);
-    await queryClient.invalidateQueries({ queryKey: INSTANCE_QUERY_KEY });
-    return instance;
 };
 
 export const fetchBufferChunks = async (
@@ -442,28 +432,6 @@ export const useGetNPEManifest = () => {
 export const NPE_QUERY_KEY = 'fetch-npe';
 export const NPE_SUMMARY_QUERY_KEY = 'npe-summary';
 export const NPE_WINDOW_QUERY_KEY = 'npe-window';
-export const NPE_OP_TRACE_QUERY_KEY = [NPE_QUERY_KEY] as const;
-export const NPE_TIMELINE_QUERY_KEY = ['get-npe-timeline'] as const;
-
-const NPE_QUERY_KEYS = [NPE_OP_TRACE_QUERY_KEY, NPE_TIMELINE_QUERY_KEY] as const;
-
-// Own AbortController (not React Query's signal): Strict Mode remount must not
-// abort a multi-hundred-MB download. Timeout / report switch call abortActiveNpeRequest.
-let activeNpeRequestAbort: AbortController | null = null;
-
-export const abortActiveNpeRequest = (): void => {
-    activeNpeRequestAbort?.abort();
-    activeNpeRequestAbort = null;
-};
-
-/** Cancel in-flight NPE downloads and drop cached payloads after a UI timeout. */
-export const discardNpeQueries = (queryClient: QueryClient): void => {
-    abortActiveNpeRequest();
-    for (const queryKey of NPE_QUERY_KEYS) {
-        queryClient.cancelQueries({ queryKey }).catch(() => undefined);
-        queryClient.removeQueries({ queryKey });
-    }
-};
 
 const NPE_TEXT_GET_OPTIONS = {
     timeout: NPE_FETCH_TIMEOUT_MS,
@@ -476,28 +444,15 @@ const NPE_TEXT_GET_OPTIONS = {
     maxBodyLength: NPE_MAX_CONTENT_LENGTH,
 };
 
-/** Exported for contract tests; prefer useNpe / useNPETimelineFile at call sites. */
-export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
-    // Abort any prior NPE download before starting a new one (key change / refetch).
-    // Do not wire React Query's AbortSignal — Strict Mode remount must join in-flight work.
-    abortActiveNpeRequest();
-    const abortController = new AbortController();
-    activeNpeRequestAbort = abortController;
-    try {
-        const response = await axiosInstance.get<string>(url, {
-            ...NPE_TEXT_GET_OPTIONS,
-            ...config,
-            signal: abortController.signal,
-        });
-        // Parse then drop the text body so RQ caches only the object graph.
-        const parsed = parseNpeAxiosResponseData(response.data);
-        (response as { data: string | null }).data = null;
-        return parsed;
-    } finally {
-        if (activeNpeRequestAbort === abortController) {
-            activeNpeRequestAbort = null;
-        }
-    }
+const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
+    const response = await axiosInstance.get<string>(url, {
+        ...NPE_TEXT_GET_OPTIONS,
+        ...config,
+    });
+    // Parse then drop the text body so RQ caches only the object graph.
+    const parsed = parseNpeAxiosResponseData(response.data);
+    (response as { data: string | null }).data = null;
+    return parsed;
 };
 
 const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
@@ -509,7 +464,7 @@ const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
 export const useNPETimelineFile = (fileName: string | undefined) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNPETimeline(fileName!),
-        queryKey: [...NPE_TIMELINE_QUERY_KEY, fileName],
+        queryKey: ['get-npe-timeline', fileName],
         retry: false,
         enabled: !!fileName,
     });
@@ -667,7 +622,7 @@ const fetchNpeOpTrace = async () => fetchNpeText(Endpoints.NPE);
 export const useNpe = (fileName: string | null) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNpeOpTrace(),
-        queryKey: [...NPE_OP_TRACE_QUERY_KEY, fileName],
+        queryKey: [NPE_QUERY_KEY, fileName],
         retry: false,
         staleTime: 30000,
         enabled: fileName !== null,
@@ -1298,12 +1253,20 @@ export const usePerformanceComparisonReport = () => {
 };
 
 export const useInstance = () => {
-    // Stable key — do not key on active-report atoms. Restore hydrates those atoms from
-    // the instance payload; putting them in the key refetches on hydrate, and Strict Mode
-    // remount can then sit in isLoading&&!hasRestoredInstance with the prior fetch aborted.
-    return useQuery<Instance | null, AxiosError>({
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeNpe = useAtomValue(activeNpeOpTraceAtom);
+    const activeMlirJson = useAtomValue(activeMlirJsonAtom);
+
+    return useQuery({
         queryFn: () => fetchInstance(),
-        queryKey: INSTANCE_QUERY_KEY,
+        queryKey: [
+            'fetch-instance',
+            activeProfilerReport?.path,
+            activePerformanceReport?.path,
+            activeNpe,
+            activeMlirJson,
+        ],
     });
 };
 

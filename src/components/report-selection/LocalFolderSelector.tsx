@@ -29,7 +29,7 @@ import {
     PROFILER_FOLDER_QUERY_KEY,
     deletePerformance,
     deleteProfiler,
-    updateInstanceAndInvalidate,
+    updateInstance,
     usePerfFolderList,
     useReportFolderList,
     useReportMetadata,
@@ -234,7 +234,7 @@ const LocalFolderOptions = () => {
     const handleSelectProfiler = async (folder: ReportFolder) => {
         await withActivatingReport(async () => {
             // Backend handles updating only the specific parts of active_report
-            await updateInstanceAndInvalidate(queryClient, {
+            await updateInstance({
                 active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
             });
 
@@ -264,7 +264,7 @@ const LocalFolderOptions = () => {
     const handleSelectPerformance = async (folder: ReportFolder) => {
         await withActivatingReport(async () => {
             // Backend handles updating only the specific parts of active_report
-            await updateInstanceAndInvalidate(queryClient, {
+            await updateInstance({
                 active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
             });
 

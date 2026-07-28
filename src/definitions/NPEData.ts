@@ -5,11 +5,8 @@
 export const MIN_SUPPORTED_VERSION = '1.0.0';
 export const LEGACY_VISUALIZER_VERSION = '0.32.3'; // Version of the visualizer that supports pre-version data format
 
-// Axios / UI wall-clock bound for GET /api/npe (download + parse, including sync JSON.parse).
+// Axios timeout for GET /api/npe (download wait; sync JSON.parse is separate).
 export const NPE_FETCH_TIMEOUT_MS = 30_000;
-
-/** Bound for first paint of NPEView after data is ready (wall clock, including sync work). */
-export const NPE_RENDER_TIMEOUT_MS = 30_000;
 
 /**
  * Intended Axios response/body size cap (~Chromium 512 MiB string limit).
@@ -18,7 +15,6 @@ export const NPE_RENDER_TIMEOUT_MS = 30_000;
 export const NPE_MAX_CONTENT_LENGTH = 512 * 1024 * 1024;
 
 export const NPE_PROCESSING_LABEL = 'Processing NPE…';
-export const NPE_RENDERING_LABEL = 'Rendering NPE…';
 
 /** Axios `error.code` values thrown by `parseNpeAxiosResponseData`. */
 export enum NpeAxiosErrorCode {
@@ -35,5 +31,4 @@ export enum NPEValidationError {
     EMPTY_NPE_TRACE,
     LOAD_TIMEOUT,
     PAYLOAD_TOO_LARGE,
-    RENDER_TIMEOUT,
 }

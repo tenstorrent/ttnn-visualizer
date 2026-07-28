@@ -7,12 +7,10 @@ import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router';
 import { AxiosError, HttpStatusCode } from 'axios';
-import classNames from 'classnames';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
 import NpeWindowedView from '../components/npe/NpeWindowedView';
 import { useNPETimelineFile, useNpe } from '../hooks/useAPI';
-import useNpeLoadRenderLifecycle from '../hooks/useNpeLoadRenderLifecycle';
 import { activeNpeOpTraceAtom } from '../store/app';
 import { NPEData } from '../model/NPEModel';
 import getServerConfig from '../functions/getServerConfig';
@@ -20,7 +18,6 @@ import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
 import { NPEValidationError, NpeAxiosErrorCode } from '../definitions/NPEData';
 import { validateNpeData } from '../functions/validateNpeData';
-import 'styles/components/NPEComponent.scss';
 
 const isNpeFetchTimeout = (error: AxiosError | null): boolean =>
     error?.code === AxiosError.ECONNABORTED || error?.code === AxiosError.ETIMEDOUT;
@@ -65,14 +62,14 @@ const NPE = () => {
     const isDemoEnabled = isServerMode;
     // Prefer RQ isLoading (isPending && isFetching) over bare isFetching so a
     // background refetch cannot pin the spinner after data is already present.
-    const isFetchingData = (isNpeQueryEnabled && isLoadingNpe) || (isTimelineQueryEnabled && isLoadingTimeline);
+    const isLoading = (isNpeQueryEnabled && isLoadingNpe) || (isTimelineQueryEnabled && isLoadingTimeline);
     const hasUploadedFile = !!npeFileName || !!filepath;
 
     // Only one query is enabled; prefer the active error without OR-ing both.
     const fetchError = httpError ?? timelineHttpError;
 
-    const fetchErrorCode = useMemo(() => {
-        if (isFetchingData) {
+    const errorCode = useMemo(() => {
+        if (isLoading) {
             return NPEValidationError.OK;
         }
 
@@ -93,24 +90,7 @@ const NPE = () => {
         }
 
         return validateNpeData(npeData);
-    }, [isFetchingData, fetchError, npeData]);
-
-    const hasValidData = !isFetchingData && !!npeData && fetchErrorCode === NPEValidationError.OK;
-    const { isRendering, isLoading, isDataReady, loadTimedOut, renderTimedOut, mountView, handleViewRendered } =
-        useNpeLoadRenderLifecycle({
-            npeFileName,
-            filepath,
-            selectedDemoKey: selectedDemo?.reportFile ?? null,
-            isFetchingData,
-            hasValidData,
-        });
-
-    let errorCode = fetchErrorCode;
-    if (renderTimedOut) {
-        errorCode = NPEValidationError.RENDER_TIMEOUT;
-    } else if (loadTimedOut) {
-        errorCode = NPEValidationError.LOAD_TIMEOUT;
-    }
+    }, [isLoading, fetchError, npeData]);
 
     useEffect(() => {
         if (loadedData || loadedTimeline) {
@@ -164,24 +144,11 @@ const NPE = () => {
                             errorCode={errorCode}
                             dataVersion={npeData?.common_info?.version || null}
                             isLoading={isLoading}
-                            isRendering={isRendering}
                             hasUploadedFile={hasUploadedFile}
                         />
                     )}
 
-                    {isDataReady && mountView && !renderTimedOut && npeData && (
-                        <div
-                            // Keep the view mounted (and measurable) while the spinner
-                            // shows, but avoid a flash of unfinished chrome.
-                            className={classNames({ 'npe-view-prepaint': isRendering })}
-                            aria-hidden={isRendering}
-                        >
-                            <NPEView
-                                npeData={npeData}
-                                onRendered={handleViewRendered}
-                            />
-                        </div>
-                    )}
+                    {!isLoading && errorCode === NPEValidationError.OK && npeData && <NPEView npeData={npeData} />}
                 </>
             )}
         </>

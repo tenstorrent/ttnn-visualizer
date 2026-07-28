@@ -3,51 +3,43 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { AxiosError, HttpStatusCode } from 'axios';
-import { useEffect, useState } from 'react';
-import { useSetAtom } from 'jotai';
+import { getDefaultStore } from 'jotai';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import {
-    NPE_FETCH_TIMEOUT_MS,
-    NPE_PROCESSING_LABEL,
-    NPE_RENDERING_LABEL,
-    NPE_RENDER_TIMEOUT_MS,
-    NpeAxiosErrorCode,
-} from '../src/definitions/NPEData';
+import { NPE_PROCESSING_LABEL, NpeAxiosErrorCode } from '../src/definitions/NPEData';
 import type { NPEData } from '../src/model/NPEModel';
 
-// Mutable holders shared with hoisted mock factories so cases can flip
+// Mutable holders shared with the hoisted mock factories so each case can flip
 // SERVER_MODE / route params and inspect how useNpe was gated.
 const h = vi.hoisted(() => ({
     // Default true so loading/error tests exercise the whole-file path; windowed
     // gate tests flip this to false (local upload → NpeWindowedView).
     serverMode: true as boolean,
+    params: {} as { filepath?: string },
     useNpeArgs: [] as (string | null)[],
 }));
 
-const { mockUseNpe, mockUseNPETimelineFile, mockUseParams, mockDiscardNpeQueries } = vi.hoisted(() => ({
+const { mockUseNpe, mockUseNPETimelineFile } = vi.hoisted(() => ({
     mockUseNpe: vi.fn(),
     mockUseNPETimelineFile: vi.fn(),
-    mockUseParams: vi.fn(() => ({})),
-    mockDiscardNpeQueries: vi.fn(),
 }));
 
-vi.mock('react-helmet-async', () => ({
-    Helmet: () => null,
-    HelmetProvider: ({ children }: { children: unknown }) => children,
-}));
 vi.mock('../src/functions/getServerConfig', () => ({ default: () => ({ SERVER_MODE: h.serverMode }) }));
 vi.mock('react-router', async () => {
     const actual = await vi.importActual<typeof import('react-router')>('react-router');
     return {
         ...actual,
-        useParams: () => mockUseParams(),
+        useParams: () => h.params,
     };
 });
+vi.mock('react-helmet-async', () => ({
+    Helmet: () => null,
+    HelmetProvider: ({ children }: { children: unknown }) => children,
+}));
 vi.mock('../src/hooks/useAPI', async () => {
     const actual = await vi.importActual<typeof import('../src/hooks/useAPI')>('../src/hooks/useAPI');
     return {
@@ -57,35 +49,14 @@ vi.mock('../src/hooks/useAPI', async () => {
             return mockUseNpe(arg);
         },
         useNPETimelineFile: (...args: unknown[]) => mockUseNPETimelineFile(...args),
-        discardNpeQueries: (...args: unknown[]) => mockDiscardNpeQueries(...args),
     };
 });
-vi.mock('../src/components/npe/NPEFileLoader', () => ({
-    default: () => <div data-testid={TEST_IDS.NPE_FILE_LOADER} />,
-}));
-vi.mock('../src/components/npe/NPEDemoSelect', () => ({
-    default: () => null,
-}));
-vi.mock('../src/components/npe/NpeWindowedView', () => ({
-    default: () => <div data-testid='windowed-view' />,
-}));
-
-let callOnRendered = true;
-let capturedOnRendered: (() => void) | null = null;
-
+vi.mock('../src/components/npe/NpeWindowedView', () => ({ default: () => <div data-testid='windowed-view' /> }));
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
-    default: function MockNPEView({ onRendered }: { onRendered?: () => void }) {
-        // Match production: fire once on mount, not when the parent recreates onRendered.
-        useEffect(() => {
-            capturedOnRendered = onRendered ?? null;
-            if (callOnRendered) {
-                onRendered?.();
-            }
-            // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only ready signal
-        }, []);
-        return <div data-testid={TEST_IDS.NPE_VIEW} />;
-    },
+    default: () => <div data-testid={TEST_IDS.NPE_VIEW} />,
 }));
+vi.mock('../src/components/npe/NPEFileLoader', () => ({ default: () => null }));
+vi.mock('../src/components/npe/NPEDemoSelect', () => ({ default: () => null }));
 
 // eslint-disable-next-line import/first
 import NPE from '../src/routes/NPE';
@@ -108,44 +79,27 @@ const settledNpe = {
     error: null,
 };
 
-const SwitchNpeFileButton = ({ fileName }: { fileName: string }) => {
-    const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
-    return (
-        <button
-            type='button'
-            onClick={() => setActiveNpe(fileName)}
-        >
-            switch-npe-file
-        </button>
-    );
-};
+const lastUseNpeArg = () => h.useNpeArgs[h.useNpeArgs.length - 1];
 
 const renderRoute = (fileName: string | null = 'trace.json') =>
     render(
         <TestProviders initialAtomValues={[[activeNpeOpTraceAtom, fileName]]}>
             <NPE />
-            <SwitchNpeFileButton fileName='other-trace.json' />
         </TestProviders>,
     );
 
-const lastUseNpeArg = () => h.useNpeArgs[h.useNpeArgs.length - 1];
-
 beforeEach(() => {
-    callOnRendered = true;
-    capturedOnRendered = null;
     h.serverMode = true;
+    h.params = {};
     h.useNpeArgs = [];
-    mockUseParams.mockReturnValue({});
     mockUseNpe.mockReturnValue(settledNpe);
     mockUseNPETimelineFile.mockReturnValue(idleTimeline);
-    mockDiscardNpeQueries.mockClear();
 });
 
 afterEach(() => {
     cleanup();
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
     vi.clearAllMocks();
+    getDefaultStore().set(activeNpeOpTraceAtom, null);
 });
 
 describe('NPE route windowed-view gate', () => {
@@ -169,7 +123,7 @@ describe('NPE route windowed-view gate', () => {
 
     it('keeps the whole-file path when viewing a saved report by filepath', () => {
         h.serverMode = false;
-        mockUseParams.mockReturnValue({ filepath: 'saved-report.json' });
+        h.params = { filepath: 'saved-report.json' };
         mockUseNPETimelineFile.mockReturnValue({
             data: validNpeData,
             isLoading: false,
@@ -187,7 +141,7 @@ describe('NPE route windowed-view gate', () => {
     });
 });
 
-describe('NPE route loading and error wiring', () => {
+describe('NPE route error mapping', () => {
     it('shows Processing while the active NPE query is loading', () => {
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
         renderRoute();
@@ -196,31 +150,11 @@ describe('NPE route loading and error wiring', () => {
         expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
     });
 
-    it('shows Rendering after data is ready and before onRendered', () => {
-        callOnRendered = false;
-        vi.useFakeTimers();
+    it('mounts the view once data is ready', () => {
         renderRoute();
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_RENDERING_LABEL);
-
-        act(() => {
-            vi.advanceTimersByTime(0);
-        });
-
-        const view = screen.getByTestId(TEST_IDS.NPE_VIEW);
-        expect(view.closest('[aria-hidden="true"]')).not.toBeNull();
-    });
-
-    it('clears the spinner after onRendered', () => {
-        vi.useFakeTimers();
-        renderRoute();
-
-        act(() => {
-            vi.advanceTimersByTime(0);
-        });
 
         expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).not.toBeInTheDocument();
-        expect(screen.getByTestId(TEST_IDS.NPE_VIEW).closest('[aria-hidden="false"]')).not.toBeNull();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
     });
 
     it('maps PAYLOAD_TOO_LARGE to the payload-too-large status', () => {
@@ -270,198 +204,5 @@ describe('NPE route loading and error wiring', () => {
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: unprocessable });
         renderRoute();
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
-    });
-
-    it('times out a stuck fetch and discards NPE queries', () => {
-        vi.useFakeTimers();
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
-        renderRoute();
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).toBeInTheDocument();
-
-        act(() => {
-            vi.advanceTimersByTime(NPE_FETCH_TIMEOUT_MS);
-        });
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
-        expect(mockDiscardNpeQueries).toHaveBeenCalled();
-    });
-
-    it('times out when fetch settles after the wall-clock budget (sync parse path)', () => {
-        vi.useFakeTimers();
-        let now = 1_000;
-        vi.stubGlobal('performance', { now: () => now });
-
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
-
-        const TickHarness = () => {
-            const [tick, setTick] = useState(0);
-            return (
-                <>
-                    <button
-                        type='button'
-                        onClick={() => setTick((value) => value + 1)}
-                    >
-                        tick-{tick}
-                    </button>
-                    <NPE />
-                </>
-            );
-        };
-
-        render(
-            <TestProviders initialAtomValues={[[activeNpeOpTraceAtom, 'trace.json']]}>
-                <TickHarness />
-            </TestProviders>,
-        );
-
-        now += NPE_FETCH_TIMEOUT_MS + 1;
-        mockUseNpe.mockReturnValue(settledNpe);
-        act(() => {
-            screen.getByRole('button', { name: /tick-/ }).click();
-        });
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
-        expect(mockDiscardNpeQueries).toHaveBeenCalled();
-        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
-    });
-
-    it('times out when onRendered never fires and discards NPE queries', () => {
-        callOnRendered = false;
-        vi.useFakeTimers();
-        renderRoute();
-
-        act(() => {
-            vi.advanceTimersByTime(0);
-        });
-        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
-
-        act(() => {
-            vi.advanceTimersByTime(NPE_RENDER_TIMEOUT_MS);
-        });
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_RENDER_TIMEOUT)).toBeInTheDocument();
-        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
-        expect(mockDiscardNpeQueries).toHaveBeenCalled();
-    });
-
-    it('times out when onRendered fires after the render budget', () => {
-        callOnRendered = false;
-        vi.useFakeTimers();
-        let now = 5_000;
-        vi.stubGlobal('performance', { now: () => now });
-
-        renderRoute();
-
-        act(() => {
-            vi.advanceTimersByTime(0);
-        });
-        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
-        expect(capturedOnRendered).not.toBeNull();
-
-        now += NPE_RENDER_TIMEOUT_MS + 1;
-        act(() => {
-            capturedOnRendered?.();
-        });
-
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_RENDER_TIMEOUT)).toBeInTheDocument();
-        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
-        expect(mockDiscardNpeQueries).toHaveBeenCalled();
-    });
-
-    it('clears timeout UI when the active report identity changes', () => {
-        vi.useFakeTimers();
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
-        renderRoute('trace.json');
-
-        act(() => {
-            vi.advanceTimersByTime(NPE_FETCH_TIMEOUT_MS);
-        });
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
-
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
-        act(() => {
-            screen.getByRole('button', { name: 'switch-npe-file' }).click();
-        });
-
-        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).not.toBeInTheDocument();
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_PROCESSING_LABEL);
-    });
-
-    it('clears sticky timeout UI when the same report starts fetching again', () => {
-        vi.useFakeTimers();
-
-        const TickHarness = () => {
-            const [tick, setTick] = useState(0);
-            return (
-                <>
-                    <button
-                        type='button'
-                        onClick={() => setTick((value) => value + 1)}
-                    >
-                        tick-{tick}
-                    </button>
-                    <NPE />
-                </>
-            );
-        };
-
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
-        render(
-            <TestProviders initialAtomValues={[[activeNpeOpTraceAtom, 'trace.json']]}>
-                <TickHarness />
-            </TestProviders>,
-        );
-
-        act(() => {
-            vi.advanceTimersByTime(NPE_FETCH_TIMEOUT_MS);
-        });
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).toBeInTheDocument();
-
-        // Simulate post-discard idle, then same-report refetch (focus/retry) without identity change.
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: null });
-        act(() => {
-            screen.getByRole('button', { name: /tick-/ }).click();
-        });
-
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
-        act(() => {
-            screen.getByRole('button', { name: /tick-/ }).click();
-        });
-
-        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).not.toBeInTheDocument();
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_PROCESSING_LABEL);
-
-        mockUseNpe.mockReturnValue(settledNpe);
-        act(() => {
-            screen.getByRole('button', { name: /tick-/ }).click();
-        });
-        act(() => {
-            vi.advanceTimersByTime(0);
-        });
-
-        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOAD_TIMEOUT)).not.toBeInTheDocument();
-        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
-    });
-
-    it('does not stay on Processing when the disabled sibling query is still loading', () => {
-        mockUseParams.mockReturnValue({ filepath: 'timeline.json' });
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
-        mockUseNPETimelineFile.mockReturnValue({
-            data: validNpeData,
-            isLoading: false,
-            error: null,
-        });
-
-        vi.useFakeTimers();
-        renderRoute(null);
-
-        expect(screen.queryByText(NPE_PROCESSING_LABEL)).not.toBeInTheDocument();
-
-        act(() => {
-            vi.advanceTimersByTime(0);
-        });
-
-        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
     });
 });

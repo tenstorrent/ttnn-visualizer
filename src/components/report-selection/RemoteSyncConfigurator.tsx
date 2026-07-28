@@ -43,7 +43,7 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
-import { updateInstanceAndInvalidate, useReportMetadata } from '../../hooks/useAPI';
+import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation } from '../../definitions/Versions';
 import { evaluateDbVersion } from '../../functions/compareDbVersion';
@@ -119,7 +119,7 @@ const RemoteSyncConfigurator = () => {
         }
 
         if (Object.keys(activeReport).length > 0) {
-            await updateInstanceAndInvalidate(queryClient, {
+            await updateInstance({
                 active_report: activeReport,
             });
         }

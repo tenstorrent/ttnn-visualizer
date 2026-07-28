@@ -68,17 +68,8 @@ afterEach(() => {
     timeline.navigate = undefined;
 });
 
-/** NPEView defers the heavy body one rAF so the route spinner can paint first. */
-const flushDeferredMount = async () => {
-    await act(async () => {
-        await new Promise<void>((resolve) => {
-            requestAnimationFrame(() => resolve());
-        });
-    });
-};
-
 describe('NPEView controlled timestep', () => {
-    it('does not reset the timestep when npeData identity changes under the same reportKey', async () => {
+    it('does not reset the timestep when npeData identity changes under the same reportKey', () => {
         const onChange = vi.fn();
         const { rerender } = render(
             <NPEView
@@ -88,7 +79,6 @@ describe('NPEView controlled timestep', () => {
                 onSelectedTimestepChange={onChange}
             />,
         );
-        await flushDeferredMount();
         expect(timeline.currentTimestep).toBe(1);
 
         // A windowed refetch produces a fresh npeData object with the SAME reportKey.
@@ -106,7 +96,7 @@ describe('NPEView controlled timestep', () => {
         expect(timeline.currentTimestep).toBe(1);
     });
 
-    it('does not self-reset the controlled timestep even when reportKey changes', async () => {
+    it('does not self-reset the controlled timestep even when reportKey changes', () => {
         const onChange = vi.fn();
         const { rerender } = render(
             <NPEView
@@ -116,7 +106,6 @@ describe('NPEView controlled timestep', () => {
                 onSelectedTimestepChange={onChange}
             />,
         );
-        await flushDeferredMount();
 
         rerender(
             <NPEView
@@ -132,9 +121,8 @@ describe('NPEView controlled timestep', () => {
         expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('uncontrolled mode still resets the internal timestep to 0 on npeData change', async () => {
+    it('uncontrolled mode still resets the internal timestep to 0 on npeData change', () => {
         const { rerender } = render(<NPEView npeData={makeNpeData()} />);
-        await flushDeferredMount();
 
         act(() => timeline.navigate?.(1));
         expect(timeline.currentTimestep).toBe(1);

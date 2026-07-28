@@ -63,7 +63,7 @@ vi.mock('../src/hooks/useAPI', async () => {
         usePerfFolderList: () => ({ data: mockPerfFolderList }),
         useInstance: () => ({ data: mockInstanceEmpty }),
         useReportFolderList: () => ({ data: mockProfilerFolderList }),
-        updateInstanceAndInvalidate: (_queryClient: unknown, ...args: unknown[]) => mockUpdateInstance(...args),
+        updateInstance: (...args: unknown[]) => mockUpdateInstance(...args),
         deleteProfiler: vi.fn().mockResolvedValue({ success: true }),
         deletePerformance: vi.fn().mockResolvedValue({ success: true }),
     };
