@@ -22,15 +22,15 @@ import { validateNpeData } from '../functions/validateNpeData';
 const NPE = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    // #861 PoC: in DEV the windowed view replaces the whole-file path for
-    // uploaded reports, so we skip `useNpe` (its full /api/npe fetch is exactly
-    // what fails on large files) and render NPEView from windowed fetches.
-    // Gated to DEV on purpose: prod/hosted still uses the whole-file path until
-    // the windowed backend is hardened (single-flight build lock is in, but the
-    // endpoints are not yet @local_only). Exit criterion for removing the fork:
-    // decide hosted-safety of /api/npe/{summary,window}, then either drop the
-    // whole-file /api/npe path or keep both behind an explicit size/flag switch.
-    const isWindowedView = import.meta.env.DEV && !filepath && !!npeFileName;
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    // #861: for uploaded reports the windowed view replaces the whole-file path,
+    // skipping `useNpe` (its full /api/npe fetch is exactly what fails on large
+    // files) and rendering NPEView from per-timestep windowed fetches instead.
+    // Enabled in both local dev and local prod, disabled under SERVER_MODE — the
+    // same boundary as the @local_only gate on /api/npe/{summary,window}, whose
+    // sidecar build isn't hosted-safe yet (#1802). Hosted keeps the whole-file
+    // path; exit criterion is deciding hosted-safety, then dropping the fork.
+    const isWindowedView = !isServerMode && !filepath && !!npeFileName;
     const {
         data: loadedData,
         isLoading: isLoadingNPE,
@@ -46,7 +46,7 @@ const NPE = () => {
 
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
 
-    const isDemoEnabled = getServerConfig()?.SERVER_MODE;
+    const isDemoEnabled = isServerMode;
     const isLoading = isLoadingNPE || isLoadingTimeline;
     const hasUploadedFile = !!npeFileName || !!filepath;
 
