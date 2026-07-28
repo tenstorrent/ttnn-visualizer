@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import NPEProcessingStatus from '../src/components/NPEProcessingStatus';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { MIN_SUPPORTED_VERSION, NPEValidationError, NPE_PROCESSING_LABEL } from '../src/definitions/NPEData';
+import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../src/definitions/NPEData';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -26,7 +26,7 @@ it('renders an initial message', () => {
     expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INITIAL).textContent).toBeDefined();
 });
 
-it('renders a loading message while the NPE is processing', () => {
+it('renders a loading spinner while the NPE is processing', () => {
     render(
         <TestProviders>
             <NPEProcessingStatus
@@ -38,7 +38,7 @@ it('renders a loading message while the NPE is processing', () => {
         </TestProviders>,
     );
 
-    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_PROCESSING_LABEL);
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).toBeDefined();
 });
 
 it('handles incorrect NPE data versions', () => {

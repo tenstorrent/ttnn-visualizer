@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { NPE_PROCESSING_LABEL, NpeAxiosErrorCode } from '../src/definitions/NPEData';
+import { NpeAxiosErrorCode } from '../src/definitions/NPEData';
 import type { NPEData } from '../src/model/NPEModel';
 
 // Mutable holders shared with the hoisted mock factories so each case can flip
@@ -142,11 +142,11 @@ describe('NPE route windowed-view gate', () => {
 });
 
 describe('NPE route error mapping', () => {
-    it('shows Processing while the active NPE query is loading', () => {
+    it('shows a loading spinner while the active NPE query is loading', () => {
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
         renderRoute();
 
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING).textContent).toContain(NPE_PROCESSING_LABEL);
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).toBeInTheDocument();
         expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
     });
 

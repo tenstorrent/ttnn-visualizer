@@ -14,8 +14,6 @@ export const NPE_FETCH_TIMEOUT_MS = 30_000;
  */
 export const NPE_MAX_CONTENT_LENGTH = 512 * 1024 * 1024;
 
-export const NPE_PROCESSING_LABEL = 'Processing NPE…';
-
 /** Axios `error.code` values thrown by `parseNpeAxiosResponseData`. */
 export enum NpeAxiosErrorCode {
     PAYLOAD_TOO_LARGE = 'NPE_PAYLOAD_TOO_LARGE',

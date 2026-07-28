@@ -4,12 +4,7 @@
 
 import { Callout, Intent } from '@blueprintjs/core';
 import 'styles/components/NPEProcessingStatus.scss';
-import {
-    LEGACY_VISUALIZER_VERSION,
-    MIN_SUPPORTED_VERSION,
-    NPEValidationError,
-    NPE_PROCESSING_LABEL,
-} from '../definitions/NPEData';
+import { LEGACY_VISUALIZER_VERSION, MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 import { TEST_IDS } from '../definitions/TestIds';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -70,7 +65,6 @@ const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoadin
                 data-testid={TEST_IDS.NPE_PROCESSING_LOADING}
             >
                 <LoadingSpinner />
-                <p>{NPE_PROCESSING_LABEL}</p>
             </div>
         );
     }
