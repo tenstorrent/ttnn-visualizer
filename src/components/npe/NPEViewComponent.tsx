@@ -67,6 +67,17 @@ interface NPEViewProps {
 
 const LABEL_STEP_THRESHOLD = 25;
 const RIGHT_MARGIN_OFFSET_PX = 25;
+// Shared fallbacks for chips with nothing to draw. A fresh `[]` per render would
+// give every idle chip a new prop identity on every scrub, re-running the
+// congestion canvas's draw effect across the whole cluster for no visual change —
+// the bulk of the cost of stepping between two empty timesteps. #1803.
+const NO_LINKS: { linkUtilization: LinkUtilization; index: number }[] = [];
+const NO_TRANSFERS: { transfer: NoCTransfer; index: number }[] = [];
+// Same hazard on the zone path: `npeData` is a new object per scrub, so a fresh `[]`
+// here would churn `zones` → `selectedZoneList` → the timeline's `zoneRanges`, whose
+// effect repaints 4 × n_timesteps heat cells. On a 196k-timestep report that is
+// ~780k fillRects per scrub — for a report that simply has no zones.
+const NO_ZONES: NPERootZone[] = [];
 const TENSIX_SIZE: number = NODE_SIZE; // * 0.75;
 const SVG_SIZE = TENSIX_SIZE;
 const PLAYBACK_SPEED = 1;
@@ -125,7 +136,7 @@ const NPEView = ({
     });
 
     const zones: NPERootZone[] = useMemo(() => {
-        return npeData.zones || [];
+        return npeData.zones || NO_ZONES;
     }, [npeData]);
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
@@ -704,15 +715,17 @@ const NPEView = ({
                                     }}
                                 >
                                     {hasVisibleTransferOrigins &&
-                                        (transfersByChip.get(clusterChip.id) ?? []).map(({ transfer, index }) => (
-                                            <RouteOriginsRenderer
-                                                key={`${transfer.id}-${index}`}
-                                                transfer={transfer}
-                                                clusterChip={clusterChip}
-                                                index={index}
-                                                getOriginOpacity={getOriginOpacity}
-                                            />
-                                        ))}
+                                        (transfersByChip.get(clusterChip.id) ?? NO_TRANSFERS).map(
+                                            ({ transfer, index }) => (
+                                                <RouteOriginsRenderer
+                                                    key={`${transfer.id}-${index}`}
+                                                    transfer={transfer}
+                                                    clusterChip={clusterChip}
+                                                    index={index}
+                                                    getOriginOpacity={getOriginOpacity}
+                                                />
+                                            ),
+                                        )}
                                     {highlightedTransfer !== null &&
                                         highlightedRoute !== null &&
                                         highlightedTransfer.route[highlightedRoute].device_id === clusterChip.id && (
@@ -726,7 +739,7 @@ const NPEView = ({
                                         )}
 
                                     <ChipCongestionCanvas
-                                        links={linkDemandByChip.get(clusterChip.id) ?? []}
+                                        links={linkDemandByChip.get(clusterChip.id) ?? NO_LINKS}
                                         gridWidth={width}
                                         gridHeight={height}
                                         isFabricMode={visualizationMode === VISUALIZATION_MODE.TRANSFERS}

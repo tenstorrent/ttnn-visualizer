@@ -19,7 +19,11 @@ interface CollapsibleProps {
     keepChildrenMounted?: boolean;
     onExpandToggle?: (state: boolean) => void;
     isDisabled?: boolean;
-    children?: React.ReactNode;
+    // Pass a function to build the content lazily: it is only invoked while the
+    // section is open. Callers whose collapsed content is huge (see the NPE zone
+    // filter, which can hold ~100k rows) use this so the element tree is never
+    // constructed — and never garbage — while the section is shut.
+    children?: React.ReactNode | (() => React.ReactNode);
 }
 
 const Collapsible = ({
@@ -37,6 +41,8 @@ const Collapsible = ({
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
     const [prevIsOpenProp, setPrevIsOpenProp] = React.useState(isOpen);
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
+    const isLazy = typeof children === 'function';
+    const content = isLazy ? isOpenState && children() : children;
 
     if (isOpen !== prevIsOpenProp) {
         setPrevIsOpenProp(isOpen);
@@ -82,7 +88,7 @@ const Collapsible = ({
                         className={classNames(contentClassName)}
                         style={contentStyles}
                     >
-                        {children}
+                        {content}
                     </div>
                 </Collapse>
             )}

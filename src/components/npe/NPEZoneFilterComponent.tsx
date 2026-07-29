@@ -214,11 +214,18 @@ const NPEZoneFilterComponent = ({
                                 </div>
                             }
                             isOpen={false}
+                            // A large report can carry ~100k zones across these
+                            // collapsibles. `Collapsible` keeps children mounted by
+                            // default, so every one of them stayed in the DOM while
+                            // collapsed — ~218k nodes that React then re-diffed on
+                            // every NPEView render, costing ~1.4 s per scrub, click
+                            // or hover regardless of the data. Mount on expand. #1803
+                            keepChildrenMounted={false}
                             onExpandToggle={(state) => {
                                 onExpandStateChange(state, rootZone.proc, rootZone.core);
                             }}
                         >
-                            <div>{getZoneElements(rootZone.zones, rootZone.core, 1)}</div>
+                            {() => <div>{getZoneElements(rootZone.zones, rootZone.core, 1)}</div>}
                         </Collapsible>
                     );
                 })}

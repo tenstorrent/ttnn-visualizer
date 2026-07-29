@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { MouseEvent, useCallback, useEffect, useMemo, useRef } from 'react';
+import { MouseEvent, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
     EVENT_TYPE_FILTER,
     FABRIC_EVENT_SCOPE_OPTIONS,
@@ -26,6 +26,19 @@ const DIMMED_ALPHA = 0.15;
 const HOVER_COLOR = '#f5e2ba';
 
 const cellKey = (x: number, y: number): string => `${x}-${y}`;
+
+// Assigning `canvas.width`/`height` reallocates and zeroes the whole backing store
+// (and forces a GPU re-upload) even when the value is unchanged — ~2.8 MB per chip
+// at dpr 2, so ~22 MB of pointless churn per scrub across an 8-chip cluster. Resize
+// only on a real geometry change; callers still clear explicitly. #1803.
+const resizeCanvas = (canvas: HTMLCanvasElement, cssWidth: number, cssHeight: number, scale: number): void => {
+    const width = Math.max(1, Math.round(cssWidth * scale));
+    const height = Math.max(1, Math.round(cssHeight * scale));
+    if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+    }
+};
 
 interface ChipLink {
     linkUtilization: LinkUtilization;
@@ -161,16 +174,15 @@ const ChipCongestionCanvas = ({
         [scale, cssWidth, cssHeight],
     );
 
-    // Resize the hover layer alongside the base canvas. Setting width/height also
-    // clears it, so drop any stale hover: the pointer may now be over a different
-    // cell, and the next move repaints anyway.
+    // Resize the hover layer alongside the base canvas. A resize also clears it, so
+    // drop any stale hover: the pointer may now be over a different cell, and the
+    // next move repaints anyway.
     useEffect(() => {
         const canvas = hoverCanvasRef.current;
         if (!canvas) {
             return;
         }
-        canvas.width = Math.max(1, Math.round(cssWidth * scale));
-        canvas.height = Math.max(1, Math.round(cssHeight * scale));
+        resizeCanvas(canvas, cssWidth, cssHeight, scale);
         hoveredCellRef.current = null;
     }, [cssWidth, cssHeight, scale]);
 
@@ -192,8 +204,7 @@ const ChipCongestionCanvas = ({
             return;
         }
 
-        canvas.width = Math.max(1, Math.round(cssWidth * scale));
-        canvas.height = Math.max(1, Math.round(cssHeight * scale));
+        resizeCanvas(canvas, cssWidth, cssHeight, scale);
         ctx.setTransform(scale, 0, 0, scale, 0, 0);
         ctx.clearRect(0, 0, cssWidth, cssHeight);
         ctx.globalAlpha = dimmed ? DIMMED_ALPHA : 1;
@@ -289,4 +300,8 @@ const ChipCongestionCanvas = ({
     );
 };
 
-export default ChipCongestionCanvas;
+// Every prop is either a primitive, a referentially stable callback, or a per-chip
+// bucket that only changes when that chip's data does — so on a scrub that leaves a
+// chip idle this skips the subtree entirely instead of re-rendering two canvases
+// per chip across the cluster.
+export default memo(ChipCongestionCanvas);

@@ -355,6 +355,20 @@
     z-index: variables.$z-index-2-interactive;
 }
 
+// Scrub playhead. A positioned div rather than a canvas layer so moving it is a
+// style update the compositor handles, not a full-width canvas clear + repaint on
+// every tick (#1803). `pointer-events: none` keeps the stack's click/hover
+// handling — which used to live on the playhead canvas — reaching the wrapper.
+.npe-timeline-playhead {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background-color: rgba($tt-white, 0.75);
+    pointer-events: none;
+    z-index: variables.$z-index-2-interactive;
+}
+
 .congestion-heatmap-tooltip {
     h3 {
         margin: 0;
