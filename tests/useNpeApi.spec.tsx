@@ -10,7 +10,7 @@ import { AxiosError, HttpStatusCode } from 'axios';
 import { fetchNpeText, useNPETimelineFile, useNpe, useNpeSummary, useNpeWindow } from '../src/hooks/useAPI';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
-import { NPE_QUERY_KEY, NPE_TIMELINE_QUERY_KEY } from '../src/definitions/NPEData';
+import { NPE_QUERY_KEY, NPE_TIMELINE_QUERY_KEY, NpeClientErrorKind } from '../src/definitions/NPEData';
 import { minimalValidNpeData } from './helpers/npeFixtures';
 
 const h = vi.hoisted(() => ({
@@ -82,6 +82,7 @@ describe('useNpeSummary / useNpeWindow fetch-boundary validation', () => {
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(result.current.error?.code).toBe(AxiosError.ERR_BAD_RESPONSE);
         expect(result.current.error?.status).toBe(HttpStatusCode.UnprocessableEntity);
+        expect(result.current.error?.response?.data).toEqual({ kind: NpeClientErrorKind.SHAPE });
         expect(result.current.error?.message).toMatch(/active_count/);
     });
 
@@ -99,6 +100,7 @@ describe('useNpeSummary / useNpeWindow fetch-boundary validation', () => {
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(result.current.error?.code).toBe(AxiosError.ERR_BAD_RESPONSE);
         expect(result.current.error?.status).toBe(HttpStatusCode.UnprocessableEntity);
+        expect(result.current.error?.response?.data).toEqual({ kind: NpeClientErrorKind.SHAPE });
         expect(result.current.error?.message).toMatch(/link_demand array/);
     });
 
@@ -134,6 +136,7 @@ describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(result.current.error?.status).toBe(HttpStatusCode.UnprocessableEntity);
         expect(result.current.error?.code).toBe(AxiosError.ERR_BAD_RESPONSE);
+        expect(result.current.error?.response?.data).toEqual({ kind: NpeClientErrorKind.PARSE });
     });
 
     it('maps a malformed JSON string body to HTTP 422 on useNpe', async () => {
@@ -142,6 +145,7 @@ describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(result.current.error?.status).toBe(HttpStatusCode.UnprocessableEntity);
         expect(result.current.error?.code).toBe(AxiosError.ERR_BAD_RESPONSE);
+        expect(result.current.error?.response?.data).toEqual({ kind: NpeClientErrorKind.PARSE });
     });
 
     it('fetches timeline with filename param and the same text options', async () => {

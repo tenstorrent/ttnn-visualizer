@@ -3,22 +3,30 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { AxiosError, AxiosResponse, HttpStatusCode } from 'axios';
+import { NpeClientErrorBody, NpeClientErrorKind } from '../definitions/NPEData';
 
 /**
- * Client-side NPE payload rejection as a synthetic 422 AxiosError so call sites
- * can share one status-aware mapper (getNpeValidationErrorFromFetch, RQ typed errors).
+ * Client-side NPE rejection as a synthetic 422 AxiosError so RQ stays typed and
+ * getNpeValidationErrorFromFetch can map PARSE → INVALID_JSON / SHAPE → INVALID_NPE_DATA.
+ * Body is only the tiny kind marker (never the raw payload).
  */
-export function throwNpeClientAxiosError(message: string, response?: AxiosResponse | null): never {
+export function throwNpeClientAxiosError(
+    message: string,
+    kind: NpeClientErrorKind,
+    response?: AxiosResponse | null,
+): never {
+    const data: NpeClientErrorBody = { kind };
+
     if (response) {
         throw new AxiosError(message, AxiosError.ERR_BAD_RESPONSE, response.config, response.request, {
             ...response,
             status: HttpStatusCode.UnprocessableEntity,
-            data: null,
+            data,
         });
     }
 
     throw new AxiosError(message, AxiosError.ERR_BAD_RESPONSE, undefined, undefined, {
-        data: null,
+        data,
         status: HttpStatusCode.UnprocessableEntity,
         statusText: 'Unprocessable Entity',
         headers: {},

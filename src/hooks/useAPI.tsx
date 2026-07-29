@@ -71,6 +71,7 @@ import {
     NPE_SUMMARY_QUERY_KEY,
     NPE_TIMELINE_QUERY_KEY,
     NPE_WINDOW_QUERY_KEY,
+    NpeClientErrorKind,
 } from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
 import { ReportFolder } from '../definitions/Reports';
@@ -466,7 +467,7 @@ export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Pr
             (response as { data: string | null }).data = null;
             // CONVENTIONS.md: client-side JSON failures → synthetic 422 AxiosError.
             const message = error instanceof Error ? error.message : 'Failed to parse NPE response';
-            return throwNpeClientAxiosError(message, response);
+            return throwNpeClientAxiosError(message, NpeClientErrorKind.PARSE, response);
         }
     } finally {
         if (activeNpeRequestAbort === abortController) {
@@ -657,7 +658,7 @@ const fetchNpeSummary = async (signal?: AbortSignal): Promise<NpeSummary> => {
     const { data } = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY, { signal });
     const shapeError = validateNpeSummary(data);
     if (shapeError) {
-        throwNpeClientAxiosError(shapeError);
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE);
     }
     return data;
 };
@@ -686,7 +687,7 @@ const fetchNpeWindow = async (t: number, signal?: AbortSignal): Promise<NpeWindo
     });
     const shapeError = validateNpeWindow(data);
     if (shapeError) {
-        throwNpeClientAxiosError(shapeError);
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE);
     }
     return data;
 };

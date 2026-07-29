@@ -7,8 +7,10 @@ import { Callout, Intent, Spinner } from '@blueprintjs/core';
 import { useNpeSummary, useNpeWindow } from '../../hooks/useAPI';
 import assembleWindowedNpeData, { buildTimestepSkeleton } from '../../functions/assembleWindowedNpeData';
 import getResponseError from '../../functions/getResponseError';
+import { NPEValidationError } from '../../definitions/NPEData';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { NpeSummary } from '../../model/NPEModel';
+import NPEProcessingStatus from '../NPEProcessingStatus';
 import NPEView from './NPEViewComponent';
 
 interface NpeWindowedViewProps {
@@ -74,15 +76,15 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
             </Callout>
         );
     } else if (summary && summary.n_timesteps === 0) {
-        // A valid but empty trace has nothing to scrub — say so rather than spin
-        // forever waiting on a window that will never resolve (t=0 is out of range).
+        // Same EMPTY_NPE_TRACE UX as the whole-file path — avoid a forked Callout.
+        // Nothing to scrub; t=0 is out of range so do not wait on a window forever.
         content = (
-            <Callout
-                intent={Intent.PRIMARY}
-                title='Empty NPE report'
-            >
-                This report contains no timesteps to display.
-            </Callout>
+            <NPEProcessingStatus
+                errorCode={NPEValidationError.EMPTY_NPE_TRACE}
+                dataVersion={summary.common_info?.version ?? null}
+                hasUploadedFile
+                isLoading={false}
+            />
         );
     } else if (!npeData) {
         // No frame yet: surface a first-window failure instead of trapping the user on

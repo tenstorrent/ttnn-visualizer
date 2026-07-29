@@ -160,7 +160,8 @@ describe('NpeWindowedView', () => {
 
         render(<NpeWindowedView fileName='trace.json' />);
 
-        expect(screen.getByText('Empty NPE report')).toBeDefined();
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_EMPTY_TRACE)).toBeDefined();
+        expect(screen.getByText('Empty NPE trace')).toBeDefined();
         expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).toBeNull();
     });
 

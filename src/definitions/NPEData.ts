@@ -19,3 +19,13 @@ export enum NPEValidationError {
     INVALID_NPE_DATA,
     EMPTY_NPE_TRACE,
 }
+
+/** Discriminant on synthetic client 422 bodies — parse vs shape must not share one UI label. */
+export enum NpeClientErrorKind {
+    PARSE = 'parse',
+    SHAPE = 'shape',
+}
+
+export interface NpeClientErrorBody {
+    kind: NpeClientErrorKind;
+}
