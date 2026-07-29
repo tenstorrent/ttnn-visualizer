@@ -117,6 +117,16 @@ Open pull requests with **`dev`** as the base branch by default.
 - Backend: **pytest** with `caplog`, `tmp_path`, and the shared **`client`** fixture (Flask's `app.test_client()`, defined in `backend/ttnn_visualizer/tests/conftest.py`) for endpoint tests.
 - For larger test suites — characterisation tests, refactor regressions — build **shared fixture helpers** (see `tests/mlirFixtures/builders.ts`) and **cross-cutting invariant checks** (see `tests/mlirFixtures/invariants.ts`) instead of repeating ad-hoc setup.
 
+### Canvas and rendering performance
+
+Applies on touch to views that draw data-proportional visuals (NPE chip cluster and timeline).
+
+- Never emit one rect or DOM node per datum when the data outnumbers the pixels. Downsample to at most one column per **device** pixel and summarise each column with a **max** — sub-pixel rects blend, so a mean or last-wins reduction hides spikes, which is a correctness bug in a congestion view. Keep the reduction pure and separate from colour mapping (`src/functions/reduceToColumns.ts`).
+- **Cap the raster scale.** Backing stores scale with `devicePixelRatio` × any on-screen scale and grow with the square; uncapped, a multi-chip cluster under a zoom control can ask for hundreds of MB, at which point the browser discards buffers and elements render blank.
+- **High-frequency feedback gets its own layer, never state.** Hover markers and playheads move imperatively via a ref or in CSS; routing pointer/scrub position through React state re-renders the owning view per event. Prefer a positioned element over a second canvas for a single border or line. Cache `getBoundingClientRect()` for hit-testing with a bounded lifetime — reading it per `mousemove` forces a layout flush, and the box can move without resizing.
+- **`memo()` makes prop stability a contract.** Every prop must be a primitive, a `useCallback`-stable handler, or a memoized value; callers must not pass inline lambdas or fresh literals. Prefer a shared frozen constant to `?? []`, and narrow handler props to the narrowest signature that works so the only thing worth passing is already stable.
+- Derive an ancestor's effective scale by **measuring the element**, not by threading the ancestor's zoom down as a prop.
+
 ### Frontend data integrity
 
 - Prefer **client-side JSON validation** for user-uploaded JSON before the backend parses it. Surface validation errors with a friendly UI message rather than a 5xx round-trip. Use `try { JSON.parse(...) } catch (e) { ... }` and shape-check predicates.
