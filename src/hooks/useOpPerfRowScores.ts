@@ -4,7 +4,8 @@
 
 import { useMemo } from 'react';
 import { PerfOverlaySource, aggregatePerfByOp, scoreOps } from '../functions/perfOverlay';
-import { DeviceOperationMapping, useGetDeviceOperationListPerf } from './useAPI';
+import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
+import { useGetDeviceOperationListPerf } from './useAPI';
 
 export interface OpPerfRowScore {
     /** Worst-case device-kernel duration across this op's perf rows (ns). */
