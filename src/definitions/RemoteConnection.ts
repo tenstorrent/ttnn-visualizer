@@ -23,6 +23,10 @@ export interface RemoteFolder {
     remotePath: string;
     lastModified: number;
     lastSynced?: number | null;
+    // Name this report occupies on local disk once synced, and its rank. Both are
+    // decided by the server, which is the side that writes the folder.
+    syncedName?: string;
+    rank?: number | null;
 }
 
 export interface SyncRemoteFolder {
@@ -39,6 +43,8 @@ export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
     timeStyle: 'short',
 });
+
+export const MULTIHOST_CHECKBOX_LABEL = 'Search per-rank subdirectories';
 
 export const NEVER_SYNCED_LABEL = 'Never synced';
 export const REPORT_OUTDATED_LABEL = 'Report is stale';

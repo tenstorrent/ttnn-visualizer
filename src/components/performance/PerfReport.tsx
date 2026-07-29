@@ -56,6 +56,7 @@ import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { capitalizeString } from '../../functions/formatting';
+import { formatSyncedReportName } from '../../functions/reportRank';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
 
@@ -611,7 +612,11 @@ const PerformanceReport = ({
                 >
                     <Tab
                         id={INITIAL_TAB_ID}
-                        title={activePerformanceReport?.reportName || 'Loading...'}
+                        title={
+                            activePerformanceReport
+                                ? formatSyncedReportName(activePerformanceReport.reportName)
+                                : 'Loading...'
+                        }
                         icon={IconNames.TH_LIST}
                         panel={
                             isStackedView ? (

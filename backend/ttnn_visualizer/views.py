@@ -67,7 +67,6 @@ from ttnn_visualizer.models import (
     ReportLocation,
     StatusMessage,
     folder_segment_from_remote_path,
-    rank_suffix_from_segment,
     sanitise_path_segment,
     sanitise_remote_host_segment,
 )
@@ -1156,36 +1155,33 @@ def delete_performance_report(performance_name, instance: Instance):
     )
 
 
-def _performance_path_for_requested_name(active_path: str, name: str) -> str:
-    """Resolve a ``?name=`` report swap against the synced performance directory.
+def _apply_requested_performance_name(instance: Instance) -> None:
+    """Point the instance at the ``?name=`` report for the duration of the request.
 
-    Callers pass the report's display name, which for a multihost report omits
-    the ``_rank<N>`` qualifier its local folder carries (see
-    ``folder_segment_from_remote_path``), so fall back to the active report's own
-    rank before giving up. Missing directories are returned unchanged so the
-    downstream not-found handling stays the same.
+    Lets the comparison selector read a sibling report without re-mounting. The
+    name is the synced folder name the listing handed the client — including any
+    ``_rank<N>`` qualifier — so it is resolved as given rather than guessed at: a
+    rank fallback here could answer with a different rank's numbers.
 
-    All three routes that honour ``?name=`` resolve it here, so the query value
+    All three routes that honour ``?name=`` come through here, so the query value
     is collapsed to a single segment once rather than trusted at each caller.
     """
-    reports_directory = Path(active_path).parent
+    name = request.args.get("name", None)
+    if not name or current_app.config["SERVER_MODE"]:
+        return
+    if not instance.performance_path:
+        raise PerformanceReportNotLoadedException()
+
     try:
         requested_name = sanitise_path_segment(name)
     except (TypeError, ValueError):
         logger.warning("Ignoring unusable performance report name: %r", name)
-        return active_path
+        return
 
-    requested = reports_directory / requested_name
-    if requested.is_dir():
-        return str(requested)
-
-    rank = rank_suffix_from_segment(Path(active_path).name)
-    if rank:
-        qualified = reports_directory / f"{requested_name}_{rank}"
-        if qualified.is_dir():
-            return str(qualified)
-
-    return str(requested)
+    instance.performance_path = str(
+        Path(instance.performance_path).parent / requested_name
+    )
+    logger.info(f"Performance path set to {instance.performance_path}")
 
 
 @api.route("/performance/perf-results/raw", methods=["GET"])
@@ -1202,7 +1198,6 @@ def get_performance_results_data_raw(instance: Instance):
 @api.route("/performance/perf-results/report", methods=["GET"])
 @with_instance
 def get_performance_results_report(instance: Instance):
-    name = request.args.get("name", None)
     start_signpost = request.args.get("start_signpost", None)
     end_signpost = request.args.get("end_signpost", None)
     print_signposts = str_to_bool(request.args.get("print_signposts", "true"))
@@ -1214,11 +1209,7 @@ def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
-    if name and not current_app.config["SERVER_MODE"]:
-        instance.performance_path = _performance_path_for_requested_name(
-            instance.performance_path, name
-        )
-        logger.info(f"************ Performance path set to {instance.performance_path}")
+    _apply_requested_performance_name(instance)
 
     try:
         report = OpsPerformanceReportQueries.generate_report(
@@ -1241,16 +1232,10 @@ def get_performance_results_report(instance: Instance):
 @api.route("/performance/device-log/raw", methods=["GET"])
 @with_instance
 def get_performance_data_raw(instance: Instance):
-    name = request.args.get("name", None)
-
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
-    if name and not current_app.config["SERVER_MODE"]:
-        instance.performance_path = _performance_path_for_requested_name(
-            instance.performance_path, name
-        )
-        logger.info(f"************ Performance path set to {instance.performance_path}")
+    _apply_requested_performance_name(instance)
 
     content = DeviceLogProfilerQueries.get_raw_csv(instance)
 
@@ -1283,16 +1268,10 @@ def get_performance_device_meta(instance: Instance):
             "max_cores": max_cores,
         }
 
-    name = request.args.get("name", None)
-
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
-    if name and not current_app.config["SERVER_MODE"]:
-        instance.performance_path = _performance_path_for_requested_name(
-            instance.performance_path, name
-        )
-        logger.info(f"************ Performance path set to {instance.performance_path}")
+    _apply_requested_performance_name(instance)
 
     file_path = Path(
         instance.performance_path,
@@ -1571,9 +1550,10 @@ def _annotate_last_synced(
     remote_data = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
     dir_name = current_app.config[directory_config_key]
     for rf in folders:
-        # Must be the same segment sync writes, or a rank's badge would report
-        # the sync state of whichever rank was downloaded into that folder.
-        directory_name = folder_segment_from_remote_path(rf.remotePath)
+        # The listing already carries the segment sync writes. Re-deriving it
+        # here would let a rank's badge report the sync state of whichever rank
+        # was downloaded into that folder.
+        directory_name = rf.syncedName
         if not directory_name:
             continue
         local_path = local_synced_report_path(
@@ -2110,17 +2090,23 @@ _REPORT_NOT_SYNCED_LOCALLY = (
 
 
 def _safe_report_folder_name(
-    *, report_name: Optional[str] = None, remote_path: Optional[str] = None
+    *,
+    report_name: Optional[str] = None,
+    remote_path: Optional[str] = None,
+    qualify_rank: bool = False,
 ) -> Optional[str]:
     """Local folder segment under REMOTE_DATA_DIRECTORY — must match sync destinations.
 
     Prefer ``remote_path`` (same segment sync writes). ``reportName`` is
-    display-only and is only used when ``remote_path`` is omitted.
+    display-only and is only used when ``remote_path`` is omitted. The payload's
+    own ``syncedName`` is deliberately not trusted: the segment is recomputed
+    here from the path and the connection, so a client cannot name the directory
+    it mounts.
     """
     if remote_path is not None:
         # Explicit remotePath — never fall back to reportName (avoids mounting an
         # unrelated folder when the basename is empty / ``.`` / ``..``).
-        return folder_segment_from_remote_path(remote_path)
+        return folder_segment_from_remote_path(remote_path, qualify_rank=qualify_rank)
     if not report_name:
         return None
     try:
@@ -2173,6 +2159,7 @@ def use_remote_folder():
         performance_name = _safe_report_folder_name(
             report_name=remote_performance_folder.reportName,
             remote_path=remote_performance_folder.remotePath,
+            qualify_rank=bool(connection.multihostPerformance),
         )
         if not performance_name:
             return response_bad_request("Invalid report path")

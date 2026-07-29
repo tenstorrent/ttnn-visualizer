@@ -10,9 +10,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
 import RemoteFolderSelector from '../src/components/report-selection/RemoteFolderSelector';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
+import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
-import { RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
+import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
 import { isActivatingReportAtom } from '../src/store/app';
@@ -1229,22 +1230,25 @@ const multihostConnection: RemoteConnection[] = [
     },
 ];
 
-const multihostFolders: RemoteFolder[] = [
-    {
-        reportName: '2026_07_28_18_04_24',
-        remotePath: `${MULTIHOST_ROOT}/rank0/reports/2026_07_28_18_04_24`,
-        lastModified: 1,
-    },
-    {
-        reportName: '2026_07_28_18_04_31',
-        remotePath: `${MULTIHOST_ROOT}/rank1/reports/2026_07_28_18_04_31`,
-        lastModified: 2,
-    },
-];
+const TIMESTAMP = '2026_07_28_18_04_24';
+
+/** As the SSH listing reports one rank: the server names the rank and the synced folder. */
+const rankFolder = (rank: number, reportName = TIMESTAMP): RemoteFolder => ({
+    reportName,
+    remotePath: `${MULTIHOST_ROOT}/rank${rank}/reports/${reportName}`,
+    lastModified: rank + 1,
+    syncedName: `${reportName}_rank${rank}`,
+    rank,
+});
+
+// Every rank of one launch names its report from its own start time at second
+// granularity, so sharing a name is the normal case rather than the edge case.
+const multihostFolders: RemoteFolder[] = [rankFolder(0), rankFolder(1)];
 
 const renderPerformanceSelector = async (
     connectionList: RemoteConnection[],
     folderList: RemoteFolder[] = multihostFolders,
+    onSelectFolder: (folder: RemoteFolder) => void = () => undefined,
 ) => {
     setupConnection(connectionList);
 
@@ -1252,7 +1256,7 @@ const renderPerformanceSelector = async (
         <TestProviders>
             <RemoteFolderSelector
                 remoteFolderList={folderList}
-                onSelectFolder={() => undefined}
+                onSelectFolder={onSelectFolder}
                 type='performance'
             />
         </TestProviders>,
@@ -1262,69 +1266,165 @@ const renderPerformanceSelector = async (
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 };
 
-it('labels multihost performance reports by rank', async () => {
+it('tells apart ranks whose reports share a name', async () => {
     await renderPerformanceSelector(multihostConnection);
 
-    expect(screen.getByText('Rank 0: 2026_07_28_18_04_24')).toBeTruthy();
-    expect(screen.getByText('Rank 1: 2026_07_28_18_04_31')).toBeTruthy();
+    expect(screen.getByText(`Rank 0: ${TIMESTAMP}`)).toBeTruthy();
+    expect(screen.getByText(`Rank 1: ${TIMESTAMP}`)).toBeTruthy();
     // The rank folder and the intervening reports/ segment are no longer shown raw.
-    expect(screen.queryByText(`/rank0/reports/2026_07_28_18_04_24`)).toBeNull();
+    expect(screen.queryByText(`/rank0/reports/${TIMESTAMP}`)).toBeNull();
+});
+
+it('hands back the rank that was clicked', async () => {
+    const onSelectFolder = vi.fn();
+
+    await renderPerformanceSelector(multihostConnection, multihostFolders, onSelectFolder);
+    screen.getByText(`Rank 1: ${TIMESTAMP}`).click();
+
+    expect(onSelectFolder).toHaveBeenCalledTimes(1);
+    expect(onSelectFolder.mock.calls[0][0].remotePath).toBe(rankFolder(1).remotePath);
+});
+
+it('names the selected rank on the collapsed button', () => {
+    // Otherwise the button reads the same for every rank of a launch and there is
+    // no way to see which one is loaded.
+    setupConnection(multihostConnection);
+
+    render(
+        <TestProviders>
+            <RemoteFolderSelector
+                remoteFolderList={multihostFolders}
+                remoteFolder={rankFolder(1)}
+                onSelectFolder={() => undefined}
+                type='performance'
+            />
+        </TestProviders>,
+    );
+
+    expect(screen.getByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON).textContent).toContain(`Rank 1: ${TIMESTAMP}`);
 });
 
 it('leaves single-host performance labels as paths', async () => {
     const singleHostConnection: RemoteConnection[] = [{ ...multihostConnection[0], multihostPerformance: false }];
+    const singleHostFolders: RemoteFolder[] = [
+        {
+            reportName: TIMESTAMP,
+            remotePath: `${MULTIHOST_ROOT}/rank0/reports/${TIMESTAMP}`,
+            lastModified: 1,
+            syncedName: TIMESTAMP,
+        },
+    ];
 
-    await renderPerformanceSelector(singleHostConnection);
+    await renderPerformanceSelector(singleHostConnection, singleHostFolders);
 
-    expect(screen.queryByText('Rank 0: 2026_07_28_18_04_24')).toBeNull();
-    expect(screen.getByText('/rank0/reports/2026_07_28_18_04_24')).toBeTruthy();
+    expect(screen.queryByText(`Rank 0: ${TIMESTAMP}`)).toBeNull();
+    expect(screen.getByText(`/rank0/reports/${TIMESTAMP}`)).toBeTruthy();
 });
 
-it('labels synced multihost copies by their rank suffix', async () => {
-    // Offline listing synthesises a path from the local folder name, which carries
-    // the rank as a suffix — the label should still match the online one.
+it('labels an already-synced rank the same as the online listing', async () => {
+    // The offline listing reports the local folder name, so both spellings of one
+    // report have to read identically.
     const syncedFolders: RemoteFolder[] = [
         {
-            reportName: '2026_07_28_18_04_24_rank0',
-            remotePath: `${MULTIHOST_ROOT}/2026_07_28_18_04_24_rank0`,
+            reportName: TIMESTAMP,
+            remotePath: `${MULTIHOST_ROOT}/${TIMESTAMP}_rank0`,
             lastModified: 1,
+            syncedName: `${TIMESTAMP}_rank0`,
+            rank: 0,
         },
     ];
 
     await renderPerformanceSelector(multihostConnection, syncedFolders);
 
-    expect(screen.getByText('Rank 0: 2026_07_28_18_04_24')).toBeTruthy();
+    expect(screen.getByText(`Rank 0: ${TIMESTAMP}`)).toBeTruthy();
 });
 
-it('does not label a directory that only looks like a rank', async () => {
-    // The backend qualifies synced folders from `^rank\d+$` alone, so labelling a
-    // near miss as a rank here would promise a distinction sync does not make.
-    const nearMiss: RemoteFolder[] = [
-        {
-            reportName: '2026_07_28_18_04_24',
-            remotePath: `${MULTIHOST_ROOT}/rank0beta/reports/2026_07_28_18_04_24`,
-            lastModified: 1,
-        },
-    ];
-
-    await renderPerformanceSelector(multihostConnection, nearMiss);
-
-    expect(screen.queryByText('Rank 0: 2026_07_28_18_04_24')).toBeNull();
-    expect(screen.getByText('/rank0beta/reports/2026_07_28_18_04_24')).toBeTruthy();
-});
-
-it('falls back to the path when a multihost report has no rank folder', async () => {
+it('falls back to the path when the listing reported no rank', async () => {
     const folderWithoutRank: RemoteFolder[] = [
         {
             reportName: 'loose_report',
             remotePath: `${MULTIHOST_ROOT}/loose_report`,
             lastModified: 1,
+            syncedName: 'loose_report',
         },
     ];
 
     await renderPerformanceSelector(multihostConnection, folderWithoutRank);
 
     expect(screen.getByText('/loose_report')).toBeTruthy();
+});
+
+const performanceFolderCacheKey = (connection: RemoteConnection) => `${connection.name} - performanceFolders`;
+
+/** Saving is gated on a passing connection test, so the edit has to run one. */
+const editSelectedConnection = async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+
+    vi.mocked(axiosInstance.default.post).mockImplementation((url: string) =>
+        url.includes('/api/remote/test')
+            ? Promise.resolve({
+                  data: [{ status: ConnectionTestStates.OK, message: 'Connection OK' }],
+              } as AxiosResponse)
+            : Promise.resolve({ data: [] } as AxiosResponse),
+    );
+
+    getButtonWithText(EDIT_NEW_CONNECTION).click();
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeTruthy());
+};
+
+const runConnectionTestAndSave = async () => {
+    getButtonWithText('Run tests').click();
+
+    const saveButton = await waitFor(() => {
+        const button = getButtonWithText('Save connection');
+        expect(button).toHaveProperty(HTML_DISABLED, false);
+
+        return button;
+    }, WAIT_FOR_OPTIONS);
+
+    saveButton.click();
+};
+
+it('drops cached performance folders when the multihost flag is flipped', async () => {
+    // The cached rows are remote paths under the old layout, so keeping them would
+    // offer reports the new search cannot find.
+    const connection = multihostConnection[0];
+    const cacheKey = performanceFolderCacheKey({ ...connection, multihostPerformance: false });
+
+    setupConnection([{ ...connection, multihostPerformance: false }]);
+    window.localStorage.setItem(cacheKey, JSON.stringify(multihostFolders));
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await editSelectedConnection();
+    screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }).click();
+    await runConnectionTestAndSave();
+
+    await waitFor(() => expect(window.localStorage.getItem(cacheKey)).toBeNull(), WAIT_FOR_OPTIONS);
+});
+
+it('keeps cached performance folders when an unrelated field is edited', async () => {
+    const connection = multihostConnection[0];
+    const cacheKey = performanceFolderCacheKey(connection);
+
+    setupConnection([connection]);
+    window.localStorage.setItem(cacheKey, JSON.stringify(multihostFolders));
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await editSelectedConnection();
+    await runConnectionTestAndSave();
+
+    await waitFor(() => expect(getButtonWithText(EDIT_NEW_CONNECTION)).toBeTruthy(), WAIT_FOR_OPTIONS);
+    expect(window.localStorage.getItem(cacheKey)).not.toBeNull();
 });
 
 // TODO: Add more tests to cover remaining functionality and edge cases

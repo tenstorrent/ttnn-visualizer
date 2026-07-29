@@ -6,7 +6,7 @@ import dataclasses
 import enum
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import JSON, Column, Integer, String
@@ -249,8 +249,10 @@ def sanitise_path_segment(value: object) -> str:
     return safe_segment
 
 
-RANK_DIRECTORY_RE = re.compile(r"^rank\d+$", re.IGNORECASE)
-RANK_SUFFIX_RE = re.compile(r"_(rank\d+)$", re.IGNORECASE)
+# `re.ASCII` because the digits also have to be readable as a rank number, and
+# because the client renders the same names from JavaScript's ASCII-only `\d`.
+RANK_DIRECTORY_RE = re.compile(r"^rank(\d+)$", re.IGNORECASE | re.ASCII)
+RANK_SUFFIX_RE = re.compile(r"_(rank\d+)$", re.IGNORECASE | re.ASCII)
 
 
 def rank_suffix_from_segment(segment: Optional[str]) -> Optional[str]:
@@ -261,29 +263,63 @@ def rank_suffix_from_segment(segment: Optional[str]) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def split_rank_suffix(segment: str) -> Tuple[str, Optional[int]]:
+    """Split a synced folder name into the report's own name and its rank.
+
+    Only sound for names this codebase qualified, so callers gate it on the same
+    multihost setting the write path uses — a single-host report genuinely named
+    ``<name>_rank3`` is not rank 3 of ``<name>``.
+    """
+    match = RANK_SUFFIX_RE.search(segment)
+    if not match:
+        return segment, None
+
+    rank_match = RANK_DIRECTORY_RE.match(match.group(1))
+    return segment[: match.start()], int(rank_match.group(1)) if rank_match else None
+
+
 def rank_directory_from_remote_path(remote_path: str) -> Optional[str]:
     """The rank folder a multihost report sits under, verbatim, or None.
 
-    Authoritative definition of a rank directory: discovery filters candidates
-    through this so nothing can be listed that cannot then be rank-qualified.
+    Authoritative definition of a rank directory. Only ancestors are considered:
+    a report directory that is itself named ``rank5`` is a report, and treating
+    it as its own rank would leave it unqualified and free to collide with the
+    other ranks of the same launch.
     """
-    for part in reversed(Path(remote_path).parts):
+    for part in reversed(Path(remote_path).parent.parts):
         if RANK_DIRECTORY_RE.match(part):
             return part
     return None
 
 
-def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]:
+def rank_from_remote_path(remote_path: Optional[str]) -> Optional[int]:
+    """Rank number of a multihost report, for display. None for single-host."""
+    if not remote_path:
+        return None
+    rank_directory = rank_directory_from_remote_path(remote_path)
+    if rank_directory is None:
+        return None
+    match = RANK_DIRECTORY_RE.match(rank_directory)
+    return int(match.group(1)) if match else None
+
+
+def folder_segment_from_remote_path(
+    remote_path: Optional[str], *, qualify_rank: bool = False
+) -> Optional[str]:
     """Sanitised local folder segment for a remote report, or None if invalid.
 
     Sync destinations, mount lookups and last-synced probes must all use this so
     write and read segments stay aligned (``sftp_operations`` ↔ ``views``).
 
-    Multihost reports are qualified with their rank: every rank of one
-    ``tt-run --tracy`` launch names its report from its own start time at second
-    granularity, so ranks routinely produce the same basename and would
-    otherwise sync on top of each other. Stays a single flat segment because
+    With ``qualify_rank``, the segment carries the report's rank: every rank of
+    one ``tt-run --tracy`` launch names its report from its own start time at
+    second granularity, so ranks routinely produce the same basename and would
+    otherwise sync on top of each other. It stays a single flat segment because
     callers join it straight onto the report directory.
+
+    Callers opt in from the connection's multihost setting rather than from the
+    shape of the path, so a single-host connection aimed at one rank's reports
+    keeps the names it has already synced under.
     """
     if remote_path is None:
         return None
@@ -292,9 +328,14 @@ def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]
     except (TypeError, ValueError):
         return None
 
-    rank_directory = rank_directory_from_remote_path(remote_path)
-    if rank_directory is None or segment == rank_directory:
+    if not qualify_rank:
         return segment
+
+    rank_directory = rank_directory_from_remote_path(remote_path)
+    if rank_directory is None:
+        return segment
+    # The suffix is applied to the sanitised segment, so the qualifier survives
+    # whatever `sanitise_path_segment` did to the basename.
     return f"{segment}_{rank_directory}"
 
 
@@ -390,6 +431,11 @@ class RemoteReportFolder(SerializeableModel):
     remotePath: str
     lastModified: int
     lastSynced: Optional[int] = None
+    # The name this report occupies (or would occupy) on local disk once synced,
+    # and its rank. The server owns both because it is the side that writes the
+    # folder; the client reads them back rather than re-deriving the rule.
+    syncedName: Optional[str] = None
+    rank: Optional[int] = None
 
 
 class Instance(BaseModel):

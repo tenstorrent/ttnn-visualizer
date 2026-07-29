@@ -126,9 +126,17 @@ that directly contains the rank directories, for example
 `/home/username/tt-metal/generated/profiler/ttrun/`. Reports are then discovered at
 `ttrun/rank<N>/reports/<report>`, and the dropdown lists them by rank.
 
+The setting selects between the two layouts rather than widening the search: while it is on, only
+`rank<N>/reports/<report>` is looked at, so single-host reports sitting directly under the same
+path are not listed. Toggling it clears the cached folder list for that connection, since the
+paths it holds belong to the other layout.
+
 Every rank names its report after its own start time to the second, so ranks of the same launch
 routinely produce the same report name. Synced copies therefore get their rank appended
-(`<report>_rank0`) to keep them from overwriting each other locally.
+(`<report>_rank0`) to keep them from overwriting each other locally. That naming applies only to
+performance reports of a connection with this setting on — memory reports and single-host
+connections keep the names they already sync under, including a connection pointed straight at
+one rank's `reports/` directory.
 
 
 ### Sync Folders

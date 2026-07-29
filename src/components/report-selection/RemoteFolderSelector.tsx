@@ -15,7 +15,7 @@ import {
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';
-import { getReportBaseName, getReportRank } from '../../functions/reportRank';
+import { getRankedReportLabel } from '../../functions/reportRank';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
@@ -48,12 +48,12 @@ const remoteFolderRenderer =
         }
 
         const { lastSynced, lastModified, reportName, remotePath } = folder;
-        const folderId = getReportId(remotePath, reportName);
+        const folderId = getRemoteFolderId(folder);
 
         return (
             <div
                 className='folder-picker-menu-item'
-                key={`${formatRemoteFolderPath(folder, type, connection)}${lastSynced ?? lastModified}`}
+                key={`${remotePath}${lastSynced ?? lastModified}`}
             >
                 <MenuItem
                     active={selectedFolder?.remotePath === remotePath}
@@ -115,13 +115,7 @@ const RemoteFolderSelector = ({
     const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
 
     const sortedFolderList = useMemo(
-        () =>
-            sortByFolderLinkState(
-                remoteFolderList ?? [],
-                (folder) => getReportId(folder.remotePath, folder.reportName),
-                linkedIds,
-                unlinkedIds,
-            ),
+        () => sortByFolderLinkState(remoteFolderList ?? [], getRemoteFolderId, linkedIds, unlinkedIds),
         [remoteFolderList, linkedIds, unlinkedIds],
     );
 
@@ -156,7 +150,7 @@ const RemoteFolderSelector = ({
                     endIcon={sortedFolderList.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
                     loading={loading}
-                    text={remoteFolder?.reportName ?? fallbackLabel}
+                    text={remoteFolder ? getRemoteFolderLabel(remoteFolder) : fallbackLabel}
                     data-testid={TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON}
                 />
             </Select>
@@ -167,20 +161,18 @@ const RemoteFolderSelector = ({
 };
 
 /**
- * Label a multihost report by its rank rather than its raw path, so both
- * `<ttrun>/rank0/reports/2026_07_28_18_04_24` and its synced copy
- * `2026_07_28_18_04_24_rank0` read `Rank 0: 2026_07_28_18_04_24`.
- * Returns null when no rank is present, leaving the plain path formatting.
+ * A report's identity is the folder it syncs into, which is unique per rank and
+ * the same before and after a reload. `remotePath` is the fallback for rows
+ * cached before the server started reporting the synced name.
  */
-const formatMultihostPerformanceLabel = (folder: RemoteFolder): string | null => {
-    const rank = getReportRank(folder.remotePath);
+const getRemoteFolderId = (folder: RemoteFolder) => getReportId(folder.syncedName, folder.remotePath);
 
-    if (rank === null) {
-        return null;
-    }
-
-    return `Rank ${rank}: ${getReportBaseName(folder.reportName || folder.remotePath)}`;
-};
+/**
+ * Name a folder by its rank when it has one, so that every rank of one launch is
+ * distinguishable: they name their reports from their own start times at second
+ * granularity and so routinely share a report name.
+ */
+const getRemoteFolderLabel = (folder: RemoteFolder): string => getRankedReportLabel(folder.reportName, folder.rank);
 
 const formatRemoteFolderPath = (
     folder: RemoteFolder,
@@ -191,12 +183,8 @@ const formatRemoteFolderPath = (
         return 'n/a';
     }
 
-    if (type === 'performance' && selectedConnection.multihostPerformance) {
-        const rankLabel = formatMultihostPerformanceLabel(folder);
-
-        if (rankLabel) {
-            return rankLabel;
-        }
+    if (folder.rank !== null && folder.rank !== undefined) {
+        return getRemoteFolderLabel(folder);
     }
 
     const paths: Record<FolderTypes, string | undefined> = {

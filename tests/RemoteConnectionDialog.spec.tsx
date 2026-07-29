@@ -7,9 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { RemoteConnection } from '../src/definitions/RemoteConnection';
-
-const MULTIHOST_CHECKBOX_LABEL = 'Search per-rank subdirectories';
+import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../src/definitions/RemoteConnection';
 
 const getServerConfigMock = vi.hoisted(() =>
     vi.fn(() => ({
@@ -96,7 +94,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        expect(screen.getByLabelText(MULTIHOST_CHECKBOX_LABEL)).not.toBeChecked();
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).not.toBeChecked();
     });
 
     it('reflects the saved flag when editing a connection', () => {
@@ -119,7 +117,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        expect(screen.getByLabelText(MULTIHOST_CHECKBOX_LABEL)).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeChecked();
     });
 
     it('sends the flag with the connection test and the saved connection', async () => {
@@ -133,7 +131,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        fireEvent.click(screen.getByLabelText(MULTIHOST_CHECKBOX_LABEL));
+        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
         fireEvent.click(screen.getByRole('button', { name: 'Run tests' }));
 
         await waitFor(() =>

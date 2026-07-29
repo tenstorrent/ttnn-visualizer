@@ -16,6 +16,7 @@ import {
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import { getReportId } from '../../functions/reportLinks';
+import { formatSyncedReportName } from '../../functions/reportRank';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
 
@@ -68,7 +69,7 @@ const LocalFolderPicker = ({
         () =>
             sortByFolderLinkState(
                 items ?? [],
-                (folder) => getReportId(folder.path, folder.reportName),
+                (folder) => getReportId(folder.syncedName, folder.path),
                 linkedIds,
                 unlinkedIds,
             ),
@@ -80,7 +81,7 @@ const LocalFolderPicker = ({
             return null;
         }
 
-        const folderId = getReportId(folder.path, folder.reportName);
+        const folderId = getReportId(folder.syncedName, folder.path);
 
         return (
             <div
@@ -94,7 +95,11 @@ const LocalFolderPicker = ({
                                 text={`/${folder.path}`}
                                 filter={query}
                             />
-                            {showReportName && <span className='folder-picker-sub-label'>{folder.reportName}</span>}
+                            {showReportName && (
+                                <span className='folder-picker-sub-label'>
+                                    {formatSyncedReportName(folder.reportName)}
+                                </span>
+                            )}
                         </>
                     }
                     roleStructure='listoption'

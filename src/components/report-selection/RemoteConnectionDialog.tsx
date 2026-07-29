@@ -7,7 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { RemoteConnection } from '../../definitions/RemoteConnection';
+import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
 import getServerConfig from '../../functions/getServerConfig';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
@@ -244,13 +244,12 @@ const RemoteConnectionDialog = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='Multihost performance reports'
-                    subLabel='The path above must be the folder that directly contains the rank folders (e.g. "/<PATH TO TT METAL>/generated/profiler/ttrun/"), so that each report is found at "ttrun/rank0/reports/<REPORT>"'
+                    subLabel='Reports are found at "ttrun/rank0/reports/<REPORT>", so the path above must be the folder that directly contains the rank folders (e.g. "/<PATH TO TT METAL>/generated/profiler/ttrun/"). Single-host reports sitting directly under that path are not listed while this is on.'
                     labelFor='remote-performance-multihost'
                 >
                     <Checkbox
                         id='remote-performance-multihost'
-                        label='Search per-rank subdirectories'
+                        label={MULTIHOST_CHECKBOX_LABEL}
                         checked={connection.multihostPerformance ?? false}
                         onChange={(e) =>
                             setConnection({ ...connection, multihostPerformance: e.currentTarget.checked })

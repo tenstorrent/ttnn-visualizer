@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import time
@@ -31,6 +32,7 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     folder_segment_from_remote_path,
     rank_directory_from_remote_path,
+    rank_from_remote_path,
 )
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
@@ -106,6 +108,10 @@ MULTIHOST_REPORT_PARENT_GLOB = "rank[0-9]*/reports"
 
 # Spelled for humans rather than for `find`, since it reaches the connection-test UI.
 MULTIHOST_REPORT_LAYOUT_HINT = "rank<N>/reports"
+
+# Paths per batched `stat` call, so a rank-heavy tree cannot build a remote
+# command line long enough to hit ARG_MAX.
+_MTIME_BATCH_SIZE = 200
 
 
 def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
@@ -908,52 +914,49 @@ def get_remote_profiler_folder_from_config_path(
         )
 
 
-def get_remote_performance_folder(
-    remote_connection: RemoteConnection, profile_folder: str
+def _describe_remote_report_folder(
+    remote_connection: RemoteConnection,
+    remote_path: str,
+    *,
+    last_modified: int,
+    report_name: Optional[str] = None,
 ) -> RemoteReportFolder:
-    """Get remote performance folder info and return RemoteFolder object."""
-    performance_name = profile_folder.split("/")[-1]
-    remote_path = profile_folder
+    """Build the wire type, including the local name this report syncs to."""
+    qualify_rank = bool(remote_connection.multihostPerformance)
 
-    # Get modification time using subprocess SSH command
-    try:
-        ssh_command = _ssh_cmd_prefix(remote_connection) + [
-            f"stat -c %Y '{profile_folder}'",
-        ]
+    return RemoteReportFolder(
+        remotePath=remote_path,
+        reportName=report_name or Path(remote_path).name,
+        lastModified=last_modified,
+        syncedName=folder_segment_from_remote_path(
+            remote_path, qualify_rank=qualify_rank
+        ),
+        rank=rank_from_remote_path(remote_path) if qualify_rank else None,
+    )
 
-        result = subprocess.run(
-            ssh_command,
-            capture_output=True,
-            text=True,
-            timeout=_ssh_subprocess_timeout_seconds(),
-        )
 
-        if result.returncode == 0:
-            last_modified = int(result.stdout.strip())
-        else:
-            # If stat fails, handle SSH errors
-            if result.returncode == 255:
-                handle_ssh_subprocess_error(
-                    subprocess.CalledProcessError(
-                        result.returncode, ssh_command, result.stdout, result.stderr
-                    ),
-                    remote_connection,
-                )
+def get_remote_performance_folders_from_paths(
+    remote_connection: RemoteConnection, profile_folders: List[str]
+) -> List[RemoteReportFolder]:
+    """Describe each performance report folder, reading all mtimes in one batch."""
+    mtimes = _remote_directory_mtimes(remote_connection, profile_folders)
+    now = int(time.time())
+    folders = []
+
+    for profile_folder, mtime in zip(profile_folders, mtimes):
+        if mtime is None:
             logger.warning(
                 f"Could not get modification time for {profile_folder}, using current time"
             )
-            last_modified = int(time.time())
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError) as e:
-        logger.warning(
-            f"Error getting modification time for {profile_folder}: {e}, using current time"
+        folders.append(
+            _describe_remote_report_folder(
+                remote_connection,
+                profile_folder,
+                last_modified=now if mtime is None else mtime,
+            )
         )
-        last_modified = int(time.time())
 
-    return RemoteReportFolder(
-        remotePath=str(remote_path),
-        reportName=str(performance_name),
-        lastModified=last_modified,
-    )
+    return folders
 
 
 @remote_exception_handler
@@ -1003,7 +1006,9 @@ class RemoteReportCounts(NamedTuple):
 
 
 @remote_exception_handler
-def check_remote_path_for_reports(remote_connection) -> RemoteReportCounts:
+def check_remote_path_for_reports(
+    remote_connection: RemoteConnection,
+) -> RemoteReportCounts:
     remote_profiler_paths = []
     if remote_connection.profilerPath:
         remote_profiler_paths = find_folders_by_files(
@@ -1083,13 +1088,14 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
 
 
 def _report_search_find_expression(
-    root_folder: str, subdirectory_glob: Optional[str]
+    root_folder: str, subdirectory_glob: Optional[str], file_names: List[str]
 ) -> str:
-    """Remote ``find`` expression listing candidate report directories.
+    """Remote ``find`` expression listing report directories in one round trip.
 
     Without ``subdirectory_glob``, candidates are the immediate children of
     ``root_folder``. With it, candidates sit directly below a matching relative
-    subpath, so the search depth follows the number of glob segments.
+    subpath, so the search depth follows the number of glob segments. Only
+    directories holding one of ``file_names`` are printed.
     """
     # A configured trailing slash is normalised out of both the root and the
     # pattern below. GNU and BSD `find` disagree on whether the root it echoes
@@ -1099,16 +1105,85 @@ def _report_search_find_expression(
     search_root = root or "/"
 
     if subdirectory_glob is None:
-        return f"find '{search_root}' -mindepth 1 -maxdepth 1 -type d"
+        depth = 1
+        path_filter = ""
+    else:
+        # `*` matches `/` in a `-path` pattern, so pinning min and max depth to
+        # the same value is what stops the glob spanning segments and matching a
+        # deeper accidental layout.
+        depth = 1 + len(subdirectory_glob.split("/"))
+        path_filter = f" -path {shlex.quote(f'{root}/{subdirectory_glob}/*')}"
 
-    # `*` matches `/` in a `-path` pattern, so pinning min and max depth to the
-    # same value is what stops the glob spanning segments and matching a deeper
-    # accidental layout.
-    depth = 1 + len(subdirectory_glob.split("/"))
-    return (
-        f"find '{search_root}' -mindepth {depth} -maxdepth {depth} -type d "
-        f"-path '{root}/{subdirectory_glob}/*'"
+    # The report-file test runs inside `find` rather than as a follow-up command
+    # per candidate: the multihost layout multiplies candidates by the rank
+    # count, and `_ssh_cmd_prefix` sets up no connection sharing, so a round trip
+    # each meant a full TCP and auth handshake per rank per report.
+    tests = " -o ".join(
+        f"-exec test -f {shlex.quote('{}/' + file_name)} ';'"
+        for file_name in file_names
     )
+
+    return (
+        f"find {shlex.quote(search_root)} "
+        f"-mindepth {depth} -maxdepth {depth} -type d{path_filter} "
+        f"'(' {tests} ')' -print"
+    )
+
+
+def _permission_denied_path(stderr: str) -> Optional[str]:
+    """The directory `find` could not read, so the error names it and not the root."""
+    match = re.search(r"find: [‘'\"]?(.+?)[’'\"]?: Permission denied", stderr)
+    return match.group(1) if match else None
+
+
+def _remote_directory_mtimes(
+    remote_connection: RemoteConnection, directories: List[str]
+) -> List[Optional[int]]:
+    """Modification times for ``directories``, batched into one round trip each.
+
+    ``stat`` is invoked per path inside a single remote shell so that a path it
+    cannot read yields a blank line, keeping the results aligned with the input.
+    """
+    mtimes: List[Optional[int]] = []
+
+    for index in range(0, len(directories), _MTIME_BATCH_SIZE):
+        batch = directories[index : index + _MTIME_BATCH_SIZE]
+        quoted = " ".join(shlex.quote(directory) for directory in batch)
+        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
+            f'for p in {quoted}; do stat -c %Y "$p" 2>/dev/null || echo; done',
+        ]
+
+        try:
+            result = subprocess.run(
+                ssh_cmd,
+                capture_output=True,
+                text=True,
+                timeout=_ssh_subprocess_timeout_seconds(),
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                "Timed out reading modification times for %d paths", len(batch)
+            )
+            mtimes.extend([None] * len(batch))
+            continue
+
+        if result.returncode == 255:
+            handle_ssh_subprocess_error(
+                subprocess.CalledProcessError(
+                    result.returncode, ssh_cmd, result.stdout, result.stderr
+                ),
+                remote_connection,
+            )
+
+        lines = result.stdout.splitlines() if result.stdout else []
+        for offset in range(len(batch)):
+            line = lines[offset].strip() if offset < len(lines) else ""
+            try:
+                mtimes.append(int(line))
+            except ValueError:
+                mtimes.append(None)
+
+    return mtimes
 
 
 def find_folders_by_files(
@@ -1128,11 +1203,8 @@ def find_folders_by_files(
     if not root_folder:
         return []
 
-    matched_folders: List[str] = []
-
-    # Build SSH command to find directories in root_folder (never prompts for password)
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        _report_search_find_expression(root_folder, subdirectory_glob),
+        _report_search_find_expression(root_folder, subdirectory_glob, file_names),
     ]
 
     try:
@@ -1140,68 +1212,57 @@ def find_folders_by_files(
             ssh_cmd,
             capture_output=True,
             text=True,
-            check=True,
             timeout=_ssh_subprocess_timeout_seconds(),
         )
-
-        directories = result.stdout.strip().splitlines()
-
-        # For each directory, check if it contains any of the specified files
-        for directory in directories:
-            directory = directory.strip()
-            if not directory:
-                continue
-
-            if directory_filter is not None and not directory_filter(directory):
-                continue
-
-            # Build SSH command to check for files in this directory
-            file_checks = [
-                f"test -f '{directory}/{file_name}'" for file_name in file_names
-            ]
-            check_cmd = _ssh_cmd_prefix(remote_connection) + [
-                f"({' || '.join(file_checks)})",
-            ]
-
-            try:
-                check_result = subprocess.run(
-                    check_cmd,
-                    capture_output=True,
-                    check=True,
-                    timeout=_ssh_remote_check_timeout_seconds(),
-                )
-                # If command succeeds, at least one file exists
-                matched_folders.append(directory)
-            except subprocess.CalledProcessError:
-                # None of the files exist in this directory, skip it
-                continue
-
-        return matched_folders
-
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-        stderr = e.stderr.lower() if e.stderr else ""
-        if "permission denied" in stderr:
-            error_msg = (
-                f"Permission denied accessing '{root_folder}'. "
-                f"The user '{remote_connection.username}' does not have read access to this directory. "
-                "Please check directory permissions on the remote server or choose a different path."
-            )
-            logger.error(f"Error finding folders: {e.stderr}")
-            raise RemoteConnectionException(
-                message=error_msg,
-                status=ConnectionTestStates.FAILED,
-                detail=e.stderr.strip() if e.stderr else None,
-            )
-        logger.error(f"Error finding folders: {e.stderr}")
-        return []
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout finding folders in: {root_folder}")
         return []
-    except Exception as e:
-        logger.error(f"Error finding folders: {e}")
-        return []
+
+    matched_folders = [
+        directory.strip()
+        for directory in result.stdout.splitlines()
+        if directory.strip()
+    ]
+    if directory_filter is not None:
+        matched_folders = [
+            directory for directory in matched_folders if directory_filter(directory)
+        ]
+
+    if result.returncode != 0:
+        if result.returncode == 255:  # SSH protocol errors
+            handle_ssh_subprocess_error(
+                subprocess.CalledProcessError(
+                    result.returncode, ssh_cmd, result.stdout, result.stderr
+                ),
+                remote_connection,
+            )
+        stderr = result.stderr or ""
+        # `find` exits nonzero for any subtree it could not read, having already
+        # printed everything it did match. Reports it found are still reports.
+        if matched_folders:
+            logger.warning(
+                "Search under %s reported errors but matched %d directories: %s",
+                root_folder,
+                len(matched_folders),
+                stderr.strip(),
+            )
+        elif "permission denied" in stderr.lower():
+            unreadable = _permission_denied_path(stderr) or root_folder
+            error_msg = (
+                f"Permission denied accessing '{unreadable}'. "
+                f"The user '{remote_connection.username}' does not have read access to this directory. "
+                "Please check directory permissions on the remote server or choose a different path."
+            )
+            logger.error(f"Error finding folders: {stderr}")
+            raise RemoteConnectionException(
+                message=error_msg,
+                status=ConnectionTestStates.FAILED,
+                detail=stderr.strip() or None,
+            )
+        else:
+            logger.error(f"Error finding folders: {stderr}")
+
+    return matched_folders
 
 
 @remote_exception_handler
@@ -1229,11 +1290,9 @@ def get_remote_performance_folders(
         )
         return []
 
-    remote_folder_data = []
-    for path in performance_paths:
-        remote_folder_data.append(
-            get_remote_performance_folder(remote_connection, path)
-        )
+    remote_folder_data = get_remote_performance_folders_from_paths(
+        remote_connection, performance_paths
+    )
 
     return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
 
@@ -1265,14 +1324,21 @@ def get_remote_profiler_folders(
         remote_folder = get_remote_profiler_folder_from_config_path(
             remote_connection, str(Path(path).joinpath(TEST_CONFIG_FILE))
         )
+        remote_folder.syncedName = folder_segment_from_remote_path(
+            remote_folder.remotePath
+        )
         remote_folder_data.append(remote_folder)
 
     return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
 
 
-def _safe_sync_destination_segment(remote_folder_path: str) -> str:
+def _safe_sync_destination_segment(
+    remote_folder_path: str, *, qualify_rank: bool = False
+) -> str:
     """Collapse remotePath to a single local folder segment; reject ``.`` / ``..`` / empty."""
-    segment = folder_segment_from_remote_path(remote_folder_path)
+    segment = folder_segment_from_remote_path(
+        remote_folder_path, qualify_rank=qualify_rank
+    )
     if not segment:
         raise RemoteConnectionException(
             message="Invalid report path",
@@ -1315,7 +1381,10 @@ def sync_remote_performance_folders(
     sid=None,
 ) -> SyncMethod:
     remote_folder_path = performance.remotePath
-    profile_folder = _safe_sync_destination_segment(remote_folder_path)
+    profile_folder = _safe_sync_destination_segment(
+        remote_folder_path,
+        qualify_rank=bool(remote_connection.multihostPerformance),
+    )
     destination_dir = Path(
         current_app.config["REPORT_DATA_DIRECTORY"],
         path_prefix,
