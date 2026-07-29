@@ -261,8 +261,12 @@ def rank_suffix_from_segment(segment: Optional[str]) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def _rank_directory_from_remote_path(remote_path: str) -> Optional[str]:
-    """The rank folder a multihost report sits under, verbatim, or None."""
+def rank_directory_from_remote_path(remote_path: str) -> Optional[str]:
+    """The rank folder a multihost report sits under, verbatim, or None.
+
+    Authoritative definition of a rank directory: discovery filters candidates
+    through this so nothing can be listed that cannot then be rank-qualified.
+    """
     for part in reversed(Path(remote_path).parts):
         if RANK_DIRECTORY_RE.match(part):
             return part
@@ -278,9 +282,8 @@ def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]
     Multihost reports are qualified with their rank: every rank of one
     ``tt-run --tracy`` launch names its report from its own start time at second
     granularity, so ranks routinely produce the same basename and would
-    otherwise sync on top of each other. Kept a single flat segment because
-    callers join it straight onto the report directory and treat report folders
-    as siblings.
+    otherwise sync on top of each other. Stays a single flat segment because
+    callers join it straight onto the report directory.
     """
     if remote_path is None:
         return None
@@ -289,7 +292,7 @@ def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]
     except (TypeError, ValueError):
         return None
 
-    rank_directory = _rank_directory_from_remote_path(remote_path)
+    rank_directory = rank_directory_from_remote_path(remote_path)
     if rank_directory is None or segment == rank_directory:
         return segment
     return f"{segment}_{rank_directory}"

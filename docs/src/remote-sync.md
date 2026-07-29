@@ -117,6 +117,19 @@ either be any folder on the remote machine where you have a sub-folders with rep
 stored there yourself, or you can point it at the generated directory in `tt-metal`:
 `/home/username/tt-metal/generated/profiler/reports/`.
 
+#### Multihost performance reports
+
+`tt-run --tracy` writes one report per rank, each under its own `rank<N>` directory, so the
+reports are one level deeper than a single-host run puts them. To pick these up, tick
+_Multihost performance reports_ and point the _Performance report folder path_ at the folder
+that directly contains the rank directories, for example
+`/home/username/tt-metal/generated/profiler/ttrun/`. Reports are then discovered at
+`ttrun/rank<N>/reports/<report>`, and the dropdown lists them by rank.
+
+Every rank names its report after its own start time to the second, so ranks of the same launch
+routinely produce the same report name. Synced copies therefore get their rank appended
+(`<report>_rank0`) to keep them from overwriting each other locally.
+
 
 ### Sync Folders
 

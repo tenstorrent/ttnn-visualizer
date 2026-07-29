@@ -1164,15 +1164,24 @@ def _performance_path_for_requested_name(active_path: str, name: str) -> str:
     ``folder_segment_from_remote_path``), so fall back to the active report's own
     rank before giving up. Missing directories are returned unchanged so the
     downstream not-found handling stays the same.
+
+    All three routes that honour ``?name=`` resolve it here, so the query value
+    is collapsed to a single segment once rather than trusted at each caller.
     """
     reports_directory = Path(active_path).parent
-    requested = reports_directory / name
+    try:
+        requested_name = sanitise_path_segment(name)
+    except (TypeError, ValueError):
+        logger.warning("Ignoring unusable performance report name: %r", name)
+        return active_path
+
+    requested = reports_directory / requested_name
     if requested.is_dir():
         return str(requested)
 
     rank = rank_suffix_from_segment(Path(active_path).name)
     if rank:
-        qualified = reports_directory / f"{name}_{rank}"
+        qualified = reports_directory / f"{requested_name}_{rank}"
         if qualified.is_dir():
             return str(qualified)
 

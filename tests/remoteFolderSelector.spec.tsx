@@ -1296,6 +1296,23 @@ it('labels synced multihost copies by their rank suffix', async () => {
     expect(screen.getByText('Rank 0: 2026_07_28_18_04_24')).toBeTruthy();
 });
 
+it('does not label a directory that only looks like a rank', async () => {
+    // The backend qualifies synced folders from `^rank\d+$` alone, so labelling a
+    // near miss as a rank here would promise a distinction sync does not make.
+    const nearMiss: RemoteFolder[] = [
+        {
+            reportName: '2026_07_28_18_04_24',
+            remotePath: `${MULTIHOST_ROOT}/rank0beta/reports/2026_07_28_18_04_24`,
+            lastModified: 1,
+        },
+    ];
+
+    await renderPerformanceSelector(multihostConnection, nearMiss);
+
+    expect(screen.queryByText('Rank 0: 2026_07_28_18_04_24')).toBeNull();
+    expect(screen.getByText('/rank0beta/reports/2026_07_28_18_04_24')).toBeTruthy();
+});
+
 it('falls back to the path when a multihost report has no rank folder', async () => {
     const folderWithoutRank: RemoteFolder[] = [
         {

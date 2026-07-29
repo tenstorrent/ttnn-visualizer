@@ -15,8 +15,10 @@ from ttnn_visualizer.models import (
     folder_segment_from_remote_path,
 )
 from ttnn_visualizer.sftp_operations import (
+    MULTIHOST_REPORT_LAYOUT_HINT,
     MULTIHOST_REPORT_PARENT_GLOB,
     TEST_PROFILER_FILE,
+    _find_performance_report_folders,
     _report_search_find_expression,
     check_remote_path_for_reports,
     find_folders_by_files,
@@ -566,7 +568,10 @@ class TestMultihostPerformanceDiscovery:
         find_command = self._find_command(run)
         # One level per glob segment plus the report directory itself.
         assert "-mindepth 3 -maxdepth 3" in find_command
-        assert f"-path '{self.MULTIHOST_ROOT}/rank*/reports/*'" in find_command
+        assert (
+            f"-path '{self.MULTIHOST_ROOT}/{MULTIHOST_REPORT_PARENT_GLOB}/*'"
+            in find_command
+        )
         # mindepth already excludes the root, so the old -not -path guard is gone.
         assert "-not -path" not in find_command
         assert matched == [
@@ -580,7 +585,10 @@ class TestMultihostPerformanceDiscovery:
             f"{self.MULTIHOST_ROOT}/", MULTIHOST_REPORT_PARENT_GLOB
         )
 
-        assert f"-path '{self.MULTIHOST_ROOT}//rank*/reports/*'" in expression
+        assert (
+            f"-path '{self.MULTIHOST_ROOT}//{MULTIHOST_REPORT_PARENT_GLOB}/*'"
+            in expression
+        )
 
     def test_directories_without_a_profiler_log_are_skipped(self):
         listing = (
@@ -605,6 +613,28 @@ class TestMultihostPerformanceDiscovery:
             )
 
         assert matched == [f"{self.MULTIHOST_ROOT}/rank0/reports/report_a"]
+
+    def test_candidates_the_glob_admits_but_cannot_be_ranked_are_dropped(self, app):
+        """Glob syntax cannot say "digits only", so the regex has the final word.
+
+        A listed folder whose rank cannot be read back would sync to an
+        unqualified segment and collide with the other ranks of the same launch,
+        so it must never reach the picker.
+        """
+        listing = (
+            f"{self.MULTIHOST_ROOT}/rank0/reports/report_a\n"
+            f"{self.MULTIHOST_ROOT}/rank0beta/reports/report_a\n"
+        )
+
+        with (
+            app.app_context(),
+            patch("subprocess.run", return_value=self._completed(listing)) as run,
+        ):
+            matched = _find_performance_report_folders(self._connection(multihost=True))
+
+        assert matched == [f"{self.MULTIHOST_ROOT}/rank0/reports/report_a"]
+        # Dropped before it cost an SSH round trip: listing plus one file check.
+        assert run.call_count == 2
 
     def test_performance_listing_uses_rank_glob_when_flag_set(self, app):
         connection = self._connection(multihost=True)
@@ -635,7 +665,7 @@ class TestMultihostPerformanceDiscovery:
         ):
             get_remote_performance_folders(connection)
 
-        assert find_folders.call_args.kwargs["subdirectory_glob"] is None
+        assert "subdirectory_glob" not in find_folders.call_args.kwargs
 
     def test_connection_test_searches_deeper_for_performance_only(self, app):
         connection = self._connection(multihost=True)
@@ -673,7 +703,9 @@ class TestMultihostPerformanceDiscovery:
 
         message = excinfo.value.message
         assert connection.performancePath in message
-        assert f"{MULTIHOST_REPORT_PARENT_GLOB}/<report>" in message
+        assert f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report>" in message
+        # The glob is `find` syntax; users get the readable spelling.
+        assert MULTIHOST_REPORT_PARENT_GLOB not in message
 
     def test_connection_test_warning_omits_the_hint_for_single_host(self, app):
         connection = self._connection(multihost=False)
@@ -688,7 +720,7 @@ class TestMultihostPerformanceDiscovery:
         ):
             check_remote_path_for_reports(connection)
 
-        assert MULTIHOST_REPORT_PARENT_GLOB not in excinfo.value.message
+        assert MULTIHOST_REPORT_LAYOUT_HINT not in excinfo.value.message
 
     def test_flag_reaches_discovery_and_rank_report_round_trips(self, app, client):
         """End to end: the flag deserializes and the rank qualifies the local folder."""
@@ -857,6 +889,22 @@ class TestPerformanceNameSwap:
         )
 
         assert resolved == str(reports / "no_such_report")
+
+    def test_a_traversing_name_stays_inside_the_reports_directory(self, tmp_path):
+        """The only choke point for `?name=`, so it collapses the value itself."""
+        reports = self._reports_directory(tmp_path, self.TIMESTAMP)
+
+        resolved = _performance_path_for_requested_name(
+            str(reports / self.TIMESTAMP), f"../../{self.TIMESTAMP}"
+        )
+
+        assert resolved == str(reports / self.TIMESTAMP)
+
+    def test_a_degenerate_name_leaves_the_active_report_alone(self, tmp_path):
+        reports = self._reports_directory(tmp_path, self.TIMESTAMP)
+        active = str(reports / self.TIMESTAMP)
+
+        assert _performance_path_for_requested_name(active, "..") == active
 
 
 class TestConnectionTestReportStatuses:

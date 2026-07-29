@@ -15,6 +15,7 @@ import {
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';
+import { getReportBaseName, getReportRank } from '../../functions/reportRank';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
@@ -165,11 +166,6 @@ const RemoteFolderSelector = ({
     );
 };
 
-const RANK_DIRECTORY_PATTERN = /^rank(\d+)$/i;
-// Synced copies carry the rank as a name suffix, since the local report folders
-// are siblings and cannot nest a rank directory.
-const RANK_SUFFIX_PATTERN = /^(.*)_rank(\d+)$/i;
-
 /**
  * Label a multihost report by its rank rather than its raw path, so both
  * `<ttrun>/rank0/reports/2026_07_28_18_04_24` and its synced copy
@@ -177,18 +173,13 @@ const RANK_SUFFIX_PATTERN = /^(.*)_rank(\d+)$/i;
  * Returns null when no rank is present, leaving the plain path formatting.
  */
 const formatMultihostPerformanceLabel = (folder: RemoteFolder): string | null => {
-    const segments = folder.remotePath.split('/').filter(Boolean);
-    const rankDirectory = segments
-        .map((segment) => segment.match(RANK_DIRECTORY_PATTERN))
-        .find((match): match is RegExpMatchArray => match !== null);
+    const rank = getReportRank(folder.remotePath);
 
-    if (rankDirectory) {
-        return `Rank ${Number(rankDirectory[1])}: ${folder.reportName || segments.at(-1)}`;
+    if (rank === null) {
+        return null;
     }
 
-    const suffixed = (folder.reportName || segments.at(-1) || '').match(RANK_SUFFIX_PATTERN);
-
-    return suffixed ? `Rank ${Number(suffixed[2])}: ${suffixed[1]}` : null;
+    return `Rank ${rank}: ${getReportBaseName(folder.reportName || folder.remotePath)}`;
 };
 
 const formatRemoteFolderPath = (

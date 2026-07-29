@@ -4,21 +4,7 @@
 
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import { ReportFolder } from '../definitions/Reports';
-
-const RANK_DIRECTORY_PATTERN = /^rank\d+$/i;
-
-/**
- * The local folder name sync writes for a remote report. Mirrors the backend's
- * `folder_segment_from_remote_path`, including the `_rank<N>` qualifier that keeps
- * identically named reports from different ranks apart.
- */
-export const getSyncedFolderName = (remotePath: string): string => {
-    const segments = remotePath.split('/').filter(Boolean);
-    const reportName = segments.at(-1) ?? '';
-    const rankDirectory = [...segments].reverse().find((segment) => RANK_DIRECTORY_PATTERN.test(segment));
-
-    return rankDirectory && rankDirectory !== reportName ? `${reportName}_${rankDirectory}` : reportName;
-};
+import { getSyncedFolderName } from './reportRank';
 
 /**
  * Whether a listed remote folder is the report currently loaded. The active report

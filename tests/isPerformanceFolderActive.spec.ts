@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import isPerformanceFolderActive, { getSyncedFolderName } from '../src/functions/isPerformanceFolderActive';
+import isPerformanceFolderActive from '../src/functions/isPerformanceFolderActive';
 import { RemoteFolder } from '../src/definitions/RemoteConnection';
 import { ReportFolder } from '../src/definitions/Reports';
 
@@ -30,20 +30,6 @@ const restoredReport = (performanceName: string): ReportFolder => ({
 const selectedReport = (folder: RemoteFolder): ReportFolder => ({
     path: folder.remotePath,
     reportName: folder.reportName,
-});
-
-describe('getSyncedFolderName', () => {
-    it('qualifies multihost reports with their rank', () => {
-        expect(getSyncedFolderName(`${PERFORMANCE_PATH}/rank0/reports/${TIMESTAMP}`)).toBe(`${TIMESTAMP}_rank0`);
-    });
-
-    it('leaves single-host reports untouched', () => {
-        expect(getSyncedFolderName(`/tt-metal/generated/profiler/reports/${TIMESTAMP}`)).toBe(TIMESTAMP);
-    });
-
-    it('does not double up an already qualified name', () => {
-        expect(getSyncedFolderName(`${PERFORMANCE_PATH}/${TIMESTAMP}_rank0`)).toBe(`${TIMESTAMP}_rank0`);
-    });
 });
 
 describe('isPerformanceFolderActive', () => {
