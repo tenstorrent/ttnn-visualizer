@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { AxiosError, HttpStatusCode } from 'axios';
+import { AxiosError, AxiosHeaders, AxiosResponse, HttpStatusCode } from 'axios';
 import { NPEValidationError, NpeClientErrorKind } from '../src/definitions/NPEData';
 import { getNpeValidationErrorFromFetch } from '../src/functions/getNpeValidationErrorFromFetch';
 import { throwNpeClientAxiosError } from '../src/functions/throwNpeClientAxiosError';
@@ -13,6 +13,14 @@ const makeStatusError = (status: number, message = 'error'): AxiosError => {
     error.status = status;
     return error;
 };
+
+const makeOkResponse = (): AxiosResponse => ({
+    data: '',
+    status: HttpStatusCode.Ok,
+    statusText: 'OK',
+    headers: {},
+    config: { headers: new AxiosHeaders() },
+});
 
 describe('getNpeValidationErrorFromFetch', () => {
     it('returns null when there is no error', () => {
@@ -28,7 +36,7 @@ describe('getNpeValidationErrorFromFetch', () => {
     it('maps client PARSE 422 to INVALID_JSON', () => {
         let caught: AxiosError | undefined;
         try {
-            throwNpeClientAxiosError('bad json', NpeClientErrorKind.PARSE);
+            throwNpeClientAxiosError('bad json', NpeClientErrorKind.PARSE, makeOkResponse());
         } catch (error) {
             caught = error as AxiosError;
         }
@@ -39,7 +47,7 @@ describe('getNpeValidationErrorFromFetch', () => {
     it('maps client SHAPE 422 to INVALID_NPE_DATA', () => {
         let caught: AxiosError | undefined;
         try {
-            throwNpeClientAxiosError('bad shape', NpeClientErrorKind.SHAPE);
+            throwNpeClientAxiosError('bad shape', NpeClientErrorKind.SHAPE, makeOkResponse());
         } catch (error) {
             caught = error as AxiosError;
         }

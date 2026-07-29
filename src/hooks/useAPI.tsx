@@ -443,7 +443,15 @@ const NPE_TEXT_GET_OPTIONS = {
 // abort a multi-hundred-MB download. Report switch / overlapping fetch aborts the prior.
 let activeNpeRequestAbort: AbortController | null = null;
 
-/** Exported for contract tests; prefer useNpe / useNPETimelineFile at call sites. */
+/**
+ * Exported for contract tests; prefer useNpe / useNPETimelineFile at call sites.
+ *
+ * Contract: at most one NPE download may be in flight application-wide. Every
+ * caller shares `activeNpeRequestAbort`, so a second call aborts the first —
+ * callers must be mutually exclusive (see isNpeQueryEnabled / isTimelineQueryEnabled
+ * in NPE.tsx). A concurrent caller would kill a sibling's multi-hundred-MB download
+ * and surface the CanceledError as INVALID_NPE_DATA, since it carries no HTTP status.
+ */
 export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
     // Abort any prior NPE download before starting a new one (key change / refetch).
     // Do not wire React Query's AbortSignal — Strict Mode remount must join in-flight work.
@@ -655,10 +663,11 @@ export const useNpe = (fileName: string | null) => {
 };
 
 const fetchNpeSummary = async (signal?: AbortSignal): Promise<NpeSummary> => {
-    const { data } = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY, { signal });
+    const response = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY, { signal });
+    const { data } = response;
     const shapeError = validateNpeSummary(data);
     if (shapeError) {
-        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE);
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE, response);
     }
     return data;
 };
@@ -678,16 +687,17 @@ export const useNpeSummary = (fileName: string | null) => {
 };
 
 const fetchNpeWindow = async (t: number, signal?: AbortSignal): Promise<NpeWindow> => {
-    const { data } = await axiosInstance.get<NpeWindow>(Endpoints.NPE_WINDOW, {
+    const response = await axiosInstance.get<NpeWindow>(Endpoints.NPE_WINDOW, {
         params: { t },
         // React Query aborts this signal when the query is superseded; passing it
         // lets axios cancel abandoned seeks during play/scrub instead of letting a
         // storm of in-flight /npe/window requests all resolve and churn the cache.
         signal,
     });
+    const { data } = response;
     const shapeError = validateNpeWindow(data);
     if (shapeError) {
-        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE);
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE, response);
     }
     return data;
 };

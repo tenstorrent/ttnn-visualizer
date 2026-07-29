@@ -8,29 +8,16 @@ import { NpeClientErrorBody, NpeClientErrorKind } from '../definitions/NPEData';
 /**
  * Client-side NPE rejection as a synthetic 422 AxiosError so RQ stays typed and
  * getNpeValidationErrorFromFetch can map PARSE → INVALID_JSON / SHAPE → INVALID_NPE_DATA.
- * Body is only the tiny kind marker (never the raw payload).
+ * Body is only the tiny kind marker (never the raw payload). The originating
+ * response is required so `config`/`request` pass through to consumers that
+ * expect a real AxiosError (CONVENTIONS.md).
  */
-export function throwNpeClientAxiosError(
-    message: string,
-    kind: NpeClientErrorKind,
-    response?: AxiosResponse | null,
-): never {
+export function throwNpeClientAxiosError(message: string, kind: NpeClientErrorKind, response: AxiosResponse): never {
     const data: NpeClientErrorBody = { kind };
 
-    if (response) {
-        throw new AxiosError(message, AxiosError.ERR_BAD_RESPONSE, response.config, response.request, {
-            ...response,
-            status: HttpStatusCode.UnprocessableEntity,
-            data,
-        });
-    }
-
-    throw new AxiosError(message, AxiosError.ERR_BAD_RESPONSE, undefined, undefined, {
-        data,
+    throw new AxiosError(message, AxiosError.ERR_BAD_RESPONSE, response.config, response.request, {
+        ...response,
         status: HttpStatusCode.UnprocessableEntity,
-        statusText: 'Unprocessable Entity',
-        headers: {},
-        // No real request config when the failure is shape-check only (summary/window).
-        config: undefined as unknown as AxiosResponse['config'],
+        data,
     });
 }
