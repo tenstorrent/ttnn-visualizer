@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError } from 'axios';
+import { AxiosError, AxiosRequestConfig } from 'axios';
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -66,6 +66,13 @@ import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions
 import { Signpost } from '../model/Signpost';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
+import {
+    NPE_QUERY_KEY,
+    NPE_SUMMARY_QUERY_KEY,
+    NPE_TIMELINE_QUERY_KEY,
+    NPE_WINDOW_QUERY_KEY,
+    NpeClientErrorKind,
+} from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
 import { ReportFolder } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
@@ -74,6 +81,8 @@ import { ToastType } from '../definitions/ToastType';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
+import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
+import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError';
 import validateNpeSummary from '../functions/validateNpeSummary';
 import validateNpeWindow from '../functions/validateNpeWindow';
 
@@ -425,18 +434,68 @@ export const useGetNPEManifest = () => {
     });
 };
 
+const NPE_TEXT_GET_OPTIONS = {
+    responseType: 'text' as const,
+    transitional: { forcedJSONParsing: false },
+};
+
+// Own AbortController (not React Query's signal): Strict Mode remount must not
+// abort a multi-hundred-MB download. Report switch / overlapping fetch aborts the prior.
+let activeNpeRequestAbort: AbortController | null = null;
+
+/**
+ * Exported for contract tests; prefer useNpe / useNPETimelineFile at call sites.
+ *
+ * Contract: at most one NPE download may be in flight application-wide. Every
+ * caller shares `activeNpeRequestAbort`, so a second call aborts the first —
+ * callers must be mutually exclusive (see isNpeQueryEnabled / isTimelineQueryEnabled
+ * in NPE.tsx). A concurrent caller would kill a sibling's multi-hundred-MB download
+ * and surface the CanceledError as INVALID_NPE_DATA, since it carries no HTTP status.
+ */
+export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
+    // Abort any prior NPE download before starting a new one (key change / refetch).
+    // Do not wire React Query's AbortSignal — Strict Mode remount must join in-flight work.
+    activeNpeRequestAbort?.abort();
+    const abortController = new AbortController();
+    activeNpeRequestAbort = abortController;
+    try {
+        const response = await axiosInstance.get<string>(url, {
+            ...NPE_TEXT_GET_OPTIONS,
+            ...config,
+            signal: abortController.signal,
+        });
+        try {
+            // Parse then drop the text body so RQ caches only the object graph.
+            const parsed = parseNpeAxiosResponseData(response.data);
+            (response as { data: string | null }).data = null;
+            return parsed;
+        } catch (error) {
+            // Drop the huge string before throwing so the synthetic error does not
+            // keep it alive via the response reference.
+            (response as { data: string | null }).data = null;
+            // CONVENTIONS.md: client-side JSON failures → synthetic 422 AxiosError.
+            const message = error instanceof Error ? error.message : 'Failed to parse NPE response';
+            return throwNpeClientAxiosError(message, NpeClientErrorKind.PARSE, response);
+        }
+    } finally {
+        if (activeNpeRequestAbort === abortController) {
+            activeNpeRequestAbort = null;
+        }
+    }
+};
+
 const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
-    const { data } = await axiosInstance.get<NPEData>(`${Endpoints.PERFORMANCE}/npe/timeline`, {
+    return fetchNpeText(`${Endpoints.PERFORMANCE}/npe/timeline`, {
         params: { filename: fileName },
     });
-
-    return data;
 };
 
 export const useNPETimelineFile = (fileName: string | undefined) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNPETimeline(fileName!),
-        queryKey: ['get-npe-timeline', fileName],
+        // instanceId matches useNpeSummary/useNpeWindow — basename-only keys bleed
+        // cached whole-file payloads across instances on a name collision.
+        queryKey: [NPE_TIMELINE_QUERY_KEY, getOrCreateInstanceId(), fileName],
         retry: false,
         enabled: !!fileName,
     });
@@ -589,21 +648,14 @@ export const useOperationListRange = (): NumberRange | null => {
     );
 };
 
-const fetchNpeOpTrace = async () => {
-    const response = await axiosInstance.get<NPEData>(Endpoints.NPE);
-    return response?.data;
-};
-
-// Exported so the re-upload cache-bust in NPEFileLoader references the same keys
-// as the hooks rather than duplicating magic strings (AGENTS.md). #861.
-export const NPE_QUERY_KEY = 'fetch-npe';
-export const NPE_SUMMARY_QUERY_KEY = 'npe-summary';
-export const NPE_WINDOW_QUERY_KEY = 'npe-window';
+const fetchNpeOpTrace = async () => fetchNpeText(Endpoints.NPE);
 
 export const useNpe = (fileName: string | null) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNpeOpTrace(),
-        queryKey: [NPE_QUERY_KEY, fileName],
+        // instanceId matches useNpeSummary/useNpeWindow — basename-only keys bleed
+        // cached whole-file payloads across instances on a name collision.
+        queryKey: [NPE_QUERY_KEY, getOrCreateInstanceId(), fileName],
         retry: false,
         staleTime: 30000,
         enabled: fileName !== null,
@@ -611,12 +663,11 @@ export const useNpe = (fileName: string | null) => {
 };
 
 const fetchNpeSummary = async (signal?: AbortSignal): Promise<NpeSummary> => {
-    const { data } = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY, { signal });
+    const response = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY, { signal });
+    const { data } = response;
     const shapeError = validateNpeSummary(data);
     if (shapeError) {
-        // AxiosError (not a plain Error) so the thrown value matches the hook's
-        // typed error param and any status-aware call site.
-        throw new AxiosError(shapeError, 'ERR_INVALID_RESPONSE');
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE, response);
     }
     return data;
 };
@@ -636,16 +687,17 @@ export const useNpeSummary = (fileName: string | null) => {
 };
 
 const fetchNpeWindow = async (t: number, signal?: AbortSignal): Promise<NpeWindow> => {
-    const { data } = await axiosInstance.get<NpeWindow>(Endpoints.NPE_WINDOW, {
+    const response = await axiosInstance.get<NpeWindow>(Endpoints.NPE_WINDOW, {
         params: { t },
         // React Query aborts this signal when the query is superseded; passing it
         // lets axios cancel abandoned seeks during play/scrub instead of letting a
         // storm of in-flight /npe/window requests all resolve and churn the cache.
         signal,
     });
+    const { data } = response;
     const shapeError = validateNpeWindow(data);
     if (shapeError) {
-        throw new AxiosError(shapeError, 'ERR_INVALID_RESPONSE');
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE, response);
     }
     return data;
 };

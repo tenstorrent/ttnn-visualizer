@@ -26,6 +26,21 @@ it('renders an initial message', () => {
     expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INITIAL).textContent).toBeDefined();
 });
 
+it('renders a loading spinner while the NPE is processing', () => {
+    render(
+        <TestProviders>
+            <NPEProcessingStatus
+                isLoading
+                hasUploadedFile
+                dataVersion={null}
+                errorCode={NPEValidationError.OK}
+            />
+        </TestProviders>,
+    );
+
+    expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).toBeDefined();
+});
+
 it('handles incorrect NPE data versions', () => {
     render(
         <TestProviders>

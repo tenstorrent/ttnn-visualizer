@@ -6,17 +6,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router';
-import { HttpStatusCode } from 'axios';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
+import NpeWindowedView from '../components/npe/NpeWindowedView';
 import { useNPETimelineFile, useNpe } from '../hooks/useAPI';
 import { activeNpeOpTraceAtom } from '../store/app';
 import { NPEData } from '../model/NPEModel';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
-import NpeWindowedView from '../components/npe/NpeWindowedView';
 import { NPEValidationError } from '../definitions/NPEData';
+import { getNpeValidationErrorFromFetch } from '../functions/getNpeValidationErrorFromFetch';
 import { validateNpeData } from '../functions/validateNpeData';
 
 const NPE = () => {
@@ -31,11 +31,16 @@ const NPE = () => {
     // sidecar build isn't hosted-safe yet (#1802). Hosted keeps the whole-file
     // path; exit criterion is deciding hosted-safety, then dropping the fork.
     const isWindowedView = !isServerMode && !filepath && !!npeFileName;
+    // Only one of these queries is enabled at a time; scope "loading" to the
+    // active one so a disabled sibling cannot keep the spinner up after restore.
+    // Windowed uploads skip useNpe entirely (#861).
+    const isNpeQueryEnabled = !filepath && !isWindowedView && npeFileName !== null;
+    const isTimelineQueryEnabled = Boolean(filepath);
     const {
         data: loadedData,
-        isLoading: isLoadingNPE,
+        isLoading: isLoadingNpe,
         error: httpError,
-    } = useNpe(filepath || isWindowedView ? null : npeFileName);
+    } = useNpe(isNpeQueryEnabled ? npeFileName : null);
     const {
         data: loadedTimeline,
         isLoading: isLoadingTimeline,
@@ -47,7 +52,12 @@ const NPE = () => {
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
 
     const isDemoEnabled = isServerMode;
-    const isLoading = isLoadingNPE || isLoadingTimeline;
+    // Prefer RQ isLoading (isPending && isFetching) over bare isFetching so a
+    // background refetch cannot pin the spinner after data is already present.
+    // Scope loading and error to the enabled query so a disabled sibling cannot
+    // pin the spinner or surface a stale cached error.
+    const isLoading = (isNpeQueryEnabled && isLoadingNpe) || (isTimelineQueryEnabled && isLoadingTimeline);
+    const fetchError = (isNpeQueryEnabled ? httpError : null) ?? (isTimelineQueryEnabled ? timelineHttpError : null);
     const hasUploadedFile = !!npeFileName || !!filepath;
 
     const errorCode = useMemo(() => {
@@ -55,22 +65,8 @@ const NPE = () => {
             return NPEValidationError.OK;
         }
 
-        if (
-            httpError?.status === HttpStatusCode.UnprocessableEntity ||
-            timelineHttpError?.status === HttpStatusCode.UnprocessableEntity
-        ) {
-            return NPEValidationError.INVALID_JSON;
-        }
-
-        if (httpError?.status !== undefined && httpError?.status >= HttpStatusCode.BadRequest) {
-            return NPEValidationError.DEFAULT;
-        }
-        if (timelineHttpError?.status !== undefined && timelineHttpError?.status >= HttpStatusCode.BadRequest) {
-            return NPEValidationError.DEFAULT;
-        }
-
-        return validateNpeData(npeData);
-    }, [isLoading, httpError?.status, timelineHttpError?.status, npeData]);
+        return getNpeValidationErrorFromFetch(fetchError) ?? validateNpeData(npeData);
+    }, [isLoading, fetchError, npeData]);
 
     useEffect(() => {
         if (loadedData || loadedTimeline) {
@@ -80,6 +76,32 @@ const NPE = () => {
             setDemoData(null);
         }
     }, [loadedData, loadedTimeline]);
+
+    const canShowView = !isLoading && errorCode === NPEValidationError.OK && npeData != null;
+
+    let mainContent;
+    if (isWindowedView) {
+        // key on the report so a report switch fully remounts: resets the
+        // selected timestep + auto-jump ref and gives fresh query observers
+        // (no keepPreviousData bleed from the previous report's window).
+        mainContent = (
+            <NpeWindowedView
+                key={npeFileName}
+                fileName={npeFileName}
+            />
+        );
+    } else if (canShowView) {
+        mainContent = <NPEView npeData={npeData} />;
+    } else {
+        mainContent = (
+            <NPEProcessingStatus
+                errorCode={errorCode}
+                dataVersion={npeData?.common_info?.version || null}
+                isLoading={isLoading}
+                hasUploadedFile={hasUploadedFile}
+            />
+        );
+    }
 
     return (
         <>
@@ -107,28 +129,7 @@ const NPE = () => {
                 )}
             </div>
 
-            {isWindowedView ? (
-                // key on the report so a report switch fully remounts: resets the
-                // selected timestep + auto-jump ref and gives fresh query observers
-                // (no keepPreviousData bleed from the previous report's window).
-                <NpeWindowedView
-                    key={npeFileName}
-                    fileName={npeFileName}
-                />
-            ) : (
-                <>
-                    {errorCode !== NPEValidationError.OK ? (
-                        <NPEProcessingStatus
-                            errorCode={errorCode}
-                            dataVersion={npeData?.common_info?.version || null}
-                            isLoading={isLoading}
-                            hasUploadedFile={hasUploadedFile}
-                        />
-                    ) : (
-                        npeData && <NPEView npeData={npeData} />
-                    )}
-                </>
-            )}
+            {mainContent}
         </>
     );
 };
