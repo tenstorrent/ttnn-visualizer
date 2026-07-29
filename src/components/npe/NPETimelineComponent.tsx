@@ -55,7 +55,12 @@ const NPETimelineComponent = ({
     navigationCallback,
 }: NPEHeatMapProps) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    // Two stacked canvases: the heatmap repaints only when its pixels change
+    // (data / width / zones), while the playhead — the only thing a scrub moves —
+    // gets its own overlay so a tick is one clear + one fillRect, not a full
+    // repaint of 4 × n_timesteps heat cells. See #1803.
+    const heatmapCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const playheadCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const [hoverMap, setHoverMap] = useState<Map<string, Rect>>(new Map());
 
     const getZoneDrawingModel = useCallback(
@@ -155,7 +160,7 @@ const NPETimelineComponent = ({
     }, [nocType, timestepList, altCongestionColors]);
 
     useEffect(() => {
-        const canvas = canvasRef.current;
+        const canvas = heatmapCanvasRef.current;
         const ctx = canvas?.getContext('2d');
         if (!canvas || !ctx) {
             return;
@@ -228,9 +233,6 @@ const NPETimelineComponent = ({
                 });
             }
         });
-        const x = (currentTimestep ?? 0) * chunkWidth;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-        ctx.fillRect(x, 0, 2, HEATMAP_HEIGHT + canvasZoneHeight);
 
         setHoverMap(hovermap);
     }, [
@@ -240,11 +242,31 @@ const NPETimelineComponent = ({
         canvasZoneHeight,
         selectedZoneList,
         zoneRanges,
-        currentTimestep,
     ]);
 
+    // Playhead overlay: the only per-scrub paint. Clears its own canvas and draws
+    // a single 2px line, so scrubbing cost is O(1) instead of O(n_timesteps).
+    useEffect(() => {
+        const canvas = playheadCanvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) {
+            return;
+        }
+
+        ctx.clearRect(0, 0, canvas.width, HEATMAP_HEIGHT + canvasZoneHeight);
+        const dataSize = congestionMapPerTimestamp.worst.length;
+        if (!dataSize) {
+            return;
+        }
+
+        const chunkWidth = canvas.width / dataSize;
+        const x = (currentTimestep ?? 0) * chunkWidth;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.fillRect(x, 0, 2, HEATMAP_HEIGHT + canvasZoneHeight);
+    }, [currentTimestep, canvasWidth, canvasZoneHeight, congestionMapPerTimestamp.worst.length]);
+
     const handleTimelineClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-        const canvas = canvasRef.current;
+        const canvas = playheadCanvasRef.current;
         if (canvas) {
             const rect = canvas.getBoundingClientRect();
             const chunkWidth = rect.width / congestionMapPerTimestamp.worst.length;
@@ -253,7 +275,7 @@ const NPETimelineComponent = ({
         }
     };
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-        const canvas = canvasRef.current;
+        const canvas = playheadCanvasRef.current;
         if (canvas) {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
@@ -354,7 +376,30 @@ const NPETimelineComponent = ({
     };
 
     return (
-        <>
+        // The tooltip's Blueprint target lives inside this relative, fixed-height
+        // wrapper on purpose: as an inline element it would otherwise force its own
+        // line box above the block canvas stack and shove the timeline down when it
+        // mounts on hover. Contained here (canvases are absolute), it can't reflow
+        // anything, and the absolute anchor is positioned relative to the timeline.
+        <div
+            className='npe-timeline-canvas-stack'
+            style={{ position: 'relative', width: '100%', height: `${HEATMAP_HEIGHT + canvasZoneHeight}px` }}
+        >
+            <canvas
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                ref={heatmapCanvasRef}
+                width={canvasWidth}
+                height={HEATMAP_HEIGHT + canvasZoneHeight}
+            />
+            <canvas
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                ref={playheadCanvasRef}
+                width={canvasWidth}
+                height={HEATMAP_HEIGHT + canvasZoneHeight}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                onClick={handleTimelineClick}
+            />
             {tooltip && (
                 <Tooltip
                     content={tooltip.text}
@@ -381,16 +426,7 @@ const NPETimelineComponent = ({
                     />
                 </Tooltip>
             )}
-            <canvas
-                style={{ width: '100%', height: `${HEATMAP_HEIGHT + canvasZoneHeight}px` }}
-                ref={canvasRef}
-                width={canvasWidth}
-                height={HEATMAP_HEIGHT + canvasZoneHeight}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={handleMouseLeave}
-                onClick={handleTimelineClick}
-            />
-        </>
+        </div>
     );
 };
 

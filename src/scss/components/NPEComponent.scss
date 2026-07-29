@@ -145,6 +145,17 @@
         position: relative;
     }
 
+    .congestion-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        cursor: pointer;
+
+        // Above the src/dst origin markers (`.tensix` = $z-index-2-interactive)
+        // so the link arrows paint over them, matching the old tile order.
+        z-index: variables.$z-index-2-interactive;
+    }
+
     .tensix-grid {
         display: grid;
         gap: 1px;

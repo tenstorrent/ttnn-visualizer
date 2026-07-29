@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import 'styles/components/NPEZoneFilterComponent.scss';
-import { Dispatch, SetStateAction, useEffect, useMemo, useState } from 'react';
+import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Classes, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -17,6 +17,7 @@ import {
     FABRIC_EVENT_SCOPE_OPTIONS,
     FabricEventScopeColors,
     KERNEL_PROCESS,
+    LinkUtilization,
     NPEData,
     NPERootZone,
     NPERootZoneUXInfo,
@@ -31,14 +32,8 @@ import {
     TimestepData,
 } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
-import {
-    NODE_SIZE,
-    calculateFabricColor,
-    calculateLinkCongestionColor,
-    getLines,
-    getLinkPoints,
-    resetRouteColors,
-} from './drawingApi';
+import ChipCongestionCanvas from './ChipCongestionCanvas';
+import { NODE_SIZE, getLines, resetRouteColors } from './drawingApi';
 import NPETimelineComponent from './NPETimelineComponent';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
@@ -218,6 +213,44 @@ const NPEView = ({
             });
     }, [npeData.noc_transfers, links?.active_transfers, fabricEventsFilter]);
 
+    // Pre-bucket per chip so each chip renders only its own entries instead of the
+    // render walking all D link_demand rows / A transfers 8 times (once per chip)
+    // and discarding the misses. #1803. A transfer lands in every chip its src or
+    // any dst touches, matching what RouteOriginsRenderer draws.
+    const linkDemandByChip = useMemo(() => {
+        const byChip = new Map<number, { linkUtilization: LinkUtilization; index: number }[]>();
+        links?.link_demand.forEach((linkUtilization, index) => {
+            const chipId = linkUtilization[NPE_LINK.CHIP_ID];
+            const bucket = byChip.get(chipId);
+            if (bucket) {
+                bucket.push({ linkUtilization, index });
+            } else {
+                byChip.set(chipId, [{ linkUtilization, index }]);
+            }
+        });
+        return byChip;
+    }, [links]);
+
+    const transfersByChip = useMemo(() => {
+        const byChip = new Map<number, { transfer: NoCTransfer; index: number }[]>();
+        transfers.forEach((transfer, index) => {
+            const chipIds = new Set<number>();
+            if (transfer.src) {
+                chipIds.add(transfer.src[NPE_LINK.CHIP_ID]);
+            }
+            transfer.dst.forEach((dst) => chipIds.add(dst[NPE_LINK.CHIP_ID]));
+            chipIds.forEach((chipId) => {
+                const bucket = byChip.get(chipId);
+                if (bucket) {
+                    bucket.push({ transfer, index });
+                } else {
+                    byChip.set(chipId, [{ transfer, index }]);
+                }
+            });
+        });
+        return byChip;
+    }, [transfers]);
+
     const showNOCType = (value: NoCType) => {
         if (nocFilter === null) {
             setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
@@ -349,6 +382,22 @@ const NPEView = ({
         setSelectedTransferList,
     });
 
+    // showActiveTransfers re-creates on every scrub/selection (its deps include
+    // selectedTimestep + selectedNode); route it through a ref so the click
+    // handlers handed to the congestion canvas stay referentially stable. #1803.
+    const showActiveTransfersRef = useRef(showActiveTransfers);
+    useEffect(() => {
+        showActiveTransfersRef.current = showActiveTransfers;
+    }, [showActiveTransfers]);
+    const handleSelectLink = useCallback((linkUtilization: LinkUtilization, index: number) => {
+        showActiveTransfersRef.current(linkUtilization, index);
+    }, []);
+    // Canvas misses (clicking a cell with no link) mirror the old empty-tile
+    // click, which deselected via showActiveTransfers(null).
+    const handleClearSelection = useCallback(() => {
+        showActiveTransfersRef.current(null);
+    }, []);
+
     const showAllTransfers = () => {
         setIsShowingAllTransfers(true);
         setSelectedNode(null);
@@ -382,6 +431,13 @@ const NPEView = ({
 
         return 0.5;
     };
+
+    // The base origin squares are driven entirely by `getOriginOpacity`, which
+    // returns 0 for every id-bearing transfer unless one is selected or
+    // highlighted. In the common scrub state (nothing selected/highlighted) the
+    // whole layer is fully transparent, so rendering it just churns thousands of
+    // invisible src/dst divs per scrub. Skip it unless it can actually be seen. #1803.
+    const hasVisibleTransferOrigins = selectedTransferList.length > 0 || highlightedTransfer !== null;
 
     const switchWidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
     const isTimelinePlaying = playbackSpeed > 0;
@@ -633,7 +689,7 @@ const NPEView = ({
                                     dram={dram}
                                     eth={eth}
                                     pcie={pcie}
-                                    showActiveTransfers={showActiveTransfers}
+                                    showActiveTransfers={handleClearSelection}
                                     selectedZoneAddress={selectedZoneAddress}
                                     isAnnotatingCores={isAnnotatingCores}
                                     TENSIX_SIZE={TENSIX_SIZE}
@@ -647,15 +703,16 @@ const NPEView = ({
                                         gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                                     }}
                                 >
-                                    {transfers.map((transfer, index) => (
-                                        <RouteOriginsRenderer
-                                            key={`${transfer.id}-${index}`}
-                                            transfer={transfer}
-                                            clusterChip={clusterChip}
-                                            index={index}
-                                            getOriginOpacity={getOriginOpacity}
-                                        />
-                                    ))}
+                                    {hasVisibleTransferOrigins &&
+                                        (transfersByChip.get(clusterChip.id) ?? []).map(({ transfer, index }) => (
+                                            <RouteOriginsRenderer
+                                                key={`${transfer.id}-${index}`}
+                                                transfer={transfer}
+                                                clusterChip={clusterChip}
+                                                index={index}
+                                                getOriginOpacity={getOriginOpacity}
+                                            />
+                                        ))}
                                     {highlightedTransfer !== null &&
                                         highlightedRoute !== null &&
                                         highlightedTransfer.route[highlightedRoute].device_id === clusterChip.id && (
@@ -668,82 +725,19 @@ const NPEView = ({
                                             />
                                         )}
 
-                                    {links?.link_demand.map((linkUtilization, index) => {
-                                        let fabricCondition = true;
-                                        if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
-                                            fabricCondition =
-                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
-                                                    FABRIC_EVENT_SCOPE_OPTIONS.FABRIC ||
-                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
-                                                    FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
-                                        } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
-                                            fabricCondition =
-                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
-                                                    FABRIC_EVENT_SCOPE_OPTIONS.LOCAL ||
-                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
-                                                    FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
-                                        }
-                                        if (
-                                            linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
-                                            (nocFilter === null ||
-                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0) &&
-                                            fabricCondition
-                                        ) {
-                                            return (
-                                                <button
-                                                    type='button'
-                                                    key={`${index}-${linkUtilization[NPE_LINK.Y]}-${linkUtilization[NPE_LINK.X]}-${linkUtilization[NPE_LINK.NOC_ID]}`}
-                                                    className={`tensix ${linkUtilization[NPE_LINK.Y]}-${linkUtilization[NPE_LINK.X]}`}
-                                                    style={{
-                                                        position: 'relative',
-                                                        gridColumn: linkUtilization[NPE_LINK.X] + 1,
-                                                        gridRow: linkUtilization[NPE_LINK.Y] + 1,
-                                                    }}
-                                                    onClick={() => showActiveTransfers(linkUtilization, index)}
-                                                >
-                                                    {/* // TENSIX CONGESTION */}
-                                                    <TensixTransferRenderer
-                                                        key={`${index}-${linkUtilization[NPE_LINK.Y]}-${linkUtilization[NPE_LINK.X]}-${linkUtilization[NPE_LINK.NOC_ID]}-transfers`}
-                                                        style={{
-                                                            opacity:
-                                                                highlightedTransfer !== null ||
-                                                                selectedTransferList.length !== 0
-                                                                    ? 0.15
-                                                                    : 1,
-                                                        }}
-                                                        width={SVG_SIZE}
-                                                        height={SVG_SIZE}
-                                                        data={[
-                                                            getLinkPoints(
-                                                                linkUtilization[NPE_LINK.NOC_ID],
-                                                                visualizationMode === VISUALIZATION_MODE.CONGESTION
-                                                                    ? calculateLinkCongestionColor(
-                                                                          linkUtilization[NPE_LINK.DEMAND],
-                                                                          0,
-                                                                          altCongestionColors,
-                                                                      )
-                                                                    : calculateFabricColor(
-                                                                          linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE],
-                                                                      ),
-                                                            ),
-                                                        ]}
-                                                        isMulticolor={false}
-                                                    />
-                                                    <div
-                                                        style={{
-                                                            fontSize: '9px',
-                                                            position: 'absolute',
-                                                            top: 0,
-                                                            opacity: 1,
-                                                        }}
-                                                    >
-                                                        {linkUtilization[NPE_LINK.Y]}-{linkUtilization[NPE_LINK.X]}
-                                                    </div>
-                                                </button>
-                                            );
-                                        }
-                                        return null;
-                                    })}
+                                    <ChipCongestionCanvas
+                                        links={linkDemandByChip.get(clusterChip.id) ?? []}
+                                        gridWidth={width}
+                                        gridHeight={height}
+                                        isFabricMode={visualizationMode === VISUALIZATION_MODE.TRANSFERS}
+                                        altCongestionColors={altCongestionColors}
+                                        nocFilter={nocFilter}
+                                        fabricEventsFilter={fabricEventsFilter}
+                                        dimmed={highlightedTransfer !== null || selectedTransferList.length !== 0}
+                                        zoom={zoom}
+                                        onSelectLink={handleSelectLink}
+                                        onClearSelection={handleClearSelection}
+                                    />
                                 </div>
 
                                 <div
