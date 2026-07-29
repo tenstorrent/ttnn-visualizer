@@ -154,6 +154,13 @@
         // Above the src/dst origin markers (`.tensix` = $z-index-2-interactive)
         // so the link arrows paint over them, matching the old tile order.
         z-index: variables.$z-index-2-interactive;
+
+        // Hover feedback gets its own layer so following the pointer repaints one
+        // 1px rect instead of the chip's whole congestion layer. It must not
+        // swallow the events the base canvas below it is listening for.
+        &--hover {
+            pointer-events: none;
+        }
     }
 
     .tensix-grid {
