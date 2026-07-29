@@ -66,6 +66,7 @@ import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions
 import { Signpost } from '../model/Signpost';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
+import { NPE_QUERY_KEY, NPE_SUMMARY_QUERY_KEY, NPE_WINDOW_QUERY_KEY } from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
 import { ReportFolder } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
@@ -425,12 +426,6 @@ export const useGetNPEManifest = () => {
         retry: false,
     });
 };
-
-// Exported so the re-upload cache-bust in NPEFileLoader references the same keys
-// as the hooks rather than duplicating magic strings (AGENTS.md). #861.
-export const NPE_QUERY_KEY = 'fetch-npe';
-export const NPE_SUMMARY_QUERY_KEY = 'npe-summary';
-export const NPE_WINDOW_QUERY_KEY = 'npe-window';
 
 const NPE_TEXT_GET_OPTIONS = {
     responseType: 'text' as const,
