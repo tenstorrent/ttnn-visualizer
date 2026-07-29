@@ -17,7 +17,9 @@ export const collapseMultideviceOperations = (
     deviceOperations: DeviceOperationMapping[],
     numDevices: number,
 ): DeviceOperationMapping[] => {
-    if (numDevices === 1) {
+    // A single device has no per-device duplicates, and an unknown device count
+    // (0, before the devices query settles) gives no count to collapse on.
+    if (numDevices <= 1) {
         return deviceOperations;
     }
 
@@ -89,9 +91,9 @@ export const matchDeviceOperationsToPerf = (
         return directMatch;
     }
 
-    // Single-device reports have nothing to collapse, so the fallback would
-    // repeat the pass that just failed.
-    if (numDevices === 1) {
+    // With nothing to collapse on, the fallback would repeat the pass that just
+    // failed.
+    if (numDevices <= 1) {
         return [];
     }
 

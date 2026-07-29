@@ -800,10 +800,9 @@ export const useGetDeviceOperationsListByOp = () => {
  */
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
-    const { data: devices } = useDevices();
 
     return useMemo(() => {
-        if (!operations || !devices) {
+        if (!operations) {
             return [];
         }
 
@@ -814,7 +813,7 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
                 operationName: operation.name,
             })),
         );
-    }, [operations, devices]);
+    }, [operations]);
 };
 
 const useProxyPerformanceReport = (): PerformanceReportResponse => {

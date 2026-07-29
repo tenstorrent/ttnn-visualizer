@@ -137,10 +137,11 @@ describe('matchDeviceOperationsToPerf', () => {
 });
 
 describe('collapseMultideviceOperations', () => {
-    it('returns the list unchanged for a single device', () => {
+    it('returns the list unchanged when there is nothing to collapse on', () => {
         const deviceOperations = [mapping('Alpha', 1), mapping('Alpha', 1)];
 
         expect(collapseMultideviceOperations(deviceOperations, 1)).toBe(deviceOperations);
+        expect(collapseMultideviceOperations(deviceOperations, 0)).toBe(deviceOperations);
     });
 
     it('keeps one entry per key seen exactly once per device and drops the rest', () => {
