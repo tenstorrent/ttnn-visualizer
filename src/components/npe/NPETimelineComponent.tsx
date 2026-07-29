@@ -137,13 +137,18 @@ const NPETimelineComponent = ({
 
     const dataSize = metricValues.worst.length;
 
-    // One column per device pixel at most. Beyond that the old code emitted a
-    // fillRect per timestep — ~0.008px wide at 196k steps — so each screen pixel
-    // was written hundreds of times and only the last (blended) write survived.
-    // That was both wasteful and lossy: an isolated congestion spike could be
-    // averaged into invisibility. Reducing each column to the MAX of the steps it
-    // covers keeps spikes visible, which is the point of a congestion heat bar.
-    const columnCount = Math.max(1, Math.min(Math.round(canvasWidth), dataSize));
+    // One column per *device* pixel — the finest resolution the screen can actually
+    // show. The heat bar is only redrawn on data/size/zone changes (the playhead is
+    // a separate div), so resolution is cheap: it costs one pass over the values,
+    // not per-scrub work. Going finer than a device pixel would put several rects
+    // back on the same physical pixel, where they blend and hide spikes — exactly
+    // the lossy overdraw that made 196k per-timestep rects both slow and wrong.
+    // Each column is the MAX of the steps it covers, so spikes survive being
+    // summarised, which is the point of a congestion heat bar. #1803
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const deviceWidth = Math.max(1, Math.round(canvasWidth * devicePixelRatio));
+    const deviceHeight = Math.max(1, Math.round((HEATMAP_HEIGHT + canvasZoneHeight) * devicePixelRatio));
+    const columnCount = Math.max(1, Math.min(deviceWidth, dataSize));
 
     const heatColumns = useMemo(() => {
         const color = (v: number) => calculateLinkCongestionColor(v, 0, altCongestionColors);
@@ -187,11 +192,15 @@ const NPETimelineComponent = ({
             return;
         }
 
-        ctx.clearRect(0, 0, canvas.width, HEATMAP_HEIGHT + canvasZoneHeight);
+        // The backing store is dpr-scaled for resolution; this transform lets all the
+        // drawing below stay in logical (canvasWidth) units, which is also the space
+        // `hoverMap` rects are compared against on mouse move.
+        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        ctx.clearRect(0, 0, canvasWidth, HEATMAP_HEIGHT + canvasZoneHeight);
 
         const numLines = heatColumns.length;
         const rowHeight = HEATMAP_HEIGHT / numLines;
-        const columnWidth = canvas.width / columnCount;
+        const columnWidth = canvasWidth / columnCount;
 
         // A report with no timesteps has no heat rows to draw — zones below still do.
         for (let row = 0; dataSize > 0 && row < numLines; row++) {
@@ -201,20 +210,20 @@ const NPETimelineComponent = ({
 
             // Coalesce neighbouring columns that resolved to the same colour into
             // one rect. Long idle stretches collapse to a handful of fills, and it
-            // avoids per-column `fillStyle` churn.
+            // avoids per-column `fillStyle` churn. Runs abut exactly, so no rounding
+            // is needed to avoid seams — a column is one device pixel wide.
             for (let col = 0; col < columnCount; col++) {
                 const isLast = col === columnCount - 1;
                 if (isLast || columns[col + 1] !== columns[runStart]) {
                     ctx.fillStyle = columns[runStart];
                     const x = runStart * columnWidth;
-                    // Ceil the span so sub-pixel column widths can't leave seams.
-                    ctx.fillRect(x, y, Math.ceil((col + 1) * columnWidth - x), rowHeight);
+                    ctx.fillRect(x, y, (col + 1) * columnWidth - x, rowHeight);
                     runStart = col + 1;
                 }
             }
         }
 
-        const chunkWidth = canvas.width / dataSize;
+        const chunkWidth = canvasWidth / dataSize;
 
         const groupBaseY = new Map<number, number>();
         {
@@ -268,6 +277,8 @@ const NPETimelineComponent = ({
         dataSize,
         canvasWidth,
         canvasZoneHeight,
+        devicePixelRatio,
+        deviceHeight,
         selectedZoneList,
         zoneRanges,
     ]);
@@ -403,8 +414,8 @@ const NPETimelineComponent = ({
             <canvas
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
                 ref={heatmapCanvasRef}
-                width={canvasWidth}
-                height={HEATMAP_HEIGHT + canvasZoneHeight}
+                width={deviceWidth}
+                height={deviceHeight}
             />
             <div
                 className='npe-timeline-playhead'
