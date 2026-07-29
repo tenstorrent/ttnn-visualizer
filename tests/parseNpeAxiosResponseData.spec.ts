@@ -4,20 +4,15 @@
 
 import { describe, expect, it } from 'vitest';
 import { parseNpeAxiosResponseData } from '../src/functions/parseNpeAxiosResponseData';
-
-const validPayload = {
-    common_info: { version: '1.0.0' },
-    noc_transfers: [{ id: 0 }],
-    timestep_data: [{ active_transfers: [] }],
-};
+import { minimalValidNpeData } from './helpers/npeFixtures';
 
 describe('parseNpeAxiosResponseData', () => {
     it('returns objects unchanged', () => {
-        expect(parseNpeAxiosResponseData(validPayload)).toEqual(validPayload);
+        expect(parseNpeAxiosResponseData(minimalValidNpeData)).toEqual(minimalValidNpeData);
     });
 
     it('parses a JSON string body', () => {
-        expect(parseNpeAxiosResponseData(JSON.stringify(validPayload))).toEqual(validPayload);
+        expect(parseNpeAxiosResponseData(JSON.stringify(minimalValidNpeData))).toEqual(minimalValidNpeData);
     });
 
     it('throws for empty bodies', () => {

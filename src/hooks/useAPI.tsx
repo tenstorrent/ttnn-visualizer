@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError, AxiosRequestConfig, HttpStatusCode } from 'axios';
+import { AxiosError, AxiosRequestConfig } from 'axios';
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -66,7 +66,12 @@ import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions
 import { Signpost } from '../model/Signpost';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
-import { NPE_QUERY_KEY, NPE_SUMMARY_QUERY_KEY, NPE_WINDOW_QUERY_KEY } from '../definitions/NPEData';
+import {
+    NPE_QUERY_KEY,
+    NPE_SUMMARY_QUERY_KEY,
+    NPE_TIMELINE_QUERY_KEY,
+    NPE_WINDOW_QUERY_KEY,
+} from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
 import { ReportFolder } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
@@ -76,6 +81,7 @@ import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
 import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
+import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError';
 import validateNpeSummary from '../functions/validateNpeSummary';
 import validateNpeWindow from '../functions/validateNpeWindow';
 
@@ -455,13 +461,12 @@ export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Pr
             (response as { data: string | null }).data = null;
             return parsed;
         } catch (error) {
+            // Drop the huge string before throwing so the synthetic error does not
+            // keep it alive via the response reference.
+            (response as { data: string | null }).data = null;
             // CONVENTIONS.md: client-side JSON failures → synthetic 422 AxiosError.
             const message = error instanceof Error ? error.message : 'Failed to parse NPE response';
-            throw new AxiosError(message, AxiosError.ERR_BAD_RESPONSE, response.config, response.request, {
-                ...response,
-                status: HttpStatusCode.UnprocessableEntity,
-                data: null,
-            });
+            return throwNpeClientAxiosError(message, response);
         }
     } finally {
         if (activeNpeRequestAbort === abortController) {
@@ -479,7 +484,9 @@ const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
 export const useNPETimelineFile = (fileName: string | undefined) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNPETimeline(fileName!),
-        queryKey: ['get-npe-timeline', fileName],
+        // instanceId matches useNpeSummary/useNpeWindow — basename-only keys bleed
+        // cached whole-file payloads across instances on a name collision.
+        queryKey: [NPE_TIMELINE_QUERY_KEY, getOrCreateInstanceId(), fileName],
         retry: false,
         enabled: !!fileName,
     });
@@ -637,7 +644,9 @@ const fetchNpeOpTrace = async () => fetchNpeText(Endpoints.NPE);
 export const useNpe = (fileName: string | null) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNpeOpTrace(),
-        queryKey: [NPE_QUERY_KEY, fileName],
+        // instanceId matches useNpeSummary/useNpeWindow — basename-only keys bleed
+        // cached whole-file payloads across instances on a name collision.
+        queryKey: [NPE_QUERY_KEY, getOrCreateInstanceId(), fileName],
         retry: false,
         staleTime: 30000,
         enabled: fileName !== null,
@@ -648,9 +657,7 @@ const fetchNpeSummary = async (signal?: AbortSignal): Promise<NpeSummary> => {
     const { data } = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY, { signal });
     const shapeError = validateNpeSummary(data);
     if (shapeError) {
-        // AxiosError (not a plain Error) so the thrown value matches the hook's
-        // typed error param and any status-aware call site.
-        throw new AxiosError(shapeError, 'ERR_INVALID_RESPONSE');
+        throwNpeClientAxiosError(shapeError);
     }
     return data;
 };
@@ -679,7 +686,7 @@ const fetchNpeWindow = async (t: number, signal?: AbortSignal): Promise<NpeWindo
     });
     const shapeError = validateNpeWindow(data);
     if (shapeError) {
-        throw new AxiosError(shapeError, 'ERR_INVALID_RESPONSE');
+        throwNpeClientAxiosError(shapeError);
     }
     return data;
 };

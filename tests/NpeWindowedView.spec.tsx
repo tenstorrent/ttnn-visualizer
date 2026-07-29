@@ -9,6 +9,7 @@ import type { AxiosError } from 'axios';
 import NpeWindowedView from '../src/components/npe/NpeWindowedView';
 import { useNpeSummary, useNpeWindow } from '../src/hooks/useAPI';
 import { CommonInfo, NoCType, NpeSummary, NpeWindow } from '../src/model/NPEModel';
+import { TEST_IDS } from '../src/definitions/TestIds';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useNpeSummary: vi.fn(),
@@ -17,7 +18,7 @@ vi.mock('../src/hooks/useAPI', () => ({
 
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
     default: ({ selectedTimestep }: { selectedTimestep?: number }) => (
-        <div data-testid='npe-view'>step:{selectedTimestep}</div>
+        <div data-testid={TEST_IDS.NPE_VIEW}>step:{selectedTimestep}</div>
     ),
 }));
 
@@ -79,7 +80,7 @@ describe('NpeWindowedView', () => {
 
         expect(screen.getByText('Unable to load NPE report')).toBeDefined();
         expect(screen.getByText('index build failed')).toBeDefined();
-        expect(screen.queryByTestId('npe-view')).toBeNull();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).toBeNull();
     });
 
     it('shows a building-index spinner while the summary loads', () => {
@@ -94,7 +95,7 @@ describe('NpeWindowedView', () => {
         render(<NpeWindowedView fileName='trace.json' />);
 
         expect(screen.getByText('Processing…')).toBeDefined();
-        expect(screen.queryByTestId('npe-view')).toBeNull();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).toBeNull();
     });
 
     it('renders the view and auto-jumps to the first active step', () => {
@@ -109,7 +110,7 @@ describe('NpeWindowedView', () => {
         render(<NpeWindowedView fileName='trace.json' />);
 
         // active_count = [0, 2, 0] → first active step is index 1.
-        expect(screen.getByTestId('npe-view').textContent).toBe('step:1');
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW).textContent).toBe('step:1');
     });
 
     it('degrades in place on a window error when a previous frame is available', () => {
@@ -132,7 +133,7 @@ describe('NpeWindowedView', () => {
         expect(screen.getByText('Timestep failed to load')).toBeDefined();
         expect(screen.getByText(/timestep 42 out of range/)).toBeDefined();
         // The scrubber-bearing view is still rendered so the user can recover.
-        expect(screen.getByTestId('npe-view')).toBeDefined();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeDefined();
     });
 
     it('shows an empty-report notice for a zero-timestep trace', () => {
@@ -160,7 +161,7 @@ describe('NpeWindowedView', () => {
         render(<NpeWindowedView fileName='trace.json' />);
 
         expect(screen.getByText('Empty NPE report')).toBeDefined();
-        expect(screen.queryByTestId('npe-view')).toBeNull();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).toBeNull();
     });
 
     it('re-clamps the selected timestep when a new (shorter) summary arrives', () => {
@@ -168,7 +169,7 @@ describe('NpeWindowedView', () => {
         mockedSummary.mockReturnValue({ data: summary, isLoading: false, isError: false, error: null } as SummaryHook);
         mockedWindow.mockReturnValue({ data: npeWindow, isError: false, error: null } as WindowHook);
         const { rerender } = render(<NpeWindowedView fileName='trace.json' />);
-        expect(screen.getByTestId('npe-view').textContent).toBe('step:1');
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW).textContent).toBe('step:1');
 
         // Same-name re-upload → fresh summary object with a single idle step. The
         // stale selectedTimestep (1) is now out of range; identity change resets it.
@@ -190,7 +191,7 @@ describe('NpeWindowedView', () => {
             rerender(<NpeWindowedView fileName='trace.json' />);
         });
 
-        expect(screen.getByTestId('npe-view').textContent).toBe('step:0');
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW).textContent).toBe('step:0');
     });
 
     it('surfaces a first-window error when no frame has loaded yet', () => {
@@ -210,7 +211,7 @@ describe('NpeWindowedView', () => {
 
         expect(screen.getByText('Unable to load NPE timestep')).toBeDefined();
         expect(screen.getByText('window fetch failed')).toBeDefined();
-        expect(screen.queryByTestId('npe-view')).toBeNull();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).toBeNull();
     });
 
     it('keeps showing Processing… when a window errors while the summary is still loading', () => {

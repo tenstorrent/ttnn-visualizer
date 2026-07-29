@@ -8,9 +8,9 @@ import { AxiosError, HttpStatusCode } from 'axios';
 import { getDefaultStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
+import { minimalValidNpeData } from './helpers/npeFixtures';
 import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import type { NPEData } from '../src/model/NPEModel';
 
 // Mutable holders shared with the hoisted mock factories so each case can flip
 // SERVER_MODE / route params and inspect how useNpe was gated.
@@ -63,12 +63,6 @@ vi.mock('../src/components/npe/NPEDemoSelect', () => ({ default: () => null }));
 // eslint-disable-next-line import/first
 import NPE from '../src/routes/NPE';
 
-const validNpeData = {
-    common_info: { version: '1.0.0' },
-    noc_transfers: [{ id: 0 }],
-    timestep_data: [{ active_transfers: [] }],
-} as unknown as NPEData;
-
 const idleTimeline = {
     data: undefined,
     isLoading: false,
@@ -76,16 +70,19 @@ const idleTimeline = {
 };
 
 const settledNpe = {
-    data: validNpeData,
+    data: minimalValidNpeData,
     isLoading: false,
     error: null,
 };
 
 const lastUseNpeArg = () => h.useNpeArgs[h.useNpeArgs.length - 1];
 
-const makeHttpError = (status: number, message: string) => {
+const makeHttpError = (status: number, message: string, code?: string) => {
     const error = new AxiosError(message);
     error.status = status;
+    if (code) {
+        error.code = code;
+    }
     return error;
 };
 
@@ -133,7 +130,7 @@ describe('NPE route windowed-view gate', () => {
         h.serverMode = false;
         h.params = { filepath: 'saved-report.json' };
         mockUseNPETimelineFile.mockReturnValue({
-            data: validNpeData,
+            data: minimalValidNpeData,
             isLoading: false,
             error: null,
         });
@@ -160,6 +157,19 @@ describe('NPE route error mapping', () => {
         expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
     });
 
+    it('does not pin the spinner on a background refetch when data is already present', () => {
+        mockUseNpe.mockReturnValue({
+            data: minimalValidNpeData,
+            isLoading: false,
+            isFetching: true,
+            error: null,
+        });
+        renderRoute();
+
+        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).not.toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
+    });
+
     it('mounts the view once data is ready', () => {
         renderRoute();
 
@@ -175,6 +185,17 @@ describe('NPE route error mapping', () => {
         });
         renderRoute();
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
+    });
+
+    it('maps HTTP 500 to the unhandled-error status and hides the view', () => {
+        mockUseNpe.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: makeHttpError(HttpStatusCode.InternalServerError, '500', AxiosError.ERR_BAD_RESPONSE),
+        });
+        renderRoute();
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_UNHANDLED_ERROR)).toBeInTheDocument();
         expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
     });
 });
@@ -208,7 +229,7 @@ describe('NPE route timeline path and loading scope', () => {
         h.params = { filepath: 'timeline.json' };
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
         mockUseNPETimelineFile.mockReturnValue({
-            data: validNpeData,
+            data: minimalValidNpeData,
             isLoading: false,
             error: null,
         });
@@ -226,7 +247,7 @@ describe('NPE route timeline path and loading scope', () => {
             error: makeHttpError(HttpStatusCode.InternalServerError, 'stale'),
         });
         mockUseNPETimelineFile.mockReturnValue({
-            data: validNpeData,
+            data: minimalValidNpeData,
             isLoading: false,
             error: null,
         });
@@ -242,6 +263,19 @@ describe('NPE route timeline path and loading scope', () => {
         renderRoute();
 
         expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).not.toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
+    });
+
+    it('ignores a stale error on a disabled timeline sibling when the hosted useNpe path is active', () => {
+        mockUseNpe.mockReturnValue(settledNpe);
+        mockUseNPETimelineFile.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: makeHttpError(HttpStatusCode.InternalServerError, 'stale-timeline'),
+        });
+        renderRoute();
+
+        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_UNHANDLED_ERROR)).not.toBeInTheDocument();
         expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
     });
 });

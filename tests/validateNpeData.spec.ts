@@ -5,16 +5,11 @@
 import { describe, expect, it } from 'vitest';
 import { NPEValidationError } from '../src/definitions/NPEData';
 import { validateNpeData } from '../src/functions/validateNpeData';
-
-const validData = {
-    common_info: { version: '1.0.0' },
-    noc_transfers: [{ id: 0 }],
-    timestep_data: [{ active_transfers: [] }],
-};
+import { minimalValidNpeData } from './helpers/npeFixtures';
 
 describe('validateNpeData', () => {
     it('returns OK for a well-formed payload', () => {
-        expect(validateNpeData(validData)).toBe(NPEValidationError.OK);
+        expect(validateNpeData(minimalValidNpeData)).toBe(NPEValidationError.OK);
     });
 
     it('returns INVALID_NPE_DATA for non-object input', () => {
@@ -29,7 +24,7 @@ describe('validateNpeData', () => {
     it('returns EMPTY_NPE_TRACE when noc_transfers is empty', () => {
         expect(
             validateNpeData({
-                ...validData,
+                ...minimalValidNpeData,
                 noc_transfers: [],
             }),
         ).toBe(NPEValidationError.EMPTY_NPE_TRACE);
@@ -38,7 +33,7 @@ describe('validateNpeData', () => {
     it('returns EMPTY_NPE_TRACE when timestep_data is empty', () => {
         expect(
             validateNpeData({
-                ...validData,
+                ...minimalValidNpeData,
                 timestep_data: [],
             }),
         ).toBe(NPEValidationError.EMPTY_NPE_TRACE);
@@ -47,7 +42,7 @@ describe('validateNpeData', () => {
     it('returns EMPTY_NPE_TRACE when both transfer arrays are empty', () => {
         expect(
             validateNpeData({
-                ...validData,
+                ...minimalValidNpeData,
                 noc_transfers: [],
                 timestep_data: [],
             }),
@@ -57,7 +52,7 @@ describe('validateNpeData', () => {
     it('returns INVALID_NPE_VERSION when version is missing', () => {
         expect(
             validateNpeData({
-                ...validData,
+                ...minimalValidNpeData,
                 common_info: {},
             }),
         ).toBe(NPEValidationError.INVALID_NPE_VERSION);
@@ -66,7 +61,7 @@ describe('validateNpeData', () => {
     it('returns INVALID_NPE_VERSION when major version does not match', () => {
         expect(
             validateNpeData({
-                ...validData,
+                ...minimalValidNpeData,
                 common_info: { version: '0.5.0' },
             }),
         ).toBe(NPEValidationError.INVALID_NPE_VERSION);

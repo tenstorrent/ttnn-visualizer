@@ -5,9 +5,9 @@
 export const MIN_SUPPORTED_VERSION = '1.0.0';
 export const LEGACY_VISUALIZER_VERSION = '0.32.3'; // Version of the visualizer that supports pre-version data format
 
-// Shared so NPEFileLoader can bust the same React Query caches the hooks use
-// without importing useAPI (AGENTS.md). #861.
+// Shared React Query key prefixes for NPE hooks and NPEFileLoader cache bust (#861).
 export const NPE_QUERY_KEY = 'fetch-npe';
+export const NPE_TIMELINE_QUERY_KEY = 'get-npe-timeline';
 export const NPE_SUMMARY_QUERY_KEY = 'npe-summary';
 export const NPE_WINDOW_QUERY_KEY = 'npe-window';
 

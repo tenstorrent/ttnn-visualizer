@@ -53,6 +53,7 @@ import GlobalSwitch from '../GlobalSwitch';
 import NPEZoneFilterComponent from './NPEZoneFilterComponent';
 import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
+import { TEST_IDS } from '../../definitions/TestIds';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -388,7 +389,10 @@ const NPEView = ({
     const isActiveTransferDetailsOpen = !!(selectedNode && !isTimelinePlaying && selectedTransferList?.length > 0);
 
     return (
-        <div className='npe'>
+        <div
+            className='npe'
+            data-testid={TEST_IDS.NPE_VIEW}
+        >
             <NPEMetadata
                 info={npeData.common_info}
                 numTransfers={transfers.length}

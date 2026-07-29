@@ -10,18 +10,24 @@ import { AxiosError, HttpStatusCode } from 'axios';
 import { fetchNpeText, useNPETimelineFile, useNpe, useNpeSummary, useNpeWindow } from '../src/hooks/useAPI';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
+import { NPE_QUERY_KEY, NPE_TIMELINE_QUERY_KEY } from '../src/definitions/NPEData';
+import { minimalValidNpeData } from './helpers/npeFixtures';
+
+const h = vi.hoisted(() => ({
+    instanceId: 'test-instance',
+}));
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: { get: vi.fn() },
-    getOrCreateInstanceId: () => 'test-instance',
+    getOrCreateInstanceId: () => h.instanceId,
 }));
 
 const mockedGet = vi.mocked(axiosInstance.get);
 
 // A fresh client per render so cached results don't bleed across cases; retry off
 // so a rejected fetch settles to `isError` immediately.
-const makeWrapper = () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const makeClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const makeWrapper = (client = makeClient()) => {
     return ({ children }: { children: React.ReactNode }) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -57,6 +63,7 @@ const validWindow = {
 };
 
 afterEach(() => {
+    h.instanceId = 'test-instance';
     vi.clearAllMocks();
 });
 
@@ -68,12 +75,13 @@ describe('useNpeSummary / useNpeWindow fetch-boundary validation', () => {
         expect(result.current.data?.n_timesteps).toBe(2);
     });
 
-    it('rejects a length-mismatched summary as an ERR_INVALID_RESPONSE AxiosError', async () => {
+    it('rejects a length-mismatched summary as a synthetic 422 AxiosError', async () => {
         const bad = { ...validSummary, timesteps: { ...validSummary.timesteps, active_count: [0] } };
         mockedGet.mockResolvedValue({ data: bad });
         const { result } = renderHook(() => useNpeSummary('trace.json'), { wrapper: makeWrapper() });
         await waitFor(() => expect(result.current.isError).toBe(true));
-        expect(result.current.error?.code).toBe('ERR_INVALID_RESPONSE');
+        expect(result.current.error?.code).toBe(AxiosError.ERR_BAD_RESPONSE);
+        expect(result.current.error?.status).toBe(HttpStatusCode.UnprocessableEntity);
         expect(result.current.error?.message).toMatch(/active_count/);
     });
 
@@ -84,12 +92,13 @@ describe('useNpeSummary / useNpeWindow fetch-boundary validation', () => {
         expect(result.current.data?.t).toBe(1);
     });
 
-    it('rejects a malformed window as an ERR_INVALID_RESPONSE AxiosError', async () => {
+    it('rejects a malformed window as a synthetic 422 AxiosError', async () => {
         const bad = { ...validWindow, timestep: { ...validWindow.timestep, link_demand: 'nope' } };
         mockedGet.mockResolvedValue({ data: bad });
         const { result } = renderHook(() => useNpeWindow('trace.json', 1), { wrapper: makeWrapper() });
         await waitFor(() => expect(result.current.isError).toBe(true));
-        expect(result.current.error?.code).toBe('ERR_INVALID_RESPONSE');
+        expect(result.current.error?.code).toBe(AxiosError.ERR_BAD_RESPONSE);
+        expect(result.current.error?.status).toBe(HttpStatusCode.UnprocessableEntity);
         expect(result.current.error?.message).toMatch(/link_demand array/);
     });
 
@@ -102,15 +111,9 @@ describe('useNpeSummary / useNpeWindow fetch-boundary validation', () => {
     });
 });
 
-const validNpePayload = {
-    common_info: { version: '1.0.0' },
-    noc_transfers: [{ id: 0 }],
-    timestep_data: [{ active_transfers: [] }],
-};
-
 describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
     it('fetches NPE as text with forcedJSONParsing disabled', async () => {
-        mockedGet.mockResolvedValue({ data: JSON.stringify(validNpePayload) });
+        mockedGet.mockResolvedValue({ data: JSON.stringify(minimalValidNpeData) });
         const { result } = renderHook(() => useNpe('trace.json'), { wrapper: makeWrapper() });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -133,8 +136,16 @@ describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
         expect(result.current.error?.code).toBe(AxiosError.ERR_BAD_RESPONSE);
     });
 
+    it('maps a malformed JSON string body to HTTP 422 on useNpe', async () => {
+        mockedGet.mockResolvedValue({ data: '{not-json' });
+        const { result } = renderHook(() => useNpe('trace.json'), { wrapper: makeWrapper() });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error?.status).toBe(HttpStatusCode.UnprocessableEntity);
+        expect(result.current.error?.code).toBe(AxiosError.ERR_BAD_RESPONSE);
+    });
+
     it('fetches timeline with filename param and the same text options', async () => {
-        mockedGet.mockResolvedValue({ data: JSON.stringify(validNpePayload) });
+        mockedGet.mockResolvedValue({ data: JSON.stringify(minimalValidNpeData) });
         const { result } = renderHook(() => useNPETimelineFile('saved.json'), { wrapper: makeWrapper() });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -148,6 +159,58 @@ describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
         );
     });
 
+    it('includes instanceId in the useNpe query key', async () => {
+        mockedGet.mockResolvedValue({ data: JSON.stringify(minimalValidNpeData) });
+        h.instanceId = 'instance-a';
+        const client = makeClient();
+        const { result } = renderHook(() => useNpe('trace.json'), { wrapper: makeWrapper(client) });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(
+            client
+                .getQueryCache()
+                .getAll()
+                .map((query) => query.queryKey),
+        ).toEqual([[NPE_QUERY_KEY, 'instance-a', 'trace.json']]);
+    });
+
+    it('includes instanceId in the timeline query key', async () => {
+        mockedGet.mockResolvedValue({ data: JSON.stringify(minimalValidNpeData) });
+        h.instanceId = 'instance-b';
+        const client = makeClient();
+        const { result } = renderHook(() => useNPETimelineFile('saved.json'), {
+            wrapper: makeWrapper(client),
+        });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(
+            client
+                .getQueryCache()
+                .getAll()
+                .map((query) => query.queryKey),
+        ).toEqual([[NPE_TIMELINE_QUERY_KEY, 'instance-b', 'saved.json']]);
+    });
+
+    it('does not reuse the useNpe cache across instanceIds for the same basename', async () => {
+        mockedGet.mockResolvedValue({ data: JSON.stringify(minimalValidNpeData) });
+        const client = makeClient();
+        const wrapper = makeWrapper(client);
+
+        h.instanceId = 'instance-a';
+        const first = renderHook(() => useNpe('trace.json'), { wrapper });
+        await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+        first.unmount();
+
+        expect(client.getQueryData([NPE_QUERY_KEY, 'instance-a', 'trace.json'])).toEqual(minimalValidNpeData);
+        expect(client.getQueryData([NPE_QUERY_KEY, 'instance-b', 'trace.json'])).toBeUndefined();
+
+        mockedGet.mockClear();
+        mockedGet.mockResolvedValue({ data: JSON.stringify(minimalValidNpeData) });
+        h.instanceId = 'instance-b';
+        const second = renderHook(() => useNpe('trace.json'), { wrapper });
+        await waitFor(() => expect(second.result.current.isSuccess).toBe(true));
+        expect(mockedGet).toHaveBeenCalledTimes(1);
+        expect(client.getQueryData([NPE_QUERY_KEY, 'instance-b', 'trace.json'])).toEqual(minimalValidNpeData);
+    });
+
     it('aborts the prior in-flight fetch when a second fetchNpeText starts', async () => {
         let resolveFirst: ((value: { data: string }) => void) | undefined;
         mockedGet.mockImplementationOnce((_url, config) => {
@@ -159,13 +222,13 @@ describe('useNpe / useNPETimelineFile whole-file text fetch', () => {
                 });
             });
         });
-        mockedGet.mockResolvedValueOnce({ data: JSON.stringify(validNpePayload) });
+        mockedGet.mockResolvedValueOnce({ data: JSON.stringify(minimalValidNpeData) });
 
         const first = fetchNpeText(Endpoints.NPE);
         const second = fetchNpeText(Endpoints.NPE);
-        await expect(second).resolves.toEqual(validNpePayload);
+        await expect(second).resolves.toEqual(minimalValidNpeData);
         await expect(first).rejects.toThrow();
         // Keep the first promise from hanging if abort listener never fired in the mock.
-        resolveFirst?.({ data: JSON.stringify(validNpePayload) });
+        resolveFirst?.({ data: JSON.stringify(minimalValidNpeData) });
     });
 });
