@@ -4,6 +4,7 @@
 
 import dataclasses
 import enum
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -248,18 +249,50 @@ def sanitise_path_segment(value: object) -> str:
     return safe_segment
 
 
-def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]:
-    """Sanitised basename of a remote report path, or None if missing/invalid.
+RANK_DIRECTORY_RE = re.compile(r"^rank\d+$", re.IGNORECASE)
+RANK_SUFFIX_RE = re.compile(r"_(rank\d+)$", re.IGNORECASE)
 
-    Sync destinations and mount lookups must use this so write and read segments
-    stay aligned (``sftp_operations`` ↔ ``views``).
+
+def rank_suffix_from_segment(segment: Optional[str]) -> Optional[str]:
+    """The ``rank<N>`` qualifier ``folder_segment_from_remote_path`` appended, if any."""
+    if not segment:
+        return None
+    match = RANK_SUFFIX_RE.search(segment)
+    return match.group(1) if match else None
+
+
+def _rank_directory_from_remote_path(remote_path: str) -> Optional[str]:
+    """The rank folder a multihost report sits under, verbatim, or None."""
+    for part in reversed(Path(remote_path).parts):
+        if RANK_DIRECTORY_RE.match(part):
+            return part
+    return None
+
+
+def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]:
+    """Sanitised local folder segment for a remote report, or None if invalid.
+
+    Sync destinations, mount lookups and last-synced probes must all use this so
+    write and read segments stay aligned (``sftp_operations`` ↔ ``views``).
+
+    Multihost reports are qualified with their rank: every rank of one
+    ``tt-run --tracy`` launch names its report from its own start time at second
+    granularity, so ranks routinely produce the same basename and would
+    otherwise sync on top of each other. Kept a single flat segment because
+    callers join it straight onto the report directory and treat report folders
+    as siblings.
     """
     if remote_path is None:
         return None
     try:
-        return sanitise_path_segment(Path(remote_path).name)
+        segment = sanitise_path_segment(Path(remote_path).name)
     except (TypeError, ValueError):
         return None
+
+    rank_directory = _rank_directory_from_remote_path(remote_path)
+    if rank_directory is None or segment == rank_directory:
+        return segment
+    return f"{segment}_{rank_directory}"
 
 
 def sanitise_remote_host_segment(value: object) -> str:
@@ -275,6 +308,9 @@ class RemoteConnection(SerializeableModel):
     profilerPath: str
     performancePath: Optional[str] = None
     identityFile: Optional[str] = None
+    # `tt-run --tracy` writes one report per rank under <performancePath>/<rank>/,
+    # so multihost discovery has to search one directory level deeper.
+    multihostPerformance: bool = False
 
     @field_validator("host", mode="before")
     @classmethod

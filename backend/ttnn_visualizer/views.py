@@ -67,6 +67,7 @@ from ttnn_visualizer.models import (
     ReportLocation,
     StatusMessage,
     folder_segment_from_remote_path,
+    rank_suffix_from_segment,
     sanitise_path_segment,
     sanitise_remote_host_segment,
 )
@@ -1155,6 +1156,29 @@ def delete_performance_report(performance_name, instance: Instance):
     )
 
 
+def _performance_path_for_requested_name(active_path: str, name: str) -> str:
+    """Resolve a ``?name=`` report swap against the synced performance directory.
+
+    Callers pass the report's display name, which for a multihost report omits
+    the ``_rank<N>`` qualifier its local folder carries (see
+    ``folder_segment_from_remote_path``), so fall back to the active report's own
+    rank before giving up. Missing directories are returned unchanged so the
+    downstream not-found handling stays the same.
+    """
+    reports_directory = Path(active_path).parent
+    requested = reports_directory / name
+    if requested.is_dir():
+        return str(requested)
+
+    rank = rank_suffix_from_segment(Path(active_path).name)
+    if rank:
+        qualified = reports_directory / f"{name}_{rank}"
+        if qualified.is_dir():
+            return str(qualified)
+
+    return str(requested)
+
+
 @api.route("/performance/perf-results/raw", methods=["GET"])
 @with_instance
 def get_performance_results_data_raw(instance: Instance):
@@ -1182,8 +1206,9 @@ def get_performance_results_report(instance: Instance):
         raise PerformanceReportNotLoadedException()
 
     if name and not current_app.config["SERVER_MODE"]:
-        performance_path = Path(instance.performance_path).parent / name
-        instance.performance_path = str(performance_path)
+        instance.performance_path = _performance_path_for_requested_name(
+            instance.performance_path, name
+        )
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     try:
@@ -1213,8 +1238,9 @@ def get_performance_data_raw(instance: Instance):
         raise PerformanceReportNotLoadedException()
 
     if name and not current_app.config["SERVER_MODE"]:
-        performance_path = Path(instance.performance_path).parent / name
-        instance.performance_path = str(performance_path)
+        instance.performance_path = _performance_path_for_requested_name(
+            instance.performance_path, name
+        )
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     content = DeviceLogProfilerQueries.get_raw_csv(instance)
@@ -1254,8 +1280,9 @@ def get_performance_device_meta(instance: Instance):
         raise PerformanceReportNotLoadedException()
 
     if name and not current_app.config["SERVER_MODE"]:
-        performance_path = Path(instance.performance_path).parent / name
-        instance.performance_path = str(performance_path)
+        instance.performance_path = _performance_path_for_requested_name(
+            instance.performance_path, name
+        )
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     file_path = Path(
@@ -1535,7 +1562,11 @@ def _annotate_last_synced(
     remote_data = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
     dir_name = current_app.config[directory_config_key]
     for rf in folders:
-        directory_name = Path(rf.remotePath).name
+        # Must be the same segment sync writes, or a rank's badge would report
+        # the sync state of whichever rank was downloaded into that folder.
+        directory_name = folder_segment_from_remote_path(rf.remotePath)
+        if not directory_name:
+            continue
         local_path = local_synced_report_path(
             remote_data, host, dir_name, directory_name
         )
@@ -1679,6 +1710,15 @@ def get_mesh_descriptor(instance: Instance):
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
 
+def _found_reports_message(
+    label: str, count: int, *, in_rank_subdirectories: bool = False
+) -> str:
+    """Connection-test success line confirming what the report search actually saw."""
+    plural = "report" if count == 1 else "reports"
+    location = " in per-rank subdirectories" if in_rank_subdirectories else ""
+    return f"Found {count} {label} {plural}{location}"
+
+
 @api.route("/remote/test", methods=["POST"])
 @local_only
 def test_remote_folder():
@@ -1744,7 +1784,7 @@ def test_remote_folder():
     # Check for Project Configurations
     if not has_failures():
         try:
-            check_remote_path_for_reports(connection)
+            report_counts = check_remote_path_for_reports(connection)
         except AuthenticationFailedException as e:
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
@@ -1752,6 +1792,23 @@ def test_remote_folder():
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
             add_status(e.status.value, e.message, getattr(e, "detail", None))
+        else:
+            # A path that exists says nothing about whether reports were found
+            # there, which is what the user is really testing for.
+            if report_counts.profiler is not None:
+                add_status(
+                    ConnectionTestStates.OK.value,
+                    _found_reports_message("memory", report_counts.profiler),
+                )
+            if report_counts.performance is not None:
+                add_status(
+                    ConnectionTestStates.OK.value,
+                    _found_reports_message(
+                        "performance",
+                        report_counts.performance,
+                        in_rank_subdirectories=connection.multihostPerformance,
+                    ),
+                )
 
     return Response(
         orjson.dumps([status.model_dump() for status in statuses]),

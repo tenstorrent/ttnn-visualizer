@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Tooltip } from '@blueprintjs/core';
+import { Button, Checkbox, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
 import { useState } from 'react';
@@ -240,6 +240,21 @@ const RemoteConnectionDialog = ({
                         id='remote-performance-path'
                         value={connection.performancePath ?? ''}
                         onChange={(e) => setConnection({ ...connection, performancePath: e.target.value })}
+                    />
+                </FormGroup>
+
+                <FormGroup
+                    label='Multihost performance reports'
+                    subLabel='The path above must be the folder that directly contains the rank folders (e.g. "/<PATH TO TT METAL>/generated/profiler/ttrun/"), so that each report is found at "ttrun/rank0/reports/<REPORT>"'
+                    labelFor='remote-performance-multihost'
+                >
+                    <Checkbox
+                        id='remote-performance-multihost'
+                        label='Search per-rank subdirectories'
+                        checked={connection.multihostPerformance ?? false}
+                        onChange={(e) =>
+                            setConnection({ ...connection, multihostPerformance: e.currentTarget.checked })
+                        }
                     />
                 </FormGroup>
 

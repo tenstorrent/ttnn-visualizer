@@ -1215,6 +1215,101 @@ const selectRemoteFolder = async (type: 'profiler' | 'performance', remotePath: 
 const selectProfilerFolder = (remotePath: string) => selectRemoteFolder('profiler', remotePath);
 const selectPerformanceFolder = (remotePath: string) => selectRemoteFolder('performance', remotePath);
 
+const MULTIHOST_ROOT = '/tt-metal/generated/profiler/ttrun';
+
+const multihostConnection: RemoteConnection[] = [
+    {
+        name: 'Multihost',
+        username: 'test-user',
+        host: 'localhost',
+        port: 2222,
+        profilerPath: '',
+        performancePath: MULTIHOST_ROOT,
+        multihostPerformance: true,
+    },
+];
+
+const multihostFolders: RemoteFolder[] = [
+    {
+        reportName: '2026_07_28_18_04_24',
+        remotePath: `${MULTIHOST_ROOT}/rank0/reports/2026_07_28_18_04_24`,
+        lastModified: 1,
+    },
+    {
+        reportName: '2026_07_28_18_04_31',
+        remotePath: `${MULTIHOST_ROOT}/rank1/reports/2026_07_28_18_04_31`,
+        lastModified: 2,
+    },
+];
+
+const renderPerformanceSelector = async (
+    connectionList: RemoteConnection[],
+    folderList: RemoteFolder[] = multihostFolders,
+) => {
+    setupConnection(connectionList);
+
+    render(
+        <TestProviders>
+            <RemoteFolderSelector
+                remoteFolderList={folderList}
+                onSelectFolder={() => undefined}
+                type='performance'
+            />
+        </TestProviders>,
+    );
+
+    getButtonWithText(NO_SELECTION).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+};
+
+it('labels multihost performance reports by rank', async () => {
+    await renderPerformanceSelector(multihostConnection);
+
+    expect(screen.getByText('Rank 0: 2026_07_28_18_04_24')).toBeTruthy();
+    expect(screen.getByText('Rank 1: 2026_07_28_18_04_31')).toBeTruthy();
+    // The rank folder and the intervening reports/ segment are no longer shown raw.
+    expect(screen.queryByText(`/rank0/reports/2026_07_28_18_04_24`)).toBeNull();
+});
+
+it('leaves single-host performance labels as paths', async () => {
+    const singleHostConnection: RemoteConnection[] = [{ ...multihostConnection[0], multihostPerformance: false }];
+
+    await renderPerformanceSelector(singleHostConnection);
+
+    expect(screen.queryByText('Rank 0: 2026_07_28_18_04_24')).toBeNull();
+    expect(screen.getByText('/rank0/reports/2026_07_28_18_04_24')).toBeTruthy();
+});
+
+it('labels synced multihost copies by their rank suffix', async () => {
+    // Offline listing synthesises a path from the local folder name, which carries
+    // the rank as a suffix — the label should still match the online one.
+    const syncedFolders: RemoteFolder[] = [
+        {
+            reportName: '2026_07_28_18_04_24_rank0',
+            remotePath: `${MULTIHOST_ROOT}/2026_07_28_18_04_24_rank0`,
+            lastModified: 1,
+        },
+    ];
+
+    await renderPerformanceSelector(multihostConnection, syncedFolders);
+
+    expect(screen.getByText('Rank 0: 2026_07_28_18_04_24')).toBeTruthy();
+});
+
+it('falls back to the path when a multihost report has no rank folder', async () => {
+    const folderWithoutRank: RemoteFolder[] = [
+        {
+            reportName: 'loose_report',
+            remotePath: `${MULTIHOST_ROOT}/loose_report`,
+            lastModified: 1,
+        },
+    ];
+
+    await renderPerformanceSelector(multihostConnection, folderWithoutRank);
+
+    expect(screen.getByText('/loose_report')).toBeTruthy();
+});
+
 // TODO: Add more tests to cover remaining functionality and edge cases
 // ❌ No test for clicking Edit button
 // ❌ No test for clicking Remove button

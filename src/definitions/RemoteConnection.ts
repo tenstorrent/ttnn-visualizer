@@ -14,6 +14,8 @@ export interface RemoteConnection {
     profilerPath: string;
     performancePath?: string;
     identityFile?: string; // Optional path to SSH private key.
+    // Performance reports sit in per-rank subdirectories of performancePath.
+    multihostPerformance?: boolean;
 }
 
 export interface RemoteFolder {

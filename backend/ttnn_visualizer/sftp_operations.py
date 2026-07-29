@@ -11,7 +11,7 @@ import time
 from http import HTTPStatus
 from pathlib import Path
 from threading import Thread
-from typing import List, NoReturn, Optional
+from typing import List, NamedTuple, NoReturn, Optional
 
 import yaml
 from flask import current_app
@@ -89,6 +89,16 @@ def _ssh_remote_check_timeout_seconds() -> int:
 TEST_CONFIG_FILE = PROFILER_CONFIG_BASENAME
 TEST_DB_FILE = "db.sqlite"
 TEST_PROFILER_FILE = "profile_log_device.csv"
+
+# `tt-run --tracy` gives each rank its own copy of the profiler output root, so a
+# multihost report lives at <root>/rank<N>/reports/<report> rather than directly
+# under the configured path. Requiring this relative subpath does two jobs: it
+# keeps a root that is not the per-rank parent from matching (the single-host
+# <root>/reports/<report> layout otherwise sits at a searchable depth of its
+# own), and it skips each rank's `.logs`, which holds the raw
+# profile_log_device.csv and would otherwise look like a report. The rank segment
+# is deliberately a prefix glob so any rank suffix works.
+MULTIHOST_REPORT_PARENT_GLOB = "rank*/reports"
 
 
 def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
@@ -954,8 +964,24 @@ def read_remote_file(
     return ssh_client.read_file(path, timeout=30)
 
 
+def _performance_subdirectory_glob(
+    remote_connection: RemoteConnection,
+) -> Optional[str]:
+    """Per-rank directory glob for multihost connections, else None (search the root)."""
+    if remote_connection.multihostPerformance:
+        return MULTIHOST_REPORT_PARENT_GLOB
+    return None
+
+
+class RemoteReportCounts(NamedTuple):
+    """Report folders found per kind; ``None`` when that path is not configured."""
+
+    profiler: Optional[int]
+    performance: Optional[int]
+
+
 @remote_exception_handler
-def check_remote_path_for_reports(remote_connection):
+def check_remote_path_for_reports(remote_connection) -> RemoteReportCounts:
     remote_profiler_paths = []
     if remote_connection.profilerPath:
         remote_profiler_paths = find_folders_by_files(
@@ -967,7 +993,10 @@ def check_remote_path_for_reports(remote_connection):
     remote_performance_paths = []
     if remote_connection.performancePath:
         remote_performance_paths = find_folders_by_files(
-            remote_connection, remote_connection.performancePath, [TEST_PROFILER_FILE]
+            remote_connection,
+            remote_connection.performancePath,
+            [TEST_PROFILER_FILE],
+            subdirectory_glob=_performance_subdirectory_glob(remote_connection),
         )
     else:
         logger.info("No performance path configured; skipping check")
@@ -976,7 +1005,18 @@ def check_remote_path_for_reports(remote_connection):
     if not remote_profiler_paths and remote_connection.profilerPath:
         errors.append(f"Profiler folder path: {remote_connection.profilerPath}")
     if not remote_performance_paths and remote_connection.performancePath:
-        errors.append(f"Performance folder path: {remote_connection.performancePath}")
+        performance_error = (
+            f"Performance folder path: {remote_connection.performancePath}"
+        )
+        if remote_connection.multihostPerformance:
+            # Naming the expected layout turns the most likely misconfiguration
+            # (pointing at the parent of the per-rank folders) into a self-
+            # diagnosing warning.
+            performance_error += (
+                f" (multihost is enabled, so reports are expected at "
+                f"{MULTIHOST_REPORT_PARENT_GLOB}/<report> under this path)"
+            )
+        errors.append(performance_error)
 
     if errors:
         raise NoReportsException(
@@ -984,7 +1024,14 @@ def check_remote_path_for_reports(remote_connection):
             status=ConnectionTestStates.WARNING,
         )
 
-    return True
+    return RemoteReportCounts(
+        profiler=(
+            len(remote_profiler_paths) if remote_connection.profilerPath else None
+        ),
+        performance=(
+            len(remote_performance_paths) if remote_connection.performancePath else None
+        ),
+    )
 
 
 @remote_exception_handler
@@ -1018,10 +1065,41 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
         )
 
 
+def _report_search_find_expression(
+    root_folder: str, subdirectory_glob: Optional[str]
+) -> str:
+    """Remote ``find`` expression listing candidate report directories.
+
+    Without ``subdirectory_glob``, candidates are the immediate children of
+    ``root_folder``. With it, candidates sit directly below a matching relative
+    subpath, so the search depth follows the number of glob segments.
+    """
+    if subdirectory_glob is None:
+        return f"find '{root_folder}' -mindepth 1 -maxdepth 1 -type d"
+
+    depth = 1 + len(subdirectory_glob.split("/"))
+    # `find` prints the root exactly as given and appends `/<name>`, so a
+    # configured trailing slash yields a doubled separator ('<root>//rank0/x').
+    # Interpolating the root verbatim keeps the pattern matching that output;
+    # normalising it here would silently match nothing.
+    return (
+        f"find '{root_folder}' -mindepth {depth} -maxdepth {depth} -type d "
+        f"-path '{root_folder}/{subdirectory_glob}/*'"
+    )
+
+
 def find_folders_by_files(
-    remote_connection: RemoteConnection, root_folder: str, file_names: List[str]
+    remote_connection: RemoteConnection,
+    root_folder: str,
+    file_names: List[str],
+    subdirectory_glob: Optional[str] = None,
 ) -> List[str]:
-    """Given a remote path, return a list of top-level folders that contain any of the specified files."""
+    """Return remote folders containing any of ``file_names``.
+
+    By default these are report folders directly under ``root_folder``. Pass
+    ``subdirectory_glob`` to look one level deeper instead, through intervening
+    directories whose names match the glob.
+    """
     if not root_folder:
         return []
 
@@ -1029,7 +1107,7 @@ def find_folders_by_files(
 
     # Build SSH command to find directories in root_folder (never prompts for password)
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find '{root_folder}' -maxdepth 1 -type d -not -path '{root_folder}'",
+        _report_search_find_expression(root_folder, subdirectory_glob),
     ]
 
     try:
@@ -1105,9 +1183,14 @@ def get_remote_performance_folders(
     """Return a list of remote folders containing a profile_log_device file."""
     performance_paths = []
 
+    subdirectory_glob = _performance_subdirectory_glob(remote_connection)
+
     if remote_connection.performancePath:
         performance_paths = find_folders_by_files(
-            remote_connection, remote_connection.performancePath, [TEST_PROFILER_FILE]
+            remote_connection,
+            remote_connection.performancePath,
+            [TEST_PROFILER_FILE],
+            subdirectory_glob=subdirectory_glob,
         )
     else:
         logger.info("No performance path configured for this connection")
@@ -1115,8 +1198,13 @@ def get_remote_performance_folders(
 
     if not performance_paths:
         logger.info(
-            "No performance reports found under path: %s",
+            "No performance reports found under path: %s (searching %s)",
             remote_connection.performancePath,
+            (
+                f"{subdirectory_glob}/<report> subdirectories"
+                if subdirectory_glob
+                else "immediate subdirectories"
+            ),
         )
         return []
 

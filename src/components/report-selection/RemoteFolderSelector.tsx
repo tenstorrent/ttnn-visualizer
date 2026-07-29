@@ -165,6 +165,32 @@ const RemoteFolderSelector = ({
     );
 };
 
+const RANK_DIRECTORY_PATTERN = /^rank(\d+)$/i;
+// Synced copies carry the rank as a name suffix, since the local report folders
+// are siblings and cannot nest a rank directory.
+const RANK_SUFFIX_PATTERN = /^(.*)_rank(\d+)$/i;
+
+/**
+ * Label a multihost report by its rank rather than its raw path, so both
+ * `<ttrun>/rank0/reports/2026_07_28_18_04_24` and its synced copy
+ * `2026_07_28_18_04_24_rank0` read `Rank 0: 2026_07_28_18_04_24`.
+ * Returns null when no rank is present, leaving the plain path formatting.
+ */
+const formatMultihostPerformanceLabel = (folder: RemoteFolder): string | null => {
+    const segments = folder.remotePath.split('/').filter(Boolean);
+    const rankDirectory = segments
+        .map((segment) => segment.match(RANK_DIRECTORY_PATTERN))
+        .find((match): match is RegExpMatchArray => match !== null);
+
+    if (rankDirectory) {
+        return `Rank ${Number(rankDirectory[1])}: ${folder.reportName || segments.at(-1)}`;
+    }
+
+    const suffixed = (folder.reportName || segments.at(-1) || '').match(RANK_SUFFIX_PATTERN);
+
+    return suffixed ? `Rank ${Number(suffixed[2])}: ${suffixed[1]}` : null;
+};
+
 const formatRemoteFolderPath = (
     folder: RemoteFolder,
     type: FolderTypes,
@@ -172,6 +198,14 @@ const formatRemoteFolderPath = (
 ): string => {
     if (!folder || !selectedConnection) {
         return 'n/a';
+    }
+
+    if (type === 'performance' && selectedConnection.multihostPerformance) {
+        const rankLabel = formatMultihostPerformanceLabel(folder);
+
+        if (rankLabel) {
+            return rankLabel;
+        }
     }
 
     const paths: Record<FolderTypes, string | undefined> = {
@@ -188,7 +222,14 @@ const formatRemoteFolderPath = (
 
 const filterFolders =
     (type: FolderTypes, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
-    (query, folder) =>
-        formatRemoteFolderPath(folder, type, connection).toLowerCase().includes(query.toLowerCase());
+    (query, folder) => {
+        const normalisedQuery = query.toLowerCase();
+
+        // Match the raw path too, so a query like `rank0` still finds a folder
+        // labelled `Rank 0: ...`.
+        return [formatRemoteFolderPath(folder, type, connection), folder.remotePath].some((value) =>
+            value.toLowerCase().includes(normalisedQuery),
+        );
+    };
 
 export default RemoteFolderSelector;

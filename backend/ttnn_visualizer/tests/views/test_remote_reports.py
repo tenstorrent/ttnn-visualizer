@@ -2,12 +2,31 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import subprocess
 from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
-from ttnn_visualizer.models import RemoteReportFolder, folder_segment_from_remote_path
-from ttnn_visualizer.views import _safe_report_folder_name
+import pytest
+from ttnn_visualizer.exceptions import RemoteConnectionException
+from ttnn_visualizer.models import (
+    RemoteConnection,
+    RemoteReportFolder,
+    folder_segment_from_remote_path,
+)
+from ttnn_visualizer.sftp_operations import (
+    MULTIHOST_REPORT_PARENT_GLOB,
+    TEST_PROFILER_FILE,
+    _report_search_find_expression,
+    check_remote_path_for_reports,
+    find_folders_by_files,
+    get_remote_performance_folders,
+)
+from ttnn_visualizer.views import (
+    _found_reports_message,
+    _performance_path_for_requested_name,
+    _safe_report_folder_name,
+)
 
 
 def _remote_connection_payload():
@@ -377,6 +396,8 @@ def test_folder_segment_parity_between_sync_and_mount():
         "/remote/reports/ spaced ",
         "/remote/reports/café",
         "/remote/reports/normal_name",
+        "/remote/ttrun/rank0/reports/2025_02_24_23_17_27",
+        "/remote/ttrun/rank11/reports/ spaced ",
     ]
     for remote_path in cases:
         sync_segment = folder_segment_from_remote_path(remote_path)
@@ -480,3 +501,551 @@ def test_remote_sync_forbidden_when_server_mode(app, client):
     )
 
     assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+class TestMultihostPerformanceDiscovery:
+    """`tt-run --tracy` nests each rank's reports one level below performancePath."""
+
+    MULTIHOST_ROOT = "/remote/generated/profiler/ttrun"
+
+    @staticmethod
+    def _connection(multihost: bool) -> RemoteConnection:
+        return RemoteConnection(
+            name="test-remote",
+            username="tester",
+            host="remote.example.com",
+            port=22,
+            profilerPath="/remote/profiler/reports",
+            performancePath="/remote/performance/reports",
+            multihostPerformance=multihost,
+        )
+
+    @staticmethod
+    def _find_command(mock_run) -> str:
+        """Remote shell command of the first ssh call — the directory listing."""
+        return mock_run.call_args_list[0][0][0][-1]
+
+    @staticmethod
+    def _completed(stdout: str) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(
+            args=["ssh"], returncode=0, stdout=stdout, stderr=""
+        )
+
+    def test_defaults_to_reports_directly_under_root(self):
+        listing = f"{self.MULTIHOST_ROOT}/report_a\n{self.MULTIHOST_ROOT}/report_b\n"
+
+        with patch("subprocess.run", return_value=self._completed(listing)) as run:
+            matched = find_folders_by_files(
+                self._connection(multihost=False),
+                self.MULTIHOST_ROOT,
+                [TEST_PROFILER_FILE],
+            )
+
+        find_command = self._find_command(run)
+        assert "-mindepth 1 -maxdepth 1" in find_command
+        assert "-path" not in find_command
+        assert matched == [
+            f"{self.MULTIHOST_ROOT}/report_a",
+            f"{self.MULTIHOST_ROOT}/report_b",
+        ]
+
+    def test_rank_glob_searches_each_ranks_reports_directory(self):
+        listing = (
+            f"{self.MULTIHOST_ROOT}/rank0/reports/report_a\n"
+            f"{self.MULTIHOST_ROOT}/rank1/reports/report_b\n"
+        )
+
+        with patch("subprocess.run", return_value=self._completed(listing)) as run:
+            matched = find_folders_by_files(
+                self._connection(multihost=True),
+                self.MULTIHOST_ROOT,
+                [TEST_PROFILER_FILE],
+                subdirectory_glob=MULTIHOST_REPORT_PARENT_GLOB,
+            )
+
+        find_command = self._find_command(run)
+        # One level per glob segment plus the report directory itself.
+        assert "-mindepth 3 -maxdepth 3" in find_command
+        assert f"-path '{self.MULTIHOST_ROOT}/rank*/reports/*'" in find_command
+        # mindepth already excludes the root, so the old -not -path guard is gone.
+        assert "-not -path" not in find_command
+        assert matched == [
+            f"{self.MULTIHOST_ROOT}/rank0/reports/report_a",
+            f"{self.MULTIHOST_ROOT}/rank1/reports/report_b",
+        ]
+
+    def test_path_pattern_mirrors_a_trailing_slash_in_the_root(self):
+        """`find` echoes the root verbatim, so the pattern must keep the slash too."""
+        expression = _report_search_find_expression(
+            f"{self.MULTIHOST_ROOT}/", MULTIHOST_REPORT_PARENT_GLOB
+        )
+
+        assert f"-path '{self.MULTIHOST_ROOT}//rank*/reports/*'" in expression
+
+    def test_directories_without_a_profiler_log_are_skipped(self):
+        listing = (
+            f"{self.MULTIHOST_ROOT}/rank0/reports/report_a\n"
+            f"{self.MULTIHOST_ROOT}/rank0/reports/stale\n"
+        )
+        missing_file = subprocess.CalledProcessError(returncode=1, cmd=["ssh"])
+
+        with patch(
+            "subprocess.run",
+            side_effect=[
+                self._completed(listing),
+                self._completed(""),
+                missing_file,
+            ],
+        ):
+            matched = find_folders_by_files(
+                self._connection(multihost=True),
+                self.MULTIHOST_ROOT,
+                [TEST_PROFILER_FILE],
+                subdirectory_glob=MULTIHOST_REPORT_PARENT_GLOB,
+            )
+
+        assert matched == [f"{self.MULTIHOST_ROOT}/rank0/reports/report_a"]
+
+    def test_performance_listing_uses_rank_glob_when_flag_set(self, app):
+        connection = self._connection(multihost=True)
+
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.find_folders_by_files",
+                return_value=[],
+            ) as find_folders,
+        ):
+            get_remote_performance_folders(connection)
+
+        assert (
+            find_folders.call_args.kwargs["subdirectory_glob"]
+            == MULTIHOST_REPORT_PARENT_GLOB
+        )
+
+    def test_performance_listing_unchanged_when_flag_unset(self, app):
+        connection = self._connection(multihost=False)
+
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.find_folders_by_files",
+                return_value=[],
+            ) as find_folders,
+        ):
+            get_remote_performance_folders(connection)
+
+        assert find_folders.call_args.kwargs["subdirectory_glob"] is None
+
+    def test_connection_test_searches_deeper_for_performance_only(self, app):
+        connection = self._connection(multihost=True)
+
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.find_folders_by_files",
+                return_value=["/remote/match"],
+            ) as find_folders,
+        ):
+            assert check_remote_path_for_reports(connection) == (1, 1)
+
+        profiler_call, performance_call = find_folders.call_args_list
+        assert profiler_call.args[1] == connection.profilerPath
+        assert "subdirectory_glob" not in profiler_call.kwargs
+        assert performance_call.args[1] == connection.performancePath
+        assert (
+            performance_call.kwargs["subdirectory_glob"] == MULTIHOST_REPORT_PARENT_GLOB
+        )
+
+    def test_connection_test_warning_names_the_expected_multihost_layout(self, app):
+        """Pointing at the parent of the per-rank folders must say so, not just fail."""
+        connection = self._connection(multihost=True)
+
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.find_folders_by_files",
+                return_value=[],
+            ),
+            pytest.raises(RemoteConnectionException) as excinfo,
+        ):
+            check_remote_path_for_reports(connection)
+
+        message = excinfo.value.message
+        assert connection.performancePath in message
+        assert f"{MULTIHOST_REPORT_PARENT_GLOB}/<report>" in message
+
+    def test_connection_test_warning_omits_the_hint_for_single_host(self, app):
+        connection = self._connection(multihost=False)
+
+        with (
+            app.app_context(),
+            patch(
+                "ttnn_visualizer.sftp_operations.find_folders_by_files",
+                return_value=[],
+            ),
+            pytest.raises(RemoteConnectionException) as excinfo,
+        ):
+            check_remote_path_for_reports(connection)
+
+        assert MULTIHOST_REPORT_PARENT_GLOB not in excinfo.value.message
+
+    def test_flag_reaches_discovery_and_rank_report_round_trips(self, app, client):
+        """End to end: the flag deserializes and the rank qualifies the local folder."""
+        app.config["SERVER_MODE"] = False
+
+        folders = [
+            RemoteReportFolder(
+                reportName="bert",
+                remotePath=f"{self.MULTIHOST_ROOT}/rank1/reports/bert_2026_01_01",
+                lastModified=200,
+            )
+        ]
+        expected_local_path = str(
+            Path(app.config["REMOTE_DATA_DIRECTORY"])
+            / "remote.example.com"
+            / app.config["PERFORMANCE_DIRECTORY_NAME"]
+            / "bert_2026_01_01_rank1"
+        )
+
+        with (
+            patch(
+                "ttnn_visualizer.views.get_remote_performance_folders",
+                return_value=folders,
+            ) as list_folders,
+            patch(
+                "ttnn_visualizer.views.read_last_synced_file", return_value=456
+            ) as read_last_synced,
+        ):
+            response = client.post(
+                "/api/remote/performance-reports",
+                json={
+                    **_remote_connection_payload(),
+                    "performancePath": self.MULTIHOST_ROOT,
+                    "multihostPerformance": True,
+                },
+            )
+
+        assert response.status_code == HTTPStatus.OK
+        assert list_folders.call_args.args[0].multihostPerformance is True
+        data = response.get_json()
+        assert (
+            data[0]["remotePath"]
+            == f"{self.MULTIHOST_ROOT}/rank1/reports/bert_2026_01_01"
+        )
+        read_last_synced.assert_called_once_with(expected_local_path)
+
+    def test_saved_connections_without_the_flag_stay_valid(self):
+        """`remote_connection` is a JSON column, so the default keeps old payloads loading."""
+        connection = RemoteConnection.model_validate(
+            _remote_connection_payload(), strict=False
+        )
+
+        assert connection.multihostPerformance is False
+
+
+class TestRankQualifiedLocalFolders:
+    """Every rank of one `tt-run` launch can name its report the same thing."""
+
+    SAME_TIMESTAMP = "2025_02_24_23_17_27"
+
+    def _segment(self, rank: str) -> str:
+        segment = folder_segment_from_remote_path(
+            f"/remote/generated/profiler/ttrun/{rank}/reports/{self.SAME_TIMESTAMP}"
+        )
+        assert segment is not None
+        return segment
+
+    def test_identical_timestamps_across_ranks_stay_distinct(self):
+        """Regression: both ranks synced into one folder and overwrote each other."""
+        assert self._segment("rank0") == f"{self.SAME_TIMESTAMP}_rank0"
+        assert self._segment("rank1") == f"{self.SAME_TIMESTAMP}_rank1"
+        assert self._segment("rank0") != self._segment("rank1")
+
+    def test_segment_stays_a_single_path_component(self):
+        """Callers join this straight onto the report directory and expect siblings."""
+        segment = self._segment("rank0")
+
+        assert "/" not in segment
+        assert Path(segment).name == segment
+
+    def test_single_host_paths_are_unchanged(self):
+        """No churn for existing synced folders or stored instance paths."""
+        assert (
+            folder_segment_from_remote_path(
+                f"/remote/generated/profiler/reports/{self.SAME_TIMESTAMP}"
+            )
+            == self.SAME_TIMESTAMP
+        )
+
+    def test_rank_directory_is_taken_verbatim(self):
+        """Mirror the remote naming rather than inventing a second convention."""
+        assert self._segment("RANK7") == f"{self.SAME_TIMESTAMP}_RANK7"
+        assert self._segment("rank10") == f"{self.SAME_TIMESTAMP}_rank10"
+
+    def test_a_rank_directory_itself_is_not_doubled(self):
+        """Guard the degenerate case where the report dir *is* the rank dir."""
+        assert folder_segment_from_remote_path("/remote/ttrun/rank0") == "rank0"
+
+    def test_non_rank_directories_do_not_qualify(self):
+        assert (
+            folder_segment_from_remote_path("/remote/ranked_reports/report_a")
+            == "report_a"
+        )
+
+
+class TestPerformanceNameSwap:
+    """`?name=` carries the report's display name, not its local folder name."""
+
+    TIMESTAMP = "2026_07_28_18_04_24"
+
+    def _reports_directory(self, tmp_path: Path, *names: str) -> Path:
+        reports = tmp_path / "performance-reports"
+        for name in names:
+            (reports / name).mkdir(parents=True)
+        return reports
+
+    def test_display_name_resolves_to_the_active_rank_folder(self, tmp_path):
+        """Regression: the swap rebuilt an unqualified path and 404'd."""
+        active = f"{self.TIMESTAMP}_rank0"
+        reports = self._reports_directory(tmp_path, active)
+
+        resolved = _performance_path_for_requested_name(
+            str(reports / active), self.TIMESTAMP
+        )
+
+        assert resolved == str(reports / active)
+
+    def test_exact_folder_names_still_win(self, tmp_path):
+        """The comparison selector sends real on-disk names, including other ranks."""
+        reports = self._reports_directory(
+            tmp_path, f"{self.TIMESTAMP}_rank0", f"{self.TIMESTAMP}_rank1"
+        )
+
+        resolved = _performance_path_for_requested_name(
+            str(reports / f"{self.TIMESTAMP}_rank0"),
+            f"{self.TIMESTAMP}_rank1",
+        )
+
+        assert resolved == str(reports / f"{self.TIMESTAMP}_rank1")
+
+    def test_a_bare_name_never_borrows_another_rank(self, tmp_path):
+        """Better a not-found than silently serving a different rank's data."""
+        reports = self._reports_directory(tmp_path, f"{self.TIMESTAMP}_rank0")
+
+        resolved = _performance_path_for_requested_name(
+            str(reports / f"{self.TIMESTAMP}_rank1"), self.TIMESTAMP
+        )
+
+        assert resolved == str(reports / self.TIMESTAMP)
+
+    def test_single_host_swaps_are_unchanged(self, tmp_path):
+        other = "2026_07_28_19_00_00"
+        reports = self._reports_directory(tmp_path, self.TIMESTAMP, other)
+
+        resolved = _performance_path_for_requested_name(
+            str(reports / self.TIMESTAMP), other
+        )
+
+        assert resolved == str(reports / other)
+
+    def test_unknown_names_keep_the_existing_not_found_path(self, tmp_path):
+        reports = self._reports_directory(tmp_path, f"{self.TIMESTAMP}_rank0")
+
+        resolved = _performance_path_for_requested_name(
+            str(reports / f"{self.TIMESTAMP}_rank0"), "no_such_report"
+        )
+
+        assert resolved == str(reports / "no_such_report")
+
+
+class TestConnectionTestReportStatuses:
+    """A path that exists says nothing about reports being found there."""
+
+    @staticmethod
+    def _messages(response) -> list[str]:
+        return [status["message"] for status in response.get_json()]
+
+    def _run_connection_test(self, client, payload, *, folders_per_path):
+        with (
+            patch("ttnn_visualizer.views.test_ssh_connection", return_value=True),
+            patch("ttnn_visualizer.views.check_remote_path_exists", return_value=True),
+            patch(
+                "ttnn_visualizer.sftp_operations.find_folders_by_files",
+                side_effect=folders_per_path,
+            ),
+        ):
+            return client.post("/api/remote/test", json=payload)
+
+    def test_reports_found_counts_are_confirmed(self, app, client):
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test(
+            client,
+            _remote_connection_payload(),
+            folders_per_path=[["/a", "/b", "/c"], ["/x", "/y"]],
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        messages = self._messages(response)
+        assert "Found 3 memory reports" in messages
+        assert "Found 2 performance reports" in messages
+
+    def test_multihost_confirms_the_per_rank_search(self, app, client):
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test(
+            client,
+            {
+                **_remote_connection_payload(),
+                "performancePath": "/remote/generated/profiler/ttrun",
+                "multihostPerformance": True,
+            },
+            folders_per_path=[["/a"], ["/ttrun/rank0/report", "/ttrun/rank1/report"]],
+        )
+
+        messages = self._messages(response)
+        assert "Found 2 performance reports in per-rank subdirectories" in messages
+
+    def test_unconfigured_performance_path_is_not_reported(self, app, client):
+        app.config["SERVER_MODE"] = False
+        payload = _remote_connection_payload()
+        del payload["performancePath"]
+
+        response = self._run_connection_test(client, payload, folders_per_path=[["/a"]])
+
+        messages = self._messages(response)
+        assert "Found 1 memory report" in messages
+        assert not any("performance report" in message for message in messages)
+
+    def test_single_report_is_not_pluralised(self):
+        assert _found_reports_message("performance", 1) == "Found 1 performance report"
+        assert (
+            _found_reports_message("performance", 1, in_rank_subdirectories=True)
+            == "Found 1 performance report in per-rank subdirectories"
+        )
+
+
+class TestReportSearchAgainstRealFind:
+    """Run the emitted expression through a local ``find``.
+
+    Discovery filtering happens remotely, so mocked-subprocess tests can only
+    pin the command text. These exercise the real ``find`` semantics — the
+    ``-mindepth``/``-maxdepth``/``-path`` combination is where the interesting
+    behaviour lives, and both GNU and BSD ``find`` support all three.
+    """
+
+    @staticmethod
+    def _profiler_tree(tmp_path: Path) -> Path:
+        """A tt-metal profiler directory holding both single-host and multihost output.
+
+        ``tt-run --tracy`` gives each rank a copy of the profiler root, so every
+        rank has its own ``.logs`` holding the raw profile_log_device.csv beside
+        the processed ``reports/<report>``. Both contain that CSV, which is why
+        discovery cannot match on the CSV alone.
+        """
+        profiler = tmp_path / "generated" / "profiler"
+        for report_dir in (
+            profiler / "reports" / "single_host_report",
+            profiler / ".logs",
+            profiler / "ttrun" / "rank0" / "reports" / "report_a",
+            profiler / "ttrun" / "rank0" / ".logs",
+            profiler / "ttrun" / "rank1" / "reports" / "report_b",
+            profiler / "ttrun" / "rank1" / ".logs",
+        ):
+            report_dir.mkdir(parents=True)
+            (report_dir / TEST_PROFILER_FILE).write_text("x")
+        return profiler
+
+    @staticmethod
+    def _run_find(expression: str) -> list[str]:
+        result = subprocess.run(
+            expression, shell=True, capture_output=True, text=True, check=True
+        )
+        return sorted(line for line in result.stdout.splitlines() if line)
+
+    def test_multihost_search_finds_every_rank_report(self, tmp_path):
+        profiler = self._profiler_tree(tmp_path)
+        ttrun = profiler / "ttrun"
+
+        found = self._run_find(
+            _report_search_find_expression(str(ttrun), MULTIHOST_REPORT_PARENT_GLOB)
+        )
+
+        assert found == [
+            str(ttrun / "rank0" / "reports" / "report_a"),
+            str(ttrun / "rank1" / "reports" / "report_b"),
+        ]
+
+    def test_multihost_search_ignores_each_ranks_raw_logs(self, tmp_path):
+        """Regression: `.logs` holds the raw CSV and was listed as a report."""
+        profiler = self._profiler_tree(tmp_path)
+        ttrun = profiler / "ttrun"
+
+        found = self._run_find(
+            _report_search_find_expression(str(ttrun), MULTIHOST_REPORT_PARENT_GLOB)
+        )
+
+        assert not any(".logs" in path for path in found)
+
+    def test_multihost_search_ignores_reports_under_a_non_rank_sibling(self, tmp_path):
+        """Regression: pointing above ttrun used to list single-host reports instead.
+
+        ``generated/profiler/reports/<report>`` sits at the same depth as
+        ``generated/profiler/ttrun/rank0``, so depth alone matched it and the
+        picker silently showed single-host reports.
+        """
+        profiler = self._profiler_tree(tmp_path)
+
+        found = self._run_find(
+            _report_search_find_expression(str(profiler), MULTIHOST_REPORT_PARENT_GLOB)
+        )
+
+        assert found == []
+
+    def test_trailing_slash_root_still_matches_rank_reports(self, tmp_path):
+        """A configured trailing slash must not silently stop matching.
+
+        ``find`` echoes the root verbatim, so results carry a doubled separator.
+        That is harmless downstream — sync destinations and mount segments both
+        go through ``Path(...).name`` — but the pattern has to expect it.
+        """
+        profiler = self._profiler_tree(tmp_path)
+        ttrun = profiler / "ttrun"
+
+        found = self._run_find(
+            _report_search_find_expression(f"{ttrun}/", MULTIHOST_REPORT_PARENT_GLOB)
+        )
+
+        assert f"{ttrun}//rank0/reports/report_a" in found
+        assert (
+            folder_segment_from_remote_path(f"{ttrun}//rank0/reports/report_a")
+            == "report_a_rank0"
+        )
+
+    def test_single_host_search_lists_immediate_children_only(self, tmp_path):
+        profiler = self._profiler_tree(tmp_path)
+        reports = profiler / "reports"
+
+        found = self._run_find(_report_search_find_expression(str(reports), None))
+
+        assert found == [str(reports / "single_host_report")]
+
+    def test_single_host_search_does_not_reach_rank_reports(self, tmp_path):
+        """With the flag off, ttrun's rank directories list but hold no report CSV."""
+        profiler = self._profiler_tree(tmp_path)
+        ttrun = profiler / "ttrun"
+
+        found = self._run_find(_report_search_find_expression(str(ttrun), None))
+
+        assert found == [str(ttrun / "rank0"), str(ttrun / "rank1")]
+
+    def test_multihost_search_ignores_the_single_host_reports_directory(self, tmp_path):
+        """`<root>/reports/<report>` must not match when root is not the rank parent."""
+        profiler = self._profiler_tree(tmp_path)
+
+        found = self._run_find(
+            _report_search_find_expression(str(profiler), MULTIHOST_REPORT_PARENT_GLOB)
+        )
+
+        assert found == []
