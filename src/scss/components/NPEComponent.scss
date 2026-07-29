@@ -145,9 +145,42 @@
         position: relative;
     }
 
+    .congestion-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        cursor: pointer;
+
+        // Above the src/dst origin markers (`.tensix` = $z-index-2-interactive)
+        // so the link arrows paint over them, matching the old tile order.
+        z-index: variables.$z-index-2-interactive;
+    }
+
+    // Hover feedback for the canvas cells, replacing the `.tensix:hover` border the
+    // DOM tiles used to carry. A positioned element rather than a second canvas: it
+    // is one 1px border, so a full-grid backing store bought nothing. Moved with a
+    // transform (compositor-only) and must not swallow the base canvas's events.
+    .congestion-hover {
+        position: absolute;
+        top: 0;
+        left: 0;
+        display: none;
+        box-sizing: border-box;
+        border: 1px solid $tt-yellow-tint-2;
+        pointer-events: none;
+        z-index: variables.$z-index-2-interactive;
+    }
+
     .tensix-grid {
         display: grid;
         gap: 1px;
+
+        // The congestion canvas and its hover marker are absolutely positioned
+        // against this grid, so it has to be their containing block — otherwise
+        // they resolve against `.chip` and only line up by coincidence.
+        &.congestion {
+            position: relative;
+        }
 
         &.empty {
             position: absolute;
@@ -334,6 +367,26 @@
     width: 0;
     height: 0;
     background-color: $tt-white;
+    z-index: variables.$z-index-2-interactive;
+}
+
+// The timeline's canvas layers and playhead are positioned against this box.
+.npe-timeline-canvas-stack {
+    position: relative;
+    width: 100%;
+}
+
+// Scrub playhead. A positioned div rather than a canvas layer, so moving it costs
+// one element's layout + paint instead of clearing and repainting a full-width
+// canvas on every tick (#1803). `pointer-events: none` so the stack wrapper keeps
+// receiving the click/hover the timeline needs.
+.npe-timeline-playhead {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background-color: rgba($tt-white, 0.75);
+    pointer-events: none;
     z-index: variables.$z-index-2-interactive;
 }
 

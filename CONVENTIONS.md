@@ -877,6 +877,56 @@ If a patch "isn't taking", the path is almost always pointing at the source modu
 
 ---
 
+## Canvas and rendering performance
+
+Applies on touch, to views that draw data-proportional visuals (NPE chip cluster and
+timeline today). The canonical examples are `src/components/npe/ChipCongestionCanvas.tsx`
+and `src/components/npe/NPETimelineComponent.tsx`.
+
+### Downsample time series to one column per device pixel
+
+Never emit one rect (or one DOM node) per datum when the data outnumbers the pixels.
+Reduce to at most one column per **device** pixel and summarise each column with a
+**max**, not a mean or a last-wins write. Sub-pixel rects are not just wasted work —
+they blend, so an isolated spike disappears, which for a congestion view is a
+correctness bug. Keep the reduction pure and separate from colour mapping
+(`src/functions/reduceToColumns.ts`) so a palette change doesn't rescan the series.
+
+### Cap the raster scale
+
+Backing stores scale with `devicePixelRatio × any on-screen scale`, and area grows
+with the square. Clamp the linear scale (see `MAX_BACKING_SCALE`) — uncapped, a
+multi-chip cluster under a zoom control can ask for hundreds of MB, at which point the
+browser silently discards buffers and elements render blank rather than slow.
+
+### High-frequency feedback goes on its own layer, never through state
+
+Hover markers, playheads and similar per-pointer/per-tick visuals get a separate
+element and are moved imperatively via a ref, or positioned in CSS. Routing pointer
+position or scrub position through React state re-renders the owning view on every
+event. Prefer a positioned element over a second canvas when the visual is a single
+border or line — a full-size backing store buys nothing.
+
+Cache `getBoundingClientRect()` for pointer hit-testing and invalidate it on
+resize/scroll; reading it per `mousemove` forces a synchronous layout flush.
+
+### `memo()` makes prop stability a contract
+
+When a component is wrapped in `memo()`, every prop must be a primitive, a
+`useCallback`-stable handler, or a memoized value — and callers must not pass inline
+lambdas or fresh literals. Two consequences worth applying deliberately:
+
+- Prefer a shared module-level frozen constant to `?? []` for an absent collection.
+  A fresh literal gives every render a new identity and defeats the memo.
+- Narrow handler props to the narrowest signature that works (`onEmptyCellClick: () => void`
+  rather than a wide selection handler), so the only thing worth passing is already stable.
+
+Derive an ancestor's effective scale by measuring the element rather than threading
+the ancestor's zoom down as a prop — one source of truth, and it stays correct if the
+ancestor is ever scaled by another mechanism.
+
+---
+
 ## Frontend data integrity
 
 ### Validate user-uploaded JSON on the client

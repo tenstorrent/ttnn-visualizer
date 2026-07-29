@@ -17,12 +17,8 @@ import {
 } from '../../model/NPEModel';
 import { altCongestionColorsAtom } from '../../store/app';
 import getWorstLinkDemand from '../../functions/getWorstLinkDemand';
+import reduceToColumns from '../../functions/reduceToColumns';
 import { formatPercentage } from '../../functions/math';
-
-interface MetricPoint {
-    value: number;
-    color: string;
-}
 
 interface Rect {
     x: number;
@@ -41,7 +37,7 @@ interface NPEHeatMapProps {
     nocType?: NoCType | null;
     navigationCallback: (timestepIndex: number) => void;
 }
-const HEATMAP_HEIGHT = 30;
+export const HEATMAP_HEIGHT = 30;
 const ZONE_HEIGHT = 10;
 
 const NPETimelineComponent = ({
@@ -55,7 +51,11 @@ const NPETimelineComponent = ({
     navigationCallback,
 }: NPEHeatMapProps) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    // The heatmap canvas repaints only when its pixels change (data / width /
+    // zones). The playhead — the only thing a scrub moves — is a positioned div
+    // above it, so a tick costs one style update rather than any canvas work. #1803.
+    const heatmapCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const stackRef = useRef<HTMLDivElement | null>(null);
     const [hoverMap, setHoverMap] = useState<Map<string, Rect>>(new Map());
 
     const getZoneDrawingModel = useCallback(
@@ -103,14 +103,16 @@ const NPETimelineComponent = ({
     const canvasZoneHeight = zoneRanges.maxZoneDepth * ZONE_HEIGHT;
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
 
-    const congestionMapPerTimestamp = useMemo(() => {
-        const result = {
-            worst: [] as MetricPoint[],
-            utilization: [] as MetricPoint[],
-            demand: [] as MetricPoint[],
-            mcast: [] as MetricPoint[],
-        };
-        const color = (v: number) => calculateLinkCongestionColor(v, 0, altCongestionColors);
+    // Per-timestep metric values only — no colours. The tooltip needs a value for
+    // whichever step is hovered, but colourising all of them cost one
+    // `calculateLinkCongestionColor` call per step per row (4 × n_timesteps, ~780k
+    // on a 196k-step report) to produce pixels that were then thrown away by
+    // sub-pixel overdraw. Colours are now computed per drawn column instead. #1803.
+    const metricValues = useMemo(() => {
+        const worst: number[] = [];
+        const utilization: number[] = [];
+        const demand: number[] = [];
+        const mcast: (number | undefined)[] = [];
 
         for (const timestep of timestepList) {
             const links = nocType
@@ -123,67 +125,95 @@ const NPETimelineComponent = ({
             // non-visited `noc` aggregates are stubbed to 0, so with a NOC filter
             // active the heat rows for non-visited steps are approximate until the
             // summary carries per-NOC aggregates. Unfiltered view is exact.
-            const worst = getWorstLinkDemand(links, timestep.max_link_demand);
-
-            result.worst.push({
-                value: worst,
-                color: color(worst),
-            });
+            worst.push(getWorstLinkDemand(links, timestep.max_link_demand));
 
             const nocData = nocType ? timestep.noc?.[nocType] : undefined;
-
-            const utilization = nocData?.avg_link_util ?? timestep.avg_link_util;
-            result.utilization.push({
-                value: utilization,
-                color: color(utilization),
-            });
-
-            const demand = nocData?.avg_link_demand ?? timestep.avg_link_demand;
-            result.demand.push({
-                value: demand,
-                color: color(demand),
-            });
-
-            const mcast = timestep.mcast_write_link_util;
-            result.mcast.push({
-                value: mcast,
-                color: color(mcast ?? -1),
-            });
+            utilization.push(nocData?.avg_link_util ?? timestep.avg_link_util);
+            demand.push(nocData?.avg_link_demand ?? timestep.avg_link_demand);
+            mcast.push(timestep.mcast_write_link_util);
         }
 
-        return result;
-    }, [nocType, timestepList, altCongestionColors]);
+        return { worst, utilization, demand, mcast };
+    }, [nocType, timestepList]);
+
+    const dataSize = metricValues.worst.length;
+
+    // One column per *device* pixel — the finest resolution the screen can actually
+    // show. The heat bar is only redrawn on data/size/zone changes (the playhead is
+    // a separate div), so resolution is cheap: it costs one pass over the values,
+    // not per-scrub work. Going finer than a device pixel would put several rects
+    // back on the same physical pixel, where they blend and hide spikes — exactly
+    // the lossy overdraw that made 196k per-timestep rects both slow and wrong.
+    // Each column is the MAX of the steps it covers, so spikes survive being
+    // summarised, which is the point of a congestion heat bar. #1803
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const deviceWidth = Math.max(1, Math.round(canvasWidth * devicePixelRatio));
+    const deviceHeight = Math.max(1, Math.round((HEATMAP_HEIGHT + canvasZoneHeight) * devicePixelRatio));
+    const columnCount = Math.max(1, Math.min(deviceWidth, dataSize));
+
+    // Reduction is separate from colouring so switching palettes doesn't rescan the
+    // whole series — only the far smaller per-column result is recoloured.
+    const columnValues = useMemo(
+        () => [
+            reduceToColumns(metricValues.worst, columnCount),
+            reduceToColumns(metricValues.utilization, columnCount),
+            reduceToColumns(metricValues.demand, columnCount),
+            reduceToColumns(metricValues.mcast, columnCount),
+        ],
+        [metricValues, columnCount],
+    );
+
+    const heatColumns = useMemo(
+        () =>
+            columnValues.map((column) =>
+                // A column with no data shares the -1 "no data" ramp entry, which is
+                // also how an N/A multicast value is drawn.
+                column.map((value) => calculateLinkCongestionColor(value ?? -1, 0, altCongestionColors)),
+            ),
+        [columnValues, altCongestionColors],
+    );
 
     useEffect(() => {
-        const canvas = canvasRef.current;
+        const canvas = heatmapCanvasRef.current;
         const ctx = canvas?.getContext('2d');
         if (!canvas || !ctx) {
             return;
         }
 
-        ctx.clearRect(0, 0, canvas.width, HEATMAP_HEIGHT + canvasZoneHeight);
-        const dataSize = congestionMapPerTimestamp.worst.length;
+        // The backing store is dpr-scaled for resolution; this transform lets all the
+        // drawing below stay in logical (canvasWidth) units, which is also the space
+        // `hoverMap` rects are compared against on mouse move.
+        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        ctx.clearRect(0, 0, canvasWidth, HEATMAP_HEIGHT + canvasZoneHeight);
 
-        const metricDataArray = [
-            congestionMapPerTimestamp.worst,
-            congestionMapPerTimestamp.utilization,
-            congestionMapPerTimestamp.demand,
-            congestionMapPerTimestamp.mcast,
-        ];
-        const numLines = metricDataArray.length;
-
-        const chunkWidth = canvas.width / dataSize;
+        const numLines = heatColumns.length;
         const rowHeight = HEATMAP_HEIGHT / numLines;
+        const columnWidth = canvasWidth / columnCount;
 
-        for (let row = 0; row < numLines; row++) {
-            const y = row * rowHeight;
-            const pointList = metricDataArray[row];
+        // A report with no timesteps has no heat rows to draw — zones below still do.
+        if (dataSize > 0) {
+            for (let row = 0; row < numLines; row++) {
+                const y = row * rowHeight;
+                const columns = heatColumns[row];
+                let runStart = 0;
 
-            pointList.forEach((point, index) => {
-                ctx.fillStyle = point.color;
-                ctx.fillRect(index * chunkWidth, y, chunkWidth, rowHeight);
-            });
+                // Coalesce neighbouring columns that resolved to the same colour into
+                // one rect. Long idle stretches collapse to a handful of fills, and it
+                // avoids per-column `fillStyle` churn. Runs abut exactly, so no rounding
+                // is needed to avoid seams — a column is one device pixel wide.
+                for (let col = 0; col < columnCount; col++) {
+                    const isLast = col === columnCount - 1;
+                    if (isLast || columns[col + 1] !== columns[runStart]) {
+                        ctx.fillStyle = columns[runStart];
+                        const x = runStart * columnWidth;
+                        ctx.fillRect(x, y, (col + 1) * columnWidth - x, rowHeight);
+                        runStart = col + 1;
+                    }
+                }
+            }
         }
+
+        const chunkWidth = dataSize > 0 ? canvasWidth / dataSize : 0;
 
         const groupBaseY = new Map<number, number>();
         {
@@ -228,38 +258,46 @@ const NPETimelineComponent = ({
                 });
             }
         });
-        const x = (currentTimestep ?? 0) * chunkWidth;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-        ctx.fillRect(x, 0, 2, HEATMAP_HEIGHT + canvasZoneHeight);
 
         setHoverMap(hovermap);
     }, [
         //
-        congestionMapPerTimestamp,
+        heatColumns,
+        columnCount,
+        dataSize,
         canvasWidth,
         canvasZoneHeight,
-        selectedZoneList,
+        devicePixelRatio,
         zoneRanges,
-        currentTimestep,
     ]);
 
-    const handleTimelineClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const rect = canvas.getBoundingClientRect();
-            const chunkWidth = rect.width / congestionMapPerTimestamp.worst.length;
-            const index = Math.floor((event.clientX - rect.left) / chunkWidth);
-            navigationCallback(index);
+    // The playhead is a positioned div rather than a canvas layer, so a scrub costs
+    // one element's layout + paint instead of clearing and repainting a full-width
+    // canvas every tick. Percent-based so it needs no measurement and stays correct
+    // as the timeline is resized.
+    const playheadPercent = dataSize ? ((currentTimestep ?? 0) / dataSize) * 100 : 0;
+
+    // Clamped because a pointer at the extreme right edge (reachable with a
+    // fractional clientX under browser zoom) yields `dataSize`, and an out-of-range
+    // timestep throws during NPEView's render. #1803
+    const timestepAt = (clientX: number, rect: DOMRect): number =>
+        Math.min(dataSize - 1, Math.max(0, Math.floor(((clientX - rect.left) / rect.width) * dataSize)));
+
+    const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>) => {
+        const stack = stackRef.current;
+        if (stack && dataSize) {
+            navigationCallback(timestepAt(event.clientX, stack.getBoundingClientRect()));
         }
     };
-    const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
+    const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+        const stack = stackRef.current;
+        if (stack && dataSize) {
+            const rect = stack.getBoundingClientRect();
+            // `hoverMap` rects are in canvas-pixel space, so scale the pointer into
+            // it for zone hit-testing while the index stays in CSS space.
+            const scaleX = canvasWidth / rect.width;
             const mouseX = (event.clientX - rect.left) * scaleX;
-            const chunkWidth = rect.width / congestionMapPerTimestamp.worst.length;
-            const hoveredIndex = Math.floor((event.clientX - rect.left) / chunkWidth);
+            const hoveredIndex = timestepAt(event.clientX, rect);
             const y = event.clientY - rect.top;
             const x = mouseX;
 
@@ -278,6 +316,15 @@ const NPETimelineComponent = ({
                     return;
                 }
 
+                // Colours for the hovered step only — four calls, versus
+                // colourising every step up front.
+                const swatch = (value: number | undefined) =>
+                    calculateLinkCongestionColor(value ?? -1, 0, altCongestionColors);
+                const worstValue = metricValues.worst[hoveredIndex];
+                const utilizationValue = metricValues.utilization[hoveredIndex];
+                const demandValue = metricValues.demand[hoveredIndex];
+                const mcastValue = metricValues.mcast[hoveredIndex];
+
                 setTooltip({
                     x,
                     y: 0,
@@ -292,46 +339,32 @@ const NPETimelineComponent = ({
                                     <div>
                                         <span
                                             className='color-square'
-                                            style={{
-                                                backgroundColor: congestionMapPerTimestamp.worst[hoveredIndex].color,
-                                            }}
+                                            style={{ backgroundColor: swatch(worstValue) }}
                                         />{' '}
-                                        Max Demand:{' '}
-                                        {congestionMapPerTimestamp.worst[hoveredIndex].value > -1
-                                            ? `${formatPercentage(congestionMapPerTimestamp.worst[hoveredIndex].value, 3)}`
-                                            : 'N/A'}
+                                        Max Demand: {worstValue > -1 ? `${formatPercentage(worstValue, 3)}` : 'N/A'}
                                     </div>
                                     <div>
                                         <span
                                             className='color-square'
-                                            style={{
-                                                backgroundColor:
-                                                    congestionMapPerTimestamp.utilization[hoveredIndex].color,
-                                            }}
+                                            style={{ backgroundColor: swatch(utilizationValue) }}
                                         />
-                                        {` Avg Utilization: ${formatPercentage(congestionMapPerTimestamp.utilization[hoveredIndex].value, 3)}`}
+                                        {` Avg Utilization: ${formatPercentage(utilizationValue, 3)}`}
                                     </div>
                                     <div>
                                         <span
                                             className='color-square'
-                                            style={{
-                                                backgroundColor: congestionMapPerTimestamp.demand[hoveredIndex].color,
-                                            }}
+                                            style={{ backgroundColor: swatch(demandValue) }}
                                         />
-                                        {` Avg Demand: ${formatPercentage(congestionMapPerTimestamp.demand[hoveredIndex].value, 3)}`}
+                                        {` Avg Demand: ${formatPercentage(demandValue, 3)}`}
                                     </div>
 
                                     <div>
                                         <span
                                             className='color-square'
-                                            style={{
-                                                backgroundColor: congestionMapPerTimestamp.mcast[hoveredIndex].color,
-                                            }}
+                                            style={{ backgroundColor: swatch(mcastValue) }}
                                         />
                                         {` Multicast Utilization:`}{' '}
-                                        {congestionMapPerTimestamp.mcast[hoveredIndex].value !== undefined
-                                            ? `${formatPercentage(congestionMapPerTimestamp.mcast[hoveredIndex].value, 3)}`
-                                            : 'N/A'}
+                                        {mcastValue !== undefined ? `${formatPercentage(mcastValue, 3)}` : 'N/A'}
                                     </div>
                                 </>
                             )}
@@ -354,7 +387,30 @@ const NPETimelineComponent = ({
     };
 
     return (
-        <>
+        // The tooltip's Blueprint target lives inside this relative, fixed-height
+        // wrapper on purpose: as an inline element it would otherwise force its own
+        // line box above the block canvas stack and shove the timeline down when it
+        // mounts on hover. Contained here (canvases are absolute), it can't reflow
+        // anything, and the absolute anchor is positioned relative to the timeline.
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+        <div
+            className='npe-timeline-canvas-stack'
+            ref={stackRef}
+            style={{ position: 'relative', width: '100%', height: `${HEATMAP_HEIGHT + canvasZoneHeight}px` }}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            onClick={handleTimelineClick}
+        >
+            <canvas
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                ref={heatmapCanvasRef}
+                width={deviceWidth}
+                height={deviceHeight}
+            />
+            <div
+                className='npe-timeline-playhead'
+                style={{ left: `${playheadPercent}%` }}
+            />
             {tooltip && (
                 <Tooltip
                     content={tooltip.text}
@@ -381,16 +437,7 @@ const NPETimelineComponent = ({
                     />
                 </Tooltip>
             )}
-            <canvas
-                style={{ width: '100%', height: `${HEATMAP_HEIGHT + canvasZoneHeight}px` }}
-                ref={canvasRef}
-                width={canvasWidth}
-                height={HEATMAP_HEIGHT + canvasZoneHeight}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={handleMouseLeave}
-                onClick={handleTimelineClick}
-            />
-        </>
+        </div>
     );
 };
 

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { Fragment } from 'react';
-import { LinkPoints } from './drawingApi';
+import { LinkPoints, formatArrowPoints, formatRotation } from './drawingApi';
 import { NoCID } from '../../model/NPEModel';
 
 interface SVGTensixRendererProps {
@@ -69,18 +69,11 @@ const TensixTransferRenderer = ({ width, height, data, isMulticolor = false, sty
                                     ? { strokeDashoffset: multiplier * dashArray.get(line.nocId)![0] }
                                     : {})}
                             />
-                            {line.arrow && !isMulticolor && (
+                            {line.arrow && (
                                 <polygon
-                                    transform={line.transform}
-                                    points={`${line.arrow.p1} ${line.arrow.p2} ${line.arrow.p3}`}
-                                    fill={line.color || 'white'}
-                                />
-                            )}
-                            {line.arrow && isMulticolor && (
-                                <polygon
-                                    transform={line.transform}
-                                    points={`${line.arrow.p1} ${line.arrow.p2} ${line.arrow.p3}`}
-                                    fill='#999'
+                                    transform={formatRotation(line.rotation)}
+                                    points={formatArrowPoints(line.arrow)}
+                                    fill={isMulticolor ? '#999' : line.color || 'white'}
                                 />
                             )}
                         </Fragment>
