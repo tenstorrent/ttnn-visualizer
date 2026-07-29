@@ -1091,20 +1091,23 @@ def _report_search_find_expression(
     ``root_folder``. With it, candidates sit directly below a matching relative
     subpath, so the search depth follows the number of glob segments.
     """
+    # A configured trailing slash is normalised out of both the root and the
+    # pattern below. GNU and BSD `find` disagree on whether the root it echoes
+    # keeps that slash, so a pattern built around either spelling matches
+    # nothing on the other implementation.
+    root = root_folder.rstrip("/")
+    search_root = root or "/"
+
     if subdirectory_glob is None:
-        return f"find '{root_folder}' -mindepth 1 -maxdepth 1 -type d"
+        return f"find '{search_root}' -mindepth 1 -maxdepth 1 -type d"
 
     # `*` matches `/` in a `-path` pattern, so pinning min and max depth to the
     # same value is what stops the glob spanning segments and matching a deeper
     # accidental layout.
     depth = 1 + len(subdirectory_glob.split("/"))
-    # `find` prints the root exactly as given and appends `/<name>`, so a
-    # configured trailing slash yields a doubled separator ('<root>//rank0/x').
-    # Interpolating the root verbatim keeps the pattern matching that output;
-    # normalising it here would silently match nothing.
     return (
-        f"find '{root_folder}' -mindepth {depth} -maxdepth {depth} -type d "
-        f"-path '{root_folder}/{subdirectory_glob}/*'"
+        f"find '{search_root}' -mindepth {depth} -maxdepth {depth} -type d "
+        f"-path '{root}/{subdirectory_glob}/*'"
     )
 
 

@@ -579,16 +579,24 @@ class TestMultihostPerformanceDiscovery:
             f"{self.MULTIHOST_ROOT}/rank1/reports/report_b",
         ]
 
-    def test_path_pattern_mirrors_a_trailing_slash_in_the_root(self):
-        """`find` echoes the root verbatim, so the pattern must keep the slash too."""
+    def test_a_trailing_slash_in_the_root_is_normalised_away(self):
+        """Only GNU `find` collapses it, and the search runs on the remote Linux host."""
         expression = _report_search_find_expression(
             f"{self.MULTIHOST_ROOT}/", MULTIHOST_REPORT_PARENT_GLOB
         )
 
         assert (
-            f"-path '{self.MULTIHOST_ROOT}//{MULTIHOST_REPORT_PARENT_GLOB}/*'"
+            f"-path '{self.MULTIHOST_ROOT}/{MULTIHOST_REPORT_PARENT_GLOB}/*'"
             in expression
         )
+        assert f"find '{self.MULTIHOST_ROOT}'" in expression
+        assert "//" not in expression
+
+    def test_a_root_of_only_slashes_still_searches_the_filesystem_root(self):
+        expression = _report_search_find_expression("//", MULTIHOST_REPORT_PARENT_GLOB)
+
+        assert "find '/' -mindepth 3 -maxdepth 3" in expression
+        assert f"-path '/{MULTIHOST_REPORT_PARENT_GLOB}/*'" in expression
 
     def test_directories_without_a_profiler_log_are_skipped(self):
         listing = (
@@ -818,6 +826,15 @@ class TestRankQualifiedLocalFolders:
     def test_a_rank_directory_itself_is_not_doubled(self):
         """Guard the degenerate case where the report dir *is* the rank dir."""
         assert folder_segment_from_remote_path("/remote/ttrun/rank0") == "rank0"
+
+    def test_a_doubled_separator_is_tolerated(self):
+        """A hand-edited path can carry one, and `find` echoes what it is given."""
+        assert (
+            folder_segment_from_remote_path(
+                f"/remote/ttrun//rank0/reports/{self.SAME_TIMESTAMP}"
+            )
+            == f"{self.SAME_TIMESTAMP}_rank0"
+        )
 
     def test_non_rank_directories_do_not_qualify(self):
         assert (
@@ -1054,9 +1071,9 @@ class TestReportSearchAgainstRealFind:
     def test_trailing_slash_root_still_matches_rank_reports(self, tmp_path):
         """A configured trailing slash must not silently stop matching.
 
-        ``find`` echoes the root verbatim, so results carry a doubled separator.
-        That is harmless downstream — sync destinations and mount segments both
-        go through ``Path(...).name`` — but the pattern has to expect it.
+        GNU and BSD ``find`` disagree on whether the echoed root keeps the
+        slash, so the root and the pattern are normalised together rather than
+        the pattern being written for one implementation's output.
         """
         profiler = self._profiler_tree(tmp_path)
         ttrun = profiler / "ttrun"
@@ -1065,11 +1082,8 @@ class TestReportSearchAgainstRealFind:
             _report_search_find_expression(f"{ttrun}/", MULTIHOST_REPORT_PARENT_GLOB)
         )
 
-        assert f"{ttrun}//rank0/reports/report_a" in found
-        assert (
-            folder_segment_from_remote_path(f"{ttrun}//rank0/reports/report_a")
-            == "report_a_rank0"
-        )
+        assert f"{ttrun}/rank0/reports/report_a" in found
+        assert not any("//" in directory for directory in found)
 
     def test_single_host_search_lists_immediate_children_only(self, tmp_path):
         profiler = self._profiler_tree(tmp_path)
