@@ -16,7 +16,7 @@ import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
 import { NPEValidationError } from '../definitions/NPEData';
-import { mapNpeFetchError } from '../functions/mapNpeFetchError';
+import { getNpeValidationErrorFromFetch } from '../functions/getNpeValidationErrorFromFetch';
 import { validateNpeData } from '../functions/validateNpeData';
 
 const NPE = () => {
@@ -54,18 +54,18 @@ const NPE = () => {
     const isDemoEnabled = isServerMode;
     // Prefer RQ isLoading (isPending && isFetching) over bare isFetching so a
     // background refetch cannot pin the spinner after data is already present.
+    // Scope loading and error to the enabled query so a disabled sibling cannot
+    // pin the spinner or surface a stale cached error.
     const isLoading = (isNpeQueryEnabled && isLoadingNpe) || (isTimelineQueryEnabled && isLoadingTimeline);
+    const fetchError = (isNpeQueryEnabled ? httpError : null) ?? (isTimelineQueryEnabled ? timelineHttpError : null);
     const hasUploadedFile = !!npeFileName || !!filepath;
-
-    // Only one query is enabled; prefer the active error without OR-ing both.
-    const fetchError = httpError ?? timelineHttpError;
 
     const errorCode = useMemo(() => {
         if (isLoading) {
             return NPEValidationError.OK;
         }
 
-        return mapNpeFetchError(fetchError) ?? validateNpeData(npeData);
+        return getNpeValidationErrorFromFetch(fetchError) ?? validateNpeData(npeData);
     }, [isLoading, fetchError, npeData]);
 
     useEffect(() => {
@@ -77,7 +77,31 @@ const NPE = () => {
         }
     }, [loadedData, loadedTimeline]);
 
-    const showStatus = isLoading || !npeData || errorCode !== NPEValidationError.OK;
+    const canShowView = !isLoading && errorCode === NPEValidationError.OK && npeData != null;
+
+    let mainContent;
+    if (isWindowedView) {
+        // key on the report so a report switch fully remounts: resets the
+        // selected timestep + auto-jump ref and gives fresh query observers
+        // (no keepPreviousData bleed from the previous report's window).
+        mainContent = (
+            <NpeWindowedView
+                key={npeFileName}
+                fileName={npeFileName}
+            />
+        );
+    } else if (canShowView) {
+        mainContent = <NPEView npeData={npeData} />;
+    } else {
+        mainContent = (
+            <NPEProcessingStatus
+                errorCode={errorCode}
+                dataVersion={npeData?.common_info?.version || null}
+                isLoading={isLoading}
+                hasUploadedFile={hasUploadedFile}
+            />
+        );
+    }
 
     return (
         <>
@@ -105,28 +129,7 @@ const NPE = () => {
                 )}
             </div>
 
-            {isWindowedView ? (
-                // key on the report so a report switch fully remounts: resets the
-                // selected timestep + auto-jump ref and gives fresh query observers
-                // (no keepPreviousData bleed from the previous report's window).
-                <NpeWindowedView
-                    key={npeFileName}
-                    fileName={npeFileName}
-                />
-            ) : (
-                <>
-                    {showStatus && (
-                        <NPEProcessingStatus
-                            errorCode={errorCode}
-                            dataVersion={npeData?.common_info?.version || null}
-                            isLoading={isLoading}
-                            hasUploadedFile={hasUploadedFile}
-                        />
-                    )}
-
-                    {!isLoading && errorCode === NPEValidationError.OK && npeData && <NPEView npeData={npeData} />}
-                </>
-            )}
+            {mainContent}
         </>
     );
 };

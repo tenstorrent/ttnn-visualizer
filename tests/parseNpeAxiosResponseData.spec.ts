@@ -3,8 +3,6 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { AxiosError } from 'axios';
-import { NPEAxiosErrorCode } from '../src/definitions/NPEData';
 import { parseNpeAxiosResponseData } from '../src/functions/parseNpeAxiosResponseData';
 
 const validPayload = {
@@ -22,37 +20,19 @@ describe('parseNpeAxiosResponseData', () => {
         expect(parseNpeAxiosResponseData(JSON.stringify(validPayload))).toEqual(validPayload);
     });
 
-    it('throws INVALID_JSON for empty bodies', () => {
+    it('throws for empty bodies', () => {
         for (const empty of [null, undefined, '']) {
-            try {
-                parseNpeAxiosResponseData(empty);
-                expect.unreachable();
-            } catch (error) {
-                expect(error).toBeInstanceOf(AxiosError);
-                expect((error as AxiosError).code).toBe(NPEAxiosErrorCode.INVALID_JSON);
-            }
+            expect(() => parseNpeAxiosResponseData(empty)).toThrow(/empty/);
         }
     });
 
-    it('throws INVALID_JSON for malformed JSON strings', () => {
-        try {
-            parseNpeAxiosResponseData('{not-json');
-            expect.unreachable();
-        } catch (error) {
-            expect(error).toBeInstanceOf(AxiosError);
-            expect((error as AxiosError).code).toBe(NPEAxiosErrorCode.INVALID_JSON);
-        }
+    it('throws for malformed JSON strings', () => {
+        expect(() => parseNpeAxiosResponseData('{not-json')).toThrow(/parse/);
     });
 
-    it('throws INVALID_JSON for non-object primitives', () => {
+    it('throws for non-object primitives', () => {
         for (const primitive of [123, true]) {
-            try {
-                parseNpeAxiosResponseData(primitive);
-                expect.unreachable();
-            } catch (error) {
-                expect(error).toBeInstanceOf(AxiosError);
-                expect((error as AxiosError).code).toBe(NPEAxiosErrorCode.INVALID_JSON);
-            }
+            expect(() => parseNpeAxiosResponseData(primitive)).toThrow(/Unexpected NPE response type/);
         }
     });
 });

@@ -5,11 +5,6 @@
 export const MIN_SUPPORTED_VERSION = '1.0.0';
 export const LEGACY_VISUALIZER_VERSION = '0.32.3'; // Version of the visualizer that supports pre-version data format
 
-/** Axios `error.code` values thrown by `parseNpeAxiosResponseData`. */
-export enum NPEAxiosErrorCode {
-    INVALID_JSON = 'NPE_INVALID_JSON',
-}
-
 export enum NPEValidationError {
     OK,
     DEFAULT,

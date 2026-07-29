@@ -10,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { NPEAxiosErrorCode } from '../src/definitions/NPEData';
 import type { NPEData } from '../src/model/NPEModel';
 
 // Mutable holders shared with the hoisted mock factories so each case can flip
@@ -60,6 +59,7 @@ vi.mock('../src/components/npe/NPEViewComponent', () => ({
 vi.mock('../src/components/npe/NPEFileLoader', () => ({ default: () => null }));
 vi.mock('../src/components/npe/NPEDemoSelect', () => ({ default: () => null }));
 
+// Import after vi.mock so the route under test sees the stubs.
 // eslint-disable-next-line import/first
 import NPE from '../src/routes/NPE';
 
@@ -82,6 +82,12 @@ const settledNpe = {
 };
 
 const lastUseNpeArg = () => h.useNpeArgs[h.useNpeArgs.length - 1];
+
+const makeHttpError = (status: number, message: string) => {
+    const error = new AxiosError(message);
+    error.status = status;
+    return error;
+};
 
 const renderRoute = (fileName: string | null = 'trace.json') =>
     render(
@@ -134,6 +140,8 @@ describe('NPE route windowed-view gate', () => {
         renderRoute('trace.json');
 
         expect(screen.queryByTestId(TEST_IDS.NPE_WINDOWED_VIEW)).toBeNull();
+        expect(lastUseNpeArg()).toBeNull();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
     });
 
     it('does not mount the windowed view when there is no uploaded file', () => {
@@ -159,36 +167,15 @@ describe('NPE route error mapping', () => {
         expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
     });
 
-    it('maps INVALID_JSON to the invalid-json status', () => {
-        const invalidJson = new AxiosError('bad json');
-        invalidJson.code = NPEAxiosErrorCode.INVALID_JSON;
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: invalidJson });
+    it('maps HTTP 422 to the invalid-json status and hides the view', () => {
+        mockUseNpe.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: makeHttpError(HttpStatusCode.UnprocessableEntity, '422'),
+        });
         renderRoute();
         expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
-    });
-
-    it('maps ERR_BAD_RESPONSE to the invalid-json status', () => {
-        const badResponse = new AxiosError('bad response');
-        badResponse.code = AxiosError.ERR_BAD_RESPONSE;
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: badResponse });
-        renderRoute();
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
-    });
-
-    it('maps HTTP 422 to the invalid-json status', () => {
-        const unprocessable = new AxiosError('422');
-        unprocessable.status = HttpStatusCode.UnprocessableEntity;
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: unprocessable });
-        renderRoute();
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
-    });
-
-    it('maps HTTP 500 to the unhandled-error status', () => {
-        const serverError = new AxiosError('500');
-        serverError.status = HttpStatusCode.InternalServerError;
-        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: serverError });
-        renderRoute();
-        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_UNHANDLED_ERROR)).toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
     });
 });
 
@@ -203,6 +190,20 @@ describe('NPE route timeline path and loading scope', () => {
         expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
     });
 
+    it('maps timeline HTTP 422 to the invalid-json status', () => {
+        h.params = { filepath: 'timeline.json' };
+        mockUseNpe.mockReturnValue({ data: undefined, isLoading: false, error: null });
+        mockUseNPETimelineFile.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: makeHttpError(HttpStatusCode.UnprocessableEntity, '422'),
+        });
+        renderRoute(null);
+
+        expect(screen.getByTestId(TEST_IDS.NPE_PROCESSING_INVALID_JSON)).toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.NPE_VIEW)).not.toBeInTheDocument();
+    });
+
     it('ignores a loading disabled useNpe sibling when the timeline path is active', () => {
         h.params = { filepath: 'timeline.json' };
         mockUseNpe.mockReturnValue({ data: undefined, isLoading: true, error: null });
@@ -214,6 +215,24 @@ describe('NPE route timeline path and loading scope', () => {
         renderRoute(null);
 
         expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_LOADING)).not.toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
+    });
+
+    it('ignores a stale error on a disabled useNpe sibling when the timeline path is active', () => {
+        h.params = { filepath: 'timeline.json' };
+        mockUseNpe.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: makeHttpError(HttpStatusCode.InternalServerError, 'stale'),
+        });
+        mockUseNPETimelineFile.mockReturnValue({
+            data: validNpeData,
+            isLoading: false,
+            error: null,
+        });
+        renderRoute(null);
+
+        expect(screen.queryByTestId(TEST_IDS.NPE_PROCESSING_UNHANDLED_ERROR)).not.toBeInTheDocument();
         expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
     });
 

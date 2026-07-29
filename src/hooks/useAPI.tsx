@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError, AxiosRequestConfig } from 'axios';
+import { AxiosError, AxiosRequestConfig, HttpStatusCode } from 'axios';
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -454,10 +454,20 @@ export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Pr
             ...config,
             signal: abortController.signal,
         });
-        // Parse then drop the text body so RQ caches only the object graph.
-        const parsed = parseNpeAxiosResponseData(response.data);
-        (response as { data: string | null }).data = null;
-        return parsed;
+        try {
+            // Parse then drop the text body so RQ caches only the object graph.
+            const parsed = parseNpeAxiosResponseData(response.data);
+            (response as { data: string | null }).data = null;
+            return parsed;
+        } catch (error) {
+            // CONVENTIONS.md: client-side JSON failures → synthetic 422 AxiosError.
+            const message = error instanceof Error ? error.message : 'Failed to parse NPE response';
+            throw new AxiosError(message, AxiosError.ERR_BAD_RESPONSE, response.config, response.request, {
+                ...response,
+                status: HttpStatusCode.UnprocessableEntity,
+                data: null,
+            });
+        }
     } finally {
         if (activeNpeRequestAbort === abortController) {
             activeNpeRequestAbort = null;
