@@ -31,6 +31,8 @@ import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemory
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
+import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
+import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
 import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
@@ -791,61 +793,27 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
-export interface DeviceOperationMapping {
-    name: string;
-    id: number;
-    operationName: string;
-    perfData?: PerfTableRow;
-}
-
+/**
+ * @description Every device operation in the memory report, flattened in report
+ * order. Multi-device collapsing happens at match time, not here, because only
+ * the performance report reveals which shape this report has (#1810).
+ */
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
     const { data: devices } = useDevices();
-
-    /**
-     * TODO: update when device op data is device bound
-     * @description Collapse multi-device operations into single entry temporary logic, this can under certain circumstances lead to false positives
-     * @param data
-     * @param numDevices
-     */
-    const collapseMultideviceOPs = (data: DeviceOperationMapping[], numDevices: number): DeviceOperationMapping[] => {
-        if (numDevices === 1) {
-            return data;
-        }
-
-        const result: DeviceOperationMapping[] = [];
-        const operationCountByKey = new Map<string, number>();
-
-        for (const { name, id } of data) {
-            const key = `${name}-${id}`;
-            operationCountByKey.set(key, (operationCountByKey.get(key) || 0) + 1);
-        }
-
-        const seen = new Set<string>();
-
-        for (const item of data) {
-            const key = `${item.name}-${item.id}`;
-            if (!seen.has(key) && operationCountByKey.get(key) === numDevices) {
-                result.push(item);
-                seen.add(key);
-            }
-        }
-
-        return result;
-    };
 
     return useMemo(() => {
         if (!operations || !devices) {
             return [];
         }
-        const result = operations.flatMap((operation) =>
+
+        return operations.flatMap((operation) =>
             operation.deviceOperationNameList.map((name) => ({
                 name,
                 id: operation.id,
                 operationName: operation.name,
             })),
         );
-        return collapseMultideviceOPs(result, devices.length);
     }, [operations, devices]);
 };
 
@@ -863,22 +831,13 @@ const useProxyPerformanceReport = (): PerformanceReportResponse => {
 
 export const useGetDeviceOperationListPerf = () => {
     const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+    const { data: devices } = useDevices();
     const data = useProxyPerformanceReport();
 
-    return useMemo(() => {
-        const isValid = deviceOperations.every((deviceOperation, index) => {
-            const perfData = data.report[index];
-
-            if (perfData && perfData.raw_op_code === deviceOperation.name) {
-                deviceOperation.perfData = perfData;
-                return true;
-            }
-
-            return false;
-        });
-
-        return isValid ? deviceOperations : [];
-    }, [data, deviceOperations]);
+    return useMemo(
+        () => matchDeviceOperationsToPerf(deviceOperations, data.report, devices?.length ?? 0),
+        [data, deviceOperations, devices],
+    );
 };
 
 /**
