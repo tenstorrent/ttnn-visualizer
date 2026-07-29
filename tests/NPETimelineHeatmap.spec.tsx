@@ -4,15 +4,13 @@
 
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import NPETimelineComponent from '../src/components/npe/NPETimelineComponent';
+import NPETimelineComponent, { HEATMAP_HEIGHT } from '../src/components/npe/NPETimelineComponent';
 import { TimestepData } from '../src/model/NPEModel';
 import { calculateLinkCongestionColor } from '../src/components/npe/drawingApi';
 
 // The heat bar summarises n_timesteps into one column per device pixel. Emitting a
 // rect per timestep instead meant ~0.008px rects at 196k steps: each screen pixel
 // was written hundreds of times and the blended result could hide a spike. #1803
-
-const HEATMAP_HEIGHT = 30;
 
 // Non-visited windowed steps carry only the per-step scalar, which is the path the
 // heat bar reduces over.
@@ -74,24 +72,24 @@ describe('NPE timeline heat bar downsampling', () => {
     it('reduces each column to the worst demand it covers so spikes survive', () => {
         // Two columns over four steps. The spike is deliberately NOT the last step in
         // its bucket: with a last-wins (or blended) reduction the column would take
-        // 0.05 and the spike would vanish, which is the bug this guards.
-        renderTimeline([makeStep(0.9), makeStep(0.05), makeStep(0.1), makeStep(0.1)], 2);
+        // the low value and the spike would vanish, which is the bug this guards.
+        renderTimeline([makeStep(90), makeStep(5), makeStep(10), makeStep(10)], 2);
 
         const firstColumn = fills[0];
-        expect(firstColumn.style).toBe(normalise(calculateLinkCongestionColor(0.9, 0, false)));
-        expect(firstColumn.style).not.toBe(normalise(calculateLinkCongestionColor(0.05, 0, false)));
+        expect(firstColumn.style).toBe(normalise(calculateLinkCongestionColor(90, 0, false)));
+        expect(firstColumn.style).not.toBe(normalise(calculateLinkCongestionColor(5, 0, false)));
     });
 
     it('keeps a spike that sits in the middle of a column’s range', () => {
         // Six steps over two columns = three per column, so the spike is neither the
         // first nor the last value in its bucket.
-        renderTimeline([makeStep(0.1), makeStep(0.8), makeStep(0.1), makeStep(0.1), makeStep(0.1), makeStep(0.1)], 2);
+        renderTimeline([makeStep(10), makeStep(80), makeStep(10), makeStep(10), makeStep(10), makeStep(10)], 2);
 
-        expect(fills[0].style).toBe(normalise(calculateLinkCongestionColor(0.8, 0, false)));
+        expect(fills[0].style).toBe(normalise(calculateLinkCongestionColor(80, 0, false)));
     });
 
     it('emits at most one rect per column per metric row, not one per timestep', () => {
-        const steps = Array.from({ length: 500 }, (_, i) => makeStep((i % 10) / 10));
+        const steps = Array.from({ length: 500 }, (_, i) => makeStep((i % 10) * 15));
         renderTimeline(steps, 50);
 
         // 4 metric rows × 50 columns is the ceiling; run-coalescing only lowers it.
@@ -100,7 +98,7 @@ describe('NPE timeline heat bar downsampling', () => {
     });
 
     it('coalesces neighbouring columns that resolve to the same colour', () => {
-        const steps = Array.from({ length: 200 }, () => makeStep(0.5));
+        const steps = Array.from({ length: 200 }, () => makeStep(50));
         renderTimeline(steps, 100);
 
         // Every column is identical, so each of the 4 rows collapses to one rect.
@@ -108,7 +106,7 @@ describe('NPE timeline heat bar downsampling', () => {
     });
 
     it('spans the full canvas width across the drawn columns', () => {
-        const steps = Array.from({ length: 200 }, () => makeStep(0.5));
+        const steps = Array.from({ length: 200 }, () => makeStep(50));
         const canvasWidth = 100;
         renderTimeline(steps, canvasWidth);
 
@@ -131,7 +129,7 @@ describe('NPE timeline heat bar resolution', () => {
 
         try {
             renderTimeline(
-                Array.from({ length: 100 }, () => makeStep(0.5)),
+                Array.from({ length: 100 }, () => makeStep(50)),
                 100,
             );
             const canvas = document.querySelector('canvas') as HTMLCanvasElement;
@@ -142,10 +140,10 @@ describe('NPE timeline heat bar resolution', () => {
         }
     });
 
-    it('never uses more columns than there are timesteps', () => {
-        // A short report must not be stretched into more columns than it has data.
-        renderTimeline([makeStep(0.1), makeStep(0.9)], 400);
-
-        expect(fills.length).toBeLessThanOrEqual(4 * 2);
-    });
+    // Note: the `columnCount` clamp to `dataSize` is deliberately NOT asserted here.
+    // Run-coalescing merges equal-coloured neighbours and colour boundaries always
+    // fall on step boundaries, so the drawn rects are identical whether or not the
+    // clamp is applied — it bounds the work done, not the output, and no rendering
+    // assertion can distinguish it. The reduction contract it relies on is covered
+    // directly in `reduceToColumns.spec.ts`.
 });

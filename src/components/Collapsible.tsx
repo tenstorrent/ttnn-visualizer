@@ -19,11 +19,13 @@ interface CollapsibleProps {
     keepChildrenMounted?: boolean;
     onExpandToggle?: (state: boolean) => void;
     isDisabled?: boolean;
-    // Pass a function to build the content lazily: it is only invoked while the
-    // section is open. Callers whose collapsed content is huge (see the NPE zone
-    // filter, which can hold ~100k rows) use this so the element tree is never
-    // constructed — and never garbage — while the section is shut.
-    children?: React.ReactNode | (() => React.ReactNode);
+    children?: React.ReactNode;
+    // Builds the content only while the section is open, so a caller whose
+    // collapsed content is huge never constructs that element tree (the NPE zone
+    // filter can hold ~100k rows). Mutually exclusive with `children`; supplying
+    // it forces unmount-on-collapse, so `keepChildrenMounted` is ignored — the
+    // whole point is that nothing is retained while shut. #1803
+    renderContent?: () => React.ReactNode;
 }
 
 const Collapsible = ({
@@ -36,13 +38,18 @@ const Collapsible = ({
     keepChildrenMounted = true,
     onExpandToggle,
     children,
+    renderContent,
     isDisabled = false,
 }: CollapsibleProps) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
     const [prevIsOpenProp, setPrevIsOpenProp] = React.useState(isOpen);
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
-    const isLazy = typeof children === 'function';
-    const content = isLazy ? isOpenState && children() : children;
+    // A section is collapsible if it has content either way; `renderContent` is
+    // only invoked while open, and it opts out of `keepChildrenMounted` so the
+    // wiring matches what the prop comment promises.
+    const hasContent = Boolean(children) || Boolean(renderContent);
+    const content = renderContent ? isOpenState && renderContent() : children;
+    const shouldKeepMounted = keepChildrenMounted && !renderContent;
 
     if (isOpen !== prevIsOpenProp) {
         setPrevIsOpenProp(isOpen);
@@ -52,7 +59,7 @@ const Collapsible = ({
     return (
         <div className={classNames('collapsible-component', collapseClassName)}>
             <div className='collapsible-controls'>
-                {children && (
+                {hasContent && (
                     <Button
                         size={Size.SMALL}
                         variant={ButtonVariant.MINIMAL}
@@ -72,17 +79,17 @@ const Collapsible = ({
                         {label}
                     </Button>
                 )}
-                {!children && (
+                {!hasContent && (
                     <div className='collapsible-label-wrap'>
                         <div className='collapsible-label'>{label}</div>
                     </div>
                 )}
                 {additionalElements && additionalElements}
             </div>
-            {children && (
+            {hasContent && (
                 <Collapse
                     isOpen={isOpenState}
-                    keepChildrenMounted={keepChildrenMounted}
+                    keepChildrenMounted={shouldKeepMounted}
                 >
                     <div
                         className={classNames(contentClassName)}

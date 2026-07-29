@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { MouseEvent, memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { MouseEvent, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     EVENT_TYPE_FILTER,
     FABRIC_EVENT_SCOPE_OPTIONS,
@@ -10,43 +10,47 @@ import {
     NPE_LINK,
     NoCType,
 } from '../../model/NPEModel';
-import { LinkPoints, NODE_SIZE, calculateFabricColor, calculateLinkCongestionColor, getLinkPoints } from './drawingApi';
+import {
+    NODE_SIZE,
+    calculateFabricColor,
+    calculateLinkCongestionColor,
+    drawLinkToCanvas,
+    getLinkPoints,
+} from './drawingApi';
 
-// The link tiles used to be one SVG (+ button + label) per link_demand row —
-// up to ~700 per timestep, all reconciled and repainted on every scrub. This
-// draws the whole chip's congestion layer to a single canvas instead, turning
-// a scrub from thousands of DOM mutations into a few hundred canvas ops. #1803.
+// One canvas per chip in place of a DOM tile (button + SVG + label) per link_demand
+// row, of which a busy timestep has hundreds. #1803
 
 const GAP = 1; // matches `.tensix-grid { gap: 1px }`
 const CELL_STRIDE = NODE_SIZE + GAP;
 const LABEL_FONT = '9px sans-serif';
 const LABEL_COLOR = 'rgba(255, 255, 255, 0.85)';
 const DIMMED_ALPHA = 0.15;
-// $tt-yellow-tint-2 — the border the old `.tensix:hover` rule drew on link tiles.
-const HOVER_COLOR = '#f5e2ba';
+// Ceiling on the backing store's linear scale. The raster is inflated by
+// devicePixelRatio × the on-screen scale of the enclosing cluster, and that scale
+// follows a zoom slider that reaches 2 — uncapped, an 8-chip Blackhole cluster at
+// dpr 2 / zoom 2 wants ~542 MB of canvas, past the point where the browser starts
+// discarding buffers and chips render blank. Capping trades slight softness when
+// zoomed in for a bounded allocation, and it also stops most of the churn: above
+// the cap the backing store stops changing size at all, so zooming no longer
+// reallocates it. #1803
+const MAX_BACKING_SCALE = 2;
+// One frame at 60Hz — long enough that the pointer events of a single frame share
+// one layout read, short enough that a moved element is re-measured immediately.
+const RECT_CACHE_MS = 16;
 
-const cellKey = (x: number, y: number): string => `${x}-${y}`;
-
-// Assigning `canvas.width`/`height` reallocates and zeroes the whole backing store
-// (and forces a GPU re-upload) even when the value is unchanged — ~2.8 MB per chip
-// at dpr 2, so ~22 MB of pointless churn per scrub across an 8-chip cluster. Resize
-// only on a real geometry change; callers still clear explicitly. #1803.
-const resizeCanvas = (canvas: HTMLCanvasElement, cssWidth: number, cssHeight: number, scale: number): void => {
-    const width = Math.max(1, Math.round(cssWidth * scale));
-    const height = Math.max(1, Math.round(cssHeight * scale));
-    if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-    }
-};
-
-interface ChipLink {
+export interface ChipLink {
     linkUtilization: LinkUtilization;
     index: number;
 }
 
+interface Cell {
+    x: number;
+    y: number;
+}
+
 interface ChipCongestionCanvasProps {
-    links: ChipLink[];
+    links: readonly ChipLink[];
     gridWidth: number;
     gridHeight: number;
     isFabricMode: boolean;
@@ -54,10 +58,11 @@ interface ChipCongestionCanvasProps {
     nocFilter: NoCType | null;
     fabricEventsFilter: EVENT_TYPE_FILTER;
     dimmed: boolean;
-    zoom: number;
     onSelectLink: (linkUtilization: LinkUtilization, index: number) => void;
     onClearSelection: () => void;
 }
+
+const cellKey = (x: number, y: number): string => `${x}-${y}`;
 
 const passesFilters = (
     linkUtilization: LinkUtilization,
@@ -78,39 +83,6 @@ const passesFilters = (
     return true;
 };
 
-const ROTATE_RE = /rotate\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\)/;
-
-const drawLink = (ctx: CanvasRenderingContext2D, points: LinkPoints, color: string): void => {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(points.x1, points.y1);
-    ctx.lineTo(points.x2, points.y2);
-    ctx.stroke();
-
-    const [p1, p2, p3] = [points.arrow.p1, points.arrow.p2, points.arrow.p3].map((p) => {
-        const [x, y] = p.split(',');
-        return [Number(x), Number(y)] as const;
-    });
-
-    ctx.save();
-    const rotate = ROTATE_RE.exec(points.transform);
-    if (rotate) {
-        const [, angle, cx, cy] = rotate;
-        ctx.translate(Number(cx), Number(cy));
-        ctx.rotate((Number(angle) * Math.PI) / 180);
-        ctx.translate(-Number(cx), -Number(cy));
-    }
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(p1[0], p1[1]);
-    ctx.lineTo(p2[0], p2[1]);
-    ctx.lineTo(p3[0], p3[1]);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-};
-
 const ChipCongestionCanvas = ({
     links,
     gridWidth,
@@ -120,82 +92,107 @@ const ChipCongestionCanvas = ({
     nocFilter,
     fabricEventsFilter,
     dimmed,
-    zoom,
     onSelectLink,
     onClearSelection,
 }: ChipCongestionCanvasProps) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const hoverCanvasRef = useRef<HTMLCanvasElement | null>(null);
-    const hoveredCellRef = useRef<{ x: number; y: number } | null>(null);
+    const hoverRef = useRef<HTMLDivElement | null>(null);
+    const hoveredCellRef = useRef<Cell | null>(null);
+    // Pointer hit-testing needs the canvas's on-screen box. Reading it per
+    // mousemove forces a synchronous layout flush, which is expensive while
+    // playback is dirtying layout every frame — so cache it and drop the cache
+    // only when it can actually have moved.
+    const rectRef = useRef<DOMRect | null>(null);
+    const rectReadAtRef = useRef(0);
     const cssWidth = gridWidth * CELL_STRIDE - GAP;
     const cssHeight = gridHeight * CELL_STRIDE - GAP;
 
-    // Backing store is inflated by dpr × zoom so the raster stays crisp under
-    // the parent's CSS `zoom`; the CSS box stays in pre-zoom tile units.
-    const scale = (window.devicePixelRatio || 1) * zoom;
+    // The enclosing cluster is scaled with CSS `zoom`, so the only honest source
+    // for "how big is a tile on screen" is the element itself. Measuring here
+    // instead of taking the ancestor's zoom as a prop keeps one source of truth —
+    // the same one hit-testing uses — and stays correct if the cluster is ever
+    // scaled by some other mechanism.
+    const [onScreenScale, setOnScreenScale] = useState(1);
 
-    // Cell → topmost link that passes the current filters. Built once per data or
-    // filter change so hover (which fires on every pointer move) and click both
-    // resolve in O(1) instead of rescanning every link. Last write wins, matching
-    // the draw order where the last link painted is the visible one.
-    const linksByCell = useMemo(() => {
-        const byCell = new Map<string, ChipLink>();
-        links.forEach((link) => {
-            if (passesFilters(link.linkUtilization, nocFilter, fabricEventsFilter)) {
-                byCell.set(cellKey(link.linkUtilization[NPE_LINK.X], link.linkUtilization[NPE_LINK.Y]), link);
-            }
-        });
-        return byCell;
-    }, [links, nocFilter, fabricEventsFilter]);
+    useLayoutEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) {
+            return undefined;
+        }
+        const measure = () => {
+            const rect = canvas.getBoundingClientRect();
+            const next = rect.width > 0 ? rect.width / cssWidth : 1;
+            // Epsilon-guarded so sub-pixel jitter can't drive a render loop.
+            setOnScreenScale((previous) => (Math.abs(previous - next) < 0.001 ? previous : next));
+        };
+        measure();
+        if (typeof window.ResizeObserver !== 'function') {
+            return undefined;
+        }
+        // Feature-detected immediately above, and the initial `measure()` already ran,
+        // so a browser without it just keeps the measured-once scale.
+        // eslint-disable-next-line compat/compat
+        const observer = new window.ResizeObserver(measure);
+        observer.observe(canvas);
+        return () => observer.disconnect();
+    }, [cssWidth]);
 
-    // Paints (or clears) the hover border on its own layer, so following the
-    // pointer costs one 1px rect instead of redrawing the chip's whole
-    // congestion layer. Called imperatively from the pointer handlers — routing
-    // the hovered cell through state would re-render NPEView on every mousemove,
-    // which is exactly the churn #1803 is removing.
-    const paintHover = useCallback(
-        (cell: { x: number; y: number } | null) => {
-            const canvas = hoverCanvasRef.current;
-            const ctx = canvas?.getContext('2d');
-            if (!canvas || !ctx) {
-                return;
-            }
-            ctx.setTransform(scale, 0, 0, scale, 0, 0);
-            ctx.clearRect(0, 0, cssWidth, cssHeight);
-            if (!cell) {
-                return;
-            }
-            // Half-pixel inset keeps the 1px stroke on the pixel grid instead of
-            // straddling two rows, mirroring the old CSS border-box edge.
-            ctx.strokeStyle = HOVER_COLOR;
-            ctx.lineWidth = 1;
-            ctx.strokeRect(cell.x * CELL_STRIDE + 0.5, cell.y * CELL_STRIDE + 0.5, NODE_SIZE - 1, NODE_SIZE - 1);
-        },
-        [scale, cssWidth, cssHeight],
+    // Read the box at most once per frame's worth of pointer events. Each read forces
+    // a synchronous layout flush, and a pointer move fires several times per frame on
+    // a high-refresh display while playback is already dirtying layout. A short time
+    // budget rather than a `requestAnimationFrame` expiry on purpose: the box can move
+    // without resizing (a scroll, or a panel opening beside the cluster) and no resize
+    // signal reports that, while a paint-driven expiry would never fire in a tab that
+    // isn't painting. This bounds staleness without enumerating every layout shift.
+    const rectForThisFrame = useCallback((canvas: HTMLCanvasElement): DOMRect => {
+        const now = performance.now();
+        if (!rectRef.current || now - rectReadAtRef.current > RECT_CACHE_MS) {
+            rectRef.current = canvas.getBoundingClientRect();
+            rectReadAtRef.current = now;
+        }
+        return rectRef.current;
+    }, []);
+
+    const scale = Math.min((window.devicePixelRatio || 1) * onScreenScale, MAX_BACKING_SCALE);
+    const deviceWidth = Math.max(1, Math.round(cssWidth * scale));
+    const deviceHeight = Math.max(1, Math.round(cssHeight * scale));
+
+    // Single source for "which links are visible": the paint loop and the
+    // hit-test index are built from the same filtered, ordered list, so what you
+    // click is necessarily what you see. Filtering twice invited them to drift.
+    const visibleLinks = useMemo(
+        () => links.filter((link) => passesFilters(link.linkUtilization, nocFilter, fabricEventsFilter)),
+        [links, nocFilter, fabricEventsFilter],
     );
 
-    // Resize the hover layer alongside the base canvas. A resize also clears it, so
-    // drop any stale hover: the pointer may now be over a different cell, and the
-    // next move repaints anyway.
-    useEffect(() => {
-        const canvas = hoverCanvasRef.current;
-        if (!canvas) {
+    // Cell → topmost visible link. Last write wins, matching the paint order, so a
+    // stack of NoC links resolves to the one drawn on top. Built once per data or
+    // filter change so hover and click are O(1).
+    const linksByCell = useMemo(() => {
+        const byCell = new Map<string, ChipLink>();
+        visibleLinks.forEach((link) => {
+            byCell.set(cellKey(link.linkUtilization[NPE_LINK.X], link.linkUtilization[NPE_LINK.Y]), link);
+        });
+        return byCell;
+    }, [visibleLinks]);
+
+    // Hover feedback is a positioned element, not a canvas layer: it is a single
+    // 1px border, so a full-grid second backing store bought nothing. Moved via a
+    // ref rather than state — routing pointer position through React would
+    // re-render the owning view on every mousemove, which is the churn #1803
+    // removes.
+    const showHover = useCallback((cell: Cell | null) => {
+        const element = hoverRef.current;
+        if (!element) {
             return;
         }
-        resizeCanvas(canvas, cssWidth, cssHeight, scale);
-        hoveredCellRef.current = null;
-    }, [cssWidth, cssHeight, scale]);
-
-    // A scrub swaps the links under a stationary pointer, so a border left on a
-    // cell that no longer has one would be a lie. Re-resolve the held cell
-    // against the new data instead of waiting for the next pointer move.
-    useEffect(() => {
-        const cell = hoveredCellRef.current;
-        if (cell && !linksByCell.has(cellKey(cell.x, cell.y))) {
-            hoveredCellRef.current = null;
+        if (!cell) {
+            element.style.display = 'none';
+            return;
         }
-        paintHover(hoveredCellRef.current);
-    }, [linksByCell, paintHover]);
+        element.style.display = 'block';
+        element.style.transform = `translate(${cell.x * CELL_STRIDE}px, ${cell.y * CELL_STRIDE}px)`;
+    }, []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -204,17 +201,16 @@ const ChipCongestionCanvas = ({
             return;
         }
 
-        resizeCanvas(canvas, cssWidth, cssHeight, scale);
+        // The backing store is sized declaratively via the width/height attributes,
+        // so React only reallocates it when the geometry genuinely changes. This
+        // transform lets the drawing below stay in logical (pre-scale) tile units.
         ctx.setTransform(scale, 0, 0, scale, 0, 0);
         ctx.clearRect(0, 0, cssWidth, cssHeight);
         ctx.globalAlpha = dimmed ? DIMMED_ALPHA : 1;
         ctx.font = LABEL_FONT;
         ctx.textBaseline = 'top';
 
-        links.forEach(({ linkUtilization }) => {
-            if (!passesFilters(linkUtilization, nocFilter, fabricEventsFilter)) {
-                return;
-            }
+        visibleLinks.forEach(({ linkUtilization }) => {
             const color = isFabricMode
                 ? calculateFabricColor(linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE])
                 : calculateLinkCongestionColor(linkUtilization[NPE_LINK.DEMAND], 0, altCongestionColors);
@@ -223,34 +219,49 @@ const ChipCongestionCanvas = ({
 
             ctx.save();
             ctx.translate(originX, originY);
-            drawLink(ctx, getLinkPoints(linkUtilization[NPE_LINK.NOC_ID], color), color);
+            drawLinkToCanvas(ctx, getLinkPoints(linkUtilization[NPE_LINK.NOC_ID]), color);
             ctx.fillStyle = LABEL_COLOR;
             ctx.fillText(`${linkUtilization[NPE_LINK.Y]}-${linkUtilization[NPE_LINK.X]}`, 1, 1);
             ctx.restore();
         });
-    }, [links, cssWidth, cssHeight, isFabricMode, altCongestionColors, nocFilter, fabricEventsFilter, dimmed, scale]);
+    }, [visibleLinks, cssWidth, cssHeight, isFabricMode, altCongestionColors, dimmed, scale]);
+
+    // Only cells carrying a link are hoverable — the old markup only mounted a tile,
+    // and so only showed a border, where there was one.
+    const hoverableCell = useCallback(
+        (cell: Cell | null) => (cell && linksByCell.has(cellKey(cell.x, cell.y)) ? cell : null),
+        [linksByCell],
+    );
+
+    // A scrub swaps the links under a stationary pointer. `hoveredCellRef` holds
+    // wherever the pointer actually is — not whether that cell was hoverable — so
+    // hoverability can be re-derived here: the marker disappears when its link goes
+    // away and appears when one arrives, neither needing the pointer to move.
+    useEffect(() => {
+        showHover(hoverableCell(hoveredCellRef.current));
+    }, [hoverableCell, showHover]);
 
     const cellFromEvent = useCallback(
-        (event: MouseEvent<HTMLCanvasElement>): { x: number; y: number } | null => {
+        (event: MouseEvent<HTMLCanvasElement>): Cell | null => {
             const canvas = canvasRef.current;
             if (!canvas) {
                 return null;
             }
-            const rect = canvas.getBoundingClientRect();
-            // rect reflects the on-screen (zoomed) size; scale the pointer offset back
-            // into tile-space so the hit-test matches the CSS grid the canvas replaced.
+            const rect = rectForThisFrame(canvas);
+            if (rect.width === 0 || rect.height === 0) {
+                return null;
+            }
+            // rect is the on-screen (scaled) box; scale the pointer offset back into
+            // tile space so the hit-test matches the grid the canvas replaced.
             const localX = ((event.clientX - rect.left) / rect.width) * cssWidth;
             const localY = ((event.clientY - rect.top) / rect.height) * cssHeight;
             return { x: Math.floor(localX / CELL_STRIDE), y: Math.floor(localY / CELL_STRIDE) };
         },
-        [cssWidth, cssHeight],
+        [cssWidth, cssHeight, rectForThisFrame],
     );
 
     const handleClick = (event: MouseEvent<HTMLCanvasElement>) => {
         const cell = cellFromEvent(event);
-        // Multiple NoC links can stack on one cell; `linksByCell` holds the last
-        // one drawn, matching the old grid where the last-mounted tile caught the
-        // click.
         const hit = cell ? linksByCell.get(cellKey(cell.x, cell.y)) : undefined;
 
         if (hit) {
@@ -262,15 +273,12 @@ const ChipCongestionCanvas = ({
 
     const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
         const cell = cellFromEvent(event);
-        // Only cells that actually carry a link are hoverable — the old markup only
-        // mounted a tile (and so only showed a border) where there was one.
-        const target = cell && linksByCell.has(cellKey(cell.x, cell.y)) ? cell : null;
         const { current } = hoveredCellRef;
-        if (target?.x === current?.x && target?.y === current?.y) {
-            return; // same cell (or still nothing) — nothing to repaint
+        if (cell?.x === current?.x && cell?.y === current?.y) {
+            return; // still the same cell — nothing to repaint
         }
-        hoveredCellRef.current = target;
-        paintHover(target);
+        hoveredCellRef.current = cell;
+        showHover(hoverableCell(cell));
     };
 
     const handleMouseLeave = () => {
@@ -278,7 +286,7 @@ const ChipCongestionCanvas = ({
             return;
         }
         hoveredCellRef.current = null;
-        paintHover(null);
+        showHover(null);
     };
 
     return (
@@ -286,22 +294,24 @@ const ChipCongestionCanvas = ({
             <canvas
                 ref={canvasRef}
                 className='congestion-canvas'
+                width={deviceWidth}
+                height={deviceHeight}
                 style={{ width: `${cssWidth}px`, height: `${cssHeight}px` }}
                 onClick={handleClick}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
             />
-            <canvas
-                ref={hoverCanvasRef}
-                className='congestion-canvas congestion-canvas--hover'
-                style={{ width: `${cssWidth}px`, height: `${cssHeight}px` }}
+            <div
+                ref={hoverRef}
+                className='congestion-hover'
+                style={{ width: `${NODE_SIZE}px`, height: `${NODE_SIZE}px` }}
             />
         </>
     );
 };
 
-// Every prop is either a primitive, a referentially stable callback, or a per-chip
-// bucket that only changes when that chip's data does — so on a scrub that leaves a
-// chip idle this skips the subtree entirely instead of re-rendering two canvases
-// per chip across the cluster.
+// Every prop is a primitive, a referentially stable callback, or a per-chip bucket.
+// The bucket arrays are rebuilt each scrub, so chips carrying links still re-render
+// (their canvas genuinely needs repainting); what this skips is the idle chips,
+// which share a single empty-bucket constant and so keep their prop identity.
 export default memo(ChipCongestionCanvas);

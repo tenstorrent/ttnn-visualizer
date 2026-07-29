@@ -32,7 +32,7 @@ import {
     TimestepData,
 } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
-import ChipCongestionCanvas from './ChipCongestionCanvas';
+import ChipCongestionCanvas, { ChipLink } from './ChipCongestionCanvas';
 import { NODE_SIZE, getLines, resetRouteColors } from './drawingApi';
 import NPETimelineComponent from './NPETimelineComponent';
 import ActiveTransferDetails from './ActiveTransferDetails';
@@ -67,17 +67,33 @@ interface NPEViewProps {
 
 const LABEL_STEP_THRESHOLD = 25;
 const RIGHT_MARGIN_OFFSET_PX = 25;
+
+interface ChipTransfer {
+    transfer: NoCTransfer;
+    index: number;
+}
+
+// Every seek ultimately indexes `timestep_data`, and an out-of-range index throws
+// during render straight past to the router's root error page. Clamp at the source
+// instead of relying on each caller's arithmetic. #1803
+const clampTimestep = (timestep: number, length: number): number => {
+    if (!Number.isFinite(timestep) || length === 0) {
+        return 0;
+    }
+    return Math.min(Math.max(0, Math.trunc(timestep)), length - 1);
+};
+
 // Shared fallbacks for chips with nothing to draw. A fresh `[]` per render would
 // give every idle chip a new prop identity on every scrub, re-running the
 // congestion canvas's draw effect across the whole cluster for no visual change —
 // the bulk of the cost of stepping between two empty timesteps. #1803.
-const NO_LINKS: { linkUtilization: LinkUtilization; index: number }[] = [];
-const NO_TRANSFERS: { transfer: NoCTransfer; index: number }[] = [];
+const NO_LINKS: readonly ChipLink[] = Object.freeze([]);
+const NO_TRANSFERS: readonly ChipTransfer[] = Object.freeze([]);
 // Same hazard on the zone path: `npeData` is a new object per scrub, so a fresh `[]`
 // here would churn `zones` → `selectedZoneList` → the timeline's `zoneRanges`, whose
 // effect repaints 4 × n_timesteps heat cells. On a 196k-timestep report that is
 // ~780k fillRects per scrub — for a report that simply has no zones.
-const NO_ZONES: NPERootZone[] = [];
+const NO_ZONES: readonly NPERootZone[] = Object.freeze([]);
 const TENSIX_SIZE: number = NODE_SIZE; // * 0.75;
 const SVG_SIZE = TENSIX_SIZE;
 const PLAYBACK_SPEED = 1;
@@ -135,7 +151,7 @@ const NPEView = ({
         };
     });
 
-    const zones: NPERootZone[] = useMemo(() => {
+    const zones: readonly NPERootZone[] = useMemo(() => {
         return npeData.zones || NO_ZONES;
     }, [npeData]);
 
@@ -171,7 +187,14 @@ const NPEView = ({
     }, [expandedZoneMap, selectedZoneAddress, zones]);
 
     const links = useMemo(() => {
-        const timestepData = npeData.timestep_data[selectedTimestep];
+        // An out-of-range index would throw here during render, and the nearest
+        // boundary is the router's root `errorElement` — it replaces the whole app
+        // shell, so the user cannot recover in place. Callers are clamped too; this
+        // is the backstop that keeps a bad index from being fatal. #1803
+        const timestepData = npeData.timestep_data[selectedTimestep] ?? npeData.timestep_data.at(-1);
+        if (!timestepData) {
+            return undefined;
+        }
         timestepData.active_transfers.forEach((id) => {
             const transfer = npeData.noc_transfers.find((tr) => tr.id === id);
             // TODO: this functionality should MAYBE move to BE. https://github.com/orgs/tenstorrent/projects/178/views/1?pane=issue&itemId=124188622&issue=tenstorrent%7Cttnn-visualizer%7C745
@@ -229,7 +252,7 @@ const NPEView = ({
     // and discarding the misses. #1803. A transfer lands in every chip its src or
     // any dst touches, matching what RouteOriginsRenderer draws.
     const linkDemandByChip = useMemo(() => {
-        const byChip = new Map<number, { linkUtilization: LinkUtilization; index: number }[]>();
+        const byChip = new Map<number, ChipLink[]>();
         links?.link_demand.forEach((linkUtilization, index) => {
             const chipId = linkUtilization[NPE_LINK.CHIP_ID];
             const bucket = byChip.get(chipId);
@@ -243,7 +266,7 @@ const NPEView = ({
     }, [links]);
 
     const transfersByChip = useMemo(() => {
-        const byChip = new Map<number, { transfer: NoCTransfer; index: number }[]>();
+        const byChip = new Map<number, ChipTransfer[]>();
         transfers.forEach((transfer, index) => {
             const chipIds = new Set<number>();
             if (transfer.src) {
@@ -366,8 +389,11 @@ const NPEView = ({
     };
 
     const onHandleZoneNavigation = (zone: NPEZone) => {
+        // `cycles_per_timestep` defaulting to 1 turns a raw cycle count into a
+        // timestep index, so a report missing it can seek far past the end. Clamp
+        // rather than trust the arithmetic. #1803
         const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep ?? 1));
-        setSelectedTimestep(timestep);
+        setSelectedTimestep(clampTimestep(timestep, npeData.timestep_data.length));
     };
 
     const handleScrubberChange = (value: number) => {
@@ -412,7 +438,7 @@ const NPEView = ({
     const showAllTransfers = () => {
         setIsShowingAllTransfers(true);
         setSelectedNode(null);
-        const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
+        const activeTransfers = (npeData.timestep_data[selectedTimestep]?.active_transfers ?? [])
             .map((transferId) => npeData.noc_transfers.find((tr) => tr.id === transferId))
             .filter((transfer): transfer is NoCTransfer => transfer !== undefined);
         setSelectedTransferList(activeTransfers as NoCTransfer[]);
@@ -700,7 +726,7 @@ const NPEView = ({
                                     dram={dram}
                                     eth={eth}
                                     pcie={pcie}
-                                    showActiveTransfers={handleClearSelection}
+                                    onEmptyCellClick={handleClearSelection}
                                     selectedZoneAddress={selectedZoneAddress}
                                     isAnnotatingCores={isAnnotatingCores}
                                     TENSIX_SIZE={TENSIX_SIZE}
@@ -747,7 +773,6 @@ const NPEView = ({
                                         nocFilter={nocFilter}
                                         fabricEventsFilter={fabricEventsFilter}
                                         dimmed={highlightedTransfer !== null || selectedTransferList.length !== 0}
-                                        zoom={zoom}
                                         onSelectLink={handleSelectLink}
                                         onClearSelection={handleClearSelection}
                                     />
@@ -858,11 +883,13 @@ const NPEView = ({
                 isOpen={isActiveTransferDetailsOpen}
                 groupedTransfersByNoCID={groupedTransfersByNoCID}
                 selectedNode={selectedNode}
-                congestionData={links?.link_demand.filter(
-                    (route) =>
-                        route[NPE_LINK.Y] === selectedNode?.coords[NPE_LINK.Y] &&
-                        route[NPE_LINK.X] === selectedNode?.coords[NPE_LINK.X],
-                )}
+                congestionData={
+                    links?.link_demand.filter(
+                        (route) =>
+                            route[NPE_LINK.Y] === selectedNode?.coords[NPE_LINK.Y] &&
+                            route[NPE_LINK.X] === selectedNode?.coords[NPE_LINK.X],
+                    ) ?? []
+                }
                 showActiveTransfers={showActiveTransfers}
                 highlightedTransfer={highlightedTransfer}
                 setHighlightedTransfer={setHighlightedTransfer}

@@ -17,6 +17,7 @@ import {
 } from '../../model/NPEModel';
 import { altCongestionColorsAtom } from '../../store/app';
 import getWorstLinkDemand from '../../functions/getWorstLinkDemand';
+import reduceToColumns from '../../functions/reduceToColumns';
 import { formatPercentage } from '../../functions/math';
 
 interface Rect {
@@ -36,7 +37,7 @@ interface NPEHeatMapProps {
     nocType?: NoCType | null;
     navigationCallback: (timestepIndex: number) => void;
 }
-const HEATMAP_HEIGHT = 30;
+export const HEATMAP_HEIGHT = 30;
 const ZONE_HEIGHT = 10;
 
 const NPETimelineComponent = ({
@@ -150,40 +151,27 @@ const NPETimelineComponent = ({
     const deviceHeight = Math.max(1, Math.round((HEATMAP_HEIGHT + canvasZoneHeight) * devicePixelRatio));
     const columnCount = Math.max(1, Math.min(deviceWidth, dataSize));
 
-    const heatColumns = useMemo(() => {
-        const color = (v: number) => calculateLinkCongestionColor(v, 0, altCongestionColors);
-        // `undefined` (mcast N/A) has no colour of its own — it shares the -1
-        // "no data" ramp entry, matching the previous `color(mcast ?? -1)`.
-        const maxOf = (values: (number | undefined)[], start: number, end: number): number | undefined => {
-            let max: number | undefined;
-            for (let i = start; i < end; i++) {
-                const value = values[i];
-                if (value !== undefined && (max === undefined || value > max)) {
-                    max = value;
-                }
-            }
-            return max;
-        };
+    // Reduction is separate from colouring so switching palettes doesn't rescan the
+    // whole series — only the far smaller per-column result is recoloured.
+    const columnValues = useMemo(
+        () => [
+            reduceToColumns(metricValues.worst, columnCount),
+            reduceToColumns(metricValues.utilization, columnCount),
+            reduceToColumns(metricValues.demand, columnCount),
+            reduceToColumns(metricValues.mcast, columnCount),
+        ],
+        [metricValues, columnCount],
+    );
 
-        const reduce = (values: (number | undefined)[]): string[] => {
-            const columns: string[] = [];
-            for (let col = 0; col < columnCount; col++) {
-                const start = Math.floor((col * dataSize) / columnCount);
-                // Always cover at least one step so a column can't come out empty
-                // when columnCount and dataSize are close.
-                const end = Math.max(start + 1, Math.floor(((col + 1) * dataSize) / columnCount));
-                columns.push(color(maxOf(values, start, Math.min(end, dataSize)) ?? -1));
-            }
-            return columns;
-        };
-
-        return [
-            reduce(metricValues.worst),
-            reduce(metricValues.utilization),
-            reduce(metricValues.demand),
-            reduce(metricValues.mcast),
-        ];
-    }, [metricValues, columnCount, dataSize, altCongestionColors]);
+    const heatColumns = useMemo(
+        () =>
+            columnValues.map((column) =>
+                // A column with no data shares the -1 "no data" ramp entry, which is
+                // also how an N/A multicast value is drawn.
+                column.map((value) => calculateLinkCongestionColor(value ?? -1, 0, altCongestionColors)),
+            ),
+        [columnValues, altCongestionColors],
+    );
 
     useEffect(() => {
         const canvas = heatmapCanvasRef.current;
@@ -203,27 +191,29 @@ const NPETimelineComponent = ({
         const columnWidth = canvasWidth / columnCount;
 
         // A report with no timesteps has no heat rows to draw — zones below still do.
-        for (let row = 0; dataSize > 0 && row < numLines; row++) {
-            const y = row * rowHeight;
-            const columns = heatColumns[row];
-            let runStart = 0;
+        if (dataSize > 0) {
+            for (let row = 0; row < numLines; row++) {
+                const y = row * rowHeight;
+                const columns = heatColumns[row];
+                let runStart = 0;
 
-            // Coalesce neighbouring columns that resolved to the same colour into
-            // one rect. Long idle stretches collapse to a handful of fills, and it
-            // avoids per-column `fillStyle` churn. Runs abut exactly, so no rounding
-            // is needed to avoid seams — a column is one device pixel wide.
-            for (let col = 0; col < columnCount; col++) {
-                const isLast = col === columnCount - 1;
-                if (isLast || columns[col + 1] !== columns[runStart]) {
-                    ctx.fillStyle = columns[runStart];
-                    const x = runStart * columnWidth;
-                    ctx.fillRect(x, y, (col + 1) * columnWidth - x, rowHeight);
-                    runStart = col + 1;
+                // Coalesce neighbouring columns that resolved to the same colour into
+                // one rect. Long idle stretches collapse to a handful of fills, and it
+                // avoids per-column `fillStyle` churn. Runs abut exactly, so no rounding
+                // is needed to avoid seams — a column is one device pixel wide.
+                for (let col = 0; col < columnCount; col++) {
+                    const isLast = col === columnCount - 1;
+                    if (isLast || columns[col + 1] !== columns[runStart]) {
+                        ctx.fillStyle = columns[runStart];
+                        const x = runStart * columnWidth;
+                        ctx.fillRect(x, y, (col + 1) * columnWidth - x, rowHeight);
+                        runStart = col + 1;
+                    }
                 }
             }
         }
 
-        const chunkWidth = canvasWidth / dataSize;
+        const chunkWidth = dataSize > 0 ? canvasWidth / dataSize : 0;
 
         const groupBaseY = new Map<number, number>();
         {
@@ -278,24 +268,25 @@ const NPETimelineComponent = ({
         canvasWidth,
         canvasZoneHeight,
         devicePixelRatio,
-        deviceHeight,
-        selectedZoneList,
         zoneRanges,
     ]);
 
-    // The playhead is a positioned div rather than a canvas layer: a scrub then
-    // changes one style value the compositor can act on, instead of clearing and
-    // repainting a full-width canvas every tick. Percent-based so it needs no
-    // measurement and stays correct as the timeline is resized.
+    // The playhead is a positioned div rather than a canvas layer, so a scrub costs
+    // one element's layout + paint instead of clearing and repainting a full-width
+    // canvas every tick. Percent-based so it needs no measurement and stays correct
+    // as the timeline is resized.
     const playheadPercent = dataSize ? ((currentTimestep ?? 0) / dataSize) * 100 : 0;
+
+    // Clamped because a pointer at the extreme right edge (reachable with a
+    // fractional clientX under browser zoom) yields `dataSize`, and an out-of-range
+    // timestep throws during NPEView's render. #1803
+    const timestepAt = (clientX: number, rect: DOMRect): number =>
+        Math.min(dataSize - 1, Math.max(0, Math.floor(((clientX - rect.left) / rect.width) * dataSize)));
 
     const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>) => {
         const stack = stackRef.current;
         if (stack && dataSize) {
-            const rect = stack.getBoundingClientRect();
-            const chunkWidth = rect.width / dataSize;
-            const index = Math.floor((event.clientX - rect.left) / chunkWidth);
-            navigationCallback(index);
+            navigationCallback(timestepAt(event.clientX, stack.getBoundingClientRect()));
         }
     };
     const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -306,8 +297,7 @@ const NPETimelineComponent = ({
             // it for zone hit-testing while the index stays in CSS space.
             const scaleX = canvasWidth / rect.width;
             const mouseX = (event.clientX - rect.left) * scaleX;
-            const chunkWidth = rect.width / dataSize;
-            const hoveredIndex = Math.floor((event.clientX - rect.left) / chunkWidth);
+            const hoveredIndex = timestepAt(event.clientX, rect);
             const y = event.clientY - rect.top;
             const x = mouseX;
 

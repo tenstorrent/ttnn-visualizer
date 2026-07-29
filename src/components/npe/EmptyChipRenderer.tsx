@@ -14,7 +14,10 @@ interface EmptyChipRendererProps {
     dram?: number[][];
     eth?: number[][];
     pcie?: number[][];
-    showActiveTransfers: (arg: null) => void;
+    // Narrow on purpose: clicking bare backdrop can only clear a selection. A wider
+    // handler would tempt callers into passing the per-scrub-unstable
+    // `showActiveTransfers`, which would silently void the memo below.
+    onEmptyCellClick: () => void;
     selectedZoneAddress?: NPE_COORDINATES | null;
     isAnnotatingCores: boolean;
     TENSIX_SIZE: number;
@@ -42,7 +45,7 @@ export const EmptyChipRenderer = memo(
         dram,
         eth,
         pcie,
-        showActiveTransfers,
+        onEmptyCellClick,
         selectedZoneAddress,
         isAnnotatingCores,
         TENSIX_SIZE,
@@ -52,8 +55,16 @@ export const EmptyChipRenderer = memo(
         // cell resolves in O(1) instead of scanning all four arrays per cell.
         const nodeTypeByCoord = useMemo(() => {
             const byCoord = new Map<string, string>();
+            // First match wins, matching the original cores → dram → eth → pcie
+            // lookup chain. A plain `set` would make it last-wins and silently
+            // relabel any coordinate that appeared in two arch lists.
             const add = (locations: number[][] | undefined, kind: string) =>
-                locations?.forEach((loc) => byCoord.set(`${loc[0]}-${loc[1]}`, kind));
+                locations?.forEach((loc) => {
+                    const key = `${loc[0]}-${loc[1]}`;
+                    if (!byCoord.has(key)) {
+                        byCoord.set(key, kind);
+                    }
+                });
             add(cores, 'c');
             add(dram, 'd');
             add(eth, 'e');
@@ -94,7 +105,7 @@ export const EmptyChipRenderer = memo(
                                 className={classNames('tensix empty-tensix', {
                                     'selected-zone': isSelectedZone,
                                 })}
-                                onClick={() => showActiveTransfers(null)}
+                                onClick={onEmptyCellClick}
                                 style={{
                                     gridColumn: x + 1,
                                     gridRow: y + 1,

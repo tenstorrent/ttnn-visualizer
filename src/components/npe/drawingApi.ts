@@ -21,17 +21,65 @@ export const NOC_CONFIGURATION = {
     core: { x: CORE_CENTER.x, y: CORE_CENTER.y },
 };
 
+export interface Point {
+    x: number;
+    y: number;
+}
+
+// Geometry is numeric so both renderers can consume it directly: the SVG path
+// stringifies at the edge (`TensixTransferRenderer`), the canvas path uses the
+// numbers as-is. It used to be stored pre-formatted for SVG, which forced the
+// canvas to `split(',')` the points and regex-parse `rotate(a cx cy)` back into
+// numbers on every link of every repaint — a string contract between two modules
+// that no type or test could hold. #1803
 export interface LinkPoints {
     x1: number;
     y1: number;
     x2: number;
     y2: number;
-    arrow: { p1: string; p2: string; p3: string };
-    transform: string;
+    arrow: { p1: Point; p2: Point; p3: Point };
+    rotation: { angle: number; cx: number; cy: number } | null;
     color?: string;
     colors?: string[];
     nocId: NoCID;
 }
+
+// `points="x,y x,y x,y"` for an SVG <polygon>.
+export const formatArrowPoints = ({ p1, p2, p3 }: LinkPoints['arrow']): string =>
+    `${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`;
+
+// `transform="rotate(angle cx cy)"` for an SVG element, or undefined when the
+// link needs no rotation.
+export const formatRotation = (rotation: LinkPoints['rotation']): string | undefined =>
+    rotation ? `rotate(${rotation.angle} ${rotation.cx} ${rotation.cy})` : undefined;
+
+// Canvas twin of the SVG <line> + <polygon> pair `TensixTransferRenderer` emits.
+// Lives here so both renderers of the same geometry sit side by side. #1803
+export const drawLinkToCanvas = (ctx: CanvasRenderingContext2D, points: LinkPoints, color: string): void => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(points.x1, points.y1);
+    ctx.lineTo(points.x2, points.y2);
+    ctx.stroke();
+
+    const { p1, p2, p3 } = points.arrow;
+    ctx.save();
+    if (points.rotation) {
+        const { angle, cx, cy } = points.rotation;
+        ctx.translate(cx, cy);
+        ctx.rotate((angle * Math.PI) / 180);
+        ctx.translate(-cx, -cy);
+    }
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+};
 
 const colorList: string[] = [
     '#FFFFFF',
@@ -84,11 +132,11 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
     let arrowHeadHeight = 9;
     let arrowHeadWidth = 9;
 
-    let transform = '';
+    let rotation: LinkPoints['rotation'] = null;
     let angle: number;
 
     let arrowOffset: number;
-    let arrow = { p1: '', p2: '', p3: '' };
+    let arrow = { p1: { x: 0, y: 0 }, p2: { x: 0, y: 0 }, p3: { x: 0, y: 0 } };
     // const arrowSecondary = { p1: '', p2: '', p3: '' };
 
     switch (nocId) {
@@ -100,9 +148,9 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
             x2 = NOC_CENTER.x + NOC_1_X_OFFSET;
             y2 = 0;
             arrow = {
-                p1: `${x2 - arrowHeadWidth / 2},${y2 + arrowHeadHeight + arrowOffset}`,
-                p2: `${x2 + arrowHeadWidth / 2},${y2 + arrowHeadHeight + arrowOffset}`,
-                p3: `${x2},${y2 + arrowOffset}`,
+                p1: { x: x2 - arrowHeadWidth / 2, y: y2 + arrowHeadHeight + arrowOffset },
+                p2: { x: x2 + arrowHeadWidth / 2, y: y2 + arrowHeadHeight + arrowOffset },
+                p3: { x: x2, y: y2 + arrowOffset },
             };
             break;
 
@@ -115,9 +163,9 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
             y1 = NOC_CENTER.y + NOC_1_Y_OFFSET;
             y2 = NOC_CENTER.y + NOC_1_Y_OFFSET;
             arrow = {
-                p1: `${x2 + arrowHeadHeight + arrowOffset},${y2 - arrowHeadWidth / 2}`,
-                p2: `${x2 + arrowHeadHeight + arrowOffset},${y2 + arrowHeadWidth / 2}`,
-                p3: `${x2 + arrowOffset},${y2}`,
+                p1: { x: x2 + arrowHeadHeight + arrowOffset, y: y2 - arrowHeadWidth / 2 },
+                p2: { x: x2 + arrowHeadHeight + arrowOffset, y: y2 + arrowHeadWidth / 2 },
+                p3: { x: x2 + arrowOffset, y: y2 },
             };
 
             break;
@@ -130,9 +178,9 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
             y1 = NOC_CENTER.y + NOC_0_Y_OFFSET;
             y2 = NODE_SIZE;
             arrow = {
-                p1: `${x2 - arrowHeadWidth / 2},${y2 - arrowHeadHeight - arrowOffset}`,
-                p2: `${x2 + arrowHeadWidth / 2},${y2 - arrowHeadHeight - arrowOffset}`,
-                p3: `${x2},${y2 - arrowOffset}`,
+                p1: { x: x2 - arrowHeadWidth / 2, y: y2 - arrowHeadHeight - arrowOffset },
+                p2: { x: x2 + arrowHeadWidth / 2, y: y2 - arrowHeadHeight - arrowOffset },
+                p3: { x: x2, y: y2 - arrowOffset },
             };
 
             break;
@@ -145,9 +193,9 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
             y1 = NOC_CENTER.y + NOC_0_Y_OFFSET;
             y2 = NOC_CENTER.y + NOC_0_Y_OFFSET;
             arrow = {
-                p1: `${x2 - arrowHeadHeight - arrowOffset},${y2 - arrowHeadWidth / 2}`,
-                p2: `${x2 - arrowHeadHeight - arrowOffset},${y2 + arrowHeadWidth / 2}`,
-                p3: `${x2 - arrowOffset},${y2}`,
+                p1: { x: x2 - arrowHeadHeight - arrowOffset, y: y2 - arrowHeadWidth / 2 },
+                p2: { x: x2 - arrowHeadHeight - arrowOffset, y: y2 + arrowHeadWidth / 2 },
+                p3: { x: x2 - arrowOffset, y: y2 },
             };
             break;
         case NoCID.NOC0_OUT:
@@ -159,12 +207,12 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
             y1 = NOC_CENTER.y + NOC_0_Y_OFFSET - CORE_DISPERSION;
             y2 = CORE_CENTER.y + NOC_0_Y_OFFSET - CORE_DISPERSION;
             arrow = {
-                p1: `${x2 - arrowHeadWidth / 2},${y2 + arrowHeadHeight - arrowOffset}`,
-                p2: `${x2 + arrowHeadWidth / 2},${y2 + arrowHeadHeight - arrowOffset}`,
-                p3: `${x2},${y2 - arrowOffset}`,
+                p1: { x: x2 - arrowHeadWidth / 2, y: y2 + arrowHeadHeight - arrowOffset },
+                p2: { x: x2 + arrowHeadWidth / 2, y: y2 + arrowHeadHeight - arrowOffset },
+                p3: { x: x2, y: y2 - arrowOffset },
             };
             angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
-            transform = `rotate(${angle} ${x2} ${y2})`;
+            rotation = { angle, cx: x2, cy: y2 };
 
             break;
         case NoCID.NOC0_IN:
@@ -176,12 +224,12 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
             y2 = NOC_CENTER.y + NOC_0_Y_OFFSET + CORE_DISPERSION;
             y1 = CORE_CENTER.y + NOC_0_Y_OFFSET + CORE_DISPERSION;
             arrow = {
-                p1: `${x2 - arrowHeadWidth / 2},${y2 + arrowHeadHeight - arrowOffset}`,
-                p2: `${x2 + arrowHeadWidth / 2},${y2 + arrowHeadHeight - arrowOffset}`,
-                p3: `${x2},${y2 - arrowOffset}`,
+                p1: { x: x2 - arrowHeadWidth / 2, y: y2 + arrowHeadHeight - arrowOffset },
+                p2: { x: x2 + arrowHeadWidth / 2, y: y2 + arrowHeadHeight - arrowOffset },
+                p3: { x: x2, y: y2 - arrowOffset },
             };
             angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
-            transform = `rotate(${angle} ${x2} ${y2})`;
+            rotation = { angle, cx: x2, cy: y2 };
             break;
         case NoCID.NOC1_OUT:
             arrowHeadWidth = 7;
@@ -192,13 +240,13 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
             y1 = NOC_CENTER.y + NOC_1_Y_OFFSET - CORE_DISPERSION;
             y2 = CORE_CENTER.y + NOC_1_Y_OFFSET - CORE_DISPERSION;
             arrow = {
-                p1: `${x2 - arrowHeadWidth / 2},${y2 + arrowHeadHeight - arrowOffset}`,
-                p2: `${x2 + arrowHeadWidth / 2},${y2 + arrowHeadHeight - arrowOffset}`,
-                p3: `${x2},${y2 - arrowOffset}`,
+                p1: { x: x2 - arrowHeadWidth / 2, y: y2 + arrowHeadHeight - arrowOffset },
+                p2: { x: x2 + arrowHeadWidth / 2, y: y2 + arrowHeadHeight - arrowOffset },
+                p3: { x: x2, y: y2 - arrowOffset },
             };
             angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
 
-            transform = `rotate(${angle} ${x2} ${y2})`;
+            rotation = { angle, cx: x2, cy: y2 };
 
             break;
         case NoCID.NOC1_IN:
@@ -210,20 +258,20 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
             y2 = NOC_CENTER.y + NOC_1_Y_OFFSET + CORE_DISPERSION;
             y1 = CORE_CENTER.y + NOC_1_Y_OFFSET + CORE_DISPERSION;
             arrow = {
-                p1: `${x2 - arrowHeadWidth / 2},${y2 + arrowHeadHeight - arrowOffset}`,
-                p2: `${x2 + arrowHeadWidth / 2},${y2 + arrowHeadHeight - arrowOffset}`,
-                p3: `${x2},${y2 - arrowOffset}`,
+                p1: { x: x2 - arrowHeadWidth / 2, y: y2 + arrowHeadHeight - arrowOffset },
+                p2: { x: x2 + arrowHeadWidth / 2, y: y2 + arrowHeadHeight - arrowOffset },
+                p3: { x: x2, y: y2 - arrowOffset },
             };
             angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
 
-            transform = `rotate(${angle} ${x2} ${y2})`;
+            rotation = { angle, cx: x2, cy: y2 };
 
             break;
         default:
             // console.warn('Unknown link type', nocId);
             break;
     }
-    return { x2, y2, x1, y1, arrow, transform, color, nocId } as LinkPoints;
+    return { x2, y2, x1, y1, arrow, rotation, color, nocId } as LinkPoints;
 };
 export const calculateLinkCongestionColor = (value: number, min: number = 0, isHC: boolean = false): string => {
     if (value === -1) {

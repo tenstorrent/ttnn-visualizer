@@ -6,14 +6,14 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Collapsible from '../src/components/Collapsible';
 
-// Function children exist so a caller whose collapsed content is enormous (the NPE
+// `renderContent` exists so a caller whose collapsed content is enormous (the NPE
 // zone filter can hold ~100k rows) never builds that element tree while shut. #1803
 afterEach(() => {
     cleanup();
     vi.clearAllMocks();
 });
 
-describe('Collapsible function children', () => {
+describe('Collapsible lazy renderContent', () => {
     it('does not invoke the child builder while collapsed', () => {
         const build = vi.fn(() => <div data-testid='content'>body</div>);
 
@@ -21,10 +21,8 @@ describe('Collapsible function children', () => {
             <Collapsible
                 label='Section'
                 isOpen={false}
-                keepChildrenMounted={false}
-            >
-                {build}
-            </Collapsible>,
+                renderContent={build}
+            />,
         );
 
         expect(build).not.toHaveBeenCalled();
@@ -38,10 +36,8 @@ describe('Collapsible function children', () => {
             <Collapsible
                 label='Section'
                 isOpen={false}
-                keepChildrenMounted={false}
-            >
-                {() => <div data-testid='content'>body</div>}
-            </Collapsible>,
+                renderContent={() => <div data-testid='content'>body</div>}
+            />,
         );
 
         expect(screen.getByRole('button', { name: /Section/ })).toBeTruthy();
@@ -54,10 +50,8 @@ describe('Collapsible function children', () => {
             <Collapsible
                 label='Section'
                 isOpen={false}
-                keepChildrenMounted={false}
-            >
-                {build}
-            </Collapsible>,
+                renderContent={build}
+            />,
         );
         fireEvent.click(screen.getByRole('button', { name: /Section/ }));
 
