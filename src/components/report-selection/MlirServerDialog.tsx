@@ -7,9 +7,11 @@ import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_UPLOAD_PATH, MlirServerConnection } from '../../definitions/MlirServer';
+import { SSH_CONFIG_HOST_CUSTOM, SshConfigHost } from '../../definitions/RemoteConnection';
 import getServerConfig from '../../functions/getServerConfig';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
+import SshConfigHostPicker from './SshConfigHostPicker';
 import 'styles/components/RemoteConnectionDialog.scss';
 
 interface MlirServerDialogProps {
@@ -60,6 +62,9 @@ const MlirServerDialog = ({
 }: MlirServerDialogProps) => {
     const { testMlirServerConnection } = useMlirRemote();
     const [connection, setConnection] = useState<MlirServerConnection>(() => server ?? getDefaultServer());
+    const [selectedSshConfigHost, setSelectedSshConfigHost] = useState(() =>
+        server?.host ? server.host : SSH_CONFIG_HOST_CUSTOM,
+    );
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [isTestingConnection, setIsTestingConnection] = useState(false);
 
@@ -92,10 +97,27 @@ const MlirServerDialog = ({
     const closeDialog = (resetChanges?: boolean) => {
         if (resetChanges) {
             setConnection(server ?? getDefaultServer());
+            setSelectedSshConfigHost(server?.host ? server.host : SSH_CONFIG_HOST_CUSTOM);
         }
 
         setConnectionTests([]);
         onClose();
+    };
+
+    const handleSelectSshConfigHost = (host: SshConfigHost) => {
+        setSelectedSshConfigHost(host.host);
+        const defaults = getDefaultServer();
+        const previousUsername = connection.username.trim() || defaults.username;
+
+        updateConnection({
+            host: host.host,
+            // Prefer config User; otherwise keep the existing/default username so the
+            // field stays populated when User is only implied by OpenSSH (local login).
+            username: host.user?.trim() || previousUsername,
+            sshPort: host.port ?? connection.sshPort,
+            identityFile: undefined,
+            name: host.host,
+        });
     };
 
     return (
@@ -108,6 +130,13 @@ const MlirServerDialog = ({
             onClose={() => closeDialog(true)}
         >
             <DialogBody>
+                <SshConfigHostPicker
+                    value={selectedSshConfigHost}
+                    enabled={open}
+                    onSelectCustom={() => setSelectedSshConfigHost(SSH_CONFIG_HOST_CUSTOM)}
+                    onSelectHost={handleSelectSshConfigHost}
+                />
+
                 <FormGroup
                     label='Name'
                     subLabel='Server name'
@@ -122,7 +151,7 @@ const MlirServerDialog = ({
 
                 <FormGroup
                     label='Username'
-                    subLabel='Username to connect with'
+                    subLabel='Username to connect with (overrides SSH config User)'
                     labelFor='mlir-server-username'
                 >
                     <InputGroup
@@ -134,7 +163,7 @@ const MlirServerDialog = ({
 
                 <FormGroup
                     label='SSH host'
-                    subLabel='Machine you SSH into (not localhost — use the remote hostname, e.g. aus-wh-05)'
+                    subLabel='Machine you SSH into (not localhost — use the remote hostname or SSH config alias)'
                     labelFor='mlir-server-host'
                 >
                     <InputGroup
@@ -142,7 +171,10 @@ const MlirServerDialog = ({
                         placeholder='aus-wh-05'
                         intent={isLocalhostSshHost(connection.host) ? 'danger' : 'none'}
                         value={connection.host}
-                        onChange={(e) => updateConnection({ host: e.target.value })}
+                        onChange={(e) => {
+                            setSelectedSshConfigHost(SSH_CONFIG_HOST_CUSTOM);
+                            updateConnection({ host: e.target.value });
+                        }}
                     />
                     {isLocalhostSshHost(connection.host) && (
                         <p className='bp6-text-muted'>
@@ -194,12 +226,12 @@ const MlirServerDialog = ({
 
                 <FormGroup
                     label='SSH identity file (optional)'
-                    subLabel='Path to your private key on this machine (e.g. ~/.ssh/id_ed25519). Leave empty for default.'
+                    subLabel='Path to your private key. Leave empty to use SSH defaults / ~/.ssh/config for this host. Setting a path ignores SSH config for this connection.'
                     labelFor='mlir-server-identity'
                 >
                     <InputGroup
                         id='mlir-server-identity'
-                        placeholder='Leave empty for default key'
+                        placeholder='Leave empty for default / SSH config'
                         value={connection.identityFile ?? ''}
                         onChange={(e) => updateConnection({ identityFile: e.target.value.trim() || undefined })}
                     />

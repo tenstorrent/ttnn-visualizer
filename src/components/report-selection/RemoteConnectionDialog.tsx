@@ -7,10 +7,11 @@ import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { RemoteConnection } from '../../definitions/RemoteConnection';
+import { RemoteConnection, SSH_CONFIG_HOST_CUSTOM, SshConfigHost } from '../../definitions/RemoteConnection';
 import getServerConfig from '../../functions/getServerConfig';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
+import SshConfigHostPicker from './SshConfigHostPicker';
 import 'styles/components/RemoteConnectionDialog.scss';
 
 interface RemoteConnectionDialogProps {
@@ -75,6 +76,9 @@ const RemoteConnectionDialog = ({
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(
         () => remoteConnection ?? getDefaultConnection(),
     );
+    const [selectedSshConfigHost, setSelectedSshConfigHost] = useState(() =>
+        remoteConnection?.host ? remoteConnection.host : SSH_CONFIG_HOST_CUSTOM,
+    );
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
@@ -126,22 +130,50 @@ const RemoteConnectionDialog = ({
     const closeDialog = (resetChanges?: boolean) => {
         if (resetChanges) {
             setConnection(remoteConnection ?? getDefaultConnection());
+            setSelectedSshConfigHost(remoteConnection?.host ? remoteConnection.host : SSH_CONFIG_HOST_CUSTOM);
         }
 
         setConnectionTests([]);
         onClose();
     };
 
+    const handleSelectSshConfigHost = (host: SshConfigHost) => {
+        setSelectedSshConfigHost(host.host);
+        setConnection((prev) => {
+            const defaults = getDefaultConnection();
+            const previousUsername = prev.username?.trim() || defaults.username;
+
+            return {
+                ...prev,
+                host: host.host,
+                // Prefer config User; otherwise keep the existing/default username so the
+                // field stays populated when User is only implied by OpenSSH (local login).
+                username: host.user?.trim() || previousUsername,
+                port: host.port ?? prev.port ?? defaults.port,
+                identityFile: undefined,
+                name: host.host,
+            };
+        });
+        setConnectionTests([]);
+    };
+
     return (
         <Dialog
             className='remote-connection-dialog'
             title={title} // Blueprint Dialog renders a H6 here regardless of what markup you pass here
-            icon={IconNames.INFO_SIGN}
+            icon={IconNames.CLOUD_SERVER}
             canOutsideClickClose={false}
             isOpen={open}
             onClose={() => closeDialog(true)}
         >
             <DialogBody>
+                <SshConfigHostPicker
+                    value={selectedSshConfigHost}
+                    enabled={open}
+                    onSelectCustom={() => setSelectedSshConfigHost(SSH_CONFIG_HOST_CUSTOM)}
+                    onSelectHost={handleSelectSshConfigHost}
+                />
+
                 <FormGroup
                     label='Name'
                     subLabel='Connection name'
@@ -157,19 +189,22 @@ const RemoteConnectionDialog = ({
 
                 <FormGroup
                     label='SSH Host'
-                    subLabel='SSH host name (e.g., localhost)'
+                    subLabel='SSH host alias or hostname (e.g. work-gpu or localhost)'
                     labelFor='remote-ssh-host'
                 >
                     <InputGroup
                         id='remote-ssh-host'
                         value={connection.host}
-                        onChange={(e) => setConnection({ ...connection, host: e.target.value })}
+                        onChange={(e) => {
+                            setSelectedSshConfigHost(SSH_CONFIG_HOST_CUSTOM);
+                            setConnection({ ...connection, host: e.target.value });
+                        }}
                     />
                 </FormGroup>
 
                 <FormGroup
                     label='Username'
-                    subLabel='Username to connect with'
+                    subLabel='Username to connect with (overrides SSH config User)'
                     labelFor='remote-ssh-username'
                 >
                     <InputGroup
@@ -203,12 +238,12 @@ const RemoteConnectionDialog = ({
 
                 <FormGroup
                     label='SSH identity file (optional)'
-                    subLabel='Path to your private key on this machine (e.g. ~/.ssh/id_ed25519). Leave empty for default.'
+                    subLabel='Path to your private key. Leave empty to use SSH defaults / ~/.ssh/config for this host. Setting a path ignores SSH config for this connection.'
                     labelFor='remote-ssh-identity'
                 >
                     <InputGroup
                         id='remote-ssh-identity'
-                        placeholder='Leave empty for default key'
+                        placeholder='Leave empty for default / SSH config'
                         value={connection.identityFile ?? ''}
                         onChange={(e) =>
                             setConnection({

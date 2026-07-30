@@ -96,6 +96,7 @@ from ttnn_visualizer.sftp_operations import (
     sync_remote_profiler_folders,
 )
 from ttnn_visualizer.ssh_client import SSHClient
+from ttnn_visualizer.ssh_config import list_ssh_config_hosts
 from ttnn_visualizer.stack_trace_source import (
     check_stack_source_local_with_origin,
     check_stack_source_remote_with_origin,
@@ -1677,6 +1678,14 @@ def get_mesh_descriptor(instance: Instance):
         return jsonify({"docs": docs})
     except yaml.YAMLError as e:
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
+
+
+@api.route("/remote/ssh-config-hosts", methods=["GET"])
+@local_only
+def list_remote_ssh_config_hosts():
+    """List concrete Host aliases from the local user's ~/.ssh/config."""
+    hosts = list_ssh_config_hosts()
+    return jsonify([host.to_dict() for host in hosts])
 
 
 @api.route("/remote/test", methods=["POST"])

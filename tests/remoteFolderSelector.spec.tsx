@@ -47,7 +47,7 @@ const ADD_NEW_CONNECTION = 'Add new connection';
 const NO_CONNECTION = '(No connection)';
 const EDIT_NEW_CONNECTION = 'Edit selected connection';
 const REMOVE_NEW_CONNECTION = 'Remove selected connection';
-const FETCH_REMOTE_FOLDERS = 'Fetch remote folders list';
+const FETCH_REMOTE_FOLDERS = 'Fetch remote folders';
 const CONNECTION_NAME = 'Local - ssh://localhost:2222/';
 const NO_SELECTION = '(No selection)';
 

@@ -10,6 +10,7 @@ import RemoteConnectionDialog from './RemoteConnectionDialog';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
 import { isEqual } from '../../functions/math';
 import HighlightedText from '../HighlightedText';
+import 'styles/components/FileLoader.scss';
 
 interface RemoteConnectionSelectorProps {
     connectionList: RemoteConnection[];
@@ -39,7 +40,7 @@ const RemoteConnectionSelector = ({
     const selectedConnection = connection ?? connectionList[0];
 
     return (
-        <>
+        <div className='file-loader'>
             <div className='form-container'>
                 <Select
                     className='remote-select'
@@ -105,7 +106,7 @@ const RemoteConnectionSelector = ({
             </div>
 
             <Tooltip
-                content='Fetching remote folders list...'
+                content='Fetching remote folders...'
                 position={PopoverPosition.TOP}
                 disabled={!loading}
             >
@@ -113,11 +114,11 @@ const RemoteConnectionSelector = ({
                     icon={IconNames.REFRESH}
                     disabled={disabled || !selectedConnection}
                     loading={loading}
-                    text='Fetch remote folders list'
+                    text='Fetch remote folders'
                     onClick={() => onSyncRemoteFolderList(selectedConnection)}
                 />
             </Tooltip>
-        </>
+        </div>
     );
 };
 

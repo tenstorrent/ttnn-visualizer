@@ -20,7 +20,7 @@ The pieces:
 
 2. Server – On the remote host, your public key must be in the right place: one line per key in `~/.ssh/authorized_keys` for the user you connect as.
 
-3. Identity file – The “SSH identity file” in the app is the path to your private key on your machine. If you leave it empty, SSH uses its default (e.g. `~/.ssh/id_ed25519`). If you use a different key or path, enter the path here. When you set a custom identity, the app tells SSH to use only that key (and to ignore `~/.ssh/config` for that connection) so the right key is used.
+3. Identity file – The “SSH identity file” in the app is the path to your private key on your machine. If you leave it empty, SSH uses its default (e.g. `~/.ssh/id_ed25519`) and still reads `~/.ssh/config` (so Host aliases, ProxyJump, and config IdentityFile apply). If you use a different key or path, enter the path here. When you set a custom identity, the app tells SSH to use only that key (and to ignore `~/.ssh/config` for that connection) so the right key is used.
 
 4. Passphrase – If your private key has a passphrase, SSH would normally prompt for it. The app does not have a place to type that, and the SSH process has no terminal. You must unlock the key once using ssh-agent; after that, the agent provides the key and no prompt is needed:
    ```bash
@@ -96,10 +96,11 @@ sync the individual reports you would like to use.
 
 1. Open TT-NN Visualizer and navigate to the Reports tab.
 2. In the "Remote Sync" section, click "+ Add New Connection".
-3. Enter your SSH connection details (hostname, username, and report paths).
-4. SSH identity file (optional): Path to your private key on this machine (e.g. `~/.ssh/id_ed25519` or `/Users/you/break_id_ed25519_test`). Leave empty to use SSH’s default. Use this if you have multiple keys or the key is not in the default location. When set, the app uses only this key and ignores `~/.ssh/config` for this connection.
-5. Passphrase: The app never prompts for a passphrase. If your key has one, run `ssh-add /path/to/your_private_key` once (in the same terminal you use to start the app, or in an environment the app can see), then start the app.
-6. Click "Test Connection". If it succeeds, click "Add connection".
+3. Optionally choose an **SSH config host** from the dropdown (populated from your local `~/.ssh/config`). This prefills the Host alias, username, and port. Selecting a config host clears the identity file so OpenSSH can still apply ProxyJump, IdentityFile, and other config for that alias. Saved connections live in browser localStorage separately — the dropdown is only a prefiller, not a second connection list.
+4. Enter or adjust SSH connection details (hostname or Host alias, username, and report paths). The app always connects as `user@host`, which overrides any `User` in SSH config (including `Host *`). That can differ from bare `ssh my-alias` in a terminal when the stanza has no `User` and the form uses a different default.
+5. SSH identity file (optional): Path to your private key on this machine (e.g. `~/.ssh/id_ed25519` or `/Users/you/break_id_ed25519_test`). Leave empty to use SSH’s default and honour `~/.ssh/config` for the Host alias. When set, the app uses only this key and ignores `~/.ssh/config` for this connection.
+6. Passphrase: The app never prompts for a passphrase. If your key has one, run `ssh-add /path/to/your_private_key` once (in the same terminal you use to start the app, or in an environment the app can see), then start the app.
+7. Click "Test Connection". If it succeeds, click "Add connection".
 
 If authentication fails, the app will show a short message. Common causes: public key not in `~/.ssh/authorized_keys` on the server; wrong identity file path; or key has a passphrase and is not in ssh-agent (run `ssh-add` and restart the app from that environment). See [How SSH key authentication works](#how-ssh-key-authentication-works-overview) above for the full picture.
 

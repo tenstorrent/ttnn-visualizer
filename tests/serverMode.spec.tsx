@@ -53,7 +53,7 @@ it('Disable remote sync in Home route', () => {
     expect(screen.getAllByTestId(TEST_IDS.REMOTE_SYNC_DISABLED)).toHaveLength(1);
     expect(getButtonWithText('Add new connection')).toBeDisabled();
     expect(getButtonWithText('(No connection)')).toBeDisabled();
-    expect(getButtonWithText('Fetch remote folders list')).toBeDisabled();
+    expect(getButtonWithText('Fetch remote folders')).toBeDisabled();
     noSelectionButtons.forEach((button) => {
         expect(button).toBeDisabled();
     });
