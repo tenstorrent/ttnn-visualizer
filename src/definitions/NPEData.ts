@@ -5,6 +5,12 @@
 export const MIN_SUPPORTED_VERSION = '1.0.0';
 export const LEGACY_VISUALIZER_VERSION = '0.32.3'; // Version of the visualizer that supports pre-version data format
 
+// Shared React Query key prefixes for NPE hooks and NPEFileLoader cache bust (#861).
+export const NPE_QUERY_KEY = 'fetch-npe';
+export const NPE_TIMELINE_QUERY_KEY = 'get-npe-timeline';
+export const NPE_SUMMARY_QUERY_KEY = 'npe-summary';
+export const NPE_WINDOW_QUERY_KEY = 'npe-window';
+
 export enum NPEValidationError {
     OK,
     DEFAULT,
@@ -12,4 +18,14 @@ export enum NPEValidationError {
     INVALID_JSON,
     INVALID_NPE_DATA,
     EMPTY_NPE_TRACE,
+}
+
+/** Discriminant on synthetic client 422 bodies — parse vs shape must not share one UI label. */
+export enum NpeClientErrorKind {
+    PARSE = 'parse',
+    SHAPE = 'shape',
+}
+
+export interface NpeClientErrorBody {
+    kind: NpeClientErrorKind;
 }

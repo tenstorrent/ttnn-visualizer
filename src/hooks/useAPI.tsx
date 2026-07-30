@@ -2,13 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError } from 'axios';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { AxiosError, AxiosRequestConfig } from 'axios';
+import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import Ajv from 'ajv';
-import axiosInstance from '../libs/axiosInstance';
+import axiosInstance, { getOrCreateInstanceId } from '../libs/axiosInstance';
 import {
     Buffer,
     BufferChunk,
@@ -31,6 +31,8 @@ import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemory
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
+import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
+import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
 import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
@@ -52,7 +54,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { NPEData, NPEManifestEntry } from '../model/NPEModel';
+import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
 import {
@@ -66,6 +68,13 @@ import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions
 import { Signpost } from '../model/Signpost';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
+import {
+    NPE_QUERY_KEY,
+    NPE_SUMMARY_QUERY_KEY,
+    NPE_TIMELINE_QUERY_KEY,
+    NPE_WINDOW_QUERY_KEY,
+    NpeClientErrorKind,
+} from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
 import { ReportFolder } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
@@ -74,6 +83,10 @@ import { ToastType } from '../definitions/ToastType';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
+import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
+import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError';
+import validateNpeSummary from '../functions/validateNpeSummary';
+import validateNpeWindow from '../functions/validateNpeWindow';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -423,18 +436,68 @@ export const useGetNPEManifest = () => {
     });
 };
 
+const NPE_TEXT_GET_OPTIONS = {
+    responseType: 'text' as const,
+    transitional: { forcedJSONParsing: false },
+};
+
+// Own AbortController (not React Query's signal): Strict Mode remount must not
+// abort a multi-hundred-MB download. Report switch / overlapping fetch aborts the prior.
+let activeNpeRequestAbort: AbortController | null = null;
+
+/**
+ * Exported for contract tests; prefer useNpe / useNPETimelineFile at call sites.
+ *
+ * Contract: at most one NPE download may be in flight application-wide. Every
+ * caller shares `activeNpeRequestAbort`, so a second call aborts the first —
+ * callers must be mutually exclusive (see isNpeQueryEnabled / isTimelineQueryEnabled
+ * in NPE.tsx). A concurrent caller would kill a sibling's multi-hundred-MB download
+ * and surface the CanceledError as INVALID_NPE_DATA, since it carries no HTTP status.
+ */
+export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
+    // Abort any prior NPE download before starting a new one (key change / refetch).
+    // Do not wire React Query's AbortSignal — Strict Mode remount must join in-flight work.
+    activeNpeRequestAbort?.abort();
+    const abortController = new AbortController();
+    activeNpeRequestAbort = abortController;
+    try {
+        const response = await axiosInstance.get<string>(url, {
+            ...NPE_TEXT_GET_OPTIONS,
+            ...config,
+            signal: abortController.signal,
+        });
+        try {
+            // Parse then drop the text body so RQ caches only the object graph.
+            const parsed = parseNpeAxiosResponseData(response.data);
+            (response as { data: string | null }).data = null;
+            return parsed;
+        } catch (error) {
+            // Drop the huge string before throwing so the synthetic error does not
+            // keep it alive via the response reference.
+            (response as { data: string | null }).data = null;
+            // CONVENTIONS.md: client-side JSON failures → synthetic 422 AxiosError.
+            const message = error instanceof Error ? error.message : 'Failed to parse NPE response';
+            return throwNpeClientAxiosError(message, NpeClientErrorKind.PARSE, response);
+        }
+    } finally {
+        if (activeNpeRequestAbort === abortController) {
+            activeNpeRequestAbort = null;
+        }
+    }
+};
+
 const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
-    const { data } = await axiosInstance.get<NPEData>(`${Endpoints.PERFORMANCE}/npe/timeline`, {
+    return fetchNpeText(`${Endpoints.PERFORMANCE}/npe/timeline`, {
         params: { filename: fileName },
     });
-
-    return data;
 };
 
 export const useNPETimelineFile = (fileName: string | undefined) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNPETimeline(fileName!),
-        queryKey: ['get-npe-timeline', fileName],
+        // instanceId matches useNpeSummary/useNpeWindow — basename-only keys bleed
+        // cached whole-file payloads across instances on a name collision.
+        queryKey: [NPE_TIMELINE_QUERY_KEY, getOrCreateInstanceId(), fileName],
         retry: false,
         enabled: !!fileName,
     });
@@ -587,18 +650,70 @@ export const useOperationListRange = (): NumberRange | null => {
     );
 };
 
-const fetchNpeOpTrace = async () => {
-    const response = await axiosInstance.get<NPEData>(Endpoints.NPE);
-    return response?.data;
-};
+const fetchNpeOpTrace = async () => fetchNpeText(Endpoints.NPE);
 
 export const useNpe = (fileName: string | null) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNpeOpTrace(),
-        queryKey: ['fetch-npe', fileName],
+        // instanceId matches useNpeSummary/useNpeWindow — basename-only keys bleed
+        // cached whole-file payloads across instances on a name collision.
+        queryKey: [NPE_QUERY_KEY, getOrCreateInstanceId(), fileName],
         retry: false,
         staleTime: 30000,
         enabled: fileName !== null,
+    });
+};
+
+const fetchNpeSummary = async (signal?: AbortSignal): Promise<NpeSummary> => {
+    const response = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY, { signal });
+    const { data } = response;
+    const shapeError = validateNpeSummary(data);
+    if (shapeError) {
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE, response);
+    }
+    return data;
+};
+
+// #861 windowed loading: per-step aggregates for the whole trace, small enough
+// to load once; transfers/link_demand come from useNpeWindow per visited step.
+// instanceId is part of the key because staleTime is Infinity — a bare basename
+// key would serve one instance's cached report to another on a name collision.
+export const useNpeSummary = (fileName: string | null) => {
+    return useQuery<NpeSummary, AxiosError>({
+        queryFn: ({ signal }) => fetchNpeSummary(signal),
+        queryKey: [NPE_SUMMARY_QUERY_KEY, getOrCreateInstanceId(), fileName],
+        retry: false,
+        staleTime: Infinity,
+        enabled: fileName !== null,
+    });
+};
+
+const fetchNpeWindow = async (t: number, signal?: AbortSignal): Promise<NpeWindow> => {
+    const response = await axiosInstance.get<NpeWindow>(Endpoints.NPE_WINDOW, {
+        params: { t },
+        // React Query aborts this signal when the query is superseded; passing it
+        // lets axios cancel abandoned seeks during play/scrub instead of letting a
+        // storm of in-flight /npe/window requests all resolve and churn the cache.
+        signal,
+    });
+    const { data } = response;
+    const shapeError = validateNpeWindow(data);
+    if (shapeError) {
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE, response);
+    }
+    return data;
+};
+
+export const useNpeWindow = (fileName: string | null, t: number | null) => {
+    return useQuery<NpeWindow, AxiosError>({
+        queryFn: ({ signal }) => fetchNpeWindow(t!, signal),
+        queryKey: [NPE_WINDOW_QUERY_KEY, getOrCreateInstanceId(), fileName, t],
+        retry: false,
+        staleTime: Infinity,
+        // Keep the previous window visible while a seek's fetch is in flight so
+        // the graph doesn't flash empty on every scrub.
+        placeholderData: keepPreviousData,
+        enabled: fileName !== null && t !== null,
     });
 };
 
@@ -730,62 +845,27 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
-export interface DeviceOperationMapping {
-    name: string;
-    id: number;
-    operationName: string;
-    perfData?: PerfTableRow;
-}
-
+/**
+ * @description Every device operation in the memory report, flattened in report
+ * order. Multi-device collapsing happens at match time, not here, because only
+ * the performance report reveals which shape this report has (#1810).
+ */
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
-    const { data: devices } = useDevices();
-
-    /**
-     * TODO: update when device op data is device bound
-     * @description Collapse multi-device operations into single entry temporary logic, this can under certain circumstances lead to false positives
-     * @param data
-     * @param numDevices
-     */
-    const collapseMultideviceOPs = (data: DeviceOperationMapping[], numDevices: number): DeviceOperationMapping[] => {
-        if (numDevices === 1) {
-            return data;
-        }
-
-        const result: DeviceOperationMapping[] = [];
-        const operationCountByKey = new Map<string, number>();
-
-        for (const { name, id } of data) {
-            const key = `${name}-${id}`;
-            operationCountByKey.set(key, (operationCountByKey.get(key) || 0) + 1);
-        }
-
-        const seen = new Set<string>();
-
-        for (const item of data) {
-            const key = `${item.name}-${item.id}`;
-            if (!seen.has(key) && operationCountByKey.get(key) === numDevices) {
-                result.push(item);
-                seen.add(key);
-            }
-        }
-
-        return result;
-    };
 
     return useMemo(() => {
-        if (!operations || !devices) {
+        if (!operations) {
             return [];
         }
-        const result = operations.flatMap((operation) =>
+
+        return operations.flatMap((operation) =>
             operation.deviceOperationNameList.map((name) => ({
                 name,
                 id: operation.id,
                 operationName: operation.name,
             })),
         );
-        return collapseMultideviceOPs(result, devices.length);
-    }, [operations, devices]);
+    }, [operations]);
 };
 
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
@@ -802,22 +882,13 @@ const useProxyPerformanceReport = (): PerformanceReportResponse => {
 
 export const useGetDeviceOperationListPerf = () => {
     const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+    const { data: devices } = useDevices();
     const data = useProxyPerformanceReport();
 
-    return useMemo(() => {
-        const isValid = deviceOperations.every((deviceOperation, index) => {
-            const perfData = data.report[index];
-
-            if (perfData && perfData.raw_op_code === deviceOperation.name) {
-                deviceOperation.perfData = perfData;
-                return true;
-            }
-
-            return false;
-        });
-
-        return isValid ? deviceOperations : [];
-    }, [data, deviceOperations]);
+    return useMemo(
+        () => matchDeviceOperationsToPerf(deviceOperations, data.report, devices?.length ?? 0),
+        [data, deviceOperations, devices],
+    );
 };
 
 /**

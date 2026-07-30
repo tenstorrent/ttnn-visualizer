@@ -54,7 +54,10 @@ interface NPEProcessingStatusProps {
 const NPEProcessingStatus = ({ dataVersion, hasUploadedFile, errorCode, isLoading }: NPEProcessingStatusProps) => {
     if (isLoading) {
         return (
-            <div>
+            <div
+                className='npe-processing-status'
+                data-testid={TEST_IDS.NPE_PROCESSING_LOADING}
+            >
                 <LoadingSpinner />
             </div>
         );

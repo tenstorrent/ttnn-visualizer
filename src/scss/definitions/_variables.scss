@@ -29,10 +29,16 @@ $npe-highlight-src: #ff0;
 $npe-highlight-dst: #ff4500;
 
 // z-index scale
+// Keep in-page chrome below Blueprint overlays (`.bp6-overlay` is 20) so e.g.
+// NPE Run summary / zone-filter portals cannot cover FileStatusOverlay.
 $z-index-0-background: -1;
 $z-index-1-base: 0;
 $z-index-2-interactive: 1;
-$z-index-3-overlay: 1000;
+$z-index-3-overlay: 10;
+
+// Popovers/menus launched from within an overlay must stack above it, still
+// below Blueprint (20).
+$z-index-4-popover: 15;
 
 // Component-specific variables
 $active-transfer-width: 380px;

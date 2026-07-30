@@ -5,7 +5,8 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOpPerfRowScores } from '../src/hooks/useOpPerfRowScores';
-import { DeviceOperationMapping, useGetDeviceOperationListPerf } from '../src/hooks/useAPI';
+import { useGetDeviceOperationListPerf } from '../src/hooks/useAPI';
+import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
 import { PerfTableRow } from '../src/definitions/PerfTable';
 
 vi.mock('../src/hooks/useAPI', () => ({

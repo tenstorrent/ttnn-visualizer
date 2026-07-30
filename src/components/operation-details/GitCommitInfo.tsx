@@ -6,6 +6,7 @@ import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ReactNode } from 'react';
 import { buildGitCommitUrl, formatShortSha } from '../../functions/formatting';
+import 'styles/components/GitCommitInfo.scss';
 
 export interface GitMetadataProps {
     gitUrl: string | null;
@@ -25,6 +26,7 @@ function GitCommitInfo({ gitUrl, gitSha }: GitMetadataProps) {
             <strong>Commit:</strong>{' '}
             {commitUrl ? (
                 <a
+                    className='report-git-info-link'
                     href={commitUrl}
                     target='_blank'
                     rel='noreferrer'
