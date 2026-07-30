@@ -6,7 +6,8 @@ import classNames from 'classnames';
 import { Icon, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useMemo } from 'react';
-import { semverParse } from '../functions/semverParse';
+import { getVersionOutdatedLevel } from '../functions/getVersionOutdatedLevel';
+import { OutdatedLevel } from '../definitions/Versions';
 import { VERSION_ICON_SIZE } from '../definitions/UiConfig';
 import 'styles/components/AppVersionStatus.scss';
 
@@ -15,13 +16,6 @@ interface AppVersionStatusProps {
     latestAppVersion?: string;
     isServerMode?: boolean;
     latestVersionCheckFailed?: boolean;
-}
-
-enum OutdatedLevel {
-    NONE = 0,
-    ONE = 1,
-    TWO = 2,
-    THREE = 3,
 }
 
 const OUTDATED_CLASS_MAP: Record<OutdatedLevel, string> = {
@@ -110,38 +104,5 @@ function AppVersionStatus({
         </Tooltip>
     );
 }
-
-const getVersionOutdatedLevel = (appVersion: string, latestAppVersion: string): OutdatedLevel => {
-    if (!latestAppVersion || !appVersion) {
-        return OutdatedLevel.NONE;
-    }
-
-    const current = semverParse(appVersion);
-    const latest = semverParse(latestAppVersion);
-
-    if (!current || !latest) {
-        return OutdatedLevel.NONE;
-    }
-
-    const majorDiff = latest.major - current.major;
-    const minorDiff = latest.minor - current.minor;
-    const patchDiff = latest.patch - current.patch;
-
-    if (majorDiff > 0) {
-        return OutdatedLevel.THREE;
-    }
-
-    if (minorDiff === 1) {
-        return OutdatedLevel.ONE;
-    }
-    if (minorDiff === 2) {
-        return OutdatedLevel.TWO;
-    }
-    if (minorDiff > 2) {
-        return OutdatedLevel.THREE;
-    }
-
-    return patchDiff > 0 ? OutdatedLevel.ONE : OutdatedLevel.NONE;
-};
 
 export default AppVersionStatus;
