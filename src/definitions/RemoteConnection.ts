@@ -9,14 +9,6 @@ export const DEFAULT_SSH_PORT = 22;
 /** Sentinel value for the SSH-config dropdown “Custom” option. */
 export const SSH_CONFIG_HOST_CUSTOM = 'custom';
 
-export interface SshConfigHost {
-    host: string;
-    hostName?: string;
-    user?: string;
-    port?: number;
-    identityFile?: string;
-}
-
 export interface RemoteConnection {
     name: string;
     username: string;

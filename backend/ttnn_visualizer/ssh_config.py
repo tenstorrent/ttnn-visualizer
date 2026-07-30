@@ -35,21 +35,51 @@ class SshConfigHost:
     identityFile: Optional[str] = None
 
     def to_dict(self) -> Dict[str, object]:
-        return {key: value for key, value in asdict(self).items() if value is not None}
+        # Never serialise IdentityFile paths into the HTTP/browser surface.
+        return {
+            key: value
+            for key, value in asdict(self).items()
+            if value is not None and key != "identityFile"
+        }
+
+
+@dataclass(frozen=True)
+class SshConfigHostsResult:
+    """Payload for the SSH config host picker."""
+
+    configExists: bool
+    hosts: List[SshConfigHost]
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "configExists": self.configExists,
+            "hosts": [host.to_dict() for host in self.hosts],
+        }
+
+
+def load_ssh_config_hosts(
+    config_path: Optional[Path] = None,
+) -> SshConfigHostsResult:
+    """Load concrete Host aliases from ``config_path`` (default ``~/.ssh/config``).
+
+    When the config file is missing, ``configExists`` is false and ``hosts`` is
+    empty so the UI can hide the picker. Unreadable files are treated the same.
+    Duplicate aliases keep the last occurrence (OpenSSH last-wins).
+    """
+    path = config_path if config_path is not None else DEFAULT_SSH_CONFIG_PATH
+    if not path.is_file():
+        return SshConfigHostsResult(configExists=False, hosts=[])
+
+    host_by_alias: Dict[str, SshConfigHost] = {}
+    _parse_ssh_config_file(path, host_by_alias, depth=0)
+    return SshConfigHostsResult(configExists=True, hosts=list(host_by_alias.values()))
 
 
 def list_ssh_config_hosts(
     config_path: Optional[Path] = None,
 ) -> List[SshConfigHost]:
-    """Return concrete Host aliases from ``config_path`` (default ``~/.ssh/config``).
-
-    Missing or unreadable files yield an empty list. Duplicate aliases keep the
-    last occurrence (OpenSSH last-wins for conflicting Host blocks).
-    """
-    path = config_path if config_path is not None else DEFAULT_SSH_CONFIG_PATH
-    host_by_alias: Dict[str, SshConfigHost] = {}
-    _parse_ssh_config_file(path, host_by_alias, depth=0)
-    return list(host_by_alias.values())
+    """Return concrete Host aliases; empty when the config file is missing."""
+    return load_ssh_config_hosts(config_path).hosts
 
 
 def _parse_ssh_config_file(

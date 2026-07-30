@@ -3,7 +3,9 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { FormGroup, HTMLSelect } from '@blueprintjs/core';
-import { SSH_CONFIG_HOST_CUSTOM, SshConfigHost } from '../../definitions/RemoteConnection';
+import { SSH_CONFIG_HOST_CUSTOM } from '../../definitions/RemoteConnection';
+import { SshConfigHost } from '../../model/SshConfigHost';
+import getServerConfig from '../../functions/getServerConfig';
 import useSshConfigHosts, { getSshConfigHostLabel } from '../../hooks/useSshConfigHosts';
 
 interface SshConfigHostPickerProps {
@@ -16,9 +18,14 @@ interface SshConfigHostPickerProps {
 }
 
 const SshConfigHostPicker = ({ value, enabled = true, onSelectCustom, onSelectHost }: SshConfigHostPickerProps) => {
-    const { data: hosts = [], isError, isFetching } = useSshConfigHosts(enabled);
+    // Reading ~/.ssh/config is local-only; hide under hosted SERVER_MODE (AGENTS.md).
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    const { data, isError, isPending } = useSshConfigHosts(enabled && !isServerMode);
+    const hosts = data?.hosts ?? [];
+    const configExists = data?.configExists === true;
 
-    if (isError || (!isFetching && hosts.length === 0)) {
+    // Hide when ~/.ssh/config is missing, empty of concrete hosts, still loading, or errored.
+    if (isServerMode || isError || isPending || !configExists || hosts.length === 0) {
         return null;
     }
 
@@ -37,13 +44,12 @@ const SshConfigHostPicker = ({ value, enabled = true, onSelectCustom, onSelectHo
     return (
         <FormGroup
             label='SSH config host'
-            subLabel='Prefill from ~/.ssh/config. Selecting a host clears the identity file so OpenSSH can apply config (ProxyJump, IdentityFile). The app still connects as user@host, which overrides config User.'
+            subLabel='Prefill from ~/.ssh/config'
             labelFor='ssh-config-host-picker'
         >
             <HTMLSelect
                 id='ssh-config-host-picker'
                 fill
-                disabled={isFetching}
                 value={hosts.some((host) => host.host === value) ? value : SSH_CONFIG_HOST_CUSTOM}
                 onChange={(event) => handleChange(event.currentTarget.value)}
             >

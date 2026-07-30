@@ -5,15 +5,24 @@
 import { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import Endpoints from '../definitions/Endpoints';
-import { SshConfigHost } from '../definitions/RemoteConnection';
+import { SshConfigHost, SshConfigHostsResponse } from '../model/SshConfigHost';
 import getServerConfig from '../functions/getServerConfig';
 import axiosInstance from '../libs/axiosInstance';
 
 export const SSH_CONFIG_HOSTS_QUERY_KEY = ['ssh-config-hosts'] as const;
 
-const fetchSshConfigHosts = async (): Promise<SshConfigHost[]> => {
-    const response = await axiosInstance.get<SshConfigHost[]>(Endpoints.REMOTE_SSH_CONFIG_HOSTS);
-    return Array.isArray(response.data) ? response.data : [];
+const fetchSshConfigHosts = async (): Promise<SshConfigHostsResponse> => {
+    const response = await axiosInstance.get<SshConfigHostsResponse>(Endpoints.REMOTE_SSH_CONFIG_HOSTS);
+    const { data } = response;
+
+    if (!data || typeof data !== 'object' || !Array.isArray(data.hosts)) {
+        return { configExists: false, hosts: [] };
+    }
+
+    return {
+        configExists: Boolean(data.configExists),
+        hosts: data.hosts,
+    };
 };
 
 export const getSshConfigHostLabel = (host: SshConfigHost): string =>
@@ -26,7 +35,7 @@ export const getSshConfigHostLabel = (host: SshConfigHost): string =>
 const useSshConfigHosts = (enabled = true) => {
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
 
-    return useQuery<SshConfigHost[], AxiosError>({
+    return useQuery<SshConfigHostsResponse, AxiosError>({
         queryKey: SSH_CONFIG_HOSTS_QUERY_KEY,
         queryFn: fetchSshConfigHosts,
         enabled: enabled && !isServerMode,
