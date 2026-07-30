@@ -269,9 +269,13 @@ def reject_ssh_option_like(value: object) -> str:
     leading ``-`` makes the whole token an option — ``-oProxyCommand=…`` is then run
     through a shell. No POSIX username or DNS label starts with ``-``, so refusing one
     costs nothing.
+
+    Non-strings are refused here rather than handed to Pydantic, which coerces ``bytes``
+    and ``bytearray`` to ``str`` in lax mode *after* ``mode="before"`` validators run —
+    slipping a leading ``-`` past this check.
     """
     if not isinstance(value, str):
-        return value  # type: ignore[return-value]
+        raise ValueError("must be a string")
     if value.startswith("-"):
         raise ValueError("must not start with '-'")
     return value
@@ -285,7 +289,8 @@ def sanitise_remote_host_segment(value: object) -> str:
 def sanitise_ssh_username(value: object) -> str:
     """Normalise a user-provided SSH username for use in an ``ssh`` argv."""
     if not isinstance(value, str):
-        return value  # type: ignore[return-value]
+        raise ValueError("must be a string")
+    # Strip before the check: " -oProxyCommand=…" is option-like once trimmed.
     return reject_ssh_option_like(value.strip())
 
 
@@ -327,7 +332,7 @@ class MlirServerConnection(SerializeableModel):
     @classmethod
     def _strip_required_strings(cls, value: object) -> str:
         if not isinstance(value, str):
-            return value  # type: ignore[return-value]
+            raise ValueError("must be a string")
         stripped = value.strip()
         if not stripped:
             raise ValueError("must not be empty")

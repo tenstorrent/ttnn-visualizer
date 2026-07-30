@@ -81,6 +81,32 @@ def test_connection_rejects_an_option_like_ssh_target(overrides):
         _connection(**overrides)
 
 
+# Pydantic's lax mode coerces bytes and bytearray to str *after* our "before" validators
+# run, so passing a non-string through to Pydantic would let a leading "-" survive.
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"username": b"-oProxyCommand=id"},
+        {"host": bytearray(b"-oProxyCommand=id")},
+    ],
+    ids=["username-bytes", "host-bytearray"],
+)
+def test_connection_rejects_a_non_string_ssh_target(overrides):
+    with pytest.raises(ValidationError, match="must be a string"):
+        _connection(**overrides)
+
+
+def test_mlir_server_connection_rejects_a_non_string_ssh_target():
+    with pytest.raises(ValidationError, match="must be a string"):
+        MlirServerConnection(
+            name="mlir",
+            username=b"-oProxyCommand=id",
+            host="work-gpu",
+            sshPort=22,
+            port=8080,
+        )
+
+
 def test_mlir_server_connection_rejects_an_option_like_ssh_target():
     with pytest.raises(ValidationError, match="must not start with '-'"):
         MlirServerConnection(
