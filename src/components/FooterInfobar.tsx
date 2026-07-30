@@ -35,6 +35,7 @@ import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
 import { useGetLatestAppVersion, useInstance, useReportMetadata } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
+import { formatSyncedReportName } from '../functions/reportRank';
 import { Instance } from '../model/APIData';
 import LoadingSpinner from './LoadingSpinner';
 import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
@@ -181,7 +182,7 @@ function FooterInfobar() {
                             <div className='title'>
                                 <strong>Performance:</strong>
                                 <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
-                                    {formatName(activePerformanceReportPath)}
+                                    {formatSyncedReportName(formatName(activePerformanceReportPath))}
                                 </span>
                                 {performanceReportLocation !== null && (
                                     <ReportLocationTag location={performanceReportLocation} />

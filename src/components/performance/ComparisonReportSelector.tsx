@@ -10,6 +10,7 @@ import classNames from 'classnames';
 import LocalFolderPicker from '../report-selection/LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import { formatSyncedReportName } from '../../functions/reportRank';
 import { TEST_IDS } from '../../definitions/TestIds';
 
 interface ComparisonReportSelectorProps {
@@ -29,6 +30,7 @@ const ComparisonReportSelector = ({
 }: ComparisonReportSelectorProps) => {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const selectedReportName = comparisonReportList?.[reportIndex] || null;
 
     return (
         <FormGroup
@@ -46,7 +48,8 @@ const ComparisonReportSelector = ({
 
                         return folder.path !== activePerformanceReport?.path && !selectedReports.includes(folder.path);
                     })}
-                    value={comparisonReportList?.[reportIndex] || null}
+                    value={selectedReportName}
+                    valueLabel={selectedReportName ? formatSyncedReportName(selectedReportName) : null}
                     handleSelect={(folder: ReportFolder) => {
                         const updatedReports = [...(comparisonReportList || [])];
                         updatedReports[reportIndex] = folder.reportName;
@@ -64,8 +67,8 @@ const ComparisonReportSelector = ({
 
                         setComparisonReportList(updatedReports?.length === 0 ? null : updatedReports);
                     }}
-                    disabled={!comparisonReportList?.[reportIndex]}
-                    aria-label={comparisonReportList?.[reportIndex] ? `Remove report` : 'No report selected'}
+                    disabled={!selectedReportName}
+                    aria-label={selectedReportName ? `Remove report` : 'No report selected'}
                 />
             </div>
         </FormGroup>
