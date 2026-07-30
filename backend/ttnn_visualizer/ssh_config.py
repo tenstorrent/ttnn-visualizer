@@ -13,6 +13,7 @@ from __future__ import annotations
 import glob
 import logging
 import os
+import re
 import shlex
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -22,25 +23,25 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SSH_CONFIG_PATH = Path.home() / ".ssh" / "config"
 MAX_INCLUDE_DEPTH = 5
+_KEYWORD_SEPARATOR_PATTERN = re.compile(r"([^\s=]+)\s*=?\s*(.*)")
 
 
 @dataclass(frozen=True)
 class SshConfigHost:
-    """One concrete Host alias from an SSH config file."""
+    """One concrete Host alias from an SSH config file.
+
+    ``IdentityFile`` is deliberately absent: the picker clears the dialog's identity
+    field so OpenSSH keeps applying the stanza's own ``IdentityFile`` and ``ProxyJump``,
+    which leaves a local key path with no reason to reach the browser.
+    """
 
     host: str
     hostName: Optional[str] = None
     user: Optional[str] = None
     port: Optional[int] = None
-    identityFile: Optional[str] = None
 
     def to_dict(self) -> Dict[str, object]:
-        # Never serialise IdentityFile paths into the HTTP/browser surface.
-        return {
-            key: value
-            for key, value in asdict(self).items()
-            if value is not None and key != "identityFile"
-        }
+        return {key: value for key, value in asdict(self).items() if value is not None}
 
 
 @dataclass(frozen=True)
@@ -77,31 +78,27 @@ def load_ssh_config_hosts(
     return SshConfigHostsResult(configExists=True, hosts=list(host_by_alias.values()))
 
 
-def list_ssh_config_hosts(
-    config_path: Optional[Path] = None,
-) -> List[SshConfigHost]:
-    """Return concrete Host aliases; empty when the config file is missing."""
-    return load_ssh_config_hosts(config_path).hosts
-
-
 def _parse_ssh_config_file(
     path: Path,
     host_by_alias: Dict[str, SshConfigHost],
     depth: int,
     visited: Set[Path],
 ) -> None:
-    if depth > MAX_INCLUDE_DEPTH:
-        logger.warning("SSH config Include depth exceeded at %s", path)
-        return
-
     # OpenSSH permits re-inclusion, but a picker only needs each file once and the
     # depth cap alone leaves Include fan-out exponential in the number of matches.
+    # Checked before the depth cap: a file already parsed is not a runaway chain, and
+    # warning about it would bury the case the cap exists for.
     try:
         resolved = path.resolve()
     except OSError:
         resolved = path
     if resolved in visited:
         return
+
+    if depth > MAX_INCLUDE_DEPTH:
+        logger.warning("SSH config Include depth exceeded at %s", path)
+        return
+
     visited.add(resolved)
 
     try:
@@ -155,7 +152,7 @@ def _parse_ssh_config_file(
             current_aliases = [
                 alias
                 for alias in _tokenise_host_patterns(argument)
-                if not _is_wildcard_host_pattern(alias)
+                if not _is_non_literal_host_pattern(alias)
             ]
             current_values = {}
             continue
@@ -169,9 +166,6 @@ def _parse_ssh_config_file(
             current_values["user"] = argument
         elif keyword_lower == "port":
             current_values["port"] = argument
-        elif keyword_lower == "identityfile":
-            # Keep the first IdentityFile in the stanza; later ones are fallbacks.
-            current_values.setdefault("identityFile", argument)
 
     flush_host_block()
 
@@ -191,17 +185,12 @@ def _store_host_block(
         if parsed is not None and 1 <= parsed <= 65535:
             port = parsed
 
-    identity = values.get("identityFile")
-    if identity:
-        identity = os.path.expanduser(identity)
-
     for alias in aliases:
         host_by_alias[alias] = SshConfigHost(
             host=alias,
             hostName=values.get("hostName"),
             user=values.get("user"),
             port=port,
-            identityFile=identity,
         )
 
 
@@ -219,17 +208,17 @@ def _strip_ssh_config_comment(line: str) -> str:
 
 
 def _split_ssh_config_line(line: str) -> tuple[Optional[str], str]:
-    """Split ``Keyword value`` or ``Keyword=value`` into keyword + remainder."""
-    if "=" in line.split(None, 1)[0]:
-        keyword, _, remainder = line.partition("=")
-        return keyword.strip() or None, remainder.strip()
+    """Split ``Keyword value``, ``Keyword=value`` or ``Keyword = value``.
 
-    parts = line.split(None, 1)
-    if not parts:
+    OpenSSH allows whitespace, a single ``=``, or both between a keyword and its
+    argument, so the whole separator has to be consumed at once — splitting on the
+    first ``=`` alone reads ``Host = alias`` as the two aliases ``=`` and ``alias``.
+    """
+    match = _KEYWORD_SEPARATOR_PATTERN.match(line)
+    if match is None:
         return None, ""
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], parts[1].strip()
+
+    return match.group(1), match.group(2).strip()
 
 
 def _tokenise_host_patterns(argument: str) -> List[str]:
@@ -241,8 +230,10 @@ def _tokenise_host_patterns(argument: str) -> List[str]:
         return argument.split()
 
 
-def _is_wildcard_host_pattern(pattern: str) -> bool:
-    return "*" in pattern or "?" in pattern
+def _is_non_literal_host_pattern(pattern: str) -> bool:
+    # Wildcards and negations describe a set of hosts rather than one you can connect
+    # to, so neither belongs in a picker of concrete aliases.
+    return pattern.startswith("!") or "*" in pattern or "?" in pattern
 
 
 def _expand_include_paths(argument: str, base_dir: Path) -> List[Path]:

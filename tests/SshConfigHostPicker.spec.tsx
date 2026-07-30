@@ -42,10 +42,14 @@ beforeEach(() => {
     useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
 });
 
-const renderPicker = (value: string, handlers?: { onSelectHost?: () => void; onSelectCustom?: () => void }) =>
+const renderPicker = (
+    value: string,
+    handlers?: { onSelectHost?: () => void; onSelectCustom?: () => void; enabled?: boolean },
+) =>
     render(
         <SshConfigHostPicker
             value={value}
+            enabled={handlers?.enabled}
             onSelectCustom={handlers?.onSelectCustom ?? vi.fn()}
             onSelectHost={handlers?.onSelectHost ?? vi.fn()}
         />,
@@ -91,6 +95,20 @@ describe('SshConfigHostPicker', () => {
         const { container } = renderPicker(SSH_CONFIG_HOST_CUSTOM);
 
         expect(container).toBeEmptyDOMElement();
+        expect(useSshConfigHostsMock).toHaveBeenCalledWith(false);
+    });
+
+    it('fetches when mounted enabled', () => {
+        renderPicker(SSH_CONFIG_HOST_CUSTOM);
+
+        expect(useSshConfigHostsMock).toHaveBeenCalledWith(true);
+    });
+
+    it('skips fetching when the dialog disables it', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
+
+        renderPicker(SSH_CONFIG_HOST_CUSTOM, { enabled: false });
+
         expect(useSshConfigHostsMock).toHaveBeenCalledWith(false);
     });
 

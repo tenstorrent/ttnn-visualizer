@@ -135,6 +135,32 @@ describe('MlirServerDialog SSH config prefill', () => {
         expect(mlirPort).toHaveValue(portBeforePrefill);
     });
 
+    it('gates the config-host fetch on the dialog being open', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
+        const props = { onClose: vi.fn(), onAddServer: vi.fn() };
+
+        const { unmount } = render(
+            <MlirServerDialog
+                open={false}
+                {...props}
+            />,
+        );
+
+        // Blueprint unmounts the dialog body when closed, so nothing reads ~/.ssh/config;
+        // enabled={open} keeps the fetch gated if the picker is ever rendered outside it.
+        expect(useSshConfigHostsMock).not.toHaveBeenCalled();
+        unmount();
+
+        render(
+            <MlirServerDialog
+                open
+                {...props}
+            />,
+        );
+
+        expect(useSshConfigHostsMock).toHaveBeenLastCalledWith(true);
+    });
+
     it('hides the SSH config host picker under SERVER_MODE', () => {
         getServerConfigMock.mockReturnValue({
             SSH_DEFAULT_PORT: 2222,

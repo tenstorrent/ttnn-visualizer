@@ -39,7 +39,10 @@ def _build_allowed_origins(
         if flask_env.lower() != "production":
             configured += f",http://{dev_server_host}:{dev_server_port}"
 
-    return [origin for origin in configured.split(",") if origin]
+    # Trimmed because an allowlist written the natural way ("a, b") would otherwise
+    # carry a leading space that can never match an Origin header.
+    origins = (origin.strip() for origin in configured.split(","))
+    return [origin for origin in origins if origin]
 
 
 class DefaultConfig(object):

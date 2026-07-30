@@ -208,6 +208,32 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
         expect(screen.queryByLabelText('SSH config host')).not.toBeInTheDocument();
     });
 
+    it('gates the config-host fetch on the dialog being open', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
+        const props = { onClose: vi.fn(), onAddConnection: vi.fn() };
+
+        const { unmount } = render(
+            <RemoteConnectionDialog
+                open={false}
+                {...props}
+            />,
+        );
+
+        // Blueprint unmounts the dialog body when closed, so nothing reads ~/.ssh/config;
+        // enabled={open} keeps the fetch gated if the picker is ever rendered outside it.
+        expect(useSshConfigHostsMock).not.toHaveBeenCalled();
+        unmount();
+
+        render(
+            <RemoteConnectionDialog
+                open
+                {...props}
+            />,
+        );
+
+        expect(useSshConfigHostsMock).toHaveBeenLastCalledWith(true);
+    });
+
     it('hides the SSH config host picker when ~/.ssh/config does not exist', () => {
         useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
 
@@ -251,6 +277,52 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
         expect(screen.queryByText('SSH connection established')).not.toBeInTheDocument();
         expect(screen.getByText('Check SSH connection is valid')).toBeInTheDocument();
         expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it.each([
+        ['SSH Host', 'other-host'],
+        ['Username', 'carol'],
+        ['SSH Port', '2022'],
+        ['Memory report folder path', '/elsewhere'],
+    ])('discards a passing test result when %s is edited by hand', async (label, value) => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'work-gpu' } });
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+        expect(screen.queryByText('SSH connection established')).not.toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('keeps a passing test result when only the connection name changes', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my lab box' } });
+
+        expect(screen.getByText('SSH connection established')).toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeEnabled();
     });
 
     it('saves the prefilled connection without an identity file', async () => {

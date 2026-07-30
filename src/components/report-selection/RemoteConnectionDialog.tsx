@@ -96,6 +96,13 @@ const RemoteConnectionDialog = ({
         connection.port &&
         (connection.profilerPath?.trim() || connection.performancePath?.trim());
 
+    // Everything the test actually exercises — the SSH target, the credentials, and the
+    // paths it stats — invalidates a previous result. The connection name doesn't.
+    const updateConnection = (changes: Partial<RemoteConnection>) => {
+        setConnection({ ...connection, ...changes });
+        setConnectionTests([]);
+    };
+
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
 
@@ -141,21 +148,17 @@ const RemoteConnectionDialog = ({
 
     const handleSelectSshConfigHost = (host: SshConfigHost) => {
         setSelectedSshConfigHost(host.host);
-        setConnection((prev) => {
-            const defaults = getDefaultConnection();
+        const defaults = getDefaultConnection();
 
-            return {
-                ...prev,
-                ...getSshConfigHostPrefill(host, {
-                    name: prev.name,
-                    username: prev.username,
-                    port: prev.port,
-                    defaultUsername: defaults.username,
-                    defaultPort: defaults.port,
-                }),
-            };
-        });
-        setConnectionTests([]);
+        updateConnection(
+            getSshConfigHostPrefill(host, {
+                name: connection.name,
+                username: connection.username,
+                port: connection.port,
+                defaultUsername: defaults.username,
+                defaultPort: defaults.port,
+            }),
+        );
     };
 
     return (
@@ -198,7 +201,7 @@ const RemoteConnectionDialog = ({
                         value={connection.host}
                         onChange={(e) => {
                             setSelectedSshConfigHost(SSH_CONFIG_HOST_CUSTOM);
-                            setConnection({ ...connection, host: e.target.value });
+                            updateConnection({ host: e.target.value });
                         }}
                     />
                 </FormGroup>
@@ -212,7 +215,7 @@ const RemoteConnectionDialog = ({
                         id='remote-ssh-username'
                         value={connection.username ?? ''}
                         onChange={(e) => {
-                            setConnection({ ...connection, username: e.target.value });
+                            updateConnection({ username: e.target.value });
                         }}
                     />
                 </FormGroup>
@@ -229,9 +232,9 @@ const RemoteConnectionDialog = ({
                             const number = Number.parseInt(e.target.value, 10);
 
                             if (e.target.value === '') {
-                                setConnection({ ...connection, port: undefined });
+                                updateConnection({ port: undefined });
                             } else if (number > 0 && number < 99999) {
-                                setConnection({ ...connection, port: number });
+                                updateConnection({ port: number });
                             }
                         }}
                     />
@@ -246,12 +249,7 @@ const RemoteConnectionDialog = ({
                         id='remote-ssh-identity'
                         placeholder='Leave empty for default / SSH config'
                         value={connection.identityFile ?? ''}
-                        onChange={(e) =>
-                            setConnection({
-                                ...connection,
-                                identityFile: e.target.value.trim() || undefined,
-                            })
-                        }
+                        onChange={(e) => updateConnection({ identityFile: e.target.value.trim() || undefined })}
                     />
                 </FormGroup>
 
@@ -263,7 +261,7 @@ const RemoteConnectionDialog = ({
                     <InputGroup
                         id='remote-memory-path'
                         value={connection.profilerPath}
-                        onChange={(e) => setConnection({ ...connection, profilerPath: e.target.value })}
+                        onChange={(e) => updateConnection({ profilerPath: e.target.value })}
                     />
                 </FormGroup>
 
@@ -275,7 +273,7 @@ const RemoteConnectionDialog = ({
                     <InputGroup
                         id='remote-performance-path'
                         value={connection.performancePath ?? ''}
-                        onChange={(e) => setConnection({ ...connection, performancePath: e.target.value })}
+                        onChange={(e) => updateConnection({ performancePath: e.target.value })}
                     />
                 </FormGroup>
 

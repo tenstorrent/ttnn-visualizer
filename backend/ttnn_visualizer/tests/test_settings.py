@@ -58,6 +58,16 @@ def test_configured_origins_replace_the_defaults():
     ]
 
 
+def test_configured_origins_tolerate_whitespace():
+    origins = _build_allowed_origins(
+        " https://a.example , https://b.example ,, ",
+        flask_env="development",
+        **DEV_ARGS,
+    )
+
+    assert origins == ["https://a.example", "https://b.example"]
+
+
 def test_empty_configured_origins_trust_nothing():
     assert _build_allowed_origins("", flask_env="development", **DEV_ARGS) == []
 
