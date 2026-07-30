@@ -12,7 +12,7 @@ import RemoteFolderSelector from '../src/components/report-selection/RemoteFolde
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
-import { RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
+import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
 import { isActivatingReportAtom } from '../src/store/app';
@@ -47,7 +47,7 @@ const ADD_NEW_CONNECTION = 'Add new connection';
 const NO_CONNECTION = '(No connection)';
 const EDIT_NEW_CONNECTION = 'Edit selected connection';
 const REMOVE_NEW_CONNECTION = 'Remove selected connection';
-const FETCH_REMOTE_FOLDERS = 'Fetch remote folders';
+const FETCH_REMOTE_FOLDERS = FETCH_REMOTE_FOLDERS_LABEL;
 const CONNECTION_NAME = 'Local - ssh://localhost:2222/';
 const NO_SELECTION = '(No selection)';
 

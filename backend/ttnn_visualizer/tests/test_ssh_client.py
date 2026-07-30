@@ -10,7 +10,9 @@ its ProxyJump, IdentityFile and friends; a set identity file must isolate the ru
 
 import os
 
-from ttnn_visualizer.models import RemoteConnection
+import pytest
+from pydantic import ValidationError
+from ttnn_visualizer.models import MlirServerConnection, RemoteConnection
 from ttnn_visualizer.ssh_client import SSHClient
 
 
@@ -59,3 +61,32 @@ def test_base_commands_pass_a_non_default_port():
 
     assert client._base_ssh_cmd[client._base_ssh_cmd.index("-p") + 1] == "2222"
     assert client._base_sftp_cmd[client._base_sftp_cmd.index("-P") + 1] == "2222"
+
+
+# The target lands in option position in every one of these argvs, so a username or
+# host starting with "-" would be read as an option — "-oProxyCommand=…" is executed
+# through a shell — rather than as the machine to connect to.
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"username": "-oProxyCommand=touch /tmp/pwned"},
+        # No slash: the host is collapsed to a basename first, which already defuses a
+        # payload carrying a path separator but leaves a bare option intact.
+        {"host": "-oProxyCommand=id"},
+    ],
+    ids=["username", "host"],
+)
+def test_connection_rejects_an_option_like_ssh_target(overrides):
+    with pytest.raises(ValidationError, match="must not start with '-'"):
+        _connection(**overrides)
+
+
+def test_mlir_server_connection_rejects_an_option_like_ssh_target():
+    with pytest.raises(ValidationError, match="must not start with '-'"):
+        MlirServerConnection(
+            name="mlir",
+            username="-oProxyCommand=touch /tmp/pwned",
+            host="work-gpu",
+            sshPort=22,
+            port=8080,
+        )

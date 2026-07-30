@@ -11,8 +11,9 @@ import { SshConfigHost } from '../../model/SshConfigHost';
 import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import useMlirRemote from '../../hooks/useMlirRemote';
+import useSshConfigHostSelection from '../../hooks/useSshConfigHostSelection';
 import ConnectionTestMessage from './ConnectionTestMessage';
-import SshConfigHostPicker, { SSH_CONFIG_HOST_CUSTOM } from './SshConfigHostPicker';
+import SshConfigHostPicker from './SshConfigHostPicker';
 import 'styles/components/RemoteConnectionDialog.scss';
 
 interface MlirServerDialogProps {
@@ -63,9 +64,7 @@ const MlirServerDialog = ({
 }: MlirServerDialogProps) => {
     const { testMlirServerConnection } = useMlirRemote();
     const [connection, setConnection] = useState<MlirServerConnection>(() => server ?? getDefaultServer());
-    const [selectedSshConfigHost, setSelectedSshConfigHost] = useState(() =>
-        server?.host ? server.host : SSH_CONFIG_HOST_CUSTOM,
-    );
+    const { selectedHost, selectHost, selectCustom, resetSelection } = useSshConfigHostSelection(server?.host);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [isTestingConnection, setIsTestingConnection] = useState(false);
 
@@ -98,7 +97,7 @@ const MlirServerDialog = ({
     const closeDialog = (resetChanges?: boolean) => {
         if (resetChanges) {
             setConnection(server ?? getDefaultServer());
-            setSelectedSshConfigHost(server?.host ? server.host : SSH_CONFIG_HOST_CUSTOM);
+            resetSelection();
         }
 
         setConnectionTests([]);
@@ -106,7 +105,7 @@ const MlirServerDialog = ({
     };
 
     const handleSelectSshConfigHost = (host: SshConfigHost) => {
-        setSelectedSshConfigHost(host.host);
+        selectHost(host.host);
         const defaults = getDefaultServer();
         const { port, ...prefill } = getSshConfigHostPrefill(host, {
             name: connection.name,
@@ -131,9 +130,9 @@ const MlirServerDialog = ({
         >
             <DialogBody>
                 <SshConfigHostPicker
-                    value={selectedSshConfigHost}
+                    value={selectedHost}
                     enabled={open}
-                    onSelectCustom={() => setSelectedSshConfigHost(SSH_CONFIG_HOST_CUSTOM)}
+                    onSelectCustom={selectCustom}
                     onSelectHost={handleSelectSshConfigHost}
                 />
 
@@ -172,7 +171,7 @@ const MlirServerDialog = ({
                         intent={isLocalhostSshHost(connection.host) ? 'danger' : 'none'}
                         value={connection.host}
                         onChange={(e) => {
-                            setSelectedSshConfigHost(SSH_CONFIG_HOST_CUSTOM);
+                            selectCustom();
                             updateConnection({ host: e.target.value });
                         }}
                     />

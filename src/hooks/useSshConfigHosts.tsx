@@ -5,7 +5,7 @@
 import { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import Endpoints from '../definitions/Endpoints';
-import { SshConfigHostsResponse } from '../model/SshConfigHost';
+import { SshConfigHostsResponse, isSshConfigHost } from '../model/SshConfigHost';
 import getServerConfig from '../functions/getServerConfig';
 import axiosInstance from '../libs/axiosInstance';
 
@@ -21,7 +21,7 @@ const fetchSshConfigHosts = async (): Promise<SshConfigHostsResponse> => {
 
     return {
         configExists: Boolean(data.configExists),
-        hosts: data.hosts,
+        hosts: data.hosts.filter(isSshConfigHost),
     };
 };
 

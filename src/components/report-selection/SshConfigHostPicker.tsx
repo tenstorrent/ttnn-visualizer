@@ -3,17 +3,16 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { FormGroup, HTMLSelect } from '@blueprintjs/core';
+import { useMemo } from 'react';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../../definitions/SshConfigHostPicker';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getSshConfigHostLabel } from '../../functions/formatting';
 import getServerConfig from '../../functions/getServerConfig';
 import useSshConfigHosts from '../../hooks/useSshConfigHosts';
 
-/**
- * Sentinel for the dropdown's “Custom” option. The backend drops wildcard patterns,
- * so `*` can never collide with a concrete alias the way a plausible name like
- * `custom` could.
- */
-export const SSH_CONFIG_HOST_CUSTOM = '*';
+// Shared and frozen so an absent payload doesn't hand the memos below a new array
+// identity on every render of the surrounding dialog.
+const NO_HOSTS: readonly SshConfigHost[] = Object.freeze([]);
 
 interface SshConfigHostPickerProps {
     /** Currently selected alias, or {@link SSH_CONFIG_HOST_CUSTOM}. */
@@ -28,8 +27,24 @@ const SshConfigHostPicker = ({ value, enabled = true, onSelectCustom, onSelectHo
     // Reading ~/.ssh/config is local-only; hide under hosted SERVER_MODE (AGENTS.md).
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
     const { data, isError, isPending } = useSshConfigHosts(enabled && !isServerMode);
-    const hosts = data?.hosts ?? [];
+    const hosts = data?.hosts ?? NO_HOSTS;
     const configExists = data?.configExists === true;
+
+    // A generated SSH config can run to thousands of stanzas, and every keystroke in
+    // the surrounding dialog re-renders this component.
+    const aliases = useMemo(() => new Set(hosts.map((host) => host.host)), [hosts]);
+    const options = useMemo(
+        () =>
+            hosts.map((host) => (
+                <option
+                    key={host.host}
+                    value={host.host}
+                >
+                    {getSshConfigHostLabel(host)}
+                </option>
+            )),
+        [hosts],
+    );
 
     // Hide when ~/.ssh/config is missing, empty of concrete hosts, still loading, or errored.
     if (isServerMode || isError || isPending || !configExists || hosts.length === 0) {
@@ -50,25 +65,18 @@ const SshConfigHostPicker = ({ value, enabled = true, onSelectCustom, onSelectHo
 
     return (
         <FormGroup
-            label='SSH config host'
+            label={SSH_CONFIG_HOST_LABEL}
             subLabel='Prefill from ~/.ssh/config'
             labelFor='ssh-config-host-picker'
         >
             <HTMLSelect
                 id='ssh-config-host-picker'
                 fill
-                value={hosts.some((host) => host.host === value) ? value : SSH_CONFIG_HOST_CUSTOM}
+                value={aliases.has(value) ? value : SSH_CONFIG_HOST_CUSTOM}
                 onChange={(event) => handleChange(event.currentTarget.value)}
             >
                 <option value={SSH_CONFIG_HOST_CUSTOM}>Custom</option>
-                {hosts.map((host) => (
-                    <option
-                        key={host.host}
-                        value={host.host}
-                    >
-                        {getSshConfigHostLabel(host)}
-                    </option>
-                ))}
+                {options}
             </HTMLSelect>
         </FormGroup>
     );

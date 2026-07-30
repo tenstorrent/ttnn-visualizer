@@ -7,10 +7,10 @@ import { Button, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRendererProps, Select } from '@blueprintjs/select';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
-import { RemoteConnection } from '../../definitions/RemoteConnection';
+import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
 import { isEqual } from '../../functions/math';
 import HighlightedText from '../HighlightedText';
-import 'styles/components/FileLoader.scss';
+import 'styles/components/RemoteConnectionSelector.scss';
 
 interface RemoteConnectionSelectorProps {
     connectionList: RemoteConnection[];
@@ -40,7 +40,7 @@ const RemoteConnectionSelector = ({
     const selectedConnection = connection ?? connectionList[0];
 
     return (
-        <div className='file-loader'>
+        <div className='remote-connection-selector'>
             <div className='form-container'>
                 <Select
                     className='remote-select'
@@ -114,7 +114,7 @@ const RemoteConnectionSelector = ({
                     icon={IconNames.REFRESH}
                     disabled={disabled || !selectedConnection}
                     loading={loading}
-                    text='Fetch remote folders'
+                    text={FETCH_REMOTE_FOLDERS_LABEL}
                     onClick={() => onSyncRemoteFolderList(selectedConnection)}
                 />
             </Tooltip>

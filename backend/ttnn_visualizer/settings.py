@@ -45,6 +45,30 @@ def _build_allowed_origins(
     return [origin for origin in origins if origin]
 
 
+class _AllowedOrigins:
+    """Resolve the CORS allowlist on read rather than at class-body import time.
+
+    ``main()`` defaults ``FLASK_ENV`` to production and applies ``--port`` by mutating
+    the environment *after* this module is imported. Today the serving process is a
+    fresh gunicorn subprocess that inherits those values, so a value computed in the
+    class body happens to be right there — but wrong in the launching process, which
+    prints it in the startup environment dump, and wrong for anything that builds an
+    app in-process. Reading through ``PORT`` on the owning config also picks up a
+    ``--port`` override applied to the config object rather than the environment.
+    """
+
+    def __get__(self, instance: object, owner: type) -> List[str]:
+        source = instance if instance is not None else owner
+
+        return _build_allowed_origins(
+            os.getenv("ALLOWED_ORIGINS"),
+            app_port=str(getattr(source, "PORT")),
+            dev_server_host=str(getattr(source, "DEV_SERVER_HOST")),
+            dev_server_port=str(getattr(source, "DEV_SERVER_PORT")),
+            flask_env=os.getenv("FLASK_ENV", "development"),
+        )
+
+
 class DefaultConfig(object):
     # General Settings
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
@@ -120,13 +144,7 @@ class DefaultConfig(object):
     DEV_SERVER_PORT = "5173"
     DEV_SERVER_HOST = "localhost"
 
-    ALLOWED_ORIGINS = _build_allowed_origins(
-        os.getenv("ALLOWED_ORIGINS"),
-        app_port=PORT,
-        dev_server_host=DEV_SERVER_HOST,
-        dev_server_port=DEV_SERVER_PORT,
-        flask_env=os.getenv("FLASK_ENV", "development"),
-    )
+    ALLOWED_ORIGINS = _AllowedOrigins()
 
     GUNICORN_BIND = f"{HOST}:{PORT}"
     GUNICORN_APP_MODULE = os.getenv(
@@ -142,10 +160,14 @@ class DefaultConfig(object):
     def override_with_env_variables(self):
         """Override config values with environment variables."""
         for key, value in self.__class__.__dict__.items():
-            if not key.startswith("_"):  # Skip private/protected attributes
-                env_value = os.getenv(key)
-                if env_value is not None:
-                    setattr(self, key, env_value)
+            # Descriptors (and methods) resolve their own value on read; assigning the
+            # raw environment string over one would shadow it with an unparsed value.
+            if key.startswith("_") or hasattr(value, "__get__"):
+                continue
+
+            env_value = os.getenv(key)
+            if env_value is not None:
+                setattr(self, key, env_value)
 
     def to_dict(self):
         """Return all config values as a dictionary, including inherited attributes."""

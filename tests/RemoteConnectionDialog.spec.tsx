@@ -6,21 +6,24 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
-import { SSH_CONFIG_HOST_CUSTOM } from '../src/components/report-selection/SshConfigHostPicker';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
 import getButtonWithText from './helpers/getButtonWithText';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 
-const getServerConfigMock = vi.hoisted(() =>
-    vi.fn(() => ({
+// Declared inside the hoisted factory: it runs before module-scope consts initialise.
+const { getServerConfigMock, SERVER_CONFIG } = vi.hoisted(() => {
+    const config = {
         SSH_DEFAULT_PORT: 2222,
         SSH_DEFAULT_PROFILER_PATH: '/mem',
         SSH_DEFAULT_PERFORMANCE_PATH: '/perf',
         USERNAME: 'bob',
         SERVER_MODE: false,
-    })),
-);
+    };
+
+    return { getServerConfigMock: vi.fn(() => config), SERVER_CONFIG: config };
+});
 
 const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
 
@@ -46,13 +49,7 @@ afterEach(() => {
 
 beforeEach(() => {
     getServerConfigMock.mockClear();
-    getServerConfigMock.mockReturnValue({
-        SSH_DEFAULT_PORT: 2222,
-        SSH_DEFAULT_PROFILER_PATH: '/mem',
-        SSH_DEFAULT_PERFORMANCE_PATH: '/perf',
-        USERNAME: 'bob',
-        SERVER_MODE: false,
-    });
+    getServerConfigMock.mockReturnValue(SERVER_CONFIG);
     useSshConfigHostsMock.mockClear();
     useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
     testConnectionMock.mockClear();
@@ -114,7 +111,7 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
         fireEvent.change(screen.getByLabelText('SSH identity file (optional)'), {
             target: { value: '/tmp/id_ed25519' },
         });
-        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
 
         expect(screen.getByLabelText('Name')).toHaveValue('work-gpu');
         expect(screen.getByLabelText('SSH Host')).toHaveValue('work-gpu');
@@ -141,7 +138,7 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
 
         expect(screen.getByLabelText('Name')).toHaveValue('my lab box');
         expect(screen.getByLabelText('SSH Host')).toHaveValue('work-gpu');
@@ -158,7 +155,7 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'bare-host' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'bare-host' } });
 
         expect(screen.getByLabelText('Username')).toHaveValue('bob');
         expect(screen.getByLabelText('SSH Host')).toHaveValue('bare-host');
@@ -177,7 +174,7 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
             />,
         );
 
-        const picker = screen.getByLabelText('SSH config host') as HTMLSelectElement;
+        const picker = screen.getByLabelText(SSH_CONFIG_HOST_LABEL) as HTMLSelectElement;
         fireEvent.change(picker, { target: { value: 'work-gpu' } });
         expect(picker.value).toBe('work-gpu');
 
@@ -188,13 +185,7 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
     });
 
     it('hides the SSH config host picker under SERVER_MODE', () => {
-        getServerConfigMock.mockReturnValue({
-            SSH_DEFAULT_PORT: 2222,
-            SSH_DEFAULT_PROFILER_PATH: '/mem',
-            SSH_DEFAULT_PERFORMANCE_PATH: '/perf',
-            USERNAME: 'bob',
-            SERVER_MODE: true,
-        });
+        getServerConfigMock.mockReturnValue({ ...SERVER_CONFIG, SERVER_MODE: true });
         useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'should-not-show' }]));
 
         render(
@@ -205,7 +196,7 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
             />,
         );
 
-        expect(screen.queryByLabelText('SSH config host')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(SSH_CONFIG_HOST_LABEL)).not.toBeInTheDocument();
     });
 
     it('gates the config-host fetch on the dialog being open', () => {
@@ -234,6 +225,57 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
         expect(useSshConfigHostsMock).toHaveBeenLastCalledWith(true);
     });
 
+    it('discards a prefill the user backed out of', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice', port: 2222 }]));
+        const onClose = vi.fn();
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={onClose}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
+        expect(screen.getByLabelText('SSH Host')).toHaveValue('work-gpu');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+        // The dialog stays mounted while closed, so this reset is the only thing keeping
+        // a cancelled prefill from reappearing the next time it opens.
+        expect(onClose).toHaveBeenCalledOnce();
+        expect(screen.getByLabelText('SSH Host')).toHaveValue('');
+        expect(screen.getByLabelText('Username')).toHaveValue('bob');
+        expect(screen.getByLabelText('Name')).toHaveValue('');
+        expect((screen.getByLabelText(SSH_CONFIG_HOST_LABEL) as HTMLSelectElement).value).toBe(SSH_CONFIG_HOST_CUSTOM);
+    });
+
+    it('restores the edited connection, not the defaults, when an edit is backed out of', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice' }]));
+
+        render(
+            <RemoteConnectionDialog
+                open
+                remoteConnection={{
+                    name: 'my lab box',
+                    host: 'old-host',
+                    port: 22,
+                    username: 'carol',
+                    profilerPath: '/mem',
+                }}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+        expect(screen.getByLabelText('SSH Host')).toHaveValue('old-host');
+        expect(screen.getByLabelText('Username')).toHaveValue('carol');
+    });
+
     it('hides the SSH config host picker when ~/.ssh/config does not exist', () => {
         useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
 
@@ -245,7 +287,7 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
             />,
         );
 
-        expect(screen.queryByLabelText('SSH config host')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(SSH_CONFIG_HOST_LABEL)).not.toBeInTheDocument();
     });
 });
 
@@ -272,7 +314,7 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
         await waitFor(() => expect(screen.getByText('SSH connection established')).toBeInTheDocument());
         expect(getButtonWithText('Add connection')).toBeEnabled();
 
-        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
 
         expect(screen.queryByText('SSH connection established')).not.toBeInTheDocument();
         expect(screen.getByText('Check SSH connection is valid')).toBeInTheDocument();
@@ -284,6 +326,8 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
         ['Username', 'carol'],
         ['SSH Port', '2022'],
         ['Memory report folder path', '/elsewhere'],
+        ['Performance report folder path', '/elsewhere-perf'],
+        ['SSH identity file (optional)', '/tmp/id_ed25519'],
     ])('discards a passing test result when %s is edited by hand', async (label, value) => {
         testConnectionMock.mockResolvedValue(PASSING_TESTS);
 
@@ -338,7 +382,7 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 

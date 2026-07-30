@@ -72,5 +72,34 @@ def test_empty_configured_origins_trust_nothing():
     assert _build_allowed_origins("", flask_env="development", **DEV_ARGS) == []
 
 
-def test_config_exposes_origins_as_a_list():
-    assert isinstance(DefaultConfig.ALLOWED_ORIGINS, list)
+def test_config_defaults_to_the_apps_own_origin():
+    origins = DefaultConfig.ALLOWED_ORIGINS
+
+    assert isinstance(origins, list)
+    assert f"http://localhost:{DefaultConfig.PORT}" in origins
+
+
+def test_config_narrows_to_production_set_after_import(monkeypatch):
+    # ``main()`` defaults FLASK_ENV to production long after this module is imported,
+    # so an allowlist frozen at import time would keep trusting the Vite dev server.
+    monkeypatch.setenv("FLASK_ENV", "production")
+
+    assert DefaultConfig.ALLOWED_ORIGINS == [f"http://localhost:{DefaultConfig.PORT}"]
+
+
+def test_config_follows_a_port_applied_after_import(monkeypatch):
+    # ``--port`` is applied by mutating the environment and the config object, both
+    # after import; the allowlist has to name the port the app actually serves on.
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("PORT", "9123")
+
+    class PortOverride(DefaultConfig):
+        PORT = "9123"
+
+    assert PortOverride.ALLOWED_ORIGINS == ["http://localhost:9123"]
+
+
+def test_config_honours_configured_origins(monkeypatch):
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://ttnn-visualizer.tenstorrent.com")
+
+    assert DefaultConfig.ALLOWED_ORIGINS == ["https://ttnn-visualizer.tenstorrent.com"]

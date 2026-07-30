@@ -17,9 +17,11 @@ import re
 import shlex
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set, TypeVar
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 DEFAULT_SSH_CONFIG_PATH = Path.home() / ".ssh" / "config"
 MAX_INCLUDE_DEPTH = 5
@@ -65,9 +67,9 @@ def load_ssh_config_hosts(
 
     When the config file is missing, ``configExists`` is false and ``hosts`` is
     empty so the UI can hide the picker. An existing but unreadable file reports
-    ``configExists`` true with no hosts. Duplicate aliases keep the last
-    occurrence (OpenSSH last-wins). Each file is parsed at most once, so an
-    ``Include`` cycle or self-matching glob terminates.
+    ``configExists`` true with no hosts. A repeated alias keeps the first value
+    obtained for each keyword, as OpenSSH does. Each file is parsed at most once, so
+    an ``Include`` cycle or self-matching glob terminates.
     """
     path = config_path if config_path is not None else DEFAULT_SSH_CONFIG_PATH
     if not path.is_file():
@@ -161,11 +163,11 @@ def _parse_ssh_config_file(
             continue
 
         if keyword_lower == "hostname":
-            current_values["hostName"] = argument
+            current_values["hostName"] = _unquote_argument(argument)
         elif keyword_lower == "user":
-            current_values["user"] = argument
+            current_values["user"] = _unquote_argument(argument)
         elif keyword_lower == "port":
-            current_values["port"] = argument
+            current_values["port"] = _unquote_argument(argument)
 
     flush_host_block()
 
@@ -186,12 +188,46 @@ def _store_host_block(
             port = parsed
 
     for alias in aliases:
+        existing = host_by_alias.get(alias)
+        if existing is None:
+            host_by_alias[alias] = SshConfigHost(
+                host=alias,
+                hostName=values.get("hostName"),
+                user=values.get("user"),
+                port=port,
+            )
+            continue
+
+        # OpenSSH uses the first value obtained for each parameter, so a repeated alias
+        # only contributes the keywords an earlier stanza left unset.
         host_by_alias[alias] = SshConfigHost(
             host=alias,
-            hostName=values.get("hostName"),
-            user=values.get("user"),
-            port=port,
+            hostName=_first_set(existing.hostName, values.get("hostName")),
+            user=_first_set(existing.user, values.get("user")),
+            port=_first_set(existing.port, port),
         )
+
+
+def _first_set(existing: Optional[T], candidate: Optional[T]) -> Optional[T]:
+    return existing if existing is not None else candidate
+
+
+def _unquote_argument(argument: str) -> str:
+    """Drop the quoting OpenSSH accepts around a keyword's value.
+
+    ``User "alice"`` connects as ``alice``, so keeping the quotes would prefill the
+    dialog with a username no remote host recognises. Only the first token is taken:
+    these keywords are single-argument, and OpenSSH rejects a file that supplies two.
+    """
+    if not argument:
+        return argument
+
+    try:
+        tokens = shlex.split(argument)
+    except ValueError:
+        return argument
+
+    return tokens[0] if tokens else ""
 
 
 def _strip_ssh_config_comment(line: str) -> str:

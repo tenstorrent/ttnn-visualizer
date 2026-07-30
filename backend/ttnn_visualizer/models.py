@@ -262,9 +262,31 @@ def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]
         return None
 
 
+def reject_ssh_option_like(value: object) -> str:
+    """Refuse a value OpenSSH would read as an option instead of part of the target.
+
+    ``username@host`` is passed to ``ssh``/``sftp``/``scp`` in option position, so a
+    leading ``-`` makes the whole token an option — ``-oProxyCommand=…`` is then run
+    through a shell. No POSIX username or DNS label starts with ``-``, so refusing one
+    costs nothing.
+    """
+    if not isinstance(value, str):
+        return value  # type: ignore[return-value]
+    if value.startswith("-"):
+        raise ValueError("must not start with '-'")
+    return value
+
+
 def sanitise_remote_host_segment(value: object) -> str:
     """Normalise a user-provided host to a single safe path segment."""
-    return sanitise_path_segment(value)
+    return reject_ssh_option_like(sanitise_path_segment(value))
+
+
+def sanitise_ssh_username(value: object) -> str:
+    """Normalise a user-provided SSH username for use in an ``ssh`` argv."""
+    if not isinstance(value, str):
+        return value  # type: ignore[return-value]
+    return reject_ssh_option_like(value.strip())
 
 
 class RemoteConnection(SerializeableModel):
@@ -280,6 +302,11 @@ class RemoteConnection(SerializeableModel):
     @classmethod
     def _sanitise_host(cls, value: object) -> str:
         return sanitise_remote_host_segment(value)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _sanitise_username(cls, value: object) -> str:
+        return sanitise_ssh_username(value)
 
 
 class MlirServerConnection(SerializeableModel):
@@ -304,7 +331,7 @@ class MlirServerConnection(SerializeableModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("must not be empty")
-        return stripped
+        return reject_ssh_option_like(stripped)
 
     @field_validator("host", mode="before")
     @classmethod

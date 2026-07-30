@@ -6,6 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, expect, it, vi } from 'vitest';
 import { activePerformanceReportAtom } from '../src/store/app';
+import { FETCH_REMOTE_FOLDERS_LABEL } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import Home from '../src/routes/Home';
 import Performance from '../src/routes/Performance';
@@ -53,7 +54,7 @@ it('Disable remote sync in Home route', () => {
     expect(screen.getAllByTestId(TEST_IDS.REMOTE_SYNC_DISABLED)).toHaveLength(1);
     expect(getButtonWithText('Add new connection')).toBeDisabled();
     expect(getButtonWithText('(No connection)')).toBeDisabled();
-    expect(getButtonWithText('Fetch remote folders')).toBeDisabled();
+    expect(getButtonWithText(FETCH_REMOTE_FOLDERS_LABEL)).toBeDisabled();
     noSelectionButtons.forEach((button) => {
         expect(button).toBeDisabled();
     });

@@ -12,8 +12,9 @@ import '@testing-library/jest-dom/vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SshConfigHostPicker, { SSH_CONFIG_HOST_CUSTOM } from '../src/components/report-selection/SshConfigHostPicker';
+import SshConfigHostPicker from '../src/components/report-selection/SshConfigHostPicker';
 import Endpoints from '../src/definitions/Endpoints';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
 import axiosInstance from '../src/libs/axiosInstance';
 
 const getServerConfigMock = vi.hoisted(() => vi.fn(() => ({ SERVER_MODE: false })));
@@ -61,7 +62,7 @@ describe('SshConfigHostPicker over the real useSshConfigHosts hook', () => {
 
         renderPicker();
 
-        await waitFor(() => expect(screen.getByLabelText('SSH config host')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByLabelText(SSH_CONFIG_HOST_LABEL)).toBeInTheDocument());
         expect(mockedGet).toHaveBeenCalledWith(Endpoints.REMOTE_SSH_CONFIG_HOSTS);
         expect(screen.getByRole('option', { name: 'work-gpu — gpu.example.com' })).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'bare-host' })).toBeInTheDocument();
@@ -73,8 +74,8 @@ describe('SshConfigHostPicker over the real useSshConfigHosts hook', () => {
 
         const { onSelectHost } = renderPicker();
 
-        await waitFor(() => expect(screen.getByLabelText('SSH config host')).toBeInTheDocument());
-        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+        await waitFor(() => expect(screen.getByLabelText(SSH_CONFIG_HOST_LABEL)).toBeInTheDocument());
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
 
         expect(onSelectHost).toHaveBeenCalledWith(WORK_GPU);
     });

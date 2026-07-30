@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../mixins/formLayout' as form-layout;
+
+// The nested .form-container is styled by the enclosing FolderFieldset, which also
+// supplies the .remote-select truncation.
+.remote-connection-selector {
+    @include form-layout.stacked-form-controls;
+}

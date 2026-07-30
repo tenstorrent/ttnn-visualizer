@@ -12,8 +12,9 @@ import { SshConfigHost } from '../../model/SshConfigHost';
 import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import useRemoteConnection from '../../hooks/useRemote';
+import useSshConfigHostSelection from '../../hooks/useSshConfigHostSelection';
 import ConnectionTestMessage from './ConnectionTestMessage';
-import SshConfigHostPicker, { SSH_CONFIG_HOST_CUSTOM } from './SshConfigHostPicker';
+import SshConfigHostPicker from './SshConfigHostPicker';
 import 'styles/components/RemoteConnectionDialog.scss';
 
 interface RemoteConnectionDialogProps {
@@ -78,8 +79,8 @@ const RemoteConnectionDialog = ({
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(
         () => remoteConnection ?? getDefaultConnection(),
     );
-    const [selectedSshConfigHost, setSelectedSshConfigHost] = useState(() =>
-        remoteConnection?.host ? remoteConnection.host : SSH_CONFIG_HOST_CUSTOM,
+    const { selectedHost, selectHost, selectCustom, resetSelection } = useSshConfigHostSelection(
+        remoteConnection?.host,
     );
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const { testConnection } = useRemoteConnection();
@@ -139,7 +140,7 @@ const RemoteConnectionDialog = ({
     const closeDialog = (resetChanges?: boolean) => {
         if (resetChanges) {
             setConnection(remoteConnection ?? getDefaultConnection());
-            setSelectedSshConfigHost(remoteConnection?.host ? remoteConnection.host : SSH_CONFIG_HOST_CUSTOM);
+            resetSelection();
         }
 
         setConnectionTests([]);
@@ -147,7 +148,7 @@ const RemoteConnectionDialog = ({
     };
 
     const handleSelectSshConfigHost = (host: SshConfigHost) => {
-        setSelectedSshConfigHost(host.host);
+        selectHost(host.host);
         const defaults = getDefaultConnection();
 
         updateConnection(
@@ -172,9 +173,9 @@ const RemoteConnectionDialog = ({
         >
             <DialogBody>
                 <SshConfigHostPicker
-                    value={selectedSshConfigHost}
+                    value={selectedHost}
                     enabled={open}
-                    onSelectCustom={() => setSelectedSshConfigHost(SSH_CONFIG_HOST_CUSTOM)}
+                    onSelectCustom={selectCustom}
                     onSelectHost={handleSelectSshConfigHost}
                 />
 
@@ -200,7 +201,7 @@ const RemoteConnectionDialog = ({
                         id='remote-ssh-host'
                         value={connection.host}
                         onChange={(e) => {
-                            setSelectedSshConfigHost(SSH_CONFIG_HOST_CUSTOM);
+                            selectCustom();
                             updateConnection({ host: e.target.value });
                         }}
                     />

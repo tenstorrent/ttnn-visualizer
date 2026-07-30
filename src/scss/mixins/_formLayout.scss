@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+// Vertical stack of form controls shared by the report-selection blocks. A mixin rather
+// than a shared classname so each component keeps a classname that names what it is,
+// instead of importing another component's stylesheet for the layout.
+@mixin stacked-form-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    align-items: flex-start;
+}

@@ -185,7 +185,7 @@ def extensions(app: flask.Flask):
     """
     flask_static_digest.init_app(app)
     if app.config["USE_WEBSOCKETS"]:
-        socketio.init_app(app)
+        socketio.init_app(app, cors_allowed_origins=app.config["ALLOWED_ORIGINS"])
 
     # Create app data and report directories
     Path(app.config["APP_DATA_DIRECTORY"]).mkdir(parents=True, exist_ok=True)

@@ -15,3 +15,11 @@ export interface SshConfigHostsResponse {
     configExists: boolean;
     hosts: SshConfigHost[];
 }
+
+/**
+ * True when an entry carries the one field the picker dereferences. Entries are
+ * checked individually because a single malformed one would otherwise throw while
+ * rendering the option list and take the whole dialog down with it.
+ */
+export const isSshConfigHost = (value: unknown): value is SshConfigHost =>
+    typeof value === 'object' && value !== null && typeof (value as SshConfigHost).host === 'string';

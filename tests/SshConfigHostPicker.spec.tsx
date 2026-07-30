@@ -5,7 +5,8 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SshConfigHostPicker, { SSH_CONFIG_HOST_CUSTOM } from '../src/components/report-selection/SshConfigHostPicker';
+import SshConfigHostPicker from '../src/components/report-selection/SshConfigHostPicker';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
 import {
     MOCK_SSH_CONFIG_HOST,
     SshConfigHostsQueryResult,
@@ -55,7 +56,7 @@ const renderPicker = (
         />,
     );
 
-const getPicker = () => screen.getByLabelText('SSH config host') as HTMLSelectElement;
+const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_LABEL) as HTMLSelectElement;
 
 describe('SshConfigHostPicker', () => {
     it('renders null when ~/.ssh/config does not exist', () => {

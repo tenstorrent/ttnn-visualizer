@@ -9,6 +9,24 @@ from typing import List
 import pytest
 from ttnn_visualizer.ssh_config import MAX_INCLUDE_DEPTH, load_ssh_config_hosts
 
+SSH_CONFIG_HOSTS_ENDPOINT = "/api/remote/ssh-config-hosts"
+
+
+def _write_config(tmp_path: Path, text: str, name: str = "config") -> Path:
+    """Write an SSH config fixture, stripped so tests can start it on its own line."""
+    path = tmp_path / name
+    path.write_text(text.strip(), encoding="utf-8")
+    return path
+
+
+def _serve_config(app, monkeypatch, config: Path) -> None:
+    """Point the endpoint at a fixture config, with the local-only gate open."""
+    app.config["SERVER_MODE"] = False
+    monkeypatch.setattr(
+        "ttnn_visualizer.views.load_ssh_config_hosts",
+        lambda: load_ssh_config_hosts(config),
+    )
+
 
 def _deny_read_text(monkeypatch, denied: Path) -> None:
     """Make only ``denied`` unreadable, so unrelated reads still behave normally."""
@@ -47,8 +65,8 @@ def test_load_ssh_config_hosts_missing_file(tmp_path: Path):
 
 
 def test_load_ssh_config_hosts_parses_concrete_hosts(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Host *
     User shared
@@ -64,8 +82,7 @@ Host bastion jump
 
 Host "*.internal" ?ingle
     HostName ignored.example.com
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     result = load_ssh_config_hosts(config)
@@ -83,16 +100,15 @@ Host "*.internal" ?ingle
 
 
 def test_load_ssh_config_hosts_skips_negated_patterns(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Host *.example.com !secret.example.com
     User alice
 
 Host good !bad
     User bob
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host for host in load_ssh_config_hosts(config).hosts}
@@ -100,14 +116,13 @@ Host good !bad
 
 
 def test_load_ssh_config_hosts_ignores_identity_file(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Host two-keys
     IdentityFile /tmp/first_ed25519
     IdentityFile /tmp/second_ed25519
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = load_ssh_config_hosts(config).hosts
@@ -118,24 +133,24 @@ Host two-keys
 def test_load_ssh_config_hosts_include(tmp_path: Path):
     included_dir = tmp_path / "config.d"
     included_dir.mkdir()
-    (included_dir / "extra").write_text(
+    _write_config(
+        included_dir,
         """
 Host included-host
     HostName included.example.com
     User carol
-""".strip(),
-        encoding="utf-8",
+""",
+        name="extra",
     )
 
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         f"""
 Include {included_dir / "extra"}
 
 Host main
     HostName main.example.com
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
@@ -143,9 +158,11 @@ Host main
     assert hosts["included-host"].user == "carol"
 
 
-def test_load_ssh_config_hosts_last_wins_on_duplicate_alias(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+def test_load_ssh_config_hosts_first_wins_per_keyword_on_duplicate_alias(
+    tmp_path: Path,
+):
+    config = _write_config(
+        tmp_path,
         """
 Host dup
     User first
@@ -153,21 +170,65 @@ Host dup
 Host dup
     User second
     Port 2200
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = load_ssh_config_hosts(config).hosts
     assert len(hosts) == 1
-    assert hosts[0].user == "second"
+    # OpenSSH keeps the first User it obtains, and takes Port from the later stanza
+    # only because the first one never set it.
+    assert hosts[0].user == "first"
     assert hosts[0].port == 2200
+
+
+def test_load_ssh_config_hosts_unquotes_values(tmp_path: Path):
+    config = _write_config(
+        tmp_path,
+        """
+Host quoted
+    HostName "gpu.example.com"
+    User "alice"
+    Port "2222"
+""",
+    )
+
+    hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
+    assert hosts["quoted"].hostName == "gpu.example.com"
+    assert hosts["quoted"].user == "alice"
+    assert hosts["quoted"].port == 2222
+
+
+def test_load_ssh_config_hosts_keeps_a_quoted_hash_in_a_value(tmp_path: Path):
+    config = _write_config(
+        tmp_path,
+        """
+Host hashed
+    HostName "a#b.example.com"
+""",
+    )
+
+    hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
+    assert hosts["hashed"].hostName == "a#b.example.com"
+
+
+def test_load_ssh_config_hosts_tolerates_unbalanced_quotes(tmp_path: Path):
+    config = _write_config(
+        tmp_path,
+        """
+Host "unclosed
+    User "carol
+""",
+    )
+
+    hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
+    assert set(hosts) == {'"unclosed'}
+    assert hosts['"unclosed'].user == '"carol'
 
 
 def test_load_ssh_config_hosts_existing_but_unreadable(
     tmp_path: Path, monkeypatch, caplog
 ):
-    config = tmp_path / "config"
-    config.write_text("Host lab\n", encoding="utf-8")
+    config = _write_config(tmp_path, "Host lab")
     _deny_read_text(monkeypatch, config)
 
     with caplog.at_level(logging.WARNING):
@@ -179,8 +240,8 @@ def test_load_ssh_config_hosts_existing_but_unreadable(
 
 
 def test_load_ssh_config_hosts_ignores_match_blocks(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Host real
     User real-user
@@ -188,8 +249,7 @@ Host real
 Match host anything
     User matched-user
     HostName matched.example.com
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
@@ -199,15 +259,14 @@ Match host anything
 
 
 def test_load_ssh_config_hosts_strips_comments(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 # A whole-line comment
 Host commented # trailing comment on the Host line
     User carol # trailing comment on a keyword
     #HostName never.example.com
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
@@ -217,15 +276,14 @@ Host commented # trailing comment on the Host line
 
 
 def test_load_ssh_config_hosts_parses_keyword_equals_value(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Host=eq-host
     HostName=eq.example.com
     User=eq-user
     Port=2200
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
@@ -236,15 +294,14 @@ Host=eq-host
 
 
 def test_load_ssh_config_hosts_parses_keyword_spaced_equals_value(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Host = spaced-host
     HostName = spaced.example.com
     User = spaced-user
     Port = 2201
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
@@ -255,13 +312,12 @@ Host = spaced-host
 
 
 def test_load_ssh_config_hosts_keeps_equals_inside_a_value(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Host odd
     HostName a=b.example.com
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
@@ -269,25 +325,24 @@ Host odd
 
 
 def test_load_ssh_config_hosts_include_inside_host_keeps_later_keywords(tmp_path: Path):
-    included = tmp_path / "common"
-    included.write_text(
+    included = _write_config(
+        tmp_path,
         """
 Host included-host
     User carol
-""".strip(),
-        encoding="utf-8",
+""",
+        name="common",
     )
 
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         f"""
 Host outer
     User outer-user
     Include {included}
     HostName outer.example.com
     Port 2201
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
@@ -301,32 +356,48 @@ Host outer
 def test_load_ssh_config_hosts_include_relative_glob(tmp_path: Path):
     included_dir = tmp_path / "conf.d"
     included_dir.mkdir()
-    (included_dir / "one").write_text("Host one\n    User u1", encoding="utf-8")
-    (included_dir / "two").write_text("Host two\n    User u2", encoding="utf-8")
+    _write_config(included_dir, "Host one\n    User u1", name="one")
+    _write_config(included_dir, "Host two\n    User u2", name="two")
 
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Include conf.d/*
 
 Host main
     HostName main.example.com
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
     assert set(hosts) == {"one", "two", "main"}
 
 
+def test_load_ssh_config_hosts_include_expands_a_home_relative_glob(
+    tmp_path: Path, monkeypatch
+):
+    # `Include ~/.ssh/config.d/*` is the form real configs use, and the only reason
+    # the include expansion calls expanduser at all.
+    ssh_dir = tmp_path / ".ssh"
+    included_dir = ssh_dir / "config.d"
+    included_dir.mkdir(parents=True)
+    _write_config(included_dir, "Host home-relative\n    User u1", name="one")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    config = _write_config(ssh_dir, "Include ~/.ssh/config.d/*")
+
+    hosts = {host.host for host in load_ssh_config_hosts(config).hosts}
+    assert hosts == {"home-relative"}
+
+
 def test_load_ssh_config_hosts_include_glob_skips_directories(tmp_path: Path, caplog):
     included_dir = tmp_path / "conf.d"
     included_dir.mkdir()
     (included_dir / "nested").mkdir()
-    (included_dir / "one").write_text("Host one\n    User u1", encoding="utf-8")
+    _write_config(included_dir, "Host one\n    User u1", name="one")
 
-    config = tmp_path / "config"
-    config.write_text("Include conf.d/*", encoding="utf-8")
+    config = _write_config(tmp_path, "Include conf.d/*")
 
     with caplog.at_level(logging.WARNING):
         hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
@@ -364,8 +435,7 @@ def test_load_ssh_config_hosts_self_matching_include_glob_terminates(
             f"Include {included_dir}/*\n\nHost part{index}", encoding="utf-8"
         )
 
-    config = tmp_path / "config"
-    config.write_text(f"Include {included_dir}/*", encoding="utf-8")
+    config = _write_config(tmp_path, f"Include {included_dir}/*")
 
     with caplog.at_level(logging.WARNING):
         hosts = {host.host for host in load_ssh_config_hosts(config).hosts}
@@ -391,8 +461,8 @@ def test_load_ssh_config_hosts_stops_at_max_include_depth(tmp_path: Path, caplog
 
 
 def test_load_ssh_config_hosts_rejects_out_of_range_ports(tmp_path: Path):
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Host not-a-number
     Port notanumber
@@ -402,8 +472,7 @@ Host zero
 
 Host too-large
     Port 70000
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
@@ -414,15 +483,9 @@ Host too-large
 def test_ssh_config_hosts_endpoint_omits_absent_fields(
     app, client, tmp_path: Path, monkeypatch
 ):
-    app.config["SERVER_MODE"] = False
-    config = tmp_path / "config"
-    config.write_text("Host bare", encoding="utf-8")
-    monkeypatch.setattr(
-        "ttnn_visualizer.views.load_ssh_config_hosts",
-        lambda: load_ssh_config_hosts(config),
-    )
+    _serve_config(app, monkeypatch, _write_config(tmp_path, "Host bare"))
 
-    response = client.get("/api/remote/ssh-config-hosts")
+    response = client.get(SSH_CONFIG_HOSTS_ENDPOINT)
 
     assert response.status_code == 200
     assert response.get_json() == {"configExists": True, "hosts": [{"host": "bare"}]}
@@ -431,24 +494,19 @@ def test_ssh_config_hosts_endpoint_omits_absent_fields(
 def test_ssh_config_hosts_endpoint_returns_hosts(
     app, client, tmp_path: Path, monkeypatch
 ):
-    app.config["SERVER_MODE"] = False
-    config = tmp_path / "config"
-    config.write_text(
+    config = _write_config(
+        tmp_path,
         """
 Host lab
     HostName lab.example.com
     User dave
     Port 22
     IdentityFile ~/.ssh/lab_ed25519
-""".strip(),
-        encoding="utf-8",
+""",
     )
-    monkeypatch.setattr(
-        "ttnn_visualizer.views.load_ssh_config_hosts",
-        lambda: load_ssh_config_hosts(config),
-    )
+    _serve_config(app, monkeypatch, config)
 
-    response = client.get("/api/remote/ssh-config-hosts")
+    response = client.get(SSH_CONFIG_HOSTS_ENDPOINT)
 
     assert response.status_code == 200
     payload = response.get_json()
@@ -469,33 +527,24 @@ Host lab
 def test_ssh_config_hosts_endpoint_existing_but_unreadable(
     app, client, tmp_path: Path, monkeypatch
 ):
-    app.config["SERVER_MODE"] = False
-    config = tmp_path / "config"
-    config.write_text("Host lab", encoding="utf-8")
+    config = _write_config(tmp_path, "Host lab")
     _deny_read_text(monkeypatch, config)
-    monkeypatch.setattr(
-        "ttnn_visualizer.views.load_ssh_config_hosts",
-        lambda: load_ssh_config_hosts(config),
-    )
+    _serve_config(app, monkeypatch, config)
 
-    response = client.get("/api/remote/ssh-config-hosts")
+    response = client.get(SSH_CONFIG_HOSTS_ENDPOINT)
 
     assert response.status_code == 200
-    # configExists true with no hosts is what tells the UI to show an empty picker
-    # rather than hide it entirely.
+    # An unreadable config still answers 200 rather than erroring; the empty host list
+    # is what hides the picker.
     assert response.get_json() == {"configExists": True, "hosts": []}
 
 
 def test_ssh_config_hosts_endpoint_missing_config(
     app, client, tmp_path: Path, monkeypatch
 ):
-    app.config["SERVER_MODE"] = False
-    monkeypatch.setattr(
-        "ttnn_visualizer.views.load_ssh_config_hosts",
-        lambda: load_ssh_config_hosts(tmp_path / "missing"),
-    )
+    _serve_config(app, monkeypatch, tmp_path / "missing")
 
-    response = client.get("/api/remote/ssh-config-hosts")
+    response = client.get(SSH_CONFIG_HOSTS_ENDPOINT)
 
     assert response.status_code == 200
     assert response.get_json() == {"configExists": False, "hosts": []}
@@ -503,5 +552,5 @@ def test_ssh_config_hosts_endpoint_missing_config(
 
 def test_ssh_config_hosts_endpoint_forbidden_in_server_mode(app, client):
     assert app.config["SERVER_MODE"] is True
-    response = client.get("/api/remote/ssh-config-hosts")
+    response = client.get(SSH_CONFIG_HOSTS_ENDPOINT)
     assert response.status_code == 403

@@ -62,6 +62,19 @@ describe('useSshConfigHosts', () => {
         expect(result.current.data).toEqual({ configExists: false, hosts: [] });
     });
 
+    it('drops malformed host entries rather than rendering them', async () => {
+        // The picker dereferences host.host while building its options, so one junk entry
+        // would otherwise throw and take the whole dialog down.
+        mockedGet.mockResolvedValue({
+            data: { configExists: true, hosts: [null, 'work-gpu', { port: 22 }, MOCK_SSH_CONFIG_HOST] },
+        });
+
+        const { result } = renderHook(() => useSshConfigHosts(), { wrapper: makeWrapper() });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toEqual({ configExists: true, hosts: [MOCK_SSH_CONFIG_HOST] });
+    });
+
     it('collapses a null body', async () => {
         mockedGet.mockResolvedValue({ data: null });
 
