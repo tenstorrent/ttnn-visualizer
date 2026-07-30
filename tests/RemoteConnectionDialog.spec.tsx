@@ -3,13 +3,14 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
+import { SSH_CONFIG_HOST_CUSTOM } from '../src/components/report-selection/SshConfigHostPicker';
+import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { RemoteConnection } from '../src/definitions/RemoteConnection';
-import { SshConfigHost, SshConfigHostsResponse } from '../src/model/SshConfigHost';
-
-const emptySshConfigResponse = (): SshConfigHostsResponse => ({ configExists: false, hosts: [] });
+import getButtonWithText from './helpers/getButtonWithText';
+import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 
 const getServerConfigMock = vi.hoisted(() =>
     vi.fn(() => ({
@@ -21,13 +22,9 @@ const getServerConfigMock = vi.hoisted(() =>
     })),
 );
 
-const useSshConfigHostsMock = vi.hoisted(() =>
-    vi.fn(() => ({
-        data: { configExists: false, hosts: [] } as SshConfigHostsResponse,
-        isError: false,
-        isPending: false,
-    })),
-);
+const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
+
+const testConnectionMock = vi.hoisted(() => vi.fn<() => Promise<ConnectionStatus[]>>());
 
 vi.mock('../src/functions/getServerConfig', () => ({
     default: getServerConfigMock,
@@ -35,12 +32,11 @@ vi.mock('../src/functions/getServerConfig', () => ({
 
 vi.mock('../src/hooks/useSshConfigHosts', () => ({
     default: useSshConfigHostsMock,
-    getSshConfigHostLabel: (host: SshConfigHost) => (host.hostName ? `${host.host} — ${host.hostName}` : host.host),
 }));
 
 vi.mock('../src/hooks/useRemote', () => ({
     default: () => ({
-        testConnection: vi.fn(),
+        testConnection: testConnectionMock,
     }),
 }));
 
@@ -58,11 +54,9 @@ beforeEach(() => {
         SERVER_MODE: false,
     });
     useSshConfigHostsMock.mockClear();
-    useSshConfigHostsMock.mockReturnValue({
-        data: emptySshConfigResponse(),
-        isError: false,
-        isPending: false,
-    });
+    useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
+    testConnectionMock.mockClear();
+    testConnectionMock.mockResolvedValue([]);
 });
 
 describe('RemoteConnectionDialog defaults', () => {
@@ -104,34 +98,22 @@ describe('RemoteConnectionDialog defaults', () => {
 });
 
 describe('RemoteConnectionDialog SSH config prefill', () => {
-    it('prefills host, name, username, and port from a config host and clears identity', () => {
-        useSshConfigHostsMock.mockReturnValue({
-            data: {
-                configExists: true,
-                hosts: [{ host: 'work-gpu', user: 'alice', port: 2222, hostName: 'gpu.example.com' }],
-            },
-            isError: false,
-            isPending: false,
-        });
+    it('prefills host, username, and port from a config host and clears identity', () => {
+        useSshConfigHostsMock.mockReturnValue(
+            sshConfigHostsResult([{ host: 'work-gpu', user: 'alice', port: 2222, hostName: 'gpu.example.com' }]),
+        );
 
         render(
             <RemoteConnectionDialog
                 open
-                remoteConnection={{
-                    name: 'old',
-                    host: 'old-host',
-                    port: 22,
-                    username: 'bob',
-                    profilerPath: '/mem',
-                    identityFile: '/tmp/id_ed25519',
-                }}
                 onClose={vi.fn()}
                 onAddConnection={vi.fn()}
             />,
         );
 
-        expect(screen.getByLabelText('SSH identity file (optional)')).toHaveValue('/tmp/id_ed25519');
-
+        fireEvent.change(screen.getByLabelText('SSH identity file (optional)'), {
+            target: { value: '/tmp/id_ed25519' },
+        });
         fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
 
         expect(screen.getByLabelText('Name')).toHaveValue('work-gpu');
@@ -141,12 +123,32 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
         expect(screen.getByLabelText('SSH identity file (optional)')).toHaveValue('');
     });
 
+    it('keeps a connection name the user already chose', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice' }]));
+
+        render(
+            <RemoteConnectionDialog
+                open
+                remoteConnection={{
+                    name: 'my lab box',
+                    host: 'old-host',
+                    port: 22,
+                    username: 'bob',
+                    profilerPath: '/mem',
+                }}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+
+        expect(screen.getByLabelText('Name')).toHaveValue('my lab box');
+        expect(screen.getByLabelText('SSH Host')).toHaveValue('work-gpu');
+    });
+
     it('keeps the existing username when the config host has no User', () => {
-        useSshConfigHostsMock.mockReturnValue({
-            data: { configExists: true, hosts: [{ host: 'bare-host', port: 45985 }] },
-            isError: false,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'bare-host', port: 45985 }]));
 
         render(
             <RemoteConnectionDialog
@@ -164,6 +166,27 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
         expect(screen.getByLabelText('SSH Port')).toHaveValue('45985');
     });
 
+    it('resets the picker to Custom when the host is typed by hand', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice' }]));
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const picker = screen.getByLabelText('SSH config host') as HTMLSelectElement;
+        fireEvent.change(picker, { target: { value: 'work-gpu' } });
+        expect(picker.value).toBe('work-gpu');
+
+        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'typed-host' } });
+
+        expect(picker.value).toBe(SSH_CONFIG_HOST_CUSTOM);
+        expect(screen.getByLabelText('SSH Host')).toHaveValue('typed-host');
+    });
+
     it('hides the SSH config host picker under SERVER_MODE', () => {
         getServerConfigMock.mockReturnValue({
             SSH_DEFAULT_PORT: 2222,
@@ -172,11 +195,7 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
             USERNAME: 'bob',
             SERVER_MODE: true,
         });
-        useSshConfigHostsMock.mockReturnValue({
-            data: { configExists: true, hosts: [{ host: 'should-not-show' }] },
-            isError: false,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'should-not-show' }]));
 
         render(
             <RemoteConnectionDialog
@@ -190,11 +209,7 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
     });
 
     it('hides the SSH config host picker when ~/.ssh/config does not exist', () => {
-        useSshConfigHostsMock.mockReturnValue({
-            data: emptySshConfigResponse(),
-            isError: false,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
 
         render(
             <RemoteConnectionDialog
@@ -205,5 +220,65 @@ describe('RemoteConnectionDialog SSH config prefill', () => {
         );
 
         expect(screen.queryByLabelText('SSH config host')).not.toBeInTheDocument();
+    });
+});
+
+describe('RemoteConnectionDialog connection test invalidation', () => {
+    const PASSING_TESTS: ConnectionStatus[] = [
+        { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+        { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+    ];
+
+    it('discards a passing test result when a config host changes the target', async () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice' }]));
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+        const onAddConnection = vi.fn();
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={onAddConnection}
+            />,
+        );
+
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(screen.getByText('SSH connection established')).toBeInTheDocument());
+        expect(getButtonWithText('Add connection')).toBeEnabled();
+
+        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+
+        expect(screen.queryByText('SSH connection established')).not.toBeInTheDocument();
+        expect(screen.getByText('Check SSH connection is valid')).toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('saves the prefilled connection without an identity file', async () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice', port: 2222 }]));
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+        const onAddConnection = vi.fn();
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={onAddConnection}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+
+        fireEvent.click(getButtonWithText('Add connection'));
+
+        expect(onAddConnection).toHaveBeenCalledTimes(1);
+        expect(onAddConnection.mock.calls[0][0]).toMatchObject({
+            host: 'work-gpu',
+            name: 'work-gpu',
+            username: 'alice',
+            port: 2222,
+        });
+        expect((onAddConnection.mock.calls[0][0] as RemoteConnection).identityFile).toBeUndefined();
     });
 });

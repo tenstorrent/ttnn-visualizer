@@ -4,6 +4,7 @@
 
 import os
 from pathlib import Path
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
@@ -18,6 +19,29 @@ from ttnn_visualizer.utils import (
 load_dotenv()
 
 
+def _build_allowed_origins(
+    configured: Optional[str],
+    app_port: str,
+    dev_server_host: str,
+    dev_server_port: str,
+    flask_env: str,
+) -> List[str]:
+    """Resolve the CORS allowlist, defaulting to the narrowest set that still works.
+
+    Only the app's own origin is trusted by default: local-only endpoints hand out SSH
+    host, user and path metadata, and with no authentication CORS is what stops another
+    page served from a different localhost port reading it. Production serves the built
+    SPA same-origin, while ``pnpm dev`` serves it from Vite's own origin, so only
+    non-production adds the dev server.
+    """
+    if configured is None:
+        configured = f"http://localhost:{app_port}"
+        if flask_env.lower() != "production":
+            configured += f",http://{dev_server_host}:{dev_server_port}"
+
+    return [origin for origin in configured.split(",") if origin]
+
+
 class DefaultConfig(object):
     # General Settings
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
@@ -26,13 +50,6 @@ class DefaultConfig(object):
     PRINT_ENV = True
     SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
-    ALLOWED_ORIGINS = [
-        o
-        for o in os.getenv(
-            "ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000"
-        ).split(",")
-        if o
-    ]
     BASE_PATH = os.getenv("BASE_PATH", "/")
     _raw_max_content = os.getenv("MAX_CONTENT_LENGTH")
     MAX_CONTENT_LENGTH = None if not _raw_max_content else int(_raw_max_content)
@@ -99,6 +116,14 @@ class DefaultConfig(object):
     HOST = os.getenv("HOST", "0.0.0.0" if is_running_in_container() else "localhost")
     DEV_SERVER_PORT = "5173"
     DEV_SERVER_HOST = "localhost"
+
+    ALLOWED_ORIGINS = _build_allowed_origins(
+        os.getenv("ALLOWED_ORIGINS"),
+        app_port=PORT,
+        dev_server_host=DEV_SERVER_HOST,
+        dev_server_port=DEV_SERVER_PORT,
+        flask_env=os.getenv("FLASK_ENV", "development"),
+    )
 
     GUNICORN_BIND = f"{HOST}:{PORT}"
     GUNICORN_APP_MODULE = os.getenv(

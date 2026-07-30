@@ -5,9 +5,15 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SshConfigHostPicker from '../src/components/report-selection/SshConfigHostPicker';
-import { SSH_CONFIG_HOST_CUSTOM } from '../src/definitions/RemoteConnection';
-import { SshConfigHost, SshConfigHostsResponse } from '../src/model/SshConfigHost';
+import SshConfigHostPicker, { SSH_CONFIG_HOST_CUSTOM } from '../src/components/report-selection/SshConfigHostPicker';
+import {
+    MOCK_SSH_CONFIG_HOST,
+    SshConfigHostsQueryResult,
+    failedSshConfigResult,
+    noSshConfigResult,
+    pendingSshConfigResult,
+    sshConfigHostsResult,
+} from './helpers/sshConfigFixtures';
 
 const getServerConfigMock = vi.hoisted(() =>
     vi.fn(() => ({
@@ -15,19 +21,7 @@ const getServerConfigMock = vi.hoisted(() =>
     })),
 );
 
-const useSshConfigHostsMock = vi.hoisted(() =>
-    vi.fn(
-        (): {
-            data: SshConfigHostsResponse | undefined;
-            isError: boolean;
-            isPending: boolean;
-        } => ({
-            data: { configExists: false, hosts: [] },
-            isError: false,
-            isPending: false,
-        }),
-    ),
-);
+const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
 
 vi.mock('../src/functions/getServerConfig', () => ({
     default: getServerConfigMock,
@@ -35,7 +29,6 @@ vi.mock('../src/functions/getServerConfig', () => ({
 
 vi.mock('../src/hooks/useSshConfigHosts', () => ({
     default: useSshConfigHostsMock,
-    getSshConfigHostLabel: (host: SshConfigHost) => (host.hostName ? `${host.host} — ${host.hostName}` : host.host),
 }));
 
 afterEach(() => {
@@ -46,146 +39,120 @@ beforeEach(() => {
     getServerConfigMock.mockClear();
     getServerConfigMock.mockReturnValue({ SERVER_MODE: false });
     useSshConfigHostsMock.mockClear();
-    useSshConfigHostsMock.mockReturnValue({
-        data: { configExists: false, hosts: [] },
-        isError: false,
-        isPending: false,
-    });
+    useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
 });
+
+const renderPicker = (value: string, handlers?: { onSelectHost?: () => void; onSelectCustom?: () => void }) =>
+    render(
+        <SshConfigHostPicker
+            value={value}
+            onSelectCustom={handlers?.onSelectCustom ?? vi.fn()}
+            onSelectHost={handlers?.onSelectHost ?? vi.fn()}
+        />,
+    );
+
+const getPicker = () => screen.getByLabelText('SSH config host') as HTMLSelectElement;
 
 describe('SshConfigHostPicker', () => {
     it('renders null when ~/.ssh/config does not exist', () => {
-        const { container } = render(
-            <SshConfigHostPicker
-                value={SSH_CONFIG_HOST_CUSTOM}
-                onSelectCustom={vi.fn()}
-                onSelectHost={vi.fn()}
-            />,
-        );
+        const { container } = renderPicker(SSH_CONFIG_HOST_CUSTOM);
 
         expect(container).toBeEmptyDOMElement();
     });
 
     it('renders null when the config exists but has no concrete hosts', () => {
-        useSshConfigHostsMock.mockReturnValue({
-            data: { configExists: true, hosts: [] },
-            isError: false,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([]));
 
-        const { container } = render(
-            <SshConfigHostPicker
-                value={SSH_CONFIG_HOST_CUSTOM}
-                onSelectCustom={vi.fn()}
-                onSelectHost={vi.fn()}
-            />,
-        );
+        const { container } = renderPicker(SSH_CONFIG_HOST_CUSTOM);
 
         expect(container).toBeEmptyDOMElement();
     });
 
     it('renders null while the config check is pending', () => {
-        useSshConfigHostsMock.mockReturnValue({
-            data: undefined,
-            isError: false,
-            isPending: true,
-        });
+        useSshConfigHostsMock.mockReturnValue(pendingSshConfigResult());
 
-        const { container } = render(
-            <SshConfigHostPicker
-                value={SSH_CONFIG_HOST_CUSTOM}
-                onSelectCustom={vi.fn()}
-                onSelectHost={vi.fn()}
-            />,
-        );
+        const { container } = renderPicker(SSH_CONFIG_HOST_CUSTOM);
 
         expect(container).toBeEmptyDOMElement();
     });
 
     it('renders null on error', () => {
-        useSshConfigHostsMock.mockReturnValue({
-            data: { configExists: true, hosts: [{ host: 'x' }] },
-            isError: true,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(failedSshConfigResult([{ host: 'x' }]));
 
-        const { container } = render(
-            <SshConfigHostPicker
-                value={SSH_CONFIG_HOST_CUSTOM}
-                onSelectCustom={vi.fn()}
-                onSelectHost={vi.fn()}
-            />,
-        );
+        const { container } = renderPicker(SSH_CONFIG_HOST_CUSTOM);
 
         expect(container).toBeEmptyDOMElement();
     });
 
     it('renders null under SERVER_MODE even when hosts are available', () => {
         getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
-        useSshConfigHostsMock.mockReturnValue({
-            data: { configExists: true, hosts: [{ host: 'work-gpu' }] },
-            isError: false,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
 
-        const { container } = render(
-            <SshConfigHostPicker
-                value={SSH_CONFIG_HOST_CUSTOM}
-                onSelectCustom={vi.fn()}
-                onSelectHost={vi.fn()}
-            />,
-        );
+        const { container } = renderPicker(SSH_CONFIG_HOST_CUSTOM);
 
         expect(container).toBeEmptyDOMElement();
         expect(useSshConfigHostsMock).toHaveBeenCalledWith(false);
     });
 
+    it('labels a host with its HostName', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([MOCK_SSH_CONFIG_HOST]));
+
+        renderPicker(SSH_CONFIG_HOST_CUSTOM);
+
+        expect(screen.getByRole('option', { name: 'work-gpu — gpu.example.com' })).toBeInTheDocument();
+    });
+
     it('calls onSelectHost when a config host is chosen', () => {
         const host = { host: 'work-gpu', user: 'alice', port: 2222 };
-        useSshConfigHostsMock.mockReturnValue({
-            data: { configExists: true, hosts: [host] },
-            isError: false,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([host]));
         const onSelectHost = vi.fn();
         const onSelectCustom = vi.fn();
 
-        render(
-            <SshConfigHostPicker
-                value={SSH_CONFIG_HOST_CUSTOM}
-                onSelectCustom={onSelectCustom}
-                onSelectHost={onSelectHost}
-            />,
-        );
-
-        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+        renderPicker(SSH_CONFIG_HOST_CUSTOM, { onSelectHost, onSelectCustom });
+        fireEvent.change(getPicker(), { target: { value: 'work-gpu' } });
 
         expect(onSelectHost).toHaveBeenCalledWith(host);
         expect(onSelectCustom).not.toHaveBeenCalled();
     });
 
     it('calls onSelectCustom when Custom is chosen', () => {
-        useSshConfigHostsMock.mockReturnValue({
-            data: { configExists: true, hosts: [{ host: 'work-gpu' }] },
-            isError: false,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
         const onSelectHost = vi.fn();
         const onSelectCustom = vi.fn();
 
-        render(
-            <SshConfigHostPicker
-                value='work-gpu'
-                onSelectCustom={onSelectCustom}
-                onSelectHost={onSelectHost}
-            />,
-        );
-
-        fireEvent.change(screen.getByLabelText('SSH config host'), {
-            target: { value: SSH_CONFIG_HOST_CUSTOM },
-        });
+        renderPicker('work-gpu', { onSelectHost, onSelectCustom });
+        fireEvent.change(getPicker(), { target: { value: SSH_CONFIG_HOST_CUSTOM } });
 
         expect(onSelectCustom).toHaveBeenCalledOnce();
         expect(onSelectHost).not.toHaveBeenCalled();
+    });
+
+    it('prefills from a host whose alias reads like the Custom sentinel', () => {
+        const host = { host: 'custom', user: 'alice' };
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([host]));
+        const onSelectHost = vi.fn();
+        const onSelectCustom = vi.fn();
+
+        renderPicker(SSH_CONFIG_HOST_CUSTOM, { onSelectHost, onSelectCustom });
+        fireEvent.change(getPicker(), { target: { value: 'custom' } });
+
+        expect(onSelectHost).toHaveBeenCalledWith(host);
+        expect(onSelectCustom).not.toHaveBeenCalled();
+    });
+
+    it('shows Custom when the current host is not a config alias', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
+
+        renderPicker('hand-typed-host');
+
+        expect(getPicker().value).toBe(SSH_CONFIG_HOST_CUSTOM);
+    });
+
+    it('shows the selected alias when it matches a config host', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
+
+        renderPicker('work-gpu');
+
+        expect(getPicker().value).toBe('work-gpu');
     });
 });

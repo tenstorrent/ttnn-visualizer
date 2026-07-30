@@ -7,12 +7,12 @@ import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_UPLOAD_PATH, MlirServerConnection } from '../../definitions/MlirServer';
-import { SSH_CONFIG_HOST_CUSTOM } from '../../definitions/RemoteConnection';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import getServerConfig from '../../functions/getServerConfig';
+import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
-import SshConfigHostPicker from './SshConfigHostPicker';
+import SshConfigHostPicker, { SSH_CONFIG_HOST_CUSTOM } from './SshConfigHostPicker';
 import 'styles/components/RemoteConnectionDialog.scss';
 
 interface MlirServerDialogProps {
@@ -108,17 +108,16 @@ const MlirServerDialog = ({
     const handleSelectSshConfigHost = (host: SshConfigHost) => {
         setSelectedSshConfigHost(host.host);
         const defaults = getDefaultServer();
-        const previousUsername = connection.username.trim() || defaults.username;
-
-        updateConnection({
-            host: host.host,
-            // Prefer config User; otherwise keep the existing/default username so the
-            // field stays populated when User is only implied by OpenSSH (local login).
-            username: host.user?.trim() || previousUsername,
-            sshPort: host.port ?? connection.sshPort,
-            identityFile: undefined,
-            name: host.host,
+        const { port, ...prefill } = getSshConfigHostPrefill(host, {
+            name: connection.name,
+            username: connection.username,
+            port: connection.sshPort,
+            defaultUsername: defaults.username,
+            defaultPort: defaults.sshPort,
         });
+
+        // The config stanza's Port is the SSH port; the MLIR server port is unrelated.
+        updateConnection({ ...prefill, sshPort: port });
     };
 
     return (

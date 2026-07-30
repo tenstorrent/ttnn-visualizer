@@ -6,7 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MlirServerDialog from '../src/components/report-selection/MlirServerDialog';
-import { SshConfigHost, SshConfigHostsResponse } from '../src/model/SshConfigHost';
+import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 
 const getServerConfigMock = vi.hoisted(() =>
     vi.fn(() => ({
@@ -18,13 +18,7 @@ const getServerConfigMock = vi.hoisted(() =>
     })),
 );
 
-const useSshConfigHostsMock = vi.hoisted(() =>
-    vi.fn(() => ({
-        data: { configExists: false, hosts: [] } as SshConfigHostsResponse,
-        isError: false,
-        isPending: false,
-    })),
-);
+const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
 
 vi.mock('../src/functions/getServerConfig', () => ({
     default: getServerConfigMock,
@@ -32,7 +26,6 @@ vi.mock('../src/functions/getServerConfig', () => ({
 
 vi.mock('../src/hooks/useSshConfigHosts', () => ({
     default: useSshConfigHostsMock,
-    getSshConfigHostLabel: (host: SshConfigHost) => (host.hostName ? `${host.host} — ${host.hostName}` : host.host),
 }));
 
 vi.mock('../src/hooks/useMlirRemote', () => ({
@@ -55,11 +48,7 @@ beforeEach(() => {
         SERVER_MODE: false,
     });
     useSshConfigHostsMock.mockClear();
-    useSshConfigHostsMock.mockReturnValue({
-        data: { configExists: false, hosts: [] },
-        isError: false,
-        isPending: false,
-    });
+    useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
 });
 
 describe('MlirServerDialog defaults', () => {
@@ -79,28 +68,19 @@ describe('MlirServerDialog defaults', () => {
 
 describe('MlirServerDialog SSH config prefill', () => {
     it('prefills host, name, username, and sshPort from a config host and clears identity', () => {
-        useSshConfigHostsMock.mockReturnValue({
-            data: { configExists: true, hosts: [{ host: 'work-gpu', user: 'alice', port: 2222 }] },
-            isError: false,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice', port: 2222 }]));
 
         render(
             <MlirServerDialog
                 open
-                server={{
-                    name: 'old',
-                    host: 'old-host',
-                    sshPort: 22,
-                    port: 8080,
-                    username: 'bob',
-                    identityFile: '/tmp/id_ed25519',
-                }}
                 onClose={vi.fn()}
                 onAddServer={vi.fn()}
             />,
         );
 
+        fireEvent.change(screen.getByLabelText('SSH identity file (optional)'), {
+            target: { value: '/tmp/id_ed25519' },
+        });
         fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
 
         expect(screen.getByLabelText('Name')).toHaveValue('work-gpu');
@@ -108,6 +88,51 @@ describe('MlirServerDialog SSH config prefill', () => {
         expect(screen.getByLabelText('Username')).toHaveValue('alice');
         expect(screen.getByLabelText('SSH port')).toHaveValue('2222');
         expect(screen.getByLabelText('SSH identity file (optional)')).toHaveValue('');
+    });
+
+    it('keeps the existing username, sshPort, and server name when the stanza omits them', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'bare-host' }]));
+
+        render(
+            <MlirServerDialog
+                open
+                server={{
+                    name: 'my model explorer',
+                    host: 'old-host',
+                    sshPort: 2022,
+                    port: 8080,
+                    username: 'carol',
+                }}
+                onClose={vi.fn()}
+                onAddServer={vi.fn()}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'bare-host' } });
+
+        expect(screen.getByLabelText('Name')).toHaveValue('my model explorer');
+        expect(screen.getByLabelText('SSH host')).toHaveValue('bare-host');
+        expect(screen.getByLabelText('Username')).toHaveValue('carol');
+        expect(screen.getByLabelText('SSH port')).toHaveValue('2022');
+    });
+
+    it('leaves the MLIR server port alone when the stanza carries an SSH Port', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', port: 2222 }]));
+
+        render(
+            <MlirServerDialog
+                open
+                onClose={vi.fn()}
+                onAddServer={vi.fn()}
+            />,
+        );
+
+        const mlirPort = screen.getByLabelText('MLIR port') as HTMLInputElement;
+        const portBeforePrefill = mlirPort.value;
+        fireEvent.change(screen.getByLabelText('SSH config host'), { target: { value: 'work-gpu' } });
+
+        expect(screen.getByLabelText('SSH port')).toHaveValue('2222');
+        expect(mlirPort).toHaveValue(portBeforePrefill);
     });
 
     it('hides the SSH config host picker under SERVER_MODE', () => {
@@ -118,11 +143,7 @@ describe('MlirServerDialog SSH config prefill', () => {
             USERNAME: 'bob',
             SERVER_MODE: true,
         });
-        useSshConfigHostsMock.mockReturnValue({
-            data: { configExists: true, hosts: [{ host: 'should-not-show' }] },
-            isError: false,
-            isPending: false,
-        });
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'should-not-show' }]));
 
         render(
             <MlirServerDialog

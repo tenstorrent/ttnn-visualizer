@@ -6,9 +6,6 @@ import { HttpStatusCode } from 'axios';
 
 export const DEFAULT_SSH_PORT = 22;
 
-/** Sentinel value for the SSH-config dropdown “Custom” option. */
-export const SSH_CONFIG_HOST_CUSTOM = 'custom';
-
 export interface RemoteConnection {
     name: string;
     username: string;

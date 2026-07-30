@@ -7,12 +7,13 @@ import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { RemoteConnection, SSH_CONFIG_HOST_CUSTOM } from '../../definitions/RemoteConnection';
+import { RemoteConnection } from '../../definitions/RemoteConnection';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import getServerConfig from '../../functions/getServerConfig';
+import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
-import SshConfigHostPicker from './SshConfigHostPicker';
+import SshConfigHostPicker, { SSH_CONFIG_HOST_CUSTOM } from './SshConfigHostPicker';
 import 'styles/components/RemoteConnectionDialog.scss';
 
 interface RemoteConnectionDialogProps {
@@ -142,17 +143,16 @@ const RemoteConnectionDialog = ({
         setSelectedSshConfigHost(host.host);
         setConnection((prev) => {
             const defaults = getDefaultConnection();
-            const previousUsername = prev.username?.trim() || defaults.username;
 
             return {
                 ...prev,
-                host: host.host,
-                // Prefer config User; otherwise keep the existing/default username so the
-                // field stays populated when User is only implied by OpenSSH (local login).
-                username: host.user?.trim() || previousUsername,
-                port: host.port ?? prev.port ?? defaults.port,
-                identityFile: undefined,
-                name: host.host,
+                ...getSshConfigHostPrefill(host, {
+                    name: prev.name,
+                    username: prev.username,
+                    port: prev.port,
+                    defaultUsername: defaults.username,
+                    defaultPort: defaults.port,
+                }),
             };
         });
         setConnectionTests([]);

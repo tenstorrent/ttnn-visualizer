@@ -16,7 +16,7 @@ import os
 import shlex
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -63,15 +63,17 @@ def load_ssh_config_hosts(
     """Load concrete Host aliases from ``config_path`` (default ``~/.ssh/config``).
 
     When the config file is missing, ``configExists`` is false and ``hosts`` is
-    empty so the UI can hide the picker. Unreadable files are treated the same.
-    Duplicate aliases keep the last occurrence (OpenSSH last-wins).
+    empty so the UI can hide the picker. An existing but unreadable file reports
+    ``configExists`` true with no hosts. Duplicate aliases keep the last
+    occurrence (OpenSSH last-wins). Each file is parsed at most once, so an
+    ``Include`` cycle or self-matching glob terminates.
     """
     path = config_path if config_path is not None else DEFAULT_SSH_CONFIG_PATH
     if not path.is_file():
         return SshConfigHostsResult(configExists=False, hosts=[])
 
     host_by_alias: Dict[str, SshConfigHost] = {}
-    _parse_ssh_config_file(path, host_by_alias, depth=0)
+    _parse_ssh_config_file(path, host_by_alias, depth=0, visited=set())
     return SshConfigHostsResult(configExists=True, hosts=list(host_by_alias.values()))
 
 
@@ -86,10 +88,21 @@ def _parse_ssh_config_file(
     path: Path,
     host_by_alias: Dict[str, SshConfigHost],
     depth: int,
+    visited: Set[Path],
 ) -> None:
     if depth > MAX_INCLUDE_DEPTH:
         logger.warning("SSH config Include depth exceeded at %s", path)
         return
+
+    # OpenSSH permits re-inclusion, but a picker only needs each file once and the
+    # depth cap alone leaves Include fan-out exponential in the number of matches.
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = path
+    if resolved in visited:
+        return
+    visited.add(resolved)
 
     try:
         text = path.read_text(encoding="utf-8")
@@ -122,12 +135,13 @@ def _parse_ssh_config_file(
         keyword_lower = keyword.lower()
 
         if keyword_lower == "include":
-            # Include applies regardless of current Host/Match context in OpenSSH;
-            # flush any open Host first so included hosts don't inherit its values.
-            flush_host_block()
-            in_match_block = False
+            # OpenSSH applies Include where it appears and the surrounding Host
+            # context continues afterwards, so the open stanza is left pending —
+            # flushing here would silently drop the keywords that follow. The
+            # included file parses with its own stanza state, so it cannot inherit
+            # the pending values.
             for included in _expand_include_paths(argument, path.parent):
-                _parse_ssh_config_file(included, host_by_alias, depth + 1)
+                _parse_ssh_config_file(included, host_by_alias, depth + 1, visited)
             continue
 
         if keyword_lower == "match":
@@ -244,7 +258,13 @@ def _expand_include_paths(argument: str, base_dir: Path) -> List[Path]:
         if not candidate.is_absolute():
             candidate = base_dir / expanded
 
-        matches = sorted(Path(match) for match in glob.glob(str(candidate)))
+        # Globs also match directories, sockets and device nodes; reading one of
+        # those would raise per match at best and block the worker at worst.
+        matches = sorted(
+            match
+            for match in (Path(entry) for entry in glob.glob(str(candidate)))
+            if match.is_file()
+        )
         if matches:
             resolved.extend(matches)
         elif candidate.is_file():

@@ -3,10 +3,17 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { FormGroup, HTMLSelect } from '@blueprintjs/core';
-import { SSH_CONFIG_HOST_CUSTOM } from '../../definitions/RemoteConnection';
 import { SshConfigHost } from '../../model/SshConfigHost';
+import { getSshConfigHostLabel } from '../../functions/formatting';
 import getServerConfig from '../../functions/getServerConfig';
-import useSshConfigHosts, { getSshConfigHostLabel } from '../../hooks/useSshConfigHosts';
+import useSshConfigHosts from '../../hooks/useSshConfigHosts';
+
+/**
+ * Sentinel for the dropdown's “Custom” option. The backend drops wildcard patterns,
+ * so `*` can never collide with a concrete alias the way a plausible name like
+ * `custom` could.
+ */
+export const SSH_CONFIG_HOST_CUSTOM = '*';
 
 interface SshConfigHostPickerProps {
     /** Currently selected alias, or {@link SSH_CONFIG_HOST_CUSTOM}. */
