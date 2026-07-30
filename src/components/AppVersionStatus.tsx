@@ -34,10 +34,7 @@ function AppVersionStatus({
     latestVersionCheckFailed,
 }: AppVersionStatusProps) {
     const versionOutdatedLevel: OutdatedLevel = useMemo(
-        () =>
-            isServerMode || !latestAppVersion
-                ? OutdatedLevel.NONE
-                : getVersionOutdatedLevel(appVersion, latestAppVersion),
+        () => (isServerMode ? OutdatedLevel.NONE : getVersionOutdatedLevel(appVersion, latestAppVersion)),
         [isServerMode, latestAppVersion, appVersion],
     );
     const isAppOutdated = versionOutdatedLevel > OutdatedLevel.NONE;

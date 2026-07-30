@@ -15,7 +15,7 @@ describe('getVersionOutdatedLevel', () => {
         ['0.96.0', '0.99.0', OutdatedLevel.THREE],
         ['0.96.0', '1.0.0', OutdatedLevel.THREE],
         ['0.96.5', '0.97.0', OutdatedLevel.ONE],
-    ])('reports level %#: local %s against published %s', (current, latest, expected) => {
+    ])('local %s against published %s reports level %i', (current, latest, expected) => {
         expect(getVersionOutdatedLevel(current, latest)).toBe(expected);
     });
 
@@ -30,15 +30,22 @@ describe('getVersionOutdatedLevel', () => {
     });
 
     test.each([
-        ['', '0.96.0'],
-        ['0.96.0', ''],
-        ['', ''],
-    ])('reports NONE when a version is missing (%s, %s)', (current, latest) => {
+        ['missing local version', undefined, '0.96.0'],
+        ['missing published version', '0.96.0', undefined],
+        ['empty local version', '', '0.96.0'],
+        ['empty published version', '0.96.0', ''],
+        ['both versions missing', undefined, undefined],
+    ])('reports NONE with a %s', (_case, current, latest) => {
         expect(getVersionOutdatedLevel(current, latest)).toBe(OutdatedLevel.NONE);
     });
 
     test('treats omitted minor and patch components as zero', () => {
         expect(getVersionOutdatedLevel('1', '1.0.0')).toBe(OutdatedLevel.NONE);
         expect(getVersionOutdatedLevel('1.0', '1.0.1')).toBe(OutdatedLevel.ONE);
+    });
+
+    test('ignores prerelease identifiers, so a local rc reports as its release', () => {
+        expect(getVersionOutdatedLevel('1.0.0-rc1', '1.0.0')).toBe(OutdatedLevel.NONE);
+        expect(getVersionOutdatedLevel('1.0.0-rc1', '1.0.1')).toBe(OutdatedLevel.ONE);
     });
 });
