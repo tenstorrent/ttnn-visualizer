@@ -1261,6 +1261,10 @@ export const useInstance = () => {
     });
 };
 
+// Stable identity across renders: a fresh `{}` made consumers memoizing on the
+// descriptor recompute every render, which now matters on the unknown-arch path. #1772
+const NO_CHIP_DESIGN = Object.freeze({}) as ChipDesign;
+
 export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
     switch (arch) {
         case DeviceArchitecture.WORMHOLE:
@@ -1270,7 +1274,7 @@ export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
         default: {
             // eslint-disable-next-line no-console
             console.error(`Unsupported arch: ${arch}`);
-            return {} as ChipDesign;
+            return NO_CHIP_DESIGN;
         }
     }
 };

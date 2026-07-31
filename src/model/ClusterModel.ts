@@ -5,7 +5,7 @@
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 
 type ChipId = number;
-type EthChannel = number;
+export type EthChannel = number;
 type CoreId = string;
 
 export type ClusterCoordinates = [x: number, y: number, r: number, s: number];
@@ -21,8 +21,11 @@ export interface ClusterChip {
     id: number;
     coords: ClusterCoordinates;
     mmio: boolean;
-    eth: string[];
+    // Live channels from the cluster descriptor; port uids derive from these rather than
+    // the arch eth list, so a cluster renders with no baked SoC descriptor. #1772
+    ethChannels: EthChannel[];
     connectedChipsByEthId: Map<string, ClusterChip>;
+    // Optional enrichment only (coordinate labels, PCIe markers); absent for an unknown arch.
     design?: ChipDesign;
     // Rank of the host this chip lives on. Defaults to 0 for single-host reports.
     // For multi-host topologies the unique key is `(rank, id)`; local `id`s can collide across ranks.
