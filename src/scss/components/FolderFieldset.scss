@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .folder-fieldset {
     position: relative;
@@ -50,12 +51,19 @@
         gap: 5px;
 
         .bp6-file-input {
-            width: 250px;
+            width: variables.$report-select-width;
         }
 
+        // The connection string is long, so truncate it rather than let the trigger outgrow the
+        // other report-selection controls.
         .remote-select {
+            max-width: variables.$report-select-width;
+
+            .bp6-button {
+                max-width: 100%;
+            }
+
             .bp6-button-text {
-                width: 8rem;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;

@@ -4,8 +4,11 @@
 
 @use '../mixins/formLayout' as form-layout;
 
-// The nested .form-container is styled by the enclosing FolderFieldset, which also
-// supplies the .remote-select truncation.
+// The nested .form-container is styled by the enclosing FolderFieldset.
 .remote-connection-selector {
     @include form-layout.stacked-form-controls;
+}
+
+.remote-connection-menu-item {
+    @include form-layout.select-menu-item-actions;
 }

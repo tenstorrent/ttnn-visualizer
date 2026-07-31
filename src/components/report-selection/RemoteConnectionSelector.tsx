@@ -2,13 +2,20 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
-import { Button, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ItemRendererProps, Select } from '@blueprintjs/select';
+import { ItemRenderer, Select } from '@blueprintjs/select';
+import { useState } from 'react';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
-import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
-import { isEqual } from '../../functions/math';
+import {
+    EDIT_CONNECTION_LABEL,
+    FETCH_REMOTE_FOLDERS_LABEL,
+    REMOVE_CONNECTION_LABEL,
+    RemoteConnection,
+} from '../../definitions/RemoteConnection';
+import { DeletableEntity } from '../../definitions/DeletableEntity';
+import { isSameConnection } from '../../functions/remoteConnection';
+import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import HighlightedText from '../HighlightedText';
 import 'styles/components/RemoteConnectionSelector.scss';
 
@@ -23,9 +30,6 @@ interface RemoteConnectionSelectorProps {
     onSyncRemoteFolderList: (connection: RemoteConnection) => void;
 }
 
-const EDIT_CONNECTION_LABEL = 'Edit selected connection';
-const REMOVE_CONNECTION_LABEL = 'Remove selected connection';
-
 const RemoteConnectionSelector = ({
     connectionList,
     connection,
@@ -36,16 +40,60 @@ const RemoteConnectionSelector = ({
     onRemoveConnection,
     onSyncRemoteFolderList,
 }: RemoteConnectionSelectorProps) => {
-    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+    const [connectionToEdit, setConnectionToEdit] = useState<RemoteConnection | null>(null);
+    const [connectionToDelete, setConnectionToDelete] = useState<RemoteConnection | null>(null);
     const selectedConnection = connection ?? connectionList[0];
+
+    const renderRemoteConnection: ItemRenderer<RemoteConnection> = (item, { handleClick, modifiers, query }) => {
+        if (!modifiers.matchesPredicate) {
+            return null;
+        }
+
+        return (
+            <div
+                className='remote-connection-menu-item'
+                key={formatConnectionString(item)}
+            >
+                <MenuItem
+                    active={isSameConnection(item, selectedConnection)}
+                    disabled={modifiers.disabled}
+                    onClick={handleClick}
+                    roleStructure='listoption'
+                    text={
+                        <HighlightedText
+                            text={formatConnectionString(item)}
+                            filter={query}
+                        />
+                    }
+                />
+
+                <Button
+                    aria-label={EDIT_CONNECTION_LABEL}
+                    icon={IconNames.EDIT}
+                    disabled={disabled}
+                    variant={ButtonVariant.MINIMAL}
+                    onClick={() => setConnectionToEdit(item)}
+                />
+
+                <Button
+                    aria-label={REMOVE_CONNECTION_LABEL}
+                    icon={IconNames.TRASH}
+                    disabled={disabled}
+                    variant={ButtonVariant.MINIMAL}
+                    intent={Intent.DANGER}
+                    onClick={() => setConnectionToDelete(item)}
+                />
+            </div>
+        );
+    };
 
     return (
         <div className='remote-connection-selector'>
             <div className='form-container'>
-                <Select
+                <Select<RemoteConnection>
                     className='remote-select'
                     items={connectionList}
-                    itemRenderer={(item, itemProps) => renderRemoteConnection(item, itemProps, selectedConnection)}
+                    itemRenderer={renderRemoteConnection}
                     disabled={disabled}
                     filterable
                     itemPredicate={filterRemoteConnections}
@@ -65,44 +113,6 @@ const RemoteConnectionSelector = ({
                         text={formatConnectionString(selectedConnection)}
                     />
                 </Select>
-                <Tooltip
-                    content={EDIT_CONNECTION_LABEL}
-                    position={PopoverPosition.TOP}
-                >
-                    <Button
-                        aria-label={EDIT_CONNECTION_LABEL}
-                        icon={IconNames.EDIT}
-                        disabled={disabled || !selectedConnection}
-                        onClick={() => setIsEditDialogOpen(true)}
-                    />
-                </Tooltip>
-                <Tooltip
-                    content={REMOVE_CONNECTION_LABEL}
-                    position={PopoverPosition.TOP}
-                >
-                    <Button
-                        aria-label={REMOVE_CONNECTION_LABEL}
-                        icon={IconNames.TRASH}
-                        disabled={disabled || !selectedConnection}
-                        onClick={() => onRemoveConnection(selectedConnection)}
-                    />
-                </Tooltip>
-
-                <RemoteConnectionDialog
-                    key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.profilerPath}`}
-                    open={isEditDialogOpen}
-                    onAddConnection={(updatedConnection) => {
-                        onEditConnection(updatedConnection, connection);
-                    }}
-                    onClose={() => setIsEditDialogOpen(false)}
-                    onSave={(updatedConnection) => {
-                        onEditConnection(updatedConnection, connection);
-                        onSyncRemoteFolderList(updatedConnection);
-                    }}
-                    title='Edit remote connection'
-                    buttonLabel='Save connection'
-                    remoteConnection={selectedConnection}
-                />
             </div>
 
             <Tooltip
@@ -118,6 +128,42 @@ const RemoteConnectionSelector = ({
                     onClick={() => onSyncRemoteFolderList(selectedConnection)}
                 />
             </Tooltip>
+
+            {connectionToEdit && (
+                <RemoteConnectionDialog
+                    key={formatConnectionString(connectionToEdit)}
+                    open
+                    // The dialog always calls onAddConnection and then onSave, so the edit is applied
+                    // here and only the follow-up fetch belongs in onSave.
+                    onAddConnection={(updatedConnection) => onEditConnection(updatedConnection, connectionToEdit)}
+                    onClose={() => setConnectionToEdit(null)}
+                    onSave={(updatedConnection) => {
+                        // Fetching populates the folder lists for whichever connection is in use, so
+                        // editing a connection that isn't selected must not trigger it.
+                        if (isSameConnection(connectionToEdit, selectedConnection)) {
+                            onSyncRemoteFolderList(updatedConnection);
+                        }
+                    }}
+                    title='Edit remote connection'
+                    buttonLabel='Save connection'
+                    remoteConnection={connectionToEdit}
+                />
+            )}
+
+            {connectionToDelete && (
+                <ConfirmDeleteAlert
+                    isOpen
+                    entity={DeletableEntity.REMOTE_CONNECTION}
+                    entityName={connectionToDelete.name}
+                    onCancel={() => setConnectionToDelete(null)}
+                    onConfirm={() => {
+                        onRemoveConnection(connectionToDelete);
+                        setConnectionToDelete(null);
+                    }}
+                >
+                    <p>Its cached memory and performance report lists will be cleared too.</p>
+                </ConfirmDeleteAlert>
+            )}
         </div>
     );
 };
@@ -132,37 +178,6 @@ const formatConnectionString = (connection?: RemoteConnection) => {
 
 const filterRemoteConnections = (query: string, connection: RemoteConnection) => {
     return formatConnectionString(connection).toLowerCase().includes(query.toLowerCase());
-};
-
-type RenderRemoteConnectionProps<T> = (
-    item: T,
-    itemProps: ItemRendererProps,
-    selectedItem: T,
-) => React.JSX.Element | null;
-
-const renderRemoteConnection: RenderRemoteConnectionProps<RemoteConnection> = (
-    connection,
-    { handleClick, modifiers, query },
-    selectedConnection,
-) => {
-    if (!modifiers.matchesPredicate) {
-        return null;
-    }
-
-    return (
-        <MenuItem
-            active={isEqual(connection, selectedConnection)}
-            disabled={modifiers.disabled}
-            key={formatConnectionString(connection)}
-            onClick={handleClick}
-            text={
-                <HighlightedText
-                    text={formatConnectionString(connection)}
-                    filter={query}
-                />
-            }
-        />
-    );
 };
 
 export default RemoteConnectionSelector;

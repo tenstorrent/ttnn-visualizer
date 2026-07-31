@@ -373,8 +373,7 @@ it('handles valid performance report upload without tracy', async () => {
     );
 });
 
-// Skipped test: Deletion test to be fixed in future PR
-it.skip('deletes memory report and updates state', async () => {
+it('deletes memory report and updates state', async () => {
     render(
         <TestProviders>
             <LocalFolderSelector />
@@ -405,8 +404,12 @@ it.skip('deletes memory report and updates state', async () => {
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(2);
     profilerSelect.click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    // Scoped to the dropdown rows: the delete toast is still on screen and carries the report
+    // name too, so an unscoped getByText matches twice.
+    const menuRows = [...document.querySelectorAll('.folder-picker-menu-item')].map((row) => row.textContent);
+
     mockProfilerFolderList.forEach((folder: ReportFolder) => {
-        expect(screen.getByText(folder.reportName)).not.toBeNull();
-        expect(screen.getByText(`/${folder.path}`)).not.toBeNull();
+        expect(menuRows.some((row) => row?.includes(`/${folder.path}`) && row?.includes(folder.reportName))).toBe(true);
     });
 });

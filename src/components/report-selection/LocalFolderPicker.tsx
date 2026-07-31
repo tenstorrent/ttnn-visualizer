@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useMemo, useState } from 'react';
-import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
@@ -13,9 +13,11 @@ import {
     shouldShowFolderLinkStatus,
     sortByFolderLinkState,
 } from '../../functions/folderLinkStatus';
-import { ReportFolder } from '../../definitions/Reports';
+import { DELETE_REPORT_LABEL, ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import { getReportId } from '../../functions/reportLinks';
+import { DeletableEntity } from '../../definitions/DeletableEntity';
+import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
 
@@ -111,82 +113,71 @@ const LocalFolderPicker = ({
                 />
 
                 {handleDelete && !isServerMode && (
-                    <>
-                        <Button
-                            aria-label='Delete report'
-                            icon={IconNames.TRASH}
-                            onClick={() => setFolderToDelete(folder)}
-                            disabled={isDeleteDisabled}
-                            variant={ButtonVariant.MINIMAL}
-                            intent={Intent.DANGER}
-                        />
-
-                        {folderToDelete && (
-                            <Alert
-                                canEscapeKeyCancel
-                                canOutsideClickCancel
-                                isOpen={!!folderToDelete}
-                                intent={Intent.DANGER}
-                                onCancel={() => setFolderToDelete(null)}
-                                onClose={() => setFolderToDelete(null)}
-                                onConfirm={() => {
-                                    if (!loading) {
-                                        handleDelete(folderToDelete);
-                                    }
-                                    setFolderToDelete(null);
-                                }}
-                                cancelButtonText='Cancel'
-                                confirmButtonText='Delete'
-                                // @ts-expect-error BackdropClassName is not defined in AlertProps
-                                backdropClassName='delete-folder-backdrop'
-                            >
-                                <p>
-                                    Are you sure you want to delete <strong>{folderToDelete.reportName}</strong>? This
-                                    action cannot be undone.
-                                </p>
-                            </Alert>
-                        )}
-                    </>
+                    <Button
+                        aria-label={DELETE_REPORT_LABEL}
+                        icon={IconNames.TRASH}
+                        onClick={() => setFolderToDelete(folder)}
+                        disabled={isDeleteDisabled}
+                        variant={ButtonVariant.MINIMAL}
+                        intent={Intent.DANGER}
+                    />
                 )}
             </div>
         );
     };
 
     return (
-        <Select<ReportFolder>
-            className='folder-picker'
-            items={sortedItems}
-            itemPredicate={(query, item) => !query || item.path.toLowerCase().includes(query.toLowerCase())}
-            itemRenderer={renderItem}
-            noResults={
-                <MenuItem
-                    disabled
-                    text='No results.'
-                    roleStructure='listoption'
-                />
-            }
-            onItemSelect={handleSelect}
-            disabled={isDisabled}
-        >
-            <Tooltip
-                content={`/${activePath}`}
-                disabled={!activePath}
-                position={Position.RIGHT}
-                openOnTargetFocus={false}
+        <>
+            <Select<ReportFolder>
+                className='folder-picker'
+                items={sortedItems}
+                itemPredicate={(query, item) => !query || item.path.toLowerCase().includes(query.toLowerCase())}
+                itemRenderer={renderItem}
+                noResults={
+                    <MenuItem
+                        disabled
+                        text='No results.'
+                        roleStructure='listoption'
+                    />
+                }
+                onItemSelect={handleSelect}
+                disabled={isDisabled}
             >
-                <Button
-                    className='folder-picker-button'
-                    text={activeName || defaultLabel}
-                    disabled={isDisabled}
-                    loading={loading}
-                    alignText='start'
-                    icon={IconNames.DOCUMENT_OPEN}
-                    endIcon={IconNames.CARET_DOWN}
-                    variant={ButtonVariant.OUTLINED}
-                    fill
+                <Tooltip
+                    content={`/${activePath}`}
+                    disabled={!activePath}
+                    position={Position.RIGHT}
+                    openOnTargetFocus={false}
+                >
+                    <Button
+                        className='folder-picker-button'
+                        text={activeName || defaultLabel}
+                        disabled={isDisabled}
+                        loading={loading}
+                        alignText='start'
+                        icon={IconNames.DOCUMENT_OPEN}
+                        endIcon={IconNames.CARET_DOWN}
+                        variant={ButtonVariant.OUTLINED}
+                        fill
+                    />
+                </Tooltip>
+            </Select>
+
+            {handleDelete && folderToDelete && (
+                <ConfirmDeleteAlert
+                    isOpen
+                    entity={DeletableEntity.REPORT}
+                    entityName={folderToDelete.reportName}
+                    onCancel={() => setFolderToDelete(null)}
+                    onConfirm={() => {
+                        if (!loading) {
+                            handleDelete(folderToDelete);
+                        }
+                        setFolderToDelete(null);
+                    }}
                 />
-            </Tooltip>
-        </Select>
+            )}
+        </>
     );
 };
 

@@ -2,20 +2,21 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-// Keep the server select and its edit/delete buttons on a single row. The
-// select label can be long, so truncate it with an ellipsis — matching the
-// remote-sync server select (`.remote-select` in FolderFieldset.scss) — rather
-// than push the icon buttons onto the next line.
-.mlir-server-select-row {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 5px;
+@use '../definitions/variables' as variables;
+@use '../mixins/formLayout' as form-layout;
 
-    .mlir-server-select-button .bp6-button-text {
-        width: 8rem;
+// The server label is long, so truncate it rather than let the trigger outgrow the other
+// report-selection controls.
+.mlir-server-select-button {
+    max-width: variables.$report-select-width;
+
+    .bp6-button-text {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
+}
+
+.mlir-server-menu-item {
+    @include form-layout.select-menu-item-actions;
 }

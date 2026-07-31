@@ -22,6 +22,7 @@ import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import mergeRemoteFolders from '../../functions/mergeRemoteFolders';
+import { isSameConnection } from '../../functions/remoteConnection';
 import notifyFolderSyncError, {
     notifyFolderListSyncError,
     notifyRemoteFolderMountError,
@@ -75,6 +76,11 @@ const RemoteSyncConfigurator = () => {
         }
     }, [reportMetadata, reportMetadataError]);
 
+    // The saved list lives in localStorage, so persisting it doesn't re-render on its own. This
+    // component is its only writer, so mirror it in state and write through persistConnectionList.
+    const [savedConnectionList, setSavedConnectionList] = useState<RemoteConnection[]>(
+        remote.persistentState.savedConnectionList,
+    );
     const [isFetching, setIsFetching] = useState(false);
     const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(
         remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection),
@@ -98,6 +104,11 @@ const RemoteSyncConfigurator = () => {
     );
     // Aborts in-flight local disk scans when the connection changes quickly.
     const localSyncedFoldersAbortRef = useRef<AbortController | null>(null);
+
+    const persistConnectionList = (connectionList: RemoteConnection[]) => {
+        setPersistentSavedConnectionList(connectionList);
+        setSavedConnectionList(connectionList);
+    };
 
     const updateSelectedConnection = async (connection: RemoteConnection) => {
         setPersistentSelectedConnection(connection);
@@ -309,13 +320,7 @@ const RemoteSyncConfigurator = () => {
     };
 
     const findConnectionIndex = (connection?: RemoteConnection) => {
-        return remote.persistentState.savedConnectionList.findIndex((c) => {
-            const isSameName = c.name === connection?.name;
-            const isSameHost = c.host === connection?.host;
-            const isSamePort = c.port === connection?.port;
-
-            return isSameName && isSameHost && isSamePort;
-        });
+        return savedConnectionList.findIndex((c) => isSameConnection(c, connection));
     };
 
     const applyProfilerReportSelection = (folder: RemoteFolder) => {
@@ -634,10 +639,7 @@ const RemoteSyncConfigurator = () => {
                 <AddRemoteConnection
                     disabled={isDisabled}
                     onAddConnection={async (newConnection) => {
-                        setPersistentSavedConnectionList([
-                            ...remote.persistentState.savedConnectionList,
-                            newConnection,
-                        ]);
+                        persistConnectionList([...savedConnectionList, newConnection]);
 
                         await updateSelectedConnection(newConnection);
                     }}
@@ -651,27 +653,47 @@ const RemoteSyncConfigurator = () => {
             >
                 <RemoteConnectionSelector
                     connection={remote.persistentState.selectedConnection}
-                    connectionList={remote.persistentState.savedConnectionList}
+                    connectionList={savedConnectionList}
                     disabled={isDisabled}
                     loading={isFetching}
                     onEditConnection={async (updatedConnection, oldConnection) => {
-                        const updatedConnections = [...remote.persistentState.savedConnectionList];
+                        const connectionIndex = findConnectionIndex(oldConnection);
 
-                        updatedConnections[findConnectionIndex(oldConnection)] = updatedConnection;
-                        setPersistentSavedConnectionList(updatedConnections);
+                        if (connectionIndex === -1) {
+                            return;
+                        }
+
+                        const wasSelected = isSameConnection(oldConnection, remote.persistentState.selectedConnection);
+                        const updatedConnections = [...savedConnectionList];
+
+                        updatedConnections[connectionIndex] = updatedConnection;
+                        persistConnectionList(updatedConnections);
                         remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
 
-                        await updateSelectedConnection(updatedConnection);
+                        // updateSelectedConnection also clears the active remote report, so editing a
+                        // connection from a dropdown row must only re-point a selection it already held.
+                        if (wasSelected) {
+                            await updateSelectedConnection(updatedConnection);
+                        }
                     }}
                     onRemoveConnection={async (connection) => {
-                        const updatedConnections = [...remote.persistentState.savedConnectionList];
+                        const connectionIndex = findConnectionIndex(connection);
 
-                        updatedConnections.splice(findConnectionIndex(connection), 1);
-                        setPersistentSavedConnectionList(updatedConnections);
+                        if (connectionIndex === -1) {
+                            return;
+                        }
+
+                        const wasSelected = isSameConnection(connection, remote.persistentState.selectedConnection);
+                        const updatedConnections = [...savedConnectionList];
+
+                        updatedConnections.splice(connectionIndex, 1);
+                        persistConnectionList(updatedConnections);
                         remote.persistentState.deleteSavedReportFolders(connection);
                         remote.persistentState.deleteSavedPerformanceFolders(connection);
 
-                        await updateSelectedConnection(updatedConnections[0]);
+                        if (wasSelected) {
+                            await updateSelectedConnection(updatedConnections[0]);
+                        }
                     }}
                     onSelectConnection={async (connection) => {
                         await updateSelectedConnection(connection);

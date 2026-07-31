@@ -11,3 +11,5 @@ export interface ReportFolder {
     path: string;
     reportName: string;
 }
+
+export const DELETE_REPORT_LABEL = 'Delete report';

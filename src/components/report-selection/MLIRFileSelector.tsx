@@ -2,21 +2,20 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, Callout, FormGroup, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Callout, FormGroup, Intent, MenuItem } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { useAtom } from 'jotai';
 import { useState } from 'react';
-import { MlirServerConnection } from '../../definitions/MlirServer';
+import { EDIT_SERVER_LABEL, MlirServerConnection, REMOVE_SERVER_LABEL } from '../../definitions/MlirServer';
 import { getActiveMlirServer, isSameMlirServer, mlirServerKey } from '../../functions/mlirServer';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
 import { mlirServersAtom, selectedMlirServerAtom } from '../../store/app';
+import { DeletableEntity } from '../../definitions/DeletableEntity';
+import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import MlirJsonFileLoader from '../mlir/MlirJsonFileLoader';
 import MlirServerDialog from './MlirServerDialog';
 import 'styles/components/MlirFileSelector.scss';
-
-const EDIT_SERVER_LABEL = 'Edit selected server';
-const REMOVE_SERVER_LABEL = 'Remove selected server';
 
 const formatServerString = (server?: MlirServerConnection | null) => {
     if (!server) {
@@ -30,12 +29,23 @@ const MLIRFileSelector = () => {
     const [servers, setServers] = useAtom(mlirServersAtom);
     const [selectedServer, setSelectedServer] = useAtom(selectedMlirServerAtom);
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+    const [serverToEdit, setServerToEdit] = useState<MlirServerConnection | null>(null);
+    const [serverToDelete, setServerToDelete] = useState<MlirServerConnection | null>(null);
     const { isActivatingReport } = useActivatingReport();
 
     const activeServer = getActiveMlirServer(servers, selectedServer);
     const isServerSelectDisabled = isActivatingReport || servers.length === 0;
-    const isServerActionDisabled = isActivatingReport || !activeServer;
+
+    const removeServer = (server: MlirServerConnection) => {
+        const remaining = servers.filter((candidate) => !isSameMlirServer(candidate, server));
+
+        setServers(remaining);
+
+        // Removing another row from the dropdown must leave the server in use alone.
+        if (isSameMlirServer(server, activeServer)) {
+            setSelectedServer(remaining[0] ?? null);
+        }
+    };
 
     const renderServer: ItemRenderer<MlirServerConnection> = (server, { handleClick, modifiers }) => {
         if (!modifiers.matchesPredicate) {
@@ -43,13 +53,35 @@ const MLIRFileSelector = () => {
         }
 
         return (
-            <MenuItem
+            <div
+                className='mlir-server-menu-item'
                 key={mlirServerKey(server)}
-                text={formatServerString(server)}
-                active={isSameMlirServer(server, activeServer)}
-                onClick={handleClick}
-                roleStructure='listoption'
-            />
+            >
+                <MenuItem
+                    text={formatServerString(server)}
+                    active={isSameMlirServer(server, activeServer)}
+                    disabled={modifiers.disabled}
+                    onClick={handleClick}
+                    roleStructure='listoption'
+                />
+
+                <Button
+                    aria-label={EDIT_SERVER_LABEL}
+                    icon={IconNames.EDIT}
+                    disabled={isActivatingReport}
+                    variant={ButtonVariant.MINIMAL}
+                    onClick={() => setServerToEdit(server)}
+                />
+
+                <Button
+                    aria-label={REMOVE_SERVER_LABEL}
+                    icon={IconNames.TRASH}
+                    disabled={isActivatingReport}
+                    variant={ButtonVariant.MINIMAL}
+                    intent={Intent.DANGER}
+                    onClick={() => setServerToDelete(server)}
+                />
+            </div>
         );
     };
 
@@ -84,7 +116,7 @@ const MLIRFileSelector = () => {
                 label={<h3 className='label'>Use MLIR server</h3>}
                 subLabel='Select the MLIR server used for uploads'
             >
-                <div className='form-container mlir-server-select-row'>
+                <div className='form-container'>
                     <Select<MlirServerConnection>
                         items={servers}
                         itemRenderer={renderServer}
@@ -107,49 +139,39 @@ const MLIRFileSelector = () => {
                             text={formatServerString(activeServer)}
                         />
                     </Select>
-
-                    <Tooltip
-                        content={EDIT_SERVER_LABEL}
-                        position={PopoverPosition.TOP}
-                    >
-                        <Button
-                            aria-label={EDIT_SERVER_LABEL}
-                            icon={IconNames.EDIT}
-                            disabled={isServerActionDisabled}
-                            onClick={() => setIsEditDialogOpen(true)}
-                        />
-                    </Tooltip>
-
-                    <Tooltip
-                        content={REMOVE_SERVER_LABEL}
-                        position={PopoverPosition.TOP}
-                    >
-                        <Button
-                            aria-label={REMOVE_SERVER_LABEL}
-                            icon={IconNames.TRASH}
-                            disabled={isServerActionDisabled}
-                            onClick={() => {
-                                const remaining = servers.filter((server) => !isSameMlirServer(server, activeServer));
-                                setServers(remaining);
-                                setSelectedServer(remaining[0] ?? null);
-                            }}
-                        />
-                    </Tooltip>
                 </div>
 
-                {activeServer && isEditDialogOpen && (
+                {serverToEdit && (
                     <MlirServerDialog
-                        open={isEditDialogOpen}
+                        open
+                        key={mlirServerKey(serverToEdit)}
                         title='Edit MLIR server'
                         buttonLabel='Save server'
-                        server={activeServer}
+                        server={serverToEdit}
                         onAddServer={(updated) => {
                             setServers(
-                                servers.map((server) => (isSameMlirServer(server, activeServer) ? updated : server)),
+                                servers.map((server) => (isSameMlirServer(server, serverToEdit) ? updated : server)),
                             );
-                            setSelectedServer(updated);
+
+                            // Follow the rename only when the edited server was the one in use.
+                            if (isSameMlirServer(serverToEdit, activeServer)) {
+                                setSelectedServer(updated);
+                            }
                         }}
-                        onClose={() => setIsEditDialogOpen(false)}
+                        onClose={() => setServerToEdit(null)}
+                    />
+                )}
+
+                {serverToDelete && (
+                    <ConfirmDeleteAlert
+                        isOpen
+                        entity={DeletableEntity.MLIR_SERVER}
+                        entityName={serverToDelete.name}
+                        onCancel={() => setServerToDelete(null)}
+                        onConfirm={() => {
+                            removeServer(serverToDelete);
+                            setServerToDelete(null);
+                        }}
                     />
                 )}
             </FormGroup>

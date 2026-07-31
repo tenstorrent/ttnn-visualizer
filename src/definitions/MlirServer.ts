@@ -15,6 +15,9 @@ export interface MlirServerConnection {
 
 export const MLIR_UPLOAD_PATH = '/apipost/v1/upload';
 
+export const EDIT_SERVER_LABEL = 'Edit server';
+export const REMOVE_SERVER_LABEL = 'Remove server';
+
 // Model formats the MLIR server (Model Explorer) accepts:
 // TF (.pb/.pbtxt/.graphdef), TFLite (.tflite), TFJS/JAX (.json/.pb),
 // PyTorch ExportedProgram (.pt2), MLIR (.mlir/.mlirbc).

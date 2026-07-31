@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Classes } from '@blueprintjs/core';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AxiosResponse } from 'axios';
 import { useAtomValue } from 'jotai';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -12,7 +12,12 @@ import RemoteFolderSelector from '../src/components/report-selection/RemoteFolde
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
-import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
+import {
+    FETCH_REMOTE_FOLDERS_LABEL,
+    REMOVE_CONNECTION_LABEL,
+    RemoteConnection,
+    RemoteFolder,
+} from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
 import { isActivatingReportAtom } from '../src/store/app';
@@ -45,8 +50,6 @@ afterEach(() => {
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
 const ADD_NEW_CONNECTION = 'Add new connection';
 const NO_CONNECTION = '(No connection)';
-const EDIT_NEW_CONNECTION = 'Edit selected connection';
-const REMOVE_NEW_CONNECTION = 'Remove selected connection';
 const FETCH_REMOTE_FOLDERS = FETCH_REMOTE_FOLDERS_LABEL;
 const CONNECTION_NAME = 'Local - ssh://localhost:2222/';
 const NO_SELECTION = '(No selection)';
@@ -148,8 +151,6 @@ it('renders the initial form state when there is no data', () => {
 
     expect(getButtonWithText(ADD_NEW_CONNECTION)).not.toBeNull();
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, true);
     expect(reportSelects).toHaveLength(2);
 
@@ -171,8 +172,6 @@ it('enables fetch remote folder list button when a connection is selected', () =
     const fetchButton = getButtonWithText(FETCH_REMOTE_FOLDERS);
 
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, false);
     expect(reportSelects).toHaveLength(2);
 
@@ -183,10 +182,10 @@ it('enables fetch remote folder list button when a connection is selected', () =
     expect(fetchButton).toHaveProperty(HTML_DISABLED, false);
 });
 
-it('clears localStorage and resets state when removing a connection', () => {
+it('clears localStorage and resets state when removing the only connection', async () => {
     setupConnection(remoteConnection);
 
-    const { rerender } = render(
+    render(
         <TestProviders>
             <RemoteSyncConfigurator />
         </TestProviders>,
@@ -194,22 +193,16 @@ it('clears localStorage and resets state when removing a connection', () => {
 
     // Verify connection exists initially
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
 
-    // Clear localStorage to simulate connection removal
-    window.localStorage.removeItem(LOCAL_STORAGE_KEY_CONNECTIONS);
-    window.localStorage.removeItem(LOCAL_STORAGE_KEY_SELECTED);
+    getButtonWithText(CONNECTION_NAME).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    rerender(
-        <TestProviders>
-            <RemoteSyncConfigurator />
-        </TestProviders>,
-    );
+    fireEvent.click(screen.getByLabelText(REMOVE_CONNECTION_LABEL));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     // Verify UI resets to no connection state
-    expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
+    await waitFor(() => expect(getButtonWithText(NO_CONNECTION)).not.toBeNull(), WAIT_FOR_OPTIONS);
+    expect(JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_CONNECTIONS) ?? '[]')).toEqual([]);
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, true);
 });
 
@@ -236,8 +229,65 @@ it('handles multiple remote connections in localStorage', () => {
 
     // Should show the first connection by default
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
+});
+
+it('keeps the selected connection when a different one is removed from its dropdown row', async () => {
+    const middleConnection: RemoteConnection = {
+        name: 'Middle Server',
+        username: 'prod-user',
+        host: 'middle.example.com',
+        port: 22,
+        profilerPath: '/opt/reports',
+        performancePath: '/opt/perf',
+    };
+    const lastConnection: RemoteConnection = {
+        name: 'Last Server',
+        username: 'prod-user',
+        host: 'last.example.com',
+        port: 22,
+        profilerPath: '/opt/reports',
+        performancePath: '/opt/perf',
+    };
+
+    // The selection deliberately isn't the first entry: re-pointing it at index 0 would be
+    // indistinguishable from preserving it otherwise.
+    setupConnection([remoteConnection[0], middleConnection, lastConnection], lastConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    getButtonWithText(lastConnection.name).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const rows = [...document.querySelectorAll('.remote-connection-menu-item')];
+    const middleRow = rows.find((row) => row.textContent?.includes(middleConnection.name));
+
+    fireEvent.click(middleRow!.querySelector<HTMLButtonElement>(`[aria-label="${REMOVE_CONNECTION_LABEL}"]`)!);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+        const storedConnections = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_CONNECTIONS) ?? '[]');
+        expect(storedConnections).toHaveLength(2);
+    }, WAIT_FOR_OPTIONS);
+
+    // The removal must not re-point the selection, which would also clear the active remote report.
+    expect(getButtonWithText(lastConnection.name)).not.toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_SELECTED) ?? 'null')).toMatchObject({
+        name: lastConnection.name,
+    });
+
+    // Persisting alone doesn't re-render, so assert the row is gone from the reopened dropdown
+    // rather than trusting localStorage.
+    getButtonWithText(lastConnection.name).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const remainingRows = [...document.querySelectorAll('.remote-connection-menu-item')];
+
+    expect(remainingRows).toHaveLength(2);
+    remainingRows.forEach((row) => expect(row.textContent).not.toContain(middleConnection.name));
 });
 
 it('displays correct connection information format', () => {
@@ -276,8 +326,6 @@ it('handles localStorage parsing errors gracefully', () => {
 
     // Should fall back to no connection state
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
 });
 
 it('handles API errors gracefully', () => {
@@ -1090,7 +1138,6 @@ it('maintains state consistency after localStorage changes', () => {
 
     // Should now show the connection
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
 });
 
 it('shows an "Incompatible report version" toast when the active report uses an unsupported DB schema', async () => {
@@ -1134,10 +1181,6 @@ it('displays appropriate connection count information', () => {
 
     // Should show first connection by default
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-
-    // All connection management buttons should be enabled
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, false);
 });
 
