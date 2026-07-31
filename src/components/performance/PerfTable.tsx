@@ -39,7 +39,8 @@ interface PerformanceTableProps {
     filters: PerfTableFilters;
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
-    reportName: string | null;
+    /** On-disk folder of the report these rows came from; addresses the device-meta fetch. */
+    reportFolderName: string | null;
     maxCores: number;
     hasL1PressureData?: boolean;
     isLoading?: boolean;
@@ -57,7 +58,7 @@ const PerformanceTable = ({
     filters,
     provideMatmulAdvice,
     hiliteHighDispatch,
-    reportName,
+    reportFolderName,
     maxCores,
     hasL1PressureData = false,
     isLoading = false,
@@ -461,7 +462,7 @@ const PerformanceTable = ({
             )}
 
             <PerfDeviceArchitecture
-                reportName={reportName}
+                reportFolderName={reportFolderName}
                 maxCores={maxCores}
             />
 

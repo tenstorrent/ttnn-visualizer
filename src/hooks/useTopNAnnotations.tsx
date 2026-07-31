@@ -5,7 +5,7 @@
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import {
-    activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
     topNAnnotationCountAtom,
     topNAnnotationEnabledAtom,
     topNAnnotationModeAtom,
@@ -60,9 +60,9 @@ export interface UseTopNAnnotationAvailabilityResult {
 export const useTopNAnnotationAvailability = ({
     forceL1Unavailable = false,
 }: UseTopNAnnotationAvailabilityParams = {}): UseTopNAnnotationAvailabilityResult => {
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
 
-    const { data: perfReport } = usePerformanceReport(activePerformanceReport?.reportName ?? null);
+    const { data: perfReport } = usePerformanceReport(activeReportFolderName);
     // Lock-step id-space match against the profiler op list. Returns [] when
     // the perf report doesn't line up — that's the `UNLINKED` signal below.
     const matchedPerfOps = useGetDeviceOperationListPerf();

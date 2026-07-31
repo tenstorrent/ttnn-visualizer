@@ -11,12 +11,13 @@ import 'styles/components/PerfDeviceArchitecture.scss';
 const NO_META_DATA = 'Unknown';
 
 interface PerfDeviceArchitectureProps {
-    reportName: string | null;
+    /** On-disk folder of the report to read device meta for, not a display name. */
+    reportFolderName: string | null;
     maxCores: number;
 }
 
-const PerfDeviceArchitecture = ({ reportName, maxCores }: PerfDeviceArchitectureProps) => {
-    const { data: deviceMeta, isLoading: isLoadingDeviceLog } = usePerfMeta(reportName);
+const PerfDeviceArchitecture = ({ reportFolderName, maxCores }: PerfDeviceArchitectureProps) => {
+    const { data: deviceMeta, isLoading: isLoadingDeviceLog } = usePerfMeta(reportFolderName);
 
     const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
 

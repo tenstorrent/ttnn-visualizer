@@ -4,7 +4,11 @@
 
 import { useAtomValue } from 'jotai';
 import { useDevices, useGetDeviceOperationListPerf, useOperationsList, usePerformanceReport } from './useAPI';
-import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
+import {
+    activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
+    activeProfilerReportAtom,
+} from '../store/app';
 import { ReportLinkMatchResult } from '../definitions/ReportLinks';
 
 /**
@@ -15,6 +19,7 @@ export const useReportLinkMatch = (): ReportLinkMatchResult => {
     const matchedOperations = useGetDeviceOperationListPerf();
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
 
     const {
         isFetched: isOperationsFetched,
@@ -26,7 +31,7 @@ export const useReportLinkMatch = (): ReportLinkMatchResult => {
         isFetched: isPerformanceFetched,
         isFetching: isPerformanceFetching,
         isError: isPerformanceError,
-    } = usePerformanceReport(activePerformanceReport?.reportName || null);
+    } = usePerformanceReport(activeReportFolderName);
 
     if (!activeProfilerReport || !activePerformanceReport) {
         return ReportLinkMatchResult.UNAVAILABLE;

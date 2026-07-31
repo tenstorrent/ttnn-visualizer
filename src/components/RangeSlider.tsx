@@ -9,6 +9,7 @@ import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
 import {
     activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
     hasClusterDescriptionAtom,
@@ -40,6 +41,7 @@ const RANGE_STEP = 25;
 function Range() {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     const setOperationRange = useSetAtom(operationRangeAtom);
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
@@ -50,7 +52,7 @@ function Range() {
     const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);
 
     const { data: operations } = useOperationsList();
-    const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport?.reportName || null);
+    const { data: perfData, error: perfDataError } = usePerformanceReport(activeReportFolderName);
     const { data: clusterData, error: clusterError } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();

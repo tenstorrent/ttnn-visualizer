@@ -29,6 +29,7 @@ import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
 import {
     activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
     bufferTypeFilterListAtom,
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
@@ -94,6 +95,7 @@ const PerformanceReport = ({
     comparisonMaxCores = [],
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
@@ -624,7 +626,7 @@ const PerformanceReport = ({
                                     stackedData={filteredStackedRows}
                                     filters={filters}
                                     stackedComparisonData={filteredComparisonStackedRowsList}
-                                    reportName={activePerformanceReport?.reportName || null}
+                                    reportFolderName={activeReportFolderName}
                                     maxCores={maxCores}
                                     isLoading={isTableLoading}
                                 />
@@ -635,7 +637,7 @@ const PerformanceReport = ({
                                     filters={filters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
-                                    reportName={activePerformanceReport?.reportName || null}
+                                    reportFolderName={activeReportFolderName}
                                     hasL1PressureData={hasL1PressureData}
                                     maxCores={maxCores}
                                     isLoading={isTableLoading}
@@ -675,7 +677,7 @@ const PerformanceReport = ({
                                             ),
                                         ]}
                                         filters={filters}
-                                        reportName={report}
+                                        reportFolderName={report}
                                         maxCores={comparisonMaxCores[index] ?? maxCores}
                                         isLoading={isTableLoading}
                                     />
@@ -689,7 +691,7 @@ const PerformanceReport = ({
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
-                                        reportName={report}
+                                        reportFolderName={report}
                                         hasL1PressureData={hasL1PressureData}
                                         maxCores={comparisonMaxCores[index] ?? maxCores}
                                         activeReportComparisonIndex={0}
