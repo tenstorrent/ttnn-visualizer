@@ -740,9 +740,9 @@ export default function Styleguide() {
                     Danger
                 </Tag>
 
-                <MemoryTag memory='L1' />
-
                 <MemoryTag memory='DRAM' />
+                <MemoryTag memory='L1' />
+                <MemoryTag memory='L1 Small' />
             </div>
 
             <h3>Progress bar</h3>
