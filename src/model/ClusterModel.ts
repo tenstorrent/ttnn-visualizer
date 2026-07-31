@@ -60,7 +60,9 @@ export type RemoteEthernetConnectionRaw = [
 ];
 
 export interface ClusterModel {
-    arch: string[];
+    // Keyed by chip id, as the YAML writes it. Typed as an array previously, which made
+    // `arch.length` undefined and silently routed every report to the Wormhole default.
+    arch: Record<ChipId, string>;
     chips: {
         [key: ChipId]: ClusterCoordinates;
     };
@@ -142,4 +144,5 @@ export interface ChipDesign {
 
     [unknownKey: string]: unknown;
 }
-export const DEFAULT_ARCHITECTURE = 'Wormhole';
+// No default architecture on purpose: guessing one renders another arch's coordinates as
+// if they were this report's. An unresolved arch omits the enrichment instead. #1772

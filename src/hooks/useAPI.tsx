@@ -1265,18 +1265,27 @@ export const useInstance = () => {
 // descriptor recompute every render, which now matters on the unknown-arch path. #1772
 const NO_CHIP_DESIGN = Object.freeze({}) as ChipDesign;
 
-export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
+// Pure so callers that need a descriptor per chip (Cluster, for heterogeneous reports)
+// can resolve one outside a hook. Returns `NO_CHIP_DESIGN` rather than logging, leaving
+// the caller to decide whether an unresolved arch is degraded-but-fine or an error.
+export const getChipDesign = (arch: DeviceArchitecture): ChipDesign => {
     switch (arch) {
         case DeviceArchitecture.WORMHOLE:
             return archWormhole as ChipDesign;
         case DeviceArchitecture.BLACKHOLE:
             return archBlackhole as ChipDesign;
-        default: {
-            // eslint-disable-next-line no-console
-            console.error(`Unsupported arch: ${arch}`);
+        default:
             return NO_CHIP_DESIGN;
-        }
     }
+};
+
+export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
+    const design = getChipDesign(arch);
+    if (design === NO_CHIP_DESIGN) {
+        // eslint-disable-next-line no-console
+        console.error(`Unsupported arch: ${arch}`);
+    }
+    return design;
 };
 
 export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; size: number }[] => {

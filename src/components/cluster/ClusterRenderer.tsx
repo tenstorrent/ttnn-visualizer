@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import 'styles/components/ClusterView.scss';
 import { stringToArchitecture } from '../../functions/stringToArchitecture';
-import { useArchitecture, useGetClusterTopology } from '../../hooks/useAPI';
+import { getChipDesign, useGetClusterTopology } from '../../hooks/useAPI';
 import {
     FALLBACK_PER_HOST_COLS,
     hostHasMeshCoords,
@@ -22,7 +22,6 @@ import {
     ClusterChip,
     ClusterCoordinates,
     ClusterTopology,
-    DEFAULT_ARCHITECTURE,
     EthChannel,
 } from '../../model/ClusterModel';
 import {
@@ -167,7 +166,6 @@ const getEthGridPosition = (ethPosition: CLUSTER_ETH_POSITION, index: number) =>
 
 function buildClusterRenderModel(
     topology: ClusterTopology,
-    chipDesign: ChipDesign,
     requestedLayoutMode: ClusterLayoutMode = 'mesh',
 ): ClusterRenderResult {
     // A missing cluster descriptor is unrenderable; a missing *arch* one only costs the
@@ -176,8 +174,6 @@ function buildClusterRenderModel(
     if (hosts.length === 0) {
         return { status: 'unsupported' };
     }
-
-    const hasArchDescriptor = Boolean(chipDesign?.eth?.length);
 
     // Step 1: place every chip on a global virtual grid. `mesh` honours the
     // report's mesh coords (1D or 2D); `condensed` tiles each host into a
@@ -204,6 +200,13 @@ function buildClusterRenderModel(
         const mmioChipIds = new Set(
             (host.descriptor.chips_with_mmio ?? []).map((obj) => Object.values(obj)[0] as number),
         );
+
+        // Per chip, not per cluster: a heterogeneous report labels each chip from its own
+        // arch entry, and an unrecognised one just loses its enrichment.
+        const designForChip = (chipId: number): ChipDesign | undefined => {
+            const design = getChipDesign(stringToArchitecture(host.descriptor.arch?.[chipId] ?? ''));
+            return design.eth?.length ? design : undefined;
+        };
 
         let usedFallback = false;
 
@@ -232,7 +235,7 @@ function buildClusterRenderModel(
                 mmio: mmioChipIds.has(chipId),
                 ethChannels: [],
                 connectedChipsByEthId: new Map(),
-                design: hasArchDescriptor ? chipDesign : undefined,
+                design: designForChip(chipId),
             });
         }
 
@@ -637,11 +640,6 @@ function ClusterRenderer() {
         topology: ClusterTopology;
     } | null>(null);
 
-    // Heterogeneous clusters aren't supported yet; assume the first host's arch.
-    const firstHostArch = topology?.hosts[0]?.descriptor.arch ?? [];
-    const arch = stringToArchitecture((firstHostArch.length && firstHostArch[0]) || DEFAULT_ARCHITECTURE);
-    const chipDesign = useArchitecture(arch);
-
     // Honour the report's mesh coords (1D or 2D) when present; otherwise pick
     // `condensed` upfront rather than silently falling back inside the builder. #1510
     const defaultLayoutMode: ClusterLayoutMode = useMemo(() => {
@@ -666,8 +664,8 @@ function ClusterRenderer() {
         if (!topology) {
             return null;
         }
-        return buildClusterRenderModel(topology, chipDesign, requestedLayoutMode);
-    }, [topology, chipDesign, requestedLayoutMode]);
+        return buildClusterRenderModel(topology, requestedLayoutMode);
+    }, [topology, requestedLayoutMode]);
 
     // close the topology overlay when Escape is pressed
     useEffect(() => {

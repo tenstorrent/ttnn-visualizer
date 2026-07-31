@@ -5,16 +5,19 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterRenderer from '../src/components/cluster/ClusterRenderer';
-import { ChipDesign, ClusterTopology } from '../src/model/ClusterModel';
+import { ClusterTopology } from '../src/model/ClusterModel';
 
 // Cluster placement and links come from the cluster descriptor; the arch descriptor is
 // only enrichment. An unrecognised arch used to blank the whole view because port uids
 // were keyed off the arch eth list. #1772
+//
+// The real `getChipDesign` is used deliberately — these assert against the baked
+// wormhole json, so a change to its channel ordering surfaces here.
 
-// Two chips side by side, linked on channels 4 and 6 — the channels are what the port
-// uids must key off, and channel 6 sits past the end of a 2-entry arch eth list so a
-// regression to arch-indexed lookup would drop that port.
-const topology = (): ClusterTopology =>
+// Two chips side by side, linked on channels 4 and 6. Channel 6 sits past the end of a
+// short eth list, so a regression to arch-indexed lookup drops that port rather than
+// mislabelling it. `arch` is keyed by chip id, matching the YAML.
+const topology = (arch: Record<number, string>): ClusterTopology =>
     ({
         isMultiHost: false,
         worldSize: 1,
@@ -23,7 +26,7 @@ const topology = (): ClusterTopology =>
             {
                 rank: 0,
                 descriptor: {
-                    arch: ['wormhole_b0'],
+                    arch,
                     chip_unique_ids: { 0: 100, 1: 101 },
                     chips_with_mmio: [{ 0: 0 }],
                     ethernet_connections: [],
@@ -35,26 +38,16 @@ const topology = (): ClusterTopology =>
         interHostLinks: [],
     }) as unknown as ClusterTopology;
 
-// Channel-indexed, mirroring the real arch json. Index 4 -> '9-0', index 6 -> '1-6'.
-const ARCH: ChipDesign = {
-    arch_name: 'wormhole_b0',
-    grid: { x_size: 10, y_size: 12 },
-    eth: ['0-0', '1-0', '2-0', '3-0', '9-0', '8-0', '1-6', '2-6'],
-    pcie: ['0-3'],
-    arc: [],
-    dram: [],
-    router_only: [],
-    functional_workers: [],
-} as unknown as ChipDesign;
+const WORMHOLE = { 0: 'wormhole_b0', 1: 'wormhole_b0' };
+// Neither substring-matches a baked descriptor, so it resolves to no design.
+const UNKNOWN_ARCH = { 0: 'quasar', 1: 'quasar' };
 
-const NO_ARCH = Object.freeze({}) as ChipDesign;
-
-let chipDesign: ChipDesign = ARCH;
+let clusterArch: Record<number, string> = WORMHOLE;
 
 vi.mock('react-router', () => ({ useNavigate: () => vi.fn() }));
-vi.mock('../src/hooks/useAPI', () => ({
-    useGetClusterTopology: () => ({ data: topology(), isLoading: false, isError: false, error: null }),
-    useArchitecture: () => chipDesign,
+vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../src/hooks/useAPI')>()),
+    useGetClusterTopology: () => ({ data: topology(clusterArch), isLoading: false, isError: false, error: null }),
 }));
 
 const ports = () => [...document.querySelectorAll('.eth')];
@@ -75,7 +68,7 @@ class ResizeObserverStub {
 
 beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
-    chipDesign = ARCH;
+    clusterArch = WORMHOLE;
 });
 
 afterEach(() => {
@@ -83,12 +76,12 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-describe('Cluster with a baked arch descriptor', () => {
+describe('Cluster with a recognised arch', () => {
     it('labels each port with its rank-chip-core coordinate', () => {
         render(<ClusterRenderer />);
 
-        // chip 0 on channel 4 -> eth[4] = '9-0'; chip 1 on channel 6 -> eth[6] = '1-6'.
-        expect(portLabels().sort()).toEqual(['0-0-9-0', '0-1-1-6']);
+        // Wormhole eth is channel-indexed: [4] = '7-0', [6] = '6-0'.
+        expect(portLabels().sort()).toEqual(['0-0-7-0', '0-1-6-0']);
     });
 
     it('renders a PCIe marker on the mmio chip', () => {
@@ -98,9 +91,9 @@ describe('Cluster with a baked arch descriptor', () => {
     });
 });
 
-describe('Cluster with no baked arch descriptor', () => {
+describe('Cluster with an unrecognised arch', () => {
     beforeEach(() => {
-        chipDesign = NO_ARCH;
+        clusterArch = UNKNOWN_ARCH;
     });
 
     it('still renders a port per linked channel', () => {
@@ -118,7 +111,7 @@ describe('Cluster with no baked arch descriptor', () => {
         expect(document.body.textContent).not.toContain('not supported for your current setup');
     });
 
-    it('omits the coordinate labels rather than inventing them', () => {
+    it('omits the coordinate labels rather than borrowing another arch’s', () => {
         render(<ClusterRenderer />);
 
         expect(portLabels()).toEqual(['', '']);
@@ -130,14 +123,30 @@ describe('Cluster with no baked arch descriptor', () => {
         expect(document.querySelectorAll('.mmio')).toHaveLength(0);
     });
 
-    it('keys ports by channel so the uid survives without the arch list', () => {
+    it('keys ports by channel so the uid survives without an eth list', () => {
         render(<ClusterRenderer />);
 
-        // Titles fall back to the uid when there is no coordinate to show.
         expect(
             ports()
                 .map((el) => el.getAttribute('title'))
                 .sort(),
         ).toEqual(['0-0-ch4', '0-1-ch6']);
+    });
+});
+
+describe('Cluster with a heterogeneous arch', () => {
+    it('enriches each chip from its own arch entry', () => {
+        clusterArch = { 0: 'wormhole_b0', 1: 'quasar' };
+        render(<ClusterRenderer />);
+
+        // Chip 0 resolves, chip 1 does not — one label, not a cluster-wide guess.
+        expect(portLabels().sort()).toEqual(['', '0-0-7-0']);
+    });
+
+    it('does not let an unresolved first chip suppress the rest', () => {
+        clusterArch = { 0: 'quasar', 1: 'wormhole_b0' };
+        render(<ClusterRenderer />);
+
+        expect(portLabels().sort()).toEqual(['', '0-1-6-0']);
     });
 });
