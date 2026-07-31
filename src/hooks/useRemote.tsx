@@ -11,6 +11,7 @@ import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definition
 import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/RemoteSync';
 import { StackSourceOrigin } from '../definitions/StackTrace';
 import { clearFileTransferProgressForSource } from '../store/fileTransferRegistry';
+import { isSameConnection, remoteConnectionKey } from '../functions/remoteConnection';
 import { beginRemoteSyncRequest, endRemoteSyncRequest } from '../functions/remoteSyncRequest';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import axiosInstance from '../libs/axiosInstance';
@@ -38,6 +39,16 @@ export const LOCAL_STORAGE_KEY_CONNECTIONS = 'remoteConnections';
 export const LOCAL_STORAGE_KEY_SELECTED = 'selectedConnection';
 
 type RemoteFolderPathKey = 'profilerPath' | 'performancePath';
+
+/**
+ * Cached folder lists are keyed by connection identity, not by name: names are not unique, and a
+ * name-keyed cache lets deleting or renaming one connection discard or overwrite another's data.
+ */
+export const savedReportFoldersKey = (connection?: RemoteConnection) =>
+    `${remoteConnectionKey(connection)} - reportFolders`;
+
+export const savedPerformanceFoldersKey = (connection?: RemoteConnection) =>
+    `${remoteConnectionKey(connection)} - performanceFolders`;
 
 const fetchRemoteFolderList = async (
     endpoint: Endpoints,
@@ -202,8 +213,10 @@ const useRemoteConnection = () => {
                 return connectionList[0];
             }
 
-            const existingConnection = connectionList.find(
-                (connection) => connection.name === savedSelectedConnection.name,
+            // Matching on identity rather than name alone: two connections may share a name, and
+            // resolving to the wrong one makes callers mistake which connection is in use.
+            const existingConnection = connectionList.find((connection) =>
+                isSameConnection(connection, savedSelectedConnection),
             );
 
             return existingConnection ?? connectionList[0];
@@ -212,26 +225,26 @@ const useRemoteConnection = () => {
             setAppConfig(LOCAL_STORAGE_KEY_SELECTED, safeJsonStringify(connection ?? null));
         },
         getSavedReportFolders: (connection?: RemoteConnection): RemoteFolder[] => {
-            const parsedList = safeJsonParse(getAppConfig(`${connection?.name} - reportFolders`), []);
+            const parsedList = safeJsonParse(getAppConfig(savedReportFoldersKey(connection)), []);
 
             return Array.isArray(parsedList) ? parsedList : [];
         },
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name} - reportFolders`, safeJsonStringify(folders, '[]'));
+            setAppConfig(savedReportFoldersKey(connection), safeJsonStringify(folders, '[]'));
         },
         deleteSavedReportFolders: (connection?: RemoteConnection) => {
-            deleteAppConfig(`${connection?.name} - reportFolders`);
+            deleteAppConfig(savedReportFoldersKey(connection));
         },
         getSavedPerformanceFolders: (connection?: RemoteConnection): RemoteFolder[] => {
-            const parsedList = safeJsonParse(getAppConfig(`${connection?.name} - performanceFolders`), []);
+            const parsedList = safeJsonParse(getAppConfig(savedPerformanceFoldersKey(connection)), []);
 
             return Array.isArray(parsedList) ? parsedList : [];
         },
         setSavedPerformanceFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name} - performanceFolders`, safeJsonStringify(folders, '[]'));
+            setAppConfig(savedPerformanceFoldersKey(connection), safeJsonStringify(folders, '[]'));
         },
         deleteSavedPerformanceFolders: (connection?: RemoteConnection) => {
-            deleteAppConfig(`${connection?.name} - performanceFolders`);
+            deleteAppConfig(savedPerformanceFoldersKey(connection));
         },
         updateSavedRemoteFoldersConnection(oldConnection?: RemoteConnection, newConnection?: RemoteConnection) {
             const reportFolders = this.getSavedReportFolders(oldConnection);

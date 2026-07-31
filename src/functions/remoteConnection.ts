@@ -7,6 +7,18 @@ import { RemoteConnection } from '../definitions/RemoteConnection';
 /**
  * Connection identity as the app has always treated it: name, host and port. Paths and the
  * identity file are editable properties of a connection, not part of which connection it is.
+ *
+ * Both parameters are optional *and* nullable because callers pass a mix — `undefined` from the
+ * optional `connection` prop and the `selectedConnection` getter, `null` from dropdown row state.
  */
 export const isSameConnection = (a?: RemoteConnection | null, b?: RemoteConnection | null): boolean =>
     !!a && !!b && a.name === b.name && a.host === b.host && a.port === b.port;
+
+/**
+ * Identity as a string, over exactly the fields `isSameConnection` compares. Everything that keys
+ * data by connection — React list keys, cached folder lists in localStorage — must use this, or
+ * two connections that differ only by host end up sharing a key while counting as distinct, and
+ * deleting one silently discards the other's data.
+ */
+export const remoteConnectionKey = (connection?: RemoteConnection | null): string =>
+    connection ? `${connection.name}|${connection.host}|${connection.port}` : '';

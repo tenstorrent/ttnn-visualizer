@@ -2,19 +2,21 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, Callout, FormGroup, Intent, MenuItem } from '@blueprintjs/core';
+import { Button, Callout, FormGroup, Intent, MenuItem } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { useAtom } from 'jotai';
 import { useState } from 'react';
-import { EDIT_SERVER_LABEL, MlirServerConnection, REMOVE_SERVER_LABEL } from '../../definitions/MlirServer';
+import { MlirServerConnection } from '../../definitions/MlirServer';
 import { getActiveMlirServer, isSameMlirServer, mlirServerKey } from '../../functions/mlirServer';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
 import { mlirServersAtom, selectedMlirServerAtom } from '../../store/app';
-import { DeletableEntity } from '../../definitions/DeletableEntity';
+import { ManagedEntity } from '../../definitions/ManagedEntity';
+import { TEST_IDS } from '../../definitions/TestIds';
 import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import MlirJsonFileLoader from '../mlir/MlirJsonFileLoader';
 import MlirServerDialog from './MlirServerDialog';
+import SelectRowActions from './SelectRowActions';
 import 'styles/components/MlirFileSelector.scss';
 
 const formatServerString = (server?: MlirServerConnection | null) => {
@@ -55,6 +57,7 @@ const MLIRFileSelector = () => {
         return (
             <div
                 className='mlir-server-menu-item'
+                data-testid={TEST_IDS.MLIR_SERVER_ROW}
                 key={mlirServerKey(server)}
             >
                 <MenuItem
@@ -65,21 +68,12 @@ const MLIRFileSelector = () => {
                     roleStructure='listoption'
                 />
 
-                <Button
-                    aria-label={EDIT_SERVER_LABEL}
-                    icon={IconNames.EDIT}
+                <SelectRowActions
+                    entity={ManagedEntity.MLIR_SERVER}
+                    itemName={server.name}
                     disabled={isActivatingReport}
-                    variant={ButtonVariant.MINIMAL}
-                    onClick={() => setServerToEdit(server)}
-                />
-
-                <Button
-                    aria-label={REMOVE_SERVER_LABEL}
-                    icon={IconNames.TRASH}
-                    disabled={isActivatingReport}
-                    variant={ButtonVariant.MINIMAL}
-                    intent={Intent.DANGER}
-                    onClick={() => setServerToDelete(server)}
+                    onEdit={() => setServerToEdit(server)}
+                    onDelete={() => setServerToDelete(server)}
                 />
             </div>
         );
@@ -165,7 +159,7 @@ const MLIRFileSelector = () => {
                 {serverToDelete && (
                     <ConfirmDeleteAlert
                         isOpen
-                        entity={DeletableEntity.MLIR_SERVER}
+                        entity={ManagedEntity.MLIR_SERVER}
                         entityName={serverToDelete.name}
                         onCancel={() => setServerToDelete(null)}
                         onConfirm={() => {

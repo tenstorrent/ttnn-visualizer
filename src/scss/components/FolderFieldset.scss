@@ -4,6 +4,7 @@
 
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
+@use '../mixins/formLayout' as form-layout;
 
 .folder-fieldset {
     position: relative;
@@ -54,20 +55,8 @@
             width: variables.$report-select-width;
         }
 
-        // The connection string is long, so truncate it rather than let the trigger outgrow the
-        // other report-selection controls.
         .remote-select {
-            max-width: variables.$report-select-width;
-
-            .bp6-button {
-                max-width: 100%;
-            }
-
-            .bp6-button-text {
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
+            @include form-layout.truncated-select-trigger;
         }
     }
 

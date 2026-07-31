@@ -2,6 +2,25 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+@use '../definitions/variables' as variables;
+
+// A report-selection Select trigger: the connection or server label is long, so cap the width and
+// truncate rather than let one trigger outgrow the controls beside it.
+@mixin truncated-select-trigger {
+    max-width: variables.$report-select-width;
+
+    // Applies whether the class sits on the trigger button or on the target element wrapping it.
+    .bp6-button {
+        max-width: 100%;
+    }
+
+    .bp6-button-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
 // Vertical stack of form controls shared by the report-selection blocks. A mixin rather
 // than a shared classname so each component keeps a classname that names what it is,
 // instead of importing another component's stylesheet for the layout.

@@ -2,9 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-/** What a delete confirmation is about, as it reads inside the confirmation sentence. */
-export enum DeletableEntity {
+/** What a report-selection row manages, as the noun reads inside UI copy. */
+export enum ManagedEntity {
     REPORT = 'report',
     REMOTE_CONNECTION = 'remote connection',
     MLIR_SERVER = 'MLIR server',
 }
+
+export const CONFIRM_DELETE_LABEL = 'Delete';
+export const CANCEL_DELETE_LABEL = 'Cancel';

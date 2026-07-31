@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import '@testing-library/jest-dom/vitest';
 import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AxiosResponse } from 'axios';
@@ -12,14 +13,17 @@ import RemoteFolderSelector from '../src/components/report-selection/RemoteFolde
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
-import {
-    FETCH_REMOTE_FOLDERS_LABEL,
-    REMOVE_CONNECTION_LABEL,
-    RemoteConnection,
-    RemoteFolder,
-} from '../src/definitions/RemoteConnection';
+import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
+import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
+import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
+import { getDeleteActionLabel, getEditActionLabel } from '../src/functions/managedEntityLabels';
+import {
+    LOCAL_STORAGE_KEY_CONNECTIONS,
+    LOCAL_STORAGE_KEY_SELECTED,
+    savedPerformanceFoldersKey,
+    savedReportFoldersKey,
+} from '../src/hooks/useRemote';
 import { isActivatingReportAtom } from '../src/store/app';
 import {
     FOLDER_LIST_SYNC_ERROR_TOAST_TITLE,
@@ -57,6 +61,20 @@ const NO_SELECTION = '(No selection)';
 const HTML_DISABLED = 'disabled';
 const SELECT_LOCAL_REPORT_TEXT = 'Select a report...';
 const IS_ACTIVATING_REPORT_PROBE_TEST_ID = 'is-activating-report-probe';
+
+const EDITED_CONNECTION_NAME = 'Renamed Server';
+
+/**
+ * Anchored on the formatted connection string so it matches the Select trigger only — row action
+ * labels carry the connection name too, and a bare name matches those as well.
+ */
+const getConnectionTrigger = (connection: RemoteConnection) =>
+    screen.getByRole('button', { name: new RegExp(`^${connection.name} - ssh`) });
+
+const editConnectionLabel = (connection: RemoteConnection) =>
+    getEditActionLabel(ManagedEntity.REMOTE_CONNECTION, connection.name);
+const deleteConnectionLabel = (connection: RemoteConnection) =>
+    getDeleteActionLabel(ManagedEntity.REMOTE_CONNECTION, connection.name);
 
 const IsActivatingReportProbe = () => {
     const isActivatingReport = useAtomValue(isActivatingReportAtom);
@@ -184,6 +202,15 @@ it('enables fetch remote folder list button when a connection is selected', () =
 
 it('clears localStorage and resets state when removing the only connection', async () => {
     setupConnection(remoteConnection);
+    // The confirmation promises these go with the connection, so seed them to assert they do.
+    window.localStorage.setItem(
+        savedReportFoldersKey(remoteConnection[0]),
+        JSON.stringify(mockRemoteProfilerFolderList),
+    );
+    window.localStorage.setItem(
+        savedPerformanceFoldersKey(remoteConnection[0]),
+        JSON.stringify(mockRemotePerformanceFolderList),
+    );
 
     render(
         <TestProviders>
@@ -197,13 +224,15 @@ it('clears localStorage and resets state when removing the only connection', asy
     getButtonWithText(CONNECTION_NAME).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(REMOVE_CONNECTION_LABEL));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getByLabelText(deleteConnectionLabel(remoteConnection[0])));
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
 
     // Verify UI resets to no connection state
     await waitFor(() => expect(getButtonWithText(NO_CONNECTION)).not.toBeNull(), WAIT_FOR_OPTIONS);
     expect(JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_CONNECTIONS) ?? '[]')).toEqual([]);
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, true);
+    expect(window.localStorage.getItem(savedReportFoldersKey(remoteConnection[0]))).toBeNull();
+    expect(window.localStorage.getItem(savedPerformanceFoldersKey(remoteConnection[0]))).toBeNull();
 });
 
 it('handles multiple remote connections in localStorage', () => {
@@ -259,14 +288,11 @@ it('keeps the selected connection when a different one is removed from its dropd
         </TestProviders>,
     );
 
-    getButtonWithText(lastConnection.name).click();
+    getConnectionTrigger(lastConnection).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    const rows = [...document.querySelectorAll('.remote-connection-menu-item')];
-    const middleRow = rows.find((row) => row.textContent?.includes(middleConnection.name));
-
-    fireEvent.click(middleRow!.querySelector<HTMLButtonElement>(`[aria-label="${REMOVE_CONNECTION_LABEL}"]`)!);
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getByLabelText(deleteConnectionLabel(middleConnection)));
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
 
     await waitFor(() => {
         const storedConnections = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_CONNECTIONS) ?? '[]');
@@ -274,20 +300,81 @@ it('keeps the selected connection when a different one is removed from its dropd
     }, WAIT_FOR_OPTIONS);
 
     // The removal must not re-point the selection, which would also clear the active remote report.
-    expect(getButtonWithText(lastConnection.name)).not.toBeNull();
+    expect(getConnectionTrigger(lastConnection)).not.toBeNull();
     expect(JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_SELECTED) ?? 'null')).toMatchObject({
         name: lastConnection.name,
     });
 
     // Persisting alone doesn't re-render, so assert the row is gone from the reopened dropdown
     // rather than trusting localStorage.
-    getButtonWithText(lastConnection.name).click();
+    getConnectionTrigger(lastConnection).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    const remainingRows = [...document.querySelectorAll('.remote-connection-menu-item')];
+    const remainingRows = screen.getAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW);
 
     expect(remainingRows).toHaveLength(2);
     remainingRows.forEach((row) => expect(row.textContent).not.toContain(middleConnection.name));
+});
+
+it('applies an edit to a connection that is not selected without changing the selection', async () => {
+    const otherConnection: RemoteConnection = {
+        name: 'Other Server',
+        username: 'prod-user',
+        host: 'other.example.com',
+        port: 22,
+        profilerPath: '/opt/reports',
+        performancePath: '/opt/perf',
+    };
+    const passingTests: ConnectionStatus[] = [
+        { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+        { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+    ];
+
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    setupConnection([remoteConnection[0], otherConnection], remoteConnection[0]);
+    mockPost.mockImplementation((url: string) => {
+        if (url === `${Endpoints.REMOTE}/test`) {
+            return Promise.resolve({ data: passingTests } as AxiosResponse);
+        }
+
+        return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+    });
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    getButtonWithText(CONNECTION_NAME).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(editConnectionLabel(otherConnection)));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: EDITED_CONNECTION_NAME } });
+    fireEvent.click(getButtonWithText('Run tests'));
+
+    await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
+    fireEvent.click(getButtonWithText('Save connection'));
+
+    await waitFor(() => {
+        const storedConnections = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_CONNECTIONS) ?? '[]');
+        expect(storedConnections.map((connection: RemoteConnection) => connection.name)).toEqual([
+            remoteConnection[0].name,
+            EDITED_CONNECTION_NAME,
+        ]);
+    }, WAIT_FOR_OPTIONS);
+
+    // Re-pointing the selection here would also clear the active remote report, and fetching folder
+    // lists would populate them for a connection that isn't in use.
+    expect(JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_SELECTED) ?? 'null')).toMatchObject({
+        name: remoteConnection[0].name,
+    });
+    expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
+
+    const listedEndpoints: string[] = [Endpoints.REMOTE_PROFILER_REPORTS, Endpoints.REMOTE_PERFORMANCE_REPORTS];
+    expect(mockPost.mock.calls.some(([url]) => listedEndpoints.includes(url))).toBe(false);
 });
 
 it('displays correct connection information format', () => {
@@ -967,7 +1054,7 @@ it('clears cached performance folders when local mount scan returns empty', asyn
     });
 
     setupConnection(remoteConnection);
-    window.localStorage.setItem(`${remoteConnection[0].name} - performanceFolders`, JSON.stringify([staleFolder]));
+    window.localStorage.setItem(savedPerformanceFoldersKey(remoteConnection[0]), JSON.stringify([staleFolder]));
 
     render(
         <TestProviders>
@@ -988,7 +1075,7 @@ it('clears cached performance folders when local mount scan returns empty', asyn
         const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
         expect(selectButtons.every((btn) => btn.hasAttribute(HTML_DISABLED))).toBe(true);
         expect(
-            JSON.parse(window.localStorage.getItem(`${remoteConnection[0].name} - performanceFolders`) ?? '[]'),
+            JSON.parse(window.localStorage.getItem(savedPerformanceFoldersKey(remoteConnection[0])) ?? '[]'),
         ).toEqual([]);
     }, WAIT_FOR_OPTIONS);
 });

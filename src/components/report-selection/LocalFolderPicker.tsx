@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useMemo, useState } from 'react';
-import { Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
@@ -13,13 +13,15 @@ import {
     shouldShowFolderLinkStatus,
     sortByFolderLinkState,
 } from '../../functions/folderLinkStatus';
-import { DELETE_REPORT_LABEL, ReportFolder } from '../../definitions/Reports';
+import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import { getReportId } from '../../functions/reportLinks';
-import { DeletableEntity } from '../../definitions/DeletableEntity';
+import { ManagedEntity } from '../../definitions/ManagedEntity';
+import { TEST_IDS } from '../../definitions/TestIds';
 import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
+import SelectRowActions from './SelectRowActions';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -87,6 +89,7 @@ const LocalFolderPicker = ({
         return (
             <div
                 className='folder-picker-menu-item'
+                data-testid={TEST_IDS.FOLDER_PICKER_ROW}
                 key={`${folder.path} - ${folder.reportName}`}
             >
                 <MenuItem
@@ -113,13 +116,11 @@ const LocalFolderPicker = ({
                 />
 
                 {handleDelete && !isServerMode && (
-                    <Button
-                        aria-label={DELETE_REPORT_LABEL}
-                        icon={IconNames.TRASH}
-                        onClick={() => setFolderToDelete(folder)}
+                    <SelectRowActions
+                        entity={ManagedEntity.REPORT}
+                        itemName={folder.reportName}
                         disabled={isDeleteDisabled}
-                        variant={ButtonVariant.MINIMAL}
-                        intent={Intent.DANGER}
+                        onDelete={() => setFolderToDelete(folder)}
                     />
                 )}
             </div>
@@ -163,10 +164,10 @@ const LocalFolderPicker = ({
                 </Tooltip>
             </Select>
 
-            {handleDelete && folderToDelete && (
+            {handleDelete && !isServerMode && folderToDelete && (
                 <ConfirmDeleteAlert
                     isOpen
-                    entity={DeletableEntity.REPORT}
+                    entity={ManagedEntity.REPORT}
                     entityName={folderToDelete.reportName}
                     onCancel={() => setFolderToDelete(null)}
                     onConfirm={() => {

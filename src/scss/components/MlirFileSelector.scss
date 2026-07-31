@@ -2,19 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-@use '../definitions/variables' as variables;
 @use '../mixins/formLayout' as form-layout;
 
-// The server label is long, so truncate it rather than let the trigger outgrow the other
-// report-selection controls.
 .mlir-server-select-button {
-    max-width: variables.$report-select-width;
-
-    .bp6-button-text {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
+    @include form-layout.truncated-select-trigger;
 }
 
 .mlir-server-menu-item {

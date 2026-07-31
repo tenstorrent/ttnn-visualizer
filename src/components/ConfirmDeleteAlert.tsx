@@ -4,11 +4,11 @@
 
 import { Alert, Intent } from '@blueprintjs/core';
 import { ReactNode } from 'react';
-import { DeletableEntity } from '../definitions/DeletableEntity';
+import { CANCEL_DELETE_LABEL, CONFIRM_DELETE_LABEL, ManagedEntity } from '../definitions/ManagedEntity';
 
 interface ConfirmDeleteAlertProps {
     isOpen: boolean;
-    entity: DeletableEntity;
+    entity: ManagedEntity;
     entityName: string;
     onConfirm: () => void;
     onCancel: () => void;
@@ -26,12 +26,15 @@ const ConfirmDeleteAlert = ({ isOpen, entity, entityName, onConfirm, onCancel, c
         canOutsideClickCancel
         isOpen={isOpen}
         intent={Intent.DANGER}
+        // No onClose: Alert calls it after onCancel/onConfirm alike, so wiring it to onCancel would
+        // run the cancel path on confirm too. Escape and outside clicks already route to onCancel.
         onCancel={onCancel}
-        onClose={onCancel}
         onConfirm={onConfirm}
-        cancelButtonText='Cancel'
-        confirmButtonText='Delete'
-        // @ts-expect-error backdropClassName is not defined in AlertProps
+        cancelButtonText={CANCEL_DELETE_LABEL}
+        confirmButtonText={CONFIRM_DELETE_LABEL}
+        // Alert collects the props it doesn't recognise and spreads them onto its Dialog, which
+        // does accept backdropClassName; only AlertProps omits it from the public type.
+        // @ts-expect-error backdropClassName is not declared on AlertProps
         backdropClassName='confirm-delete-backdrop'
     >
         <p>

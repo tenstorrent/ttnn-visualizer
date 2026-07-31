@@ -2,21 +2,18 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { useState } from 'react';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
-import {
-    EDIT_CONNECTION_LABEL,
-    FETCH_REMOTE_FOLDERS_LABEL,
-    REMOVE_CONNECTION_LABEL,
-    RemoteConnection,
-} from '../../definitions/RemoteConnection';
-import { DeletableEntity } from '../../definitions/DeletableEntity';
-import { isSameConnection } from '../../functions/remoteConnection';
+import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
+import { ManagedEntity } from '../../definitions/ManagedEntity';
+import { TEST_IDS } from '../../definitions/TestIds';
+import { isSameConnection, remoteConnectionKey } from '../../functions/remoteConnection';
 import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import HighlightedText from '../HighlightedText';
+import SelectRowActions from './SelectRowActions';
 import 'styles/components/RemoteConnectionSelector.scss';
 
 interface RemoteConnectionSelectorProps {
@@ -52,7 +49,8 @@ const RemoteConnectionSelector = ({
         return (
             <div
                 className='remote-connection-menu-item'
-                key={formatConnectionString(item)}
+                data-testid={TEST_IDS.REMOTE_CONNECTION_ROW}
+                key={remoteConnectionKey(item)}
             >
                 <MenuItem
                     active={isSameConnection(item, selectedConnection)}
@@ -67,21 +65,12 @@ const RemoteConnectionSelector = ({
                     }
                 />
 
-                <Button
-                    aria-label={EDIT_CONNECTION_LABEL}
-                    icon={IconNames.EDIT}
+                <SelectRowActions
+                    entity={ManagedEntity.REMOTE_CONNECTION}
+                    itemName={item.name}
                     disabled={disabled}
-                    variant={ButtonVariant.MINIMAL}
-                    onClick={() => setConnectionToEdit(item)}
-                />
-
-                <Button
-                    aria-label={REMOVE_CONNECTION_LABEL}
-                    icon={IconNames.TRASH}
-                    disabled={disabled}
-                    variant={ButtonVariant.MINIMAL}
-                    intent={Intent.DANGER}
-                    onClick={() => setConnectionToDelete(item)}
+                    onEdit={() => setConnectionToEdit(item)}
+                    onDelete={() => setConnectionToDelete(item)}
                 />
             </div>
         );
@@ -131,7 +120,7 @@ const RemoteConnectionSelector = ({
 
             {connectionToEdit && (
                 <RemoteConnectionDialog
-                    key={formatConnectionString(connectionToEdit)}
+                    key={remoteConnectionKey(connectionToEdit)}
                     open
                     // The dialog always calls onAddConnection and then onSave, so the edit is applied
                     // here and only the follow-up fetch belongs in onSave.
@@ -153,7 +142,7 @@ const RemoteConnectionSelector = ({
             {connectionToDelete && (
                 <ConfirmDeleteAlert
                     isOpen
-                    entity={DeletableEntity.REMOTE_CONNECTION}
+                    entity={ManagedEntity.REMOTE_CONNECTION}
                     entityName={connectionToDelete.name}
                     onCancel={() => setConnectionToDelete(null)}
                     onConfirm={() => {

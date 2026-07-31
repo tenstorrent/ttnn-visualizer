@@ -39,8 +39,6 @@ export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
 });
 
 export const FETCH_REMOTE_FOLDERS_LABEL = 'Fetch remote folders';
-export const EDIT_CONNECTION_LABEL = 'Edit connection';
-export const REMOVE_CONNECTION_LABEL = 'Remove connection';
 export const NEVER_SYNCED_LABEL = 'Never synced';
 export const REPORT_OUTDATED_LABEL = 'Report is stale';
 export const REPORT_UP_TO_DATE_LABEL = 'Report recently synced';

@@ -76,10 +76,13 @@ const RemoteSyncConfigurator = () => {
         }
     }, [reportMetadata, reportMetadataError]);
 
-    // The saved list lives in localStorage, so persisting it doesn't re-render on its own. This
-    // component is its only writer, so mirror it in state and write through persistConnectionList.
+    // The saved list lives in localStorage, so persisting it doesn't re-render on its own. Mirror
+    // it in state and write through persistConnectionList. The initialiser is lazy because reading
+    // the getter parses localStorage, and an eager one would do that on every render. The mirror is
+    // a stopgap: migrating remote.persistentState to atomWithStorage would make it reactive without
+    // a second source of truth, which no longer relies on this component being the only writer.
     const [savedConnectionList, setSavedConnectionList] = useState<RemoteConnection[]>(
-        remote.persistentState.savedConnectionList,
+        () => remote.persistentState.savedConnectionList,
     );
     const [isFetching, setIsFetching] = useState(false);
     const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(
@@ -321,6 +324,33 @@ const RemoteSyncConfigurator = () => {
 
     const findConnectionIndex = (connection?: RemoteConnection) => {
         return savedConnectionList.findIndex((c) => isSameConnection(c, connection));
+    };
+
+    /**
+     * Both dropdown row actions share this shape: locate the row, apply the change to a copy of the
+     * list, then re-point the selection only when the affected connection held it.
+     * updateSelectedConnection also clears the active remote report, so acting on any other row must
+     * leave the selection alone. `applyChange` returns what the selection should become.
+     */
+    const changeSavedConnection = async (
+        target: RemoteConnection | undefined,
+        applyChange: (connectionList: RemoteConnection[], index: number) => RemoteConnection,
+    ) => {
+        const connectionIndex = findConnectionIndex(target);
+
+        if (connectionIndex === -1) {
+            return;
+        }
+
+        const wasSelected = isSameConnection(target, remote.persistentState.selectedConnection);
+        const updatedConnections = [...savedConnectionList];
+        const nextSelectedConnection = applyChange(updatedConnections, connectionIndex);
+
+        persistConnectionList(updatedConnections);
+
+        if (wasSelected) {
+            await updateSelectedConnection(nextSelectedConnection);
+        }
     };
 
     const applyProfilerReportSelection = (folder: RemoteFolder) => {
@@ -657,43 +687,21 @@ const RemoteSyncConfigurator = () => {
                     disabled={isDisabled}
                     loading={isFetching}
                     onEditConnection={async (updatedConnection, oldConnection) => {
-                        const connectionIndex = findConnectionIndex(oldConnection);
+                        await changeSavedConnection(oldConnection, (connectionList, connectionIndex) => {
+                            connectionList[connectionIndex] = updatedConnection;
+                            remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
 
-                        if (connectionIndex === -1) {
-                            return;
-                        }
-
-                        const wasSelected = isSameConnection(oldConnection, remote.persistentState.selectedConnection);
-                        const updatedConnections = [...savedConnectionList];
-
-                        updatedConnections[connectionIndex] = updatedConnection;
-                        persistConnectionList(updatedConnections);
-                        remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
-
-                        // updateSelectedConnection also clears the active remote report, so editing a
-                        // connection from a dropdown row must only re-point a selection it already held.
-                        if (wasSelected) {
-                            await updateSelectedConnection(updatedConnection);
-                        }
+                            return updatedConnection;
+                        });
                     }}
                     onRemoveConnection={async (connection) => {
-                        const connectionIndex = findConnectionIndex(connection);
+                        await changeSavedConnection(connection, (connectionList, connectionIndex) => {
+                            connectionList.splice(connectionIndex, 1);
+                            remote.persistentState.deleteSavedReportFolders(connection);
+                            remote.persistentState.deleteSavedPerformanceFolders(connection);
 
-                        if (connectionIndex === -1) {
-                            return;
-                        }
-
-                        const wasSelected = isSameConnection(connection, remote.persistentState.selectedConnection);
-                        const updatedConnections = [...savedConnectionList];
-
-                        updatedConnections.splice(connectionIndex, 1);
-                        persistConnectionList(updatedConnections);
-                        remote.persistentState.deleteSavedReportFolders(connection);
-                        remote.persistentState.deleteSavedPerformanceFolders(connection);
-
-                        if (wasSelected) {
-                            await updateSelectedConnection(updatedConnections[0]);
-                        }
+                            return connectionList[0];
+                        });
                     }}
                     onSelectConnection={async (connection) => {
                         await updateSelectedConnection(connection);

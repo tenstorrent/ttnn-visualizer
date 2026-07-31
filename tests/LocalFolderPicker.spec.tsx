@@ -2,30 +2,44 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalFolderPicker from '../src/components/report-selection/LocalFolderPicker';
+import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
 import { ReportFolder } from '../src/definitions/Reports';
+import { TEST_IDS } from '../src/definitions/TestIds';
+import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
 
+const getServerConfigMock = vi.hoisted(() => vi.fn(() => ({ SERVER_MODE: false })));
+
 afterEach(cleanup);
+
+beforeEach(() => {
+    getServerConfigMock.mockClear();
+    getServerConfigMock.mockReturnValue({ SERVER_MODE: false });
+});
 
 vi.mock('../src/hooks/useAPI', () => ({
     useInstance: () => ({ data: {} }),
 }));
 
 vi.mock('../src/functions/getServerConfig', () => ({
-    default: () => ({ SERVER_MODE: false }),
+    default: getServerConfigMock,
 }));
 
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
+const SELECT_REPORT_TEXT = 'Select a report...';
 
 const folders: ReportFolder[] = [
     { path: 'unknown-run', reportName: 'unknown-run' },
     { path: 'unlinked-run', reportName: 'unlinked-run' },
     { path: 'linked-run', reportName: 'linked-run' },
 ];
+
+const deleteLabel = (folder: ReportFolder) => getDeleteActionLabel(ManagedEntity.REPORT, folder.reportName);
 
 describe('LocalFolderPicker link badges', () => {
     it('sorts linked first, unknown middle, unlinked last', async () => {
@@ -82,7 +96,7 @@ describe('LocalFolderPicker link badges', () => {
         fireEvent.click(screen.getByText('Select a report...'));
         await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-        fireEvent.click(screen.getAllByLabelText('Delete report')[0]);
+        fireEvent.click(screen.getByLabelText(deleteLabel(folders[0])));
         expect(screen.getAllByText(/Are you sure you want to delete/).length).toBeGreaterThan(0);
 
         rerender(
@@ -99,7 +113,7 @@ describe('LocalFolderPicker link badges', () => {
 
         // Select may close the menu (and unmount Alerts) when loading; if an Alert
         // remains, confirm must still be a no-op.
-        screen.queryAllByRole('button', { name: 'Delete' }).forEach((button) => {
+        screen.queryAllByRole('button', { name: CONFIRM_DELETE_LABEL }).forEach((button) => {
             fireEvent.click(button);
         });
         expect(handleDelete).not.toHaveBeenCalled();
@@ -120,7 +134,7 @@ describe('LocalFolderPicker link badges', () => {
         fireEvent.click(screen.getByText('Select a report...'));
         await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-        fireEvent.click(screen.getAllByLabelText('Delete report')[0]);
+        fireEvent.click(screen.getByLabelText(deleteLabel(folders[0])));
 
         expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     });
@@ -142,14 +156,40 @@ describe('LocalFolderPicker link badges', () => {
         await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
         // Rows render sorted, so read the row's own label rather than assuming the items order.
-        const rows = [...document.querySelectorAll('.folder-picker-menu-item')];
-        const secondRowPath = rows[1].querySelector('.bp6-text-overflow-ellipsis')?.textContent;
+        const secondRow = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW)[1];
+        const secondRowFolder = folders.find((folder) => secondRow.textContent?.includes(`/${folder.path}`))!;
 
-        fireEvent.click(rows[1].querySelector<HTMLButtonElement>('[aria-label="Delete report"]')!);
-        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        fireEvent.click(within(secondRow).getByLabelText(deleteLabel(secondRowFolder)));
+
+        // The confirmation must name the row that was clicked, not whichever row rendered first.
+        expect(screen.getByText(/Are you sure you want to delete/)).toHaveTextContent(secondRowFolder.reportName);
+        fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
 
         expect(handleDelete).toHaveBeenCalledTimes(1);
-        expect(`/${handleDelete.mock.calls[0][0].path}`).toBe(secondRowPath);
+        expect(handleDelete).toHaveBeenCalledWith(secondRowFolder);
+    });
+
+    it('offers no delete action or confirmation in server mode', async () => {
+        getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
+
+        render(
+            <TestProviders>
+                <LocalFolderPicker
+                    items={folders}
+                    value={null}
+                    handleSelect={vi.fn()}
+                    handleDelete={vi.fn()}
+                />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByText(SELECT_REPORT_TEXT));
+        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+        // The rows still render, so this is the gate being asserted rather than an empty dropdown.
+        expect(screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW)).toHaveLength(folders.length);
+        folders.forEach((folder) => expect(screen.queryByLabelText(deleteLabel(folder))).toBeNull());
+        expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(0);
     });
 
     it('shows a warning unlink icon on unlinked folders', async () => {
