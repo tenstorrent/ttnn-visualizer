@@ -18,6 +18,19 @@ export enum PerfChartId {
     OperationTypes = 'perf-chart-operation-types',
 }
 
+export enum PerfChartGroup {
+    ALL = 'all',
+    MATMUL = 'matmul',
+    CONV = 'conv',
+}
+
+/** Shared by the chart-index menu dividers and the on-page section headings so the two can't drift. */
+export const PERF_CHART_GROUP_LABELS: Record<PerfChartGroup, string> = {
+    [PerfChartGroup.ALL]: 'All operations',
+    [PerfChartGroup.MATMUL]: 'Matmul operations',
+    [PerfChartGroup.CONV]: 'Conv operations',
+};
+
 export const PERF_CHART_TABLE_FILTER_HINT = 'Click an operation to filter the performance table';
 
 export type OnOpCodeClick = (opCode: string) => void;
@@ -41,24 +54,29 @@ export const PERF_CHART_LABELS: Record<PerfChartId, string> = {
 export interface PerfChartIndexEntry {
     id: string;
     label: string;
+    group: PerfChartGroup;
 }
 
 export const FILTERABLE_CHART_ENTRIES: PerfChartIndexEntry[] = [
     {
         id: PerfChartId.OpDurationHistogram,
         label: PERF_CHART_LABELS[PerfChartId.OpDurationHistogram],
+        group: PerfChartGroup.ALL,
     },
     {
         id: PerfChartId.OpCountVsRuntime,
         label: PERF_CHART_LABELS[PerfChartId.OpCountVsRuntime],
+        group: PerfChartGroup.ALL,
     },
     {
         id: PerfChartId.CoreCountKernelRuntime,
         label: PERF_CHART_LABELS[PerfChartId.CoreCountKernelRuntime],
+        group: PerfChartGroup.ALL,
     },
     {
         id: PerfChartId.KernelDurationVsCoreCount,
         label: PERF_CHART_LABELS[PerfChartId.KernelDurationVsCoreCount],
+        group: PerfChartGroup.ALL,
     },
 ];
 
@@ -66,18 +84,22 @@ export const MATMUL_CHART_ENTRIES: PerfChartIndexEntry[] = [
     {
         id: PerfChartId.MatmulCoreCountUtilization,
         label: PERF_CHART_LABELS[PerfChartId.MatmulCoreCountUtilization],
+        group: PerfChartGroup.MATMUL,
     },
     {
         id: PerfChartId.MatmulDeviceTime,
         label: PERF_CHART_LABELS[PerfChartId.MatmulDeviceTime],
+        group: PerfChartGroup.MATMUL,
     },
     {
         id: PerfChartId.MatmulKernelDurationUtilization,
         label: PERF_CHART_LABELS[PerfChartId.MatmulKernelDurationUtilization],
+        group: PerfChartGroup.MATMUL,
     },
     {
         id: PerfChartId.MatmulUtilizationVsKernelDuration,
         label: PERF_CHART_LABELS[PerfChartId.MatmulUtilizationVsKernelDuration],
+        group: PerfChartGroup.MATMUL,
     },
 ];
 
@@ -85,17 +107,21 @@ export const CONV_CHART_ENTRIES: PerfChartIndexEntry[] = [
     {
         id: PerfChartId.ConvCoreCountUtilization,
         label: PERF_CHART_LABELS[PerfChartId.ConvCoreCountUtilization],
+        group: PerfChartGroup.CONV,
     },
     {
         id: PerfChartId.ConvDeviceTime,
         label: PERF_CHART_LABELS[PerfChartId.ConvDeviceTime],
+        group: PerfChartGroup.CONV,
     },
     {
         id: PerfChartId.ConvKernelDurationUtilization,
         label: PERF_CHART_LABELS[PerfChartId.ConvKernelDurationUtilization],
+        group: PerfChartGroup.CONV,
     },
     {
         id: PerfChartId.ConvUtilizationVsKernelDuration,
         label: PERF_CHART_LABELS[PerfChartId.ConvUtilizationVsKernelDuration],
+        group: PerfChartGroup.CONV,
     },
 ];
