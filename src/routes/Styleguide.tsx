@@ -744,6 +744,8 @@ export default function Styleguide() {
                 <MemoryTag memory={BufferTypeLabel[BufferType.DRAM]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.L1]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.L1_SMALL]} />
+                <MemoryTag memory={BufferTypeLabel[BufferType.SYSTEM_MEMORY]} />
+                <MemoryTag memory={BufferTypeLabel[BufferType.TRACE]} />
             </div>
 
             <h3>Progress bar</h3>
