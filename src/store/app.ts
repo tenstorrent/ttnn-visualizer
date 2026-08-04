@@ -14,6 +14,7 @@ import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { REPORT_LINKS_STORAGE_KEY } from '../definitions/ReportLinks';
 import { ReportLink } from '../model/ReportLinks';
 import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { DurationBucket } from '../definitions/PerfDurationHistogram';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
@@ -108,6 +109,9 @@ export const mathFilterListAtom = atom<TypedPerfTableRow['math_fidelity'][]>([])
 export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>([]);
 export const bufferTypeFilterListAtom = atom<TypedPerfTableRow['buffer_type'][]>([]);
 export const layoutFilterListAtom = atom<TypedPerfTableRow['layout'][]>([]);
+// Selected duration buckets, keyed by each bucket's lower bound in microseconds. bucketIndex
+// is an offset from the dataset's lowest decade, so it would shift meaning as rows change.
+export const durationBucketFilterListAtom = atom<DurationBucket['minUs'][]>([]);
 export const mergeDevicesAtom = atom<boolean>(true);
 export const tracingModeAtom = atom<boolean>(false);
 export const stackedGroupByAtom = atom<StackedGroupBy>(StackedGroupBy.OP);

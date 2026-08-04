@@ -22,6 +22,7 @@ import {
 } from '@blueprintjs/core';
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
+import { DurationBucket } from '../../definitions/PerfDurationHistogram';
 import { ColumnKeys, Columns, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { Signpost } from '../../model/Signpost';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
@@ -31,6 +32,7 @@ import {
     activePerformanceReportAtom,
     bufferTypeFilterListAtom,
     comparisonPerformanceReportListAtom,
+    durationBucketFilterListAtom,
     filterBySignpostAtom,
     hideHostOpsAtom,
     isStackedViewAtom,
@@ -56,6 +58,8 @@ import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { capitalizeString } from '../../functions/formatting';
+import { DECADE_FACTOR } from '../../functions/durationBuckets';
+import { formatDurationBucketRange } from '../../functions/formatDurationBucketRange';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
 
@@ -104,6 +108,7 @@ const PerformanceReport = ({
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
     const [activeLayoutFilterList, setActiveLayoutFilterList] = useAtom(layoutFilterListAtom);
+    const [activeDurationBucketFilterList, setActiveDurationBucketFilterList] = useAtom(durationBucketFilterListAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -140,6 +145,7 @@ const PerformanceReport = ({
         processedComparisonRows,
         combinedRows,
         rawOpCodeOptions,
+        durationBucketOptions,
         filteredRows,
         filteredComparisonRowsList,
     } = usePerfReportFiltering({
@@ -151,8 +157,16 @@ const PerformanceReport = ({
         activeRawOpCodeFilterList,
         activeBufferTypeFilterList,
         activeLayoutFilterList,
+        activeDurationBucketFilterList,
         filterBySignpost,
     });
+    const labelByBucketMinUs = useMemo(
+        () =>
+            new Map<DurationBucket['minUs'], string>(
+                durationBucketOptions.map((bucket) => [bucket.minUs, bucket.label]),
+            ),
+        [durationBucketOptions],
+    );
     const validRawOpCodeValues = useMemo(
         () => new Set(rawOpCodeOptions.flatMap((row) => (row.raw_op_code !== null ? [row.raw_op_code] : []))),
         [rawOpCodeOptions],
@@ -183,6 +197,10 @@ const PerformanceReport = ({
                     .filter((value): value is NonNullable<TypedPerfTableRow['layout']> => value !== null),
             ),
         [combinedRows],
+    );
+    const validDurationBucketValues = useMemo(
+        () => new Set(durationBucketOptions.map((bucket) => bucket.minUs)),
+        [durationBucketOptions],
     );
 
     const filteredComparisonRows = useMemo(
@@ -317,13 +335,21 @@ const PerformanceReport = ({
 
             return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
         });
+        // A bucket that no longer exists would filter every row out with no visible tag to explain it
+        setActiveDurationBucketFilterList((currentFilters) => {
+            const nextFilters = currentFilters.filter((value) => validDurationBucketValues.has(value));
+
+            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
+        });
     }, [
         validMathFilterValues,
         validBufferTypeValues,
         validLayoutValues,
+        validDurationBucketValues,
         setActiveMathFilterList,
         setActiveBufferTypeFilterList,
         setActiveLayoutFilterList,
+        setActiveDurationBucketFilterList,
     ]);
 
     return (
@@ -564,6 +590,18 @@ const PerformanceReport = ({
                                     values={activeMathFilterList}
                                     updateHandler={setActiveMathFilterList}
                                     disabled={isStackedView}
+                                />
+
+                                <MultiSelectField<DurationBucket, 'minUs'>
+                                    keyName='minUs'
+                                    options={durationBucketOptions}
+                                    labelFormatter={(minUs) =>
+                                        labelByBucketMinUs.get(minUs) ??
+                                        formatDurationBucketRange(minUs, minUs * DECADE_FACTOR)
+                                    }
+                                    placeholder='Select Device Time...'
+                                    values={activeDurationBucketFilterList}
+                                    updateHandler={setActiveDurationBucketFilterList}
                                 />
                             </ButtonGroup>
 
