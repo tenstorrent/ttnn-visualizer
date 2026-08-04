@@ -31,7 +31,6 @@ from ttnn_visualizer.models import (
     RemoteConnection,
     RemoteReportFolder,
     folder_segment_from_remote_path,
-    rank_directory_from_remote_path,
     rank_from_remote_path,
 )
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
@@ -102,8 +101,8 @@ TEST_PROFILER_FILE = "profile_log_device.csv"
 # profile_log_device.csv and would otherwise look like a report.
 #
 # Glob syntax cannot express "digits only", so this only narrows the candidates
-# worth an SSH round trip; `rank_directory_from_remote_path` is what decides
-# whether a candidate is really a rank.
+# worth an SSH round trip; `rank_from_remote_path` is what decides whether a
+# candidate is really a rank.
 MULTIHOST_REPORT_PARENT_GLOB = "rank[0-9]*/reports"
 
 # Spelled for humans rather than for `find`, since it reaches the connection-test UI.
@@ -994,7 +993,7 @@ def _find_performance_report_folders(
         subdirectory_glob=MULTIHOST_REPORT_PARENT_GLOB,
         # A candidate whose rank we cannot read back would sync to an unqualified
         # folder and collide with the other ranks of the same launch.
-        directory_filter=lambda path: rank_directory_from_remote_path(path) is not None,
+        directory_filter=lambda path: rank_from_remote_path(path) is not None,
     )
 
 

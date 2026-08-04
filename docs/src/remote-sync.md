@@ -133,7 +133,9 @@ paths it holds belong to the other layout.
 
 Every rank names its report after its own start time to the second, so ranks of the same launch
 routinely produce the same report name. Synced copies therefore get their rank appended
-(`<report>_rank0`) to keep them from overwriting each other locally. That naming applies only to
+(`<report>_rank0`) to keep them from overwriting each other locally. The suffix is built from the
+rank number rather than copied from the remote directory, so `rank0/`, `Rank0/` and `rank00/` all
+sync into the one local folder instead of three. That naming applies only to
 performance reports of a connection with this setting on — memory reports and single-host
 connections keep the names they already sync under, including a connection pointed straight at
 one rank's `reports/` directory.

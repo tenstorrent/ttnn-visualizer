@@ -16,6 +16,7 @@ from ttnn_visualizer.models import (
     RemoteConnection,
     RemoteReportFolder,
     folder_segment_from_remote_path,
+    split_rank_suffix,
 )
 from ttnn_visualizer.sftp_operations import (
     MULTIHOST_REPORT_LAYOUT_HINT,
@@ -887,10 +888,26 @@ class TestRankQualifiedLocalFolders:
             == self.SAME_TIMESTAMP
         )
 
-    def test_rank_directory_is_taken_verbatim(self):
-        """Mirror the remote naming rather than inventing a second convention."""
-        assert self._segment("RANK7") == f"{self.SAME_TIMESTAMP}_RANK7"
+    def test_rank_is_normalised_from_the_number_not_the_directory(self):
+        """One rank gets one local folder, however the remote spells it."""
         assert self._segment("rank10") == f"{self.SAME_TIMESTAMP}_rank10"
+        assert self._segment("RANK7") == f"{self.SAME_TIMESTAMP}_rank7"
+        assert (
+            self._segment("Rank0") == self._segment("rank0") == self._segment("rank00")
+        )
+
+    def test_a_normalised_name_reads_back_as_the_same_rank(self):
+        """Sync writes the segment, the offline listing splits it: the two must agree."""
+        segment = self._segment("RANK7")
+
+        assert split_rank_suffix(segment) == (self.SAME_TIMESTAMP, 7)
+
+    def test_folders_synced_before_normalisation_still_read_back(self):
+        """`_RANK7` is on disk from earlier builds and must not become rank-less."""
+        assert split_rank_suffix(f"{self.SAME_TIMESTAMP}_RANK7") == (
+            self.SAME_TIMESTAMP,
+            7,
+        )
 
     def test_a_rank_directory_itself_is_not_doubled(self):
         """Guard the degenerate case where the report dir *is* the rank dir."""

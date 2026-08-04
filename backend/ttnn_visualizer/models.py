@@ -249,18 +249,14 @@ def sanitise_path_segment(value: object) -> str:
     return safe_segment
 
 
-# `re.ASCII` because the digits also have to be readable as a rank number, and
-# because the client renders the same names from JavaScript's ASCII-only `\d`.
+# Rank is read as a number at the discovery boundary and every name is derived
+# back from that number, so one rank has one spelling everywhere. Both patterns
+# stay case-insensitive for *reading*: the remote tree is not ours to spell, and
+# folders synced before normalisation can carry the remote's capitalisation.
+# `re.ASCII` because the digits have to be readable as a number, and because the
+# client renders the same names from JavaScript's ASCII-only `\d`.
 RANK_DIRECTORY_RE = re.compile(r"^rank(\d+)$", re.IGNORECASE | re.ASCII)
-RANK_SUFFIX_RE = re.compile(r"_(rank\d+)$", re.IGNORECASE | re.ASCII)
-
-
-def rank_suffix_from_segment(segment: Optional[str]) -> Optional[str]:
-    """The ``rank<N>`` qualifier ``folder_segment_from_remote_path`` appended, if any."""
-    if not segment:
-        return None
-    match = RANK_SUFFIX_RE.search(segment)
-    return match.group(1) if match else None
+RANK_SUFFIX_RE = re.compile(r"_rank(\d+)$", re.IGNORECASE | re.ASCII)
 
 
 def split_rank_suffix(segment: str) -> Tuple[str, Optional[int]]:
@@ -274,33 +270,25 @@ def split_rank_suffix(segment: str) -> Tuple[str, Optional[int]]:
     if not match:
         return segment, None
 
-    rank_match = RANK_DIRECTORY_RE.match(match.group(1))
-    return segment[: match.start()], int(rank_match.group(1)) if rank_match else None
-
-
-def rank_directory_from_remote_path(remote_path: str) -> Optional[str]:
-    """The rank folder a multihost report sits under, verbatim, or None.
-
-    Authoritative definition of a rank directory. Only ancestors are considered:
-    a report directory that is itself named ``rank5`` is a report, and treating
-    it as its own rank would leave it unqualified and free to collide with the
-    other ranks of the same launch.
-    """
-    for part in reversed(Path(remote_path).parent.parts):
-        if RANK_DIRECTORY_RE.match(part):
-            return part
-    return None
+    return segment[: match.start()], int(match.group(1))
 
 
 def rank_from_remote_path(remote_path: Optional[str]) -> Optional[int]:
-    """Rank number of a multihost report, for display. None for single-host."""
+    """Rank of a multihost report from the folder it sits under. None if single-host.
+
+    Authoritative definition of a rank directory, and the only place a rank is
+    parsed out of a remote path. Only ancestors are considered: a report
+    directory that is itself named ``rank5`` is a report, and treating it as its
+    own rank would leave it unqualified and free to collide with the other ranks
+    of the same launch.
+    """
     if not remote_path:
         return None
-    rank_directory = rank_directory_from_remote_path(remote_path)
-    if rank_directory is None:
-        return None
-    match = RANK_DIRECTORY_RE.match(rank_directory)
-    return int(match.group(1)) if match else None
+    for part in reversed(Path(remote_path).parent.parts):
+        match = RANK_DIRECTORY_RE.match(part)
+        if match:
+            return int(match.group(1))
+    return None
 
 
 def folder_segment_from_remote_path(
@@ -331,12 +319,14 @@ def folder_segment_from_remote_path(
     if not qualify_rank:
         return segment
 
-    rank_directory = rank_directory_from_remote_path(remote_path)
-    if rank_directory is None:
+    rank = rank_from_remote_path(remote_path)
+    if rank is None:
         return segment
+    # Built from the parsed number rather than echoing the remote directory, so
+    # `rank0/`, `Rank0/` and `rank00/` name one local folder instead of three.
     # The suffix is applied to the sanitised segment, so the qualifier survives
     # whatever `sanitise_path_segment` did to the basename.
-    return f"{segment}_{rank_directory}"
+    return f"{segment}_rank{rank}"
 
 
 def sanitise_remote_host_segment(value: object) -> str:
