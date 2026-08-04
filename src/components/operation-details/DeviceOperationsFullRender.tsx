@@ -34,7 +34,7 @@ import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1Memory
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
 import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
-import { BufferTypeToStringBufferType, StringBufferType } from '../../model/BufferType';
+import { BufferTypeToStringBufferType, StringBufferType, StringBufferTypeLabel } from '../../model/BufferType';
 import {
     DEVICE_OPERATION_ANALYSIS_RESULT_LABEL,
     DeviceOperationAnalysisResult,
@@ -101,7 +101,7 @@ const renderBufferDetails = ({ bufferOrTensorNode, optionalOutput, details }: Bu
             <span> {formatMemorySize(size, 2)}</span>
             <span>{dtype && `${toReadableType(dtype)}`}</span>
             <span>
-                <MemoryTag memory={type} />
+                <MemoryTag memory={StringBufferTypeLabel[type]} />
             </span>
             {layout && <span className='layout'>{layout}</span>}
 

@@ -10,3 +10,11 @@ export enum DBVersionValidation {
     DB_OLD,
     DB_NEW,
 }
+
+/** Severity of how far the running app trails the latest published release. Ordered, so `> NONE` means an update is available. */
+export enum OutdatedLevel {
+    NONE = 0,
+    ONE = 1,
+    TWO = 2,
+    THREE = 3,
+}
