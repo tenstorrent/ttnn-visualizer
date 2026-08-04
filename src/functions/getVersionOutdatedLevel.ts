@@ -9,9 +9,13 @@ import { semverParse } from './semverParse';
  * Compares (major, minor, patch) as an ordered triple. PyPI's release feed lags a freshly tagged
  * release, so a local build ahead of the published one is routine and must report NONE.
  *
- * Prereleases compare equal to their release: a local 1.0.0-rc1 is not prompted towards 1.0.0,
- * because prompting every dev build to "update" to the version it already contains is worse noise
- * than the missed prompt.
+ * Hyphenated prereleases compare equal to their release: a local 1.0.0-rc1 is not prompted towards
+ * 1.0.0, because prompting every dev build to "update" to the version it already contains is worse
+ * noise than the missed prompt. Only the local side can carry a prerelease — the published version
+ * is regex-constrained to \d+\.\d+\.\d+ in views.get_latest_version — which is where suppressing
+ * the prompt is the right policy. Non-hyphenated PEP 440 spellings (1.0.0rc1, 1.0.0.dev0) miss
+ * semverParse's regex and degrade to 0.0.0, so they would invert this; unreachable while the local
+ * version comes from package.json via import.meta.env.APP_VERSION.
  */
 export const getVersionOutdatedLevel = (
     appVersion: string | undefined,
