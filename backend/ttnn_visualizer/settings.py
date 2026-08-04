@@ -29,11 +29,17 @@ def _build_allowed_origins(
 ) -> List[str]:
     """Resolve the CORS allowlist, defaulting to the narrowest set that still works.
 
-    Only the app's own origin is trusted by default: local-only endpoints hand out SSH
-    host, user and path metadata, and with no authentication CORS is what stops another
-    page served from a different localhost port reading it. Production serves the built
-    SPA same-origin, while ``pnpm dev`` serves it from Vite's own origin, so only
-    non-production adds the dev server.
+    This governs which *other* pages may read us, not whether the app can reach itself:
+    local-only endpoints hand out SSH host, user and path metadata, and with no
+    authentication CORS is what stops a page served from a different localhost port
+    reading it. Production serves the built SPA same-origin, while ``pnpm dev`` serves
+    it from Vite's own origin, so only non-production adds the dev server.
+
+    The default therefore doesn't have to name the origin the app is actually served
+    on. A same-origin fetch is unaffected by a missing ``Access-Control-Allow-Origin``,
+    so a binding this list doesn't mention still works. Sockets are the exception —
+    engine.io refuses an unlisted ``Origin`` outright — which is why they go through
+    :func:`build_socketio_origin_check` rather than taking this list verbatim.
     """
     if configured is None:
         configured = f"http://localhost:{app_port}"

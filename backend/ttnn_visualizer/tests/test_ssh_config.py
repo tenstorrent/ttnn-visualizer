@@ -145,7 +145,7 @@ Host two-keys
 
     hosts = load_ssh_config_hosts(config).hosts
     assert [host.host for host in hosts] == ["two-keys"]
-    assert hosts[0].to_dict() == {"host": "two-keys"}
+    assert hosts[0].model_dump(exclude_none=True) == {"host": "two-keys"}
 
 
 def test_load_ssh_config_hosts_include(tmp_path: Path):
@@ -389,6 +389,24 @@ Host main
 
     hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
     assert set(hosts) == {"one", "two", "main"}
+
+
+def test_load_ssh_config_hosts_nested_include_resolves_against_the_entry_directory(
+    tmp_path: Path,
+):
+    # ssh_config(5): a relative Include is read from the SSH directory of the config
+    # the read started from, so a directive nested one level down still resolves
+    # alongside the entry file rather than beside the file containing it.
+    included_dir = tmp_path / "conf.d"
+    included_dir.mkdir()
+    _write_config(included_dir, "Include sibling\n\nHost nested", name="one")
+    _write_config(included_dir, "Host beside-the-nested-file", name="sibling")
+    _write_config(tmp_path, "Host beside-the-entry-file", name="sibling")
+
+    config = _write_config(tmp_path, "Include conf.d/one")
+
+    hosts = {host.host for host in load_ssh_config_hosts(config).hosts}
+    assert hosts == {"nested", "beside-the-entry-file"}
 
 
 def test_load_ssh_config_hosts_include_expands_a_home_relative_glob(

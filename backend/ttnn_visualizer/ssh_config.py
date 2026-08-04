@@ -15,9 +15,11 @@ import logging
 import os
 import re
 import shlex
-from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, TypeVar
+
+from pydantic import ConfigDict
+from ttnn_visualizer.models import SerializeableModel
 
 logger = logging.getLogger(__name__)
 
@@ -30,36 +32,36 @@ MAX_INCLUDE_DEPTH = 16
 _KEYWORD_SEPARATOR_PATTERN = re.compile(r"([^\s=]+)\s*=?\s*(.*)")
 
 
-@dataclass(frozen=True)
-class SshConfigHost:
+class SshConfigHost(SerializeableModel):
     """One concrete Host alias from an SSH config file.
 
     ``IdentityFile`` is deliberately absent: the picker clears the dialog's identity
     field so OpenSSH keeps applying the stanza's own ``IdentityFile`` and ``ProxyJump``,
     which leaves a local key path with no reason to reach the browser.
+
+    ``port`` is unconstrained because :func:`_store_host_block` drops an out-of-range
+    value and keeps the alias; a ``Field`` bound would lose the whole stanza instead.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     host: str
     hostName: Optional[str] = None
     user: Optional[str] = None
     port: Optional[int] = None
 
-    def to_dict(self) -> Dict[str, object]:
-        return {key: value for key, value in asdict(self).items() if value is not None}
 
+class SshConfigHostsResult(SerializeableModel):
+    """Payload for the SSH config host picker.
 
-@dataclass(frozen=True)
-class SshConfigHostsResult:
-    """Payload for the SSH config host picker."""
+    Serialise with ``model_dump(exclude_none=True)``: the picker's TypeScript model
+    declares the optional fields absent rather than null.
+    """
+
+    model_config = ConfigDict(frozen=True)
 
     configExists: bool
     hosts: List[SshConfigHost]
-
-    def to_dict(self) -> Dict[str, object]:
-        return {
-            "configExists": self.configExists,
-            "hosts": [host.to_dict() for host in self.hosts],
-        }
 
 
 def load_ssh_config_hosts(
@@ -78,7 +80,12 @@ def load_ssh_config_hosts(
         return SshConfigHostsResult(configExists=False, hosts=[])
 
     host_by_alias: Dict[str, SshConfigHost] = {}
-    _parse_ssh_config_file(path, host_by_alias, depth=0, visited=set())
+    # ssh_config(5) resolves a relative Include against the SSH directory of the file
+    # the read started from, not against whichever file holds the directive, so the
+    # base is fixed once here rather than recomputed per file.
+    _parse_ssh_config_file(
+        path, host_by_alias, depth=0, visited=set(), base_dir=path.parent
+    )
     return SshConfigHostsResult(configExists=True, hosts=list(host_by_alias.values()))
 
 
@@ -87,6 +94,7 @@ def _parse_ssh_config_file(
     host_by_alias: Dict[str, SshConfigHost],
     depth: int,
     visited: Set[Path],
+    base_dir: Path,
 ) -> None:
     # OpenSSH permits re-inclusion, but a picker only needs each file once and the
     # depth cap alone leaves Include fan-out exponential in the number of matches.
@@ -148,8 +156,10 @@ def _parse_ssh_config_file(
             # picker loses is a HostName or Port prefill for a config shaped that way.
             # test_load_ssh_config_hosts_include_inside_host_keeps_later_keywords pins
             # this; don't "fix" it toward parity without replacing that test.
-            for included in _expand_include_paths(argument, path.parent):
-                _parse_ssh_config_file(included, host_by_alias, depth + 1, visited)
+            for included in _expand_include_paths(argument, base_dir):
+                _parse_ssh_config_file(
+                    included, host_by_alias, depth + 1, visited, base_dir
+                )
             continue
 
         if keyword_lower == "match":

@@ -1684,7 +1684,7 @@ def get_mesh_descriptor(instance: Instance):
 @local_only
 def list_remote_ssh_config_hosts():
     """List concrete Host aliases from the local user's ~/.ssh/config."""
-    return jsonify(load_ssh_config_hosts().to_dict())
+    return jsonify(load_ssh_config_hosts().model_dump(exclude_none=True))
 
 
 @api.route("/remote/test", methods=["POST"])

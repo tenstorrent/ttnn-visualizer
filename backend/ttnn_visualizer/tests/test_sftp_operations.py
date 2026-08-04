@@ -29,8 +29,11 @@ from ttnn_visualizer.sftp_operations import (
     _get_remote_file_list_without_sizes,
     _remote_transfer_key,
     _sftp_subsystem_unavailable,
+    find_folders_by_files,
     get_remote_directory_list,
     get_remote_file_list,
+    get_remote_performance_folder,
+    resolve_file_path,
     sync_files_and_directories,
 )
 from ttnn_visualizer.sockets import FileStatus
@@ -102,6 +105,50 @@ class TestRemoteFindShellQuoting:
         remote_cmd = _remote_shell_command_from_run(run)
         assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
         assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
+
+    def test_find_folders_by_files_quotes_the_root_folder(self, connection):
+        with patch("subprocess.run", return_value=_completed("")) as run:
+            find_folders_by_files(connection, self._APOSTROPHE_FOLDER, ["config.json"])
+
+        remote_cmd = _remote_shell_command_from_run(run)
+        assert remote_cmd.count(shlex.quote(self._APOSTROPHE_FOLDER)) == 2
+        assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
+
+    def test_find_folders_by_files_quotes_each_directory_it_probes(self, connection):
+        # The directory comes back from the remote `find`, so it carries whatever the
+        # remote filesystem holds rather than anything we validated on the way out.
+        directory = "/remote/reports/o'brien"
+        listing = _completed(f"{directory}\n")
+        with patch("subprocess.run", side_effect=[listing, _completed("")]) as run:
+            find_folders_by_files(connection, "/remote/reports", ["config.json"])
+
+        probe_cmd = _remote_shell_command_from_run(run)
+        assert shlex.quote(f"{directory}/config.json") in probe_cmd
+        assert f"test -f '{directory}/config.json'" not in probe_cmd
+
+    def test_get_remote_performance_folder_quotes_the_folder(self, connection):
+        with patch("subprocess.run", return_value=_completed("1700000000")) as run:
+            get_remote_performance_folder(connection, self._APOSTROPHE_FOLDER)
+
+        remote_cmd = _remote_shell_command_from_run(run)
+        assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
+        assert f"stat -c %Y '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
+
+    def test_resolve_file_path_quotes_around_the_wildcard(self, connection):
+        # The wildcard has to reach the remote shell unquoted for `ls` to expand it,
+        # so this path can't just be handed to shlex.quote wholesale.
+        pattern = "/remote/o'brien/*/config.json"
+        with patch(
+            "subprocess.run", return_value=_completed("/remote/resolved/config.json\n")
+        ) as run:
+            resolved = resolve_file_path(connection, pattern)
+
+        remote_cmd = _remote_shell_command_from_run(run)
+        assert resolved == "/remote/resolved/config.json"
+        # Quote removal gives the pattern back verbatim, so the apostrophe can't end
+        # the quoting early, while the wildcard is left outside quotes to expand.
+        assert shlex.split(remote_cmd) == ["ls", "-1", pattern]
+        assert "'*'" not in remote_cmd
 
 
 class TestGetRemoteFileList:
