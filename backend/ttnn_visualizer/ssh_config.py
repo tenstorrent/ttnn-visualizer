@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 DEFAULT_SSH_CONFIG_PATH = Path.home() / ".ssh" / "config"
-MAX_INCLUDE_DEPTH = 5
+# OpenSSH allows 16 (MAX_READCONF_DEPTH). Matched here so a config it accepts never
+# loses hosts from the picker, even though real configs nest one or two levels.
+MAX_INCLUDE_DEPTH = 16
 _KEYWORD_SEPARATOR_PATTERN = re.compile(r"([^\s=]+)\s*=?\s*(.*)")
 
 
@@ -136,9 +138,16 @@ def _parse_ssh_config_file(
         if keyword_lower == "include":
             # OpenSSH applies Include where it appears and the surrounding Host
             # context continues afterwards, so the open stanza is left pending —
-            # flushing here would silently drop the keywords that follow. The
-            # included file parses with its own stanza state, so it cannot inherit
-            # the pending values.
+            # flushing here would silently drop the keywords that follow.
+            #
+            # We deliberately diverge from OpenSSH on the included file's own state:
+            # it threads the active stanza in by pointer, so a fragment both inherits
+            # the open Host and can leave a different one active on return. Giving the
+            # include fresh state and resuming the parent stanza keeps a mid-stanza
+            # Include from silently rewriting the alias being read, and the worst a
+            # picker loses is a HostName or Port prefill for a config shaped that way.
+            # test_load_ssh_config_hosts_include_inside_host_keeps_later_keywords pins
+            # this; don't "fix" it toward parity without replacing that test.
             for included in _expand_include_paths(argument, path.parent):
                 _parse_ssh_config_file(included, host_by_alias, depth + 1, visited)
             continue

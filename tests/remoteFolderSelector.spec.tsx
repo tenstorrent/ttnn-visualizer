@@ -14,10 +14,9 @@ import LocalFolderSelector from '../src/components/report-selection/LocalFolderS
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
+import { CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
 import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { getDeleteActionLabel, getEditActionLabel } from '../src/functions/managedEntityLabels';
 import {
     LOCAL_STORAGE_KEY_CONNECTIONS,
     LOCAL_STORAGE_KEY_SELECTED,
@@ -42,6 +41,11 @@ import mockRemoteProfilerFolderList from './data/mockRemoteProfilerFolderList.js
 import remoteConnection from './data/remoteConnection.json';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 import getButtonWithText from './helpers/getButtonWithText';
+import {
+    getConnectionTrigger,
+    getDeleteConnectionLabel,
+    getEditConnectionLabel,
+} from './helpers/remoteConnectionSelectors';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -63,18 +67,6 @@ const SELECT_LOCAL_REPORT_TEXT = 'Select a report...';
 const IS_ACTIVATING_REPORT_PROBE_TEST_ID = 'is-activating-report-probe';
 
 const EDITED_CONNECTION_NAME = 'Renamed Server';
-
-/**
- * Anchored on the formatted connection string so it matches the Select trigger only — row action
- * labels carry the connection name too, and a bare name matches those as well.
- */
-const getConnectionTrigger = (connection: RemoteConnection) =>
-    screen.getByRole('button', { name: new RegExp(`^${connection.name} - ssh`) });
-
-const editConnectionLabel = (connection: RemoteConnection) =>
-    getEditActionLabel(ManagedEntity.REMOTE_CONNECTION, connection.name);
-const deleteConnectionLabel = (connection: RemoteConnection) =>
-    getDeleteActionLabel(ManagedEntity.REMOTE_CONNECTION, connection.name);
 
 const IsActivatingReportProbe = () => {
     const isActivatingReport = useAtomValue(isActivatingReportAtom);
@@ -224,7 +216,7 @@ it('clears localStorage and resets state when removing the only connection', asy
     getButtonWithText(CONNECTION_NAME).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(deleteConnectionLabel(remoteConnection[0])));
+    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(remoteConnection[0])));
     fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
 
     // Verify UI resets to no connection state
@@ -291,7 +283,7 @@ it('keeps the selected connection when a different one is removed from its dropd
     getConnectionTrigger(lastConnection).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(deleteConnectionLabel(middleConnection)));
+    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(middleConnection)));
     fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
 
     await waitFor(() => {
@@ -351,7 +343,7 @@ it('applies an edit to a connection that is not selected without changing the se
     getButtonWithText(CONNECTION_NAME).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(editConnectionLabel(otherConnection)));
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(otherConnection)));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: EDITED_CONNECTION_NAME } });
     fireEvent.click(getButtonWithText('Run tests'));
 

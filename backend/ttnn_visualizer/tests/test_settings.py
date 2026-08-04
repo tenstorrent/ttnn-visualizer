@@ -7,13 +7,22 @@ path metadata, and the app has no authentication, so every extra allowed origin 
 another local page that can read them.
 """
 
-from ttnn_visualizer.settings import DefaultConfig, _build_allowed_origins
+import pytest
+from ttnn_visualizer.settings import (
+    DefaultConfig,
+    _build_allowed_origins,
+    build_socketio_origin_check,
+)
 
 DEV_ARGS = {
     "app_port": "8000",
     "dev_server_host": "localhost",
     "dev_server_port": "5173",
 }
+
+
+def wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
+    return {"wsgi.url_scheme": scheme, "HTTP_HOST": host, **headers}
 
 
 def test_defaults_add_the_vite_dev_server_outside_production():
@@ -103,3 +112,48 @@ def test_config_honours_configured_origins(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://ttnn-visualizer.tenstorrent.com")
 
     assert DefaultConfig.ALLOWED_ORIGINS == ["https://ttnn-visualizer.tenstorrent.com"]
+
+
+# engine.io rejects an unlisted Origin with a 400 rather than merely withholding CORS
+# headers, so the socket check has to accept the app's own origin under every binding —
+# the default allowlist only ever names localhost.
+@pytest.mark.parametrize("host", ["localhost:8000", "0.0.0.0:8000", "127.0.0.1:8000"])
+def test_socketio_accepts_the_origin_the_app_is_served_on(host):
+    is_allowed = build_socketio_origin_check(["http://localhost:8000"])
+
+    assert is_allowed(f"http://{host}", wsgi_environ(host))
+
+
+def test_socketio_accepts_a_configured_cross_origin():
+    is_allowed = build_socketio_origin_check(
+        ["http://localhost:8000", "http://localhost:5173"]
+    )
+
+    assert is_allowed("http://localhost:5173", wsgi_environ("localhost:8000"))
+
+
+def test_socketio_rejects_an_unrelated_origin():
+    is_allowed = build_socketio_origin_check(["http://localhost:8000"])
+
+    assert not is_allowed("http://evil.example", wsgi_environ("0.0.0.0:8000"))
+
+
+def test_socketio_accepts_the_origin_a_proxy_presents():
+    # Behind TLS termination the browser's Origin names the proxy, not the bind address.
+    is_allowed = build_socketio_origin_check(["http://localhost:8000"])
+    environ = wsgi_environ(
+        "127.0.0.1:8000",
+        HTTP_X_FORWARDED_PROTO="https",
+        HTTP_X_FORWARDED_HOST="visualizer.example.com",
+    )
+
+    assert is_allowed("https://visualizer.example.com", environ)
+
+
+def test_socketio_still_accepts_same_origin_when_nothing_is_configured():
+    # An empty list means "skip the origin check entirely" to engine.io, so trusting
+    # nothing must not be expressible as one — a callable is always consulted.
+    is_allowed = build_socketio_origin_check([])
+
+    assert is_allowed("http://0.0.0.0:8000", wsgi_environ("0.0.0.0:8000"))
+    assert not is_allowed("http://evil.example", wsgi_environ("0.0.0.0:8000"))

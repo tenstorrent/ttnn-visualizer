@@ -53,3 +53,11 @@ When both the frontend and backend are running you can access the app on [http:/
 ## Environment variables
 
 The application should run out of the box, but should you need to you can adjust certain values in the front end or back end code using a `.env` file. See [.env.sample](https://github.com/tenstorrent/ttnn-visualizer/blob/dev/.env.sample) for some of the key variables available.
+
+### `ALLOWED_ORIGINS`
+
+Comma-separated list of browser origins allowed to call the API and open a socket, for example `ALLOWED_ORIGINS=https://visualizer.example.com,https://ops.example.com`.
+
+By default the app trusts only its own origin, plus the Vite dev server (`http://localhost:5173`) outside production. This matters because there is no authentication: local-only endpoints hand out SSH hosts, usernames, and report paths, so anything you add here is another page that can read them. The origin the app is actually served on is always accepted regardless of this setting, so `--host`, `--server`, and containers reached by IP work without configuration.
+
+You therefore only need to set it when a page served from a *different* origin has to call the API — a separately hosted front end, or a reverse proxy that rewrites the scheme or host without setting `X-Forwarded-Proto`/`X-Forwarded-Host`. Setting it to an empty string trusts nothing beyond the app's own origin.

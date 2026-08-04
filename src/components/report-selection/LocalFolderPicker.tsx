@@ -62,6 +62,9 @@ const LocalFolderPicker = ({
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    // Gates the trash button and its confirmation together — rendering one without the other leaves
+    // either a delete with no confirmation step or an alert nothing can open.
+    const canDeleteReports = !!handleDelete && !isServerMode;
     // Loading also blocks trash while an open Select popover can still render
     // items after the trigger disables.
     const isDeleteDisabled = isServerMode || loading;
@@ -115,7 +118,7 @@ const LocalFolderPicker = ({
                     }
                 />
 
-                {handleDelete && !isServerMode && (
+                {canDeleteReports && (
                     <SelectRowActions
                         entity={ManagedEntity.REPORT}
                         itemName={folder.reportName}
@@ -164,7 +167,7 @@ const LocalFolderPicker = ({
                 </Tooltip>
             </Select>
 
-            {handleDelete && !isServerMode && folderToDelete && (
+            {canDeleteReports && folderToDelete && (
                 <ConfirmDeleteAlert
                     isOpen
                     entity={ManagedEntity.REPORT}

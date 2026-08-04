@@ -116,3 +116,23 @@ def test_mlir_server_connection_rejects_an_option_like_ssh_target():
             sshPort=22,
             port=8080,
         )
+
+
+# Both models feed the same "user@host" argv token, so an empty username would reach
+# ssh as the bare target "@host" rather than failing validation.
+@pytest.mark.parametrize("username", ["", "   "], ids=["empty", "whitespace"])
+def test_connection_rejects_an_empty_username(username):
+    with pytest.raises(ValidationError, match="must not be empty"):
+        _connection(username=username)
+
+
+@pytest.mark.parametrize("username", ["", "   "], ids=["empty", "whitespace"])
+def test_mlir_server_connection_rejects_an_empty_username(username):
+    with pytest.raises(ValidationError, match="must not be empty"):
+        MlirServerConnection(
+            name="mlir",
+            username=username,
+            host="work-gpu",
+            sshPort=22,
+            port=8080,
+        )

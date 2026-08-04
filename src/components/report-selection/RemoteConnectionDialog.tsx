@@ -8,6 +8,12 @@ import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
+import {
+    SSH_IDENTITY_FILE_LABEL,
+    SSH_IDENTITY_FILE_PLACEHOLDER,
+    SSH_IDENTITY_FILE_SUBLABEL,
+    SSH_USERNAME_SUBLABEL,
+} from '../../definitions/SshConnectionFields';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
@@ -209,7 +215,7 @@ const RemoteConnectionDialog = ({
 
                 <FormGroup
                     label='Username'
-                    subLabel='Username to connect with (overrides SSH config User)'
+                    subLabel={SSH_USERNAME_SUBLABEL}
                     labelFor='remote-ssh-username'
                 >
                     <InputGroup
@@ -242,13 +248,13 @@ const RemoteConnectionDialog = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='SSH identity file (optional)'
-                    subLabel='Path to your private key. Leave empty to use SSH defaults / ~/.ssh/config for this host. Setting a path ignores SSH config for this connection.'
+                    label={SSH_IDENTITY_FILE_LABEL}
+                    subLabel={SSH_IDENTITY_FILE_SUBLABEL}
                     labelFor='remote-ssh-identity'
                 >
                     <InputGroup
                         id='remote-ssh-identity'
-                        placeholder='Leave empty for default / SSH config'
+                        placeholder={SSH_IDENTITY_FILE_PLACEHOLDER}
                         value={connection.identityFile ?? ''}
                         onChange={(e) => updateConnection({ identityFile: e.target.value.trim() || undefined })}
                     />

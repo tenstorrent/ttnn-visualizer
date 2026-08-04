@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MlirServerDialog from '../src/components/report-selection/MlirServerDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
+import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
 import getButtonWithText from './helpers/getButtonWithText';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 
@@ -82,7 +83,7 @@ describe('MlirServerDialog SSH config prefill', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText('SSH identity file (optional)'), {
+        fireEvent.change(screen.getByLabelText(SSH_IDENTITY_FILE_LABEL), {
             target: { value: '/tmp/id_ed25519' },
         });
         fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
@@ -91,7 +92,7 @@ describe('MlirServerDialog SSH config prefill', () => {
         expect(screen.getByLabelText('SSH host')).toHaveValue('work-gpu');
         expect(screen.getByLabelText('Username')).toHaveValue('alice');
         expect(screen.getByLabelText('SSH port')).toHaveValue('2222');
-        expect(screen.getByLabelText('SSH identity file (optional)')).toHaveValue('');
+        expect(screen.getByLabelText(SSH_IDENTITY_FILE_LABEL)).toHaveValue('');
     });
 
     it('keeps the existing username, sshPort, and server name when the stanza omits them', () => {

@@ -26,6 +26,7 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 - [Lint discipline](#lint-discipline)
 - [Testing](#testing)
 - [Frontend data integrity](#frontend-data-integrity)
+- [Trust boundaries](#trust-boundaries)
 - [Upload security](#upload-security)
 - [Toolchain and package management](#toolchain-and-package-management)
 - [Database schema changes](#database-schema-changes)
@@ -313,6 +314,27 @@ export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', fals
 ```
 
 The first argument is the storage key — pick something stable; renaming it later orphans existing users' settings.
+
+### Key persisted data by a shared identity helper, not by a display name
+
+Preference flags get a fixed key, but data stored *per domain entity* needs a derived one, and the derivation belongs in a single exported helper next to the equality check it must agree with:
+
+`src/functions/remoteConnection.ts`
+
+```ts
+export const isSameConnection = (a?: RemoteConnection | null, b?: RemoteConnection | null): boolean =>
+    !!a && !!b && a.name === b.name && a.host === b.host && a.port === b.port;
+
+export const remoteConnectionKey = (connection?: RemoteConnection | null): string =>
+    connection ? `${connection.name}|${connection.host}|${connection.port}` : '';
+```
+
+**Rationale.** Every consumer that keys data by that entity must use the same helper — storage keys (`savedReportFoldersKey` in `src/hooks/useRemote.tsx`), React list keys, and `find`/`map` lookups alike. Two risks, both silent:
+
+- **Keying on a display name.** Names aren't unique. A name-keyed cache lets two connections share a slot while `isSameConnection` counts them as distinct, so deleting or renaming one discards the other's data — the bug that moved these keys off `connection.name`.
+- **A key that disagrees with the equality check.** If the key covers fewer fields than `isSame*` compares (or more), entities that compare equal land in different slots, or vice versa. Deriving both from adjacent helpers over the same fields keeps them honest; if you add a field to the identity, both change together.
+
+**Changing a key's shape is a migration.** The key is a compatibility surface exactly like an `atomWithStorage` key. When the shape changes, existing entries become unreachable *and* orphaned — the delete path only ever targets the new shape, so they're never cleaned up. Add a one-time read fallback that looks up the old shape, re-writes under the new one, and deletes the stale entry, with a test that seeds an old-format key.
 
 ---
 
@@ -948,6 +970,31 @@ throw new AxiosError(
 ```
 
 Pass the original `response.config` and `response.request` (omitting them breaks callers that assume they exist), spread the response so type guards on the error shape still work (don't pass a fresh object), and use the numeric `HttpStatusCode` constant from `axios` — call sites compare with `===`.
+
+---
+
+## Trust boundaries
+
+### `@local_only` and `ALLOWED_ORIGINS` are two separate boundaries
+
+Nothing in the app is authenticated, so these two controls are what stand between a caller and the data. They answer different questions, and satisfying one says nothing about the other:
+
+| Boundary | Question it answers | Failure mode if you get it wrong |
+|---|---|---|
+| `@local_only` (`backend/ttnn_visualizer/decorators.py`) | *Who may call what?* | A local-only flow (uploads, SSH sync, filesystem access) becomes reachable on the hosted, multi-user deployment |
+| `ALLOWED_ORIGINS` (`backend/ttnn_visualizer/settings.py`) | *Which pages may call us at all?* | Any page in the user's browser can read SSH hosts, usernames, and local report paths off their local install |
+
+A new endpoint needs a conscious decision on both. `@local_only` returns 403 automatically under `SERVER_MODE`, and the frontend must hide the matching UI via `getServerConfig()` — gating one side only leaves a feature that 403s in the UI or an endpoint anyone can reach.
+
+### CORS is a trust boundary, not deployment plumbing
+
+**Rationale.** `@local_only` endpoints are the *most* sensitive ones on a local install, not the least: they hand out `~/.ssh/config` host aliases, usernames, and local filesystem paths. Since there's no authentication, the only thing stopping a page served from another localhost port from reading that is the origin allowlist. `_build_allowed_origins` therefore defaults to the narrowest set that still works — the app's own origin, plus the Vite dev server outside production — rather than to `*`.
+
+**The socket handshake needs the same allowlist, expressed as a callable.** Socket events carry the same instance-scoped report and file-transfer data as the HTTP API, so `socketio.init_app` is passed `build_socketio_origin_check(...)`. Pass a **callable**, never the bare list: engine.io treats `cors_allowed_origins == []` as *skip the origin check entirely*, so configuring `ALLOWED_ORIGINS=""` to trust nothing would widen the socket to every origin instead of narrowing it. A callable is always consulted.
+
+**What the allowlist does not cover.** The origin the app is actually served on is accepted unconditionally — `_request_own_origins` derives it from the request's own `Host` and `X-Forwarded-Host`, because `--server` binds `0.0.0.0`, `--host` names any interface, and a hosted deployment arrives through a proxy, none of which the default allowlist can name in advance. So the allowlist governs which **other** origins may talk to us; it is not by itself a defence against a hostname that resolves to the loopback, or against an upstream that forwards client-supplied `X-Forwarded-*` headers. Don't treat it as the only control over what a socket event may reveal — scope emits to the owning instance's room (`emit_file_status`) rather than broadcasting.
+
+**Testing.** The origin check is a pure function and should be unit-tested as one (`backend/ttnn_visualizer/tests/test_settings.py`), but also assert the **wiring**: `socketio.test_client` never reaches engine.io's origin gate, so a regression to `"*"` passes a suite that only tests the builder. Check `socketio.server.cors_allowed_origins` is the callable and that it rejects a foreign origin.
 
 ---
 

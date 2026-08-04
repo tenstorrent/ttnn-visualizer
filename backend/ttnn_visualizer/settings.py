@@ -4,7 +4,7 @@
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Callable, List, Mapping, Optional, Set
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
@@ -43,6 +43,50 @@ def _build_allowed_origins(
     # carry a leading space that can never match an Origin header.
     origins = (origin.strip() for origin in configured.split(","))
     return [origin for origin in origins if origin]
+
+
+def _request_own_origins(environ: Mapping[str, Any]) -> Set[str]:
+    """Origins naming the app itself, derived as engine.io does when unconfigured."""
+    scheme = environ.get("wsgi.url_scheme")
+    host = environ.get("HTTP_HOST")
+    if not scheme or not host:
+        return set()
+
+    forwarded_scheme = (
+        str(environ.get("HTTP_X_FORWARDED_PROTO", scheme)).split(",")[0].strip()
+    )
+    forwarded_host = (
+        str(environ.get("HTTP_X_FORWARDED_HOST", host)).split(",")[0].strip()
+    )
+
+    return {f"{scheme}://{host}", f"{forwarded_scheme}://{forwarded_host}"}
+
+
+def build_socketio_origin_check(
+    allowed_origins: List[str],
+) -> Callable[[Optional[str], Mapping[str, Any]], bool]:
+    """Accept the configured origins plus the origin the app is actually served on.
+
+    ``flask_cors`` only withholds response headers for an unlisted origin, but engine.io
+    refuses the handshake with a 400, and only its unconfigured branch derives the
+    allowed origin from the request. Handing it the HTTP allowlist alone therefore
+    breaks the app against itself wherever it is not reached as ``localhost``:
+    ``--server`` binds and opens ``0.0.0.0``, ``--host`` names any interface, and a
+    hosted deployment arrives through a proxy. Same-origin is allowed unconditionally
+    for that reason — the allowlist governs which *other* pages may talk to us.
+
+    A callable is also the only form engine.io always consults: an empty list means
+    "skip the origin check entirely" there, so configuring ``ALLOWED_ORIGINS=""`` to
+    trust nothing would otherwise widen the socket to every origin.
+    """
+
+    def is_allowed_origin(origin: Optional[str], environ: Mapping[str, Any]) -> bool:
+        if origin in allowed_origins:
+            return True
+
+        return origin in _request_own_origins(environ)
+
+    return is_allowed_origin
 
 
 class _AllowedOrigins:

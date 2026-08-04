@@ -9,10 +9,14 @@ import { ComponentProps } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteConnectionSelector from '../src/components/report-selection/RemoteConnectionSelector';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { CANCEL_DELETE_LABEL, CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
+import { CANCEL_DELETE_LABEL, CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
 import { RemoteConnection } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { getDeleteActionLabel, getEditActionLabel } from '../src/functions/managedEntityLabels';
+import {
+    getConnectionTrigger,
+    getDeleteConnectionLabel,
+    getEditConnectionLabel,
+} from './helpers/remoteConnectionSelectors';
 import testForPortal from './helpers/testForPortal';
 import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
 
@@ -61,11 +65,6 @@ const WAIT_FOR_OPTIONS = { timeout: 1000 };
 const SAVE_CONNECTION_LABEL = 'Save connection';
 const EDITED_NAME = 'Renamed';
 
-const editLabel = (connection: RemoteConnection) =>
-    getEditActionLabel(ManagedEntity.REMOTE_CONNECTION, connection.name);
-const deleteLabel = (connection: RemoteConnection) =>
-    getDeleteActionLabel(ManagedEntity.REMOTE_CONNECTION, connection.name);
-
 const renderSelector = (overrides: Partial<ComponentProps<typeof RemoteConnectionSelector>> = {}) => {
     const props = {
         connectionList: [FIRST_CONNECTION, SECOND_CONNECTION],
@@ -95,7 +94,7 @@ const renderSelector = (overrides: Partial<ComponentProps<typeof RemoteConnectio
 
 /** Row actions only exist while the Select popover is open; the trigger shows the selection. */
 const openConnectionDropdown = async (selected: RemoteConnection = FIRST_CONNECTION) => {
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${selected.name} - ssh`) }));
+    fireEvent.click(getConnectionTrigger(selected));
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 };
 
@@ -122,10 +121,10 @@ it('renders an edit and delete action on every connection row', async () => {
     renderSelector();
     await openConnectionDropdown();
 
-    expect(screen.getByLabelText(editLabel(FIRST_CONNECTION))).toBeInTheDocument();
-    expect(screen.getByLabelText(deleteLabel(FIRST_CONNECTION))).toBeInTheDocument();
-    expect(screen.getByLabelText(editLabel(SECOND_CONNECTION))).toBeInTheDocument();
-    expect(screen.getByLabelText(deleteLabel(SECOND_CONNECTION))).toBeInTheDocument();
+    expect(screen.getByLabelText(getEditConnectionLabel(FIRST_CONNECTION))).toBeInTheDocument();
+    expect(screen.getByLabelText(getDeleteConnectionLabel(FIRST_CONNECTION))).toBeInTheDocument();
+    expect(screen.getByLabelText(getEditConnectionLabel(SECOND_CONNECTION))).toBeInTheDocument();
+    expect(screen.getByLabelText(getDeleteConnectionLabel(SECOND_CONNECTION))).toBeInTheDocument();
 });
 
 it('marks only the selected connection as the active row', async () => {
@@ -143,7 +142,7 @@ it('removes the connection whose row was clicked, not the selected one', async (
     const { onRemoveConnection } = renderSelector();
     await openConnectionDropdown();
 
-    fireEvent.click(screen.getByLabelText(deleteLabel(SECOND_CONNECTION)));
+    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(SECOND_CONNECTION)));
 
     expect(screen.getByText(/Are you sure you want to delete the remote connection/)).toHaveTextContent(
         SECOND_CONNECTION.name,
@@ -158,7 +157,7 @@ it('does not remove anything when the delete is cancelled', async () => {
     const { onRemoveConnection } = renderSelector();
     await openConnectionDropdown();
 
-    fireEvent.click(screen.getByLabelText(deleteLabel(FIRST_CONNECTION)));
+    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(FIRST_CONNECTION)));
     fireEvent.click(screen.getByRole('button', { name: CANCEL_DELETE_LABEL }));
 
     expect(onRemoveConnection).not.toHaveBeenCalled();
@@ -168,7 +167,7 @@ it('warns that the cached report lists go with the connection', async () => {
     renderSelector();
     await openConnectionDropdown();
 
-    fireEvent.click(screen.getByLabelText(deleteLabel(FIRST_CONNECTION)));
+    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(FIRST_CONNECTION)));
 
     expect(screen.getByText(/cached memory and performance report lists will be cleared/)).toBeInTheDocument();
 });
@@ -177,7 +176,7 @@ it('seeds the edit dialog from the row that was clicked', async () => {
     renderSelector();
     await openConnectionDropdown();
 
-    fireEvent.click(screen.getByLabelText(editLabel(SECOND_CONNECTION)));
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(SECOND_CONNECTION)));
 
     expect(screen.getByText('Edit remote connection')).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toHaveValue(SECOND_CONNECTION.name);
@@ -188,7 +187,7 @@ it('applies a saved edit against the row it was opened from', async () => {
     const { onEditConnection } = renderSelector();
     await openConnectionDropdown();
 
-    fireEvent.click(screen.getByLabelText(editLabel(SECOND_CONNECTION)));
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(SECOND_CONNECTION)));
     await runTestsAndSave();
 
     // The second argument identifies which connection to replace, so passing the selected one
@@ -204,7 +203,7 @@ it('does not fetch folder lists when the edited connection is not the selected o
     const { onSyncRemoteFolderList } = renderSelector();
     await openConnectionDropdown();
 
-    fireEvent.click(screen.getByLabelText(editLabel(SECOND_CONNECTION)));
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(SECOND_CONNECTION)));
     await runTestsAndSave();
 
     expect(onSyncRemoteFolderList).not.toHaveBeenCalled();
@@ -214,7 +213,7 @@ it('fetches folder lists when the edited connection is the selected one', async 
     const { onSyncRemoteFolderList } = renderSelector();
     await openConnectionDropdown();
 
-    fireEvent.click(screen.getByLabelText(editLabel(FIRST_CONNECTION)));
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(FIRST_CONNECTION)));
     await runTestsAndSave();
 
     expect(onSyncRemoteFolderList).toHaveBeenCalledTimes(1);
@@ -233,5 +232,5 @@ it('leaves no reachable row action once the selector is disabled', async () => {
 
     // Blueprint empties the item list of a disabled Select, so an open popover loses its rows.
     expect(screen.queryAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW)).toHaveLength(0);
-    expect(screen.getByRole('button', { name: /^First - ssh/ })).toBeDisabled();
+    expect(getConnectionTrigger(FIRST_CONNECTION)).toBeDisabled();
 });
