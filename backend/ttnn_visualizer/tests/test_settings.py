@@ -138,9 +138,59 @@ def test_socketio_rejects_an_unrelated_origin():
     assert not is_allowed("http://evil.example", wsgi_environ("0.0.0.0:8000"))
 
 
-def test_socketio_accepts_the_origin_a_proxy_presents():
-    # Behind TLS termination the browser's Origin names the proxy, not the bind address.
+def test_socketio_accepts_an_ipv6_loopback_binding():
     is_allowed = build_socketio_origin_check(["http://localhost:8000"])
+
+    assert is_allowed("http://[::1]:8000", wsgi_environ("[::1]:8000"))
+
+
+def test_socketio_accepts_the_host_it_was_launched_with():
+    # ``--host name.example`` is the operator naming this machine, so serving the SPA
+    # from it must work without also spelling the name out in ALLOWED_ORIGINS.
+    is_allowed = build_socketio_origin_check([], bind_host="name.example")
+
+    assert is_allowed("http://name.example:8000", wsgi_environ("name.example:8000"))
+
+
+# Self-derivation only ever matches a same-origin request, and an IP literal can't be
+# forged into one by DNS: a page whose origin is an address was served from it. So
+# ``--server`` and containers stay reachable by address without configuration.
+@pytest.mark.parametrize(
+    "host", ["10.0.0.5:8000", "192.168.1.20:8000", "[fd00::1]:8000"]
+)
+def test_socketio_accepts_being_reached_by_address(host):
+    is_allowed = build_socketio_origin_check(["http://localhost:8000"])
+
+    assert is_allowed(f"http://{host}", wsgi_environ(host))
+
+
+# The Host header is attacker-controlled, so a name that merely resolves here must not
+# vouch for itself: a page on attacker.example that points the name at 127.0.0.1 would
+# otherwise pass its own origin check and read instance-scoped socket traffic.
+@pytest.mark.parametrize(
+    "environ",
+    [
+        wsgi_environ("attacker.example"),
+        # A proxy is not distinguishable from a forged header without a trust signal.
+        wsgi_environ(
+            "127.0.0.1:8000",
+            HTTP_X_FORWARDED_PROTO="https",
+            HTTP_X_FORWARDED_HOST="attacker.example",
+        ),
+    ],
+    ids=["host", "forwarded-host"],
+)
+def test_socketio_refuses_to_derive_trust_from_an_unrecognised_name(environ):
+    is_allowed = build_socketio_origin_check(["http://localhost:8000"])
+
+    assert not is_allowed("http://attacker.example", environ)
+    assert not is_allowed("https://attacker.example", environ)
+
+
+def test_socketio_accepts_a_proxy_origin_once_it_is_configured():
+    # Reaching the app under a name it was not launched with — a hosted deployment
+    # behind TLS termination, a LAN or container address — is a configuration step.
+    is_allowed = build_socketio_origin_check(["https://visualizer.example.com"])
     environ = wsgi_environ(
         "127.0.0.1:8000",
         HTTP_X_FORWARDED_PROTO="https",
@@ -157,3 +207,34 @@ def test_socketio_still_accepts_same_origin_when_nothing_is_configured():
 
     assert is_allowed("http://0.0.0.0:8000", wsgi_environ("0.0.0.0:8000"))
     assert not is_allowed("http://evil.example", wsgi_environ("0.0.0.0:8000"))
+
+
+# Unit-testing the builder alone leaves the wiring unpinned, and both halves fail open:
+# ``SocketIO`` carried ``cors_allowed_origins="*"`` before this allowlist existed, and
+# ``socketio.test_client`` never reaches engine.io's origin gate, so a revert to ``"*"``
+# would pass every test above.
+def test_socketio_is_wired_with_the_origin_check(app):
+    from ttnn_visualizer.extensions import socketio
+
+    # engine.io owns the origin gate; socketio.Server just forwards the option to it.
+    origin_check = socketio.server.eio.cors_allowed_origins
+
+    assert callable(origin_check)
+    assert origin_check("http://localhost:8000", wsgi_environ("localhost:8000"))
+    assert not origin_check("http://evil.example", wsgi_environ("localhost:8000"))
+
+
+# The HTTP half of the same boundary: flask_cors withholds the header rather than
+# refusing the request, so only the response headers show whether the allowlist arrived.
+def test_cors_withholds_the_header_for_an_unlisted_origin(client):
+    response = client.get("/api/up", headers={"Origin": "http://evil.example"})
+
+    assert "Access-Control-Allow-Origin" not in response.headers
+
+
+def test_cors_echoes_a_listed_origin(app, client):
+    allowed_origin = app.config["ALLOWED_ORIGINS"][0]
+
+    response = client.get("/api/up", headers={"Origin": allowed_origin})
+
+    assert response.headers["Access-Control-Allow-Origin"] == allowed_origin

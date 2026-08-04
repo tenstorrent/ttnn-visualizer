@@ -58,6 +58,13 @@ The application should run out of the box, but should you need to you can adjust
 
 Comma-separated list of browser origins allowed to call the API and open a socket, for example `ALLOWED_ORIGINS=https://visualizer.example.com,https://ops.example.com`.
 
-By default the app trusts only its own origin, plus the Vite dev server (`http://localhost:5173`) outside production. This matters because there is no authentication: local-only endpoints hand out SSH hosts, usernames, and report paths, so anything you add here is another page that can read them. The origin the app is actually served on is always accepted regardless of this setting, so `--host`, `--server`, and containers reached by IP work without configuration.
+By default the app trusts only its own origin, plus the Vite dev server (`http://localhost:5173`) outside production. This matters because there is no authentication: local-only endpoints hand out SSH hosts, usernames, and report paths, so anything you add here is another page that can read them.
 
-You therefore only need to set it when a page served from a *different* origin has to call the API — a separately hosted front end, or a reverse proxy that rewrites the scheme or host without setting `X-Forwarded-Proto`/`X-Forwarded-Host`. Setting it to an empty string trusts nothing beyond the app's own origin.
+The app still accepts its own origin without configuration where it can recognise it: `localhost`, any IP address (so `--server` and containers reached by address work as they always have), and whatever you passed to `--host`.
+
+Set it when the app is reached under some *other* hostname, including:
+
+* a hosted deployment behind a reverse proxy or TLS termination;
+* a separately hosted front end calling this API.
+
+A hostname the app wasn't launched with is not trusted just because it resolves here, even via `X-Forwarded-Host`: a page on an attacker-controlled domain can point its own name at your loopback interface, and the socket handshake would otherwise accept it as same-origin. Addresses aren't affected, since no name is resolved. Setting `ALLOWED_ORIGINS` to an empty string trusts nothing beyond those self-recognised origins.

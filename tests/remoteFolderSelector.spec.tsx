@@ -369,6 +369,76 @@ it('applies an edit to a connection that is not selected without changing the se
     expect(mockPost.mock.calls.some(([url]) => listedEndpoints.includes(url))).toBe(false);
 });
 
+// The folder caches are keyed by name|host|port, so editing the host moves them.
+// updateSavedRemoteFoldersConnection is the only thing carrying them across, and asserting
+// only on the connection list would stay green if that call were dropped.
+it('moves cached folder lists when an edit changes the host', async () => {
+    const editedHost = 'moved.example.com';
+    // Editing the *unselected* connection keeps the folder-fetch path out of it: re-pointing the
+    // selection refetches and would overwrite the moved cache with the mocked empty response,
+    // hiding whether the move happened at all.
+    const original: RemoteConnection = {
+        name: 'Other Server',
+        username: 'prod-user',
+        host: 'other.example.com',
+        port: 22,
+        profilerPath: '/opt/reports',
+        performancePath: '/opt/perf',
+    };
+    const cachedReportFolders = [{ remotePath: '/reports/cached', reportName: 'cached', lastModified: 1 }];
+    const cachedPerformanceFolders = [{ remotePath: '/perf/cached', reportName: 'cached-perf', lastModified: 2 }];
+
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    setupConnection([remoteConnection[0], original], remoteConnection[0]);
+    window.localStorage.setItem(savedReportFoldersKey(original), JSON.stringify(cachedReportFolders));
+    window.localStorage.setItem(savedPerformanceFoldersKey(original), JSON.stringify(cachedPerformanceFolders));
+
+    mockPost.mockImplementation((url: string) => {
+        if (url === `${Endpoints.REMOTE}/test`) {
+            return Promise.resolve({
+                data: [
+                    { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+                    { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+                ] as ConnectionStatus[],
+            } as AxiosResponse);
+        }
+
+        return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+    });
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    getButtonWithText(CONNECTION_NAME).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(original)));
+    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: editedHost } });
+    fireEvent.click(getButtonWithText('Run tests'));
+
+    await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
+    fireEvent.click(getButtonWithText('Save connection'));
+
+    const movedConnection: RemoteConnection = { ...original, host: editedHost };
+
+    await waitFor(() => {
+        expect(window.localStorage.getItem(savedReportFoldersKey(movedConnection))).toBe(
+            JSON.stringify(cachedReportFolders),
+        );
+    }, WAIT_FOR_OPTIONS);
+
+    expect(window.localStorage.getItem(savedPerformanceFoldersKey(movedConnection))).toBe(
+        JSON.stringify(cachedPerformanceFolders),
+    );
+    expect(window.localStorage.getItem(savedReportFoldersKey(original))).toBeNull();
+    expect(window.localStorage.getItem(savedPerformanceFoldersKey(original))).toBeNull();
+});
+
 it('displays correct connection information format', () => {
     const customConnection: RemoteConnection[] = [
         {
@@ -1193,7 +1263,11 @@ it('validates connection data structure', () => {
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
 });
 
-it('maintains state consistency after localStorage changes', () => {
+// Scoped to the trigger label, which reads the selectedConnection getter on every render. The
+// dropdown's own rows come from the savedConnectionList mirror in state, which only this
+// component's writes refresh — an externally written connection doesn't appear there until the
+// mirror is retired in favour of atomWithStorage.
+it('labels the trigger with a connection written to localStorage after the first render', () => {
     // Remove previously set connections
     window.localStorage.removeItem(LOCAL_STORAGE_KEY_CONNECTIONS);
 
@@ -1215,7 +1289,6 @@ it('maintains state consistency after localStorage changes', () => {
         </TestProviders>,
     );
 
-    // Should now show the connection
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
 });
 

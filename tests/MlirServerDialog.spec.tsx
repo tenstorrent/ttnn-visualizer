@@ -3,14 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MlirServerDialog from '../src/components/report-selection/MlirServerDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
-import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
-import getButtonWithText from './helpers/getButtonWithText';
+import { SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
+import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
 
 // Declared inside the hoisted factory: it runs before module-scope consts initialise.
 const { getServerConfigMock, SERVER_CONFIG } = vi.hoisted(() => {
@@ -71,30 +70,45 @@ describe('MlirServerDialog defaults', () => {
     });
 });
 
-describe('MlirServerDialog SSH config prefill', () => {
-    it('prefills host, name, username, and sshPort from a config host and clears identity', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice', port: 2222 }]));
+const MLIR_SERVER_REACHABLE = 'MLIR server reachable';
 
-        render(
-            <MlirServerDialog
-                open
-                onClose={vi.fn()}
-                onAddServer={vi.fn()}
-            />,
-        );
+const renderMlirServerDialog = ({ open = true, existing }: { open?: boolean; existing?: ExistingTarget } = {}) =>
+    render(
+        <MlirServerDialog
+            open={open}
+            server={
+                existing && {
+                    name: existing.name,
+                    host: existing.host,
+                    username: existing.username,
+                    sshPort: 22,
+                    port: 8080,
+                }
+            }
+            onClose={vi.fn()}
+            onAddServer={vi.fn()}
+        />,
+    );
 
-        fireEvent.change(screen.getByLabelText(SSH_IDENTITY_FILE_LABEL), {
-            target: { value: '/tmp/id_ed25519' },
-        });
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
+describeSshConfigPrefillContract('MlirServerDialog', {
+    renderDialog: renderMlirServerDialog,
+    hostLabel: 'SSH host',
+    sshPortLabel: 'SSH port',
+    runTestsLabel: 'Run test',
+    saveLabel: 'Add server',
+    passingTestMessage: MLIR_SERVER_REACHABLE,
+    invalidatedTestMessage: 'Check the MLIR server connection is valid',
+    useSshConfigHostsMock,
+    setServerMode: (serverMode) => getServerConfigMock.mockReturnValue({ ...SERVER_CONFIG, SERVER_MODE: serverMode }),
+    mockPassingTest: () =>
+        testMlirServerConnectionMock.mockResolvedValue([
+            { status: ConnectionTestStates.OK, message: MLIR_SERVER_REACHABLE },
+        ]),
+    defaultUsername: SERVER_CONFIG.USERNAME,
+});
 
-        expect(screen.getByLabelText('Name')).toHaveValue('work-gpu');
-        expect(screen.getByLabelText('SSH host')).toHaveValue('work-gpu');
-        expect(screen.getByLabelText('Username')).toHaveValue('alice');
-        expect(screen.getByLabelText('SSH port')).toHaveValue('2222');
-        expect(screen.getByLabelText(SSH_IDENTITY_FILE_LABEL)).toHaveValue('');
-    });
-
+// Behaviour specific to this dialog; the rest of the prefill contract is asserted above.
+describe('MlirServerDialog SSH config prefill specifics', () => {
     it('keeps the existing username, sshPort, and server name when the stanza omits them', () => {
         useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'bare-host' }]));
 
@@ -138,97 +152,5 @@ describe('MlirServerDialog SSH config prefill', () => {
 
         expect(screen.getByLabelText('SSH port')).toHaveValue('2222');
         expect(mlirPort).toHaveValue(portBeforePrefill);
-    });
-
-    it('gates the config-host fetch on the dialog being open', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
-        const props = { onClose: vi.fn(), onAddServer: vi.fn() };
-
-        const { unmount } = render(
-            <MlirServerDialog
-                open={false}
-                {...props}
-            />,
-        );
-
-        // Blueprint unmounts the dialog body when closed, so nothing reads ~/.ssh/config;
-        // enabled={open} keeps the fetch gated if the picker is ever rendered outside it.
-        expect(useSshConfigHostsMock).not.toHaveBeenCalled();
-        unmount();
-
-        render(
-            <MlirServerDialog
-                open
-                {...props}
-            />,
-        );
-
-        expect(useSshConfigHostsMock).toHaveBeenLastCalledWith(true);
-    });
-
-    it('hides the SSH config host picker under SERVER_MODE', () => {
-        getServerConfigMock.mockReturnValue({ ...SERVER_CONFIG, SERVER_MODE: true });
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'should-not-show' }]));
-
-        render(
-            <MlirServerDialog
-                open
-                onClose={vi.fn()}
-                onAddServer={vi.fn()}
-            />,
-        );
-
-        expect(screen.queryByLabelText(SSH_CONFIG_HOST_LABEL)).not.toBeInTheDocument();
-    });
-
-    it('discards a prefill the user backed out of', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice', port: 2222 }]));
-        const onClose = vi.fn();
-
-        render(
-            <MlirServerDialog
-                open
-                onClose={onClose}
-                onAddServer={vi.fn()}
-            />,
-        );
-
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
-        expect(screen.getByLabelText('SSH host')).toHaveValue('work-gpu');
-
-        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-
-        // The dialog stays mounted while closed, so this reset is the only thing keeping
-        // a cancelled prefill from reappearing the next time it opens.
-        expect(onClose).toHaveBeenCalledOnce();
-        expect(screen.getByLabelText('SSH host')).toHaveValue('');
-        expect(screen.getByLabelText('Username')).toHaveValue('bob');
-        expect((screen.getByLabelText(SSH_CONFIG_HOST_LABEL) as HTMLSelectElement).value).toBe(SSH_CONFIG_HOST_CUSTOM);
-    });
-
-    it('discards a passing test result when a config host changes the target', async () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice', port: 2222 }]));
-        testMlirServerConnectionMock.mockResolvedValue([
-            { status: ConnectionTestStates.OK, message: 'MLIR server reachable' },
-        ]);
-
-        render(
-            <MlirServerDialog
-                open
-                onClose={vi.fn()}
-                onAddServer={vi.fn()}
-            />,
-        );
-
-        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my model explorer' } });
-        fireEvent.change(screen.getByLabelText('SSH host'), { target: { value: 'aus-wh-05' } });
-        fireEvent.click(getButtonWithText('Run test'));
-        await waitFor(() => expect(getButtonWithText('Add server')).toBeEnabled());
-
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
-
-        expect(screen.queryByText('MLIR server reachable')).not.toBeInTheDocument();
-        expect(screen.getByText('Check the MLIR server connection is valid')).toBeInTheDocument();
-        expect(getButtonWithText('Add server')).toBeDisabled();
     });
 });

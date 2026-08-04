@@ -111,11 +111,10 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
-        // Select may close the menu (and unmount Alerts) when loading; if an Alert
-        // remains, confirm must still be a no-op.
-        screen.queryAllByRole('button', { name: CONFIRM_DELETE_LABEL }).forEach((button) => {
-            fireEvent.click(button);
-        });
+        // The alert is a sibling of the Select rather than a child of its item renderer, so it
+        // stays mounted when the popover closes — confirming while loading must be a no-op.
+        fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
         expect(handleDelete).not.toHaveBeenCalled();
     });
 

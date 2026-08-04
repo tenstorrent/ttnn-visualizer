@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import ipaddress
 import os
 from pathlib import Path
 from typing import Any, Callable, List, Mapping, Optional, Set
@@ -45,8 +46,54 @@ def _build_allowed_origins(
     return [origin for origin in origins if origin]
 
 
-def _request_own_origins(environ: Mapping[str, Any]) -> Set[str]:
-    """Origins naming the app itself, derived as engine.io does when unconfigured."""
+def _hostname_of(host: str) -> str:
+    """Hostname from a ``Host`` header or bind address, without port or IPv6 brackets."""
+    hostname = host.strip().lower()
+    if hostname.startswith("["):
+        closing_bracket = hostname.find("]")
+        return hostname[1:closing_bracket] if closing_bracket != -1 else hostname[1:]
+
+    return hostname.split(":", 1)[0]
+
+
+def _names_this_machine(host: str, bind_host: str) -> bool:
+    """Whether a ``Host`` header can only be a name for the machine we're running on.
+
+    A ``Host`` header is attacker-controlled, and self-derivation only ever matches a
+    *same-origin* request, so the question is which same-origin claims can be forged.
+    DNS rebinding forges one for a **name**: a page on ``attacker.example`` points that
+    name at 127.0.0.1, and both its origin and the ``Host`` it sends become
+    ``attacker.example`` — enough to pass a naive self-check and read instance-scoped
+    socket traffic (SSH host, username, paths) from a local install.
+
+    An **IP literal** cannot be forged that way, because no name is resolved: a page
+    whose origin is ``http://10.0.0.5:8000`` was served from that address, so matching
+    it means the request really is same-origin. That keeps ``--server`` and containers
+    reachable by address without configuration. ``localhost`` and the address passed to
+    ``--host`` are accepted as names the operator chose for this machine; every other
+    name — a proxy's, notably — has to go in ``ALLOWED_ORIGINS``.
+    """
+    hostname = _hostname_of(host)
+    if not hostname:
+        return False
+
+    if hostname == _hostname_of(bind_host) or hostname == "localhost":
+        return True
+
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+
+    return True
+
+
+def _request_own_origins(environ: Mapping[str, Any], bind_host: str) -> Set[str]:
+    """Origins naming the app itself, derived as engine.io does when unconfigured.
+
+    Only the derivations whose host survives :func:`_names_this_machine` are returned,
+    so an unrecognised name yields nothing to match against rather than trusting itself.
+    """
     scheme = environ.get("wsgi.url_scheme")
     host = environ.get("HTTP_HOST")
     if not scheme or not host:
@@ -59,11 +106,19 @@ def _request_own_origins(environ: Mapping[str, Any]) -> Set[str]:
         str(environ.get("HTTP_X_FORWARDED_HOST", host)).split(",")[0].strip()
     )
 
-    return {f"{scheme}://{host}", f"{forwarded_scheme}://{forwarded_host}"}
+    return {
+        f"{origin_scheme}://{origin_host}"
+        for origin_scheme, origin_host in (
+            (scheme, host),
+            (forwarded_scheme, forwarded_host),
+        )
+        if _names_this_machine(origin_host, bind_host)
+    }
 
 
 def build_socketio_origin_check(
     allowed_origins: List[str],
+    bind_host: str = "",
 ) -> Callable[[Optional[str], Mapping[str, Any]], bool]:
     """Accept the configured origins plus the origin the app is actually served on.
 
@@ -71,9 +126,13 @@ def build_socketio_origin_check(
     refuses the handshake with a 400, and only its unconfigured branch derives the
     allowed origin from the request. Handing it the HTTP allowlist alone therefore
     breaks the app against itself wherever it is not reached as ``localhost``:
-    ``--server`` binds and opens ``0.0.0.0``, ``--host`` names any interface, and a
-    hosted deployment arrives through a proxy. Same-origin is allowed unconditionally
-    for that reason — the allowlist governs which *other* pages may talk to us.
+    ``--server`` binds and opens ``0.0.0.0`` and ``--host`` names an interface. Those
+    same-origin cases are allowed without configuration — the allowlist governs which
+    *other* pages may talk to us.
+
+    Self-derivation stops at hosts that can only mean this machine (see
+    :func:`_names_this_machine`), so a hosted deployment behind a proxy, or anything
+    else reached under a hostname we were not launched with, needs ``ALLOWED_ORIGINS``.
 
     A callable is also the only form engine.io always consults: an empty list means
     "skip the origin check entirely" there, so configuring ``ALLOWED_ORIGINS=""`` to
@@ -84,7 +143,7 @@ def build_socketio_origin_check(
         if origin in allowed_origins:
             return True
 
-        return origin in _request_own_origins(environ)
+        return origin in _request_own_origins(environ, bind_host)
 
     return is_allowed_origin
 

@@ -64,6 +64,24 @@ def test_load_ssh_config_hosts_missing_file(tmp_path: Path):
     assert result.hosts == []
 
 
+# Every other test passes config_path explicitly, so the branch production takes — no
+# argument, falling back to DEFAULT_SSH_CONFIG_PATH — would otherwise never run. The
+# constant is bound from Path.home() at import, so patch the attribute rather than HOME.
+def test_load_ssh_config_hosts_defaults_to_the_users_config(
+    tmp_path: Path, monkeypatch
+):
+    config = _write_config(tmp_path, "Host from-default-path")
+    monkeypatch.setattr(
+        "ttnn_visualizer.ssh_config.DEFAULT_SSH_CONFIG_PATH",
+        config,
+    )
+
+    result = load_ssh_config_hosts()
+
+    assert result.configExists is True
+    assert [host.host for host in result.hosts] == ["from-default-path"]
+
+
 def test_load_ssh_config_hosts_parses_concrete_hosts(tmp_path: Path):
     config = _write_config(
         tmp_path,

@@ -14,7 +14,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SshConfigHostPicker from '../src/components/report-selection/SshConfigHostPicker';
 import Endpoints from '../src/definitions/Endpoints';
-import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
+import {
+    SSH_CONFIG_HOST_CUSTOM,
+    SSH_CONFIG_HOST_CUSTOM_LABEL,
+    SSH_CONFIG_HOST_LABEL,
+} from '../src/definitions/SshConfigHostPicker';
 import axiosInstance from '../src/libs/axiosInstance';
 
 const getServerConfigMock = vi.hoisted(() => vi.fn(() => ({ SERVER_MODE: false })));
@@ -66,7 +70,7 @@ describe('SshConfigHostPicker over the real useSshConfigHosts hook', () => {
         expect(mockedGet).toHaveBeenCalledWith(Endpoints.REMOTE_SSH_CONFIG_HOSTS);
         expect(screen.getByRole('option', { name: 'work-gpu — gpu.example.com' })).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'bare-host' })).toBeInTheDocument();
-        expect(screen.getByRole('option', { name: 'Custom' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: SSH_CONFIG_HOST_CUSTOM_LABEL })).toBeInTheDocument();
     });
 
     it('hands the selected host straight through from the payload', async () => {

@@ -11,3 +11,6 @@ export const SSH_CONFIG_HOST_CUSTOM = '*';
 
 /** Picker label — the accessible name both dialogs and their tests address it by. */
 export const SSH_CONFIG_HOST_LABEL = 'SSH config host';
+
+/** Option copy for {@link SSH_CONFIG_HOST_CUSTOM}, asserted on by the picker's tests. */
+export const SSH_CONFIG_HOST_CUSTOM_LABEL = 'Custom';

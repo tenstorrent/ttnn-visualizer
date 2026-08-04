@@ -387,7 +387,7 @@ class RemoteReportFolder(SerializeableModel):
     lastSynced: Optional[int] = None
 
 
-def _stored_remote_connection(value: Any) -> Optional[RemoteConnection]:
+def stored_remote_connection(value: Any) -> Optional[RemoteConnection]:
     """Deserialise a persisted connection, treating an unusable one as absent.
 
     The field validators are a write-path guard, but rows predate them: a username of
@@ -485,7 +485,7 @@ class InstanceTable(db.Model):
                 if isinstance(self.active_report, dict)
                 else None
             ),
-            remote_connection=_stored_remote_connection(self.remote_connection),
+            remote_connection=stored_remote_connection(self.remote_connection),
             remote_profiler_folder=(
                 RemoteReportFolder.model_validate(
                     self.remote_profiler_folder, strict=False

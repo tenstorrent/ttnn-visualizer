@@ -28,6 +28,18 @@ def _connection(**overrides) -> RemoteConnection:
     return RemoteConnection(**fields)
 
 
+def _mlir_connection(**overrides) -> MlirServerConnection:
+    fields = {
+        "name": "mlir",
+        "username": "alice",
+        "host": "work-gpu",
+        "sshPort": 22,
+        "port": 8080,
+    }
+    fields.update(overrides)
+    return MlirServerConnection(**fields)
+
+
 def test_base_commands_honour_ssh_config_without_an_identity_file():
     client = SSHClient(_connection())
 
@@ -96,26 +108,32 @@ def test_connection_rejects_a_non_string_ssh_target(overrides):
         _connection(**overrides)
 
 
-def test_mlir_server_connection_rejects_a_non_string_ssh_target():
+# MlirServerConnection reaches ssh through to_remote_connection, so it runs the same
+# username and host validators and has to refuse the same values.
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"username": b"-oProxyCommand=id"},
+        {"host": bytearray(b"-oProxyCommand=id")},
+    ],
+    ids=["username-bytes", "host-bytearray"],
+)
+def test_mlir_server_connection_rejects_a_non_string_ssh_target(overrides):
     with pytest.raises(ValidationError, match="must be a string"):
-        MlirServerConnection(
-            name="mlir",
-            username=b"-oProxyCommand=id",
-            host="work-gpu",
-            sshPort=22,
-            port=8080,
-        )
+        _mlir_connection(**overrides)
 
 
-def test_mlir_server_connection_rejects_an_option_like_ssh_target():
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"username": "-oProxyCommand=touch /tmp/pwned"},
+        {"host": "-oProxyCommand=id"},
+    ],
+    ids=["username", "host"],
+)
+def test_mlir_server_connection_rejects_an_option_like_ssh_target(overrides):
     with pytest.raises(ValidationError, match="must not start with '-'"):
-        MlirServerConnection(
-            name="mlir",
-            username="-oProxyCommand=touch /tmp/pwned",
-            host="work-gpu",
-            sshPort=22,
-            port=8080,
-        )
+        _mlir_connection(**overrides)
 
 
 # Both models feed the same "user@host" argv token, so an empty username would reach
@@ -129,10 +147,14 @@ def test_connection_rejects_an_empty_username(username):
 @pytest.mark.parametrize("username", ["", "   "], ids=["empty", "whitespace"])
 def test_mlir_server_connection_rejects_an_empty_username(username):
     with pytest.raises(ValidationError, match="must not be empty"):
-        MlirServerConnection(
-            name="mlir",
-            username=username,
-            host="work-gpu",
-            sshPort=22,
-            port=8080,
-        )
+        _mlir_connection(username=username)
+
+
+# The empty-username rule is enforced after stripping, so padding has to survive as a
+# trimmed username rather than being rejected along with it.
+def test_connection_accepts_a_padded_username():
+    assert _connection(username="  alice  ").username == "alice"
+
+
+def test_mlir_server_connection_accepts_a_padded_username():
+    assert _mlir_connection(username="  alice  ").username == "alice"

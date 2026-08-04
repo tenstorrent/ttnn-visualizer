@@ -85,20 +85,22 @@ const RemoteSyncConfigurator = () => {
         () => remote.persistentState.savedConnectionList,
     );
     const [isFetching, setIsFetching] = useState(false);
-    const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(
+    // Lazy for the same reason as the mirror above: an eager initialiser re-reads and re-parses
+    // both the selected connection and its cached folder list on every render.
+    const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(() =>
         remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection),
     );
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
-    const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
+    const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(() =>
         activeProfilerReport
             ? reportFolderList.find((folder) => folder.remotePath?.includes(activeProfilerReport.path))
             : undefined,
     );
-    const [remotePerformanceFolderList, setRemotePerformanceFolders] = useState<RemoteFolder[]>(
+    const [remotePerformanceFolderList, setRemotePerformanceFolders] = useState<RemoteFolder[]>(() =>
         remote.persistentState.getSavedPerformanceFolders(remote.persistentState.selectedConnection),
     );
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
-    const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
+    const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(() =>
         activePerformanceReport
             ? remotePerformanceFolderList.find((folder) =>
                   folder.reportName?.includes(activePerformanceReport?.reportName),

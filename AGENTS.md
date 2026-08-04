@@ -28,7 +28,7 @@ Treat the hosted deployment as **multi-user and untrusted-input**: requests can 
 - **`@local_only`** decides *who may call what*. It returns 403 under `SERVER_MODE`, and the matching UI is hidden via `getServerConfig()`. When adding endpoints, sockets, or data flows, decide consciously whether they're safe under `SERVER_MODE`, and gate genuinely local-only features on **both** backend and frontend.
 - **`ALLOWED_ORIGINS`** decides *which pages may call us at all*. Nothing is authenticated, and `@local_only` endpoints hand out SSH host, username, and local path metadata, so on a local install CORS is what stops a page served from another localhost port reading it. It defaults to the narrowest set that still works, and the same allowlist gates the socket.io handshake (`build_socketio_origin_check`) because sockets carry the same instance-scoped data. Don't widen it for convenience.
 
-See [CONVENTIONS.md](./CONVENTIONS.md#trust-boundaries) for what each boundary does and does not cover — in particular, the allowlist governs which *other* origins may talk to us and is not on its own a defence against a name that resolves to the loopback, so socket events still need to be scoped to their own instance.
+See [CONVENTIONS.md](./CONVENTIONS.md#trust-boundaries) for what each boundary does and does not cover — in particular, the app derives its own origin from the request only for hosts that can only mean this machine (an IP address, `localhost`, or the `--host` it was launched with), so a proxied hostname needs configuring; and the allowlist governs which *other* origins may talk to us, not what a socket event may reveal, so emits still need scoping to their own instance.
 
 ## Python environment
 

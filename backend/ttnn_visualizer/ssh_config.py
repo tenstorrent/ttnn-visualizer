@@ -240,6 +240,15 @@ def _unquote_argument(argument: str) -> str:
 
 
 def _strip_ssh_config_comment(line: str) -> str:
+    """Drop a trailing comment, honouring quotes so a ``#`` inside a value survives.
+
+    The scan below is per character, and the picker re-parses the whole include tree on every
+    dialog open, so lines that cannot contain a comment skip it: the loop only ever returns
+    early on ``#``, and quote state is discarded afterwards.
+    """
+    if "#" not in line:
+        return line
+
     in_single = False
     in_double = False
     for index, char in enumerate(line):

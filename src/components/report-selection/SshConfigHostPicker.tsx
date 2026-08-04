@@ -4,7 +4,11 @@
 
 import { FormGroup, HTMLSelect } from '@blueprintjs/core';
 import { useMemo } from 'react';
-import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../../definitions/SshConfigHostPicker';
+import {
+    SSH_CONFIG_HOST_CUSTOM,
+    SSH_CONFIG_HOST_CUSTOM_LABEL,
+    SSH_CONFIG_HOST_LABEL,
+} from '../../definitions/SshConfigHostPicker';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getSshConfigHostLabel } from '../../functions/formatting';
 import getServerConfig from '../../functions/getServerConfig';
@@ -75,7 +79,7 @@ const SshConfigHostPicker = ({ value, enabled = true, onSelectCustom, onSelectHo
                 value={aliases.has(value) ? value : SSH_CONFIG_HOST_CUSTOM}
                 onChange={(event) => handleChange(event.currentTarget.value)}
             >
-                <option value={SSH_CONFIG_HOST_CUSTOM}>Custom</option>
+                <option value={SSH_CONFIG_HOST_CUSTOM}>{SSH_CONFIG_HOST_CUSTOM_LABEL}</option>
                 {options}
             </HTMLSelect>
         </FormGroup>

@@ -192,7 +192,8 @@ def extensions(app: flask.Flask):
         socketio.init_app(
             app,
             cors_allowed_origins=build_socketio_origin_check(
-                app.config["ALLOWED_ORIGINS"]
+                app.config["ALLOWED_ORIGINS"],
+                bind_host=app.config["HOST"],
             ),
         )
 
