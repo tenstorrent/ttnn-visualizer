@@ -28,12 +28,12 @@ import {
     profilerReportLocationAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
-import { ReportLocation } from '../definitions/Reports';
+import { ReportLocation, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
-import { SINGLE_HOST_WORLD_SIZE, useGetLatestAppVersion, useInstance, useReportMetadata } from '../hooks/useAPI';
+import { useGetLatestAppVersion, useInstance, useReportMetadata } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
 import { Instance } from '../model/APIData';
 import LoadingSpinner from './LoadingSpinner';
@@ -161,7 +161,7 @@ function FooterInfobar() {
                                         <>
                                             <br />
                                             <strong>Multi-host report:</strong> showing rank {SCOPED_RANK} of{' '}
-                                            {reportMetadata?.worldSize}. Other ranks are not yet selectable.
+                                            {worldSize}. Other ranks are not yet selectable.
                                         </>
                                     )}
                                 </>

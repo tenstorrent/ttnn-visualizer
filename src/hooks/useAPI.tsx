@@ -76,7 +76,7 @@ import {
     NpeClientErrorKind,
 } from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
-import { ReportFolder } from '../definitions/Reports';
+import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
@@ -925,9 +925,6 @@ export const usePerformanceRange = (): NumberRange | null => {
     );
 };
 
-// Single-host reports omit `world_size`; treat an absent or unparseable value as one rank.
-export const SINGLE_HOST_WORLD_SIZE = 1;
-
 interface ReportMetadata {
     version: SemVer;
     timestamp: string;
@@ -941,6 +938,7 @@ export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
     const parsedSchemaVersion = semverParse(data?.schema_version);
     const parsedDuration = Number(data?.total_duration_ns);
+    // Single-host reports omit `world_size`; an absent or unparseable value is one rank.
     const parsedWorldSize = Number(data?.world_size);
 
     return {

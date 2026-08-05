@@ -3,13 +3,14 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 """
-API tests for optional ``?rank=`` filtering on multi-host report databases.
+API tests for ``?rank=`` filtering on multi-host report databases.
 """
 
 import sqlite3
 import tempfile
 from http import HTTPStatus
 from pathlib import Path
+from typing import Any, List
 
 import pytest
 from ttnn_visualizer.extensions import db
@@ -245,9 +246,157 @@ CREATE TABLE global_tensor_comparison_records (
 """
 
 
+# Shaped like a real multi-host capture: the writer restarts `operation_id` and
+# `tensor_id` at 1 for every rank, so both ranks reuse the SAME ids and only
+# `(rank, id)` is unique. `_RANKED_REPORT_SQL` above keeps ids distinct per rank
+# because its mismatch tests need an id that exists on one rank only; this
+# fixture is the one that reproduces the collision from #1842.
+_COLLIDING_RANK_REPORT_SQL = """
+CREATE TABLE operations (
+    operation_id int,
+    name text,
+    duration float,
+    rank int NOT NULL DEFAULT 0,
+    UNIQUE(operation_id, rank)
+);
+INSERT INTO operations VALUES (1, 'ttnn.to_device', 1.0, 0), (1, 'ttnn.to_device', 2.0, 1);
+
+CREATE TABLE operation_arguments (
+    operation_id int,
+    name text,
+    value text,
+    rank int NOT NULL DEFAULT 0
+);
+
+CREATE TABLE stack_traces (
+    operation_id int,
+    stack_trace text,
+    rank int NOT NULL DEFAULT 0
+);
+
+CREATE TABLE input_tensors (
+    operation_id int,
+    input_index int,
+    tensor_id int,
+    rank int NOT NULL DEFAULT 0
+);
+
+CREATE TABLE output_tensors (
+    operation_id int,
+    output_index int,
+    tensor_id int,
+    rank int NOT NULL DEFAULT 0
+);
+INSERT INTO output_tensors VALUES (1, 0, 1, 0), (1, 0, 1, 1);
+
+CREATE TABLE tensors (
+    tensor_id int,
+    shape text,
+    dtype text,
+    layout text,
+    memory_config text,
+    device_id int,
+    address int,
+    buffer_type int,
+    rank int NOT NULL DEFAULT 0,
+    size int,
+    UNIQUE(tensor_id, rank)
+);
+INSERT INTO tensors VALUES
+(1, '(1,)', 'float32', 'TILE', '{}', 0, 100, 0, 0, 4096),
+(1, '(1,)', 'float32', 'TILE', '{}', 0, 100, 0, 1, 4096);
+
+CREATE TABLE buffers (
+    operation_id int,
+    device_id int,
+    address int,
+    max_size_per_bank int,
+    buffer_type int,
+    buffer_layout int,
+    rank int NOT NULL DEFAULT 0
+);
+INSERT INTO buffers VALUES (1, 0, 100, 512, 0, 0, 0), (1, 0, 100, 512, 0, 0, 1);
+
+CREATE TABLE buffer_pages (
+    operation_id int,
+    device_id int,
+    address int,
+    core_y int,
+    core_x int,
+    bank_id int,
+    page_index int,
+    page_address int,
+    page_size int,
+    buffer_type int,
+    rank int NOT NULL DEFAULT 0
+);
+INSERT INTO buffer_pages VALUES
+(1, 0, 100, 0, 0, 0, 0, 100, 4096, 0, 0),
+(1, 0, 100, 0, 0, 0, 0, 100, 4096, 0, 1);
+
+-- `device_id` is re-normalised to 0-based per rank by the writer, so both ranks
+-- report `device 0`. That is exactly why device_id cannot disambiguate a rank.
+CREATE TABLE devices (
+    device_id int,
+    num_y_cores int,
+    num_x_cores int,
+    num_y_compute_cores int,
+    num_x_compute_cores int,
+    worker_l1_size int,
+    l1_num_banks int,
+    l1_bank_size int,
+    address_at_first_l1_bank int,
+    address_at_first_l1_cb_buffer int,
+    num_banks_per_storage_core int,
+    num_compute_cores int,
+    total_l1_memory int,
+    total_l1_for_tensors int,
+    total_l1_for_interleaved_buffers int,
+    total_l1_for_sharded_buffers int,
+    cb_limit int,
+    rank int NOT NULL DEFAULT 0
+);
+INSERT INTO devices VALUES
+(0, 4, 4, 2, 2, 1024, 4, 256, 0, 0, 1, 2, 4096, 2048, 2048, 2048, 256, 0),
+(0, 4, 4, 2, 2, 1024, 4, 256, 0, 0, 1, 2, 4096, 2048, 2048, 2048, 256, 1);
+
+CREATE TABLE errors (
+    operation_id int,
+    operation_name text,
+    error_type text,
+    error_message text,
+    stack_trace text,
+    timestamp text,
+    rank int NOT NULL DEFAULT 0
+);
+
+CREATE TABLE local_tensor_comparison_records (
+    tensor_id int,
+    golden_tensor_id int,
+    matches int,
+    desired_pcc float,
+    actual_pcc float
+);
+CREATE TABLE global_tensor_comparison_records (
+    tensor_id int,
+    golden_tensor_id int,
+    matches int,
+    desired_pcc float,
+    actual_pcc float
+);
+"""
+
+
 def _write_ranked_report_db(path: str) -> None:
     conn = sqlite3.connect(path)
     conn.executescript(_RANKED_REPORT_SQL)
+    conn.commit()
+    conn.close()
+
+
+def _write_colliding_rank_report_db(path: str) -> None:
+    conn = sqlite3.connect(path)
+    conn.executescript(_COLLIDING_RANK_REPORT_SQL)
     conn.commit()
     conn.close()
 
@@ -302,6 +451,35 @@ def test_operations_list_without_rank_defaults_to_rank_zero(app, client):
         Path(path).unlink(missing_ok=True)
 
 
+def _collect_ranks(payload: Any) -> List[int]:
+    """Every ``rank`` value anywhere in a response, however deeply nested."""
+    found: List[int] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key == "rank" and isinstance(value, int):
+                found.append(value)
+            else:
+                found.extend(_collect_ranks(value))
+    elif isinstance(payload, list):
+        for item in payload:
+            found.extend(_collect_ranks(item))
+    return found
+
+
+def _assert_scoped_to_rank_zero(payload: Any, path: str) -> None:
+    """
+    Assert a response carries rank-0 rows only.
+
+    A union would surface rank 1 somewhere in the payload, so this is the
+    assertion that can actually fail if a route stops filtering. The
+    non-empty check keeps it from passing vacuously on a route whose
+    serializer drops the ``rank`` field.
+    """
+    ranks = _collect_ranks(payload)
+    assert ranks, f"{path} serialized no rank field, so scoping is unverifiable"
+    assert set(ranks) == {0}, f"{path} leaked non-zero ranks: {sorted(set(ranks))}"
+
+
 @pytest.mark.parametrize(
     "path,extra_query",
     [
@@ -312,6 +490,13 @@ def test_operations_list_without_rank_defaults_to_rank_zero(app, client):
         ("/api/operation-buffers", {}),
         ("/api/errors", {}),
         ("/api/operations/1", {}),
+        ("/api/operation-buffers/1", {}),
+        ("/api/tensors/100", {}),
+        ("/api/buffer-pages", {"operation_id": "1", "address": "100"}),
+        # `/api/buffer` is deliberately absent: `query_next_buffer` looks for the
+        # address in a *later* operation, so it 404s on a one-operation-per-rank
+        # fixture for reasons unrelated to rank. Its rank handling is covered by
+        # `test_legacy_nonzero_rank_returns_422_not_rank_zero_payload`.
     ],
 )
 def test_omitted_rank_is_equivalent_to_explicit_rank_zero(
@@ -321,6 +506,9 @@ def test_omitted_rank_is_equivalent_to_explicit_rank_zero(
     The two route families used to disagree on what an absent rank meant:
     file-backed routes defaulted to 0, DB-backed routes returned every rank.
     Pin the unified contract so the asymmetry can't come back. #1842
+
+    Payload equality alone is not enough: two identical unions would satisfy it.
+    The rank-0 assertion below is what makes this test able to fail.
     """
     with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
         db_path = f.name
@@ -342,6 +530,7 @@ def test_omitted_rank_is_equivalent_to_explicit_rank_zero(
         assert (
             omitted.get_json() == explicit.get_json()
         ), f"{path} returns a different payload when rank is omitted"
+        _assert_scoped_to_rank_zero(omitted.get_json(), path)
     finally:
         Path(db_path).unlink(missing_ok=True)
 
@@ -613,6 +802,96 @@ def test_legacy_nonzero_rank_returns_422_not_rank_zero_payload(
         assert not isinstance(err, list)
     finally:
         Path(path_db).unlink(missing_ok=True)
+
+
+def test_colliding_ids_do_not_union_without_rank(app, client):
+    """
+    The #1842 symptom: with both ranks reusing ``operation_id = 1`` and
+    ``tensor_id = 1``, an unfiltered read returned two indistinguishable rows
+    per entity. Scoped to rank 0 there must be exactly one of each.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        path = f.name
+    try:
+        _write_colliding_rank_report_db(path)
+        _register_profiler_instance(app, path)
+
+        operations = client.get(
+            "/api/operations",
+            query_string={"instanceId": INSTANCE_ID},
+        )
+        assert operations.status_code == HTTPStatus.OK
+        ops = operations.get_json()
+        assert len(ops) == 1, f"unioned ranks: {ops}"
+        assert ops[0]["id"] == 1
+        assert ops[0]["rank"] == 0
+        assert len(ops[0]["outputs"]) == 1
+
+        tensors = client.get(
+            "/api/tensors",
+            query_string={"instanceId": INSTANCE_ID},
+        )
+        assert tensors.status_code == HTTPStatus.OK
+        tensor_rows = tensors.get_json()
+        assert len(tensor_rows) == 1, f"unioned ranks: {tensor_rows}"
+        assert tensor_rows[0]["id"] == 1
+        assert tensor_rows[0]["rank"] == 0
+
+        buffers = client.get(
+            "/api/buffers",
+            query_string={"instanceId": INSTANCE_ID},
+        )
+        assert buffers.status_code == HTTPStatus.OK
+        buffer_rows = buffers.get_json()
+        assert len(buffer_rows) == 1, f"unioned ranks: {buffer_rows}"
+        assert buffer_rows[0]["rank"] == 0
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_colliding_ids_resolve_per_rank_on_detail_routes(app, client):
+    """
+    A shared id must still address both rows: ``/operations/1`` is rank 0's
+    operation by default and rank 1's when asked, never an arbitrary winner.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        path = f.name
+    try:
+        _write_colliding_rank_report_db(path)
+        _register_profiler_instance(app, path)
+
+        default = client.get(
+            "/api/operations/1",
+            query_string={"instanceId": INSTANCE_ID},
+        )
+        assert default.status_code == HTTPStatus.OK
+        assert default.get_json()["rank"] == 0
+        assert default.get_json()["duration"] == 1.0
+
+        rank_one = client.get(
+            "/api/operations/1",
+            query_string={"instanceId": INSTANCE_ID, "rank": "1"},
+        )
+        assert rank_one.status_code == HTTPStatus.OK
+        assert rank_one.get_json()["rank"] == 1
+        assert rank_one.get_json()["duration"] == 2.0
+
+        # Same colliding tensor_id, disambiguated only by rank.
+        tensor_zero = client.get(
+            "/api/tensors/1",
+            query_string={"instanceId": INSTANCE_ID},
+        )
+        assert tensor_zero.status_code == HTTPStatus.OK
+        assert tensor_zero.get_json()["rank"] == 0
+
+        tensor_one = client.get(
+            "/api/tensors/1",
+            query_string={"instanceId": INSTANCE_ID, "rank": "1"},
+        )
+        assert tensor_one.status_code == HTTPStatus.OK
+        assert tensor_one.get_json()["rank"] == 1
+    finally:
+        Path(path).unlink(missing_ok=True)
 
 
 def test_rank_zero_explicit_allowed_on_legacy_db(app, client):

@@ -199,6 +199,8 @@ def _rank_query_param() -> int:
             400,
             description="Invalid query parameter 'rank': expected an integer.",
         )
+        # Unreachable: `abort` raises. Flask's stubs don't type it `NoReturn`,
+        # so mypy needs a terminating return on this branch.
         return _DEFAULT_RANK
 
 
@@ -697,7 +699,9 @@ def tensors_list(instance: Instance):
         tensors = list(
             db.query_tensors(db.merge_rank_filter("tensors", tensor_filters, rank))
         )
-        if rank is not None and "rank" in db._get_table_columns("tensors"):
+        # The comparison tables carry no `rank` column, so they can only be
+        # narrowed indirectly, via the rank-scoped tensor ids.
+        if "rank" in db._get_table_columns("tensors"):
             tensor_ids = [t.tensor_id for t in tensors]
             if tensor_ids:
                 local_comparisons = list(
