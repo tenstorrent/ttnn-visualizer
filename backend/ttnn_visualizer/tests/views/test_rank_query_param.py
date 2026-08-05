@@ -15,6 +15,7 @@ from typing import Any, List
 import pytest
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.queries import DatabaseQueries
 
 INSTANCE_ID = "pytest-rank-filter"
 LEGACY_INSTANCE_ID = "pytest-legacy-no-rank"
@@ -302,9 +303,12 @@ CREATE TABLE tensors (
     size int,
     UNIQUE(tensor_id, rank)
 );
+-- Tensor 1 collides across both ranks; tensor 2 exists on rank 1 only, so it is
+-- the probe for whether a rank-0 read reaches another rank's tensors.
 INSERT INTO tensors VALUES
 (1, '(1,)', 'float32', 'TILE', '{}', 0, 100, 0, 0, 4096),
-(1, '(1,)', 'float32', 'TILE', '{}', 0, 100, 0, 1, 4096);
+(1, '(1,)', 'float32', 'TILE', '{}', 0, 100, 0, 1, 4096),
+(2, '(2,)', 'float32', 'TILE', '{}', 0, 200, 0, 1, 8192);
 
 CREATE TABLE buffers (
     operation_id int,
@@ -370,6 +374,10 @@ CREATE TABLE errors (
     rank int NOT NULL DEFAULT 0
 );
 
+-- No `rank` column here, mirroring the real schema: a comparison can only be
+-- narrowed through the tensor ids belonging to a rank. Rows exist for tensor 1
+-- (both ranks) and tensor 2 (rank 1 only), so a rank-0 read must return the
+-- former and never the latter.
 CREATE TABLE local_tensor_comparison_records (
     tensor_id int,
     golden_tensor_id int,
@@ -377,6 +385,7 @@ CREATE TABLE local_tensor_comparison_records (
     desired_pcc float,
     actual_pcc float
 );
+INSERT INTO local_tensor_comparison_records VALUES (1, 900, 1, 0.99, 0.995), (2, 901, 0, 0.99, 0.5);
 CREATE TABLE global_tensor_comparison_records (
     tensor_id int,
     golden_tensor_id int,
@@ -384,6 +393,7 @@ CREATE TABLE global_tensor_comparison_records (
     desired_pcc float,
     actual_pcc float
 );
+INSERT INTO global_tensor_comparison_records VALUES (1, 800, 1, 0.98, 0.985), (2, 801, 0, 0.98, 0.4);
 """
 
 
@@ -397,6 +407,23 @@ def _write_ranked_report_db(path: str) -> None:
 def _write_colliding_rank_report_db(path: str) -> None:
     conn = sqlite3.connect(path)
     conn.executescript(_COLLIDING_RANK_REPORT_SQL)
+    conn.commit()
+    conn.close()
+
+
+def _write_wide_ranked_report_db(path: str, *, tensor_count: int) -> None:
+    """Ranked report carrying ``tensor_count`` rank-0 tensors.
+
+    Sized past SQLite's 32766-variable cap, so a rank scoping that binds one
+    parameter per tensor id fails outright rather than merely being slow.
+    """
+    conn = sqlite3.connect(path)
+    conn.executescript(_COLLIDING_RANK_REPORT_SQL)
+    conn.executemany(
+        "INSERT INTO tensors VALUES (?, '(1,)', 'float32', 'TILE', '{}', 0, ?, 0, 0, 4096)",
+        # Tensor 1 already sits at rank 0 in the fixture.
+        [(tensor_id, 1000 + tensor_id) for tensor_id in range(2, tensor_count + 1)],
+    )
     conn.commit()
     conn.close()
 
@@ -731,7 +758,17 @@ def test_operation_detail_rank_mismatch_returns_404(app, client):
         Path(path).unlink(missing_ok=True)
 
 
-def test_invalid_rank_query_returns_400(app, client):
+@pytest.mark.parametrize(
+    "rank,reason",
+    [
+        ("not-an-int", "not an integer"),
+        # `int()` is arbitrary-precision: unbounded, this reaches SQLite's int64
+        # binding and raises OverflowError as an unhandled 500.
+        ("99999999999999999999", "beyond SQLite's integer range"),
+        ("-1", "negative, which no world size contains"),
+    ],
+)
+def test_invalid_rank_query_returns_400(app, client, rank, reason):
     with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
         path = f.name
     try:
@@ -740,9 +777,11 @@ def test_invalid_rank_query_returns_400(app, client):
 
         response = client.get(
             "/api/tensors",
-            query_string={"instanceId": INSTANCE_ID, "rank": "not-an-int"},
+            query_string={"instanceId": INSTANCE_ID, "rank": rank},
         )
-        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert (
+            response.status_code == HTTPStatus.BAD_REQUEST
+        ), f"rank={rank!r} is {reason}, got {response.status_code}"
     finally:
         Path(path).unlink(missing_ok=True)
 
@@ -890,6 +929,99 @@ def test_colliding_ids_resolve_per_rank_on_detail_routes(app, client):
         )
         assert tensor_one.status_code == HTTPStatus.OK
         assert tensor_one.get_json()["rank"] == 1
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_scoped_comparisons_still_attach_to_their_tensor(app, client):
+    """
+    Scoping comparisons by rank must not cost the rank its own comparison.
+
+    Only the attachment is observable here: ``serialize_tensors`` keys
+    comparisons by the tensors in the response, so surplus rows for another
+    rank's tensors are silently dropped and cannot be asserted on. The
+    narrowing itself is verified in ``test_query_tensor_comparisons_rank``.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        path = f.name
+    try:
+        _write_colliding_rank_report_db(path)
+        _register_profiler_instance(app, path)
+
+        response = client.get(
+            "/api/tensors",
+            query_string={"instanceId": INSTANCE_ID},
+        )
+        assert response.status_code == HTTPStatus.OK
+        rows = response.get_json()
+        assert len(rows) == 1
+
+        comparison = rows[0]["comparison"]
+        assert comparison is not None, "rank 0's own comparison was dropped"
+        assert comparison["local"]["golden_tensor_id"] == 900
+        assert comparison["global"]["golden_tensor_id"] == 800
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_query_tensor_comparisons_rank(app):
+    """
+    The rank argument must narrow to that rank's tensor ids and nothing else.
+
+    Tensor 2 exists on rank 1 only, so its comparison rows (golden 901/801) are
+    the evidence: reading them under ``rank=0`` means the scoping was dropped.
+    Asserted at this layer because the route serializes comparisons against the
+    tensors it already holds, which hides any surplus.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        path = f.name
+    try:
+        _write_colliding_rank_report_db(path)
+        connection = sqlite3.connect(path)
+        try:
+            db = DatabaseQueries(connection=connection)
+
+            scoped = [c.golden_tensor_id for c in db.query_tensor_comparisons(rank=0)]
+            assert scoped == [900], f"reached another rank's comparisons: {scoped}"
+
+            scoped_global = [
+                c.golden_tensor_id
+                for c in db.query_tensor_comparisons(local=False, rank=0)
+            ]
+            assert scoped_global == [800], scoped_global
+
+            # `rank=None` is the unscoped read the report routes no longer make.
+            unscoped = [c.golden_tensor_id for c in db.query_tensor_comparisons()]
+            assert sorted(unscoped) == [900, 901]
+        finally:
+            connection.close()
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_comparison_scoping_survives_a_report_larger_than_the_sqlite_var_cap(
+    app, client
+):
+    """
+    Scoping must not bind one parameter per tensor id.
+
+    SQLite refuses more than 32766 variables in a statement, so reading the ids
+    out and binding them made any report above that cap a hard 500 — and every
+    smaller one pay a parameter list growing with its tensor count.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        path = f.name
+    try:
+        _write_wide_ranked_report_db(path, tensor_count=40_000)
+        _register_profiler_instance(app, path)
+
+        response = client.get(
+            "/api/tensors",
+            query_string={"instanceId": INSTANCE_ID},
+        )
+
+        assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+        assert len(response.get_json()) == 40_000
     finally:
         Path(path).unlink(missing_ok=True)
 

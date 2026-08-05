@@ -176,6 +176,16 @@ def _stack_source_request_params():
 
 
 _DEFAULT_RANK = 0
+# `int()` is arbitrary-precision, so an unbounded parse lets a value too large for
+# SQLite's int64 binding reach the driver, where it raises OverflowError as an
+# unhandled 500. These routes aren't `@local_only`, so that is reachable by anyone
+# under SERVER_MODE. A world size never approaches this, and rejecting negatives
+# here also matches the 400 the file-backed routes already return for them.
+_MAX_RANK = 2**31 - 1
+_INVALID_RANK_MSG = (
+    f"Invalid query parameter 'rank': expected an integer "
+    f"between {_DEFAULT_RANK} and {_MAX_RANK}."
+)
 
 
 def _rank_query_param() -> int:
@@ -192,16 +202,20 @@ def _rank_query_param() -> int:
     raw = request.args.get("rank")
     if raw is None or raw == "":
         return _DEFAULT_RANK
+
     try:
-        return int(raw)
+        rank: Optional[int] = int(raw)
     except (TypeError, ValueError):
-        abort(
-            400,
-            description="Invalid query parameter 'rank': expected an integer.",
-        )
-        # Unreachable: `abort` raises. Flask's stubs don't type it `NoReturn`,
-        # so mypy needs a terminating return on this branch.
+        rank = None
+
+    if rank is None or not _DEFAULT_RANK <= rank <= _MAX_RANK:
+        abort(400, description=_INVALID_RANK_MSG)
+        # Unreachable: Flask annotates `abort` as `NoReturn`, but
+        # `follow_imports = "skip"` under `[tool.mypy]` stops mypy from reading
+        # that annotation, so it still requires a terminating return here.
         return _DEFAULT_RANK
+
+    return rank
 
 
 _NONZERO_RANK_UNSUPPORTED_MSG = (
@@ -699,25 +713,8 @@ def tensors_list(instance: Instance):
         tensors = list(
             db.query_tensors(db.merge_rank_filter("tensors", tensor_filters, rank))
         )
-        # The comparison tables carry no `rank` column, so they can only be
-        # narrowed indirectly, via the rank-scoped tensor ids.
-        if "rank" in db._get_table_columns("tensors"):
-            tensor_ids = [t.tensor_id for t in tensors]
-            if tensor_ids:
-                local_comparisons = list(
-                    db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
-                )
-                global_comparisons = list(
-                    db.query_tensor_comparisons(
-                        local=False, filters={"tensor_id": tensor_ids}
-                    )
-                )
-            else:
-                local_comparisons = []
-                global_comparisons = []
-        else:
-            local_comparisons = list(db.query_tensor_comparisons())
-            global_comparisons = list(db.query_tensor_comparisons(local=False))
+        local_comparisons = list(db.query_tensor_comparisons(rank=rank))
+        global_comparisons = list(db.query_tensor_comparisons(local=False, rank=rank))
         producers_consumers = list(db.query_producers_consumers(rank=rank))
         serialized_tensors = serialize_tensors(
             tensors, producers_consumers, local_comparisons, global_comparisons

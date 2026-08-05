@@ -35,7 +35,7 @@ import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
 import { useGetLatestAppVersion, useInstance, useReportMetadata } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
-import { formatSyncedReportName } from '../functions/reportRank';
+import { formatSyncedReportName, getScopedRankLabel } from '../functions/reportRank';
 import { Instance } from '../model/APIData';
 import LoadingSpinner from './LoadingSpinner';
 import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
@@ -161,8 +161,9 @@ function FooterInfobar() {
                                     {isMultiHostReport && (
                                         <>
                                             <br />
-                                            <strong>Multi-host report:</strong> showing rank {SCOPED_RANK} of{' '}
-                                            {worldSize}. Other ranks are not yet selectable.
+                                            <strong>Multi-host report:</strong> showing{' '}
+                                            {getScopedRankLabel(SCOPED_RANK, worldSize)}. Other ranks are not yet
+                                            selectable.
                                         </>
                                     )}
                                 </>
@@ -241,16 +242,20 @@ interface ReportRankTagProps {
     worldSize: number;
 }
 
-const ReportRankTag = ({ worldSize }: ReportRankTagProps) => (
-    <Tag
-        minimal
-        className='report-rank-tag'
-        aria-label={`Showing rank ${SCOPED_RANK} of ${worldSize}`}
-        intent={Intent.WARNING}
-    >
-        rank {SCOPED_RANK} of {worldSize}
-    </Tag>
-);
+const ReportRankTag = ({ worldSize }: ReportRankTagProps) => {
+    const label = getScopedRankLabel(SCOPED_RANK, worldSize);
+
+    return (
+        <Tag
+            minimal
+            className='report-rank-tag'
+            aria-label={`Showing ${label}`}
+            intent={Intent.WARNING}
+        >
+            {label}
+        </Tag>
+    );
+};
 
 const ReportLocationTag = ({ location }: { location: ReportLocation }) => {
     const isRemote = location === ReportLocation.REMOTE;

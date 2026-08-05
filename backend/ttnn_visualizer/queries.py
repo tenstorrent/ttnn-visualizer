@@ -144,26 +144,45 @@ class DatabaseQueries:
                 )
             self.query_runner = LocalQueryRunner(instance=instance)
 
+        # A report DB is read-only for the lifetime of this context manager, so its
+        # schema cannot change under us. Worth caching because these two run on
+        # nearly every read: `merge_rank_filter` alone probes per table per call,
+        # a dozen-plus times on `/operations` and `/tensors`.
+        self._table_exists_cache: Dict[str, bool] = {}
+        self._table_columns_cache: Dict[str, List[str]] = {}
+
     def _check_table_exists(self, table_name: str) -> bool:
         """
         Checks if a table exists in the database.
         This method works for both local and remote databases.
         """
+        cached = self._table_exists_cache.get(table_name)
+        if cached is not None:
+            return cached
+
         # Properly format the table name into the query string with single quotes
         query = "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
 
         # Use the execute_query method to handle both local and remote cases.
         rows = self.query_runner.execute_query(query, [table_name])
 
-        return bool(rows)
+        exists = bool(rows)
+        self._table_exists_cache[table_name] = exists
+        return exists
 
     def _get_table_columns(self, table_name: str) -> List[str]:
         """
         Gets the list of column names for a table.
         """
+        cached = self._table_columns_cache.get(table_name)
+        if cached is not None:
+            return cached
+
         query = f"PRAGMA table_info({table_name})"
         rows = self.query_runner.execute_query(query)
-        return [row[1] for row in rows]  # row[1] is the column name
+        columns = [row[1] for row in rows]  # row[1] is the column name
+        self._table_columns_cache[table_name] = columns
+        return columns
 
     def _dataclass_select_clause(
         self,
@@ -240,7 +259,13 @@ class DatabaseQueries:
     ) -> Dict[str, Any]:
         """
         Return a copy of filters with rank = rank if the table has a rank column.
-        No-op when rank is None or the schema has no rank (old reports).
+        No-op when the schema has no rank column (old reports).
+
+        ``rank=None`` means "every rank", which for a report route is almost never
+        what you want: ids restart at 1 per rank, so an unfiltered read unions the
+        ranks and collides. Report routes get their rank from
+        ``views._rank_query_param()``, which defaults to 0 and never returns None.
+        Pass None only for a genuinely rank-agnostic aggregate. #1842
         """
         out = dict(filters or {})
         if rank is None:
@@ -371,8 +396,25 @@ class DatabaseQueries:
             yield ErrorRecord(*row)
 
     def query_tensor_comparisons(
-        self, local: bool = True, filters: Optional[Dict[str, Any]] = None
+        self,
+        local: bool = True,
+        filters: Optional[Dict[str, Any]] = None,
+        rank: Optional[int] = None,
     ) -> Generator[TensorComparisonRecord, None, None]:
+        """
+        Yield comparison records, optionally narrowed to one rank's tensors.
+
+        The comparison tables have no ``rank`` column, so a rank can only be
+        applied indirectly, through the tensor ids that belong to it. That
+        narrowing is expressed as a subquery rather than by reading the ids out
+        and binding one parameter each: a report with more tensors than SQLite's
+        variable cap (32766) would fail outright, and every report would pay a
+        parameter list that grows with its tensor count.
+
+        Caveat this cannot fix here: with ids restarting per rank, a comparison
+        row for ``tensor_id = 1`` is ambiguous between ranks. Disambiguating it
+        needs a ``rank`` column on the comparison tables. #1842
+        """
         if local:
             table_name = "local_tensor_comparison_records"
         else:
@@ -380,7 +422,22 @@ class DatabaseQueries:
         select_clause = self._dataclass_select_clause(
             table_name, TensorComparisonRecord
         )
-        rows = self._query_table(table_name, filters, select_clause=select_clause)
+
+        additional_conditions = None
+        additional_params: Optional[List[Any]] = None
+        if rank is not None and "rank" in self._get_table_columns("tensors"):
+            additional_conditions = (
+                "AND tensor_id IN (SELECT tensor_id FROM tensors WHERE rank = ?)"
+            )
+            additional_params = [rank]
+
+        rows = self._query_table(
+            table_name,
+            filters,
+            additional_conditions=additional_conditions,
+            additional_params=additional_params,
+            select_clause=select_clause,
+        )
         for row in rows:
             yield TensorComparisonRecord(*row)
 

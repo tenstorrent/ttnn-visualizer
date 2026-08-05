@@ -33,3 +33,13 @@ export const formatSyncedReportName = (syncedName: string): string => {
 
     return match ? getRankedReportLabel(syncedName.slice(0, match.index), Number(match[1])) : syncedName;
 };
+
+/**
+ * `rank 0 of 2` — which rank of a multi-host report the API is showing.
+ *
+ * One source of truth for the tag text, its accessible name and the assertions:
+ * the visible label and the `aria-label` would otherwise be free to drift, and
+ * the tests only read the accessible name. #1842
+ */
+export const getScopedRankLabel = (scopedRank: number, worldSize: number): string =>
+    `rank ${scopedRank} of ${worldSize}`;
