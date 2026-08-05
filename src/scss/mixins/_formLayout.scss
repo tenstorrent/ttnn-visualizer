@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/variables' as variables;
+
+// A report-selection Select trigger: the connection or server label is long, so cap the width and
+// truncate rather than let one trigger outgrow the controls beside it.
+@mixin truncated-select-trigger {
+    max-width: variables.$report-select-width;
+
+    // Applies whether the class sits on the trigger button or on the target element wrapping it.
+    .bp6-button {
+        max-width: 100%;
+    }
+
+    .bp6-button-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+// Vertical stack of form controls shared by the report-selection blocks. A mixin rather
+// than a shared classname so each component keeps a classname that names what it is,
+// instead of importing another component's stylesheet for the layout.
+@mixin stacked-form-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    align-items: flex-start;
+}
+
+// A dropdown row that carries its own edit/delete buttons: the MenuItem takes the width
+// left over by the trailing actions and truncates rather than wrapping them onto a new line.
+@mixin select-menu-item-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+    .bp6-menu-item {
+        padding-left: 5px; // Aligns with search icon padding in the filter field
+    }
+
+    > li {
+        flex-grow: 1; // Lets the item take up the full width of the menu
+        overflow: hidden; // Ensures text-overflow ellipsis works when the text is too long
+    }
+}

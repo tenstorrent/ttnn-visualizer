@@ -20,6 +20,11 @@ export const TEST_IDS = Object.freeze({
     MLIR_DISABLED: 'mlir-disabled',
     MLIR_GRAPH: 'mlir-graph',
 
+    // Report-selection dropdown rows, each carrying its own edit/delete actions
+    FOLDER_PICKER_ROW: 'folder-picker-row',
+    REMOTE_CONNECTION_ROW: 'remote-connection-row',
+    MLIR_SERVER_ROW: 'mlir-server-row',
+
     // Comparison components
     COMPARISON_REPORT_SELECTOR: 'comparison-report-selector',
 

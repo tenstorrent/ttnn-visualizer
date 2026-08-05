@@ -32,7 +32,11 @@ from ttnn_visualizer.exceptions import (
     ReportNotLoadedException,
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
-from ttnn_visualizer.settings import Config, DefaultConfig
+from ttnn_visualizer.settings import (
+    Config,
+    DefaultConfig,
+    build_socketio_origin_check,
+)
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     get_app_data_directory,
@@ -185,7 +189,13 @@ def extensions(app: flask.Flask):
     """
     flask_static_digest.init_app(app)
     if app.config["USE_WEBSOCKETS"]:
-        socketio.init_app(app)
+        socketio.init_app(
+            app,
+            cors_allowed_origins=build_socketio_origin_check(
+                app.config["ALLOWED_ORIGINS"],
+                bind_host=app.config["HOST"],
+            ),
+        )
 
     # Create app data and report directories
     Path(app.config["APP_DATA_DIRECTORY"]).mkdir(parents=True, exist_ok=True)

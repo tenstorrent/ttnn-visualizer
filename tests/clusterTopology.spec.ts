@@ -16,7 +16,7 @@ import { ClusterHost, ClusterModel, InterHostEthernetLink, MeshData, MeshDataDoc
 
 // Minimal ClusterModel factory; fills in defaults so tests can override only what they care about.
 const makeDescriptor = (overrides: Partial<ClusterModel>): ClusterModel => ({
-    arch: ['blackhole'],
+    arch: { 0: 'blackhole' },
     chips: {},
     ethernet_connections: [],
     chips_with_mmio: [],
@@ -340,7 +340,7 @@ describe('pickMeshDocForRank', () => {
 
 describe('looksLikeRankedDescriptor', () => {
     const baseDescriptor = {
-        arch: [],
+        arch: {},
         chips: {},
         ethernet_connections: [],
         chips_with_mmio: [],
@@ -412,7 +412,7 @@ describe('sortHostsByConnectionProximity', () => {
     const makeHost = (rank: number, chipUniqueIds: Record<number, number>): ClusterHost => ({
         rank,
         descriptor: {
-            arch: [],
+            arch: {},
             chips: {},
             ethernet_connections: [],
             chips_with_mmio: [],
@@ -462,7 +462,7 @@ describe('mesh-availability helpers', () => {
     const makeHost = (meshChips: ClusterHost['meshChips']): ClusterHost => ({
         rank: 0,
         descriptor: {
-            arch: [],
+            arch: {},
             chips: {},
             ethernet_connections: [],
             chips_with_mmio: [],

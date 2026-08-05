@@ -30,6 +30,7 @@ import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
 import {
     activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
     bufferTypeFilterListAtom,
     comparisonPerformanceReportListAtom,
     durationBucketFilterListAtom,
@@ -60,6 +61,7 @@ import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { capitalizeString } from '../../functions/formatting';
 import { DECADE_FACTOR } from '../../functions/durationBuckets';
 import { formatDurationBucketRange } from '../../functions/formatDurationBucketRange';
+import { formatSyncedReportName } from '../../functions/reportRank';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
 
@@ -97,6 +99,7 @@ const PerformanceReport = ({
     comparisonMaxCores = [],
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
@@ -649,7 +652,11 @@ const PerformanceReport = ({
                 >
                     <Tab
                         id={INITIAL_TAB_ID}
-                        title={activePerformanceReport?.reportName || 'Loading...'}
+                        title={
+                            activePerformanceReport
+                                ? formatSyncedReportName(activePerformanceReport.reportName)
+                                : 'Loading...'
+                        }
                         icon={IconNames.TH_LIST}
                         panel={
                             isStackedView ? (
@@ -657,7 +664,7 @@ const PerformanceReport = ({
                                     stackedData={filteredStackedRows}
                                     filters={filters}
                                     stackedComparisonData={filteredComparisonStackedRowsList}
-                                    reportName={activePerformanceReport?.reportName || null}
+                                    reportFolderName={activeReportFolderName}
                                     maxCores={maxCores}
                                     isLoading={isTableLoading}
                                 />
@@ -668,7 +675,7 @@ const PerformanceReport = ({
                                     filters={filters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
-                                    reportName={activePerformanceReport?.reportName || null}
+                                    reportFolderName={activeReportFolderName}
                                     hasL1PressureData={hasL1PressureData}
                                     maxCores={maxCores}
                                     isLoading={isTableLoading}
@@ -708,7 +715,7 @@ const PerformanceReport = ({
                                             ),
                                         ]}
                                         filters={filters}
-                                        reportName={report}
+                                        reportFolderName={report}
                                         maxCores={comparisonMaxCores[index] ?? maxCores}
                                         isLoading={isTableLoading}
                                     />
@@ -722,7 +729,7 @@ const PerformanceReport = ({
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
-                                        reportName={report}
+                                        reportFolderName={report}
                                         hasL1PressureData={hasL1PressureData}
                                         maxCores={comparisonMaxCores[index] ?? maxCores}
                                         activeReportComparisonIndex={0}

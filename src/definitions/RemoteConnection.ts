@@ -14,6 +14,8 @@ export interface RemoteConnection {
     profilerPath: string;
     performancePath?: string;
     identityFile?: string; // Optional path to SSH private key.
+    // Performance reports sit in per-rank subdirectories of performancePath.
+    multihostPerformance?: boolean;
 }
 
 export interface RemoteFolder {
@@ -21,6 +23,10 @@ export interface RemoteFolder {
     remotePath: string;
     lastModified: number;
     lastSynced?: number | null;
+    // Name this report occupies on local disk once synced, and its rank. Both are
+    // decided by the server, which is the side that writes the folder.
+    syncedName?: string;
+    rank?: number | null;
 }
 
 export interface SyncRemoteFolder {
@@ -38,6 +44,8 @@ export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     timeStyle: 'short',
 });
 
+export const MULTIHOST_CHECKBOX_LABEL = 'Search per-rank subdirectories';
+export const FETCH_REMOTE_FOLDERS_LABEL = 'Fetch remote folders';
 export const NEVER_SYNCED_LABEL = 'Never synced';
 export const REPORT_OUTDATED_LABEL = 'Report is stale';
 export const REPORT_UP_TO_DATE_LABEL = 'Report recently synced';

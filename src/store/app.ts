@@ -12,6 +12,7 @@ import { Signpost } from '../model/Signpost';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { REPORT_LINKS_STORAGE_KEY } from '../definitions/ReportLinks';
+import { getReportId } from '../functions/reportLinks';
 import { ReportLink } from '../model/ReportLinks';
 import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { DurationBucket } from '../definitions/PerfDurationHistogram';
@@ -55,6 +56,17 @@ export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceReportLocationAtom = atom<ReportLocation | null>(null);
 export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
+/**
+ * Folder the active performance report occupies on disk, which is what the API's
+ * `?name=` parameter addresses a report by. `reportName` cannot stand in: it is the
+ * report's own name, so for a synced multihost report it lacks the `_rank<N>`
+ * qualifier that tells one rank of a launch from another.
+ */
+export const activePerformanceReportFolderNameAtom = atom((get) => {
+    const activeReport = get(activePerformanceReportAtom);
+
+    return getReportId(activeReport?.syncedName, activeReport?.path);
+});
 /** True while a report select/mount is awaiting confirmation of the active report. */
 export const isActivatingReportAtom = atom(false);
 // Persisted memory↔performance report pairs (linked and unlinked). Many-to-many

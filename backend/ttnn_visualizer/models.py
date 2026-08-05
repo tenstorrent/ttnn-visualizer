@@ -4,15 +4,19 @@
 
 import dataclasses
 import enum
+import logging
+import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.ext.mutable import MutableDict
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.utils import SerializeableDataclass, parse_memory_config
+
+logger = logging.getLogger(__name__)
 
 
 class BufferType(enum.Enum):
@@ -248,23 +252,120 @@ def sanitise_path_segment(value: object) -> str:
     return safe_segment
 
 
-def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]:
-    """Sanitised basename of a remote report path, or None if missing/invalid.
+# Rank is read as a number at the discovery boundary and every name is derived
+# back from that number, so one rank has one spelling everywhere. Both patterns
+# stay case-insensitive for *reading*: the remote tree is not ours to spell, and
+# folders synced before normalisation can carry the remote's capitalisation.
+# `re.ASCII` because the digits have to be readable as a number, and because the
+# client renders the same names from JavaScript's ASCII-only `\d`.
+RANK_DIRECTORY_RE = re.compile(r"^rank(\d+)$", re.IGNORECASE | re.ASCII)
+RANK_SUFFIX_RE = re.compile(r"_rank(\d+)$", re.IGNORECASE | re.ASCII)
 
-    Sync destinations and mount lookups must use this so write and read segments
-    stay aligned (``sftp_operations`` ↔ ``views``).
+
+def split_rank_suffix(segment: str) -> Tuple[str, Optional[int]]:
+    """Split a synced folder name into the report's own name and its rank.
+
+    Only sound for names this codebase qualified, so callers gate it on the same
+    multihost setting the write path uses — a single-host report genuinely named
+    ``<name>_rank3`` is not rank 3 of ``<name>``.
+    """
+    match = RANK_SUFFIX_RE.search(segment)
+    if not match:
+        return segment, None
+
+    return segment[: match.start()], int(match.group(1))
+
+
+def rank_from_remote_path(remote_path: Optional[str]) -> Optional[int]:
+    """Rank of a multihost report from the folder it sits under. None if single-host.
+
+    Authoritative definition of a rank directory, and the only place a rank is
+    parsed out of a remote path. Only ancestors are considered: a report
+    directory that is itself named ``rank5`` is a report, and treating it as its
+    own rank would leave it unqualified and free to collide with the other ranks
+    of the same launch.
+    """
+    if not remote_path:
+        return None
+    for part in reversed(Path(remote_path).parent.parts):
+        match = RANK_DIRECTORY_RE.match(part)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def folder_segment_from_remote_path(
+    remote_path: Optional[str], *, qualify_rank: bool = False
+) -> Optional[str]:
+    """Sanitised local folder segment for a remote report, or None if invalid.
+
+    Sync destinations, mount lookups and last-synced probes must all use this so
+    write and read segments stay aligned (``sftp_operations`` ↔ ``views``).
+
+    With ``qualify_rank``, the segment carries the report's rank: every rank of
+    one ``tt-run --tracy`` launch names its report from its own start time at
+    second granularity, so ranks routinely produce the same basename and would
+    otherwise sync on top of each other. It stays a single flat segment because
+    callers join it straight onto the report directory.
+
+    Callers opt in from the connection's multihost setting rather than from the
+    shape of the path, so a single-host connection aimed at one rank's reports
+    keeps the names it has already synced under.
     """
     if remote_path is None:
         return None
     try:
-        return sanitise_path_segment(Path(remote_path).name)
+        segment = sanitise_path_segment(Path(remote_path).name)
     except (TypeError, ValueError):
         return None
+
+    if not qualify_rank:
+        return segment
+
+    rank = rank_from_remote_path(remote_path)
+    if rank is None:
+        return segment
+    # Built from the parsed number rather than echoing the remote directory, so
+    # `rank0/`, `Rank0/` and `rank00/` name one local folder instead of three.
+    # The suffix is applied to the sanitised segment, so the qualifier survives
+    # whatever `sanitise_path_segment` did to the basename.
+    return f"{segment}_rank{rank}"
+
+
+def reject_ssh_option_like(value: object) -> str:
+    """Refuse a value OpenSSH would read as an option instead of part of the target.
+
+    ``username@host`` is passed to ``ssh``/``sftp``/``scp`` in option position, so a
+    leading ``-`` makes the whole token an option — ``-oProxyCommand=…`` is then run
+    through a shell. No POSIX username or DNS label starts with ``-``, so refusing one
+    costs nothing.
+
+    Non-strings are refused here rather than handed to Pydantic, which coerces ``bytes``
+    and ``bytearray`` to ``str`` in lax mode *after* ``mode="before"`` validators run —
+    slipping a leading ``-`` past this check.
+    """
+    if not isinstance(value, str):
+        raise ValueError("must be a string")
+    if value.startswith("-"):
+        raise ValueError("must not start with '-'")
+    return value
 
 
 def sanitise_remote_host_segment(value: object) -> str:
     """Normalise a user-provided host to a single safe path segment."""
-    return sanitise_path_segment(value)
+    return reject_ssh_option_like(sanitise_path_segment(value))
+
+
+def sanitise_ssh_username(value: object) -> str:
+    """Normalise a user-provided SSH username for use in an ``ssh`` argv."""
+    if not isinstance(value, str):
+        raise ValueError("must be a string")
+    # Strip before the checks: " -oProxyCommand=…" is option-like once trimmed, and an
+    # all-whitespace username would otherwise reach argv as the bare target "@host".
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("must not be empty")
+    return reject_ssh_option_like(stripped)
 
 
 class RemoteConnection(SerializeableModel):
@@ -275,11 +376,19 @@ class RemoteConnection(SerializeableModel):
     profilerPath: str
     performancePath: Optional[str] = None
     identityFile: Optional[str] = None
+    # `tt-run --tracy` writes one report per rank under <performancePath>/<rank>/,
+    # so multihost discovery has to search one directory level deeper.
+    multihostPerformance: bool = False
 
     @field_validator("host", mode="before")
     @classmethod
     def _sanitise_host(cls, value: object) -> str:
         return sanitise_remote_host_segment(value)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _sanitise_username(cls, value: object) -> str:
+        return sanitise_ssh_username(value)
 
 
 class MlirServerConnection(SerializeableModel):
@@ -298,13 +407,8 @@ class MlirServerConnection(SerializeableModel):
 
     @field_validator("username", mode="before")
     @classmethod
-    def _strip_required_strings(cls, value: object) -> str:
-        if not isinstance(value, str):
-            return value  # type: ignore[return-value]
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("must not be empty")
-        return stripped
+    def _sanitise_username(cls, value: object) -> str:
+        return sanitise_ssh_username(value)
 
     @field_validator("host", mode="before")
     @classmethod
@@ -351,6 +455,29 @@ class RemoteReportFolder(SerializeableModel):
     remotePath: str
     lastModified: int
     lastSynced: Optional[int] = None
+    # The name this report occupies (or would occupy) on local disk once synced,
+    # and its rank. The server owns both because it is the side that writes the
+    # folder; the client reads them back rather than re-deriving the rule.
+    syncedName: Optional[str] = None
+    rank: Optional[int] = None
+
+
+def stored_remote_connection(value: Any) -> Optional[RemoteConnection]:
+    """Deserialise a persisted connection, treating an unusable one as absent.
+
+    The field validators are a write-path guard, but rows predate them: a username of
+    ``"  "`` was accepted before ``sanitise_ssh_username`` rejected empties, and raising
+    here would turn every instance-scoped request against that row into a 500 the user
+    cannot clear from the UI. Dropping the connection instead leaves the instance
+    loadable so it can be re-entered.
+    """
+    if value is None:
+        return None
+    try:
+        return RemoteConnection.model_validate(value, strict=False)
+    except ValidationError as exc:
+        logger.warning("Ignoring unusable stored remote connection: %s", exc)
+        return None
 
 
 class Instance(BaseModel):
@@ -433,11 +560,7 @@ class InstanceTable(db.Model):
                 if isinstance(self.active_report, dict)
                 else None
             ),
-            remote_connection=(
-                RemoteConnection.model_validate(self.remote_connection, strict=False)
-                if self.remote_connection is not None
-                else None
-            ),
+            remote_connection=stored_remote_connection(self.remote_connection),
             remote_profiler_folder=(
                 RemoteReportFolder.model_validate(
                     self.remote_profiler_folder, strict=False

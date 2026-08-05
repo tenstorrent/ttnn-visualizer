@@ -4,6 +4,7 @@
 
 """Regression tests for mixed local/remote active_report path resolution (issue #1359)."""
 
+import logging
 from pathlib import Path
 
 from ttnn_visualizer.extensions import db
@@ -12,6 +13,8 @@ from ttnn_visualizer.instances import (
     KEY_MLIR_NAME,
     KEY_PERFORMANCE_LOCATION,
     KEY_PERFORMANCE_NAME,
+    KEY_PROFILER_LOCATION,
+    KEY_PROFILER_NAME,
     update_existing_instance,
 )
 from ttnn_visualizer.models import (
@@ -142,3 +145,52 @@ def test_mlir_path_remains_a_file_when_switching_unrelated_report(app):
         # The path must point at a file, not the directory (the pre-fix value).
         assert instance.mlir_path == expected_file
         assert instance.mlir_path != expected_dir
+
+
+# Reading an instance drops a stored connection the current validators reject rather than
+# raising (models.stored_remote_connection). Updating one has to agree: a username of "  "
+# was storable before sanitise_ssh_username rejected empties, and validating it strictly
+# here would 500 every update against that row — including the one clearing the connection.
+def test_update_tolerates_a_stored_connection_the_validators_now_reject(app, caplog):
+    with app.app_context():
+        instance = InstanceTable(
+            instance_id="test-instance-legacy-connection",
+            active_report={
+                KEY_PROFILER_NAME: "some-profiler",
+                KEY_PROFILER_LOCATION: ReportLocation.LOCAL.value,
+            },
+            remote_connection={
+                "name": "conn",
+                "username": "   ",
+                "host": "yyzc-wh-05",
+                "port": 22,
+                "profilerPath": "/data/profiler",
+            },
+            remote_profiler_folder=None,
+            remote_performance_folder=None,
+        )
+        db.session.add(instance)
+        db.session.commit()
+
+        with caplog.at_level(logging.WARNING):
+            update_existing_instance(
+                instance,
+                profiler_name=None,
+                profiler_location=None,
+                performance_name=None,
+                performance_location=None,
+                npe_name=None,
+                npe_location=None,
+                mlir_name=None,
+                mlir_location=None,
+                remote_connection=None,
+                remote_profiler_folder=None,
+                remote_performance_folder=None,
+                clear_remote=False,
+            )
+
+        assert "unusable stored remote connection" in caplog.text
+        # Treated as absent, so the local report resolves under LOCAL_DATA_DIRECTORY
+        # rather than a remote host directory.
+        local_root = Path(app.config["LOCAL_DATA_DIRECTORY"])
+        assert str(instance.profiler_path or "").startswith(str(local_root))

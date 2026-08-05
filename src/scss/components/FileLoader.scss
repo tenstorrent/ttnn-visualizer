@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../mixins/formLayout' as form-layout;
 
 .inline-loaders {
     display: flex;
@@ -11,10 +12,7 @@
 }
 
 .file-loader {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    align-items: flex-start;
+    @include form-layout.stacked-form-controls;
 
     .form-header {
         font-weight: 700;

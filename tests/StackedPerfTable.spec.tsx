@@ -40,7 +40,7 @@ function renderStacked({ stackedData = [], isLoading = false }: RenderOptions = 
                 stackedData={stackedData}
                 stackedComparisonData={[]}
                 filters={null}
-                reportName='unit-test'
+                reportFolderName='unit-test'
                 maxCores={DEFAULT_MAX_CORES}
                 isLoading={isLoading}
             />
