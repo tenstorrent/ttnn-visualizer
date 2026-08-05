@@ -175,24 +175,47 @@ def _stack_source_request_params():
     return file_path, source_file_id, None
 
 
-def _optional_rank_query_param() -> Optional[int]:
+_DEFAULT_RANK = 0
+# `int()` is arbitrary-precision, so an unbounded parse lets a value too large for
+# SQLite's int64 binding reach the driver, where it raises OverflowError as an
+# unhandled 500. These routes aren't `@local_only`, so that is reachable by anyone
+# under SERVER_MODE. A world size never approaches this, and rejecting negatives
+# here also matches the 400 the file-backed routes already return for them.
+_MAX_RANK = 2**31 - 1
+_INVALID_RANK_MSG = (
+    f"Invalid query parameter 'rank': expected an integer "
+    f"between {_DEFAULT_RANK} and {_MAX_RANK}."
+)
+
+
+def _rank_query_param() -> int:
     """
-    Parse optional ``?rank=`` for multi-host report DBs.
-    Returns None if the parameter is absent or empty.
+    Parse ``?rank=`` for multi-host report DBs, defaulting to rank 0.
+
+    An absent rank must mean rank 0, never "every rank". The report writer
+    restarts ``operation_id`` and ``tensor_id`` at 1 for each rank and
+    re-normalises ``device_id`` per rank, so an unfiltered read unions the
+    ranks and collides on all three. File-backed routes (cluster/mesh
+    descriptor, profiler config) already defaulted to 0; DB-backed routes
+    passed None and returned the union. #1842
     """
-    if "rank" not in request.args:
-        return None
     raw = request.args.get("rank")
     if raw is None or raw == "":
-        return None
+        return _DEFAULT_RANK
+
     try:
-        return int(raw)
+        rank: Optional[int] = int(raw)
     except (TypeError, ValueError):
-        abort(
-            400,
-            description="Invalid query parameter 'rank': expected an integer.",
-        )
-        return None
+        rank = None
+
+    if rank is None or not _DEFAULT_RANK <= rank <= _MAX_RANK:
+        abort(400, description=_INVALID_RANK_MSG)
+        # Unreachable: Flask annotates `abort` as `NoReturn`, but
+        # `follow_imports = "skip"` under `[tool.mypy]` stops mypy from reading
+        # that annotation, so it still requires a terminating return here.
+        return _DEFAULT_RANK
+
+    return rank
 
 
 _NONZERO_RANK_UNSUPPORTED_MSG = (
@@ -201,13 +224,13 @@ _NONZERO_RANK_UNSUPPORTED_MSG = (
 )
 
 
-def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
+def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: int):
     """
     Legacy reports only represent rank 0. If the client asks for a different rank
     but the schema has no ``rank`` column, return 422 instead of returning all rows
     (which would misleadingly appear as rank 0 in the API).
     """
-    if rank is None or rank == 0:
+    if rank == _DEFAULT_RANK:
         return None
     if db.report_has_rank_column():
         return None
@@ -358,7 +381,7 @@ def get_system_capabilities():
 @with_instance
 @timer
 def operation_list(instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -418,7 +441,7 @@ def operation_list(instance: Instance):
 @with_instance
 @timer
 def operation_detail(operation_id, instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -600,7 +623,7 @@ def operation_history(instance: Instance):
 @with_instance
 @timer
 def errors_list(instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -651,8 +674,7 @@ def get_config(instance: Instance):
     to read another host's file (debugging).
     """
     report_dir = Path(str(instance.profiler_path)).parent
-    rank_param = _optional_rank_query_param()
-    logical_rank = 0 if rank_param is None else rank_param
+    logical_rank = _rank_query_param()
 
     payload, err = read_profiler_config_api_payload(report_dir, logical_rank)
     if err == "rank_out_of_range":
@@ -676,7 +698,7 @@ def get_config(instance: Instance):
 @with_instance
 @timer
 def tensors_list(instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -691,23 +713,8 @@ def tensors_list(instance: Instance):
         tensors = list(
             db.query_tensors(db.merge_rank_filter("tensors", tensor_filters, rank))
         )
-        if rank is not None and "rank" in db._get_table_columns("tensors"):
-            tensor_ids = [t.tensor_id for t in tensors]
-            if tensor_ids:
-                local_comparisons = list(
-                    db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
-                )
-                global_comparisons = list(
-                    db.query_tensor_comparisons(
-                        local=False, filters={"tensor_id": tensor_ids}
-                    )
-                )
-            else:
-                local_comparisons = []
-                global_comparisons = []
-        else:
-            local_comparisons = list(db.query_tensor_comparisons())
-            global_comparisons = list(db.query_tensor_comparisons(local=False))
+        local_comparisons = list(db.query_tensor_comparisons(rank=rank))
+        global_comparisons = list(db.query_tensor_comparisons(local=False, rank=rank))
         producers_consumers = list(db.query_producers_consumers(rank=rank))
         serialized_tensors = serialize_tensors(
             tensors, producers_consumers, local_comparisons, global_comparisons
@@ -733,7 +740,7 @@ def buffer_detail(instance: Instance):
     else:
         return response_bad_request()
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -766,7 +773,7 @@ def buffer_pages(instance: Instance):
     else:
         buffer_type = None
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -792,7 +799,7 @@ def buffer_pages(instance: Instance):
 @with_instance
 @timer
 def tensor_detail(tensor_id, instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -821,7 +828,7 @@ def get_all_buffers(instance: Instance):
     else:
         buffer_type = None
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -850,7 +857,7 @@ def get_operations_buffers(instance: Instance):
     else:
         buffer_type = None
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -883,7 +890,7 @@ def get_operation_buffers(operation_id, instance: Instance):
     else:
         buffer_type = None
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -1321,7 +1328,7 @@ def get_zone_statistics(zone, instance: Instance):
 @api.route("/devices", methods=["GET"])
 @with_instance
 def get_devices(instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -1613,8 +1620,7 @@ def get_cluster_descriptor(instance: Instance):
         return response_not_found("cluster_descriptor.yaml not found")
 
     report_dir = Path(instance.profiler_path).parent
-    rank_param = _optional_rank_query_param()
-    logical_rank = 0 if rank_param is None else rank_param
+    logical_rank = _rank_query_param()
 
     path, err = pick_cluster_descriptor_path(report_dir, logical_rank)
     if err == "rank_out_of_range":
@@ -1650,8 +1656,7 @@ def get_mesh_descriptor(instance: Instance):
         )
 
     report_dir = Path(instance.profiler_path).parent
-    rank_param = _optional_rank_query_param()
-    logical_rank = 0 if rank_param is None else rank_param
+    logical_rank = _rank_query_param()
 
     path, err = pick_mesh_descriptor_path(report_dir, logical_rank)
     if err == "rank_out_of_range":

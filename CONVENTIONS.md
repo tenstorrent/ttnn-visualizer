@@ -1102,7 +1102,7 @@ Every route in the file decorates with `@api.route("/path", methods=[...])` and 
 
 **Don't.** Create a second blueprint for a new endpoint group unless you genuinely need a separate `url_prefix` and lifecycle (e.g. an unauthenticated `/health` namespace). Two blueprints with the same prefix create silent registration-order bugs.
 
-Module-private helpers inside `views.py` (cross-route utilities like rank-parameter parsing) carry a leading underscore — covered under [Naming](#naming). Examples currently in `views.py`: `_file_path_from_stack_source_request`, `_optional_rank_query_param`, `_reject_nonzero_rank_on_legacy_db`, `_stack_source_availability_response`. New cross-endpoint helpers go in the same file with the same prefix; only reach for a separate module if the helper is needed outside `views.py`.
+Module-private helpers inside `views.py` (cross-route utilities like rank-parameter parsing) carry a leading underscore — covered under [Naming](#naming). Examples currently in `views.py`: `_file_path_from_stack_source_request`, `_rank_query_param`, `_reject_nonzero_rank_on_legacy_db`, `_stack_source_availability_response`. New cross-endpoint helpers go in the same file with the same prefix; only reach for a separate module if the helper is needed outside `views.py`.
 
 ### Prefer `Response(orjson.dumps(payload), mimetype="application/json")` for read-mostly endpoints
 

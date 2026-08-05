@@ -76,7 +76,7 @@ import {
     NpeClientErrorKind,
 } from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
-import { ReportFolder } from '../definitions/Reports';
+import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
@@ -931,12 +931,15 @@ interface ReportMetadata {
     duration: number;
     gitUrl: string | null;
     gitSha: string | null;
+    worldSize: number;
 }
 
 export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
     const parsedSchemaVersion = semverParse(data?.schema_version);
     const parsedDuration = Number(data?.total_duration_ns);
+    // Single-host reports omit `world_size`; an absent or unparseable value is one rank.
+    const parsedWorldSize = Number(data?.world_size);
 
     return {
         timestamp: data?.capture_timestamp_ns,
@@ -944,6 +947,10 @@ export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
         version: parsedSchemaVersion,
         gitUrl: data?.git_url ?? null,
         gitSha: data?.git_sha ?? null,
+        worldSize:
+            Number.isFinite(parsedWorldSize) && parsedWorldSize >= SINGLE_HOST_WORLD_SIZE
+                ? parsedWorldSize
+                : SINGLE_HOST_WORLD_SIZE,
     } as ReportMetadata;
 };
 
