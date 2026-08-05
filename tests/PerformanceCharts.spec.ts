@@ -7,6 +7,7 @@ import {
     CONV_CHART_ENTRIES,
     FILTERABLE_CHART_ENTRIES,
     MATMUL_CHART_ENTRIES,
+    PerfChartGroup,
 } from '../src/definitions/PerformanceCharts';
 import {
     buildChartIndexEntries,
@@ -78,6 +79,7 @@ describe('buildChartIndexEntries', () => {
         expect(entries).toContainEqual({
             id: getOperationTypesChartId('active'),
             label: getOperationTypesChartLabel(''),
+            group: PerfChartGroup.ALL,
         });
         // Exactly one Operation Types entry (the active one), no comparison entries.
         expect(entries.filter((entry) => entry.id.includes('operation-types'))).toHaveLength(1);
@@ -94,14 +96,17 @@ describe('buildChartIndexEntries', () => {
         expect(entries).toContainEqual({
             id: getOperationTypesChartId('active'),
             label: getOperationTypesChartLabel('report-a'),
+            group: PerfChartGroup.ALL,
         });
         expect(entries).toContainEqual({
             id: getOperationTypesChartId('comparison-0'),
             label: getOperationTypesChartLabel('report-b'),
+            group: PerfChartGroup.ALL,
         });
         expect(entries).toContainEqual({
             id: getOperationTypesChartId('comparison-1'),
             label: getOperationTypesChartLabel('report-c'),
+            group: PerfChartGroup.ALL,
         });
     });
 
@@ -117,6 +122,40 @@ describe('buildChartIndexEntries', () => {
         expect(entries).toContainEqual({
             id: getOperationTypesChartId('comparison-0'),
             label: getOperationTypesChartLabel(''),
+            group: PerfChartGroup.ALL,
         });
+    });
+
+    it('assigns every entry to its chart group', () => {
+        const entries = buildChartIndexEntries({
+            hasMatmulData: true,
+            hasConvData: true,
+            activeReportName: 'report-a',
+            comparisonReportNames: null,
+        });
+
+        const groupsById = new Map(entries.map((entry) => [entry.id, entry.group]));
+
+        FILTERABLE_IDS.forEach((id) => expect(groupsById.get(id)).toBe(PerfChartGroup.ALL));
+        MATMUL_IDS.forEach((id) => expect(groupsById.get(id)).toBe(PerfChartGroup.MATMUL));
+        CONV_IDS.forEach((id) => expect(groupsById.get(id)).toBe(PerfChartGroup.CONV));
+        expect(groupsById.get(getOperationTypesChartId('active'))).toBe(PerfChartGroup.ALL);
+    });
+
+    it('orders the Operation Types entries with the all-operations charts, ahead of matmul and conv', () => {
+        const entries = buildChartIndexEntries({
+            hasMatmulData: true,
+            hasConvData: true,
+            activeReportName: 'report-a',
+            comparisonReportNames: ['report-b'],
+        });
+
+        expect(idsOf(entries)).toEqual([
+            ...FILTERABLE_IDS,
+            getOperationTypesChartId('active'),
+            getOperationTypesChartId('comparison-0'),
+            ...MATMUL_IDS,
+            ...CONV_IDS,
+        ]);
     });
 });
