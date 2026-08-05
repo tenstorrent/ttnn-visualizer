@@ -65,7 +65,7 @@ function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}
                 filters={null}
                 provideMatmulAdvice={false}
                 hiliteHighDispatch={false}
-                reportName='unit-test'
+                reportFolderName='unit-test'
                 maxCores={DEFAULT_MAX_CORES}
                 activeReportComparisonIndex={activeReportComparisonIndex}
             />
@@ -155,7 +155,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     filters={null}
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
-                    reportName='unit-test'
+                    reportFolderName='unit-test'
                     maxCores={DEFAULT_MAX_CORES}
                 />
             </TestProviders>,
@@ -184,7 +184,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     filters={null}
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
-                    reportName='unit-test'
+                    reportFolderName='unit-test'
                     maxCores={DEFAULT_MAX_CORES}
                 />
                 <SelectedRowProbe />
@@ -204,7 +204,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     filters={null}
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
-                    reportName='unit-test'
+                    reportFolderName='unit-test'
                     maxCores={DEFAULT_MAX_CORES}
                 />
                 <SelectedRowProbe />
@@ -233,7 +233,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     filters={null}
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
-                    reportName='unit-test'
+                    reportFolderName='unit-test'
                     maxCores={DEFAULT_MAX_CORES}
                 />
                 <SelectedRowProbe />
@@ -251,7 +251,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
                     filters={null}
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
-                    reportName='unit-test'
+                    reportFolderName='unit-test'
                     maxCores={DEFAULT_MAX_CORES}
                 />
                 <SelectedRowProbe />
@@ -281,7 +281,7 @@ describe('PerfTable loading state', () => {
                     filters={null}
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
-                    reportName='unit-test'
+                    reportFolderName='unit-test'
                     maxCores={DEFAULT_MAX_CORES}
                     isLoading
                 />
@@ -305,7 +305,7 @@ describe('PerfTable loading state', () => {
                     filters={null}
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
-                    reportName='unit-test'
+                    reportFolderName='unit-test'
                     maxCores={DEFAULT_MAX_CORES}
                     isLoading
                 />
@@ -325,7 +325,7 @@ describe('PerfTable loading state', () => {
                     filters={null}
                     provideMatmulAdvice={false}
                     hiliteHighDispatch={false}
-                    reportName='unit-test'
+                    reportFolderName='unit-test'
                     maxCores={DEFAULT_MAX_CORES}
                 />
             </TestProviders>,

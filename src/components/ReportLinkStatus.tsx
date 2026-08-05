@@ -51,8 +51,8 @@ const ReportLinkStatus = () => {
             return;
         }
 
-        const profilerId = getReportId(activeProfilerReport.path, activeProfilerReport.reportName);
-        const performanceId = getReportId(activePerformanceReport.path, activePerformanceReport.reportName);
+        const profilerId = getReportId(activeProfilerReport.syncedName, activeProfilerReport.path);
+        const performanceId = getReportId(activePerformanceReport.syncedName, activePerformanceReport.path);
 
         if (!profilerId || !performanceId) {
             return;

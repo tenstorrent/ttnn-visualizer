@@ -56,6 +56,7 @@ const useRestoreInstance = () => {
             ? {
                   path: profilerReportPath,
                   reportName: profilerReportName ?? profilerReportPath,
+                  syncedName: profilerReportPath,
               }
             : null;
         const activeProfilerLocation = instance?.active_report?.profiler_location ?? null;
@@ -63,6 +64,7 @@ const useRestoreInstance = () => {
             ? {
                   path: perfReportPath,
                   reportName: perfReportPath,
+                  syncedName: perfReportPath,
               }
             : null;
         const activePerfLocation = instance?.active_report?.performance_location ?? null;
@@ -134,6 +136,9 @@ const useRestoreInstance = () => {
 };
 
 const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null): string | undefined =>
-    folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : undefined;
+    folderName
+        ? remoteFolders?.find((report) => report.syncedName === folderName || report.remotePath.includes(folderName))
+              ?.reportName
+        : undefined;
 
 export default useRestoreInstance;

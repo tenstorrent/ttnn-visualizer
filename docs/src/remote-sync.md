@@ -97,7 +97,7 @@ sync the individual reports you would like to use.
 1. Open TT-NN Visualizer and navigate to the Reports tab.
 2. In the "Remote Sync" section, click "+ Add New Connection".
 3. Optionally choose an **SSH config host** from the dropdown (populated from your local `~/.ssh/config`; local installs only — not available when `SERVER_MODE` is enabled). This prefills the Host alias, username, and port, and names the connection after the alias if you haven’t typed a name yourself. Selecting a config host clears the identity file so OpenSSH can still apply ProxyJump, IdentityFile, and other config for that alias, and discards any earlier connection-test result, since it was run against a different target. Saved connections live in browser localStorage separately — the dropdown is only a prefiller, not a second connection list.
-4. Enter or adjust SSH connection details (hostname or Host alias, username, and report paths). The app always connects as `user@host`, so the form’s username overrides any `User` in SSH config (including `Host *`). The port is only passed explicitly when it isn’t 22: leave it at 22 and SSH config’s `Port` for the alias still applies, set anything else and it overrides. Either can differ from bare `ssh my-alias` in a terminal. Editing any field the test exercises — host, username, port, identity file, or either report path — discards an earlier test result; renaming the connection does not.
+4. Enter or adjust SSH connection details (hostname or Host alias, username, and report paths). The app always connects as `user@host`, so the form’s username overrides any `User` in SSH config (including `Host *`). The port is only passed explicitly when it isn’t 22: leave it at 22 and SSH config’s `Port` for the alias still applies, set anything else and it overrides. Either can differ from bare `ssh my-alias` in a terminal. Editing any field the test exercises — host, username, port, identity file, either report path, or the multihost performance setting — discards an earlier test result; renaming the connection does not.
 5. SSH identity file (optional): Path to your private key on this machine (e.g. `~/.ssh/id_ed25519` or `/Users/you/break_id_ed25519_test`). Leave empty to use SSH’s default and honour `~/.ssh/config` for the Host alias. When set, the app uses only this key and ignores `~/.ssh/config` for this connection.
 6. Passphrase: The app never prompts for a passphrase. If your key has one, run `ssh-add /path/to/your_private_key` once (in the same terminal you use to start the app, or in an environment the app can see), then start the app.
 7. Click "Test Connection". If it succeeds, click "Add connection".
@@ -117,6 +117,29 @@ You may optionally specify a _Performance report folder path_. As with memory re
 either be any folder on the remote machine where you have a sub-folders with reports you have
 stored there yourself, or you can point it at the generated directory in `tt-metal`:
 `/home/username/tt-metal/generated/profiler/reports/`.
+
+#### Multihost performance reports
+
+`tt-run --tracy` writes one report per rank, each under its own `rank<N>` directory, so the
+reports are one level deeper than a single-host run puts them. To pick these up, tick
+_Multihost performance reports_ and point the _Performance report folder path_ at the folder
+that directly contains the rank directories, for example
+`/home/username/tt-metal/generated/profiler/ttrun/`. Reports are then discovered at
+`ttrun/rank<N>/reports/<report>`, and the dropdown lists them by rank.
+
+The setting selects between the two layouts rather than widening the search: while it is on, only
+`rank<N>/reports/<report>` is looked at, so single-host reports sitting directly under the same
+path are not listed. Toggling it clears the cached folder list for that connection, since the
+paths it holds belong to the other layout.
+
+Every rank names its report after its own start time to the second, so ranks of the same launch
+routinely produce the same report name. Synced copies therefore get their rank appended
+(`<report>_rank0`) to keep them from overwriting each other locally. The suffix is built from the
+rank number rather than copied from the remote directory, so `rank0/`, `Rank0/` and `rank00/` all
+sync into the one local folder instead of three. That naming applies only to
+performance reports of a connection with this setting on — memory reports and single-host
+connections keep the names they already sync under, including a connection pointed straight at
+one rank's `reports/` directory.
 
 
 ### Sync Folders

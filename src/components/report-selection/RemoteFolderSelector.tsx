@@ -15,6 +15,7 @@ import {
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';
+import { getRankedReportLabel } from '../../functions/reportRank';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
@@ -47,12 +48,12 @@ const remoteFolderRenderer =
         }
 
         const { lastSynced, lastModified, reportName, remotePath } = folder;
-        const folderId = getReportId(remotePath, reportName);
+        const folderId = getRemoteFolderId(folder);
 
         return (
             <div
                 className='folder-picker-menu-item'
-                key={`${formatRemoteFolderPath(folder, type, connection)}${lastSynced ?? lastModified}`}
+                key={`${remotePath}${lastSynced ?? lastModified}`}
             >
                 <MenuItem
                     active={selectedFolder?.remotePath === remotePath}
@@ -114,13 +115,7 @@ const RemoteFolderSelector = ({
     const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
 
     const sortedFolderList = useMemo(
-        () =>
-            sortByFolderLinkState(
-                remoteFolderList ?? [],
-                (folder) => getReportId(folder.remotePath, folder.reportName),
-                linkedIds,
-                unlinkedIds,
-            ),
+        () => sortByFolderLinkState(remoteFolderList ?? [], getRemoteFolderId, linkedIds, unlinkedIds),
         [remoteFolderList, linkedIds, unlinkedIds],
     );
 
@@ -155,7 +150,7 @@ const RemoteFolderSelector = ({
                     endIcon={sortedFolderList.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
                     loading={loading}
-                    text={remoteFolder?.reportName ?? fallbackLabel}
+                    text={remoteFolder ? getRemoteFolderLabel(remoteFolder) : fallbackLabel}
                     data-testid={TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON}
                 />
             </Select>
@@ -165,6 +160,20 @@ const RemoteFolderSelector = ({
     );
 };
 
+/**
+ * A report's identity is the folder it syncs into, which is unique per rank and
+ * the same before and after a reload. `remotePath` is the fallback for rows
+ * cached before the server started reporting the synced name.
+ */
+const getRemoteFolderId = (folder: RemoteFolder) => getReportId(folder.syncedName, folder.remotePath);
+
+/**
+ * Name a folder by its rank when it has one, so that every rank of one launch is
+ * distinguishable: they name their reports from their own start times at second
+ * granularity and so routinely share a report name.
+ */
+const getRemoteFolderLabel = (folder: RemoteFolder): string => getRankedReportLabel(folder.reportName, folder.rank);
+
 const formatRemoteFolderPath = (
     folder: RemoteFolder,
     type: FolderTypes,
@@ -172,6 +181,10 @@ const formatRemoteFolderPath = (
 ): string => {
     if (!folder || !selectedConnection) {
         return 'n/a';
+    }
+
+    if (folder.rank !== null && folder.rank !== undefined) {
+        return getRemoteFolderLabel(folder);
     }
 
     const paths: Record<FolderTypes, string | undefined> = {
@@ -188,7 +201,14 @@ const formatRemoteFolderPath = (
 
 const filterFolders =
     (type: FolderTypes, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
-    (query, folder) =>
-        formatRemoteFolderPath(folder, type, connection).toLowerCase().includes(query.toLowerCase());
+    (query, folder) => {
+        const normalisedQuery = query.toLowerCase();
+
+        // Match the raw path too, so a query like `rank0` still finds a folder
+        // labelled `Rank 0: ...`.
+        return [formatRemoteFolderPath(folder, type, connection), folder.remotePath].some((value) =>
+            value.toLowerCase().includes(normalisedQuery),
+        );
+    };
 
 export default RemoteFolderSelector;

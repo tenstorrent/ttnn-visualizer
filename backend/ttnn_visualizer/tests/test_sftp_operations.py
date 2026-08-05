@@ -27,12 +27,12 @@ from ttnn_visualizer.exceptions import (
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
     _get_remote_file_list_without_sizes,
+    _remote_directory_mtimes,
     _remote_transfer_key,
     _sftp_subsystem_unavailable,
     find_folders_by_files,
     get_remote_directory_list,
     get_remote_file_list,
-    get_remote_performance_folder,
     resolve_file_path,
     sync_files_and_directories,
 )
@@ -111,7 +111,7 @@ class TestRemoteFindShellQuoting:
             find_folders_by_files(connection, self._APOSTROPHE_FOLDER, ["config.json"])
 
         remote_cmd = _remote_shell_command_from_run(run)
-        assert remote_cmd.count(shlex.quote(self._APOSTROPHE_FOLDER)) == 2
+        assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
         assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
 
     def test_find_folders_by_files_quotes_each_probed_file_name(self, connection):
@@ -122,12 +122,15 @@ class TestRemoteFindShellQuoting:
             find_folders_by_files(connection, "/remote/reports", [file_name])
 
         remote_cmd = _remote_shell_command_from_run(run)
-        assert f"-exec test -f {{}}/{shlex.quote(file_name)} ';'" in remote_cmd
-        assert f"{{}}/{file_name}" not in remote_cmd
+        # Asserted after quote removal rather than on the spelling: whether the
+        # `{}` sits inside or outside the quotes is arbitrary, but the argument
+        # find ends up with is not, and an apostrophe must not close the quoting
+        # early and split the probe into two arguments.
+        assert f"{{}}/{file_name}" in shlex.split(remote_cmd)
 
-    def test_get_remote_performance_folder_quotes_the_folder(self, connection):
+    def test_remote_directory_mtimes_quotes_each_folder(self, connection):
         with patch("subprocess.run", return_value=_completed("1700000000")) as run:
-            get_remote_performance_folder(connection, self._APOSTROPHE_FOLDER)
+            _remote_directory_mtimes(connection, [self._APOSTROPHE_FOLDER])
 
         remote_cmd = _remote_shell_command_from_run(run)
         assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd

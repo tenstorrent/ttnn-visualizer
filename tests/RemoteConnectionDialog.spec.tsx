@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../src/definitions/RemoteConnection';
 import { SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
 import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
 import getButtonWithText from './helpers/getButtonWithText';
@@ -255,5 +255,90 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
             port: 2222,
         });
         expect((onAddConnection.mock.calls[0][0] as RemoteConnection).identityFile).toBeUndefined();
+    });
+});
+
+describe('RemoteConnectionDialog multihost performance flag', () => {
+    it('defaults to unchecked for a new connection', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).not.toBeChecked();
+    });
+
+    it('reflects the saved flag when editing a connection', () => {
+        const remoteConnection: RemoteConnection = {
+            name: 'c',
+            host: 'h',
+            port: 22,
+            username: 'u',
+            profilerPath: '/p',
+            performancePath: '/remote/generated/profiler/ttrun',
+            multihostPerformance: true,
+        };
+
+        render(
+            <RemoteConnectionDialog
+                open
+                remoteConnection={remoteConnection}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeChecked();
+    });
+
+    it('sends the flag with the connection test and the saved connection', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+        const onAddConnection = vi.fn();
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={onAddConnection}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() =>
+            expect(testConnectionMock).toHaveBeenCalledWith(expect.objectContaining({ multihostPerformance: true })),
+        );
+
+        const saveButton = getButtonWithText('Add connection');
+        await waitFor(() => expect(saveButton).toBeEnabled());
+        fireEvent.click(saveButton);
+
+        expect(onAddConnection).toHaveBeenCalledWith(expect.objectContaining({ multihostPerformance: true }));
+    });
+
+    it('discards a passing test result when the flag is toggled', async () => {
+        // The flag selects which layout is searched, so a result computed for the
+        // other one says nothing about this connection and must not gate the save.
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+
+        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+
+        expect(screen.queryByText('SSH connection established')).not.toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
     });
 });

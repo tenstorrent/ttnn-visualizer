@@ -398,7 +398,9 @@ Arbitrary `instanceId` strings are valid tab identifiers — the server creates 
 
 Both `…NotLoadedException` classes inherit from `ReportNotLoadedException` and share one 404 handler in `app.py`; the body string lives on each subclass as `DEFAULT_MESSAGE` so call sites raise without a message argument. Helpers raise at the top of every path that touches a missing report path, so routes don't need a parallel `if not instance.<kind>_path` guard **when the helper is the next thing they call**.
 
-Routes that **dereference `instance.<kind>_path` directly** before invoking a helper (e.g. computing `Path(instance.performance_path).parent / name` from a `?name=` swap) must keep an explicit `raise <Kind>ReportNotLoadedException()` at the top — otherwise mypy fails (`Path(None)`) and runtime crashes. `views.py::get_performance_results_report`, `get_performance_data_raw`, and `get_performance_device_meta` are the live examples. NPE and MLIR routes do their own filesystem IO and still use per-route `response_not_found()` guards.
+Routes that **dereference `instance.<kind>_path` directly** before invoking a helper must keep an explicit `raise <Kind>ReportNotLoadedException()` at the top — otherwise mypy fails (`Path(None)`) and runtime crashes. NPE and MLIR routes do their own filesystem IO and still use per-route `response_not_found()` guards.
+
+The `?name=` performance swap is no longer one of those cases: `views.py::_apply_requested_performance_name` owns the whole block — reading the query param, honouring the `SERVER_MODE` gate, collapsing the value through `sanitise_path_segment`, and raising when no report is loaded. `get_performance_results_report`, `get_performance_data_raw` and `get_performance_device_meta` call it rather than resolving a name themselves; new routes that accept `?name=` should do the same instead of rebuilding `Path(instance.performance_path).parent / name`.
 
 ### Cross-cutting retries belong in the interceptor, not in individual hooks
 

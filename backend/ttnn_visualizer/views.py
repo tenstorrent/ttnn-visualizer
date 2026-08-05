@@ -987,35 +987,32 @@ def get_profiler_data_list(instance: Instance):
     return Response(orjson.dumps(valid_dirs), mimetype="application/json")
 
 
+def _report_directory_to_delete(directory_name_key: str, report_name: str) -> Path:
+    """Resolve a delete request to one report directory under the local data directory.
+
+    The listings these deletes are paired with (``GET /profiler``, ``GET /performance``)
+    only ever read the local data directory, so that is the only tree a delete may
+    reach, and only one report inside it — anything wider removes reports the client
+    never listed.
+    """
+    return (
+        Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+        / current_app.config[directory_name_key]
+        / sanitise_path_segment(report_name)
+    )
+
+
 @api.route("/profiler/<profiler_name>", methods=["DELETE"])
 @with_instance
 @local_only
 def delete_profiler_report(profiler_name, instance: Instance):
-    is_remote = (
-        instance.active_report
-        and instance.active_report.profiler_location == ReportLocation.REMOTE.value
-    )
-    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    data_directory = Path(current_app.config[config_key])
-
     if not profiler_name:
         return response_bad_request("Report name is required.")
 
-    if is_remote:
-        connection = RemoteConnection.model_validate(
-            instance.remote_connection, strict=False
-        )
-        path = (
-            data_directory
-            / connection.host
-            / current_app.config["PROFILER_DIRECTORY_NAME"]
-        )
-    else:
-        path = (
-            data_directory
-            / current_app.config["PROFILER_DIRECTORY_NAME"]
-            / profiler_name
-        )
+    try:
+        path = _report_directory_to_delete("PROFILER_DIRECTORY_NAME", profiler_name)
+    except (TypeError, ValueError):
+        return response_bad_request(f"Invalid report name: {profiler_name}")
 
     if instance.active_report and instance.active_report.profiler_name == profiler_name:
         instance_id = request.args.get("instanceId")
@@ -1121,31 +1118,15 @@ def get_profiler_performance_data(instance: Instance):
 @with_instance
 @local_only
 def delete_performance_report(performance_name, instance: Instance):
-    is_remote = (
-        instance.active_report
-        and instance.active_report.performance_location == ReportLocation.REMOTE.value
-    )
-    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    data_directory = Path(current_app.config[config_key])
-
     if not performance_name:
         return response_bad_request("Report name is required.")
 
-    if is_remote:
-        connection = RemoteConnection.model_validate(
-            instance.remote_connection, strict=False
+    try:
+        path = _report_directory_to_delete(
+            "PERFORMANCE_DIRECTORY_NAME", performance_name
         )
-        path = (
-            data_directory
-            / connection.host
-            / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-        )
-    else:
-        path = (
-            data_directory
-            / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-            / performance_name
-        )
+    except (TypeError, ValueError):
+        return response_bad_request(f"Invalid report name: {performance_name}")
 
     if (
         instance.active_report
@@ -1164,6 +1145,35 @@ def delete_performance_report(performance_name, instance: Instance):
     )
 
 
+def _apply_requested_performance_name(instance: Instance) -> None:
+    """Point the instance at the ``?name=`` report for the duration of the request.
+
+    Lets the comparison selector read a sibling report without re-mounting. The
+    name is the synced folder name the listing handed the client — including any
+    ``_rank<N>`` qualifier — so it is resolved as given rather than guessed at: a
+    rank fallback here could answer with a different rank's numbers.
+
+    All three routes that honour ``?name=`` come through here, so the query value
+    is collapsed to a single segment once rather than trusted at each caller.
+    """
+    name = request.args.get("name", None)
+    if not name or current_app.config["SERVER_MODE"]:
+        return
+    if not instance.performance_path:
+        raise PerformanceReportNotLoadedException()
+
+    try:
+        requested_name = sanitise_path_segment(name)
+    except (TypeError, ValueError):
+        logger.warning("Ignoring unusable performance report name: %r", name)
+        return
+
+    instance.performance_path = str(
+        Path(instance.performance_path).parent / requested_name
+    )
+    logger.info(f"Performance path set to {instance.performance_path}")
+
+
 @api.route("/performance/perf-results/raw", methods=["GET"])
 @with_instance
 def get_performance_results_data_raw(instance: Instance):
@@ -1178,7 +1188,6 @@ def get_performance_results_data_raw(instance: Instance):
 @api.route("/performance/perf-results/report", methods=["GET"])
 @with_instance
 def get_performance_results_report(instance: Instance):
-    name = request.args.get("name", None)
     start_signpost = request.args.get("start_signpost", None)
     end_signpost = request.args.get("end_signpost", None)
     print_signposts = str_to_bool(request.args.get("print_signposts", "true"))
@@ -1190,10 +1199,7 @@ def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
-    if name and not current_app.config["SERVER_MODE"]:
-        performance_path = Path(instance.performance_path).parent / name
-        instance.performance_path = str(performance_path)
-        logger.info(f"************ Performance path set to {instance.performance_path}")
+    _apply_requested_performance_name(instance)
 
     try:
         report = OpsPerformanceReportQueries.generate_report(
@@ -1216,15 +1222,10 @@ def get_performance_results_report(instance: Instance):
 @api.route("/performance/device-log/raw", methods=["GET"])
 @with_instance
 def get_performance_data_raw(instance: Instance):
-    name = request.args.get("name", None)
-
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
-    if name and not current_app.config["SERVER_MODE"]:
-        performance_path = Path(instance.performance_path).parent / name
-        instance.performance_path = str(performance_path)
-        logger.info(f"************ Performance path set to {instance.performance_path}")
+    _apply_requested_performance_name(instance)
 
     content = DeviceLogProfilerQueries.get_raw_csv(instance)
 
@@ -1257,15 +1258,10 @@ def get_performance_device_meta(instance: Instance):
             "max_cores": max_cores,
         }
 
-    name = request.args.get("name", None)
-
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
-    if name and not current_app.config["SERVER_MODE"]:
-        performance_path = Path(instance.performance_path).parent / name
-        instance.performance_path = str(performance_path)
-        logger.info(f"************ Performance path set to {instance.performance_path}")
+    _apply_requested_performance_name(instance)
 
     file_path = Path(
         instance.performance_path,
@@ -1544,7 +1540,12 @@ def _annotate_last_synced(
     remote_data = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
     dir_name = current_app.config[directory_config_key]
     for rf in folders:
-        directory_name = Path(rf.remotePath).name
+        # The listing already carries the segment sync writes. Re-deriving it
+        # here would let a rank's badge report the sync state of whichever rank
+        # was downloaded into that folder.
+        directory_name = rf.syncedName
+        if not directory_name:
+            continue
         local_path = local_synced_report_path(
             remote_data, host, dir_name, directory_name
         )
@@ -1688,6 +1689,15 @@ def get_mesh_descriptor(instance: Instance):
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
 
+def _found_reports_message(
+    label: str, count: int, *, in_rank_subdirectories: bool = False
+) -> str:
+    """Connection-test success line confirming what the report search actually saw."""
+    plural = "report" if count == 1 else "reports"
+    location = " in per-rank subdirectories" if in_rank_subdirectories else ""
+    return f"Found {count} {label} {plural}{location}"
+
+
 @api.route("/remote/ssh-config-hosts", methods=["GET"])
 @local_only
 def list_remote_ssh_config_hosts():
@@ -1760,7 +1770,7 @@ def test_remote_folder():
     # Check for Project Configurations
     if not has_failures():
         try:
-            check_remote_path_for_reports(connection)
+            report_counts = check_remote_path_for_reports(connection)
         except AuthenticationFailedException as e:
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
@@ -1768,6 +1778,23 @@ def test_remote_folder():
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
             add_status(e.status.value, e.message, getattr(e, "detail", None))
+        else:
+            # A path that exists says nothing about whether reports were found
+            # there, which is what the user is really testing for.
+            if report_counts.profiler is not None:
+                add_status(
+                    ConnectionTestStates.OK.value,
+                    _found_reports_message("memory", report_counts.profiler),
+                )
+            if report_counts.performance is not None:
+                add_status(
+                    ConnectionTestStates.OK.value,
+                    _found_reports_message(
+                        "performance",
+                        report_counts.performance,
+                        in_rank_subdirectories=connection.multihostPerformance,
+                    ),
+                )
 
     return Response(
         orjson.dumps([status.model_dump() for status in statuses]),
@@ -2060,17 +2087,23 @@ _REPORT_NOT_SYNCED_LOCALLY = (
 
 
 def _safe_report_folder_name(
-    *, report_name: Optional[str] = None, remote_path: Optional[str] = None
+    *,
+    report_name: Optional[str] = None,
+    remote_path: Optional[str] = None,
+    qualify_rank: bool = False,
 ) -> Optional[str]:
     """Local folder segment under REMOTE_DATA_DIRECTORY — must match sync destinations.
 
     Prefer ``remote_path`` (same segment sync writes). ``reportName`` is
-    display-only and is only used when ``remote_path`` is omitted.
+    display-only and is only used when ``remote_path`` is omitted. The payload's
+    own ``syncedName`` is deliberately not trusted: the segment is recomputed
+    here from the path and the connection, so a client cannot name the directory
+    it mounts.
     """
     if remote_path is not None:
         # Explicit remotePath — never fall back to reportName (avoids mounting an
         # unrelated folder when the basename is empty / ``.`` / ``..``).
-        return folder_segment_from_remote_path(remote_path)
+        return folder_segment_from_remote_path(remote_path, qualify_rank=qualify_rank)
     if not report_name:
         return None
     try:
@@ -2123,6 +2156,7 @@ def use_remote_folder():
         performance_name = _safe_report_folder_name(
             report_name=remote_performance_folder.reportName,
             remote_path=remote_performance_folder.remotePath,
+            qualify_rank=bool(connection.multihostPerformance),
         )
         if not performance_name:
             return response_bad_request("Invalid report path")

@@ -42,6 +42,7 @@ import {
     activeMlirJsonAtom,
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
@@ -868,8 +869,8 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
 };
 
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const response = usePerformanceReport(activePerformanceReport?.reportName || null);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
+    const response = usePerformanceReport(activeReportFolderName);
 
     return useMemo(() => {
         if (!response.data) {
@@ -909,8 +910,8 @@ export const useOpToPerfIdFiltered = () => {
 };
 
 export const usePerformanceRange = (): NumberRange | null => {
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: perfData } = usePerformanceReport(activePerformanceReport?.reportName || null);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
+    const { data: perfData } = usePerformanceReport(activeReportFolderName);
 
     return useMemo(
         () =>
