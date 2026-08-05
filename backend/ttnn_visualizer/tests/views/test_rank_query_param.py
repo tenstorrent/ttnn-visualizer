@@ -276,7 +276,12 @@ def _register_profiler_instance(
         db.session.commit()
 
 
-def test_operations_list_without_rank_returns_all_ranks(app, client):
+def test_operations_list_without_rank_defaults_to_rank_zero(app, client):
+    """
+    Omitting ``?rank`` must scope to rank 0, not union every rank. The writer
+    restarts operation_id/tensor_id at 1 per rank, so a union collides on ids
+    and the client renders one row per rank with no way to tell them apart. #1842
+    """
     with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
         path = f.name
     try:
@@ -290,11 +295,55 @@ def test_operations_list_without_rank_returns_all_ranks(app, client):
         assert response.status_code == HTTPStatus.OK
         data = response.get_json()
         assert isinstance(data, list)
-        assert len(data) == 2
-        names = {op["name"] for op in data}
-        assert names == {"op_r0", "op_r1"}
+        assert len(data) == 1
+        assert data[0]["name"] == "op_r0"
+        assert data[0]["rank"] == 0
     finally:
         Path(path).unlink(missing_ok=True)
+
+
+@pytest.mark.parametrize(
+    "path,extra_query",
+    [
+        ("/api/operations", {}),
+        ("/api/tensors", {}),
+        ("/api/devices", {}),
+        ("/api/buffers", {}),
+        ("/api/operation-buffers", {}),
+        ("/api/errors", {}),
+        ("/api/operations/1", {}),
+    ],
+)
+def test_omitted_rank_is_equivalent_to_explicit_rank_zero(
+    app, client, path, extra_query
+):
+    """
+    The two route families used to disagree on what an absent rank meant:
+    file-backed routes defaulted to 0, DB-backed routes returned every rank.
+    Pin the unified contract so the asymmetry can't come back. #1842
+    """
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        db_path = f.name
+    try:
+        _write_ranked_report_db(db_path)
+        _register_profiler_instance(app, db_path)
+
+        omitted = client.get(
+            path,
+            query_string={"instanceId": INSTANCE_ID, **extra_query},
+        )
+        explicit = client.get(
+            path,
+            query_string={"instanceId": INSTANCE_ID, "rank": "0", **extra_query},
+        )
+
+        assert omitted.status_code == HTTPStatus.OK, f"{path} failed without rank"
+        assert explicit.status_code == HTTPStatus.OK, f"{path} failed with rank=0"
+        assert (
+            omitted.get_json() == explicit.get_json()
+        ), f"{path} returns a different payload when rank is omitted"
+    finally:
+        Path(db_path).unlink(missing_ok=True)
 
 
 def test_operations_list_rank_filter_limits_operations_and_nested_tensors(app, client):

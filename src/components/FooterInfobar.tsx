@@ -33,7 +33,7 @@ import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
-import { useGetLatestAppVersion, useInstance, useReportMetadata } from '../hooks/useAPI';
+import { SINGLE_HOST_WORLD_SIZE, useGetLatestAppVersion, useInstance, useReportMetadata } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
 import { Instance } from '../model/APIData';
 import LoadingSpinner from './LoadingSpinner';
@@ -42,6 +42,11 @@ import AppVersionStatus from './AppVersionStatus';
 import { ReportGitMetadataLines } from './operation-details/GitCommitInfo';
 
 const RANGE_DISALLOWED_ROUTES: string[] = [ROUTES.NPE];
+
+// The API scopes every report-backed read to rank 0 while rank selection is
+// unimplemented, so the footer states which rank is on screen rather than
+// letting a multi-host report look like the whole run. #1842
+const SCOPED_RANK = 0;
 
 function FooterInfobar() {
     const [sliderIsOpen, setSliderIsOpen] = useState(false);
@@ -55,6 +60,8 @@ function FooterInfobar() {
 
     const { data: instance } = useInstance();
     const { data: reportMetadata } = useReportMetadata();
+    const worldSize = reportMetadata?.worldSize ?? SINGLE_HOST_WORLD_SIZE;
+    const isMultiHostReport = worldSize > SINGLE_HOST_WORLD_SIZE;
     const location = useLocation();
     const {
         data: latestAppVersion,
@@ -150,6 +157,13 @@ function FooterInfobar() {
                                         gitUrl={reportMetadata?.gitUrl ?? null}
                                         gitSha={reportMetadata?.gitSha ?? null}
                                     />
+                                    {isMultiHostReport && (
+                                        <>
+                                            <br />
+                                            <strong>Multi-host report:</strong> showing rank {SCOPED_RANK} of{' '}
+                                            {reportMetadata?.worldSize}. Other ranks are not yet selectable.
+                                        </>
+                                    )}
                                 </>
                             }
                             position={PopoverPosition.TOP}
@@ -162,6 +176,7 @@ function FooterInfobar() {
                                 {profilerReportLocation !== null && (
                                     <ReportLocationTag location={profilerReportLocation} />
                                 )}
+                                {isMultiHostReport && <ReportRankTag worldSize={worldSize} />}
                             </div>
                         </Tooltip>
                     )}
@@ -220,6 +235,21 @@ function FooterInfobar() {
         </footer>
     );
 }
+
+interface ReportRankTagProps {
+    worldSize: number;
+}
+
+const ReportRankTag = ({ worldSize }: ReportRankTagProps) => (
+    <Tag
+        minimal
+        className='report-rank-tag'
+        aria-label={`Showing rank ${SCOPED_RANK} of ${worldSize}`}
+        intent={Intent.WARNING}
+    >
+        rank {SCOPED_RANK} of {worldSize}
+    </Tag>
+);
 
 const ReportLocationTag = ({ location }: { location: ReportLocation }) => {
     const isRemote = location === ReportLocation.REMOTE;

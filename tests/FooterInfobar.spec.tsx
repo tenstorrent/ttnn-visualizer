@@ -53,7 +53,9 @@ vi.mock('@blueprintjs/core', async () => {
 
 const REPORT_PATH = '/reports/memory/my-report';
 
-const renderFooter = (reportMetadata: { gitUrl?: string | null; gitSha?: string | null } | undefined) => {
+const renderFooter = (
+    reportMetadata: { gitUrl?: string | null; gitSha?: string | null; worldSize?: number } | undefined,
+) => {
     mockUseReportMetadata.mockReturnValue({ data: reportMetadata });
     mockUseInstance.mockReturnValue({ data: mockInstance });
     mockUseGetLatestAppVersion.mockReturnValue({
@@ -120,5 +122,26 @@ describe('FooterInfobar memory report tooltip', () => {
 
         const link = within(tooltip).getByRole('link');
         expect(link).toHaveAttribute('href', `https://github.com/foo/bar/commit/${MOCK_FULL_GIT_SHA}`);
+    });
+});
+
+// The API scopes report reads to rank 0, so a multi-host report shows one rank's
+// data. Without this notice the run looks complete rather than partial. #1842
+describe('FooterInfobar multi-host rank scoping', () => {
+    it('announces the scoped rank when the report spans several ranks', () => {
+        renderFooter({ worldSize: 2 });
+
+        expect(screen.getByLabelText('Showing rank 0 of 2')).toBeInTheDocument();
+        expect(getMemoryReportTooltipContent().textContent).toContain('showing rank 0 of 2');
+    });
+
+    it.each([
+        ['single-rank', 1],
+        ['unreported', undefined],
+    ])('stays silent on a %s report', (_label, worldSize) => {
+        renderFooter({ worldSize });
+
+        expect(screen.queryByLabelText(/Showing rank/)).not.toBeInTheDocument();
+        expect(getMemoryReportTooltipContent().textContent).not.toMatch(/showing rank/);
     });
 });

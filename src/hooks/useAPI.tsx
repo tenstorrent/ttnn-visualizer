@@ -925,18 +925,23 @@ export const usePerformanceRange = (): NumberRange | null => {
     );
 };
 
+// Single-host reports omit `world_size`; treat an absent or unparseable value as one rank.
+export const SINGLE_HOST_WORLD_SIZE = 1;
+
 interface ReportMetadata {
     version: SemVer;
     timestamp: string;
     duration: number;
     gitUrl: string | null;
     gitSha: string | null;
+    worldSize: number;
 }
 
 export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
     const parsedSchemaVersion = semverParse(data?.schema_version);
     const parsedDuration = Number(data?.total_duration_ns);
+    const parsedWorldSize = Number(data?.world_size);
 
     return {
         timestamp: data?.capture_timestamp_ns,
@@ -944,6 +949,10 @@ export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
         version: parsedSchemaVersion,
         gitUrl: data?.git_url ?? null,
         gitSha: data?.git_sha ?? null,
+        worldSize:
+            Number.isFinite(parsedWorldSize) && parsedWorldSize >= SINGLE_HOST_WORLD_SIZE
+                ? parsedWorldSize
+                : SINGLE_HOST_WORLD_SIZE,
     } as ReportMetadata;
 };
 
