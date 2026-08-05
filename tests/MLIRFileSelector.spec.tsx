@@ -15,9 +15,11 @@ import { getDeleteActionLabel, getEditActionLabel } from '../src/functions/manag
 import { GraphBundle } from '../src/model/MLIRJsonModel';
 import { isActivatingReportAtom, mlirFileResultsAtom, mlirServersAtom, selectedMlirServerAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
+import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
 import testForPortal from './helpers/testForPortal';
 
 const testMlirServerConnectionMock = vi.hoisted(() => vi.fn<() => Promise<ConnectionStatus[]>>());
+const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
 
 vi.mock('../src/hooks/useMlirRemote', () => ({
     default: () => ({
@@ -25,6 +27,10 @@ vi.mock('../src/hooks/useMlirRemote', () => ({
         testMlirServerConnection: testMlirServerConnectionMock,
     }),
 }));
+
+// The edit dialog renders SshConfigHostPicker, which otherwise issues a real request from jsdom.
+// This spec is about the selector's rows, so the picker stays hidden for a stated reason.
+vi.mock('../src/hooks/useSshConfigHosts', () => ({ default: useSshConfigHostsMock }));
 
 const SERVER: MlirServerConnection = {
     name: 'Test host',
@@ -104,6 +110,8 @@ afterEach(() => {
 beforeEach(() => {
     testMlirServerConnectionMock.mockClear();
     testMlirServerConnectionMock.mockResolvedValue(PASSING_TESTS);
+    useSshConfigHostsMock.mockClear();
+    useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
 });
 
 it('disables MLIR inputs while an active report is being confirmed', () => {

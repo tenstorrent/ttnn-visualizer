@@ -46,6 +46,7 @@ import {
     getDeleteConnectionLabel,
     getEditConnectionLabel,
 } from './helpers/remoteConnectionSelectors';
+import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -83,6 +84,8 @@ const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance, mockUse
     };
 });
 
+const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
+
 vi.mock('../src/hooks/useAPI.tsx', async () => {
     const actual = await vi.importActual<typeof import('../src/hooks/useAPI.tsx')>('../src/hooks/useAPI.tsx');
 
@@ -101,8 +104,15 @@ vi.mock('../src/hooks/useAPI.tsx', async () => {
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
         post: vi.fn(),
+        // Present so an unmocked GET surfaces as an unexpected call rather than as
+        // "axiosInstance.get is not a function" swallowed by a query's error state.
+        get: vi.fn(),
     },
 }));
+
+// The edit dialog renders SshConfigHostPicker; without this it would issue a real request from
+// jsdom, and the picker would be absent because the query failed rather than because of a fixture.
+vi.mock('../src/hooks/useSshConfigHosts', () => ({ default: useSshConfigHostsMock }));
 
 beforeEach(() => {
     vi.resetAllMocks();
@@ -111,6 +121,7 @@ beforeEach(() => {
     mockUseInstance.mockReturnValue({ data: mockInstance });
     // No active report metadata by default; effect short-circuits.
     mockUseReportMetadata.mockReturnValue({ data: undefined, error: undefined });
+    useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
     // Clean up localStorage between tests
     window.localStorage.clear();
 });
@@ -225,6 +236,44 @@ it('clears localStorage and resets state when removing the only connection', asy
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, true);
     expect(window.localStorage.getItem(savedReportFoldersKey(remoteConnection[0]))).toBeNull();
     expect(window.localStorage.getItem(savedPerformanceFoldersKey(remoteConnection[0]))).toBeNull();
+});
+
+it('empties the folder lists rather than reading the no-connection cache key when the last connection goes', async () => {
+    setupConnection(remoteConnection);
+    // No connection still produces a real cache key, so anything stored under it would be adopted
+    // as the folder lists of a connection that no longer exists.
+    window.localStorage.setItem(savedReportFoldersKey(), JSON.stringify(mockRemoteProfilerFolderList));
+    window.localStorage.setItem(savedPerformanceFoldersKey(), JSON.stringify(mockRemotePerformanceFolderList));
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    getButtonWithText(CONNECTION_NAME).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(remoteConnection[0])));
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
+    await waitFor(() => expect(getButtonWithText(NO_CONNECTION)).not.toBeNull(), WAIT_FOR_OPTIONS);
+
+    // The selectors enable themselves on a non-empty folder list, so staying disabled is what
+    // distinguishes emptied lists from ones populated off the no-connection key.
+    const reportSelects = screen.getAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+
+    expect(reportSelects).toHaveLength(2);
+    reportSelects.forEach((select) => expect(select).toHaveProperty(HTML_DISABLED, true));
+
+    // Nothing is left to scan on disk, so no local report listing should be attempted either.
+    const axiosInstance = await import('../src/libs/axiosInstance');
+
+    expect(vi.mocked(axiosInstance.default.post)).not.toHaveBeenCalledWith(
+        Endpoints.REMOTE_LOCAL_PROFILER_REPORTS,
+        expect.anything(),
+        expect.anything(),
+    );
 });
 
 it('handles multiple remote connections in localStorage', () => {
@@ -367,6 +416,52 @@ it('applies an edit to a connection that is not selected without changing the se
 
     const listedEndpoints: string[] = [Endpoints.REMOTE_PROFILER_REPORTS, Endpoints.REMOTE_PERFORMANCE_REPORTS];
     expect(mockPost.mock.calls.some(([url]) => listedEndpoints.includes(url))).toBe(false);
+});
+
+// Every other case here seeds localStorage before mount, so the list mirror is filled by its lazy
+// initialiser. Only the add path exercises the mirror write itself: without it the new connection
+// would name the trigger yet be missing from the dropdown it was selected from, and so could never
+// be edited or deleted.
+it('lists a newly added connection as a dropdown row', async () => {
+    const passingTests: ConnectionStatus[] = [
+        { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+        { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+    ];
+    const addedName = 'Added Server';
+
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    vi.mocked(axiosInstance.default.post).mockImplementation((url: string) => {
+        if (url === `${Endpoints.REMOTE}/test`) {
+            return Promise.resolve({ data: passingTests } as AxiosResponse);
+        }
+
+        return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+    });
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    fireEvent.click(getButtonWithText(ADD_NEW_CONNECTION));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: addedName } });
+    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'added.example.com' } });
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'prod-user' } });
+    fireEvent.change(screen.getByLabelText('Memory report folder path'), { target: { value: '/opt/reports' } });
+    fireEvent.click(getButtonWithText('Run tests'));
+
+    await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
+    fireEvent.click(getButtonWithText('Add connection'));
+
+    const trigger = await screen.findByRole('button', { name: new RegExp(addedName) }, WAIT_FOR_OPTIONS);
+    trigger.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const rows = screen.getAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain(addedName);
 });
 
 // The folder caches are keyed by name|host|port, so editing the host moves them.
@@ -1263,12 +1358,12 @@ it('validates connection data structure', () => {
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
 });
 
-// Scoped to the trigger label, which reads the selectedConnection getter on every render. The
-// dropdown's own rows come from the savedConnectionList mirror in state, which only this
-// component's writes refresh — an externally written connection doesn't appear there until the
-// mirror is retired in favour of atomWithStorage.
-it('labels the trigger with a connection written to localStorage after the first render', () => {
-    // Remove previously set connections
+// Both the trigger and the dropdown rows read state mirrors of localStorage, so neither notices a
+// write from outside this component. Pinned because the two used to disagree — the trigger read
+// through to localStorage while the rows came from the mirror — which meant a connection could
+// name the trigger while being absent from the list it was supposedly selected from. Retiring the
+// mirrors for atomWithStorage should make both pick the write up, not just one.
+it('ignores a connection written to localStorage by something other than this component', () => {
     window.localStorage.removeItem(LOCAL_STORAGE_KEY_CONNECTIONS);
 
     const { rerender } = render(
@@ -1277,10 +1372,8 @@ it('labels the trigger with a connection written to localStorage after the first
         </TestProviders>,
     );
 
-    // Initially no connections
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
 
-    // Add connection to localStorage
     setupConnection(remoteConnection);
 
     rerender(
@@ -1289,7 +1382,8 @@ it('labels the trigger with a connection written to localStorage after the first
         </TestProviders>,
     );
 
-    expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
+    expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
+    expect(screen.queryAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW)).toHaveLength(0);
 });
 
 it('shows an "Incompatible report version" toast when the active report uses an unsupported DB schema', async () => {

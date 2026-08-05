@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_UPLOAD_PATH, MlirServerConnection } from '../../definitions/MlirServer';
 import {
+    MLIR_SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
     SSH_IDENTITY_FILE_SUBLABEL,
@@ -84,11 +85,16 @@ const MlirServerDialog = ({
     const isValidConnection =
         connectionTests.length > 0 && connectionTests.every(({ status }) => status === ConnectionTestStates.OK);
 
-    const updateConnection = (changes: Partial<MlirServerConnection>) => {
+    // Everything the test actually exercises — the SSH target, the credentials, and the port it
+    // probes — invalidates a previous result. The name isn't part of the target, so it goes through
+    // updateName instead: saving is gated on a passing test, and renaming shouldn't cost a fresh
+    // SSH round-trip. Named for the distinction so a new field can't silently take the wrong path.
+    const updateTarget = (changes: Partial<MlirServerConnection>) => {
         setConnection({ ...connection, ...changes });
-        // Invalidate a previous test result whenever the target changes.
         setConnectionTests([]);
     };
+
+    const updateName = (name: string) => setConnection({ ...connection, name });
 
     const testConnectionStatus = async () => {
         setIsTestingConnection(true);
@@ -122,7 +128,7 @@ const MlirServerDialog = ({
         });
 
         // The config stanza's Port is the SSH port; the MLIR server port is unrelated.
-        updateConnection({ ...prefill, sshPort: port });
+        updateTarget({ ...prefill, sshPort: port });
     };
 
     return (
@@ -150,7 +156,7 @@ const MlirServerDialog = ({
                     <InputGroup
                         id='mlir-server-name'
                         value={connection.name}
-                        onChange={(e) => updateConnection({ name: e.target.value })}
+                        onChange={(e) => updateName(e.target.value)}
                     />
                 </FormGroup>
 
@@ -162,13 +168,13 @@ const MlirServerDialog = ({
                     <InputGroup
                         id='mlir-server-username'
                         value={connection.username}
-                        onChange={(e) => updateConnection({ username: e.target.value })}
+                        onChange={(e) => updateTarget({ username: e.target.value })}
                     />
                 </FormGroup>
 
                 <FormGroup
                     label='SSH host'
-                    subLabel='Machine you SSH into (not localhost — use the remote hostname or SSH config alias)'
+                    subLabel={MLIR_SSH_HOST_SUBLABEL}
                     labelFor='mlir-server-host'
                 >
                     <InputGroup
@@ -178,7 +184,7 @@ const MlirServerDialog = ({
                         value={connection.host}
                         onChange={(e) => {
                             selectCustom();
-                            updateConnection({ host: e.target.value });
+                            updateTarget({ host: e.target.value });
                         }}
                     />
                     {isLocalhostSshHost(connection.host) && (
@@ -201,9 +207,9 @@ const MlirServerDialog = ({
                             const number = Number.parseInt(e.target.value, 10);
 
                             if (e.target.value === '') {
-                                updateConnection({ sshPort: 0 });
+                                updateTarget({ sshPort: 0 });
                             } else if (number > 0 && number < 99999) {
-                                updateConnection({ sshPort: number });
+                                updateTarget({ sshPort: number });
                             }
                         }}
                     />
@@ -221,9 +227,9 @@ const MlirServerDialog = ({
                             const number = Number.parseInt(e.target.value, 10);
 
                             if (e.target.value === '') {
-                                updateConnection({ port: 0 });
+                                updateTarget({ port: 0 });
                             } else if (number > 0 && number < 99999) {
-                                updateConnection({ port: number });
+                                updateTarget({ port: number });
                             }
                         }}
                     />
@@ -238,7 +244,7 @@ const MlirServerDialog = ({
                         id='mlir-server-identity'
                         placeholder={SSH_IDENTITY_FILE_PLACEHOLDER}
                         value={connection.identityFile ?? ''}
-                        onChange={(e) => updateConnection({ identityFile: e.target.value.trim() || undefined })}
+                        onChange={(e) => updateTarget({ identityFile: e.target.value.trim() || undefined })}
                     />
                 </FormGroup>
 

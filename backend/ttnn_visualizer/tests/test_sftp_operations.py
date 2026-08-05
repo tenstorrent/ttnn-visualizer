@@ -114,17 +114,16 @@ class TestRemoteFindShellQuoting:
         assert remote_cmd.count(shlex.quote(self._APOSTROPHE_FOLDER)) == 2
         assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
 
-    def test_find_folders_by_files_quotes_each_directory_it_probes(self, connection):
-        # The directory comes back from the remote `find`, so it carries whatever the
-        # remote filesystem holds rather than anything we validated on the way out.
-        directory = "/remote/reports/o'brien"
-        listing = _completed(f"{directory}\n")
-        with patch("subprocess.run", side_effect=[listing, _completed("")]) as run:
-            find_folders_by_files(connection, "/remote/reports", ["config.json"])
+    def test_find_folders_by_files_quotes_each_probed_file_name(self, connection):
+        # find substitutes {} on the remote side, so the directory is never interpolated
+        # here — only the file names are, and they still have to survive the remote shell.
+        file_name = "o'brien.json"
+        with patch("subprocess.run", return_value=_completed("")) as run:
+            find_folders_by_files(connection, "/remote/reports", [file_name])
 
-        probe_cmd = _remote_shell_command_from_run(run)
-        assert shlex.quote(f"{directory}/config.json") in probe_cmd
-        assert f"test -f '{directory}/config.json'" not in probe_cmd
+        remote_cmd = _remote_shell_command_from_run(run)
+        assert f"-exec test -f {{}}/{shlex.quote(file_name)} ';'" in remote_cmd
+        assert f"{{}}/{file_name}" not in remote_cmd
 
     def test_get_remote_performance_folder_quotes_the_folder(self, connection):
         with patch("subprocess.run", return_value=_completed("1700000000")) as run:
@@ -149,6 +148,55 @@ class TestRemoteFindShellQuoting:
         # the quoting early, while the wildcard is left outside quotes to expand.
         assert shlex.split(remote_cmd) == ["ls", "-1", pattern]
         assert "'*'" not in remote_cmd
+
+
+class TestFindFoldersByFiles:
+    """The scan is one remote `find`, not a listing plus a probe per directory."""
+
+    def test_probes_every_candidate_over_a_single_ssh_connection(self, connection):
+        listing = _completed("/remote/reports/a\n/remote/reports/b\n")
+        with patch("subprocess.run", return_value=listing) as run:
+            matched = find_folders_by_files(
+                connection, "/remote/reports", ["config.json", "db.sqlite"]
+            )
+
+        # A connection per candidate directory is a full SSH handshake each, serially.
+        assert run.call_count == 1
+        assert matched == ["/remote/reports/a", "/remote/reports/b"]
+
+        remote_cmd = _remote_shell_command_from_run(run)
+        # Either file qualifies a directory, and -print is explicit because find only
+        # applies the default action when no other action is present.
+        assert " -o " in remote_cmd
+        assert remote_cmd.endswith("-print")
+        # Quoted so the remote shell hands them to find instead of grouping/separating.
+        assert "'('" in remote_cmd and "')'" in remote_cmd
+
+    def test_blank_lines_in_the_listing_are_dropped(self, connection):
+        with patch(
+            "subprocess.run",
+            return_value=_completed("/remote/reports/a\n\n   \n/remote/reports/b\n"),
+        ):
+            matched = find_folders_by_files(
+                connection, "/remote/reports", ["config.json"]
+            )
+
+        assert matched == ["/remote/reports/a", "/remote/reports/b"]
+
+    def test_no_file_names_makes_no_connection(self, connection):
+        # Without a probe the find would match every directory, which is the opposite
+        # of "folders containing one of these files".
+        with patch("subprocess.run") as run:
+            assert find_folders_by_files(connection, "/remote/reports", []) == []
+
+        assert run.call_count == 0
+
+    def test_no_matches_returns_empty(self, connection):
+        with patch("subprocess.run", return_value=_completed("")):
+            assert (
+                find_folders_by_files(connection, "/remote/reports", ["config.json"])
+                == []
+            )
 
 
 class TestGetRemoteFileList:

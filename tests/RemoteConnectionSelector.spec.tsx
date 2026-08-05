@@ -127,6 +127,31 @@ it('renders an edit and delete action on every connection row', async () => {
     expect(screen.getByLabelText(getDeleteConnectionLabel(SECOND_CONNECTION))).toBeInTheDocument();
 });
 
+// Edit and delete used to be toolbar buttons outside the popover; moving them into the listbox
+// makes their reachability the selector's problem. The row wrapper is presentational so the option
+// stays owned by the listbox, and the actions must remain real focusable buttons inside it.
+it('exposes the row actions as focusable buttons owned by the listbox', async () => {
+    renderSelector();
+    await openConnectionDropdown();
+
+    const listbox = document.querySelector('[role="listbox"]');
+    const deleteAction = screen.getByRole('button', { name: getDeleteConnectionLabel(FIRST_CONNECTION) });
+
+    expect(listbox).not.toBeNull();
+    expect(listbox?.querySelectorAll('[role="option"]')).toHaveLength(2);
+    // A wrapper carrying a role of its own would sit between the listbox and its options.
+    expect(listbox?.querySelector(`[data-testid="${TEST_IDS.REMOTE_CONNECTION_ROW}"]`)).toHaveAttribute('role', 'none');
+
+    deleteAction.focus();
+
+    expect(deleteAction).toHaveFocus();
+    expect(deleteAction).not.toHaveAttribute('tabindex', '-1');
+
+    fireEvent.click(deleteAction);
+
+    expect(screen.getByText(/Are you sure you want to delete/)).toBeInTheDocument();
+});
+
 it('marks only the selected connection as the active row', async () => {
     renderSelector({ connection: SECOND_CONNECTION });
     await openConnectionDropdown(SECOND_CONNECTION);

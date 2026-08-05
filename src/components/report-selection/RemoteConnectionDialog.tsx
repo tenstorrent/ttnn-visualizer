@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
 import {
+    SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
     SSH_IDENTITY_FILE_SUBLABEL,
@@ -103,12 +104,16 @@ const RemoteConnectionDialog = ({
         connection.port &&
         (connection.profilerPath?.trim() || connection.performancePath?.trim());
 
-    // Everything the test actually exercises — the SSH target, the credentials, and the
-    // paths it stats — invalidates a previous result. The connection name doesn't.
-    const updateConnection = (changes: Partial<RemoteConnection>) => {
+    // Everything the test actually exercises — the SSH target, the credentials, and the paths it
+    // stats — invalidates a previous result. The name isn't part of the target, so it goes through
+    // updateName instead: saving is gated on a passing test, and renaming shouldn't cost a fresh
+    // SSH round-trip. Named for the distinction so a new field can't silently take the wrong path.
+    const updateTarget = (changes: Partial<RemoteConnection>) => {
         setConnection({ ...connection, ...changes });
         setConnectionTests([]);
     };
+
+    const updateName = (name: string) => setConnection({ ...connection, name });
 
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
@@ -157,7 +162,7 @@ const RemoteConnectionDialog = ({
         selectHost(host.host);
         const defaults = getDefaultConnection();
 
-        updateConnection(
+        updateTarget(
             getSshConfigHostPrefill(host, {
                 name: connection.name,
                 username: connection.username,
@@ -194,13 +199,13 @@ const RemoteConnectionDialog = ({
                         id='remote-connection-name'
                         key='name'
                         value={connection.name}
-                        onChange={(e) => setConnection({ ...connection, name: e.target.value })}
+                        onChange={(e) => updateName(e.target.value)}
                     />
                 </FormGroup>
 
                 <FormGroup
                     label='SSH Host'
-                    subLabel='SSH host alias or hostname (e.g. work-gpu or localhost)'
+                    subLabel={SSH_HOST_SUBLABEL}
                     labelFor='remote-ssh-host'
                 >
                     <InputGroup
@@ -208,7 +213,7 @@ const RemoteConnectionDialog = ({
                         value={connection.host}
                         onChange={(e) => {
                             selectCustom();
-                            updateConnection({ host: e.target.value });
+                            updateTarget({ host: e.target.value });
                         }}
                     />
                 </FormGroup>
@@ -222,7 +227,7 @@ const RemoteConnectionDialog = ({
                         id='remote-ssh-username'
                         value={connection.username ?? ''}
                         onChange={(e) => {
-                            updateConnection({ username: e.target.value });
+                            updateTarget({ username: e.target.value });
                         }}
                     />
                 </FormGroup>
@@ -239,9 +244,9 @@ const RemoteConnectionDialog = ({
                             const number = Number.parseInt(e.target.value, 10);
 
                             if (e.target.value === '') {
-                                updateConnection({ port: undefined });
+                                updateTarget({ port: undefined });
                             } else if (number > 0 && number < 99999) {
-                                updateConnection({ port: number });
+                                updateTarget({ port: number });
                             }
                         }}
                     />
@@ -256,7 +261,7 @@ const RemoteConnectionDialog = ({
                         id='remote-ssh-identity'
                         placeholder={SSH_IDENTITY_FILE_PLACEHOLDER}
                         value={connection.identityFile ?? ''}
-                        onChange={(e) => updateConnection({ identityFile: e.target.value.trim() || undefined })}
+                        onChange={(e) => updateTarget({ identityFile: e.target.value.trim() || undefined })}
                     />
                 </FormGroup>
 
@@ -268,7 +273,7 @@ const RemoteConnectionDialog = ({
                     <InputGroup
                         id='remote-memory-path'
                         value={connection.profilerPath}
-                        onChange={(e) => updateConnection({ profilerPath: e.target.value })}
+                        onChange={(e) => updateTarget({ profilerPath: e.target.value })}
                     />
                 </FormGroup>
 
@@ -280,7 +285,7 @@ const RemoteConnectionDialog = ({
                     <InputGroup
                         id='remote-performance-path'
                         value={connection.performancePath ?? ''}
-                        onChange={(e) => updateConnection({ performancePath: e.target.value })}
+                        onChange={(e) => updateTarget({ performancePath: e.target.value })}
                     />
                 </FormGroup>
 

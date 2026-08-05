@@ -30,6 +30,8 @@ DEFAULT_SSH_CONFIG_PATH = Path.home() / ".ssh" / "config"
 # loses hosts from the picker, even though real configs nest one or two levels.
 MAX_INCLUDE_DEPTH = 16
 _KEYWORD_SEPARATOR_PATTERN = re.compile(r"([^\s=]+)\s*=?\s*(.*)")
+# An argument containing none of these splits the same way with or without a lexer.
+_QUOTING_CHARACTERS = ('"', "'", "\\")
 
 
 class SshConfigHost(SerializeableModel):
@@ -231,6 +233,24 @@ def _first_set(existing: Optional[T], candidate: Optional[T]) -> Optional[T]:
     return existing if existing is not None else candidate
 
 
+def _split_tolerantly(argument: str) -> List[str]:
+    """Split an argument into tokens, honouring quotes only when there are any.
+
+    ``shlex.split`` builds a lexer and reads the string a character at a time, and it
+    dominated the parse of a large generated config — the sort the module docstring
+    anticipates. Arguments carrying no quote or escape character are the overwhelming
+    majority and split identically on whitespace, so the lexer is reserved for the rest.
+    Unbalanced quotes fall back to the plain split rather than losing the line.
+    """
+    if not any(char in argument for char in _QUOTING_CHARACTERS):
+        return argument.split()
+
+    try:
+        return shlex.split(argument)
+    except ValueError:
+        return argument.split()
+
+
 def _unquote_argument(argument: str) -> str:
     """Drop the quoting OpenSSH accepts around a keyword's value.
 
@@ -241,10 +261,7 @@ def _unquote_argument(argument: str) -> str:
     if not argument:
         return argument
 
-    try:
-        tokens = shlex.split(argument)
-    except ValueError:
-        return argument
+    tokens = _split_tolerantly(argument)
 
     return tokens[0] if tokens else ""
 
@@ -288,10 +305,8 @@ def _split_ssh_config_line(line: str) -> tuple[Optional[str], str]:
 def _tokenise_host_patterns(argument: str) -> List[str]:
     if not argument:
         return []
-    try:
-        return shlex.split(argument)
-    except ValueError:
-        return argument.split()
+
+    return _split_tolerantly(argument)
 
 
 def _is_non_literal_host_pattern(pattern: str) -> bool:
@@ -301,11 +316,7 @@ def _is_non_literal_host_pattern(pattern: str) -> bool:
 
 
 def _expand_include_paths(argument: str, base_dir: Path) -> List[Path]:
-    try:
-        patterns = shlex.split(argument)
-    except ValueError:
-        patterns = argument.split()
-
+    patterns = _split_tolerantly(argument)
     resolved: List[Path] = []
     for pattern in patterns:
         expanded = os.path.expanduser(pattern)

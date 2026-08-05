@@ -219,5 +219,25 @@ export const describeSshConfigPrefillContract = (
             expect(screen.getByText(invalidatedTestMessage)).toBeInTheDocument();
             expect(getButtonWithText(saveLabel)).toBeDisabled();
         });
+
+        it('keeps a passing test result when only the name changes', async () => {
+            useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: ALIAS, user: ALIAS_USER }]));
+            mockPassingTest();
+
+            renderDialog();
+
+            fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my lab box' } });
+            fireEvent.change(screen.getByLabelText(hostLabel), { target: { value: 'aus-wh-05' } });
+            fireEvent.click(getButtonWithText(runTestsLabel));
+            await waitFor(() => expect(getButtonWithText(saveLabel)).toBeEnabled());
+
+            fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'renamed box' } });
+
+            // The name isn't part of what the test exercised, so discarding the result here would
+            // make a rename cost a fresh SSH round-trip before the edit could be saved at all.
+            expect(screen.getByText(passingTestMessage)).toBeInTheDocument();
+            expect(getButtonWithText(saveLabel)).toBeEnabled();
+            expect(screen.getByLabelText('Name')).toHaveValue('renamed box');
+        });
     });
 };

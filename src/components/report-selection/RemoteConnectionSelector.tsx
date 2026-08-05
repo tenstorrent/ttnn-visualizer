@@ -47,8 +47,11 @@ const RemoteConnectionSelector = ({
         }
 
         return (
+            // Presentational for the same reason as the other selectors: MenuItem owns the
+            // <li role="option">, so this wrapper must not sit between it and the listbox.
             <div
                 className='remote-connection-menu-item'
+                role='none'
                 data-testid={TEST_IDS.REMOTE_CONNECTION_ROW}
                 key={remoteConnectionKey(item)}
             >

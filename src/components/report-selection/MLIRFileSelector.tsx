@@ -55,8 +55,11 @@ const MLIRFileSelector = () => {
         }
 
         return (
+            // Presentational for the same reason as the other selectors: MenuItem owns the
+            // <li role="option">, so this wrapper must not sit between it and the listbox.
             <div
                 className='mlir-server-menu-item'
+                role='none'
                 data-testid={TEST_IDS.MLIR_SERVER_ROW}
                 key={mlirServerKey(server)}
             >

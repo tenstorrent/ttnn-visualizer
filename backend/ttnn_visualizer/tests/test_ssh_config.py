@@ -243,6 +243,21 @@ Host "unclosed
     assert hosts['"unclosed'].user == '"carol'
 
 
+def test_load_ssh_config_hosts_takes_one_token_from_an_unbalanced_value(tmp_path: Path):
+    # The fallback for unparseable quoting is a plain whitespace split, so a value the
+    # lexer rejects still yields its first token rather than the rest of the line.
+    config = _write_config(
+        tmp_path,
+        """
+Host lab
+    User "carol smith
+""",
+    )
+
+    hosts = {host.host: host for host in load_ssh_config_hosts(config).hosts}
+    assert hosts["lab"].user == '"carol'
+
+
 def test_load_ssh_config_hosts_existing_but_unreadable(
     tmp_path: Path, monkeypatch, caplog
 ):

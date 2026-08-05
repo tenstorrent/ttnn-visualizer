@@ -1035,15 +1035,24 @@ def find_folders_by_files(
     remote_connection: RemoteConnection, root_folder: str, file_names: List[str]
 ) -> List[str]:
     """Given a remote path, return a list of top-level folders that contain any of the specified files."""
-    if not root_folder:
+    if not root_folder or not file_names:
         return []
 
-    matched_folders: List[str] = []
-
-    # Build SSH command to find directories in root_folder (never prompts for password)
     quoted_root = shlex.quote(root_folder)
+    # The probes run inside the same remote `find` as the listing. Opening a connection
+    # per candidate directory cost a full TCP and SSH handshake each, serially, and
+    # _ssh_cmd_prefix sets up no multiplexing to amortise them — on a reports root with a
+    # hundred folders that was seconds of setup for milliseconds of `test -f`.
+    #
+    # `(`, `)` and the `;` terminator are quoted so the remote shell passes them through
+    # to find rather than reading them as grouping and command separators. `{}` is
+    # substituted by find on the remote side, so the directory needs no quoting here.
+    probes = " -o ".join(
+        f"-exec test -f {{}}/{shlex.quote(file_name)} ';'" for file_name in file_names
+    )
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find {quoted_root} -maxdepth 1 -type d -not -path {quoted_root}",
+        f"find {quoted_root} -maxdepth 1 -type d -not -path {quoted_root} "
+        f"'(' {probes} ')' -print",
     ]
 
     try:
@@ -1052,40 +1061,11 @@ def find_folders_by_files(
             capture_output=True,
             text=True,
             check=True,
+            # The probes are part of this call now, so it inherits the longer budget.
             timeout=_ssh_subprocess_timeout_seconds(),
         )
 
-        directories = result.stdout.strip().splitlines()
-
-        # For each directory, check if it contains any of the specified files
-        for directory in directories:
-            directory = directory.strip()
-            if not directory:
-                continue
-
-            # Build SSH command to check for files in this directory
-            file_checks = [
-                f"test -f {shlex.quote(f'{directory}/{file_name}')}"
-                for file_name in file_names
-            ]
-            check_cmd = _ssh_cmd_prefix(remote_connection) + [
-                f"({' || '.join(file_checks)})",
-            ]
-
-            try:
-                check_result = subprocess.run(
-                    check_cmd,
-                    capture_output=True,
-                    check=True,
-                    timeout=_ssh_remote_check_timeout_seconds(),
-                )
-                # If command succeeds, at least one file exists
-                matched_folders.append(directory)
-            except subprocess.CalledProcessError:
-                # None of the files exist in this directory, skip it
-                continue
-
-        return matched_folders
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 255:  # SSH protocol errors

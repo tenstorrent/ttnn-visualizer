@@ -111,6 +111,10 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
+        // Loading disables the Select, which closes the popover and takes the row actions with it,
+        // so nothing can start a second delete — but the alert already open is the exposed half.
+        expect(screen.queryByLabelText(deleteLabel(folders[0]))).not.toBeInTheDocument();
+
         // The alert is a sibling of the Select rather than a child of its item renderer, so it
         // stays mounted when the popover closes — confirming while loading must be a no-op.
         fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));

@@ -10,6 +10,16 @@
 
 export const SSH_USERNAME_SUBLABEL = 'Username to connect with (overrides SSH config User)';
 
+export const SSH_HOST_SUBLABEL = 'SSH host alias or hostname (e.g. work-gpu or localhost)';
+
+/**
+ * The MLIR variant deliberately differs: that flow SSHes to the host and then probes the MLIR
+ * server on *that* machine's loopback, so localhost names this machine and is rejected outright
+ * by the dialog. Both live here so the divergence is visible rather than looking like drift.
+ */
+export const MLIR_SSH_HOST_SUBLABEL =
+    'Machine you SSH into (not localhost — use the remote hostname or SSH config alias)';
+
 /** Accessible name for the identity input; both dialogs and their tests address it by this. */
 export const SSH_IDENTITY_FILE_LABEL = 'SSH identity file (optional)';
 

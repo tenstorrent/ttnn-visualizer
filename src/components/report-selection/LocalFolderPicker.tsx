@@ -65,9 +65,10 @@ const LocalFolderPicker = ({
     // Gates the trash button and its confirmation together — rendering one without the other leaves
     // either a delete with no confirmation step or an alert nothing can open.
     const canDeleteReports = !!handleDelete && !isServerMode;
-    // Loading also blocks trash while an open Select popover can still render
-    // items after the trigger disables.
-    const isDeleteDisabled = isServerMode || loading;
+    // Loading disables the Select, so in practice the popover and its rows are already gone by the
+    // time this matters; the guard on the alert's onConfirm is what actually stops a delete landing
+    // mid-load, since the alert outlives the popover. canDeleteReports covers SERVER_MODE.
+    const isDeleteDisabled = loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 
     // Linked first, unknown next, failed links last — preserve server order within each group.
@@ -90,8 +91,12 @@ const LocalFolderPicker = ({
         const folderId = getReportId(folder.path, folder.reportName);
 
         return (
+            // MenuItem renders the <li role="option"> itself, so this layout wrapper can't be one
+            // without nesting list items. Marking it presentational keeps the option an owned child
+            // of the listbox in the accessibility tree instead of hiding it behind a plain div.
             <div
                 className='folder-picker-menu-item'
+                role='none'
                 data-testid={TEST_IDS.FOLDER_PICKER_ROW}
                 key={`${folder.path} - ${folder.reportName}`}
             >

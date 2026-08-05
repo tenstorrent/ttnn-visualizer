@@ -7,7 +7,9 @@ import { useMemo } from 'react';
 import {
     SSH_CONFIG_HOST_CUSTOM,
     SSH_CONFIG_HOST_CUSTOM_LABEL,
+    SSH_CONFIG_HOST_INPUT_ID,
     SSH_CONFIG_HOST_LABEL,
+    SSH_CONFIG_HOST_SUBLABEL,
 } from '../../definitions/SshConfigHostPicker';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getSshConfigHostLabel } from '../../functions/formatting';
@@ -70,11 +72,11 @@ const SshConfigHostPicker = ({ value, enabled = true, onSelectCustom, onSelectHo
     return (
         <FormGroup
             label={SSH_CONFIG_HOST_LABEL}
-            subLabel='Prefill from ~/.ssh/config'
-            labelFor='ssh-config-host-picker'
+            subLabel={SSH_CONFIG_HOST_SUBLABEL}
+            labelFor={SSH_CONFIG_HOST_INPUT_ID}
         >
             <HTMLSelect
-                id='ssh-config-host-picker'
+                id={SSH_CONFIG_HOST_INPUT_ID}
                 fill
                 value={aliases.has(value) ? value : SSH_CONFIG_HOST_CUSTOM}
                 onChange={(event) => handleChange(event.currentTarget.value)}

@@ -81,7 +81,7 @@ def test_empty_configured_origins_trust_nothing():
     assert _build_allowed_origins("", flask_env="development", **DEV_ARGS) == []
 
 
-def test_config_defaults_to_the_apps_own_origin():
+def test_config_defaults_to_localhost_on_the_serving_port():
     origins = DefaultConfig.ALLOWED_ORIGINS
 
     assert isinstance(origins, list)
@@ -112,6 +112,35 @@ def test_config_honours_configured_origins(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://ttnn-visualizer.tenstorrent.com")
 
     assert DefaultConfig.ALLOWED_ORIGINS == ["https://ttnn-visualizer.tenstorrent.com"]
+
+
+def test_env_override_leaves_the_allowlist_parsed(monkeypatch):
+    # The path the hosted deployment actually takes: ``Config()`` runs this on an instance and
+    # ``app.config.from_object`` then reads it. ``ALLOWED_ORIGINS`` is a non-data descriptor, so
+    # copying the raw environment string onto the instance would shadow it and hand flask_cors a
+    # single comma-joined origin that can never match. Every assertion above reads the class
+    # instead, where no instance attribute exists to do the shadowing.
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://a.example,https://b.example")
+
+    config = DefaultConfig()
+    config.override_with_env_variables()
+
+    assert config.ALLOWED_ORIGINS == ["https://a.example", "https://b.example"]
+    assert config.to_dict()["ALLOWED_ORIGINS"] == [
+        "https://a.example",
+        "https://b.example",
+    ]
+
+
+def test_env_override_still_applies_to_plain_values(monkeypatch):
+    # The descriptor skip is keyed on ``__get__``, so it must not quietly widen into
+    # "stop overriding config" for ordinary string values.
+    monkeypatch.setenv("BASE_PATH", "/visualizer/")
+
+    config = DefaultConfig()
+    config.override_with_env_variables()
+
+    assert config.BASE_PATH == "/visualizer/"
 
 
 # engine.io rejects an unlisted Origin with a 400 rather than merely withholding CORS

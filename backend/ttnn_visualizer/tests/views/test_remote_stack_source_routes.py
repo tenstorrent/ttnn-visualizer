@@ -6,7 +6,30 @@ from http import HTTPStatus
 from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer.extensions import db
+from ttnn_visualizer.models import InstanceTable
 from ttnn_visualizer.tests.report_schemas import SCHEMA_V2_1
+
+STORED_CONNECTION = {
+    "name": "lab",
+    "username": "tt",
+    "host": "worker-01.internal",
+    "port": 22,
+    "profilerPath": "/remote/reports",
+}
+
+
+def _store_remote_connection(app, instance_id):
+    """Attach a saved SSH connection to an existing instance.
+
+    Only ``@local_only`` endpoints write this column, so a hosted deployment should never
+    produce one — but a database carried over from a local install would, and nothing
+    revalidates it at read time.
+    """
+    with app.app_context():
+        instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        instance.remote_connection = STORED_CONNECTION
+        db.session.commit()
 
 
 def test_stack_source_availability_requires_instance(client):
@@ -47,6 +70,97 @@ def test_stack_source_content_forbidden_in_server_mode_without_remote(
         query_string={"instanceId": instance_id, "filePath": "/any/path"},
     )
     assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+# These two are the fail-open case: neither endpoint is @local_only, and both used to
+# reach the SSH branch on a stored connection before consulting SERVER_MODE. That let an
+# unauthenticated request to the hosted deployment make the server open an outbound SSH
+# connection to an internal host and hand back whatever it read.
+def test_stack_source_availability_does_not_ssh_in_server_mode(
+    app, client, make_report
+):
+    instance_id = make_report()
+    _store_remote_connection(app, instance_id)
+
+    with patch("ttnn_visualizer.views.SSHClient") as ssh_client:
+        response = client.get(
+            "/api/remote/stack-trace/test",
+            query_string={"instanceId": instance_id, "filePath": "/any/path"},
+        )
+
+    ssh_client.assert_not_called()
+    assert response.status_code == HTTPStatus.OK
+    assert response.get_json() == {"available": False, "source": None}
+
+
+def test_stack_source_read_does_not_ssh_in_server_mode(app, client, make_report):
+    instance_id = make_report()
+    _store_remote_connection(app, instance_id)
+
+    with patch("ttnn_visualizer.views.SSHClient") as ssh_client:
+        response = client.get(
+            "/api/remote/stack-trace/read",
+            query_string={"instanceId": instance_id, "filePath": "/any/path"},
+        )
+
+    ssh_client.assert_not_called()
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_stack_source_read_still_uses_a_stored_connection_locally(
+    app, client, make_report
+):
+    # The gate is SERVER_MODE, not the stored connection: a local install must still read
+    # the file over SSH, or gating the hosted case would have removed the feature.
+    instance_id = make_report()
+    _store_remote_connection(app, instance_id)
+    app.config["SERVER_MODE"] = False
+
+    with (
+        patch("ttnn_visualizer.views.SSHClient"),
+        patch(
+            "ttnn_visualizer.views.read_stack_source_remote",
+            return_value=("print('remote')\n", "/remote/resolved.py", False),
+        ) as read_remote,
+    ):
+        response = client.get(
+            "/api/remote/stack-trace/read",
+            query_string={"instanceId": instance_id, "filePath": "/any/path"},
+        )
+
+    read_remote.assert_called_once()
+    assert response.status_code == HTTPStatus.OK
+    assert response.get_json() == {
+        "content": "print('remote')\n",
+        "resolved_path": "/remote/resolved.py",
+    }
+
+
+def test_stack_source_read_from_report_db_wins_over_a_stored_connection(
+    app, client, make_report
+):
+    # The report DB is consulted before either branch, so an uploaded report still serves
+    # its own bundled sources under SERVER_MODE — the gate above must not shadow that.
+    instance_id = make_report(
+        schema_sql=SCHEMA_V2_1,
+        inserts_sql="""
+        INSERT INTO source_files VALUES (1, '/proj/model.py', 'print(1)\n');
+        """,
+    )
+    _store_remote_connection(app, instance_id)
+
+    with patch("ttnn_visualizer.views.SSHClient") as ssh_client:
+        response = client.get(
+            "/api/remote/stack-trace/read",
+            query_string={"instanceId": instance_id, "filePath": "/proj/model.py"},
+        )
+
+    ssh_client.assert_not_called()
+    assert response.status_code == HTTPStatus.OK
+    assert response.get_json() == {
+        "content": "print(1)\n",
+        "resolved_path": "/proj/model.py",
+    }
 
 
 def test_stack_source_content_local_read_sets_no_store(app, client, make_report):
