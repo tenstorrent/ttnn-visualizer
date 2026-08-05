@@ -127,6 +127,18 @@ interface EthPort {
     chan: EthChannel;
 }
 
+// Endpoint uids are built once, when connections are recorded, and carried to the segment
+// pass. Rebuilding them there instead would let the two constructions drift, which renders
+// no links at all rather than failing loudly. #1772
+interface ResolvedLink {
+    a: RenderChip;
+    b: RenderChip;
+    uidA: string;
+    uidB: string;
+    interHost: boolean;
+    index: number;
+}
+
 // Cheap deterministic non-negative hash for distributing ports across a small
 // candidate edge list. Quality only needs to be uniform over 2-3 buckets. #1510
 const hashLinkKey = (key: string): number => {
@@ -270,21 +282,27 @@ function buildClusterRenderModel(
         canonicalLinkKeyByUid.set(uidB, key);
     };
 
-    for (const link of intraHostLinks) {
+    const resolvedLinks: ResolvedLink[] = [];
+
+    intraHostLinks.forEach((link, index) => {
         const a = chipsByKey.get(chipKey(link.rank, link.a.chip));
         const b = chipsByKey.get(chipKey(link.rank, link.b.chip));
         if (a && b) {
-            rememberLinkKey(...recordConnection(a, link.a.chan, b, link.b.chan));
+            const [uidA, uidB] = recordConnection(a, link.a.chan, b, link.b.chan);
+            rememberLinkKey(uidA, uidB);
+            resolvedLinks.push({ a, b, uidA, uidB, interHost: false, index });
         }
-    }
+    });
 
-    for (const link of interHostLinks) {
+    interHostLinks.forEach((link, index) => {
         const a = chipsByKey.get(chipKey(link.a.rank, link.a.chip));
         const b = chipsByKey.get(chipKey(link.b.rank, link.b.chip));
         if (a && b) {
-            rememberLinkKey(...recordConnection(a, link.a.chan, b, link.b.chan));
+            const [uidA, uidB] = recordConnection(a, link.a.chan, b, link.b.chan);
+            rememberLinkKey(uidA, uidB);
+            resolvedLinks.push({ a, b, uidA, uidB, interHost: true, index });
         }
-    }
+    });
 
     // Ascending to match the previous arch-list order, which was channel order; dedup
     // guards a channel appearing on two links.
@@ -529,19 +547,20 @@ function buildClusterRenderModel(
     const pushSegment = (
         a: RenderChip,
         b: RenderChip,
-        uidA: string | undefined,
-        uidB: string | undefined,
+        uidA: string,
+        uidB: string,
         interHost: boolean,
         prefix: string,
         index: number,
     ) => {
-        const portA = uidA ? portPixelByUid.get(uidA) : undefined;
-        const portB = uidB ? portPixelByUid.get(uidB) : undefined;
+        const portA = portPixelByUid.get(uidA);
+        const portB = portPixelByUid.get(uidB);
+        // A uid can exist without a placed port when its chord direction is degenerate.
         if (!portA || !portB) {
             return;
         }
         // Inter-host always curves; intra-host curves only when long-haul.
-        const longHaul = !interHost && (longHaulUids.has(uidA ?? '') || longHaulUids.has(uidB ?? ''));
+        const longHaul = !interHost && (longHaulUids.has(uidA) || longHaulUids.has(uidB));
         const useCurve = interHost || longHaul;
         linkSegments.push({
             key: `${prefix}__${uidA}__${uidB}__${index}`,
@@ -556,36 +575,8 @@ function buildClusterRenderModel(
         });
     };
 
-    intraHostLinks.forEach((link, index) => {
-        const a = chipsByKey.get(chipKey(link.rank, link.a.chip));
-        const b = chipsByKey.get(chipKey(link.rank, link.b.chip));
-        if (a && b) {
-            pushSegment(
-                a,
-                b,
-                ethUid(a.rank, a.id, link.a.chan),
-                ethUid(b.rank, b.id, link.b.chan),
-                false,
-                'intra',
-                index,
-            );
-        }
-    });
-
-    interHostLinks.forEach((link, index) => {
-        const a = chipsByKey.get(chipKey(link.a.rank, link.a.chip));
-        const b = chipsByKey.get(chipKey(link.b.rank, link.b.chip));
-        if (a && b) {
-            pushSegment(
-                a,
-                b,
-                ethUid(a.rank, a.id, link.a.chan),
-                ethUid(b.rank, b.id, link.b.chan),
-                true,
-                'inter',
-                index,
-            );
-        }
+    resolvedLinks.forEach(({ a, b, uidA, uidB, interHost, index }) => {
+        pushSegment(a, b, uidA, uidB, interHost, interHost ? 'inter' : 'intra', index);
     });
 
     const neighboursByChip = new Map<string, Set<string>>();

@@ -39,6 +39,7 @@ const topology = (arch: Record<number, string>): ClusterTopology =>
     }) as unknown as ClusterTopology;
 
 const WORMHOLE = { 0: 'wormhole_b0', 1: 'wormhole_b0' };
+const BLACKHOLE = { 0: 'blackhole', 1: 'blackhole' };
 // Neither substring-matches a baked descriptor, so it resolves to no design.
 const UNKNOWN_ARCH = { 0: 'quasar', 1: 'quasar' };
 
@@ -52,6 +53,7 @@ vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
 
 const ports = () => [...document.querySelectorAll('.eth')];
 const portLabels = () => ports().map((el) => el.querySelector('span')?.textContent ?? '');
+const links = () => [...document.querySelectorAll('.cluster-link')];
 
 // The component observes its scroll container to fit the topology; jsdom has no
 // ResizeObserver and the fitted size is irrelevant to what these tests assert. Has to be
@@ -89,6 +91,37 @@ describe('Cluster with a recognised arch', () => {
 
         expect(document.querySelectorAll('.mmio').length).toBeGreaterThan(0);
     });
+
+    // A segment only draws when the uid built at the link pass matches the one the port
+    // pass registered. Those are separate constructions of the same key, so a drift
+    // between them silently drops every link while ports, labels and markers all survive.
+    it('draws a segment for the link', () => {
+        render(<ClusterRenderer />);
+
+        expect(links()).toHaveLength(1);
+    });
+});
+
+describe('Cluster with a Blackhole arch', () => {
+    beforeEach(() => {
+        clusterArch = BLACKHOLE;
+    });
+
+    // Blackhole's eth channel map is disjoint from Wormhole's, so these labels are what
+    // separates "resolved per chip" from "resolved to Wormhole regardless" — the defect
+    // this ticket uncovered, where every report was enriched from the wormhole list.
+    it('labels ports from the Blackhole eth list, not Wormhole’s', () => {
+        render(<ClusterRenderer />);
+
+        // Blackhole eth: [4] = '5-1', [6] = '7-1'. Wormhole would give '7-0' / '6-0'.
+        expect(portLabels().sort()).toEqual(['0-0-5-1', '0-1-7-1']);
+    });
+
+    it('renders a PCIe marker on the mmio chip', () => {
+        render(<ClusterRenderer />);
+
+        expect(document.querySelectorAll('.mmio').length).toBeGreaterThan(0);
+    });
 });
 
 describe('Cluster with an unrecognised arch', () => {
@@ -101,6 +134,13 @@ describe('Cluster with an unrecognised arch', () => {
 
         // The link is the only source of channels, so both endpoints must still appear.
         expect(ports()).toHaveLength(2);
+    });
+
+    // The point of the ticket: links resolve from the cluster descriptor alone.
+    it('still draws a segment for the link', () => {
+        render(<ClusterRenderer />);
+
+        expect(links()).toHaveLength(1);
     });
 
     it('does not fall back to the unsupported-setup panel', () => {

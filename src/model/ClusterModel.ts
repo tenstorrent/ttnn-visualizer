@@ -60,9 +60,9 @@ export type RemoteEthernetConnectionRaw = [
 ];
 
 export interface ClusterModel {
-    // Keyed by chip id, as the YAML writes it. Typed as an array previously, which made
-    // `arch.length` undefined and silently routed every report to the Wormhole default.
-    arch: Record<ChipId, string>;
+    // Keyed by chip id, as the YAML writes it. Optional because a descriptor may omit it
+    // entirely, in which case chips render without arch enrichment.
+    arch?: Record<ChipId, string>;
     chips: {
         [key: ChipId]: ClusterCoordinates;
     };
