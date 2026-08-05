@@ -9,7 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import 'styles/components/ClusterView.scss';
 import { stringToArchitecture } from '../../functions/stringToArchitecture';
-import { getChipDesign, useGetClusterTopology } from '../../hooks/useAPI';
+import { useGetClusterTopology } from '../../hooks/useAPI';
+import { getChipDesign } from '../../functions/getChipDesign';
 import {
     FALLBACK_PER_HOST_COLS,
     hostHasMeshCoords,
@@ -23,6 +24,7 @@ import {
     ClusterCoordinates,
     ClusterTopology,
     EthChannel,
+    EthPort,
 } from '../../model/ClusterModel';
 import {
     CHIP_GAP,
@@ -115,17 +117,13 @@ const chipKey = (rank: number, id: number) => `${rank}-${id}`;
 // Keyed by channel, not arch core-id, so links resolve from the cluster descriptor alone. #1772
 const ethUid = (rank: number, chipId: number, chan: EthChannel) => `${rank}-${chipId}-ch${chan}`;
 
-// `chipDesign.eth` is channel-indexed; undefined when no descriptor is baked for the arch.
-const ethCoordLabel = (chip: ClusterChip, chan: EthChannel): string | undefined => {
+// `chipDesign.eth` is channel-indexed. Absent for an unknown arch, and also for a channel the
+// cluster descriptor reports live but the baked list is too short to cover, since the two are
+// now sourced independently. #1772
+const ethCoordLabel = (chip: ClusterChip, chan: EthChannel): string | null => {
     const coreId = chip.design?.eth?.[chan];
-    return coreId === undefined ? undefined : `${chip.rank ?? 0}-${chip.id}-${coreId}`;
+    return coreId === undefined ? null : `${chip.rank ?? 0}-${chip.id}-${coreId}`;
 };
-
-// Channel travels with the uid so the render needn't parse it back out for the label.
-interface EthPort {
-    uid: string;
-    chan: EthChannel;
-}
 
 // Endpoint uids are built once, when connections are recorded, and carried to the segment
 // pass. Rebuilding them there instead would let the two constructions drift, which renders
@@ -214,11 +212,10 @@ function buildClusterRenderModel(
         );
 
         // Per chip, not per cluster: a heterogeneous report labels each chip from its own
-        // arch entry, and an unrecognised one just loses its enrichment.
-        const designForChip = (chipId: number): ChipDesign | undefined => {
-            const design = getChipDesign(stringToArchitecture(host.descriptor.arch?.[chipId] ?? ''));
-            return design.eth?.length ? design : undefined;
-        };
+        // arch entry, and an unrecognised one just loses its enrichment. `stringToArchitecture`
+        // absorbs a missing or non-string entry, so no coercion is needed here.
+        const designForChip = (chipId: number): ChipDesign | null =>
+            getChipDesign(stringToArchitecture(host.descriptor.arch?.[chipId]));
 
         let usedFallback = false;
 
@@ -245,7 +242,7 @@ function buildClusterRenderModel(
                 chipUniqueId: host.descriptor.chip_unique_ids?.[chipId],
                 coords: [x, y, 0, 0] satisfies ClusterCoordinates,
                 mmio: mmioChipIds.has(chipId),
-                ethChannels: [],
+                ethPorts: [],
                 connectedChipsByEthId: new Map(),
                 design: designForChip(chipId),
             });
@@ -262,14 +259,16 @@ function buildClusterRenderModel(
     // Step 2: wire intra-host and inter-host eth connections into each chip's
     // `connectedChipsByEthId` map so the port-positioning step below can compute
     // edges relative to neighbours.
-    // Also collects live channels, which replace the arch eth list as the ports to draw.
+    // Also collects the live ports, which replace the arch eth list as the ports to draw.
+    // Sole construction site for both the uid and the coordinate label: every later pass reads
+    // them off the `EthPort` rather than rebuilding, so the two cannot disagree. #1772
     const recordConnection = (chipA: RenderChip, chanA: EthChannel, chipB: RenderChip, chanB: EthChannel) => {
         const uidA = ethUid(chipA.rank, chipA.id, chanA);
         const uidB = ethUid(chipB.rank, chipB.id, chanB);
         chipA.connectedChipsByEthId.set(uidA, chipB);
         chipB.connectedChipsByEthId.set(uidB, chipA);
-        chipA.ethChannels.push(chanA);
-        chipB.ethChannels.push(chanB);
+        chipA.ethPorts.push({ uid: uidA, chan: chanA, coordLabel: ethCoordLabel(chipA, chanA) });
+        chipB.ethPorts.push({ uid: uidB, chan: chanB, coordLabel: ethCoordLabel(chipB, chanB) });
         return [uidA, uidB] as const;
     };
 
@@ -304,10 +303,12 @@ function buildClusterRenderModel(
         }
     });
 
-    // Ascending to match the previous arch-list order, which was channel order; dedup
-    // guards a channel appearing on two links.
+    // Ascending by channel to match the previous arch-list order; dedup on uid guards a
+    // channel the descriptor reports on two links, which would otherwise draw two ports at
+    // the same coordinates and place only whichever won the last write.
     for (const chip of renderChips) {
-        chip.ethChannels = [...new Set(chip.ethChannels)].sort((x, y) => x - y);
+        const portsByUid = new Map<string, EthPort>(chip.ethPorts.map((port) => [port.uid, port]));
+        chip.ethPorts = [...portsByUid.values()].sort((portA, portB) => portA.chan - portB.chan);
     }
 
     // Step 3: pick which edge of each chip an ETH port sits on, based on the
@@ -412,12 +413,11 @@ function buildClusterRenderModel(
         // Edges already claimed by direct neighbours — pass 2 avoids these.
         const directNeighbourEdges = new Set<CLUSTER_ETH_POSITION>();
         // Long-haul/inter-host placements deferred until pass 2.
-        const deferred: (EthPort & { chord: CLUSTER_ETH_POSITION })[] = [];
+        const deferred: { port: EthPort; chord: CLUSTER_ETH_POSITION }[] = [];
 
         // Pass 1: direct cardinal neighbours go on their chord edge.
-        clusterChip.ethChannels.forEach((chan) => {
-            const uid = ethUid(clusterChip.rank, clusterChip.id, chan);
-            const connectedChip = clusterChip.connectedChipsByEthId.get(uid);
+        clusterChip.ethPorts.forEach((port) => {
+            const connectedChip = clusterChip.connectedChipsByEthId.get(port.uid);
             if (!connectedChip) {
                 return;
             }
@@ -437,12 +437,12 @@ function buildClusterRenderModel(
                 if (!ethPosition.has(chord)) {
                     ethPosition.set(chord, []);
                 }
-                ethPosition.get(chord)!.push({ uid, chan });
+                ethPosition.get(chord)!.push(port);
                 directNeighbourEdges.add(chord);
             } else {
-                deferred.push({ uid, chan, chord });
+                deferred.push({ port, chord });
                 if (sameRank) {
-                    longHaulUids.add(uid);
+                    longHaulUids.add(port.uid);
                 }
             }
         });
@@ -454,7 +454,7 @@ function buildClusterRenderModel(
         // canonical link key so both endpoints pick the same side and the
         // bezier bows in one direction instead of arcing across. #1510
         const outwardForChip = ALL_EDGES.filter((edge) => isOutwardEdge(clusterChip, edge));
-        for (const { uid, chan, chord } of deferred) {
+        for (const { port, chord } of deferred) {
             const perp = perpendicularEdges(chord);
             let chosen: CLUSTER_ETH_POSITION;
             if (outwardForChip.length === 0) {
@@ -469,14 +469,14 @@ function buildClusterRenderModel(
                 if (candidates.length === 1) {
                     [chosen] = candidates;
                 } else {
-                    const linkKey = canonicalLinkKeyByUid.get(uid) ?? uid;
+                    const linkKey = canonicalLinkKeyByUid.get(port.uid) ?? port.uid;
                     chosen = candidates[hashLinkKey(linkKey) % candidates.length];
                 }
             }
             if (!ethPosition.has(chosen)) {
                 ethPosition.set(chosen, []);
             }
-            ethPosition.get(chosen)!.push({ uid, chan });
+            ethPosition.get(chosen)!.push(port);
         }
 
         // Order ports along each edge by partner perpendicular-axis coord
@@ -1013,14 +1013,17 @@ function ClusterRenderer() {
                                     )}
 
                                     {[...ethPosition.entries()].map(([position, ports]) => {
-                                        return ports.map(({ uid, chan }, index) => {
+                                        return ports.map(({ uid, coordLabel }, index) => {
                                             const { x, y } = getEthGridPosition(position, index);
                                             const size = clusterChipSize / CLUSTER_NODE_GRID_SIZE - CHIP_GAP;
                                             // scale the label with the port so it doesn't overflow on dense meshes
                                             const ethFontSize = Math.max(4, Math.round(size / 4));
                                             return (
                                                 <div
-                                                    title={ethCoordLabel(clusterChip, chan) ?? uid}
+                                                    // Tooltip falls back to the uid so an unlabelled port stays
+                                                    // identifiable; the inline text deliberately does not, since at
+                                                    // this size (4px on dense meshes) a uid is unreadable. #1772
+                                                    title={coordLabel ?? uid}
                                                     key={uid}
                                                     className={`eth eth-position-${position}`}
                                                     style={{
@@ -1031,7 +1034,7 @@ function ClusterRenderer() {
                                                         fontSize: `${ethFontSize}px`,
                                                     }}
                                                 >
-                                                    <span>{ethCoordLabel(clusterChip, chan)}</span>
+                                                    <span>{coordLabel}</span>
                                                 </div>
                                             );
                                         });

@@ -4,7 +4,7 @@
 
 import { AxiosError, AxiosRequestConfig } from 'axios';
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import Ajv from 'ajv';
@@ -51,9 +51,8 @@ import {
     stackedGroupByAtom,
     tracingModeAtom,
 } from '../store/app';
-import archWormhole from '../assets/data/arch-wormhole.json';
-import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
+import { getChipDesign } from '../functions/getChipDesign';
 import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
@@ -1261,30 +1260,21 @@ export const useInstance = () => {
     });
 };
 
-// Stable identity across renders: a fresh `{}` made consumers memoizing on the
-// descriptor recompute every render, which now matters on the unknown-arch path. #1772
-const NO_CHIP_DESIGN = Object.freeze({}) as ChipDesign;
-
-// Pure so callers that need a descriptor per chip (Cluster, for heterogeneous reports)
-// can resolve one outside a hook. Returns `NO_CHIP_DESIGN` rather than logging, leaving
-// the caller to decide whether an unresolved arch is degraded-but-fine or an error.
-export const getChipDesign = (arch: DeviceArchitecture): ChipDesign => {
-    switch (arch) {
-        case DeviceArchitecture.WORMHOLE:
-            return archWormhole as ChipDesign;
-        case DeviceArchitecture.BLACKHOLE:
-            return archBlackhole as ChipDesign;
-        default:
-            return NO_CHIP_DESIGN;
-    }
-};
-
-export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
+export const useArchitecture = (arch: DeviceArchitecture): ChipDesign | null => {
     const design = getChipDesign(arch);
-    if (design === NO_CHIP_DESIGN) {
-        // eslint-disable-next-line no-console
-        console.error(`Unsupported arch: ${arch}`);
-    }
+
+    // Reported from an effect rather than the hook body, which runs on every render:
+    // `useNodeType` is a consumer and NPE playback re-renders per interval tick, so an
+    // inline warn emits a line per frame for the length of the run. #1772
+    useEffect(() => {
+        if (design === null) {
+            // Still worth surfacing: unlike Cluster, these callers have no degraded mode and
+            // silently lose every core-type overlay when the arch doesn't resolve.
+            // eslint-disable-next-line no-console
+            console.error(`Unsupported arch: ${arch}`);
+        }
+    }, [arch, design]);
+
     return design;
 };
 
@@ -1307,7 +1297,7 @@ export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; siz
 export const useNodeType = (arch: DeviceArchitecture) => {
     const architecture = useArchitecture(arch);
     const cores = useMemo(() => {
-        return architecture.functional_workers?.map((loc) => {
+        return architecture?.functional_workers?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -1316,7 +1306,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const dram = useMemo(() => {
-        return architecture.dram?.flat().map((loc) => {
+        return architecture?.dram?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -1325,7 +1315,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const eth = useMemo(() => {
-        return architecture.eth?.flat().map((loc) => {
+        return architecture?.eth?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -1334,7 +1324,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const pcie = useMemo(() => {
-        return architecture.pcie?.map((loc) => {
+        return architecture?.pcie?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()

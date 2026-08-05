@@ -32,4 +32,16 @@ describe('stringToArchitecture', () => {
         expect(stringToArchitecture('quasar')).toBe(DeviceArchitecture.UNKNOWN);
         expect(stringToArchitecture('')).toBe(DeviceArchitecture.UNKNOWN);
     });
+
+    // The descriptor is uploaded and reaches us through `yaml.safe_load`, which does no schema
+    // validation: a bare `arch: 1` or a nested map both parse. Calling `.toLowerCase()` on one
+    // throws, and the nearest boundary is the router's root `errorElement`, which replaces the
+    // whole app shell rather than degrading the cluster view.
+    it('treats a non-string arch as unknown instead of throwing', () => {
+        expect(stringToArchitecture(undefined)).toBe(DeviceArchitecture.UNKNOWN);
+        expect(stringToArchitecture(null)).toBe(DeviceArchitecture.UNKNOWN);
+        expect(stringToArchitecture(1)).toBe(DeviceArchitecture.UNKNOWN);
+        expect(stringToArchitecture({ name: 'wormhole_b0' })).toBe(DeviceArchitecture.UNKNOWN);
+        expect(stringToArchitecture(['wormhole_b0'])).toBe(DeviceArchitecture.UNKNOWN);
+    });
 });
