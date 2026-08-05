@@ -13,14 +13,6 @@ export enum BufferType {
     TRACE,
 }
 
-export const BufferTypeLabel: Record<BufferType, string> = {
-    [BufferType.DRAM]: 'DRAM',
-    [BufferType.L1]: 'L1',
-    [BufferType.SYSTEM_MEMORY]: 'System Memory',
-    [BufferType.L1_SMALL]: 'L1 Small',
-    [BufferType.TRACE]: 'Trace',
-};
-
 export enum StringBufferType {
     DRAM = 'DRAM',
     L1 = 'L1',
@@ -29,6 +21,18 @@ export enum StringBufferType {
     TRACE = 'TRACE',
 }
 
+export const BufferTypeToStringBufferType: Record<BufferType, StringBufferType> = {
+    [BufferType.DRAM]: StringBufferType.DRAM,
+    [BufferType.L1]: StringBufferType.L1,
+    [BufferType.SYSTEM_MEMORY]: StringBufferType.SYSTEM_MEMORY,
+    [BufferType.L1_SMALL]: StringBufferType.L1_SMALL,
+    [BufferType.TRACE]: StringBufferType.TRACE,
+};
+
+/**
+ * The only place display labels are spelled out. `MemoryTag` slugs these into its
+ * `tag-*` class, so renaming one requires a matching rule in `_common.scss`.
+ */
 export const StringBufferTypeLabel: Record<StringBufferType, string> = {
     [StringBufferType.DRAM]: 'DRAM',
     [StringBufferType.L1]: 'L1',
@@ -37,10 +41,10 @@ export const StringBufferTypeLabel: Record<StringBufferType, string> = {
     [StringBufferType.TRACE]: 'Trace',
 };
 
-export const BufferTypeToStringBufferType: Record<BufferType, StringBufferType> = {
-    [BufferType.DRAM]: StringBufferType.DRAM,
-    [BufferType.L1]: StringBufferType.L1,
-    [BufferType.SYSTEM_MEMORY]: StringBufferType.SYSTEM_MEMORY,
-    [BufferType.L1_SMALL]: StringBufferType.L1_SMALL,
-    [BufferType.TRACE]: StringBufferType.TRACE,
+export const BufferTypeLabel: Record<BufferType, string> = {
+    [BufferType.DRAM]: StringBufferTypeLabel[StringBufferType.DRAM],
+    [BufferType.L1]: StringBufferTypeLabel[StringBufferType.L1],
+    [BufferType.SYSTEM_MEMORY]: StringBufferTypeLabel[StringBufferType.SYSTEM_MEMORY],
+    [BufferType.L1_SMALL]: StringBufferTypeLabel[StringBufferType.L1_SMALL],
+    [BufferType.TRACE]: StringBufferTypeLabel[StringBufferType.TRACE],
 };
