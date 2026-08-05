@@ -7,9 +7,20 @@ import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MLIR_UPLOAD_PATH, MlirServerConnection } from '../../definitions/MlirServer';
+import {
+    MLIR_SSH_HOST_SUBLABEL,
+    SSH_IDENTITY_FILE_LABEL,
+    SSH_IDENTITY_FILE_PLACEHOLDER,
+    SSH_IDENTITY_FILE_SUBLABEL,
+    SSH_USERNAME_SUBLABEL,
+} from '../../definitions/SshConnectionFields';
+import { SshConfigHost } from '../../model/SshConfigHost';
 import getServerConfig from '../../functions/getServerConfig';
+import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import useMlirRemote from '../../hooks/useMlirRemote';
+import useSshConfigHostSelection from '../../hooks/useSshConfigHostSelection';
 import ConnectionTestMessage from './ConnectionTestMessage';
+import SshConfigHostPicker from './SshConfigHostPicker';
 import 'styles/components/RemoteConnectionDialog.scss';
 
 interface MlirServerDialogProps {
@@ -60,6 +71,7 @@ const MlirServerDialog = ({
 }: MlirServerDialogProps) => {
     const { testMlirServerConnection } = useMlirRemote();
     const [connection, setConnection] = useState<MlirServerConnection>(() => server ?? getDefaultServer());
+    const { selectedHost, selectHost, selectCustom, resetSelection } = useSshConfigHostSelection(server?.host);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [isTestingConnection, setIsTestingConnection] = useState(false);
 
@@ -73,11 +85,16 @@ const MlirServerDialog = ({
     const isValidConnection =
         connectionTests.length > 0 && connectionTests.every(({ status }) => status === ConnectionTestStates.OK);
 
-    const updateConnection = (changes: Partial<MlirServerConnection>) => {
+    // Everything the test actually exercises — the SSH target, the credentials, and the port it
+    // probes — invalidates a previous result. The name isn't part of the target, so it goes through
+    // updateName instead: saving is gated on a passing test, and renaming shouldn't cost a fresh
+    // SSH round-trip. Named for the distinction so a new field can't silently take the wrong path.
+    const updateTarget = (changes: Partial<MlirServerConnection>) => {
         setConnection({ ...connection, ...changes });
-        // Invalidate a previous test result whenever the target changes.
         setConnectionTests([]);
     };
+
+    const updateName = (name: string) => setConnection({ ...connection, name });
 
     const testConnectionStatus = async () => {
         setIsTestingConnection(true);
@@ -92,10 +109,26 @@ const MlirServerDialog = ({
     const closeDialog = (resetChanges?: boolean) => {
         if (resetChanges) {
             setConnection(server ?? getDefaultServer());
+            resetSelection();
         }
 
         setConnectionTests([]);
         onClose();
+    };
+
+    const handleSelectSshConfigHost = (host: SshConfigHost) => {
+        selectHost(host.host);
+        const defaults = getDefaultServer();
+        const { port, ...prefill } = getSshConfigHostPrefill(host, {
+            name: connection.name,
+            username: connection.username,
+            port: connection.sshPort,
+            defaultUsername: defaults.username,
+            defaultPort: defaults.sshPort,
+        });
+
+        // The config stanza's Port is the SSH port; the MLIR server port is unrelated.
+        updateTarget({ ...prefill, sshPort: port });
     };
 
     return (
@@ -108,6 +141,13 @@ const MlirServerDialog = ({
             onClose={() => closeDialog(true)}
         >
             <DialogBody>
+                <SshConfigHostPicker
+                    value={selectedHost}
+                    enabled={open}
+                    onSelectCustom={selectCustom}
+                    onSelectHost={handleSelectSshConfigHost}
+                />
+
                 <FormGroup
                     label='Name'
                     subLabel='Server name'
@@ -116,25 +156,25 @@ const MlirServerDialog = ({
                     <InputGroup
                         id='mlir-server-name'
                         value={connection.name}
-                        onChange={(e) => updateConnection({ name: e.target.value })}
+                        onChange={(e) => updateName(e.target.value)}
                     />
                 </FormGroup>
 
                 <FormGroup
                     label='Username'
-                    subLabel='Username to connect with'
+                    subLabel={SSH_USERNAME_SUBLABEL}
                     labelFor='mlir-server-username'
                 >
                     <InputGroup
                         id='mlir-server-username'
                         value={connection.username}
-                        onChange={(e) => updateConnection({ username: e.target.value })}
+                        onChange={(e) => updateTarget({ username: e.target.value })}
                     />
                 </FormGroup>
 
                 <FormGroup
                     label='SSH host'
-                    subLabel='Machine you SSH into (not localhost — use the remote hostname, e.g. aus-wh-05)'
+                    subLabel={MLIR_SSH_HOST_SUBLABEL}
                     labelFor='mlir-server-host'
                 >
                     <InputGroup
@@ -142,7 +182,10 @@ const MlirServerDialog = ({
                         placeholder='aus-wh-05'
                         intent={isLocalhostSshHost(connection.host) ? 'danger' : 'none'}
                         value={connection.host}
-                        onChange={(e) => updateConnection({ host: e.target.value })}
+                        onChange={(e) => {
+                            selectCustom();
+                            updateTarget({ host: e.target.value });
+                        }}
                     />
                     {isLocalhostSshHost(connection.host) && (
                         <p className='bp6-text-muted'>
@@ -164,9 +207,9 @@ const MlirServerDialog = ({
                             const number = Number.parseInt(e.target.value, 10);
 
                             if (e.target.value === '') {
-                                updateConnection({ sshPort: 0 });
+                                updateTarget({ sshPort: 0 });
                             } else if (number > 0 && number < 99999) {
-                                updateConnection({ sshPort: number });
+                                updateTarget({ sshPort: number });
                             }
                         }}
                     />
@@ -184,24 +227,24 @@ const MlirServerDialog = ({
                             const number = Number.parseInt(e.target.value, 10);
 
                             if (e.target.value === '') {
-                                updateConnection({ port: 0 });
+                                updateTarget({ port: 0 });
                             } else if (number > 0 && number < 99999) {
-                                updateConnection({ port: number });
+                                updateTarget({ port: number });
                             }
                         }}
                     />
                 </FormGroup>
 
                 <FormGroup
-                    label='SSH identity file (optional)'
-                    subLabel='Path to your private key on this machine (e.g. ~/.ssh/id_ed25519). Leave empty for default.'
+                    label={SSH_IDENTITY_FILE_LABEL}
+                    subLabel={SSH_IDENTITY_FILE_SUBLABEL}
                     labelFor='mlir-server-identity'
                 >
                     <InputGroup
                         id='mlir-server-identity'
-                        placeholder='Leave empty for default key'
+                        placeholder={SSH_IDENTITY_FILE_PLACEHOLDER}
                         value={connection.identityFile ?? ''}
-                        onChange={(e) => updateConnection({ identityFile: e.target.value.trim() || undefined })}
+                        onChange={(e) => updateTarget({ identityFile: e.target.value.trim() || undefined })}
                     />
                 </FormGroup>
 

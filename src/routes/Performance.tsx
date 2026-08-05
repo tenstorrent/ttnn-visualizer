@@ -24,6 +24,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
 import {
     activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
     comparisonPerformanceReportListAtom,
     perfSelectedTabAtom,
     selectedPerformanceRangeAtom,
@@ -47,6 +48,7 @@ const EMPTY_COMPARISON_MAX_CORES: number[] = [];
 export default function Performance() {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
     const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>([]);
@@ -62,14 +64,14 @@ export default function Performance() {
         data,
         isLoading: isLoadingPerformance,
         error: perfDataError,
-    } = usePerformanceReport(activePerformanceReport?.reportName || null);
+    } = usePerformanceReport(activeReportFolderName);
     const { data: comparisonData, isLoading: isLoadingComparison } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
     const l1Pressure = useL1PressureByOperation();
     const l1PressureMap = l1Pressure.data;
-    const { data: deviceMeta } = usePerfMeta(activePerformanceReport?.reportName ?? null);
+    const { data: deviceMeta } = usePerfMeta(activeReportFolderName);
     // Combined to `(MetaData | null)[]` so comparison enrichment memos on stable data, not per-render query objects.
     const comparisonDeviceMetas = usePerfMetas(comparisonReportList);
     // Reserve the column while still loading so it doesn't pop in and shift the table sideways;

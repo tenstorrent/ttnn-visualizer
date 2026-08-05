@@ -185,6 +185,9 @@ $row-background: $tt-grey-2;
 
 .bp6-tag {
     &.memory-tag {
+        // Blueprint tags default to white text, which is unreadable on the light fills
+        // below, so dark text is the default here and only the dark DRAM fill opts out.
+        color: $tt-grey-2;
         background-color: $tt-grey-6;
 
         &.tag-l1 {
@@ -192,11 +195,11 @@ $row-background: $tt-grey-2;
         }
 
         &.tag-dram {
+            color: $tt-white;
             background-color: $tt-teal-shade;
         }
 
         &.tag-l1-small {
-            color: $tt-grey-2;
             background-color: $tt-yellow-tint-1;
         }
     }
@@ -225,7 +228,7 @@ $row-background: $tt-grey-2;
     }
 }
 
-.delete-folder-backdrop {
+.confirm-delete-backdrop {
     background-color: rgb(0 0 0 / 8%);
 }
 

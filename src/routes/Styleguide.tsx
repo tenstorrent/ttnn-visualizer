@@ -32,6 +32,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
+import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
@@ -740,9 +741,11 @@ export default function Styleguide() {
                     Danger
                 </Tag>
 
-                <MemoryTag memory='L1' />
-
-                <MemoryTag memory='DRAM' />
+                <MemoryTag memory={BufferTypeLabel[BufferType.DRAM]} />
+                <MemoryTag memory={BufferTypeLabel[BufferType.L1]} />
+                <MemoryTag memory={BufferTypeLabel[BufferType.L1_SMALL]} />
+                <MemoryTag memory={BufferTypeLabel[BufferType.SYSTEM_MEMORY]} />
+                <MemoryTag memory={BufferTypeLabel[BufferType.TRACE]} />
             </div>
 
             <h3>Progress bar</h3>

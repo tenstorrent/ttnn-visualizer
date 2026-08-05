@@ -17,7 +17,12 @@ import {
     setFileTransferProgressForSource,
 } from '../src/store/fileTransferRegistry';
 import { abortActiveRemoteSyncRequest } from '../src/functions/remoteSyncRequest';
-import useRemoteConnection from '../src/hooks/useRemote';
+import useRemoteConnection, {
+    legacySavedPerformanceFoldersKey,
+    legacySavedReportFoldersKey,
+    savedPerformanceFoldersKey,
+    savedReportFoldersKey,
+} from '../src/hooks/useRemote';
 import { FileStatus } from '../src/model/APIData';
 
 vi.mock('../src/libs/axiosInstance', () => ({
@@ -467,5 +472,90 @@ describe('useRemoteConnection - listLocal reports', () => {
                 profilerPath: '/p',
             }),
         ).rejects.toThrow('No connection provided');
+    });
+});
+
+// The folder caches were keyed by connection name before they moved to name|host|port. Existing
+// installs hold entries under the old shape, and nothing else looks them up again — the delete
+// paths only ever target the key they were given.
+describe('useRemoteConnection - folder cache key migration', () => {
+    const connection = {
+        name: 'lab',
+        host: 'work-gpu',
+        port: 22,
+        username: 'alice',
+        profilerPath: '/reports',
+        performancePath: '/perf',
+    };
+    const reportFolders = [{ remotePath: '/reports/r', reportName: 'r', lastModified: 1 }];
+    const performanceFolders = [{ remotePath: '/perf/p', reportName: 'p', lastModified: 2 }];
+
+    it('reads folders still stored under the pre-identity key', () => {
+        window.localStorage.setItem(legacySavedReportFoldersKey(connection), JSON.stringify(reportFolders));
+        window.localStorage.setItem(legacySavedPerformanceFoldersKey(connection), JSON.stringify(performanceFolders));
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        expect(result.current.persistentState.getSavedReportFolders(connection)).toEqual(reportFolders);
+        expect(result.current.persistentState.getSavedPerformanceFolders(connection)).toEqual(performanceFolders);
+    });
+
+    it('rewrites a legacy entry under the identity key and drops the stale one', () => {
+        window.localStorage.setItem(legacySavedReportFoldersKey(connection), JSON.stringify(reportFolders));
+        window.localStorage.setItem(legacySavedPerformanceFoldersKey(connection), JSON.stringify(performanceFolders));
+
+        const { result } = renderHook(() => useRemoteConnection());
+        result.current.persistentState.getSavedReportFolders(connection);
+        result.current.persistentState.getSavedPerformanceFolders(connection);
+
+        expect(window.localStorage.getItem(savedReportFoldersKey(connection))).toBe(JSON.stringify(reportFolders));
+        expect(window.localStorage.getItem(savedPerformanceFoldersKey(connection))).toBe(
+            JSON.stringify(performanceFolders),
+        );
+        expect(window.localStorage.getItem(legacySavedReportFoldersKey(connection))).toBeNull();
+        expect(window.localStorage.getItem(legacySavedPerformanceFoldersKey(connection))).toBeNull();
+    });
+
+    it('prefers the identity key when both shapes are present', () => {
+        const current = [{ remotePath: '/reports/current', reportName: 'current', lastModified: 3 }];
+        window.localStorage.setItem(savedReportFoldersKey(connection), JSON.stringify(current));
+        window.localStorage.setItem(legacySavedReportFoldersKey(connection), JSON.stringify(reportFolders));
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        expect(result.current.persistentState.getSavedReportFolders(connection)).toEqual(current);
+    });
+
+    it('does not hand a legacy entry to a same-named connection on a different host', () => {
+        window.localStorage.setItem(legacySavedReportFoldersKey(connection), JSON.stringify(reportFolders));
+
+        const { result } = renderHook(() => useRemoteConnection());
+        const sameNameOtherHost = { ...connection, host: 'other-gpu' };
+
+        // Whichever connection reads first claims the entry; the loser re-fetches rather than
+        // inheriting folders that belong to a different machine.
+        expect(result.current.persistentState.getSavedReportFolders(sameNameOtherHost)).toEqual(reportFolders);
+        expect(result.current.persistentState.getSavedReportFolders(connection)).toEqual([]);
+    });
+
+    it('deleting a connection also clears a legacy entry it never read', () => {
+        window.localStorage.setItem(legacySavedReportFoldersKey(connection), JSON.stringify(reportFolders));
+        window.localStorage.setItem(legacySavedPerformanceFoldersKey(connection), JSON.stringify(performanceFolders));
+
+        const { result } = renderHook(() => useRemoteConnection());
+        result.current.persistentState.deleteSavedReportFolders(connection);
+        result.current.persistentState.deleteSavedPerformanceFolders(connection);
+
+        expect(window.localStorage.getItem(legacySavedReportFoldersKey(connection))).toBeNull();
+        expect(window.localStorage.getItem(legacySavedPerformanceFoldersKey(connection))).toBeNull();
+    });
+
+    it('tolerates a legacy entry that is not an array', () => {
+        window.localStorage.setItem(legacySavedReportFoldersKey(connection), JSON.stringify({ nope: true }));
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        expect(result.current.persistentState.getSavedReportFolders(connection)).toEqual([]);
+        expect(window.localStorage.getItem(legacySavedReportFoldersKey(connection))).toBeNull();
     });
 });

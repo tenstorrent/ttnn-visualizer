@@ -21,7 +21,7 @@ import { extractOperationSourceData } from '../functions/stackTraceSource';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../model/MemoryConfig';
-import { BufferType } from '../model/BufferType';
+import { BufferTypeLabel } from '../model/BufferType';
 import { formatDuration, toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
 import MemoryTag from './MemoryTag';
@@ -939,7 +939,7 @@ const TensorDetailsComponent = ({ tensor }: OperationGraphTensorDetailsProps) =>
     return (
         <div className='tensor-details'>
             <h3 className='tensor-header'>
-                <span>{tensor.buffer_type !== null && <MemoryTag memory={BufferType[tensor.buffer_type]} />}</span>{' '}
+                <span>{tensor.buffer_type !== null && <MemoryTag memory={BufferTypeLabel[tensor.buffer_type]} />}</span>{' '}
                 {toReadableShape(tensor.shape)} Tensor {tensor.id}{' '}
             </h3>
 

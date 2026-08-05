@@ -4,7 +4,7 @@
 
 import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 import mockInstanceEmpty from './data/mockInstanceEmpty.json';
@@ -12,7 +12,9 @@ import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
 import { ReportFolder } from '../src/definitions/Reports';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
+import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import { isActivatingReportAtom } from '../src/store/app';
 import testForPortal from './helpers/testForPortal';
 import createMockFile, { MOCK_FOLDER } from './helpers/createMockFile';
@@ -24,8 +26,12 @@ const SELECT_REPORT_TEXT = 'Select a report...';
 // Data is mutated in the mock of useLocal - eventually this should be set per test as needed
 const mockPerfFolderList = [...mockPerformanceReportFolders];
 
-const { mockUpdateInstance } = vi.hoisted(() => ({
+// The folder list is the mocked query's only source of truth, so deleting has to remove from it
+// for anything downstream of the delete to be observable.
+const { mockUpdateInstance, mockDeleteProfiler, mockProfilerFolders } = vi.hoisted(() => ({
     mockUpdateInstance: vi.fn(),
+    mockDeleteProfiler: vi.fn(),
+    mockProfilerFolders: [] as { path: string; reportName: string }[],
 }));
 
 vi.mock('../src/hooks/useLocal', async () => {
@@ -62,9 +68,9 @@ vi.mock('../src/hooks/useAPI', async () => {
         useGetClusterDescription: () => ({ data: null }),
         usePerfFolderList: () => ({ data: mockPerfFolderList }),
         useInstance: () => ({ data: mockInstanceEmpty }),
-        useReportFolderList: () => ({ data: mockProfilerFolderList }),
+        useReportFolderList: () => ({ data: mockProfilerFolders }),
         updateInstance: (...args: unknown[]) => mockUpdateInstance(...args),
-        deleteProfiler: vi.fn().mockResolvedValue({ success: true }),
+        deleteProfiler: (...args: unknown[]) => mockDeleteProfiler(...args),
         deletePerformance: vi.fn().mockResolvedValue({ success: true }),
     };
 });
@@ -96,6 +102,21 @@ afterEach(() => {
     cleanup();
     mockUpdateInstance.mockReset();
     mockUpdateInstance.mockImplementation(defaultUpdateInstance);
+});
+
+beforeEach(() => {
+    // Restore the list in place: the mock factory closed over this array reference.
+    mockProfilerFolders.splice(0, mockProfilerFolders.length, ...mockProfilerFolderList);
+    mockDeleteProfiler.mockReset();
+    mockDeleteProfiler.mockImplementation((path: string) => {
+        const folderIndex = mockProfilerFolders.findIndex((folder) => folder.path === path);
+
+        if (folderIndex !== -1) {
+            mockProfilerFolders.splice(folderIndex, 1);
+        }
+
+        return Promise.resolve({ success: true });
+    });
 });
 
 mockUpdateInstance.mockImplementation(defaultUpdateInstance);
@@ -373,14 +394,13 @@ it('handles valid performance report upload without tracy', async () => {
     );
 });
 
-// Skipped test: Deletion test to be fixed in future PR
-it.skip('deletes memory report and updates state', async () => {
+it('deletes memory report and updates state', async () => {
     render(
         <TestProviders>
             <LocalFolderSelector />
         </TestProviders>,
     );
-    const { reportName } = mockProfilerFolderList[0];
+    const deletedFolder = mockProfilerFolderList[0];
     const profilerSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[0];
 
     profilerSelect.click();
@@ -389,24 +409,33 @@ it.skip('deletes memory report and updates state', async () => {
         expect(screen.getByText(folder.reportName)).not.toBeNull();
         expect(screen.getByText(`/${folder.path}`)).not.toBeNull();
     });
-    screen.getAllByLabelText('Delete report')[0].click();
+
+    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, deletedFolder.reportName)));
 
     await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
 
-    const deleteAlertButtons: NodeListOf<HTMLButtonElement> = document.querySelectorAll('[role="alertdialog"] button');
-
-    deleteAlertButtons[0].click();
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
 
     await waitFor(
-        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(reportName),
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(deletedFolder.reportName),
         WAIT_FOR_OPTIONS,
     );
 
+    expect(mockDeleteProfiler).toHaveBeenCalledTimes(1);
+    expect(mockDeleteProfiler).toHaveBeenCalledWith(deletedFolder.path);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(2);
+
     profilerSelect.click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
-    mockProfilerFolderList.forEach((folder: ReportFolder) => {
-        expect(screen.getByText(folder.reportName)).not.toBeNull();
-        expect(screen.getByText(`/${folder.path}`)).not.toBeNull();
+
+    // Scoped to the dropdown rows: the delete toast is still on screen and carries the report name
+    // too, so an unscoped query would match it and hide the row's disappearance.
+    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+
+    expect(menuRows).toHaveLength(mockProfilerFolderList.length - 1);
+    expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(false);
+
+    mockProfilerFolders.forEach((folder) => {
+        expect(menuRows.some((row) => row?.includes(`/${folder.path}`) && row?.includes(folder.reportName))).toBe(true);
     });
 });

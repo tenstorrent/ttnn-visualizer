@@ -96,6 +96,7 @@ from ttnn_visualizer.sftp_operations import (
     sync_remote_profiler_folders,
 )
 from ttnn_visualizer.ssh_client import SSHClient
+from ttnn_visualizer.ssh_config import load_ssh_config_hosts
 from ttnn_visualizer.stack_trace_source import (
     check_stack_source_local_with_origin,
     check_stack_source_remote_with_origin,
@@ -174,24 +175,47 @@ def _stack_source_request_params():
     return file_path, source_file_id, None
 
 
-def _optional_rank_query_param() -> Optional[int]:
+_DEFAULT_RANK = 0
+# `int()` is arbitrary-precision, so an unbounded parse lets a value too large for
+# SQLite's int64 binding reach the driver, where it raises OverflowError as an
+# unhandled 500. These routes aren't `@local_only`, so that is reachable by anyone
+# under SERVER_MODE. A world size never approaches this, and rejecting negatives
+# here also matches the 400 the file-backed routes already return for them.
+_MAX_RANK = 2**31 - 1
+_INVALID_RANK_MSG = (
+    f"Invalid query parameter 'rank': expected an integer "
+    f"between {_DEFAULT_RANK} and {_MAX_RANK}."
+)
+
+
+def _rank_query_param() -> int:
     """
-    Parse optional ``?rank=`` for multi-host report DBs.
-    Returns None if the parameter is absent or empty.
+    Parse ``?rank=`` for multi-host report DBs, defaulting to rank 0.
+
+    An absent rank must mean rank 0, never "every rank". The report writer
+    restarts ``operation_id`` and ``tensor_id`` at 1 for each rank and
+    re-normalises ``device_id`` per rank, so an unfiltered read unions the
+    ranks and collides on all three. File-backed routes (cluster/mesh
+    descriptor, profiler config) already defaulted to 0; DB-backed routes
+    passed None and returned the union. #1842
     """
-    if "rank" not in request.args:
-        return None
     raw = request.args.get("rank")
     if raw is None or raw == "":
-        return None
+        return _DEFAULT_RANK
+
     try:
-        return int(raw)
+        rank: Optional[int] = int(raw)
     except (TypeError, ValueError):
-        abort(
-            400,
-            description="Invalid query parameter 'rank': expected an integer.",
-        )
-        return None
+        rank = None
+
+    if rank is None or not _DEFAULT_RANK <= rank <= _MAX_RANK:
+        abort(400, description=_INVALID_RANK_MSG)
+        # Unreachable: Flask annotates `abort` as `NoReturn`, but
+        # `follow_imports = "skip"` under `[tool.mypy]` stops mypy from reading
+        # that annotation, so it still requires a terminating return here.
+        return _DEFAULT_RANK
+
+    return rank
 
 
 _NONZERO_RANK_UNSUPPORTED_MSG = (
@@ -200,13 +224,13 @@ _NONZERO_RANK_UNSUPPORTED_MSG = (
 )
 
 
-def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: Optional[int]):
+def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: int):
     """
     Legacy reports only represent rank 0. If the client asks for a different rank
     but the schema has no ``rank`` column, return 422 instead of returning all rows
     (which would misleadingly appear as rank 0 in the API).
     """
-    if rank is None or rank == 0:
+    if rank == _DEFAULT_RANK:
         return None
     if db.report_has_rank_column():
         return None
@@ -250,14 +274,17 @@ def _remote_stack_source_path_availability(
     # `remapped` is None when the file is unavailable, False on a literal-path hit,
     # and True when resolved via a /tt-metal/ remap. The /test endpoint surfaces this
     # distinction so clients can warn only about approximate (remapped) matches.
+    # SERVER_MODE gates the SSH branch as well as the local one; see the note in
+    # _remote_stack_source_read for why a stored connection can't be trusted here.
     remapped: Optional[bool] = None
-    if remote_connection:
+    is_server_mode = bool(current_app.config.get("SERVER_MODE"))
+    if remote_connection and not is_server_mode:
         try:
             ssh_client = SSHClient(remote_connection)
             remapped = check_stack_source_remote_with_origin(ssh_client, file_path)
         except RemoteConnectionException:
             return _stack_source_availability_response(False)
-    elif not current_app.config.get("SERVER_MODE"):
+    elif not remote_connection and not is_server_mode:
         remapped = check_stack_source_local_with_origin(file_path)
 
     if remapped is None:
@@ -287,6 +314,16 @@ def _remote_stack_source_read(
     if not file_path:
         return response_not_found("Source file not found.")
 
+    # Both branches are gated, not just the local one. The endpoints that store a
+    # connection on an instance are @local_only, so a hosted instance should never carry
+    # one — but nothing revalidates that at read time, and a database carried over from a
+    # local install would otherwise make the hosted server open outbound SSH connections
+    # on an unauthenticated request, with the file it read coming back in the response.
+    if current_app.config.get("SERVER_MODE"):
+        return response_forbidden(
+            "Stack source reads are not available in server mode.",
+        )
+
     if remote_connection:
         try:
             ssh_client = SSHClient(remote_connection)
@@ -298,11 +335,6 @@ def _remote_stack_source_read(
             return error_response(e.http_status, e.message)
         except RemoteFileReadException as e:
             return error_response(e.http_status, str(e), e.detail)
-
-    if current_app.config.get("SERVER_MODE"):
-        return response_forbidden(
-            "Local stack source reads are not available in server mode.",
-        )
 
     try:
         content, resolved, _remapped = read_stack_source_local(file_path)
@@ -349,7 +381,7 @@ def get_system_capabilities():
 @with_instance
 @timer
 def operation_list(instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -409,7 +441,7 @@ def operation_list(instance: Instance):
 @with_instance
 @timer
 def operation_detail(operation_id, instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -591,7 +623,7 @@ def operation_history(instance: Instance):
 @with_instance
 @timer
 def errors_list(instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -642,8 +674,7 @@ def get_config(instance: Instance):
     to read another host's file (debugging).
     """
     report_dir = Path(str(instance.profiler_path)).parent
-    rank_param = _optional_rank_query_param()
-    logical_rank = 0 if rank_param is None else rank_param
+    logical_rank = _rank_query_param()
 
     payload, err = read_profiler_config_api_payload(report_dir, logical_rank)
     if err == "rank_out_of_range":
@@ -667,7 +698,7 @@ def get_config(instance: Instance):
 @with_instance
 @timer
 def tensors_list(instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -682,23 +713,8 @@ def tensors_list(instance: Instance):
         tensors = list(
             db.query_tensors(db.merge_rank_filter("tensors", tensor_filters, rank))
         )
-        if rank is not None and "rank" in db._get_table_columns("tensors"):
-            tensor_ids = [t.tensor_id for t in tensors]
-            if tensor_ids:
-                local_comparisons = list(
-                    db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
-                )
-                global_comparisons = list(
-                    db.query_tensor_comparisons(
-                        local=False, filters={"tensor_id": tensor_ids}
-                    )
-                )
-            else:
-                local_comparisons = []
-                global_comparisons = []
-        else:
-            local_comparisons = list(db.query_tensor_comparisons())
-            global_comparisons = list(db.query_tensor_comparisons(local=False))
+        local_comparisons = list(db.query_tensor_comparisons(rank=rank))
+        global_comparisons = list(db.query_tensor_comparisons(local=False, rank=rank))
         producers_consumers = list(db.query_producers_consumers(rank=rank))
         serialized_tensors = serialize_tensors(
             tensors, producers_consumers, local_comparisons, global_comparisons
@@ -724,7 +740,7 @@ def buffer_detail(instance: Instance):
     else:
         return response_bad_request()
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -757,7 +773,7 @@ def buffer_pages(instance: Instance):
     else:
         buffer_type = None
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -783,7 +799,7 @@ def buffer_pages(instance: Instance):
 @with_instance
 @timer
 def tensor_detail(tensor_id, instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -812,7 +828,7 @@ def get_all_buffers(instance: Instance):
     else:
         buffer_type = None
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -841,7 +857,7 @@ def get_operations_buffers(instance: Instance):
     else:
         buffer_type = None
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -874,7 +890,7 @@ def get_operation_buffers(operation_id, instance: Instance):
     else:
         buffer_type = None
 
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -978,35 +994,32 @@ def get_profiler_data_list(instance: Instance):
     return Response(orjson.dumps(valid_dirs), mimetype="application/json")
 
 
+def _report_directory_to_delete(directory_name_key: str, report_name: str) -> Path:
+    """Resolve a delete request to one report directory under the local data directory.
+
+    The listings these deletes are paired with (``GET /profiler``, ``GET /performance``)
+    only ever read the local data directory, so that is the only tree a delete may
+    reach, and only one report inside it — anything wider removes reports the client
+    never listed.
+    """
+    return (
+        Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+        / current_app.config[directory_name_key]
+        / sanitise_path_segment(report_name)
+    )
+
+
 @api.route("/profiler/<profiler_name>", methods=["DELETE"])
 @with_instance
 @local_only
 def delete_profiler_report(profiler_name, instance: Instance):
-    is_remote = (
-        instance.active_report
-        and instance.active_report.profiler_location == ReportLocation.REMOTE.value
-    )
-    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    data_directory = Path(current_app.config[config_key])
-
     if not profiler_name:
         return response_bad_request("Report name is required.")
 
-    if is_remote:
-        connection = RemoteConnection.model_validate(
-            instance.remote_connection, strict=False
-        )
-        path = (
-            data_directory
-            / connection.host
-            / current_app.config["PROFILER_DIRECTORY_NAME"]
-        )
-    else:
-        path = (
-            data_directory
-            / current_app.config["PROFILER_DIRECTORY_NAME"]
-            / profiler_name
-        )
+    try:
+        path = _report_directory_to_delete("PROFILER_DIRECTORY_NAME", profiler_name)
+    except (TypeError, ValueError):
+        return response_bad_request(f"Invalid report name: {profiler_name}")
 
     if instance.active_report and instance.active_report.profiler_name == profiler_name:
         instance_id = request.args.get("instanceId")
@@ -1112,31 +1125,15 @@ def get_profiler_performance_data(instance: Instance):
 @with_instance
 @local_only
 def delete_performance_report(performance_name, instance: Instance):
-    is_remote = (
-        instance.active_report
-        and instance.active_report.performance_location == ReportLocation.REMOTE.value
-    )
-    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    data_directory = Path(current_app.config[config_key])
-
     if not performance_name:
         return response_bad_request("Report name is required.")
 
-    if is_remote:
-        connection = RemoteConnection.model_validate(
-            instance.remote_connection, strict=False
+    try:
+        path = _report_directory_to_delete(
+            "PERFORMANCE_DIRECTORY_NAME", performance_name
         )
-        path = (
-            data_directory
-            / connection.host
-            / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-        )
-    else:
-        path = (
-            data_directory
-            / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-            / performance_name
-        )
+    except (TypeError, ValueError):
+        return response_bad_request(f"Invalid report name: {performance_name}")
 
     if (
         instance.active_report
@@ -1155,6 +1152,35 @@ def delete_performance_report(performance_name, instance: Instance):
     )
 
 
+def _apply_requested_performance_name(instance: Instance) -> None:
+    """Point the instance at the ``?name=`` report for the duration of the request.
+
+    Lets the comparison selector read a sibling report without re-mounting. The
+    name is the synced folder name the listing handed the client — including any
+    ``_rank<N>`` qualifier — so it is resolved as given rather than guessed at: a
+    rank fallback here could answer with a different rank's numbers.
+
+    All three routes that honour ``?name=`` come through here, so the query value
+    is collapsed to a single segment once rather than trusted at each caller.
+    """
+    name = request.args.get("name", None)
+    if not name or current_app.config["SERVER_MODE"]:
+        return
+    if not instance.performance_path:
+        raise PerformanceReportNotLoadedException()
+
+    try:
+        requested_name = sanitise_path_segment(name)
+    except (TypeError, ValueError):
+        logger.warning("Ignoring unusable performance report name: %r", name)
+        return
+
+    instance.performance_path = str(
+        Path(instance.performance_path).parent / requested_name
+    )
+    logger.info(f"Performance path set to {instance.performance_path}")
+
+
 @api.route("/performance/perf-results/raw", methods=["GET"])
 @with_instance
 def get_performance_results_data_raw(instance: Instance):
@@ -1169,7 +1195,6 @@ def get_performance_results_data_raw(instance: Instance):
 @api.route("/performance/perf-results/report", methods=["GET"])
 @with_instance
 def get_performance_results_report(instance: Instance):
-    name = request.args.get("name", None)
     start_signpost = request.args.get("start_signpost", None)
     end_signpost = request.args.get("end_signpost", None)
     print_signposts = str_to_bool(request.args.get("print_signposts", "true"))
@@ -1181,10 +1206,7 @@ def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
-    if name and not current_app.config["SERVER_MODE"]:
-        performance_path = Path(instance.performance_path).parent / name
-        instance.performance_path = str(performance_path)
-        logger.info(f"************ Performance path set to {instance.performance_path}")
+    _apply_requested_performance_name(instance)
 
     try:
         report = OpsPerformanceReportQueries.generate_report(
@@ -1207,15 +1229,10 @@ def get_performance_results_report(instance: Instance):
 @api.route("/performance/device-log/raw", methods=["GET"])
 @with_instance
 def get_performance_data_raw(instance: Instance):
-    name = request.args.get("name", None)
-
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
-    if name and not current_app.config["SERVER_MODE"]:
-        performance_path = Path(instance.performance_path).parent / name
-        instance.performance_path = str(performance_path)
-        logger.info(f"************ Performance path set to {instance.performance_path}")
+    _apply_requested_performance_name(instance)
 
     content = DeviceLogProfilerQueries.get_raw_csv(instance)
 
@@ -1248,15 +1265,10 @@ def get_performance_device_meta(instance: Instance):
             "max_cores": max_cores,
         }
 
-    name = request.args.get("name", None)
-
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
-    if name and not current_app.config["SERVER_MODE"]:
-        performance_path = Path(instance.performance_path).parent / name
-        instance.performance_path = str(performance_path)
-        logger.info(f"************ Performance path set to {instance.performance_path}")
+    _apply_requested_performance_name(instance)
 
     file_path = Path(
         instance.performance_path,
@@ -1316,7 +1328,7 @@ def get_zone_statistics(zone, instance: Instance):
 @api.route("/devices", methods=["GET"])
 @with_instance
 def get_devices(instance: Instance):
-    rank = _optional_rank_query_param()
+    rank = _rank_query_param()
     with DatabaseQueries(instance) as db:
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
@@ -1535,7 +1547,12 @@ def _annotate_last_synced(
     remote_data = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
     dir_name = current_app.config[directory_config_key]
     for rf in folders:
-        directory_name = Path(rf.remotePath).name
+        # The listing already carries the segment sync writes. Re-deriving it
+        # here would let a rank's badge report the sync state of whichever rank
+        # was downloaded into that folder.
+        directory_name = rf.syncedName
+        if not directory_name:
+            continue
         local_path = local_synced_report_path(
             remote_data, host, dir_name, directory_name
         )
@@ -1603,8 +1620,7 @@ def get_cluster_descriptor(instance: Instance):
         return response_not_found("cluster_descriptor.yaml not found")
 
     report_dir = Path(instance.profiler_path).parent
-    rank_param = _optional_rank_query_param()
-    logical_rank = 0 if rank_param is None else rank_param
+    logical_rank = _rank_query_param()
 
     path, err = pick_cluster_descriptor_path(report_dir, logical_rank)
     if err == "rank_out_of_range":
@@ -1640,8 +1656,7 @@ def get_mesh_descriptor(instance: Instance):
         )
 
     report_dir = Path(instance.profiler_path).parent
-    rank_param = _optional_rank_query_param()
-    logical_rank = 0 if rank_param is None else rank_param
+    logical_rank = _rank_query_param()
 
     path, err = pick_mesh_descriptor_path(report_dir, logical_rank)
     if err == "rank_out_of_range":
@@ -1677,6 +1692,22 @@ def get_mesh_descriptor(instance: Instance):
         return jsonify({"docs": docs})
     except yaml.YAMLError as e:
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
+
+
+def _found_reports_message(
+    label: str, count: int, *, in_rank_subdirectories: bool = False
+) -> str:
+    """Connection-test success line confirming what the report search actually saw."""
+    plural = "report" if count == 1 else "reports"
+    location = " in per-rank subdirectories" if in_rank_subdirectories else ""
+    return f"Found {count} {label} {plural}{location}"
+
+
+@api.route("/remote/ssh-config-hosts", methods=["GET"])
+@local_only
+def list_remote_ssh_config_hosts():
+    """List concrete Host aliases from the local user's ~/.ssh/config."""
+    return jsonify(load_ssh_config_hosts().model_dump(exclude_none=True))
 
 
 @api.route("/remote/test", methods=["POST"])
@@ -1744,7 +1775,7 @@ def test_remote_folder():
     # Check for Project Configurations
     if not has_failures():
         try:
-            check_remote_path_for_reports(connection)
+            report_counts = check_remote_path_for_reports(connection)
         except AuthenticationFailedException as e:
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
@@ -1752,6 +1783,23 @@ def test_remote_folder():
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
             add_status(e.status.value, e.message, getattr(e, "detail", None))
+        else:
+            # A path that exists says nothing about whether reports were found
+            # there, which is what the user is really testing for.
+            if report_counts.profiler is not None:
+                add_status(
+                    ConnectionTestStates.OK.value,
+                    _found_reports_message("memory", report_counts.profiler),
+                )
+            if report_counts.performance is not None:
+                add_status(
+                    ConnectionTestStates.OK.value,
+                    _found_reports_message(
+                        "performance",
+                        report_counts.performance,
+                        in_rank_subdirectories=connection.multihostPerformance,
+                    ),
+                )
 
     return Response(
         orjson.dumps([status.model_dump() for status in statuses]),
@@ -2044,17 +2092,23 @@ _REPORT_NOT_SYNCED_LOCALLY = (
 
 
 def _safe_report_folder_name(
-    *, report_name: Optional[str] = None, remote_path: Optional[str] = None
+    *,
+    report_name: Optional[str] = None,
+    remote_path: Optional[str] = None,
+    qualify_rank: bool = False,
 ) -> Optional[str]:
     """Local folder segment under REMOTE_DATA_DIRECTORY — must match sync destinations.
 
     Prefer ``remote_path`` (same segment sync writes). ``reportName`` is
-    display-only and is only used when ``remote_path`` is omitted.
+    display-only and is only used when ``remote_path`` is omitted. The payload's
+    own ``syncedName`` is deliberately not trusted: the segment is recomputed
+    here from the path and the connection, so a client cannot name the directory
+    it mounts.
     """
     if remote_path is not None:
         # Explicit remotePath — never fall back to reportName (avoids mounting an
         # unrelated folder when the basename is empty / ``.`` / ``..``).
-        return folder_segment_from_remote_path(remote_path)
+        return folder_segment_from_remote_path(remote_path, qualify_rank=qualify_rank)
     if not report_name:
         return None
     try:
@@ -2107,6 +2161,7 @@ def use_remote_folder():
         performance_name = _safe_report_folder_name(
             report_name=remote_performance_folder.reportName,
             remote_path=remote_performance_folder.remotePath,
+            qualify_rank=bool(connection.multihostPerformance),
         )
         if not performance_name:
             return response_bad_request("Invalid report path")

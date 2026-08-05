@@ -233,6 +233,7 @@ export interface ReportMetadataResponse {
     total_duration_ns?: string;
     git_url?: string;
     git_sha?: string;
+    world_size?: string;
 }
 export interface OperationDescription extends Operation {
     duration: number;

@@ -7,7 +7,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FooterInfobar from '../src/components/FooterInfobar';
-import { activeProfilerReportAtom } from '../src/store/app';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
 import mockInstance from './data/mockInstance.json';
 import { MOCK_FULL_GIT_SHA, MOCK_HTTP_GIT_URL, MOCK_SHORT_GIT_SHA } from './helpers/gitFixtures';
 import { TestProviders } from './helpers/TestProviders';
@@ -53,7 +53,9 @@ vi.mock('@blueprintjs/core', async () => {
 
 const REPORT_PATH = '/reports/memory/my-report';
 
-const renderFooter = (reportMetadata: { gitUrl?: string | null; gitSha?: string | null } | undefined) => {
+const renderFooter = (
+    reportMetadata: { gitUrl?: string | null; gitSha?: string | null; worldSize?: number } | undefined,
+) => {
     mockUseReportMetadata.mockReturnValue({ data: reportMetadata });
     mockUseInstance.mockReturnValue({ data: mockInstance });
     mockUseGetLatestAppVersion.mockReturnValue({
@@ -120,5 +122,66 @@ describe('FooterInfobar memory report tooltip', () => {
 
         const link = within(tooltip).getByRole('link');
         expect(link).toHaveAttribute('href', `https://github.com/foo/bar/commit/${MOCK_FULL_GIT_SHA}`);
+    });
+});
+
+// The API scopes report reads to rank 0, so a multi-host report shows one rank's
+// data. Without this notice the run looks complete rather than partial. #1842
+describe('FooterInfobar multi-host rank scoping', () => {
+    it('announces the scoped rank when the report spans several ranks', () => {
+        renderFooter({ worldSize: 2 });
+
+        expect(screen.getByLabelText('Showing rank 0 of 2')).toBeInTheDocument();
+        expect(getMemoryReportTooltipContent().textContent).toContain('showing rank 0 of 2');
+    });
+
+    it.each([
+        ['single-rank', 1],
+        ['unreported', undefined],
+    ])('stays silent on a %s report', (_label, worldSize) => {
+        renderFooter({ worldSize });
+
+        expect(screen.queryByLabelText(/Showing rank/)).not.toBeInTheDocument();
+        expect(getMemoryReportTooltipContent().textContent).not.toMatch(/showing rank/);
+    });
+});
+
+const renderFooterWithPerformanceReport = (performancePath: string) => {
+    mockUseReportMetadata.mockReturnValue({ data: undefined });
+    mockUseInstance.mockReturnValue({ data: mockInstance });
+    mockUseGetLatestAppVersion.mockReturnValue({
+        data: '1.0.0',
+        isPending: false,
+        isError: false,
+    });
+
+    return render(
+        <TestProviders
+            initialAtomValues={[
+                [
+                    activePerformanceReportAtom,
+                    {
+                        reportName: performancePath,
+                        path: performancePath,
+                    },
+                ],
+            ]}
+        >
+            <FooterInfobar />
+        </TestProviders>,
+    );
+};
+
+describe('FooterInfobar performance report name', () => {
+    it('names the rank of a synced multihost report', () => {
+        renderFooterWithPerformanceReport('2026_07_28_18_04_24_rank0');
+
+        expect(screen.getByText('Rank 0: 2026_07_28_18_04_24')).toBeInTheDocument();
+    });
+
+    it('leaves a single-host report name alone', () => {
+        renderFooterWithPerformanceReport('2026_07_28_18_04_24');
+
+        expect(screen.getByText('2026_07_28_18_04_24')).toBeInTheDocument();
     });
 });

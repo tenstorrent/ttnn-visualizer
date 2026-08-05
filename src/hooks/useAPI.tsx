@@ -4,7 +4,7 @@
 
 import { AxiosError, AxiosRequestConfig } from 'axios';
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import Ajv from 'ajv';
@@ -42,6 +42,7 @@ import {
     activeMlirJsonAtom,
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
@@ -51,9 +52,8 @@ import {
     stackedGroupByAtom,
     tracingModeAtom,
 } from '../store/app';
-import archWormhole from '../assets/data/arch-wormhole.json';
-import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
+import { getChipDesign } from '../functions/getChipDesign';
 import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
@@ -76,7 +76,7 @@ import {
     NpeClientErrorKind,
 } from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
-import { ReportFolder } from '../definitions/Reports';
+import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
@@ -869,8 +869,8 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
 };
 
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const response = usePerformanceReport(activePerformanceReport?.reportName || null);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
+    const response = usePerformanceReport(activeReportFolderName);
 
     return useMemo(() => {
         if (!response.data) {
@@ -910,8 +910,8 @@ export const useOpToPerfIdFiltered = () => {
 };
 
 export const usePerformanceRange = (): NumberRange | null => {
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: perfData } = usePerformanceReport(activePerformanceReport?.reportName || null);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
+    const { data: perfData } = usePerformanceReport(activeReportFolderName);
 
     return useMemo(
         () =>
@@ -931,12 +931,15 @@ interface ReportMetadata {
     duration: number;
     gitUrl: string | null;
     gitSha: string | null;
+    worldSize: number;
 }
 
 export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
     const parsedSchemaVersion = semverParse(data?.schema_version);
     const parsedDuration = Number(data?.total_duration_ns);
+    // Single-host reports omit `world_size`; an absent or unparseable value is one rank.
+    const parsedWorldSize = Number(data?.world_size);
 
     return {
         timestamp: data?.capture_timestamp_ns,
@@ -944,6 +947,10 @@ export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
         version: parsedSchemaVersion,
         gitUrl: data?.git_url ?? null,
         gitSha: data?.git_sha ?? null,
+        worldSize:
+            Number.isFinite(parsedWorldSize) && parsedWorldSize >= SINGLE_HOST_WORLD_SIZE
+                ? parsedWorldSize
+                : SINGLE_HOST_WORLD_SIZE,
     } as ReportMetadata;
 };
 
@@ -1261,18 +1268,22 @@ export const useInstance = () => {
     });
 };
 
-export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
-    switch (arch) {
-        case DeviceArchitecture.WORMHOLE:
-            return archWormhole as ChipDesign;
-        case DeviceArchitecture.BLACKHOLE:
-            return archBlackhole as ChipDesign;
-        default: {
+export const useArchitecture = (arch: DeviceArchitecture): ChipDesign | null => {
+    const design = getChipDesign(arch);
+
+    // Reported from an effect rather than the hook body, which runs on every render:
+    // `useNodeType` is a consumer and NPE playback re-renders per interval tick, so an
+    // inline warn emits a line per frame for the length of the run. #1772
+    useEffect(() => {
+        if (design === null) {
+            // Still worth surfacing: unlike Cluster, these callers have no degraded mode and
+            // silently lose every core-type overlay when the arch doesn't resolve.
             // eslint-disable-next-line no-console
             console.error(`Unsupported arch: ${arch}`);
-            return {} as ChipDesign;
         }
-    }
+    }, [arch, design]);
+
+    return design;
 };
 
 export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; size: number }[] => {
@@ -1294,7 +1305,7 @@ export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; siz
 export const useNodeType = (arch: DeviceArchitecture) => {
     const architecture = useArchitecture(arch);
     const cores = useMemo(() => {
-        return architecture.functional_workers?.map((loc) => {
+        return architecture?.functional_workers?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -1303,7 +1314,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const dram = useMemo(() => {
-        return architecture.dram?.flat().map((loc) => {
+        return architecture?.dram?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -1312,7 +1323,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const eth = useMemo(() => {
-        return architecture.eth?.flat().map((loc) => {
+        return architecture?.eth?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -1321,7 +1332,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const pcie = useMemo(() => {
-        return architecture.pcie?.map((loc) => {
+        return architecture?.pcie?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()

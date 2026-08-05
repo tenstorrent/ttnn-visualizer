@@ -11,15 +11,15 @@ import { useGetDeviceOperationListPerf, useOperationsList, usePerformanceReport 
 import OperationGraph from '../components/OperationGraphComponent';
 import LoadingSpinner from '../components/LoadingSpinner';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
-import { activePerformanceReportAtom, selectedOperationRangeAtom } from '../store/app';
+import { activePerformanceReportFolderNameAtom, selectedOperationRangeAtom } from '../store/app';
 import { PerfOverlaySource } from '../functions/perfOverlay';
 
 const GraphView = () => {
     const { data: operationList, isLoading } = useOperationsList();
     const { operationId } = useParams<{ operationId?: string }>();
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: perfReport } = usePerformanceReport(activePerformanceReport?.reportName ?? null);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
+    const { data: perfReport } = usePerformanceReport(activeReportFolderName);
     // Canonical "do the loaded reports belong to the same run?" signal. This is
     // the same name-based lock-step match used by `ReportLinkStatus`: returns
     // `[]` whenever the loaded perf report doesn't line up with the profiler

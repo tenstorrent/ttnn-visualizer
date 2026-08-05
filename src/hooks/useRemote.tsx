@@ -11,6 +11,7 @@ import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definition
 import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/RemoteSync';
 import { StackSourceOrigin } from '../definitions/StackTrace';
 import { clearFileTransferProgressForSource } from '../store/fileTransferRegistry';
+import { isSameConnection, remoteConnectionKey } from '../functions/remoteConnection';
 import { beginRemoteSyncRequest, endRemoteSyncRequest } from '../functions/remoteSyncRequest';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import axiosInstance from '../libs/axiosInstance';
@@ -38,6 +39,26 @@ export const LOCAL_STORAGE_KEY_CONNECTIONS = 'remoteConnections';
 export const LOCAL_STORAGE_KEY_SELECTED = 'selectedConnection';
 
 type RemoteFolderPathKey = 'profilerPath' | 'performancePath';
+
+/**
+ * Cached folder lists are keyed by connection identity, not by name: names are not unique, and a
+ * name-keyed cache lets deleting or renaming one connection discard or overwrite another's data.
+ */
+export const savedReportFoldersKey = (connection?: RemoteConnection) =>
+    `${remoteConnectionKey(connection)} - reportFolders`;
+
+export const savedPerformanceFoldersKey = (connection?: RemoteConnection) =>
+    `${remoteConnectionKey(connection)} - performanceFolders`;
+
+/**
+ * The name-only keys these caches used before they moved to connection identity. Kept so an
+ * upgrade migrates rather than orphans a user's folder lists — the delete paths only ever target
+ * the shape they were given, so an entry left under the old key is never cleaned up.
+ */
+export const legacySavedReportFoldersKey = (connection?: RemoteConnection) => `${connection?.name} - reportFolders`;
+
+export const legacySavedPerformanceFoldersKey = (connection?: RemoteConnection) =>
+    `${connection?.name} - performanceFolders`;
 
 const fetchRemoteFolderList = async (
     endpoint: Endpoints,
@@ -180,6 +201,39 @@ const useRemoteConnection = () => {
         });
     };
 
+    /**
+     * Reads a folder cache, migrating an entry still stored under the pre-identity key.
+     *
+     * Two connections that share a name share one legacy entry, so the first read to reach it
+     * wins and the second sees no cache. That's the ambiguity the identity key exists to remove,
+     * and a re-fetch costs the user less than leaving the entry unreachable.
+     */
+    const readSavedFolders = (currentKey: string, legacyKey: string): RemoteFolder[] => {
+        const stored = getAppConfig(currentKey);
+
+        if (stored === null) {
+            const legacy = getAppConfig(legacyKey);
+
+            if (legacy !== null) {
+                deleteAppConfig(legacyKey);
+
+                const migrated = safeJsonParse(legacy, []);
+
+                if (Array.isArray(migrated)) {
+                    setAppConfig(currentKey, safeJsonStringify(migrated, '[]'));
+
+                    return migrated;
+                }
+
+                return [];
+            }
+        }
+
+        const parsedList = safeJsonParse(stored, []);
+
+        return Array.isArray(parsedList) ? parsedList : [];
+    };
+
     const persistentState = {
         get savedConnectionList(): RemoteConnection[] {
             const connectionList = safeJsonParse(getAppConfig(LOCAL_STORAGE_KEY_CONNECTIONS), []);
@@ -202,8 +256,10 @@ const useRemoteConnection = () => {
                 return connectionList[0];
             }
 
-            const existingConnection = connectionList.find(
-                (connection) => connection.name === savedSelectedConnection.name,
+            // Matching on identity rather than name alone: two connections may share a name, and
+            // resolving to the wrong one makes callers mistake which connection is in use.
+            const existingConnection = connectionList.find((connection) =>
+                isSameConnection(connection, savedSelectedConnection),
             );
 
             return existingConnection ?? connectionList[0];
@@ -211,27 +267,24 @@ const useRemoteConnection = () => {
         set selectedConnection(connection: RemoteConnection | undefined) {
             setAppConfig(LOCAL_STORAGE_KEY_SELECTED, safeJsonStringify(connection ?? null));
         },
-        getSavedReportFolders: (connection?: RemoteConnection): RemoteFolder[] => {
-            const parsedList = safeJsonParse(getAppConfig(`${connection?.name} - reportFolders`), []);
-
-            return Array.isArray(parsedList) ? parsedList : [];
-        },
+        getSavedReportFolders: (connection?: RemoteConnection): RemoteFolder[] =>
+            readSavedFolders(savedReportFoldersKey(connection), legacySavedReportFoldersKey(connection)),
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name} - reportFolders`, safeJsonStringify(folders, '[]'));
+            setAppConfig(savedReportFoldersKey(connection), safeJsonStringify(folders, '[]'));
         },
         deleteSavedReportFolders: (connection?: RemoteConnection) => {
-            deleteAppConfig(`${connection?.name} - reportFolders`);
+            deleteAppConfig(savedReportFoldersKey(connection));
+            // Also clears a never-read legacy entry, which no later delete would find.
+            deleteAppConfig(legacySavedReportFoldersKey(connection));
         },
-        getSavedPerformanceFolders: (connection?: RemoteConnection): RemoteFolder[] => {
-            const parsedList = safeJsonParse(getAppConfig(`${connection?.name} - performanceFolders`), []);
-
-            return Array.isArray(parsedList) ? parsedList : [];
-        },
+        getSavedPerformanceFolders: (connection?: RemoteConnection): RemoteFolder[] =>
+            readSavedFolders(savedPerformanceFoldersKey(connection), legacySavedPerformanceFoldersKey(connection)),
         setSavedPerformanceFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name} - performanceFolders`, safeJsonStringify(folders, '[]'));
+            setAppConfig(savedPerformanceFoldersKey(connection), safeJsonStringify(folders, '[]'));
         },
         deleteSavedPerformanceFolders: (connection?: RemoteConnection) => {
-            deleteAppConfig(`${connection?.name} - performanceFolders`);
+            deleteAppConfig(savedPerformanceFoldersKey(connection));
+            deleteAppConfig(legacySavedPerformanceFoldersKey(connection));
         },
         updateSavedRemoteFoldersConnection(oldConnection?: RemoteConnection, newConnection?: RemoteConnection) {
             const reportFolders = this.getSavedReportFolders(oldConnection);
