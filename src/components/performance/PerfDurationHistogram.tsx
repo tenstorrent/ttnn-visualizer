@@ -2,28 +2,43 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
-import { PlotData } from 'plotly.js';
+import { useCallback, useMemo } from 'react';
+import { useAtomValue } from 'jotai';
+import { Annotations, ClickAnnotationEvent, PlotData } from 'plotly.js';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
 import {
     DurationHistogramBucketSegment,
     EMPTY_SAMPLES_SUMMARY,
     OTHER_OP_CODE_COLOUR,
     OTHER_OP_CODE_LABEL,
+    PERF_DURATION_BUCKET_ANNOTATION_FONT_SIZE,
+    PERF_DURATION_BUCKET_ANNOTATION_Y_SHIFT,
+    PERF_DURATION_BUCKET_AXIS_TITLE_STANDOFF,
+    PERF_DURATION_BUCKET_FILTER_HINT,
     PERF_DURATION_HISTOGRAM_ACTIVE_REPORT_SUBTITLE,
     PERF_DURATION_HISTOGRAM_ARIA_LABEL,
     PERF_DURATION_HISTOGRAM_EMPTY_MESSAGE,
     SAMPLE_OPS_PER_BUCKET,
 } from '../../definitions/PerfDurationHistogram';
 import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import {
+    PERF_CHART_LINE_COLOUR,
+    PERF_CHART_SURFACE_COLOUR,
+    PERF_CHART_TEXT_COLOUR,
+    PERF_CHART_TRANSPARENT,
+    PlotConfiguration,
+} from '../../definitions/PlotConfigurations';
 import { TEST_IDS } from '../../definitions/TestIds';
 import buildDurationHistogram from '../../functions/buildDurationHistogram';
 import { getHistogramOpCodeStacks } from '../../functions/getDisplayedHistogramOpCodes';
 import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { usePrefilterPerfTableByDurationBucket } from '../../hooks/usePrefilterPerfTableByDurationBucket';
+import { durationBucketFilterListAtom } from '../../store/app';
 import PerfChart from './PerfChart';
 import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerfDurationHistogram.scss';
+
+const CHART_HINTS = [PERF_DURATION_BUCKET_FILTER_HINT];
 
 /** Plotly hovertemplate indexes: [0]=rawOpCode, [1]=bucketTotal, [2]=sampleOpsSummary */
 type DurationHistogramCustomData = [string, number, string];
@@ -49,10 +64,54 @@ function PerfDurationHistogram({
 }: PerfDurationHistogramProps) {
     const histogramData = useMemo(() => buildDurationHistogram(rows), [rows]);
     const handlePlotClick = useHandlePerfChartPlotClick(onOpCodeClick);
+    const selectedBucketMinUsList = useAtomValue(durationBucketFilterListAtom);
+    const prefilterPerfTableByDurationBucket = usePrefilterPerfTableByDurationBucket();
 
-    const bucketLabels = useMemo(
-        () => histogramData.buckets.map((bucket) => bucket.bucket.label),
-        [histogramData.buckets],
+    const bucketList = useMemo(() => histogramData.buckets.map((entry) => entry.bucket), [histogramData.buckets]);
+
+    const bucketLabels = useMemo(() => bucketList.map((bucket) => bucket.label), [bucketList]);
+
+    // One control per column, standing in for the x tick labels. The fill reflects the filter
+    // already in force, so returning from the table shows which column it came from.
+    const bucketAnnotations = useMemo<Partial<Annotations>[]>(
+        () =>
+            bucketList.map((bucket) => {
+                const isSelected = selectedBucketMinUsList.includes(bucket.minUs);
+
+                return {
+                    x: bucket.label,
+                    xref: 'x',
+                    y: 0,
+                    yref: 'paper',
+                    yanchor: 'top',
+                    yshift: PERF_DURATION_BUCKET_ANNOTATION_Y_SHIFT,
+                    text: bucket.label,
+                    showarrow: false,
+                    captureevents: true,
+                    borderwidth: 1,
+                    borderpad: 4,
+                    bgcolor: isSelected ? PERF_CHART_TEXT_COLOUR : PERF_CHART_TRANSPARENT,
+                    bordercolor: isSelected ? PERF_CHART_TEXT_COLOUR : PERF_CHART_LINE_COLOUR,
+                    font: {
+                        size: PERF_DURATION_BUCKET_ANNOTATION_FONT_SIZE,
+                        color: isSelected ? PERF_CHART_SURFACE_COLOUR : PERF_CHART_TEXT_COLOUR,
+                    },
+                };
+            }),
+        [bucketList, selectedBucketMinUsList],
+    );
+
+    const handleAnnotationClick = useCallback(
+        (event: Readonly<ClickAnnotationEvent>) => {
+            const bucket = bucketList[event.index];
+
+            if (!bucket) {
+                return;
+            }
+
+            prefilterPerfTableByDurationBucket(bucket.minUs);
+        },
+        [bucketList, prefilterPerfTableByDurationBucket],
     );
 
     const colourByOpCode = useMemo(
@@ -150,10 +209,14 @@ function PerfDurationHistogram({
         },
         barMode: 'stack',
         showLegend: false,
+        annotations: bucketAnnotations,
         xAxis: {
             title: {
                 text: 'Device time',
+                standoff: PERF_DURATION_BUCKET_AXIS_TITLE_STANDOFF,
             },
+            // The bucket annotations carry the range labels, so ticks would duplicate them
+            showticklabels: false,
         },
         yAxis: {
             title: {
@@ -189,6 +252,8 @@ function PerfDurationHistogram({
                         chartData={chartData}
                         configuration={configuration}
                         onPlotClick={onOpCodeClick ? handlePlotClick : undefined}
+                        onAnnotationClick={handleAnnotationClick}
+                        hints={CHART_HINTS}
                     />
                 </div>
             )}

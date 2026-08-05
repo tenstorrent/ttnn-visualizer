@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import type { Layout, LayoutAxis, PlotData, PlotMouseEvent } from 'plotly.js';
+import type { ClickAnnotationEvent, Layout, LayoutAxis, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
 import type { ReactNode } from 'react';
 import Plot from '../../libs/PlotComponent';
@@ -17,6 +17,10 @@ interface PerfChartSharedProps {
     subtitle?: ReactNode;
     className?: string;
     onPlotClick?: (event: Readonly<PlotMouseEvent>) => void;
+    /** Fires for annotations declared with `captureevents`, e.g. in-plot filter controls. */
+    onAnnotationClick?: (event: Readonly<ClickAnnotationEvent>) => void;
+    /** Guidance for in-plot controls this chart draws itself, one line each below the click hint. */
+    hints?: string[];
 }
 
 /** Custom layout (e.g. pie) — mutually exclusive with configuration. */
@@ -59,6 +63,7 @@ function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
         showlegend: configuration.showLegend || false,
         // Clone margins — never hand Plotly the shared PerfChartLayout.margin reference.
         margin: { ...(configuration.margin ?? PerfChartLayout.margin!) },
+        ...(configuration.annotations ? { annotations: [...configuration.annotations] } : {}),
         legend: {
             orientation: 'h',
             font: {
@@ -79,7 +84,7 @@ function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
 }
 
 function PerfChart(props: PerfChartProps) {
-    const { chartData, id, title, subtitle, className, onPlotClick } = props;
+    const { chartData, id, title, subtitle, className, onPlotClick, onAnnotationClick, hints } = props;
     const isClickable = onPlotClick != null;
     const isCustomLayout = props.layout != null;
     // Clone custom layouts too — pie charts share PerfPieChartLayout as a module singleton.
@@ -96,6 +101,7 @@ function PerfChart(props: PerfChartProps) {
             title={title}
             subtitle={subtitle}
             isClickable={isClickable}
+            hints={hints}
         >
             <Plot
                 className='chart'
@@ -103,6 +109,7 @@ function PerfChart(props: PerfChartProps) {
                 layout={layout}
                 config={PerfChartConfig}
                 onClick={onPlotClick}
+                onClickAnnotation={onAnnotationClick}
                 useResizeHandler
             />
         </PerfChartFrame>

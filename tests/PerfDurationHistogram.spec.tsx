@@ -3,21 +3,33 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { useAtomValue } from 'jotai';
+import { Annotations } from 'plotly.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+    firePlotAnnotationClick,
+    firePlotClick,
+    getLatestPlotLayout,
+    getPlotInstances,
+    resetPlotPropsCapture,
+} from './mocks/plotComponent';
 import PerfDurationHistogram from '../src/components/performance/PerfDurationHistogram';
 import {
     MAX_LEGEND_OP_CODES,
     OTHER_OP_CODE_COLOUR,
     OTHER_OP_CODE_LABEL,
+    PERF_DURATION_BUCKET_FILTER_HINT,
     PERF_DURATION_HISTOGRAM_ACTIVE_REPORT_SUBTITLE,
     PERF_DURATION_HISTOGRAM_EMPTY_MESSAGE,
 } from '../src/definitions/PerfDurationHistogram';
-import { OpType } from '../src/definitions/Performance';
-import { PerfChartId } from '../src/definitions/PerformanceCharts';
+import { OpType, PerfTabIds } from '../src/definitions/Performance';
+import { PERF_CHART_TABLE_FILTER_HINT, PerfChartId } from '../src/definitions/PerformanceCharts';
+import { PERF_CHART_TRANSPARENT } from '../src/definitions/PlotConfigurations';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { durationBucketFilterListAtom, perfSelectedTabAtom } from '../src/store/app';
+import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
 
 type HistogramTrace = {
@@ -27,6 +39,9 @@ type HistogramTrace = {
     marker?: { color?: string };
     y?: number[];
 };
+
+const getHintText = () =>
+    screen.queryAllByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT).map((hint) => hint.textContent);
 
 const row = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
     ({
@@ -147,8 +162,23 @@ describe('PerfDurationHistogram', () => {
             </TestProviders>,
         );
 
-        expect(screen.queryByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).not.toBeInTheDocument();
+        // The bucket controls stay clickable, so a hint remains — minus the op code guidance
+        expect(getHintText()).toEqual([PERF_DURATION_BUCKET_FILTER_HINT]);
         expect(getPlotInstances()[0]?.onClick).toBeUndefined();
+    });
+
+    it('lists the op code and bucket guidance as separate hints when both apply', () => {
+        render(
+            <TestProviders>
+                <PerfDurationHistogram
+                    rows={[row()]}
+                    selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                    onOpCodeClick={vi.fn()}
+                />
+            </TestProviders>,
+        );
+
+        expect(getHintText()).toEqual([PERF_CHART_TABLE_FILTER_HINT, PERF_DURATION_BUCKET_FILTER_HINT]);
     });
 
     it('rolls overflow op codes into Other and does not filter on Other clicks', () => {
@@ -190,5 +220,121 @@ describe('PerfDurationHistogram', () => {
 
         firePlotClick({ points: [{ customdata: otherPoint }] } as never);
         expect(onOpCodeClick).not.toHaveBeenCalled();
+    });
+});
+
+describe('PerfDurationHistogram duration bucket controls', () => {
+    // 5us and 50us straddle a decade boundary, so the histogram spans exactly two buckets
+    const twoBucketRows = [row({ device_time: 5 }), row({ device_time: 50, id: 2 })];
+
+    function SelectedTabProbe() {
+        return <span data-testid='selected-tab'>{String(useAtomValue(perfSelectedTabAtom))}</span>;
+    }
+
+    const renderHistogram = (selectedBuckets: number[] = []) => {
+        const initialAtomValues: AtomProviderInitialValues = [[perfSelectedTabAtom, PerfTabIds.CHARTS]];
+
+        if (selectedBuckets.length > 0) {
+            initialAtomValues.push([durationBucketFilterListAtom, selectedBuckets]);
+        }
+
+        return render(
+            <TestProviders initialAtomValues={initialAtomValues}>
+                <PerfDurationHistogram
+                    rows={twoBucketRows}
+                    selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                />
+                <SelectedTabProbe />
+            </TestProviders>,
+        );
+    };
+
+    const getAnnotations = () => (getLatestPlotLayout()?.annotations ?? []) as Partial<Annotations>[];
+
+    const getSelectedFlags = () => getAnnotations().map((annotation) => annotation.bgcolor !== PERF_CHART_TRANSPARENT);
+
+    // Plotly calls the handler outside React's event system, so the re-render needs flushing
+    const clickBucket = (index: number) => act(() => firePlotAnnotationClick(index));
+
+    // The tab swap scrolls the new panel to the top, which jsdom does not implement
+    beforeEach(() => {
+        vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+            callback(0);
+            return 0;
+        });
+        vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('draws one clickable annotation per histogram column, labelled with its range', () => {
+        renderHistogram();
+
+        const annotations = getAnnotations();
+        expect(annotations).toHaveLength(2);
+        expect(annotations.every((annotation) => annotation.captureevents === true)).toBe(true);
+        expect(annotations.every((annotation) => Boolean(annotation.text))).toBe(true);
+    });
+
+    it('explains the bucket controls in the chart hint rather than per-annotation hover text', () => {
+        renderHistogram();
+
+        expect(getHintText()).toContain(PERF_DURATION_BUCKET_FILTER_HINT);
+        expect(getAnnotations().every((annotation) => annotation.hovertext === undefined)).toBe(true);
+    });
+
+    it('replaces the x tick labels rather than duplicating them', () => {
+        renderHistogram();
+
+        const xaxis = getLatestPlotLayout()?.xaxis as { showticklabels?: boolean } | undefined;
+        expect(xaxis?.showticklabels).toBe(false);
+    });
+
+    it('draws no bucket annotations when there are no eligible ops', () => {
+        render(
+            <TestProviders>
+                <PerfDurationHistogram
+                    rows={[row({ device_time: 0 })]}
+                    selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.getByText(PERF_DURATION_HISTOGRAM_EMPTY_MESSAGE)).toBeInTheDocument();
+    });
+
+    it('fills in buckets already held in the filter', () => {
+        renderHistogram([1]);
+
+        expect(getSelectedFlags()).toEqual([true, false]);
+    });
+
+    it('filters to the clicked bucket and moves to the table tab', () => {
+        renderHistogram();
+        expect(getSelectedFlags()).toEqual([false, false]);
+
+        clickBucket(0);
+
+        expect(getSelectedFlags()).toEqual([true, false]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.TABLE);
+    });
+
+    it('replaces the previous selection rather than unioning with it', () => {
+        renderHistogram([1]);
+
+        clickBucket(1);
+
+        expect(getSelectedFlags()).toEqual([false, true]);
+    });
+
+    it('ignores a click on an annotation index with no matching bucket', () => {
+        renderHistogram();
+
+        clickBucket(99);
+
+        expect(getSelectedFlags()).toEqual([false, false]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
     });
 });

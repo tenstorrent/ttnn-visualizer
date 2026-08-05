@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Config, Layout, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
+import { Annotations, Config, Layout, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
 import { Tensor } from '../model/APIData';
 
 export const L1RenderConfiguration: PlotConfiguration = {
@@ -91,7 +91,10 @@ export const BufferSummaryAxisConfiguration: PlotConfiguration = {
 export interface AxisConfig {
     title?: {
         text?: string;
+        /** Gap between the axis and its title — widen it to clear anything drawn in between. */
+        standoff?: number;
     };
+    showticklabels?: boolean;
     side?: 'top' | 'bottom';
     tickmode?: 'array' | 'auto' | 'linear';
     tick0?: number;
@@ -118,6 +121,7 @@ export interface PlotConfiguration {
     yAxis?: AxisConfig;
     yAxis2?: AxisConfig;
     barMode?: 'stack' | 'group';
+    annotations?: Partial<Annotations>[];
 }
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
@@ -192,6 +196,12 @@ export const PERF_CHART_WIDE_LEFT_MARGIN = {
 const GRID_COLOUR = '#575757';
 const LINE_COLOUR = '#575757';
 const TITLE_COLOUR = '#FFF';
+
+// Chart chrome, exported for in-plot controls that must match the surrounding axes.
+export const PERF_CHART_LINE_COLOUR = LINE_COLOUR;
+export const PERF_CHART_TEXT_COLOUR = TITLE_COLOUR;
+export const PERF_CHART_SURFACE_COLOUR = '#343434'; // $tt-background
+export const PERF_CHART_TRANSPARENT = 'rgba(0, 0, 0, 0)';
 
 export const PerfChartLayout: Partial<Layout> = {
     autosize: true,
