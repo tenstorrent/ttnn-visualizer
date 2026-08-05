@@ -335,3 +335,70 @@ def test_local_performance_reports_endpoint_204_when_empty(app, client):
     )
 
     assert response.status_code == HTTPStatus.NO_CONTENT
+
+
+class TestOfflineListingReportsTheSyncedName:
+    """The offline listing owns the inverse mapping: local name -> remote path."""
+
+    TIMESTAMP = "2026_07_14_18_51_53"
+
+    @staticmethod
+    def _multihost_connection(performance_path: str) -> RemoteConnection:
+        return RemoteConnection(
+            name="test",
+            username="user",
+            host="bh-lb-01",
+            port=22,
+            profilerPath="/remote/profiler/reports",
+            performancePath=performance_path,
+            multihostPerformance=True,
+        )
+
+    def _list(self, tmp_path: Path, performance_path: str, *names: str):
+        for name in names:
+            _write_valid_performance_report(
+                tmp_path / "bh-lb-01" / "performance-reports" / name
+            )
+        return list_local_synced_performance_folders(
+            self._multihost_connection(performance_path),
+            tmp_path,
+            "performance-reports",
+        )
+
+    def test_the_local_name_is_reported_rather_than_re_derived(self, tmp_path: Path):
+        """Regression: the synthetic remote path was qualified a second time.
+
+        `_synthetic_remote_path` builds the remote path back out of the local
+        folder name, so deriving the segment from it appended the rank twice and
+        every mount of an offline row 404'd.
+        """
+        folders = self._list(
+            tmp_path,
+            # A configured path that itself sits under a rank directory is what
+            # made the double qualification reachable.
+            "/home/u/runs/rank0/reports",
+            f"{self.TIMESTAMP}_rank0",
+        )
+
+        assert [folder.syncedName for folder in folders] == [f"{self.TIMESTAMP}_rank0"]
+
+    def test_rank_and_display_name_are_split_out(self, tmp_path: Path):
+        folders = self._list(tmp_path, "/remote/ttrun", f"{self.TIMESTAMP}_rank2")
+
+        assert folders[0].rank == 2
+        # Matches what the SSH listing calls the same report.
+        assert folders[0].reportName == self.TIMESTAMP
+
+    def test_single_host_names_are_never_split(self, tmp_path: Path):
+        """Without the flag nothing was qualified, so nothing may be unqualified."""
+        _write_valid_performance_report(
+            tmp_path / "bh-lb-01" / "performance-reports" / f"{self.TIMESTAMP}_rank2"
+        )
+
+        folders = list_local_synced_performance_folders(
+            _connection(), tmp_path, "performance-reports"
+        )
+
+        assert folders[0].reportName == f"{self.TIMESTAMP}_rank2"
+        assert folders[0].syncedName == f"{self.TIMESTAMP}_rank2"
+        assert folders[0].rank is None

@@ -19,6 +19,7 @@ import { ToastType } from '../../definitions/ToastType';
 import getRemoteSyncFailureAction from '../../functions/getRemoteSyncFailureAction';
 import { RemoteSyncFailureAction } from '../../definitions/RemoteSync';
 import getResponseError from '../../functions/getResponseError';
+import hasPerformanceDiscoveryChanged from '../../functions/hasPerformanceDiscoveryChanged';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import mergeRemoteFolders from '../../functions/mergeRemoteFolders';
@@ -30,6 +31,8 @@ import notifyFolderSyncError, {
 import notifyFolderSyncLocalFallback, {
     notifyLocalSyncedReportsListFallback,
 } from '../../functions/notifyFolderSyncLocalFallback';
+import isRemoteFolderActive from '../../functions/isRemoteFolderActive';
+import { getRankedReportLabel } from '../../functions/reportRank';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
 import useRemoteConnection from '../../hooks/useRemote';
@@ -106,9 +109,7 @@ const RemoteSyncConfigurator = () => {
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
     const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(() =>
         activePerformanceReport
-            ? remotePerformanceFolderList.find((folder) =>
-                  folder.reportName?.includes(activePerformanceReport?.reportName),
-              )
+            ? remotePerformanceFolderList.find((folder) => isRemoteFolderActive(folder, activePerformanceReport))
             : remotePerformanceFolderList[0],
     );
     // Aborts in-flight local disk scans when the connection changes quickly.
@@ -383,6 +384,7 @@ const RemoteSyncConfigurator = () => {
         setActiveProfilerReport({
             path: folder.remotePath,
             reportName: folder.reportName,
+            syncedName: folder.syncedName,
         });
     };
 
@@ -392,17 +394,26 @@ const RemoteSyncConfigurator = () => {
         setActivePerformanceReport({
             path: folder.remotePath,
             reportName: folder.reportName,
+            syncedName: folder.syncedName,
         });
     };
 
     const updateReportSelection = (folder: RemoteFolder) => {
         applyProfilerReportSelection(folder);
-        createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, folder.reportName, ToastType.SUCCESS);
+        createToastNotification(
+            ACTIVE_MEMORY_REPORT_TOAST_TITLE,
+            getRankedReportLabel(folder.reportName, folder.rank),
+            ToastType.SUCCESS,
+        );
     };
 
     const updatePerformanceSelection = (folder: RemoteFolder) => {
         applyPerformanceReportSelection(folder);
-        createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, folder.reportName, ToastType.SUCCESS);
+        createToastNotification(
+            ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE,
+            getRankedReportLabel(folder.reportName, folder.rank),
+            ToastType.SUCCESS,
+        );
     };
 
     const mountLocalFolderOnSyncFailure = async (
@@ -649,7 +660,7 @@ const RemoteSyncConfigurator = () => {
         queueMicrotask(() => {
             if (activeProfilerReport && isProfilerRemote) {
                 const matchedFolder = reportFolderList.find((folder) =>
-                    folder.remotePath?.includes(activeProfilerReport.path),
+                    isRemoteFolderActive(folder, activeProfilerReport),
                 );
 
                 setSelectedReportFolder(matchedFolder);
@@ -657,7 +668,7 @@ const RemoteSyncConfigurator = () => {
 
             if (activePerformanceReport && isPerformanceRemote) {
                 const matchedFolder = remotePerformanceFolderList.find((folder) =>
-                    folder.reportName?.includes(activePerformanceReport.reportName),
+                    isRemoteFolderActive(folder, activePerformanceReport),
                 );
 
                 setSelectedPerformanceFolder(matchedFolder);
@@ -714,6 +725,15 @@ const RemoteSyncConfigurator = () => {
                         await changeSavedConnection(oldConnection, (connectionList, connectionIndex) => {
                             connectionList[connectionIndex] = updatedConnection;
                             remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
+
+                            // The two layouts have disjoint report paths, so a cached list
+                            // survives the switch offering reports this connection can no
+                            // longer find. Dropping it here rather than clearing the
+                            // selection directly lets updateSelectedConnection re-read the
+                            // emptied cache, and only when this row held the selection.
+                            if (hasPerformanceDiscoveryChanged(oldConnection, updatedConnection)) {
+                                remote.persistentState.deleteSavedPerformanceFolders(updatedConnection);
+                            }
 
                             return updatedConnection;
                         });

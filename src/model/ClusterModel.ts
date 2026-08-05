@@ -5,7 +5,7 @@
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 
 type ChipId = number;
-type EthChannel = number;
+export type EthChannel = number;
 type CoreId = string;
 
 export type ClusterCoordinates = [x: number, y: number, r: number, s: number];
@@ -17,13 +17,27 @@ export enum CLUSTER_ETH_POSITION {
     RIGHT = 'right',
 }
 
+// A live ethernet port on a chip. Both the uid and the coordinate label are resolved once,
+// where the connection is recorded, and read back by the port-placement and render passes.
+// Reconstructing either downstream lets the two constructions drift, and a uid mismatch
+// renders no links at all rather than failing loudly. #1772
+export interface EthPort {
+    uid: string;
+    chan: EthChannel;
+    // Arch-derived `rank-chip-core` coordinate; null when no SoC descriptor is baked. #1772
+    coordLabel: string | null;
+}
+
 export interface ClusterChip {
     id: number;
     coords: ClusterCoordinates;
     mmio: boolean;
-    eth: string[];
+    // Live ports from the cluster descriptor; uids derive from its channels rather than the
+    // arch eth list, so a cluster renders with no baked SoC descriptor. #1772
+    ethPorts: EthPort[];
     connectedChipsByEthId: Map<string, ClusterChip>;
-    design?: ChipDesign;
+    // Optional enrichment only (coordinate labels, PCIe markers); null for an unknown arch.
+    design: ChipDesign | null;
     // Rank of the host this chip lives on. Defaults to 0 for single-host reports.
     // For multi-host topologies the unique key is `(rank, id)`; local `id`s can collide across ranks.
     rank?: number;
@@ -57,7 +71,9 @@ export type RemoteEthernetConnectionRaw = [
 ];
 
 export interface ClusterModel {
-    arch: string[];
+    // Keyed by chip id, as the YAML writes it. Optional because a descriptor may omit it
+    // entirely, in which case chips render without arch enrichment.
+    arch?: Record<ChipId, string>;
     chips: {
         [key: ChipId]: ClusterCoordinates;
     };
@@ -139,4 +155,5 @@ export interface ChipDesign {
 
     [unknownKey: string]: unknown;
 }
-export const DEFAULT_ARCHITECTURE = 'Wormhole';
+// No default architecture on purpose: guessing one renders another arch's coordinates as
+// if they were this report's. An unresolved arch omits the enrichment instead. #1772

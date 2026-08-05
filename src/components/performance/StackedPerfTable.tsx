@@ -28,7 +28,8 @@ interface StackedPerformanceTableProps {
     stackedData: TypedStackedPerfRow[];
     stackedComparisonData: TypedStackedPerfRow[][];
     filters: Record<string, string> | null;
-    reportName: string | null;
+    /** On-disk folder of the report these rows came from; addresses the device-meta fetch. */
+    reportFolderName: string | null;
     maxCores: number;
     isLoading?: boolean;
 }
@@ -37,7 +38,7 @@ const StackedPerformanceTable = ({
     stackedData,
     stackedComparisonData,
     filters,
-    reportName,
+    reportFolderName,
     maxCores,
     isLoading = false,
 }: StackedPerformanceTableProps) => {
@@ -206,7 +207,7 @@ const StackedPerformanceTable = ({
             )}
 
             <PerfDeviceArchitecture
-                reportName={reportName}
+                reportFolderName={reportFolderName}
                 maxCores={maxCores}
             />
 

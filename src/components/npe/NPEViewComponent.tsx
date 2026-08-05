@@ -303,14 +303,17 @@ const NPEView = ({
     }, []);
 
     const { architecture, cores, dram, eth, pcie } = useNodeType(npeData.common_info.arch as DeviceArchitecture);
-    const width = architecture.grid?.x_size || 10;
-    const height = architecture.grid?.y_size || 12;
+    const width = architecture?.grid?.x_size || 10;
+    const height = architecture?.grid?.y_size || 12;
 
     useEffect(() => {
-        if (architecture.arch_name === undefined) {
+        // `architecture === null` rather than probing a field: `arch_name` is declared required
+        // on `ChipDesign` and only read as absent because the unresolved case used to return an
+        // empty stand-in. Now the same predicate holds here as everywhere else. #1772
+        if (architecture === null) {
             createToastNotification(`Unsupported architecture`, npeData.common_info.arch, ToastType.WARNING);
         }
-    }, [architecture.arch_name, npeData.common_info.arch]);
+    }, [architecture, npeData.common_info.arch]);
 
     useEffect(() => {
         resetRouteColors();

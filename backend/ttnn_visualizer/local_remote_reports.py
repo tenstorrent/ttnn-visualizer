@@ -10,7 +10,11 @@ import logging
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
+from ttnn_visualizer.models import (
+    RemoteConnection,
+    RemoteReportFolder,
+    split_rank_suffix,
+)
 from ttnn_visualizer.utils import (
     is_valid_performance_report_dir,
     is_valid_profiler_report_dir,
@@ -38,6 +42,7 @@ def list_local_synced_report_folders(
     report_directory_name: str,
     configured_remote_path: Optional[str],
     is_valid_report_dir: Callable[[Path], bool],
+    qualify_rank: bool = False,
 ) -> List[RemoteReportFolder]:
     """
     List report folders under REMOTE_DATA_DIRECTORY/<host>/<report_directory_name>/.
@@ -83,12 +88,20 @@ def list_local_synced_report_folders(
             last_modified = mtime
             effective_last_synced = mtime
 
+        # `entry.name` is already the synced name, so it is reported as such
+        # rather than re-derived from the synthetic remote path — that path is
+        # built from this same name and would otherwise qualify it a second time.
+        report_name, rank = (
+            split_rank_suffix(entry.name) if qualify_rank else (entry.name, None)
+        )
         folders.append(
             RemoteReportFolder(
-                reportName=entry.name,
+                reportName=report_name,
                 remotePath=_synthetic_remote_path(configured_remote_path, entry.name),
                 lastModified=last_modified,
                 lastSynced=effective_last_synced,
+                syncedName=entry.name,
+                rank=rank,
             )
         )
 
@@ -125,4 +138,5 @@ def list_local_synced_performance_folders(
         report_directory_name=performance_directory_name,
         configured_remote_path=connection.performancePath,
         is_valid_report_dir=is_valid_performance_report_dir,
+        qualify_rank=bool(connection.multihostPerformance),
     )

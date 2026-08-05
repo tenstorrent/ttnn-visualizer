@@ -2,12 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Tooltip } from '@blueprintjs/core';
+import { Button, Checkbox, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { RemoteConnection } from '../../definitions/RemoteConnection';
+import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
 import {
     SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
@@ -286,6 +286,18 @@ const RemoteConnectionDialog = ({
                         id='remote-performance-path'
                         value={connection.performancePath ?? ''}
                         onChange={(e) => updateTarget({ performancePath: e.target.value })}
+                    />
+                </FormGroup>
+
+                <FormGroup
+                    subLabel='Reports are found at "ttrun/rank0/reports/<REPORT>", so the path above must be the folder that directly contains the rank folders (e.g. "/<PATH TO TT METAL>/generated/profiler/ttrun/"). Single-host reports sitting directly under that path are not listed while this is on.'
+                    labelFor='remote-performance-multihost'
+                >
+                    <Checkbox
+                        id='remote-performance-multihost'
+                        label={MULTIHOST_CHECKBOX_LABEL}
+                        checked={connection.multihostPerformance ?? false}
+                        onChange={(e) => updateTarget({ multihostPerformance: e.currentTarget.checked })}
                     />
                 </FormGroup>
 
