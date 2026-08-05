@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { formatSyncedReportName, getRankedReportLabel } from '../src/functions/reportRank';
+import { formatSyncedReportName, getRankedReportLabel, getScopedRankLabel } from '../src/functions/reportRank';
 
 const TIMESTAMP = '2026_07_28_18_04_24';
 
@@ -39,5 +39,12 @@ describe('formatSyncedReportName', () => {
     it('reads the same label the picker shows for the same report', () => {
         // The two spellings of one report must not read differently to the user.
         expect(formatSyncedReportName(`${TIMESTAMP}_rank3`)).toBe(getRankedReportLabel(TIMESTAMP, 3));
+    });
+});
+
+describe('getScopedRankLabel', () => {
+    it('says which rank of how many is on screen', () => {
+        expect(getScopedRankLabel(0, 2)).toBe('rank 0 of 2');
+        expect(getScopedRankLabel(0, 16)).toBe('rank 0 of 16');
     });
 });
