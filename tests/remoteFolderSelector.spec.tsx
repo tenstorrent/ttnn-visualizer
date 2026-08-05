@@ -2,20 +2,32 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import '@testing-library/jest-dom/vitest';
 import { Classes } from '@blueprintjs/core';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AxiosResponse } from 'axios';
 import { useAtomValue } from 'jotai';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
 import RemoteFolderSelector from '../src/components/report-selection/RemoteFolderSelector';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
-import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
+import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
-import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
+import { CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
+import {
+    FETCH_REMOTE_FOLDERS_LABEL,
+    MULTIHOST_CHECKBOX_LABEL,
+    RemoteConnection,
+    RemoteFolder,
+} from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { LOCAL_STORAGE_KEY_CONNECTIONS, LOCAL_STORAGE_KEY_SELECTED } from '../src/hooks/useRemote';
+import {
+    LOCAL_STORAGE_KEY_CONNECTIONS,
+    LOCAL_STORAGE_KEY_SELECTED,
+    savedPerformanceFoldersKey,
+    savedReportFoldersKey,
+} from '../src/hooks/useRemote';
 import { isActivatingReportAtom } from '../src/store/app';
 import {
     FOLDER_LIST_SYNC_ERROR_TOAST_TITLE,
@@ -34,6 +46,12 @@ import mockRemoteProfilerFolderList from './data/mockRemoteProfilerFolderList.js
 import remoteConnection from './data/remoteConnection.json';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 import getButtonWithText from './helpers/getButtonWithText';
+import {
+    getConnectionTrigger,
+    getDeleteConnectionLabel,
+    getEditConnectionLabel,
+} from './helpers/remoteConnectionSelectors';
+import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -46,15 +64,15 @@ afterEach(() => {
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
 const ADD_NEW_CONNECTION = 'Add new connection';
 const NO_CONNECTION = '(No connection)';
-const EDIT_NEW_CONNECTION = 'Edit selected connection';
-const REMOVE_NEW_CONNECTION = 'Remove selected connection';
-const FETCH_REMOTE_FOLDERS = 'Fetch remote folders list';
+const FETCH_REMOTE_FOLDERS = FETCH_REMOTE_FOLDERS_LABEL;
 const CONNECTION_NAME = 'Local - ssh://localhost:2222/';
 const NO_SELECTION = '(No selection)';
 
 const HTML_DISABLED = 'disabled';
 const SELECT_LOCAL_REPORT_TEXT = 'Select a report...';
 const IS_ACTIVATING_REPORT_PROBE_TEST_ID = 'is-activating-report-probe';
+
+const EDITED_CONNECTION_NAME = 'Renamed Server';
 
 const IsActivatingReportProbe = () => {
     const isActivatingReport = useAtomValue(isActivatingReportAtom);
@@ -70,6 +88,8 @@ const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance, mockUse
         mockUseReportMetadata: vi.fn(),
     };
 });
+
+const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
 
 vi.mock('../src/hooks/useAPI.tsx', async () => {
     const actual = await vi.importActual<typeof import('../src/hooks/useAPI.tsx')>('../src/hooks/useAPI.tsx');
@@ -89,8 +109,15 @@ vi.mock('../src/hooks/useAPI.tsx', async () => {
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
         post: vi.fn(),
+        // Present so an unmocked GET surfaces as an unexpected call rather than as
+        // "axiosInstance.get is not a function" swallowed by a query's error state.
+        get: vi.fn(),
     },
 }));
+
+// The edit dialog renders SshConfigHostPicker; without this it would issue a real request from
+// jsdom, and the picker would be absent because the query failed rather than because of a fixture.
+vi.mock('../src/hooks/useSshConfigHosts', () => ({ default: useSshConfigHostsMock }));
 
 beforeEach(() => {
     vi.resetAllMocks();
@@ -99,6 +126,7 @@ beforeEach(() => {
     mockUseInstance.mockReturnValue({ data: mockInstance });
     // No active report metadata by default; effect short-circuits.
     mockUseReportMetadata.mockReturnValue({ data: undefined, error: undefined });
+    useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
     // Clean up localStorage between tests
     window.localStorage.clear();
 });
@@ -149,8 +177,6 @@ it('renders the initial form state when there is no data', () => {
 
     expect(getButtonWithText(ADD_NEW_CONNECTION)).not.toBeNull();
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, true);
     expect(reportSelects).toHaveLength(2);
 
@@ -172,8 +198,6 @@ it('enables fetch remote folder list button when a connection is selected', () =
     const fetchButton = getButtonWithText(FETCH_REMOTE_FOLDERS);
 
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, false);
     expect(reportSelects).toHaveLength(2);
 
@@ -184,10 +208,19 @@ it('enables fetch remote folder list button when a connection is selected', () =
     expect(fetchButton).toHaveProperty(HTML_DISABLED, false);
 });
 
-it('clears localStorage and resets state when removing a connection', () => {
+it('clears localStorage and resets state when removing the only connection', async () => {
     setupConnection(remoteConnection);
+    // The confirmation promises these go with the connection, so seed them to assert they do.
+    window.localStorage.setItem(
+        savedReportFoldersKey(remoteConnection[0]),
+        JSON.stringify(mockRemoteProfilerFolderList),
+    );
+    window.localStorage.setItem(
+        savedPerformanceFoldersKey(remoteConnection[0]),
+        JSON.stringify(mockRemotePerformanceFolderList),
+    );
 
-    const { rerender } = render(
+    render(
         <TestProviders>
             <RemoteSyncConfigurator />
         </TestProviders>,
@@ -195,23 +228,57 @@ it('clears localStorage and resets state when removing a connection', () => {
 
     // Verify connection exists initially
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
 
-    // Clear localStorage to simulate connection removal
-    window.localStorage.removeItem(LOCAL_STORAGE_KEY_CONNECTIONS);
-    window.localStorage.removeItem(LOCAL_STORAGE_KEY_SELECTED);
+    getButtonWithText(CONNECTION_NAME).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    rerender(
+    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(remoteConnection[0])));
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
+    // Verify UI resets to no connection state
+    await waitFor(() => expect(getButtonWithText(NO_CONNECTION)).not.toBeNull(), WAIT_FOR_OPTIONS);
+    expect(JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_CONNECTIONS) ?? '[]')).toEqual([]);
+    expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, true);
+    expect(window.localStorage.getItem(savedReportFoldersKey(remoteConnection[0]))).toBeNull();
+    expect(window.localStorage.getItem(savedPerformanceFoldersKey(remoteConnection[0]))).toBeNull();
+});
+
+it('empties the folder lists rather than reading the no-connection cache key when the last connection goes', async () => {
+    setupConnection(remoteConnection);
+    // No connection still produces a real cache key, so anything stored under it would be adopted
+    // as the folder lists of a connection that no longer exists.
+    window.localStorage.setItem(savedReportFoldersKey(), JSON.stringify(mockRemoteProfilerFolderList));
+    window.localStorage.setItem(savedPerformanceFoldersKey(), JSON.stringify(mockRemotePerformanceFolderList));
+
+    render(
         <TestProviders>
             <RemoteSyncConfigurator />
         </TestProviders>,
     );
 
-    // Verify UI resets to no connection state
-    expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
-    expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, true);
+    getButtonWithText(CONNECTION_NAME).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(remoteConnection[0])));
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
+    await waitFor(() => expect(getButtonWithText(NO_CONNECTION)).not.toBeNull(), WAIT_FOR_OPTIONS);
+
+    // The selectors enable themselves on a non-empty folder list, so staying disabled is what
+    // distinguishes emptied lists from ones populated off the no-connection key.
+    const reportSelects = screen.getAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
+
+    expect(reportSelects).toHaveLength(2);
+    reportSelects.forEach((select) => expect(select).toHaveProperty(HTML_DISABLED, true));
+
+    // Nothing is left to scan on disk, so no local report listing should be attempted either.
+    const axiosInstance = await import('../src/libs/axiosInstance');
+
+    expect(vi.mocked(axiosInstance.default.post)).not.toHaveBeenCalledWith(
+        Endpoints.REMOTE_LOCAL_PROFILER_REPORTS,
+        expect.anything(),
+        expect.anything(),
+    );
 });
 
 it('handles multiple remote connections in localStorage', () => {
@@ -237,8 +304,239 @@ it('handles multiple remote connections in localStorage', () => {
 
     // Should show the first connection by default
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
+});
+
+it('keeps the selected connection when a different one is removed from its dropdown row', async () => {
+    const middleConnection: RemoteConnection = {
+        name: 'Middle Server',
+        username: 'prod-user',
+        host: 'middle.example.com',
+        port: 22,
+        profilerPath: '/opt/reports',
+        performancePath: '/opt/perf',
+    };
+    const lastConnection: RemoteConnection = {
+        name: 'Last Server',
+        username: 'prod-user',
+        host: 'last.example.com',
+        port: 22,
+        profilerPath: '/opt/reports',
+        performancePath: '/opt/perf',
+    };
+
+    // The selection deliberately isn't the first entry: re-pointing it at index 0 would be
+    // indistinguishable from preserving it otherwise.
+    setupConnection([remoteConnection[0], middleConnection, lastConnection], lastConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    getConnectionTrigger(lastConnection).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(middleConnection)));
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
+    await waitFor(() => {
+        const storedConnections = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_CONNECTIONS) ?? '[]');
+        expect(storedConnections).toHaveLength(2);
+    }, WAIT_FOR_OPTIONS);
+
+    // The removal must not re-point the selection, which would also clear the active remote report.
+    expect(getConnectionTrigger(lastConnection)).not.toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_SELECTED) ?? 'null')).toMatchObject({
+        name: lastConnection.name,
+    });
+
+    // Persisting alone doesn't re-render, so assert the row is gone from the reopened dropdown
+    // rather than trusting localStorage.
+    getConnectionTrigger(lastConnection).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const remainingRows = screen.getAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW);
+
+    expect(remainingRows).toHaveLength(2);
+    remainingRows.forEach((row) => expect(row.textContent).not.toContain(middleConnection.name));
+});
+
+it('applies an edit to a connection that is not selected without changing the selection', async () => {
+    const otherConnection: RemoteConnection = {
+        name: 'Other Server',
+        username: 'prod-user',
+        host: 'other.example.com',
+        port: 22,
+        profilerPath: '/opt/reports',
+        performancePath: '/opt/perf',
+    };
+    const passingTests: ConnectionStatus[] = [
+        { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+        { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+    ];
+
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    setupConnection([remoteConnection[0], otherConnection], remoteConnection[0]);
+    mockPost.mockImplementation((url: string) => {
+        if (url === `${Endpoints.REMOTE}/test`) {
+            return Promise.resolve({ data: passingTests } as AxiosResponse);
+        }
+
+        return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+    });
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    getButtonWithText(CONNECTION_NAME).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(otherConnection)));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: EDITED_CONNECTION_NAME } });
+    fireEvent.click(getButtonWithText('Run tests'));
+
+    await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
+    fireEvent.click(getButtonWithText('Save connection'));
+
+    await waitFor(() => {
+        const storedConnections = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_CONNECTIONS) ?? '[]');
+        expect(storedConnections.map((connection: RemoteConnection) => connection.name)).toEqual([
+            remoteConnection[0].name,
+            EDITED_CONNECTION_NAME,
+        ]);
+    }, WAIT_FOR_OPTIONS);
+
+    // Re-pointing the selection here would also clear the active remote report, and fetching folder
+    // lists would populate them for a connection that isn't in use.
+    expect(JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY_SELECTED) ?? 'null')).toMatchObject({
+        name: remoteConnection[0].name,
+    });
+    expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
+
+    const listedEndpoints: string[] = [Endpoints.REMOTE_PROFILER_REPORTS, Endpoints.REMOTE_PERFORMANCE_REPORTS];
+    expect(mockPost.mock.calls.some(([url]) => listedEndpoints.includes(url))).toBe(false);
+});
+
+// Every other case here seeds localStorage before mount, so the list mirror is filled by its lazy
+// initialiser. Only the add path exercises the mirror write itself: without it the new connection
+// would name the trigger yet be missing from the dropdown it was selected from, and so could never
+// be edited or deleted.
+it('lists a newly added connection as a dropdown row', async () => {
+    const passingTests: ConnectionStatus[] = [
+        { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+        { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+    ];
+    const addedName = 'Added Server';
+
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    vi.mocked(axiosInstance.default.post).mockImplementation((url: string) => {
+        if (url === `${Endpoints.REMOTE}/test`) {
+            return Promise.resolve({ data: passingTests } as AxiosResponse);
+        }
+
+        return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+    });
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    fireEvent.click(getButtonWithText(ADD_NEW_CONNECTION));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: addedName } });
+    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'added.example.com' } });
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'prod-user' } });
+    fireEvent.change(screen.getByLabelText('Memory report folder path'), { target: { value: '/opt/reports' } });
+    fireEvent.click(getButtonWithText('Run tests'));
+
+    await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
+    fireEvent.click(getButtonWithText('Add connection'));
+
+    const trigger = await screen.findByRole('button', { name: new RegExp(addedName) }, WAIT_FOR_OPTIONS);
+    trigger.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const rows = screen.getAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain(addedName);
+});
+
+// The folder caches are keyed by name|host|port, so editing the host moves them.
+// updateSavedRemoteFoldersConnection is the only thing carrying them across, and asserting
+// only on the connection list would stay green if that call were dropped.
+it('moves cached folder lists when an edit changes the host', async () => {
+    const editedHost = 'moved.example.com';
+    // Editing the *unselected* connection keeps the folder-fetch path out of it: re-pointing the
+    // selection refetches and would overwrite the moved cache with the mocked empty response,
+    // hiding whether the move happened at all.
+    const original: RemoteConnection = {
+        name: 'Other Server',
+        username: 'prod-user',
+        host: 'other.example.com',
+        port: 22,
+        profilerPath: '/opt/reports',
+        performancePath: '/opt/perf',
+    };
+    const cachedReportFolders = [{ remotePath: '/reports/cached', reportName: 'cached', lastModified: 1 }];
+    const cachedPerformanceFolders = [{ remotePath: '/perf/cached', reportName: 'cached-perf', lastModified: 2 }];
+
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+
+    setupConnection([remoteConnection[0], original], remoteConnection[0]);
+    window.localStorage.setItem(savedReportFoldersKey(original), JSON.stringify(cachedReportFolders));
+    window.localStorage.setItem(savedPerformanceFoldersKey(original), JSON.stringify(cachedPerformanceFolders));
+
+    mockPost.mockImplementation((url: string) => {
+        if (url === `${Endpoints.REMOTE}/test`) {
+            return Promise.resolve({
+                data: [
+                    { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+                    { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+                ] as ConnectionStatus[],
+            } as AxiosResponse);
+        }
+
+        return Promise.resolve({ status: 204, data: '' } as AxiosResponse);
+    });
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    getButtonWithText(CONNECTION_NAME).click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(original)));
+    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: editedHost } });
+    fireEvent.click(getButtonWithText('Run tests'));
+
+    await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
+    fireEvent.click(getButtonWithText('Save connection'));
+
+    const movedConnection: RemoteConnection = { ...original, host: editedHost };
+
+    await waitFor(() => {
+        expect(window.localStorage.getItem(savedReportFoldersKey(movedConnection))).toBe(
+            JSON.stringify(cachedReportFolders),
+        );
+    }, WAIT_FOR_OPTIONS);
+
+    expect(window.localStorage.getItem(savedPerformanceFoldersKey(movedConnection))).toBe(
+        JSON.stringify(cachedPerformanceFolders),
+    );
+    expect(window.localStorage.getItem(savedReportFoldersKey(original))).toBeNull();
+    expect(window.localStorage.getItem(savedPerformanceFoldersKey(original))).toBeNull();
 });
 
 it('displays correct connection information format', () => {
@@ -277,8 +575,6 @@ it('handles localStorage parsing errors gracefully', () => {
 
     // Should fall back to no connection state
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, true);
 });
 
 it('handles API errors gracefully', () => {
@@ -920,7 +1216,7 @@ it('clears cached performance folders when local mount scan returns empty', asyn
     });
 
     setupConnection(remoteConnection);
-    window.localStorage.setItem(`${remoteConnection[0].name} - performanceFolders`, JSON.stringify([staleFolder]));
+    window.localStorage.setItem(savedPerformanceFoldersKey(remoteConnection[0]), JSON.stringify([staleFolder]));
 
     render(
         <TestProviders>
@@ -941,7 +1237,7 @@ it('clears cached performance folders when local mount scan returns empty', asyn
         const selectButtons = screen.queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON);
         expect(selectButtons.every((btn) => btn.hasAttribute(HTML_DISABLED))).toBe(true);
         expect(
-            JSON.parse(window.localStorage.getItem(`${remoteConnection[0].name} - performanceFolders`) ?? '[]'),
+            JSON.parse(window.localStorage.getItem(savedPerformanceFoldersKey(remoteConnection[0])) ?? '[]'),
         ).toEqual([]);
     }, WAIT_FOR_OPTIONS);
 });
@@ -1067,8 +1363,12 @@ it('validates connection data structure', () => {
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
 });
 
-it('maintains state consistency after localStorage changes', () => {
-    // Remove previously set connections
+// Both the trigger and the dropdown rows read state mirrors of localStorage, so neither notices a
+// write from outside this component. Pinned because the two used to disagree — the trigger read
+// through to localStorage while the rows came from the mirror — which meant a connection could
+// name the trigger while being absent from the list it was supposedly selected from. Retiring the
+// mirrors for atomWithStorage should make both pick the write up, not just one.
+it('ignores a connection written to localStorage by something other than this component', () => {
     window.localStorage.removeItem(LOCAL_STORAGE_KEY_CONNECTIONS);
 
     const { rerender } = render(
@@ -1077,10 +1377,8 @@ it('maintains state consistency after localStorage changes', () => {
         </TestProviders>,
     );
 
-    // Initially no connections
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
 
-    // Add connection to localStorage
     setupConnection(remoteConnection);
 
     rerender(
@@ -1089,9 +1387,8 @@ it('maintains state consistency after localStorage changes', () => {
         </TestProviders>,
     );
 
-    // Should now show the connection
-    expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
+    expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
+    expect(screen.queryAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW)).toHaveLength(0);
 });
 
 it('shows an "Incompatible report version" toast when the active report uses an unsupported DB schema', async () => {
@@ -1135,10 +1432,6 @@ it('displays appropriate connection count information', () => {
 
     // Should show first connection by default
     expect(getButtonWithText(CONNECTION_NAME)).not.toBeNull();
-
-    // All connection management buttons should be enabled
-    expect(getButtonWithText(EDIT_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
-    expect(getButtonWithText(REMOVE_NEW_CONNECTION)).toHaveProperty(HTML_DISABLED, false);
     expect(getButtonWithText(FETCH_REMOTE_FOLDERS)).toHaveProperty(HTML_DISABLED, false);
 });
 
@@ -1354,10 +1647,8 @@ it('falls back to the path when the listing reported no rank', async () => {
     expect(screen.getByText('/loose_report')).toBeTruthy();
 });
 
-const performanceFolderCacheKey = (connection: RemoteConnection) => `${connection.name} - performanceFolders`;
-
 /** Saving is gated on a passing connection test, so the edit has to run one. */
-const editSelectedConnection = async () => {
+const editConnection = async (connection: RemoteConnection) => {
     const axiosInstance = await import('../src/libs/axiosInstance');
 
     vi.mocked(axiosInstance.default.post).mockImplementation((url: string) =>
@@ -1368,48 +1659,28 @@ const editSelectedConnection = async () => {
             : Promise.resolve({ data: [] } as AxiosResponse),
     );
 
-    getButtonWithText(EDIT_NEW_CONNECTION).click();
+    // Edit is a per-row action inside the connection dropdown, so the row has to be on screen.
+    fireEvent.click(getConnectionTrigger(connection));
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(connection)));
     await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeTruthy());
 };
 
 const runConnectionTestAndSave = async () => {
-    getButtonWithText('Run tests').click();
+    fireEvent.click(getButtonWithText('Run tests'));
 
-    const saveButton = await waitFor(() => {
-        const button = getButtonWithText('Save connection');
-        expect(button).toHaveProperty(HTML_DISABLED, false);
+    await waitFor(() => expect(getButtonWithText('Save connection')).toHaveProperty(HTML_DISABLED, false), {
+        ...WAIT_FOR_OPTIONS,
+    });
 
-        return button;
-    }, WAIT_FOR_OPTIONS);
-
-    saveButton.click();
+    fireEvent.click(getButtonWithText('Save connection'));
 };
 
 it('drops cached performance folders when the multihost flag is flipped', async () => {
     // The cached rows are remote paths under the old layout, so keeping them would
     // offer reports the new search cannot find.
-    const connection = multihostConnection[0];
-    const cacheKey = performanceFolderCacheKey({ ...connection, multihostPerformance: false });
-
-    setupConnection([{ ...connection, multihostPerformance: false }]);
-    window.localStorage.setItem(cacheKey, JSON.stringify(multihostFolders));
-
-    render(
-        <TestProviders>
-            <RemoteSyncConfigurator />
-        </TestProviders>,
-    );
-
-    await editSelectedConnection();
-    screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }).click();
-    await runConnectionTestAndSave();
-
-    await waitFor(() => expect(window.localStorage.getItem(cacheKey)).toBeNull(), WAIT_FOR_OPTIONS);
-});
-
-it('keeps cached performance folders when an unrelated field is edited', async () => {
-    const connection = multihostConnection[0];
-    const cacheKey = performanceFolderCacheKey(connection);
+    const connection = { ...multihostConnection[0], multihostPerformance: false };
+    const cacheKey = savedPerformanceFoldersKey(connection);
 
     setupConnection([connection]);
     window.localStorage.setItem(cacheKey, JSON.stringify(multihostFolders));
@@ -1420,10 +1691,36 @@ it('keeps cached performance folders when an unrelated field is edited', async (
         </TestProviders>,
     );
 
-    await editSelectedConnection();
+    await editConnection(connection);
+    fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
     await runConnectionTestAndSave();
 
-    await waitFor(() => expect(getButtonWithText(EDIT_NEW_CONNECTION)).toBeTruthy(), WAIT_FOR_OPTIONS);
+    await waitFor(() => expect(window.localStorage.getItem(cacheKey)).toBeNull(), WAIT_FOR_OPTIONS);
+});
+
+it('keeps cached performance folders when an unrelated field is edited', async () => {
+    const connection = multihostConnection[0];
+    const cacheKey = savedPerformanceFoldersKey(connection);
+
+    setupConnection([connection]);
+    window.localStorage.setItem(cacheKey, JSON.stringify(multihostFolders));
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await editConnection(connection);
+    // Not the name: the cache is keyed on it, so a rename moves the entry rather
+    // than dropping it and the assertion below would pass for the wrong reason.
+    fireEvent.change(screen.getByLabelText('Memory report folder path'), { target: { value: '/elsewhere' } });
+    await runConnectionTestAndSave();
+
+    await waitFor(
+        () => expect(screen.queryByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeNull(),
+        WAIT_FOR_OPTIONS,
+    );
     expect(window.localStorage.getItem(cacheKey)).not.toBeNull();
 });
 

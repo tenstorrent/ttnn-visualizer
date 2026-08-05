@@ -336,7 +336,11 @@ class SSHClient:
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
         # SFTP commands to execute
-        sftp_commands = f"get '{remote_path}' '{local_path}'\nquit\n"
+        # Batch script is parsed by sftp, not the shell — quote paths for spaces/special chars.
+        sftp_commands = (
+            f"get {shlex.quote(str(remote_path))} {shlex.quote(str(local_path))}\n"
+            "quit\n"
+        )
 
         logger.debug(f"Downloading: {remote_path} -> {local_path}")
 
@@ -435,7 +439,8 @@ class SSHClient:
         try:
             # Use stat command to get file information
             result = self.execute_command(
-                f"stat -c '%s %Y %F' '{path}' 2>/dev/null || echo 'NOT_FOUND'",
+                f"stat -c '%s %Y %F' {shlex.quote(str(path))} "
+                "2>/dev/null || echo 'NOT_FOUND'",
                 timeout=timeout,
             )
 
@@ -464,7 +469,7 @@ class SSHClient:
 
         try:
             result = self.execute_command(
-                f"ls -1 '{path}' 2>/dev/null", timeout=timeout
+                f"ls -1 {shlex.quote(str(path))} 2>/dev/null", timeout=timeout
             )
             return [line.strip() for line in result.split("\n") if line.strip()]
         except SSHException:

@@ -3,6 +3,8 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+@use '../mixins/formLayout' as form-layout;
 
 .folder-fieldset {
     position: relative;
@@ -50,16 +52,11 @@
         gap: 5px;
 
         .bp6-file-input {
-            width: 250px;
+            width: variables.$report-select-width;
         }
 
         .remote-select {
-            .bp6-button-text {
-                width: 8rem;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
+            @include form-layout.truncated-select-trigger;
         }
     }
 

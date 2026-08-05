@@ -4,6 +4,7 @@
 
 import { formatSize } from './math';
 import { TensorMemoryLayout } from '../model/MemoryConfig';
+import { SshConfigHost } from '../model/SshConfigHost';
 
 export const toReadableShape = (input: string) => {
     const match = input.match(/(?:Shape|torch\.Size)\((\[.*\])\)/);
@@ -102,3 +103,7 @@ export const formatDuration = (ns: number): string => {
 
 /** Remote folder sync timestamps are Unix epoch seconds. */
 export const getUTCFromEpoch = (epoch: number): Date => new Date(epoch * 1000);
+
+/** Dropdown label for a `~/.ssh/config` alias, disambiguated by its HostName. */
+export const getSshConfigHostLabel = (host: SshConfigHost): string =>
+    host.hostName ? `${host.host} — ${host.hostName}` : host.host;

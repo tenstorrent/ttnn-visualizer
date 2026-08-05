@@ -13,7 +13,12 @@ import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from
 import PerfDeviceTimeChart from './PerfDeviceTimeChart';
 import { resolveMaxCores } from '../../functions/getCoreCount';
 import { usePerfMeta } from '../../hooks/useAPI';
-import { OnOpCodeClick, PerfChartId } from '../../definitions/PerformanceCharts';
+import {
+    OnOpCodeClick,
+    PERF_CHART_GROUP_LABELS,
+    PerfChartGroup,
+    PerfChartId,
+} from '../../definitions/PerformanceCharts';
 import { getOperationTypesChartId } from '../../functions/buildChartIndexEntries';
 
 interface NonFilterablePerfChartsProps {
@@ -47,7 +52,33 @@ const NonFilterablePerfCharts = ({
 
     return (
         <>
-            <h2>Matmul operations</h2>
+            {/* Continues the "All operations" section opened by PerfCharts, so it carries no heading of its own. */}
+            <div className='operation-types-charts'>
+                {performanceReport && (
+                    <PerfOperationTypesChart
+                        className='flex-chart'
+                        reportTitle={comparisonReportList ? performanceReport.reportName : ''}
+                        data={chartData}
+                        opCodes={opCodeOptions}
+                        id={getOperationTypesChartId('active')}
+                        onOpCodeClick={onOpCodeClick}
+                    />
+                )}
+
+                {comparisonReportList?.map((report, index) => (
+                    <PerfOperationTypesChart
+                        key={`${report}-${index}`}
+                        className='flex-chart'
+                        reportTitle={performanceReport ? report : ''}
+                        data={secondaryData[index]}
+                        opCodes={opCodeOptions}
+                        id={getOperationTypesChartId(`comparison-${index}`)}
+                        onOpCodeClick={onOpCodeClick}
+                    />
+                ))}
+            </div>
+
+            <h2>{PERF_CHART_GROUP_LABELS[PerfChartGroup.MATMUL]}</h2>
 
             {hasMatmulData ? (
                 <>
@@ -78,7 +109,7 @@ const NonFilterablePerfCharts = ({
                 <SkeletalChart />
             )}
 
-            <h2>Conv operations</h2>
+            <h2>{PERF_CHART_GROUP_LABELS[PerfChartGroup.CONV]}</h2>
 
             {hasConvData ? (
                 <>
@@ -108,32 +139,6 @@ const NonFilterablePerfCharts = ({
             ) : (
                 <SkeletalChart />
             )}
-
-            <h2>All operations</h2>
-            <div className='operation-types-charts'>
-                {performanceReport && (
-                    <PerfOperationTypesChart
-                        className='flex-chart'
-                        reportTitle={comparisonReportList ? performanceReport.reportName : ''}
-                        data={chartData}
-                        opCodes={opCodeOptions}
-                        id={getOperationTypesChartId('active')}
-                        onOpCodeClick={onOpCodeClick}
-                    />
-                )}
-
-                {comparisonReportList?.map((report, index) => (
-                    <PerfOperationTypesChart
-                        key={`${report}-${index}`}
-                        className='flex-chart'
-                        reportTitle={performanceReport ? report : ''}
-                        data={secondaryData[index]}
-                        opCodes={opCodeOptions}
-                        id={getOperationTypesChartId(`comparison-${index}`)}
-                        onOpCodeClick={onOpCodeClick}
-                    />
-                ))}
-            </div>
         </>
     );
 };

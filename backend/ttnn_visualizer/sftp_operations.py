@@ -65,6 +65,17 @@ def _is_sftp_subsystem_unavailable(stderr: str) -> bool:
     return "subsystem request failed" in (stderr or "").lower()
 
 
+def _quote_keeping_globs(pattern: str) -> str:
+    """Shell-quote a remote path while leaving ``*`` free to expand on the host.
+
+    ``shlex.quote`` on the whole pattern would quote the wildcard too, turning a
+    glob the caller depends on into a literal filename. Quoting each side of the
+    wildcards instead keeps the expansion while closing the quote-escape that a
+    hand-rolled ``'{path}'`` leaves open.
+    """
+    return "*".join(shlex.quote(segment) for segment in pattern.split("*"))
+
+
 def get_active_sync_method(remote_connection: RemoteConnection) -> SyncMethod:
     """Which transport this host is currently using (scp once SFTP has failed)."""
     if _remote_transfer_key(remote_connection) in _sftp_subsystem_unavailable:
@@ -204,7 +215,9 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     """
     if "*" in file_path:
         # Build SSH command to list files matching the pattern (never prompts for password)
-        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [f"ls -1 '{file_path}'"]
+        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
+            f"ls -1 {_quote_keeping_globs(file_path)}"
+        ]
 
         try:
             result = subprocess.run(
@@ -1199,7 +1212,7 @@ def find_folders_by_files(
     directories whose names match the glob, and ``directory_filter`` to drop
     candidates the glob cannot exclude before they cost an SSH round trip.
     """
-    if not root_folder:
+    if not root_folder or not file_names:
         return []
 
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
@@ -1211,6 +1224,10 @@ def find_folders_by_files(
             ssh_cmd,
             capture_output=True,
             text=True,
+            # The probes run inside this call, so it inherits the longer budget.
+            # Deliberately not `check=True`: `find` exits nonzero for an unreadable
+            # subtree after printing everything it did match, and those matches are
+            # still reports. The return code is inspected below instead.
             timeout=_ssh_subprocess_timeout_seconds(),
         )
     except subprocess.TimeoutExpired:

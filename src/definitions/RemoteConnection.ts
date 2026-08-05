@@ -45,7 +45,7 @@ export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
 });
 
 export const MULTIHOST_CHECKBOX_LABEL = 'Search per-rank subdirectories';
-
+export const FETCH_REMOTE_FOLDERS_LABEL = 'Fetch remote folders';
 export const NEVER_SYNCED_LABEL = 'Never synced';
 export const REPORT_OUTDATED_LABEL = 'Report is stale';
 export const REPORT_UP_TO_DATE_LABEL = 'Report recently synced';
