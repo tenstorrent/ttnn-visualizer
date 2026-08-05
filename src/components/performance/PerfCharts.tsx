@@ -7,7 +7,7 @@ import PerfDeviceKernelDurationChart from './PerfDeviceKernelDurationChart';
 import PerfDeviceKernelRuntimeChart from './PerfDeviceKernelRuntimeChart';
 import PerfOpCountVsRuntimeChart from './PerfOpCountVsRuntimeChart';
 import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
-import { OnOpCodeClick } from '../../definitions/PerformanceCharts';
+import { OnOpCodeClick, PERF_CHART_GROUP_LABELS, PerfChartGroup } from '../../definitions/PerformanceCharts';
 
 interface PerfChartsProps {
     filteredPerfData: TypedPerfTableRow[];
@@ -22,6 +22,8 @@ const PerfCharts = ({ filteredPerfData, comparisonData, selectedOpCodes, onOpCod
 
     return (
         <>
+            <h2>{PERF_CHART_GROUP_LABELS[PerfChartGroup.ALL]}</h2>
+
             <PerfDurationHistogram
                 rows={filteredPerfData}
                 selectedOpCodes={selectedOpCodes}
