@@ -96,6 +96,7 @@ from ttnn_visualizer.sftp_operations import (
     sync_remote_profiler_folders,
 )
 from ttnn_visualizer.ssh_client import SSHClient
+from ttnn_visualizer.ssh_config import load_ssh_config_hosts
 from ttnn_visualizer.stack_trace_source import (
     check_stack_source_local_with_origin,
     check_stack_source_remote_with_origin,
@@ -250,14 +251,17 @@ def _remote_stack_source_path_availability(
     # `remapped` is None when the file is unavailable, False on a literal-path hit,
     # and True when resolved via a /tt-metal/ remap. The /test endpoint surfaces this
     # distinction so clients can warn only about approximate (remapped) matches.
+    # SERVER_MODE gates the SSH branch as well as the local one; see the note in
+    # _remote_stack_source_read for why a stored connection can't be trusted here.
     remapped: Optional[bool] = None
-    if remote_connection:
+    is_server_mode = bool(current_app.config.get("SERVER_MODE"))
+    if remote_connection and not is_server_mode:
         try:
             ssh_client = SSHClient(remote_connection)
             remapped = check_stack_source_remote_with_origin(ssh_client, file_path)
         except RemoteConnectionException:
             return _stack_source_availability_response(False)
-    elif not current_app.config.get("SERVER_MODE"):
+    elif not remote_connection and not is_server_mode:
         remapped = check_stack_source_local_with_origin(file_path)
 
     if remapped is None:
@@ -287,6 +291,16 @@ def _remote_stack_source_read(
     if not file_path:
         return response_not_found("Source file not found.")
 
+    # Both branches are gated, not just the local one. The endpoints that store a
+    # connection on an instance are @local_only, so a hosted instance should never carry
+    # one — but nothing revalidates that at read time, and a database carried over from a
+    # local install would otherwise make the hosted server open outbound SSH connections
+    # on an unauthenticated request, with the file it read coming back in the response.
+    if current_app.config.get("SERVER_MODE"):
+        return response_forbidden(
+            "Stack source reads are not available in server mode.",
+        )
+
     if remote_connection:
         try:
             ssh_client = SSHClient(remote_connection)
@@ -298,11 +312,6 @@ def _remote_stack_source_read(
             return error_response(e.http_status, e.message)
         except RemoteFileReadException as e:
             return error_response(e.http_status, str(e), e.detail)
-
-    if current_app.config.get("SERVER_MODE"):
-        return response_forbidden(
-            "Local stack source reads are not available in server mode.",
-        )
 
     try:
         content, resolved, _remapped = read_stack_source_local(file_path)
@@ -1677,6 +1686,13 @@ def get_mesh_descriptor(instance: Instance):
         return jsonify({"docs": docs})
     except yaml.YAMLError as e:
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
+
+
+@api.route("/remote/ssh-config-hosts", methods=["GET"])
+@local_only
+def list_remote_ssh_config_hosts():
+    """List concrete Host aliases from the local user's ~/.ssh/config."""
+    return jsonify(load_ssh_config_hosts().model_dump(exclude_none=True))
 
 
 @api.route("/remote/test", methods=["POST"])

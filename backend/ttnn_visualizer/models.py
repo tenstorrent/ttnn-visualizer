@@ -4,15 +4,18 @@
 
 import dataclasses
 import enum
+import logging
 from pathlib import Path
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.ext.mutable import MutableDict
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.utils import SerializeableDataclass, parse_memory_config
+
+logger = logging.getLogger(__name__)
 
 
 class BufferType(enum.Enum):
@@ -262,9 +265,40 @@ def folder_segment_from_remote_path(remote_path: Optional[str]) -> Optional[str]
         return None
 
 
+def reject_ssh_option_like(value: object) -> str:
+    """Refuse a value OpenSSH would read as an option instead of part of the target.
+
+    ``username@host`` is passed to ``ssh``/``sftp``/``scp`` in option position, so a
+    leading ``-`` makes the whole token an option — ``-oProxyCommand=…`` is then run
+    through a shell. No POSIX username or DNS label starts with ``-``, so refusing one
+    costs nothing.
+
+    Non-strings are refused here rather than handed to Pydantic, which coerces ``bytes``
+    and ``bytearray`` to ``str`` in lax mode *after* ``mode="before"`` validators run —
+    slipping a leading ``-`` past this check.
+    """
+    if not isinstance(value, str):
+        raise ValueError("must be a string")
+    if value.startswith("-"):
+        raise ValueError("must not start with '-'")
+    return value
+
+
 def sanitise_remote_host_segment(value: object) -> str:
     """Normalise a user-provided host to a single safe path segment."""
-    return sanitise_path_segment(value)
+    return reject_ssh_option_like(sanitise_path_segment(value))
+
+
+def sanitise_ssh_username(value: object) -> str:
+    """Normalise a user-provided SSH username for use in an ``ssh`` argv."""
+    if not isinstance(value, str):
+        raise ValueError("must be a string")
+    # Strip before the checks: " -oProxyCommand=…" is option-like once trimmed, and an
+    # all-whitespace username would otherwise reach argv as the bare target "@host".
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("must not be empty")
+    return reject_ssh_option_like(stripped)
 
 
 class RemoteConnection(SerializeableModel):
@@ -280,6 +314,11 @@ class RemoteConnection(SerializeableModel):
     @classmethod
     def _sanitise_host(cls, value: object) -> str:
         return sanitise_remote_host_segment(value)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _sanitise_username(cls, value: object) -> str:
+        return sanitise_ssh_username(value)
 
 
 class MlirServerConnection(SerializeableModel):
@@ -298,13 +337,8 @@ class MlirServerConnection(SerializeableModel):
 
     @field_validator("username", mode="before")
     @classmethod
-    def _strip_required_strings(cls, value: object) -> str:
-        if not isinstance(value, str):
-            return value  # type: ignore[return-value]
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("must not be empty")
-        return stripped
+    def _sanitise_username(cls, value: object) -> str:
+        return sanitise_ssh_username(value)
 
     @field_validator("host", mode="before")
     @classmethod
@@ -351,6 +385,24 @@ class RemoteReportFolder(SerializeableModel):
     remotePath: str
     lastModified: int
     lastSynced: Optional[int] = None
+
+
+def stored_remote_connection(value: Any) -> Optional[RemoteConnection]:
+    """Deserialise a persisted connection, treating an unusable one as absent.
+
+    The field validators are a write-path guard, but rows predate them: a username of
+    ``"  "`` was accepted before ``sanitise_ssh_username`` rejected empties, and raising
+    here would turn every instance-scoped request against that row into a 500 the user
+    cannot clear from the UI. Dropping the connection instead leaves the instance
+    loadable so it can be re-entered.
+    """
+    if value is None:
+        return None
+    try:
+        return RemoteConnection.model_validate(value, strict=False)
+    except ValidationError as exc:
+        logger.warning("Ignoring unusable stored remote connection: %s", exc)
+        return None
 
 
 class Instance(BaseModel):
@@ -433,11 +485,7 @@ class InstanceTable(db.Model):
                 if isinstance(self.active_report, dict)
                 else None
             ),
-            remote_connection=(
-                RemoteConnection.model_validate(self.remote_connection, strict=False)
-                if self.remote_connection is not None
-                else None
-            ),
+            remote_connection=stored_remote_connection(self.remote_connection),
             remote_profiler_folder=(
                 RemoteReportFolder.model_validate(
                     self.remote_profiler_folder, strict=False

@@ -23,7 +23,12 @@ The app ships in two first-class shapes, and changes should work in both unless 
 - **Local install** on the engineer's own machine — full feature set, including local filesystem access, uploads, and remote SSH sync.
 - **Hosted** at **ttnn-visualizer.tenstorrent.com** — runs with `SERVER_MODE` enabled, so `@local_only` endpoints return 403 and the frontend hides the matching UI via `getServerConfig()`.
 
-Treat the hosted deployment as **multi-user and untrusted-input**: requests can come from anyone, instances are not mutually trusted, and uploaded payloads must be validated rather than blindly parsed. Authentication is not part of the app's model, so the `@local_only` boundary *is* the security boundary — when adding endpoints, sockets, or data flows, decide consciously whether they're safe under `SERVER_MODE`, and gate genuinely local-only features on both backend and frontend.
+Treat the hosted deployment as **multi-user and untrusted-input**: requests can come from anyone, instances are not mutually trusted, and uploaded payloads must be validated rather than blindly parsed. Authentication is not part of the app's model, so two boundaries carry the security posture between them and a change can weaken either:
+
+- **`@local_only`** decides *who may call what*. It returns 403 under `SERVER_MODE`, and the matching UI is hidden via `getServerConfig()`. When adding endpoints, sockets, or data flows, decide consciously whether they're safe under `SERVER_MODE`, and gate genuinely local-only features on **both** backend and frontend.
+- **`ALLOWED_ORIGINS`** decides *which pages may call us at all*. Nothing is authenticated, and `@local_only` endpoints hand out SSH host, username, and local path metadata, so on a local install CORS is what stops a page served from another localhost port reading it. It defaults to the narrowest set that still works, and the same allowlist gates the socket.io handshake (`build_socketio_origin_check`) because sockets carry the same instance-scoped data. Don't widen it for convenience.
+
+See [CONVENTIONS.md](./CONVENTIONS.md#trust-boundaries) for what each boundary does and does not cover — in particular, the app derives its own origin from the request only for hosts that can only mean this machine (an IP address, `localhost`, or the `--host` it was launched with), so a proxied hostname needs configuring; and the allowlist governs which *other* origins may talk to us, not what a socket event may reveal, so emits still need scoping to their own instance.
 
 ## Python environment
 
@@ -43,8 +48,8 @@ If you mainly work in Python, you still benefit from knowing that many behaviors
 ## HTTP API conventions
 
 - **Instance scoping:** Report-backed routes (operations, tensors, buffers, metadata, stack-trace, etc.) expect **`instanceId` as a query parameter**. The React app’s `axiosInstance` injects it on every request from session storage / URL; paths do not embed instance IDs.
-- **`/api/remote` subtree:** Remote SSH flows are grouped under **`/api/remote/...`**. Canonical names include `POST /api/remote/profiler-reports`, `POST /api/remote/performance-reports`, `POST /api/remote/test`, `POST /api/remote/sync`, `POST /api/remote/use`.
-- **GET vs POST:** Read-only stack trace file checks use **`GET /api/remote/stack-trace/test`** and **`GET /api/remote/stack-trace/read`** with `?filePath=...`. **POST** is used where the body carries SSH connection material (folder listing, sync, use, test).
+- **`/api/remote` subtree:** Remote SSH flows are grouped under **`/api/remote/...`**. Canonical names include `POST /api/remote/profiler-reports`, `POST /api/remote/performance-reports`, `POST /api/remote/test`, `POST /api/remote/sync`, `POST /api/remote/use`, and `GET /api/remote/ssh-config-hosts`.
+- **GET vs POST:** Read-only requests that take no SSH connection material use **GET** — the stack trace file checks **`GET /api/remote/stack-trace/test`** and **`GET /api/remote/stack-trace/read`** with `?filePath=...`, and **`GET /api/remote/ssh-config-hosts`**, which reads the local `~/.ssh/config` and takes no parameters at all (never a caller-supplied path). **POST** is used where the body carries SSH connection material (folder listing, sync, use, test).
 
 ## Running the app from a development checkout
 
@@ -150,6 +155,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 - Shared atoms live under **`src/store/`**, end with the `Atom` suffix (e.g. `activeProfilerReportAtom`), and are discoverable via **`src/store/app.ts`**. Prefer declaring new atoms in `app.ts` in the section comment block matching their feature area. When co-locating atoms with mutators in another `store/` module (e.g. `store/fileTransferRegistry.ts` to avoid a circular import), **re-export atoms and mutators from `app.ts`** and **import from `app.ts` at call sites** — the co-located module is an implementation detail, not a second public API. Components and hooks consume atoms — they do not declare new ones inline.
 - Prefer **`useAtomValue`** for read-only consumers and **`useSetAtom`** for write-only consumers; use **`useAtom`** when a component both reads and writes the same atom. Don't subscribe via `useAtom` if you only need one half of the tuple.
 - Use **`atomWithStorage`** from `jotai/utils` for user-preference flags that need to survive reloads — never reach for `localStorage` directly.
+- **Key persisted data by a shared identity helper, not by a display name.** Anything that stores or looks up data per domain entity — storage keys, React list keys, `isSame*` comparisons — must derive its key from one exported helper (e.g. **`remoteConnectionKey`** in `src/functions/remoteConnection.ts`), so the key and the equality check can't disagree. Names are not unique: keying on one lets two entities share a slot while counting as distinct, and deleting one silently discards the other's data. Changing a key's shape orphans existing users' data, so add a read fallback for the old shape.
 
 ### Data fetching (React Query)
 

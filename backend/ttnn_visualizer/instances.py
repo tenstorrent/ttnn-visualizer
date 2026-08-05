@@ -11,7 +11,12 @@ from pathlib import Path
 from flask import request
 from ttnn_visualizer.exceptions import InvalidProfilerPath, InvalidReportPath
 from ttnn_visualizer.extensions import db
-from ttnn_visualizer.models import InstanceTable, RemoteConnection, ReportLocation
+from ttnn_visualizer.models import (
+    InstanceTable,
+    RemoteConnection,
+    ReportLocation,
+    stored_remote_connection,
+)
 from ttnn_visualizer.utils import (
     get_mlir_path,
     get_npe_path,
@@ -175,9 +180,10 @@ def update_existing_instance(
         effective_remote_connection is None
         and instance_data.remote_connection is not None
     ):
-        effective_remote_connection = RemoteConnection.model_validate(
-            instance_data.remote_connection,
-            strict=False,
+        # Same failsafe as reading an instance: a row stored before the current validators
+        # must not make every update against it a 500 the user can't clear from the UI.
+        effective_remote_connection = stored_remote_connection(
+            instance_data.remote_connection
         )
 
     if profiler_path is not _sentinel:

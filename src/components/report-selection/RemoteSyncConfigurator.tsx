@@ -22,6 +22,7 @@ import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import mergeRemoteFolders from '../../functions/mergeRemoteFolders';
+import { isSameConnection } from '../../functions/remoteConnection';
 import notifyFolderSyncError, {
     notifyFolderListSyncError,
     notifyRemoteFolderMountError,
@@ -75,21 +76,35 @@ const RemoteSyncConfigurator = () => {
         }
     }, [reportMetadata, reportMetadataError]);
 
+    // The saved list and the selection live in localStorage, so persisting them doesn't re-render on
+    // its own. Both are mirrored in state and written through persistConnectionList /
+    // persistSelectedConnection. Mirroring both matters: reading one live and one from state let the
+    // dropdown and its trigger disagree within a render, and the selection getter also re-parses two
+    // keys and returns a fresh object identity per read, which churned the selector's props.
+    // Initialisers are lazy because an eager one parses localStorage on every render. The mirrors are
+    // a stopgap: migrating remote.persistentState to atomWithStorage would make it reactive without
+    // a second source of truth, which no longer relies on this component being the only writer.
+    const [savedConnectionList, setSavedConnectionList] = useState<RemoteConnection[]>(
+        () => remote.persistentState.savedConnectionList,
+    );
+    const [selectedConnection, setSelectedConnection] = useState<RemoteConnection | undefined>(
+        () => remote.persistentState.selectedConnection,
+    );
     const [isFetching, setIsFetching] = useState(false);
-    const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(
-        remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection),
+    const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(() =>
+        remote.persistentState.getSavedReportFolders(selectedConnection),
     );
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
-    const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
+    const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(() =>
         activeProfilerReport
             ? reportFolderList.find((folder) => folder.remotePath?.includes(activeProfilerReport.path))
             : undefined,
     );
-    const [remotePerformanceFolderList, setRemotePerformanceFolders] = useState<RemoteFolder[]>(
-        remote.persistentState.getSavedPerformanceFolders(remote.persistentState.selectedConnection),
+    const [remotePerformanceFolderList, setRemotePerformanceFolders] = useState<RemoteFolder[]>(() =>
+        remote.persistentState.getSavedPerformanceFolders(selectedConnection),
     );
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
-    const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
+    const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(() =>
         activePerformanceReport
             ? remotePerformanceFolderList.find((folder) =>
                   folder.reportName?.includes(activePerformanceReport?.reportName),
@@ -99,10 +114,23 @@ const RemoteSyncConfigurator = () => {
     // Aborts in-flight local disk scans when the connection changes quickly.
     const localSyncedFoldersAbortRef = useRef<AbortController | null>(null);
 
-    const updateSelectedConnection = async (connection: RemoteConnection) => {
+    const persistConnectionList = (connectionList: RemoteConnection[]) => {
+        setPersistentSavedConnectionList(connectionList);
+        setSavedConnectionList(connectionList);
+    };
+
+    const persistSelectedConnection = (connection: RemoteConnection | undefined) => {
         setPersistentSelectedConnection(connection);
-        setReportFolders(remote.persistentState.getSavedReportFolders(connection));
-        setRemotePerformanceFolders(remote.persistentState.getSavedPerformanceFolders(connection));
+        setSelectedConnection(connection);
+    };
+
+    // `connection` is undefined once the last saved connection is removed. Folder lists are then
+    // emptied rather than read for it, because the cache key for no connection is a real but
+    // degenerate localStorage key that no connection ever writes to.
+    const updateSelectedConnection = async (connection: RemoteConnection | undefined) => {
+        persistSelectedConnection(connection);
+        setReportFolders(connection ? remote.persistentState.getSavedReportFolders(connection) : []);
+        setRemotePerformanceFolders(connection ? remote.persistentState.getSavedPerformanceFolders(connection) : []);
 
         const activeReport: ActiveReport = {};
 
@@ -122,6 +150,15 @@ const RemoteSyncConfigurator = () => {
             await updateInstance({
                 active_report: activeReport,
             });
+        }
+
+        if (!connection) {
+            // Nothing left to scan, and aborting stops a scan already in flight for the removed
+            // connection from repopulating the dropdowns that were just cleared.
+            localSyncedFoldersAbortRef.current?.abort();
+            localSyncedFoldersAbortRef.current = null;
+
+            return;
         }
 
         // Populate report dropdowns from on-disk synced copies for this host (no SSH).
@@ -309,13 +346,35 @@ const RemoteSyncConfigurator = () => {
     };
 
     const findConnectionIndex = (connection?: RemoteConnection) => {
-        return remote.persistentState.savedConnectionList.findIndex((c) => {
-            const isSameName = c.name === connection?.name;
-            const isSameHost = c.host === connection?.host;
-            const isSamePort = c.port === connection?.port;
+        return savedConnectionList.findIndex((c) => isSameConnection(c, connection));
+    };
 
-            return isSameName && isSameHost && isSamePort;
-        });
+    /**
+     * Both dropdown row actions share this shape: locate the row, apply the change to a copy of the
+     * list, then re-point the selection only when the affected connection held it.
+     * updateSelectedConnection also clears the active remote report, so acting on any other row must
+     * leave the selection alone. `applyChange` returns what the selection should become, or undefined
+     * when removing the last connection leaves nothing to select.
+     */
+    const changeSavedConnection = async (
+        target: RemoteConnection | undefined,
+        applyChange: (connectionList: RemoteConnection[], index: number) => RemoteConnection | undefined,
+    ) => {
+        const connectionIndex = findConnectionIndex(target);
+
+        if (connectionIndex === -1) {
+            return;
+        }
+
+        const wasSelected = isSameConnection(target, selectedConnection);
+        const updatedConnections = [...savedConnectionList];
+        const nextSelectedConnection = applyChange(updatedConnections, connectionIndex);
+
+        persistConnectionList(updatedConnections);
+
+        if (wasSelected) {
+            await updateSelectedConnection(nextSelectedConnection);
+        }
     };
 
     const applyProfilerReportSelection = (folder: RemoteFolder) => {
@@ -352,7 +411,7 @@ const RemoteSyncConfigurator = () => {
         mount: (connection: RemoteConnection) => Promise<AxiosResponse>,
         applySelection: (folder: RemoteFolder) => void,
     ) => {
-        const connection = remote.persistentState.selectedConnection;
+        const connection = selectedConnection;
 
         if (!connection) {
             notifyFolderSyncError(err);
@@ -408,7 +467,7 @@ const RemoteSyncConfigurator = () => {
             activateWithToast: (folder: RemoteFolder) => void;
         },
     ) => {
-        const connection = remote.persistentState.selectedConnection;
+        const connection = selectedConnection;
         if (!connection) {
             return;
         }
@@ -454,7 +513,7 @@ const RemoteSyncConfigurator = () => {
         setSyncing(true);
 
         try {
-            const connection = remote.persistentState.selectedConnection;
+            const connection = selectedConnection;
             if (!connection || !selected) {
                 return;
             }
@@ -559,7 +618,7 @@ const RemoteSyncConfigurator = () => {
     const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder || isActivatingReport;
     const isDisabled = isFetching || isLoading || disableRemoteSync;
 
-    const selectedRemoteHost = remote.persistentState.selectedConnection?.host ?? null;
+    const selectedRemoteHost = selectedConnection?.host ?? null;
     const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
         useReportLinkBadgeIds({ remoteHost: selectedRemoteHost });
 
@@ -568,7 +627,7 @@ const RemoteSyncConfigurator = () => {
     // Cleanup aborts any in-flight scan so unmount cannot call setState after teardown.
     useEffect(() => {
         if (!disableRemoteSync) {
-            const connection = remote.persistentState.selectedConnection;
+            const connection = selectedConnection;
 
             if (connection) {
                 loadLocalSyncedFolders(connection).catch(() => {
@@ -634,10 +693,7 @@ const RemoteSyncConfigurator = () => {
                 <AddRemoteConnection
                     disabled={isDisabled}
                     onAddConnection={async (newConnection) => {
-                        setPersistentSavedConnectionList([
-                            ...remote.persistentState.savedConnectionList,
-                            newConnection,
-                        ]);
+                        persistConnectionList([...savedConnectionList, newConnection]);
 
                         await updateSelectedConnection(newConnection);
                     }}
@@ -650,35 +706,35 @@ const RemoteSyncConfigurator = () => {
                 subLabel='Select remote server that will be used for syncing folders'
             >
                 <RemoteConnectionSelector
-                    connection={remote.persistentState.selectedConnection}
-                    connectionList={remote.persistentState.savedConnectionList}
+                    connection={selectedConnection}
+                    connectionList={savedConnectionList}
                     disabled={isDisabled}
                     loading={isFetching}
                     onEditConnection={async (updatedConnection, oldConnection) => {
-                        const updatedConnections = [...remote.persistentState.savedConnectionList];
+                        await changeSavedConnection(oldConnection, (connectionList, connectionIndex) => {
+                            connectionList[connectionIndex] = updatedConnection;
+                            remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
 
-                        updatedConnections[findConnectionIndex(oldConnection)] = updatedConnection;
-                        setPersistentSavedConnectionList(updatedConnections);
-                        remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
-
-                        await updateSelectedConnection(updatedConnection);
+                            return updatedConnection;
+                        });
                     }}
                     onRemoveConnection={async (connection) => {
-                        const updatedConnections = [...remote.persistentState.savedConnectionList];
+                        await changeSavedConnection(connection, (connectionList, connectionIndex) => {
+                            connectionList.splice(connectionIndex, 1);
+                            remote.persistentState.deleteSavedReportFolders(connection);
+                            remote.persistentState.deleteSavedPerformanceFolders(connection);
 
-                        updatedConnections.splice(findConnectionIndex(connection), 1);
-                        setPersistentSavedConnectionList(updatedConnections);
-                        remote.persistentState.deleteSavedReportFolders(connection);
-                        remote.persistentState.deleteSavedPerformanceFolders(connection);
-
-                        await updateSelectedConnection(updatedConnections[0]);
+                            // `.at` rather than `[0]` so removing the last connection types as
+                            // undefined instead of silently claiming to be a connection.
+                            return connectionList.at(0);
+                        });
                     }}
                     onSelectConnection={async (connection) => {
                         await updateSelectedConnection(connection);
                     }}
                     onSyncRemoteFolderList={async () => {
-                        if (remote.persistentState.selectedConnection) {
-                            await fetchRemoteFolderLists(remote.persistentState.selectedConnection);
+                        if (selectedConnection) {
+                            await fetchRemoteFolderLists(selectedConnection);
                         }
                     }}
                 />

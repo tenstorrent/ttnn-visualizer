@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useMemo, useState } from 'react';
-import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
@@ -16,8 +16,12 @@ import {
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import { getReportId } from '../../functions/reportLinks';
+import { ManagedEntity } from '../../definitions/ManagedEntity';
+import { TEST_IDS } from '../../definitions/TestIds';
+import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
+import SelectRowActions from './SelectRowActions';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -58,9 +62,13 @@ const LocalFolderPicker = ({
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
-    // Loading also blocks trash while an open Select popover can still render
-    // items after the trigger disables.
-    const isDeleteDisabled = isServerMode || loading;
+    // Gates the trash button and its confirmation together — rendering one without the other leaves
+    // either a delete with no confirmation step or an alert nothing can open.
+    const canDeleteReports = !!handleDelete && !isServerMode;
+    // Loading disables the Select, so in practice the popover and its rows are already gone by the
+    // time this matters; the guard on the alert's onConfirm is what actually stops a delete landing
+    // mid-load, since the alert outlives the popover. canDeleteReports covers SERVER_MODE.
+    const isDeleteDisabled = loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 
     // Linked first, unknown next, failed links last — preserve server order within each group.
@@ -83,8 +91,13 @@ const LocalFolderPicker = ({
         const folderId = getReportId(folder.path, folder.reportName);
 
         return (
+            // MenuItem renders the <li role="option"> itself, so this layout wrapper can't be one
+            // without nesting list items. Marking it presentational keeps the option an owned child
+            // of the listbox in the accessibility tree instead of hiding it behind a plain div.
             <div
                 className='folder-picker-menu-item'
+                role='none'
+                data-testid={TEST_IDS.FOLDER_PICKER_ROW}
                 key={`${folder.path} - ${folder.reportName}`}
             >
                 <MenuItem
@@ -110,83 +123,70 @@ const LocalFolderPicker = ({
                     }
                 />
 
-                {handleDelete && !isServerMode && (
-                    <>
-                        <Button
-                            aria-label='Delete report'
-                            icon={IconNames.TRASH}
-                            onClick={() => setFolderToDelete(folder)}
-                            disabled={isDeleteDisabled}
-                            variant={ButtonVariant.MINIMAL}
-                            intent={Intent.DANGER}
-                        />
-
-                        {folderToDelete && (
-                            <Alert
-                                canEscapeKeyCancel
-                                canOutsideClickCancel
-                                isOpen={!!folderToDelete}
-                                intent={Intent.DANGER}
-                                onCancel={() => setFolderToDelete(null)}
-                                onClose={() => setFolderToDelete(null)}
-                                onConfirm={() => {
-                                    if (!loading) {
-                                        handleDelete(folderToDelete);
-                                    }
-                                    setFolderToDelete(null);
-                                }}
-                                cancelButtonText='Cancel'
-                                confirmButtonText='Delete'
-                                // @ts-expect-error BackdropClassName is not defined in AlertProps
-                                backdropClassName='delete-folder-backdrop'
-                            >
-                                <p>
-                                    Are you sure you want to delete <strong>{folderToDelete.reportName}</strong>? This
-                                    action cannot be undone.
-                                </p>
-                            </Alert>
-                        )}
-                    </>
+                {canDeleteReports && (
+                    <SelectRowActions
+                        entity={ManagedEntity.REPORT}
+                        itemName={folder.reportName}
+                        disabled={isDeleteDisabled}
+                        onDelete={() => setFolderToDelete(folder)}
+                    />
                 )}
             </div>
         );
     };
 
     return (
-        <Select<ReportFolder>
-            className='folder-picker'
-            items={sortedItems}
-            itemPredicate={(query, item) => !query || item.path.toLowerCase().includes(query.toLowerCase())}
-            itemRenderer={renderItem}
-            noResults={
-                <MenuItem
-                    disabled
-                    text='No results.'
-                    roleStructure='listoption'
-                />
-            }
-            onItemSelect={handleSelect}
-            disabled={isDisabled}
-        >
-            <Tooltip
-                content={`/${activePath}`}
-                disabled={!activePath}
-                position={Position.RIGHT}
-                openOnTargetFocus={false}
+        <>
+            <Select<ReportFolder>
+                className='folder-picker'
+                items={sortedItems}
+                itemPredicate={(query, item) => !query || item.path.toLowerCase().includes(query.toLowerCase())}
+                itemRenderer={renderItem}
+                noResults={
+                    <MenuItem
+                        disabled
+                        text='No results.'
+                        roleStructure='listoption'
+                    />
+                }
+                onItemSelect={handleSelect}
+                disabled={isDisabled}
             >
-                <Button
-                    className='folder-picker-button'
-                    text={activeName || defaultLabel}
-                    disabled={isDisabled}
-                    loading={loading}
-                    alignText='start'
-                    icon={IconNames.DOCUMENT_OPEN}
-                    endIcon={IconNames.CARET_DOWN}
-                    variant={ButtonVariant.OUTLINED}
-                    fill
+                <Tooltip
+                    content={`/${activePath}`}
+                    disabled={!activePath}
+                    position={Position.RIGHT}
+                    openOnTargetFocus={false}
+                >
+                    <Button
+                        className='folder-picker-button'
+                        text={activeName || defaultLabel}
+                        disabled={isDisabled}
+                        loading={loading}
+                        alignText='start'
+                        icon={IconNames.DOCUMENT_OPEN}
+                        endIcon={IconNames.CARET_DOWN}
+                        variant={ButtonVariant.OUTLINED}
+                        fill
+                    />
+                </Tooltip>
+            </Select>
+
+            {canDeleteReports && folderToDelete && (
+                <ConfirmDeleteAlert
+                    isOpen
+                    entity={ManagedEntity.REPORT}
+                    entityName={folderToDelete.reportName}
+                    onCancel={() => setFolderToDelete(null)}
+                    onConfirm={() => {
+                        if (!loading) {
+                            handleDelete(folderToDelete);
+                        }
+                        setFolderToDelete(null);
+                    }}
                 />
-            </Tooltip>
-        </Select>
+            )}
+        </>
     );
 };
 
