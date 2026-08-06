@@ -12,6 +12,7 @@ import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/RemoteSync';
 import { StackSourceOrigin } from '../definitions/StackTrace';
 import { clearFileTransferProgressForSource } from '../store/fileTransferRegistry';
 import { isSameConnection, remoteConnectionKey } from '../functions/remoteConnection';
+import { isValidRemotePath } from '../functions/remotePath';
 import { beginRemoteSyncRequest, endRemoteSyncRequest } from '../functions/remoteSyncRequest';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import axiosInstance from '../libs/axiosInstance';
@@ -427,7 +428,10 @@ const isValidConnection = (connection?: Partial<RemoteConnection>) => {
         return false;
     }
 
-    return true;
+    // A relative path was storable before the backend required absolute ones, and the
+    // server now drops such a connection on read. Dropping it here too keeps the two
+    // sides agreeing, rather than listing a connection every request refuses to use.
+    return isValidRemotePath(connection.profilerPath) && isValidRemotePath(connection.performancePath);
 };
 
 export default useRemoteConnection;

@@ -41,6 +41,7 @@ from ttnn_visualizer.exceptions import (
     SSHException,
 )
 from ttnn_visualizer.models import MlirServerConnection, RemoteConnection, StatusMessage
+from ttnn_visualizer.remote_command import RemoteCommand
 from ttnn_visualizer.ssh_client import SSHClient
 
 logger = logging.getLogger(__name__)
@@ -152,7 +153,8 @@ def test_mlir_server_connection(
 
     try:
         output = client.execute_command(
-            curl_cmd, timeout=_ENDPOINT_TEST_TIMEOUT_SECONDS
+            RemoteCommand.from_shell_fragment(curl_cmd),
+            timeout=_ENDPOINT_TEST_TIMEOUT_SECONDS,
         )
     except SSHException as e:
         # curl exits non-zero (e.g. connection refused) when the server is down.
@@ -225,7 +227,8 @@ def _upload_file_to_server(
     try:
         client.upload_file(local_path, remote_path, timeout=_UPLOAD_TIMEOUT_SECONDS)
         stdout = client.execute_command(
-            curl_cmd, timeout=_UPLOAD_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS
+            RemoteCommand.from_shell_fragment(curl_cmd),
+            timeout=_UPLOAD_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS,
         )
     except SSHException as e:
         elapsed = time.perf_counter() - started
@@ -238,7 +241,7 @@ def _upload_file_to_server(
         Path(local_path).unlink(missing_ok=True)
         try:
             client.execute_command(
-                f"rm -f {shlex.quote(remote_path)}",
+                RemoteCommand.of("rm", "-f", remote_path),
                 timeout=_CURL_CONNECT_TIMEOUT_SECONDS,
             )
         except SSHException:
@@ -398,7 +401,8 @@ def _convert_with_extension(
     started = time.perf_counter()
     try:
         stdout = client.execute_command(
-            curl_cmd, timeout=_CONVERT_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS
+            RemoteCommand.from_shell_fragment(curl_cmd),
+            timeout=_CONVERT_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS,
         )
     except SSHException as e:
         return None, str(e)

@@ -368,6 +368,56 @@ def sanitise_ssh_username(value: object) -> str:
     return reject_ssh_option_like(stripped)
 
 
+# Linux PATH_MAX. A report path is typed into a form field, so anything approaching
+# this is a payload rather than a path, and a remote command line has its own limits.
+MAX_REMOTE_PATH_LENGTH = 4096
+
+
+def sanitise_remote_report_path(value: object) -> str:
+    """Validate a remote report root, which is interpolated into remote shell commands.
+
+    Quoting at the call site is what makes these paths safe; this is the second half,
+    so that a value which could not be a legitimate report root is refused before it
+    reaches a command at all and a future unquoted call site has less to work with.
+
+    Relative paths are refused even though ``find`` would resolve them against the SSH
+    login home: accepting them means the same connection means different directories
+    depending on the account, and ``~`` has never worked (it is quoted, so no shell
+    expands it) while looking like it should. Absolute-only makes both cases say so.
+    """
+    if not isinstance(value, str):
+        # Pydantic's lax mode coerces bytes and bytearray to str *after* "before"
+        # validators run, which would otherwise smuggle a payload past these checks.
+        raise ValueError("must be a string")
+
+    stripped = value.strip()
+    if not stripped:
+        # An unconfigured path is a supported state: MlirServerConnection builds a
+        # RemoteConnection with no profiler path, and report discovery skips a path
+        # it was not given.
+        return ""
+
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in stripped):
+        # NUL reaches subprocess as ValueError("embedded null byte") — a 500 — and a
+        # newline would split one remote command into two.
+        raise ValueError("must not contain control characters")
+
+    if not stripped.startswith("/"):
+        raise ValueError("must be an absolute path starting with '/'")
+
+    if len(stripped) > MAX_REMOTE_PATH_LENGTH:
+        raise ValueError(f"must be at most {MAX_REMOTE_PATH_LENGTH} characters")
+
+    return stripped
+
+
+def sanitise_optional_remote_report_path(value: object) -> Optional[str]:
+    """As ``sanitise_remote_report_path``, but leaves an absent path absent."""
+    if value is None:
+        return None
+    return sanitise_remote_report_path(value)
+
+
 class RemoteConnection(SerializeableModel):
     name: str
     username: str
@@ -389,6 +439,16 @@ class RemoteConnection(SerializeableModel):
     @classmethod
     def _sanitise_username(cls, value: object) -> str:
         return sanitise_ssh_username(value)
+
+    @field_validator("profilerPath", mode="before")
+    @classmethod
+    def _sanitise_profiler_path(cls, value: object) -> str:
+        return sanitise_remote_report_path(value)
+
+    @field_validator("performancePath", mode="before")
+    @classmethod
+    def _sanitise_performance_path(cls, value: object) -> Optional[str]:
+        return sanitise_optional_remote_report_path(value)
 
 
 class MlirServerConnection(SerializeableModel):

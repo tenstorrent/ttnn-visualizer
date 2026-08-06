@@ -1718,7 +1718,13 @@ def test_remote_folder():
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
+    try:
+        connection = RemoteConnection.model_validate(connection_data, strict=False)
+    except ValidationError:
+        # A rejected host, username or report path is user input, not a server fault,
+        # and the dialog needs a message it can render rather than a 500.
+        return response_bad_request("Invalid connection data")
+
     logger.debug(
         "test_remote_folder request identityFile=%r, connection.identityFile=%r",
         connection_data.get("identityFile"),

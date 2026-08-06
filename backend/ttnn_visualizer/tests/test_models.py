@@ -50,3 +50,18 @@ def test_to_pydantic_drops_a_connection_the_validators_now_reject(caplog):
     assert pydantic_instance.remote_connection is None
     assert pydantic_instance.instance_id == "test-instance-models"
     assert "unusable stored remote connection" in caplog.text
+
+
+# Documents an accepted regression: a relative path resolved against the SSH login home
+# and worked, so requiring absolute paths costs these users their stored connection. It
+# is dropped rather than raised on so the instance stays loadable and can be re-entered.
+def test_to_pydantic_drops_a_connection_with_a_relative_report_path(caplog):
+    instance = _instance(
+        {**VALID_STORED_CONNECTION, "profilerPath": "tt-metal/generated/ttnn/reports"}
+    )
+
+    with caplog.at_level(logging.WARNING):
+        pydantic_instance = instance.to_pydantic()
+
+    assert pydantic_instance.remote_connection is None
+    assert "unusable stored remote connection" in caplog.text

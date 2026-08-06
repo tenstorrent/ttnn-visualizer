@@ -1112,6 +1112,31 @@ class TestConnectionTestReportStatuses:
     def _messages(response) -> list[str]:
         return [status["message"] for status in response.get_json()]
 
+    # The dialog calls this endpoint before saving, so a value the validators reject has
+    # to come back as a message the form can render rather than as a 500.
+    @pytest.mark.parametrize(
+        "payload_override",
+        [
+            {"profilerPath": "tt-metal/generated/ttnn/reports"},
+            {"performancePath": "reports"},
+            {"profilerPath": "/reports\nrm -rf /"},
+            {"host": ".."},
+        ],
+        ids=["relative-profiler", "relative-performance", "newline", "bad-host"],
+    )
+    def test_invalid_connection_data_is_a_bad_request(
+        self, app, client, payload_override
+    ):
+        app.config["SERVER_MODE"] = False
+
+        response = client.post(
+            "/api/remote/test",
+            json={**_remote_connection_payload(), **payload_override},
+        )
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.get_json()["error"] == "Invalid connection data"
+
     def _run_connection_test(self, client, payload, *, folders_per_path):
         with (
             patch("ttnn_visualizer.views.test_ssh_connection", return_value=True),
