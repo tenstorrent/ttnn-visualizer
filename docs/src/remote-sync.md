@@ -108,6 +108,15 @@ Make sure you have sufficient local storage space for the files you want to sync
 
 ### Report Paths
 
+Both report paths must be **absolute** — they have to start with `/`. The paths are sent to the
+remote host quoted, so nothing on the far side expands them: a home-relative path such as
+`~/tt-metal/generated/ttnn/reports/` is taken literally, matches nothing, and would otherwise
+report an empty folder list rather than an error. Write the full path instead
+(`/home/username/tt-metal/generated/ttnn/reports/`). Paths must also be free of line breaks and
+other control characters, and no longer than 4096 characters. The dialog flags a path it would
+refuse and withholds the connection test until you fix it; a connection saved before this was
+enforced stays in the list, marked with a warning, so you can edit it.
+
 When adding the SSH connection, you must specify a _Memory report folder path_. This is either a
 folder outside of tt-metal where you have stored reports, or you can point it directly to the
 `generated` directory in `tt-metal`. If syncing directly from the generated directory, point

@@ -7,8 +7,13 @@
 // — but repeating the rule here turns a 400 from the connection test into a message
 // against the offending field while the user is still typing.
 
-// Linux PATH_MAX, matching MAX_REMOTE_PATH_LENGTH on the backend.
-export const MAX_REMOTE_PATH_LENGTH = 4096;
+import {
+    MAX_REMOTE_PATH_LENGTH,
+    REMOTE_PATH_CONTROL_CHARACTERS_ERROR,
+    REMOTE_PATH_NOT_ABSOLUTE_ERROR,
+    REMOTE_PATH_NOT_TEXT_ERROR,
+    REMOTE_PATH_TOO_LONG_ERROR,
+} from '../definitions/SshConnectionFields';
 
 const UNIT_SEPARATOR_CODE_POINT = 0x1f;
 const DELETE_CODE_POINT = 0x7f;
@@ -33,30 +38,55 @@ function hasControlCharacters(value: string): boolean {
  * An empty path is valid: it means the folder is not configured, and report discovery
  * skips a path it was not given.
  */
-export function getRemotePathError(path: string | undefined | null): string | null {
-    const trimmed = (path ?? '').trim();
+export function getRemotePathError(path: unknown): string | null {
+    // Callers include a getter over JSON.parse'd localStorage, so a non-string can
+    // arrive: typed as unknown rather than string so a `.trim()` on corrupted data
+    // can't throw out of a render.
+    if (path === undefined || path === null || path === '') {
+        return null;
+    }
+
+    if (typeof path !== 'string') {
+        return REMOTE_PATH_NOT_TEXT_ERROR;
+    }
+
+    const trimmed = path.trim();
 
     if (trimmed === '') {
         return null;
     }
 
+    if (trimmed.length > MAX_REMOTE_PATH_LENGTH) {
+        // Checked before scanning for control characters so an oversized paste is
+        // rejected on its length rather than walked in full first.
+        return REMOTE_PATH_TOO_LONG_ERROR;
+    }
+
     if (hasControlCharacters(trimmed)) {
-        return 'Path must not contain line breaks or other control characters.';
+        return REMOTE_PATH_CONTROL_CHARACTERS_ERROR;
     }
 
     if (!trimmed.startsWith('/')) {
-        // `~` is called out because it looks like it should work: it reaches the remote
-        // host quoted, so no shell expands it and discovery silently finds nothing.
-        return 'Path must be absolute, starting with "/". Home-relative paths such as "~/tt-metal" are not expanded.';
-    }
-
-    if (trimmed.length > MAX_REMOTE_PATH_LENGTH) {
-        return `Path must be at most ${MAX_REMOTE_PATH_LENGTH} characters.`;
+        return REMOTE_PATH_NOT_ABSOLUTE_ERROR;
     }
 
     return null;
 }
 
-export function isValidRemotePath(path: string | undefined | null): boolean {
+export function isValidRemotePath(path: unknown): boolean {
     return getRemotePathError(path) === null;
+}
+
+/**
+ * Why a saved connection's report paths would be refused by the server, or null.
+ *
+ * Such a connection is kept in the list rather than filtered out of it: it was
+ * storable before the paths were validated, and dropping it on read would erase
+ * it from storage on the next write with nothing telling the user why.
+ */
+export function getRemoteConnectionPathError(connection: {
+    profilerPath?: unknown;
+    performancePath?: unknown;
+}): string | null {
+    return getRemotePathError(connection.profilerPath) ?? getRemotePathError(connection.performancePath);
 }

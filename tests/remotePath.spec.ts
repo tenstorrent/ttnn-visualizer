@@ -3,7 +3,14 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { MAX_REMOTE_PATH_LENGTH, getRemotePathError, isValidRemotePath } from '../src/functions/remotePath';
+import {
+    MAX_REMOTE_PATH_LENGTH,
+    REMOTE_PATH_CONTROL_CHARACTERS_ERROR,
+    REMOTE_PATH_NOT_ABSOLUTE_ERROR,
+    REMOTE_PATH_NOT_TEXT_ERROR,
+    REMOTE_PATH_TOO_LONG_ERROR,
+} from '../src/definitions/SshConnectionFields';
+import { getRemoteConnectionPathError, getRemotePathError, isValidRemotePath } from '../src/functions/remotePath';
 
 describe('getRemotePathError', () => {
     it('accepts an absolute path', () => {
@@ -30,7 +37,7 @@ describe('getRemotePathError', () => {
         ['relative', 'tt-metal/generated/ttnn/reports'],
         ['dot-relative', './reports'],
     ])('rejects a path that is not absolute (%s)', (_label, path) => {
-        expect(getRemotePathError(path)).toMatch(/must be absolute/);
+        expect(getRemotePathError(path)).toBe(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
     });
 
     // Called out separately because a tilde path looks like it should work: it reaches
@@ -46,11 +53,12 @@ describe('getRemotePathError', () => {
         ['tab', '/reports\treports'],
         ['delete', '/reports\u007f'],
     ])('rejects control characters (%s)', (_label, path) => {
-        expect(getRemotePathError(path)).toMatch(/control characters/);
+        expect(getRemotePathError(path)).toBe(REMOTE_PATH_CONTROL_CHARACTERS_ERROR);
     });
 
     it('rejects a path longer than the backend limit', () => {
-        expect(getRemotePathError(`/${'a'.repeat(MAX_REMOTE_PATH_LENGTH)}`)).toMatch(/at most 4096/);
+        expect(getRemotePathError(`/${'a'.repeat(MAX_REMOTE_PATH_LENGTH)}`)).toBe(REMOTE_PATH_TOO_LONG_ERROR);
+        expect(REMOTE_PATH_TOO_LONG_ERROR).toContain(String(MAX_REMOTE_PATH_LENGTH));
     });
 
     it('accepts a path at exactly the limit', () => {
@@ -69,7 +77,19 @@ describe('getRemotePathError', () => {
 
     it('trims before validating', () => {
         expect(getRemotePathError('  /reports  ')).toBeNull();
-        expect(getRemotePathError('  reports  ')).toMatch(/must be absolute/);
+        expect(getRemotePathError('  reports  ')).toBe(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+    });
+
+    // Callers include a getter over JSON.parse'd localStorage, and the connection-list
+    // getter runs inside a useState initialiser — a throw there is a blank page, not a
+    // filtered-out row.
+    it.each([
+        ['number', 42],
+        ['object', { path: '/reports' }],
+        ['array', ['/reports']],
+        ['boolean', true],
+    ])('rejects a non-string path (%s) rather than throwing', (_label, path) => {
+        expect(getRemotePathError(path)).toBe(REMOTE_PATH_NOT_TEXT_ERROR);
     });
 });
 
@@ -78,5 +98,22 @@ describe('isValidRemotePath', () => {
         expect(isValidRemotePath('/reports')).toBe(true);
         expect(isValidRemotePath('reports')).toBe(false);
         expect(isValidRemotePath(undefined)).toBe(true);
+    });
+});
+
+describe('getRemoteConnectionPathError', () => {
+    it('accepts a connection whose configured paths are absolute', () => {
+        expect(getRemoteConnectionPathError({ profilerPath: '/mem', performancePath: '/perf' })).toBeNull();
+    });
+
+    it('accepts a connection with only one path configured', () => {
+        expect(getRemoteConnectionPathError({ profilerPath: '/mem' })).toBeNull();
+    });
+
+    it.each([
+        ['profiler', { profilerPath: 'reports', performancePath: '/perf' }],
+        ['performance', { profilerPath: '/mem', performancePath: 'reports' }],
+    ])('reports whichever path (%s) the server would refuse', (_label, connection) => {
+        expect(getRemoteConnectionPathError(connection)).toBe(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
     });
 });

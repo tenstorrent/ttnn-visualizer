@@ -713,22 +713,12 @@ def get_remote_directory_list(
         return []
 
 
-def _scp_remote_target(remote_connection: RemoteConnection, remote_file: str) -> str:
-    """Build the ``user@host:path`` target for scp.
-
-    The path half needs quoting despite travelling in argv: ``-O`` selects the
-    legacy SCP protocol, under which the remote side expands the path through a
-    shell rather than treating it as a literal name.
-    """
-    return remote_scp_target(remote_connection, remote_file)
-
-
 def download_single_file_scp(
     remote_connection: RemoteConnection, remote_file: str, local_file: Path
 ) -> SyncMethod:
     """Download a single file using scp (when the remote SFTP subsystem is disabled)."""
     local_file.parent.mkdir(parents=True, exist_ok=True)
-    remote_spec = _scp_remote_target(remote_connection, remote_file)
+    remote_spec = remote_scp_target(remote_connection, remote_file)
     scp_cmd = _scp_cmd_prefix(remote_connection) + [remote_spec, str(local_file)]
     try:
         subprocess.run(

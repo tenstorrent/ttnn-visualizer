@@ -29,7 +29,6 @@ from ttnn_visualizer.sftp_operations import (
     _get_remote_file_list_without_sizes,
     _remote_directory_mtimes,
     _remote_transfer_key,
-    _scp_remote_target,
     _sftp_subsystem_unavailable,
     find_folders_by_files,
     get_remote_directory_list,
@@ -161,7 +160,18 @@ class TestRemoteFindShellQuoting:
 
     def test_no_config_path_command_leaks_the_payload_unquoted(self, connection):
         for command in self._config_path_commands(connection):
-            assert "; touch /tmp/pwned" not in shlex.split(command)
+            tokens = shlex.split(command)
+            # A leak splits the payload across argv — the path ends at `o'brien;`
+            # and `touch` becomes a word of its own. Asserted on the tokens rather
+            # than on the command text because some commands carry the config
+            # path's parent folder instead of the path itself, so what has to hold
+            # is that whichever of the two a token carries, it carries whole.
+            assert "touch" not in tokens
+            for token in tokens:
+                if "touch" in token:
+                    assert token.endswith("; touch /tmp/pwned/config.json") or (
+                        token.endswith("; touch /tmp/pwned")
+                    )
 
     def test_ranked_config_listing_wraps_the_folder_in_one_argument(self, connection):
         # The `bash -lc` script must reach the remote shell as a single argv element,
@@ -189,14 +199,6 @@ class TestRemoteFindShellQuoting:
         program, flag, script = shlex.split(listing[0])
         assert (program, flag) == ("bash", "-lc")
         assert shlex.split(script)[:2] == ["find", "/remote/o'brien/reports"]
-
-    def test_scp_remote_target_quotes_only_the_path(self, connection):
-        target = _scp_remote_target(connection, self._APOSTROPHE_FOLDER)
-
-        # `-O` selects the legacy SCP protocol, under which the remote side expands
-        # the path through a shell, so argv delivery alone is not protection.
-        assert target.startswith(f"{connection.username}@{connection.host}:")
-        assert shlex.split(target.split(":", 1)[1]) == [self._APOSTROPHE_FOLDER]
 
     def test_resolve_file_path_quotes_around_the_wildcard(self, connection):
         # The wildcard has to reach the remote shell unquoted for `ls` to expand it,

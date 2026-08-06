@@ -372,6 +372,10 @@ def sanitise_ssh_username(value: object) -> str:
 # this is a payload rather than a path, and a remote command line has its own limits.
 MAX_REMOTE_PATH_LENGTH = 4096
 
+# C0 controls and DEL. Compiled rather than iterated per character because the
+# validator runs on every instance-scoped request through to_pydantic().
+_CONTROL_CHARACTERS = re.compile("[\x00-\x1f\x7f]")
+
 
 def sanitise_remote_report_path(value: object) -> str:
     """Validate a remote report root, which is interpolated into remote shell commands.
@@ -397,16 +401,19 @@ def sanitise_remote_report_path(value: object) -> str:
         # it was not given.
         return ""
 
-    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in stripped):
+    if len(stripped) > MAX_REMOTE_PATH_LENGTH:
+        # Checked first so an oversized value is rejected on its length rather than
+        # scanned character by character to reach the same answer. This validator also
+        # runs on the read path, via InstanceTable.to_pydantic().
+        raise ValueError(f"must be at most {MAX_REMOTE_PATH_LENGTH} characters")
+
+    if _CONTROL_CHARACTERS.search(stripped):
         # NUL reaches subprocess as ValueError("embedded null byte") — a 500 — and a
         # newline would split one remote command into two.
         raise ValueError("must not contain control characters")
 
     if not stripped.startswith("/"):
         raise ValueError("must be an absolute path starting with '/'")
-
-    if len(stripped) > MAX_REMOTE_PATH_LENGTH:
-        raise ValueError(f"must be at most {MAX_REMOTE_PATH_LENGTH} characters")
 
     return stripped
 
@@ -521,6 +528,14 @@ class RemoteReportFolder(SerializeableModel):
     syncedName: Optional[str] = None
     rank: Optional[int] = None
 
+    @field_validator("remotePath", mode="before")
+    @classmethod
+    def _sanitise_remote_path(cls, value: object) -> str:
+        # This is the path that actually reaches remote commands — `find`, the scp
+        # target, the sftp batch script and the perf-CSV glob — so it earns the same
+        # guard as the configured roots it is discovered under, not less.
+        return sanitise_remote_report_path(value)
+
 
 def stored_remote_connection(value: Any) -> Optional[RemoteConnection]:
     """Deserialise a persisted connection, treating an unusable one as absent.
@@ -537,6 +552,23 @@ def stored_remote_connection(value: Any) -> Optional[RemoteConnection]:
         return RemoteConnection.model_validate(value, strict=False)
     except ValidationError as exc:
         logger.warning("Ignoring unusable stored remote connection: %s", exc)
+        return None
+
+
+def stored_remote_report_folder(value: Any) -> Optional[RemoteReportFolder]:
+    """Deserialise a persisted report folder, treating an unusable one as absent.
+
+    As ``stored_remote_connection``: a row whose ``remotePath`` predates the path
+    validator must not turn every instance-scoped request into a 500. The local
+    report paths are separate columns, so dropping this metadata costs the sync
+    badge rather than the loaded report.
+    """
+    if value is None:
+        return None
+    try:
+        return RemoteReportFolder.model_validate(value, strict=False)
+    except ValidationError as exc:
+        logger.warning("Ignoring unusable stored remote report folder: %s", exc)
         return None
 
 
@@ -621,18 +653,10 @@ class InstanceTable(db.Model):
                 else None
             ),
             remote_connection=stored_remote_connection(self.remote_connection),
-            remote_profiler_folder=(
-                RemoteReportFolder.model_validate(
-                    self.remote_profiler_folder, strict=False
-                )
-                if self.remote_profiler_folder is not None
-                else None
+            remote_profiler_folder=stored_remote_report_folder(
+                self.remote_profiler_folder
             ),
-            remote_performance_folder=(
-                RemoteReportFolder.model_validate(
-                    self.remote_performance_folder, strict=False
-                )
-                if self.remote_performance_folder is not None
-                else None
+            remote_performance_folder=stored_remote_report_folder(
+                self.remote_performance_folder
             ),
         )

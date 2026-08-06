@@ -19,6 +19,8 @@ import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
 import {
+    REMOTE_MEMORY_PATH_ERROR_ID,
+    REMOTE_PERFORMANCE_PATH_ERROR_ID,
     SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
@@ -290,11 +292,15 @@ const RemoteConnectionDialog = ({
                     subLabel='Path to a remote folder containing memory reports (e.g., "/<PATH TO TT METAL>/generated/ttnn/reports/")'
                     labelFor='remote-memory-path'
                     intent={profilerPathError ? Intent.DANGER : undefined}
-                    helperText={profilerPathError ?? undefined}
+                    helperText={profilerPathError && <span id={REMOTE_MEMORY_PATH_ERROR_ID}>{profilerPathError}</span>}
                 >
                     <InputGroup
                         id='remote-memory-path'
                         intent={profilerPathError ? Intent.DANGER : undefined}
+                        // Blueprint colours the field but tells assistive tech nothing, so the
+                        // error is announced only if the input points at it itself.
+                        aria-invalid={profilerPathError !== null}
+                        aria-describedby={profilerPathError ? REMOTE_MEMORY_PATH_ERROR_ID : undefined}
                         value={connection.profilerPath}
                         onChange={(e) => updateTarget({ profilerPath: e.target.value })}
                     />
@@ -305,11 +311,17 @@ const RemoteConnectionDialog = ({
                     subLabel='Path to a remote folder containing performance reports (e.g., "/<PATH TO TT METAL>/generated/profiler/reports/")'
                     labelFor='remote-performance-path'
                     intent={performancePathError ? Intent.DANGER : undefined}
-                    helperText={performancePathError ?? undefined}
+                    helperText={
+                        performancePathError && (
+                            <span id={REMOTE_PERFORMANCE_PATH_ERROR_ID}>{performancePathError}</span>
+                        )
+                    }
                 >
                     <InputGroup
                         id='remote-performance-path'
                         intent={performancePathError ? Intent.DANGER : undefined}
+                        aria-invalid={performancePathError !== null}
+                        aria-describedby={performancePathError ? REMOTE_PERFORMANCE_PATH_ERROR_ID : undefined}
                         value={connection.performancePath ?? ''}
                         onChange={(e) => updateTarget({ performancePath: e.target.value })}
                     />

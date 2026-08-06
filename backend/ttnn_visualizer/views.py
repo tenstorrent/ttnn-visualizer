@@ -13,7 +13,7 @@ import urllib
 import urllib.request
 from http import HTTPStatus
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
 
 import orjson
 import yaml
@@ -31,6 +31,7 @@ from ttnn_visualizer.enums import ConnectionTestStates, StackSourceOrigin
 from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     DataFormatError,
+    InvalidRequestPayload,
     PerformanceReportNotLoadedException,
     RemoteConnectionException,
     RemoteFileReadException,
@@ -1562,16 +1563,34 @@ def _annotate_last_synced(
             logger.debug("%s not yet synced", directory_name)
 
 
+def _validated_remote_connection(connection_data: Any) -> RemoteConnection:
+    """Parse a request body's connection, refusing an unusable one as a 400.
+
+    A rejected host, username or report path is user input, not a server fault,
+    and the value can arrive from the client's own stored connections, so every
+    ``/api/remote`` route needs the same answer rather than a 500.
+    """
+    try:
+        return RemoteConnection.model_validate(connection_data, strict=False)
+    except ValidationError as validation_error:
+        raise InvalidRequestPayload("Invalid connection data") from validation_error
+
+
+def _validated_remote_report_folder(folder_data: Any) -> RemoteReportFolder:
+    """As ``_validated_remote_connection``, for a report folder in a request body."""
+    try:
+        return RemoteReportFolder.model_validate(folder_data, strict=False)
+    except ValidationError as validation_error:
+        raise InvalidRequestPayload("Invalid report data") from validation_error
+
+
 def _respond_remote_report_list(fetch_fn, directory_config_key: str):
     connection_data = request.get_json()
 
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    try:
-        connection = RemoteConnection.model_validate(connection_data, strict=False)
-    except ValidationError:
-        return response_bad_request("Invalid connection data")
+    connection = _validated_remote_connection(connection_data)
 
     try:
         remote_folders: List[RemoteReportFolder] = fetch_fn(connection)
@@ -1594,10 +1613,7 @@ def _respond_local_synced_folders(list_fn, directory_config_key: str):
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    try:
-        connection = RemoteConnection.model_validate(connection_data, strict=False)
-    except ValidationError:
-        return response_bad_request("Invalid connection data")
+    connection = _validated_remote_connection(connection_data)
 
     folders = list_fn(
         connection,
@@ -1718,12 +1734,7 @@ def test_remote_folder():
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    try:
-        connection = RemoteConnection.model_validate(connection_data, strict=False)
-    except ValidationError:
-        # A rejected host, username or report path is user input, not a server fault,
-        # and the dialog needs a message it can render rather than a 500.
-        return response_bad_request("Invalid connection data")
+    connection = _validated_remote_connection(connection_data)
 
     logger.debug(
         "test_remote_folder request identityFile=%r, connection.identityFile=%r",
@@ -2029,14 +2040,10 @@ def sync_remote_folder():
     profiler = request_body.get("profiler")
     performance = request_body.get("performance", None)
     instance_id = request.args.get("instanceId", None)
-    connection = RemoteConnection.model_validate(
-        request_body.get("connection"), strict=False
-    )
+    connection = _validated_remote_connection(request_body.get("connection"))
 
     if performance:
-        performance_folder = RemoteReportFolder.model_validate(
-            performance, strict=False
-        )
+        performance_folder = _validated_remote_report_folder(performance)
         try:
             sync_method = sync_remote_performance_folders(
                 connection,
@@ -2060,11 +2067,9 @@ def sync_remote_folder():
                 sync_method=e.sync_method or get_active_sync_method(connection).value,
             )
 
-    try:
-        remote_profiler_folder = RemoteReportFolder.model_validate(
-            profiler, strict=False
-        )
+    remote_profiler_folder = _validated_remote_report_folder(profiler)
 
+    try:
         sync_method = sync_remote_profiler_folders(
             connection,
             remote_profiler_folder.remotePath,
@@ -2134,7 +2139,7 @@ def use_remote_folder():
     if not connection_data or not (profiler or performance):
         return response_bad_request("Missing connection or report data")
 
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
+    connection = _validated_remote_connection(connection_data)
 
     kwargs = {
         "instance_id": request.args.get("instanceId"),
@@ -2142,10 +2147,7 @@ def use_remote_folder():
     }
 
     if profiler:
-        remote_profiler_folder = RemoteReportFolder.model_validate(
-            profiler,
-            strict=False,
-        )
+        remote_profiler_folder = _validated_remote_report_folder(profiler)
         profiler_name = _safe_report_folder_name(
             report_name=remote_profiler_folder.reportName,
             remote_path=remote_profiler_folder.remotePath,
@@ -2160,10 +2162,7 @@ def use_remote_folder():
         kwargs["profiler_location"] = ReportLocation.REMOTE.value
 
     if performance:
-        remote_performance_folder = RemoteReportFolder.model_validate(
-            performance,
-            strict=False,
-        )
+        remote_performance_folder = _validated_remote_report_folder(performance)
         performance_name = _safe_report_folder_name(
             report_name=remote_performance_folder.reportName,
             remote_path=remote_performance_folder.remotePath,

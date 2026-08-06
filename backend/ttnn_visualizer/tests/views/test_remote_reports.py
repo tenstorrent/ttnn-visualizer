@@ -1197,6 +1197,69 @@ class TestConnectionTestReportStatuses:
         )
 
 
+class TestRejectedPayloadsAreBadRequests:
+    """Every ``/api/remote`` route answers a rejected payload the same way.
+
+    The validators tightened after these values were storable, so the offending
+    connection can arrive from the client's own saved list rather than from a
+    hand-crafted request. A 500 gives the user nothing to act on.
+    """
+
+    _PROFILER_FOLDER = {
+        "reportName": "resnet50",
+        "remotePath": "/remote/profiler/reports/resnet50",
+        "lastModified": 1,
+    }
+
+    def _post(self, client, endpoint: str, *, connection: dict, profiler: dict):
+        if endpoint == "/api/remote/test":
+            return client.post(endpoint, json=connection)
+        return client.post(
+            endpoint, json={"connection": connection, "profiler": profiler}
+        )
+
+    @pytest.mark.parametrize(
+        "endpoint",
+        ["/api/remote/test", "/api/remote/sync", "/api/remote/use"],
+        ids=["test", "sync", "use"],
+    )
+    def test_a_rejected_connection_path_is_a_bad_request(self, app, client, endpoint):
+        app.config["SERVER_MODE"] = False
+
+        response = self._post(
+            client,
+            endpoint,
+            connection={**_remote_connection_payload(), "profilerPath": "reports"},
+            profiler=self._PROFILER_FOLDER,
+        )
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.get_json()["error"] == "Invalid connection data"
+
+    @pytest.mark.parametrize(
+        "remote_path",
+        ["/remote/reports\nrm -rf /", "relative/reports"],
+        ids=["newline", "relative"],
+    )
+    @pytest.mark.parametrize(
+        "endpoint", ["/api/remote/sync", "/api/remote/use"], ids=["sync", "use"]
+    )
+    def test_a_rejected_report_path_is_a_bad_request(
+        self, app, client, endpoint, remote_path
+    ):
+        app.config["SERVER_MODE"] = False
+
+        response = self._post(
+            client,
+            endpoint,
+            connection=_remote_connection_payload(),
+            profiler={**self._PROFILER_FOLDER, "remotePath": remote_path},
+        )
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.get_json()["error"] == "Invalid report data"
+
+
 class TestReportSearchAgainstRealFind:
     """Run the emitted expression through a local ``find``.
 

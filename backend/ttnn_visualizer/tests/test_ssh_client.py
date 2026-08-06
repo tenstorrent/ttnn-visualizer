@@ -9,6 +9,9 @@ its ProxyJump, IdentityFile and friends; a set identity file must isolate the ru
 """
 
 import os
+import shlex
+import subprocess
+from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
@@ -239,6 +242,25 @@ def test_connection_accepts_an_empty_performance_path(path):
 )
 def test_connection_accepts_an_absolute_path_containing_shell_metacharacters(path):
     assert _connection(profilerPath=path).profilerPath == path
+
+
+# `scp -O` expands its remote path through a shell on the far side, so delivering the
+# target as one argv element is not protection on its own — the path half needs quoting.
+def test_upload_file_quotes_the_remote_path_in_the_scp_target(tmp_path):
+    remote_path = "/remote/o'brien/reports/model.mlir"
+    local_file = tmp_path / "model.mlir"
+    local_file.write_text("x")
+    client = SSHClient(_connection())
+
+    with patch(
+        "subprocess.run",
+        return_value=subprocess.CompletedProcess(args=["scp"], returncode=0),
+    ) as run:
+        client.upload_file(str(local_file), remote_path)
+
+    target = run.call_args[0][0][-1]
+    assert target.startswith("alice@work-gpu:")
+    assert shlex.split(target.split(":", 1)[1]) == [remote_path]
 
 
 # MlirServerConnection has no report paths of its own but builds a RemoteConnection

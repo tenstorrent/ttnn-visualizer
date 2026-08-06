@@ -9,7 +9,7 @@ import RemoteConnectionDialog from '../src/components/report-selection/RemoteCon
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../src/definitions/RemoteConnection';
 import { SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
-import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
+import { REMOTE_PATH_NOT_ABSOLUTE_ERROR, SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
 import getButtonWithText from './helpers/getButtonWithText';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
@@ -273,9 +273,14 @@ describe('RemoteConnectionDialog remote path validation', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+        const input = screen.getByLabelText(label);
+        fireEvent.change(input, { target: { value } });
 
-        expect(screen.getByText(/must be absolute/)).toBeInTheDocument();
+        // Asserted as the input's description rather than as text on the page: Blueprint
+        // only colours the field, so the message reaches a screen reader solely through
+        // the aria-describedby the dialog wires up itself.
+        expect(input).toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeInvalid();
         expect(getButtonWithText('Run tests')).toBeDisabled();
     });
 
@@ -307,11 +312,12 @@ describe('RemoteConnectionDialog remote path validation', () => {
 
         const input = screen.getByLabelText('Memory report folder path');
         fireEvent.change(input, { target: { value: 'reports' } });
-        expect(screen.getByText(/must be absolute/)).toBeInTheDocument();
+        expect(input).toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
 
         fireEvent.change(input, { target: { value: '/reports' } });
 
-        expect(screen.queryByText(/must be absolute/)).not.toBeInTheDocument();
+        expect(input).not.toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeValid();
         expect(getButtonWithText('Run tests')).toBeEnabled();
     });
 
@@ -324,15 +330,19 @@ describe('RemoteConnectionDialog remote path validation', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText('Performance report folder path'), { target: { value: '' } });
+        const input = screen.getByLabelText('Performance report folder path');
+        fireEvent.change(input, { target: { value: '' } });
 
-        expect(screen.queryByText(/must be absolute/)).not.toBeInTheDocument();
+        expect(input).not.toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeValid();
         expect(getButtonWithText('Run tests')).toBeEnabled();
     });
 
-    it('blocks saving a stored connection whose path is no longer accepted', () => {
-        testConnectionMock.mockResolvedValue(PASSING_TESTS);
-
+    // The list keeps a connection stored before paths had to be absolute, so this is the
+    // repair route: opening it has to name the problem and leave the test — the only way to
+    // re-enable saving — closed until the path is fixed. Saving is already blocked by the
+    // absent test result, so `!hasPathError` in the save gate is defence in depth.
+    it('names the problem and withholds the test when a stored path is no longer accepted', () => {
         render(
             <RemoteConnectionDialog
                 open
@@ -348,8 +358,35 @@ describe('RemoteConnectionDialog remote path validation', () => {
             />,
         );
 
-        expect(screen.getByText(/must be absolute/)).toBeInTheDocument();
+        expect(screen.getByLabelText('Memory report folder path')).toHaveAccessibleDescription(
+            REMOTE_PATH_NOT_ABSOLUTE_ERROR,
+        );
+        expect(getButtonWithText('Run tests')).toBeDisabled();
         expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('re-enables the test once the stored path is corrected', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                remoteConnection={{
+                    name: 'legacy',
+                    host: 'work-gpu',
+                    port: 22,
+                    username: 'bob',
+                    profilerPath: 'tt-metal/generated/ttnn/reports',
+                }}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const input = screen.getByLabelText('Memory report folder path');
+        fireEvent.change(input, { target: { value: '/tt-metal/generated/ttnn/reports' } });
+
+        expect(input).not.toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeValid();
+        expect(getButtonWithText('Run tests')).toBeEnabled();
     });
 });
 

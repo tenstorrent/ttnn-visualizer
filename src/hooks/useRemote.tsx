@@ -12,7 +12,6 @@ import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/RemoteSync';
 import { StackSourceOrigin } from '../definitions/StackTrace';
 import { clearFileTransferProgressForSource } from '../store/fileTransferRegistry';
 import { isSameConnection, remoteConnectionKey } from '../functions/remoteConnection';
-import { isValidRemotePath } from '../functions/remotePath';
 import { beginRemoteSyncRequest, endRemoteSyncRequest } from '../functions/remoteSyncRequest';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import axiosInstance from '../libs/axiosInstance';
@@ -417,21 +416,18 @@ const safeJsonStringify = <T,>(value: T, fallback: string = 'null'): string => {
     }
 };
 
-const isValidConnection = (connection?: Partial<RemoteConnection>) => {
-    if (
-        !connection?.name ||
-        !connection?.username ||
-        !connection?.host ||
-        !connection?.port ||
-        (!connection?.profilerPath && !connection?.performancePath)
-    ) {
-        return false;
-    }
-
-    // A relative path was storable before the backend required absolute ones, and the
-    // server now drops such a connection on read. Dropping it here too keeps the two
-    // sides agreeing, rather than listing a connection every request refuses to use.
-    return isValidRemotePath(connection.profilerPath) && isValidRemotePath(connection.performancePath);
-};
+// Deliberately does not check the report paths. A relative path was storable before the
+// backend required absolute ones, and filtering such a connection out here would erase it:
+// the list is read filtered but written whole, so the next add or edit would drop it from
+// storage silently. It stays listed and is flagged for repair instead — see
+// getRemoteConnectionPathError and RemoteConnectionSelector.
+const isValidConnection = (connection?: Partial<RemoteConnection>) =>
+    Boolean(
+        connection?.name &&
+        connection?.username &&
+        connection?.host &&
+        connection?.port &&
+        (connection?.profilerPath || connection?.performancePath),
+    );
 
 export default useRemoteConnection;

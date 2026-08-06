@@ -18,6 +18,8 @@ import {
 } from '../src/store/fileTransferRegistry';
 import { abortActiveRemoteSyncRequest } from '../src/functions/remoteSyncRequest';
 import useRemoteConnection, {
+    LOCAL_STORAGE_KEY_CONNECTIONS,
+    LOCAL_STORAGE_KEY_SELECTED,
     legacySavedPerformanceFoldersKey,
     legacySavedReportFoldersKey,
     savedPerformanceFoldersKey,
@@ -557,5 +559,64 @@ describe('useRemoteConnection - folder cache key migration', () => {
 
         expect(result.current.persistentState.getSavedReportFolders(connection)).toEqual([]);
         expect(window.localStorage.getItem(legacySavedReportFoldersKey(connection))).toBeNull();
+    });
+});
+
+// The list is read filtered but written whole, so anything the getter hides is erased from
+// storage by the next add or edit. Report paths are therefore not part of what makes a
+// stored connection listable — the selector flags those rows instead.
+describe('useRemoteConnection - savedConnectionList', () => {
+    const VALID_CONNECTION = {
+        name: 'lab',
+        host: 'work-gpu',
+        port: 22,
+        username: 'alice',
+        profilerPath: '/reports',
+    };
+    const LEGACY_RELATIVE_PATH_CONNECTION = {
+        ...VALID_CONNECTION,
+        name: 'legacy',
+        profilerPath: 'tt-metal/generated/ttnn/reports',
+    };
+
+    const seedConnections = (connections: unknown[]) =>
+        window.localStorage.setItem(LOCAL_STORAGE_KEY_CONNECTIONS, JSON.stringify(connections));
+
+    it('keeps a connection whose report path the server would now refuse', () => {
+        seedConnections([VALID_CONNECTION, LEGACY_RELATIVE_PATH_CONNECTION]);
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        expect(result.current.persistentState.savedConnectionList).toEqual([
+            VALID_CONNECTION,
+            LEGACY_RELATIVE_PATH_CONNECTION,
+        ]);
+    });
+
+    it('still drops an entry missing the fields needed to reach a host', () => {
+        seedConnections([VALID_CONNECTION, { name: 'broken', host: 'work-gpu', port: 22 }]);
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        expect(result.current.persistentState.savedConnectionList).toEqual([VALID_CONNECTION]);
+    });
+
+    it('leaves a stored selection with a refused path selected rather than reassigning it', () => {
+        seedConnections([VALID_CONNECTION, LEGACY_RELATIVE_PATH_CONNECTION]);
+        window.localStorage.setItem(LOCAL_STORAGE_KEY_SELECTED, JSON.stringify(LEGACY_RELATIVE_PATH_CONNECTION));
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        expect(result.current.persistentState.selectedConnection).toEqual(LEGACY_RELATIVE_PATH_CONNECTION);
+    });
+
+    // A non-string path can only arrive from hand-edited or corrupted storage, but the getter
+    // feeds a useState initialiser, so throwing there costs the whole page.
+    it('does not throw on a connection whose path is not a string', () => {
+        seedConnections([{ ...VALID_CONNECTION, profilerPath: 42 }]);
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        expect(() => result.current.persistentState.savedConnectionList).not.toThrow();
     });
 });
