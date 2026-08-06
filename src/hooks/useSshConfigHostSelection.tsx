@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { useCallback, useState } from 'react';
-import { SSH_CONFIG_HOST_CUSTOM } from '../definitions/SshConfigHostPicker';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_UNSELECTED } from '../definitions/SshConfigHostPicker';
 
 /**
  * Tracks which `~/.ssh/config` alias a connection dialog is showing, so the remote
@@ -12,18 +12,20 @@ import { SSH_CONFIG_HOST_CUSTOM } from '../definitions/SshConfigHostPicker';
  * port under different keys.
  *
  * `initialHost` is the host of the connection being edited, if any — an existing
- * connection whose host matches an alias opens with that alias selected.
+ * connection whose host matches an alias opens with that alias selected. Without one
+ * there is nothing to report yet, so a new connection starts on neither an alias nor
+ * Custom until the user picks one.
  */
 const useSshConfigHostSelection = (initialHost?: string) => {
-    const [selectedHost, setSelectedHost] = useState(() => initialHost || SSH_CONFIG_HOST_CUSTOM);
+    const [selectedHost, setSelectedHost] = useState(() => initialHost || SSH_CONFIG_HOST_UNSELECTED);
 
     const selectHost = useCallback((host: string) => setSelectedHost(host), []);
 
-    /** The host was typed by hand, or the picker's own Custom option was chosen. */
+    /** The host was typed by hand, or the picker's own "add new" option was chosen. */
     const selectCustom = useCallback(() => setSelectedHost(SSH_CONFIG_HOST_CUSTOM), []);
 
     /** Discard a prefill the user backed out of, so it can't leak into the next open. */
-    const resetSelection = useCallback(() => setSelectedHost(initialHost || SSH_CONFIG_HOST_CUSTOM), [initialHost]);
+    const resetSelection = useCallback(() => setSelectedHost(initialHost || SSH_CONFIG_HOST_UNSELECTED), [initialHost]);
 
     return { selectedHost, selectHost, selectCustom, resetSelection };
 };

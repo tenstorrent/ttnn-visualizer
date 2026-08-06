@@ -6,7 +6,12 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SshConfigHostPicker from '../src/components/report-selection/SshConfigHostPicker';
-import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
+import {
+    SSH_CONFIG_HOST_CUSTOM,
+    SSH_CONFIG_HOST_LABEL,
+    SSH_CONFIG_HOST_UNSELECTED,
+    SSH_CONFIG_HOST_UNSELECTED_LABEL,
+} from '../src/definitions/SshConfigHostPicker';
 import {
     MOCK_SSH_CONFIG_HOST,
     SshConfigHostsQueryResult,
@@ -165,6 +170,27 @@ describe('SshConfigHostPicker', () => {
         renderPicker('hand-typed-host');
 
         expect(getPicker().value).toBe(SSH_CONFIG_HOST_CUSTOM);
+    });
+
+    it('shows a placeholder, which is a prompt rather than a choice, while nothing has been chosen', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
+
+        renderPicker(SSH_CONFIG_HOST_UNSELECTED);
+
+        expect(getPicker().value).toBe(SSH_CONFIG_HOST_UNSELECTED);
+        expect(screen.getByRole('option', { name: SSH_CONFIG_HOST_UNSELECTED_LABEL })).toBeDisabled();
+        // Muted, so an unanswered picker doesn't read as a value the user settled on.
+        expect(getPicker().parentElement).toHaveClass('ssh-config-host-placeholder');
+    });
+
+    it('drops the placeholder once a choice is made', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu' }]));
+
+        // Choosing it again would mean unchoosing, which nothing downstream can act on.
+        renderPicker(SSH_CONFIG_HOST_CUSTOM);
+
+        expect(screen.queryByRole('option', { name: SSH_CONFIG_HOST_UNSELECTED_LABEL })).not.toBeInTheDocument();
+        expect(getPicker().parentElement).not.toHaveClass('ssh-config-host-placeholder');
     });
 
     it('shows the selected alias when it matches a config host', () => {

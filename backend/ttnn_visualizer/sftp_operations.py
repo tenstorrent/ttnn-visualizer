@@ -21,7 +21,6 @@ from ttnn_visualizer.enums import ConnectionTestStates, SyncMethod
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     HostKeyVerificationException,
-    NoReportsException,
     NoValidConnectionsError,
     RemoteConnectionException,
     SSHException,
@@ -1011,7 +1010,11 @@ def _find_performance_report_folders(
 
 
 class RemoteReportCounts(NamedTuple):
-    """Report folders found per kind; ``None`` when that path is not configured."""
+    """Report folders found per kind; ``None`` when that path is not configured.
+
+    A configured path that holds nothing counts ``0`` rather than raising, so
+    the caller can report each kind's outcome against the path it searched.
+    """
 
     profiler: Optional[int]
     performance: Optional[int]
@@ -1034,29 +1037,6 @@ def check_remote_path_for_reports(
         remote_performance_paths = _find_performance_report_folders(remote_connection)
     else:
         logger.info("No performance path configured; skipping check")
-
-    errors = []
-    if not remote_profiler_paths and remote_connection.profilerPath:
-        errors.append(f"Profiler folder path: {remote_connection.profilerPath}")
-    if not remote_performance_paths and remote_connection.performancePath:
-        performance_error = (
-            f"Performance folder path: {remote_connection.performancePath}"
-        )
-        if remote_connection.multihostPerformance:
-            # Naming the expected layout turns the most likely misconfiguration
-            # (pointing at the parent of the per-rank folders) into a self-
-            # diagnosing warning.
-            performance_error += (
-                f" (multihost is enabled, so reports are expected at "
-                f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report> under this path)"
-            )
-        errors.append(performance_error)
-
-    if errors:
-        raise NoReportsException(
-            message="; ".join(errors),
-            status=ConnectionTestStates.WARNING,
-        )
 
     return RemoteReportCounts(
         profiler=(

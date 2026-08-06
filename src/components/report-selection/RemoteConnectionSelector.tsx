@@ -125,6 +125,7 @@ const RemoteConnectionSelector = ({
                 <RemoteConnectionDialog
                     key={remoteConnectionKey(connectionToEdit)}
                     open
+                    existingConnections={connectionList}
                     // The dialog always calls onAddConnection and then onSave, so the edit is applied
                     // here and only the follow-up fetch belongs in onSave.
                     onAddConnection={(updatedConnection) => onEditConnection(updatedConnection, connectionToEdit)}

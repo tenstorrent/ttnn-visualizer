@@ -4,14 +4,21 @@
 
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../src/definitions/RemoteConnection';
-import { SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
 import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
-import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
+import {
+    SshConfigHostsQueryResult,
+    noSshConfigResult,
+    pendingSshConfigResult,
+    sshConfigHostsResult,
+} from './helpers/sshConfigFixtures';
 import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
 
 // Declared inside the hoisted factory: it runs before module-scope consts initialise.
@@ -69,8 +76,8 @@ describe('RemoteConnectionDialog defaults', () => {
         );
 
         expect(screen.getByLabelText('SSH Port')).toHaveValue('2222');
-        expect(screen.getByLabelText('Memory report folder path')).toHaveValue('/mem');
-        expect(screen.getByLabelText('Performance report folder path')).toHaveValue('/perf');
+        expect(screen.getByLabelText('Remote memory report folder path')).toHaveValue('/mem');
+        expect(screen.getByLabelText('Remote performance report folder path')).toHaveValue('/perf');
         expect(screen.getByLabelText('Username')).toHaveValue('bob');
     });
 
@@ -92,9 +99,26 @@ describe('RemoteConnectionDialog defaults', () => {
             />,
         );
 
-        expect(screen.getByLabelText('Performance report folder path')).toHaveValue('');
+        expect(screen.getByLabelText('Remote performance report folder path')).toHaveValue('');
     });
 });
+
+// The multihost FormGroup's label points at the checkbox as well as heading the group, so the
+// checkbox's accessible name is that heading followed by its own label. Match on the half that
+// identifies the control.
+const MULTIHOST_CHECKBOX_NAME = new RegExp(MULTIHOST_CHECKBOX_LABEL);
+
+// A stale result stays on screen, so this class is what separates it from one
+// that still applies.
+const STALE_RESULTS_CLASS = 'stale-connection-tests';
+
+const getTestBlock = () => screen.queryByRole('group', { name: 'Test Connection' });
+
+/** The server results, which go stale — as opposed to the name check, which is recomputed. */
+const getServerTestResults = () => screen.getByTestId(TEST_IDS.CONNECTION_TEST_RESULTS);
+
+/** Saving needs a name, so anything that ends at an enabled save button has to supply one. */
+const fillName = (name = 'my lab box') => fireEvent.change(screen.getByLabelText('Name'), { target: { value: name } });
 
 const PASSING_TESTS: ConnectionStatus[] = [
     { status: ConnectionTestStates.OK, message: 'SSH connection established' },
@@ -126,7 +150,6 @@ describeSshConfigPrefillContract('RemoteConnectionDialog', {
     runTestsLabel: 'Run tests',
     saveLabel: 'Add connection',
     passingTestMessage: 'SSH connection established',
-    invalidatedTestMessage: 'Check SSH connection is valid',
     useSshConfigHostsMock,
     setServerMode: (serverMode) => getServerConfigMock.mockReturnValue({ ...SERVER_CONFIG, SERVER_MODE: serverMode }),
     mockPassingTest: () => testConnectionMock.mockResolvedValue(PASSING_TESTS),
@@ -141,18 +164,15 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
         render(
             <RemoteConnectionDialog
                 open
-                remoteConnection={{
-                    name: 'my lab box',
-                    host: 'old-host',
-                    port: 22,
-                    username: 'bob',
-                    profilerPath: '/mem',
-                }}
                 onClose={vi.fn()}
                 onAddConnection={vi.fn()}
             />,
         );
 
+        // Reaching the Name field at all means choosing something first, so the name is
+        // typed after one alias and kept when the user settles on another.
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: SSH_CONFIG_HOST_CUSTOM } });
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my lab box' } });
         fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
 
         expect(screen.getByLabelText('Name')).toHaveValue('my lab box');
@@ -179,15 +199,96 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
     });
 });
 
-describe('RemoteConnectionDialog connection test invalidation', () => {
+describe('RemoteConnectionDialog host choice gate', () => {
+    const CONFIG_HOSTS = [{ host: 'work-gpu', user: 'alice', port: 2222 }];
+
+    const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_LABEL) as HTMLSelectElement;
+    const queryNameField = () => screen.queryByLabelText('Name');
+
+    it('shows nothing but the picker, and no actions, until a choice is made', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
+
+        renderRemoteConnectionDialog();
+
+        expect(getPicker()).toBeInTheDocument();
+        expect(queryNameField()).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('SSH Host')).not.toBeInTheDocument();
+        // A form that isn't on screen has nothing to test or save.
+        expect(screen.queryByRole('button', { name: 'Run tests' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Add connection' })).not.toBeInTheDocument();
+    });
+
+    it('reveals the form when the add-new option is chosen', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
+
+        renderRemoteConnectionDialog();
+        fireEvent.change(getPicker(), { target: { value: SSH_CONFIG_HOST_CUSTOM } });
+
+        expect(screen.getByLabelText('SSH Host')).toHaveValue('');
+        expect(getButtonWithText('Run tests')).toBeInTheDocument();
+    });
+
+    it('reveals the form prefilled when a config host is chosen', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
+
+        renderRemoteConnectionDialog();
+        fireEvent.change(getPicker(), { target: { value: 'work-gpu' } });
+
+        expect(screen.getByLabelText('SSH Host')).toHaveValue('work-gpu');
+    });
+
+    it('waits for ~/.ssh/config before deciding, rather than showing a form it takes away', () => {
+        useSshConfigHostsMock.mockReturnValue(pendingSshConfigResult());
+
+        renderRemoteConnectionDialog();
+
+        expect(queryNameField()).not.toBeInTheDocument();
+    });
+
     it.each([
-        ['SSH Host', 'other-host'],
-        ['Username', 'carol'],
-        ['SSH Port', '2022'],
-        ['Memory report folder path', '/elsewhere'],
-        ['Performance report folder path', '/elsewhere-perf'],
-        [SSH_IDENTITY_FILE_LABEL, '/tmp/id_ed25519'],
-    ])('discards a passing test result when %s is edited by hand', async (label, value) => {
+        ['there is no ~/.ssh/config to choose from', noSshConfigResult],
+        ['the config holds no concrete hosts', () => sshConfigHostsResult([])],
+    ])('shows the form straight away when %s', (_, result) => {
+        useSshConfigHostsMock.mockReturnValue(result());
+
+        renderRemoteConnectionDialog();
+
+        expect(queryNameField()).toBeInTheDocument();
+    });
+
+    it('shows the form straight away under SERVER_MODE, where the picker never renders', () => {
+        // The query is disabled here, and a disabled query never settles — waiting on
+        // the config to load would leave a hosted user with an empty dialog for good.
+        getServerConfigMock.mockReturnValue({ ...SERVER_CONFIG, SERVER_MODE: true });
+        useSshConfigHostsMock.mockReturnValue(pendingSshConfigResult());
+
+        renderRemoteConnectionDialog();
+
+        expect(queryNameField()).toBeInTheDocument();
+    });
+
+    it('shows the form straight away when an existing connection is being edited', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
+
+        renderRemoteConnectionDialog({ existing: { name: 'saved', host: 'not-an-alias', username: 'carol' } });
+
+        expect(screen.getByLabelText('SSH Host')).toHaveValue('not-an-alias');
+    });
+
+    it('offers no picker at all when editing, and leaves ~/.ssh/config unread', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
+
+        // The prefill replaces host, name, username, port and identity file together, so on a
+        // connection that already has them it is an offer to undo the edit.
+        renderRemoteConnectionDialog({ existing: { name: 'saved', host: 'work-gpu', username: 'carol' } });
+
+        expect(screen.queryByLabelText(SSH_CONFIG_HOST_LABEL)).not.toBeInTheDocument();
+        expect(useSshConfigHostsMock).not.toHaveBeenCalledWith(true);
+    });
+});
+
+describe('RemoteConnectionDialog connection test block', () => {
+    it('stays hidden until a test is run, then survives an edit as a stale result', async () => {
         testConnectionMock.mockResolvedValue(PASSING_TESTS);
 
         render(
@@ -198,13 +299,176 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
             />,
         );
 
+        expect(getTestBlock()).not.toBeInTheDocument();
+
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(screen.getByText('SSH connection established')).toBeInTheDocument());
+        expect(getServerTestResults()).not.toHaveClass(STALE_RESULTS_CLASS);
+
+        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'other-host' } });
+
+        // The record of what the last run found is worth more than a clean slate,
+        // as long as it can't be read as approving the target now in the form.
+        expect(screen.getByText('SSH connection established')).toBeInTheDocument();
+        expect(getServerTestResults()).toHaveClass(STALE_RESULTS_CLASS);
+    });
+
+    it('drops the stale marking once the tests are run again', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'other-host' } });
+        expect(getServerTestResults()).toHaveClass(STALE_RESULTS_CLASS);
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+        expect(getServerTestResults()).not.toHaveClass(STALE_RESULTS_CLASS);
+    });
+});
+
+describe('RemoteConnectionDialog connection name validation', () => {
+    const SAVED: RemoteConnection = {
+        name: 'Worker',
+        host: 'worker-01',
+        port: 2222,
+        username: 'tt',
+        profilerPath: '/mem',
+    };
+
+    const renderWithSaved = (props: Partial<ComponentProps<typeof RemoteConnectionDialog>> = {}) =>
+        render(
+            <RemoteConnectionDialog
+                open
+                existingConnections={[SAVED]}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+                {...props}
+            />,
+        );
+
+    it('reports a duplicate name as soon as it is typed, without waiting for a test run', () => {
+        renderWithSaved();
+
+        expect(getTestBlock()).not.toBeInTheDocument();
+
+        fillName(SAVED.name);
+
+        expect(screen.getByText(`A connection named "${SAVED.name}" already exists`)).toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it.each([
+        ['case', 'worker'],
+        ['surrounding space', '  Worker  '],
+    ])('reports a name differing only by %s as a duplicate', (_difference, name) => {
+        renderWithSaved();
+
+        fillName(name);
+
+        expect(screen.getByText(`A connection named "${name.trim()}" already exists`)).toBeInTheDocument();
+    });
+
+    it('keeps a duplicate name from being saved even after the tests pass', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+        renderWithSaved();
+
+        fillName('my lab box');
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+
+        // A rename doesn't invalidate the SSH results, so nothing else here would notice.
+        fillName(SAVED.name);
+
+        expect(screen.getByText('SSH connection established')).toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('takes the failure back down when the name is changed to a free one', () => {
+        renderWithSaved();
+
+        fillName(SAVED.name);
+        expect(getTestBlock()).toBeInTheDocument();
+
+        fillName('Worker 2');
+
+        // With nothing left to report and no test run to report it alongside, the whole
+        // block goes rather than leaving a tick the user never asked for.
+        expect(getTestBlock()).not.toBeInTheDocument();
+    });
+
+    it('reports a missing name with the rest of the results, rather than before them', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+        renderWithSaved();
+
+        // Nothing to complain about until the user asks for a verdict.
+        expect(getTestBlock()).not.toBeInTheDocument();
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('Connection name is required')).toBeInTheDocument());
+        // Saved without a name, the connection is discarded as invalid on the next read.
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('does not report the connection being edited as a duplicate of itself', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+        renderWithSaved({ remoteConnection: SAVED, buttonLabel: 'Save connection' });
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled());
+        expect(screen.getByText('Connection name is available')).toBeInTheDocument();
+    });
+
+    it('reports an edit that takes the name of a different connection', () => {
+        const other: RemoteConnection = { ...SAVED, name: 'Spare', host: 'worker-02' };
+
+        renderWithSaved({ existingConnections: [SAVED, other], remoteConnection: SAVED });
+
+        fillName(other.name);
+
+        expect(screen.getByText(`A connection named "${other.name}" already exists`)).toBeInTheDocument();
+    });
+});
+
+describe('RemoteConnectionDialog connection test invalidation', () => {
+    it.each([
+        ['SSH Host', 'other-host'],
+        ['Username', 'carol'],
+        ['SSH Port', '2022'],
+        ['Remote memory report folder path', '/elsewhere'],
+        ['Remote performance report folder path', '/elsewhere-perf'],
+        [SSH_IDENTITY_FILE_LABEL, '/tmp/id_ed25519'],
+    ])('stops a passing test result gating the save when %s is edited by hand', async (label, value) => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
         fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'work-gpu' } });
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
         fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
-        expect(screen.queryByText('SSH connection established')).not.toBeInTheDocument();
+        expect(getServerTestResults()).toHaveClass(STALE_RESULTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeDisabled();
     });
 
@@ -219,12 +483,14 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
             />,
         );
 
+        fillName();
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
-        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my lab box' } });
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'renamed box' } });
 
         expect(screen.getByText('SSH connection established')).toBeInTheDocument();
+        expect(getServerTestResults()).not.toHaveClass(STALE_RESULTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeEnabled();
     });
 
@@ -268,7 +534,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).not.toBeChecked();
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).not.toBeChecked();
     });
 
     it('reflects the saved flag when editing a connection', () => {
@@ -291,7 +557,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeChecked();
     });
 
     it('sends the flag with the connection test and the saved connection', async () => {
@@ -306,7 +572,8 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+        fillName();
+        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
         fireEvent.click(getButtonWithText('Run tests'));
 
         await waitFor(() =>
@@ -320,7 +587,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
         expect(onAddConnection).toHaveBeenCalledWith(expect.objectContaining({ multihostPerformance: true }));
     });
 
-    it('discards a passing test result when the flag is toggled', async () => {
+    it('stops a passing test result gating the save when the flag is toggled', async () => {
         // The flag selects which layout is searched, so a result computed for the
         // other one says nothing about this connection and must not gate the save.
         testConnectionMock.mockResolvedValue(PASSING_TESTS);
@@ -333,12 +600,13 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
+        fillName();
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
-        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
 
-        expect(screen.queryByText('SSH connection established')).not.toBeInTheDocument();
+        expect(getServerTestResults()).toHaveClass(STALE_RESULTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeDisabled();
     });
 });

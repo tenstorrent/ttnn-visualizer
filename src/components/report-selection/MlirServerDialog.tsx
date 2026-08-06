@@ -6,7 +6,7 @@ import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Toolti
 import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { MLIR_UPLOAD_PATH, MlirServerConnection } from '../../definitions/MlirServer';
+import { MlirServerConnection } from '../../definitions/MlirServer';
 import {
     MLIR_SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
@@ -52,14 +52,6 @@ const TEST_PROGRESS: ConnectionStatus = {
 const LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
 const isLocalhostSshHost = (host: string) => LOCALHOST_HOSTNAMES.has(host.trim().toLowerCase());
-
-const formatMlirTestPreview = (connection: MlirServerConnection) =>
-    `ssh -p ${connection.sshPort} ${connection.username}@${connection.host} ` +
-    `→ curl http://127.0.0.1:${connection.port}${MLIR_UPLOAD_PATH} on remote`;
-
-const formatMlirUploadPreview = (connection: MlirServerConnection) =>
-    `ssh -p ${connection.sshPort} ${connection.username}@${connection.host} ` +
-    `→ curl http://127.0.0.1:${connection.port}${MLIR_UPLOAD_PATH} on remote`;
 
 const MlirServerDialog = ({
     open,
@@ -247,23 +239,6 @@ const MlirServerDialog = ({
                         onChange={(e) => updateTarget({ identityFile: e.target.value.trim() || undefined })}
                     />
                 </FormGroup>
-
-                {hasRequiredFields && (
-                    <>
-                        <FormGroup
-                            label='Connection test'
-                            subLabel='SSH into the remote host and probe the MLIR server'
-                        >
-                            <code>{formatMlirTestPreview(connection)}</code>
-                        </FormGroup>
-                        <FormGroup
-                            label='Upload'
-                            subLabel='Proxied through this app to your local tunnel'
-                        >
-                            <code>{formatMlirUploadPreview(connection)}</code>
-                        </FormGroup>
-                    </>
-                )}
 
                 <fieldset>
                     <legend>Test Connection</legend>

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { RemoteConnection } from '../src/definitions/RemoteConnection';
-import { isSameConnection, remoteConnectionKey } from '../src/functions/remoteConnection';
+import { isConnectionNameTaken, isSameConnection, remoteConnectionKey } from '../src/functions/remoteConnection';
 
 const connection: RemoteConnection = {
     name: 'Worker',
@@ -70,5 +70,44 @@ describe('remoteConnectionKey', () => {
     it('returns an empty string when there is no connection', () => {
         expect(remoteConnectionKey(undefined)).toBe('');
         expect(remoteConnectionKey(null)).toBe('');
+    });
+});
+
+describe('isConnectionNameTaken', () => {
+    const connections = [connection, { ...connection, name: 'Spare', host: 'worker-02' }];
+
+    it('reports a name already carried by a saved connection', () => {
+        expect(isConnectionNameTaken('Worker', connections)).toBe(true);
+    });
+
+    it('accepts a name no saved connection carries', () => {
+        expect(isConnectionNameTaken('Worker 2', connections)).toBe(false);
+    });
+
+    it.each([
+        ['case', 'worker'],
+        ['surrounding space', '  Worker  '],
+    ])('treats a name differing only by %s as the same name', (_difference, name) => {
+        expect(isConnectionNameTaken(name, connections)).toBe(true);
+    });
+
+    it('accepts an edited connection keeping its own name', () => {
+        expect(isConnectionNameTaken('Worker', connections, connection)).toBe(false);
+    });
+
+    it('still rejects an edit that takes another connection name', () => {
+        expect(isConnectionNameTaken('Spare', connections, connection)).toBe(true);
+    });
+
+    it('excludes the edited connection by identity, not by name', () => {
+        // Editing the host of a connection whose name is unchanged: the entry about to be
+        // replaced is still in the list, and matching on name alone would find it.
+        const movedHost = { ...connection, host: 'worker-99' };
+
+        expect(isConnectionNameTaken(movedHost.name, connections, connection)).toBe(false);
+    });
+
+    it('finds nothing in an empty list', () => {
+        expect(isConnectionNameTaken('Worker', [])).toBe(false);
     });
 });

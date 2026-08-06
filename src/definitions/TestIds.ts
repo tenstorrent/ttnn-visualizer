@@ -28,6 +28,9 @@ export const TEST_IDS = Object.freeze({
     // Comparison components
     COMPARISON_REPORT_SELECTOR: 'comparison-report-selector',
 
+    // Connection dialogs
+    CONNECTION_TEST_RESULTS: 'connection-test-results',
+
     // Navigation
     ADD_NEW_CONNECTION: 'add-new-connection',
     NO_CONNECTION: 'no-connection',

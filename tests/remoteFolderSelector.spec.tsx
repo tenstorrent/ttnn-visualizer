@@ -74,6 +74,11 @@ const IS_ACTIVATING_REPORT_PROBE_TEST_ID = 'is-activating-report-probe';
 
 const EDITED_CONNECTION_NAME = 'Renamed Server';
 
+// The multihost FormGroup's label points at the checkbox as well as heading the group, so the
+// checkbox's accessible name is that heading followed by its own label. Match on the half that
+// identifies the control.
+const MULTIHOST_CHECKBOX_NAME = new RegExp(MULTIHOST_CHECKBOX_LABEL);
+
 const IsActivatingReportProbe = () => {
     const isActivatingReport = useAtomValue(isActivatingReportAtom);
 
@@ -453,7 +458,7 @@ it('lists a newly added connection as a dropdown row', async () => {
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: addedName } });
     fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'added.example.com' } });
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'prod-user' } });
-    fireEvent.change(screen.getByLabelText('Memory report folder path'), { target: { value: '/opt/reports' } });
+    fireEvent.change(screen.getByLabelText('Remote memory report folder path'), { target: { value: '/opt/reports' } });
     fireEvent.click(getButtonWithText('Run tests'));
 
     await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
@@ -1663,7 +1668,7 @@ const editConnection = async (connection: RemoteConnection) => {
     fireEvent.click(getConnectionTrigger(connection));
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
     fireEvent.click(screen.getByLabelText(getEditConnectionLabel(connection)));
-    await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeTruthy());
 };
 
 const runConnectionTestAndSave = async () => {
@@ -1692,7 +1697,7 @@ it('drops cached performance folders when the multihost flag is flipped', async 
     );
 
     await editConnection(connection);
-    fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+    fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
     await runConnectionTestAndSave();
 
     await waitFor(() => expect(window.localStorage.getItem(cacheKey)).toBeNull(), WAIT_FOR_OPTIONS);
@@ -1714,11 +1719,11 @@ it('keeps cached performance folders when an unrelated field is edited', async (
     await editConnection(connection);
     // Not the name: the cache is keyed on it, so a rename moves the entry rather
     // than dropping it and the assertion below would pass for the wrong reason.
-    fireEvent.change(screen.getByLabelText('Memory report folder path'), { target: { value: '/elsewhere' } });
+    fireEvent.change(screen.getByLabelText('Remote memory report folder path'), { target: { value: '/elsewhere' } });
     await runConnectionTestAndSave();
 
     await waitFor(
-        () => expect(screen.queryByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeNull(),
+        () => expect(screen.queryByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeNull(),
         WAIT_FOR_OPTIONS,
     );
     expect(window.localStorage.getItem(cacheKey)).not.toBeNull();

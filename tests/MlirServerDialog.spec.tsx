@@ -3,11 +3,12 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MlirServerDialog from '../src/components/report-selection/MlirServerDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
+import getButtonWithText from './helpers/getButtonWithText';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
 
@@ -71,6 +72,7 @@ describe('MlirServerDialog defaults', () => {
 });
 
 const MLIR_SERVER_REACHABLE = 'MLIR server reachable';
+const MLIR_TEST_PROMPT = 'Check the MLIR server connection is valid';
 
 const renderMlirServerDialog = ({ open = true, existing }: { open?: boolean; existing?: ExistingTarget } = {}) =>
     render(
@@ -97,7 +99,6 @@ describeSshConfigPrefillContract('MlirServerDialog', {
     runTestsLabel: 'Run test',
     saveLabel: 'Add server',
     passingTestMessage: MLIR_SERVER_REACHABLE,
-    invalidatedTestMessage: 'Check the MLIR server connection is valid',
     useSshConfigHostsMock,
     setServerMode: (serverMode) => getServerConfigMock.mockReturnValue({ ...SERVER_CONFIG, SERVER_MODE: serverMode }),
     mockPassingTest: () =>
@@ -107,8 +108,53 @@ describeSshConfigPrefillContract('MlirServerDialog', {
     defaultUsername: SERVER_CONFIG.USERNAME,
 });
 
+describe('MlirServerDialog connection test block', () => {
+    it('prompts for a test before one has run, and again once a result is invalidated', async () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice' }]));
+        testMlirServerConnectionMock.mockResolvedValue([
+            { status: ConnectionTestStates.OK, message: MLIR_SERVER_REACHABLE },
+        ]);
+
+        renderMlirServerDialog();
+
+        expect(screen.getByText(MLIR_TEST_PROMPT)).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my model explorer' } });
+        fireEvent.change(screen.getByLabelText('SSH host'), { target: { value: 'aus-wh-05' } });
+        fireEvent.click(getButtonWithText('Run test'));
+        await waitFor(() => expect(screen.getByText(MLIR_SERVER_REACHABLE)).toBeInTheDocument());
+        expect(screen.queryByText(MLIR_TEST_PROMPT)).not.toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('SSH host'), { target: { value: 'somewhere-else' } });
+
+        // Unlike the remote connection dialog, this one drops the result outright
+        // rather than keeping it on screen marked stale.
+        expect(screen.queryByText(MLIR_SERVER_REACHABLE)).not.toBeInTheDocument();
+        expect(screen.getByText(MLIR_TEST_PROMPT)).toBeInTheDocument();
+    });
+});
+
 // Behaviour specific to this dialog; the rest of the prefill contract is asserted above.
 describe('MlirServerDialog SSH config prefill specifics', () => {
+    // Unlike the remote connection dialog, this one still offers the picker for a saved server.
+    it('opens with the alias selected when the existing host matches one', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice' }]));
+
+        renderMlirServerDialog({ existing: { name: 'saved', host: 'work-gpu', username: 'carol' } });
+
+        // initialHost exists for this: a saved server pointing at an alias should not read as
+        // Custom, or reopening the dialog implies the stanza no longer applies.
+        expect(screen.getByLabelText<HTMLSelectElement>(SSH_CONFIG_HOST_LABEL).value).toBe('work-gpu');
+    });
+
+    it('reads as Custom when the existing host matches no alias', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'work-gpu', user: 'alice' }]));
+
+        renderMlirServerDialog({ existing: { name: 'saved', host: 'not-an-alias', username: 'carol' } });
+
+        expect(screen.getByLabelText<HTMLSelectElement>(SSH_CONFIG_HOST_LABEL).value).toBe(SSH_CONFIG_HOST_CUSTOM);
+    });
+
     it('keeps the existing username, sshPort, and server name when the stanza omits them', () => {
         useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: 'bare-host' }]));
 

@@ -10,6 +10,7 @@ from typing import Optional
 from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.models import (
     Instance,
@@ -30,7 +31,7 @@ from ttnn_visualizer.sftp_operations import (
 )
 from ttnn_visualizer.views import (
     _apply_requested_performance_name,
-    _found_reports_message,
+    _report_search_status,
     _safe_report_folder_name,
 )
 
@@ -762,40 +763,19 @@ class TestMultihostPerformanceDiscovery:
             performance_call.kwargs["subdirectory_glob"] == MULTIHOST_REPORT_PARENT_GLOB
         )
 
-    def test_connection_test_warning_names_the_expected_multihost_layout(self, app):
-        """Pointing at the parent of the per-rank folders must say so, not just fail."""
-        connection = self._connection(multihost=True)
+    def test_connection_test_warning_names_the_expected_multihost_layout(self):
+        """Pointing at the parent of the per-rank folders must say so, not just warn."""
+        status = _report_search_status("performance", 0, in_rank_subdirectories=True)
 
-        with (
-            app.app_context(),
-            patch(
-                "ttnn_visualizer.sftp_operations.find_folders_by_files",
-                return_value=[],
-            ),
-            pytest.raises(RemoteConnectionException) as excinfo,
-        ):
-            check_remote_path_for_reports(connection)
-
-        message = excinfo.value.message
-        assert connection.performancePath in message
-        assert f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report>" in message
+        assert status.status == ConnectionTestStates.WARNING.value
+        assert f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report>" in status.message
         # The glob is `find` syntax; users get the readable spelling.
-        assert MULTIHOST_REPORT_PARENT_GLOB not in message
+        assert MULTIHOST_REPORT_PARENT_GLOB not in status.message
 
-    def test_connection_test_warning_omits_the_hint_for_single_host(self, app):
-        connection = self._connection(multihost=False)
+    def test_connection_test_warning_omits_the_hint_for_single_host(self):
+        status = _report_search_status("performance", 0)
 
-        with (
-            app.app_context(),
-            patch(
-                "ttnn_visualizer.sftp_operations.find_folders_by_files",
-                return_value=[],
-            ),
-            pytest.raises(RemoteConnectionException) as excinfo,
-        ):
-            check_remote_path_for_reports(connection)
-
-        assert MULTIHOST_REPORT_LAYOUT_HINT not in excinfo.value.message
+        assert MULTIHOST_REPORT_LAYOUT_HINT not in status.message
 
     def test_flag_reaches_discovery_and_rank_report_round_trips(self, app, client):
         """End to end: the flag deserializes and the rank qualifies the local folder."""
@@ -1106,7 +1086,11 @@ class TestPerformanceNameSwap:
 
 
 class TestConnectionTestReportStatuses:
-    """A path that exists says nothing about reports being found there."""
+    """A path that exists says nothing about reports being found there.
+
+    Each configured path earns exactly one line, reporting what the search
+    found rather than that the directory was reachable.
+    """
 
     @staticmethod
     def _messages(response) -> list[str]:
@@ -1133,9 +1117,47 @@ class TestConnectionTestReportStatuses:
         )
 
         assert response.status_code == HTTPStatus.OK
-        messages = self._messages(response)
-        assert "Found 3 memory reports" in messages
-        assert "Found 2 performance reports" in messages
+        # A reachable directory no longer earns a line of its own.
+        assert self._messages(response) == [
+            "SSH connection established",
+            "Found 3 memory reports",
+            "Found 2 performance reports",
+        ]
+
+    def test_a_path_that_exists_but_holds_nothing_warns(self, app, client):
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test(
+            client,
+            _remote_connection_payload(),
+            folders_per_path=[[], []],
+        )
+
+        statuses = response.get_json()[1:]
+        assert [status["message"] for status in statuses] == [
+            "Memory path exists but no reports found",
+            "Performance path exists but no reports found",
+        ]
+        assert all(
+            status["status"] == ConnectionTestStates.WARNING.value
+            for status in statuses
+        )
+
+    def test_an_empty_path_does_not_suppress_the_other_count(self, app, client):
+        """Each kind is judged against the path it searched, not the pair."""
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test(
+            client,
+            _remote_connection_payload(),
+            folders_per_path=[["/a"], []],
+        )
+
+        assert self._messages(response) == [
+            "SSH connection established",
+            "Found 1 memory report",
+            "Performance path exists but no reports found",
+        ]
 
     def test_multihost_confirms_the_per_rank_search(self, app, client):
         app.config["SERVER_MODE"] = False
@@ -1162,12 +1184,15 @@ class TestConnectionTestReportStatuses:
 
         messages = self._messages(response)
         assert "Found 1 memory report" in messages
-        assert not any("performance report" in message for message in messages)
+        assert not any("performance" in message.lower() for message in messages)
 
     def test_single_report_is_not_pluralised(self):
-        assert _found_reports_message("performance", 1) == "Found 1 performance report"
         assert (
-            _found_reports_message("performance", 1, in_rank_subdirectories=True)
+            _report_search_status("performance", 1).message
+            == "Found 1 performance report"
+        )
+        assert (
+            _report_search_status("performance", 1, in_rank_subdirectories=True).message
             == "Found 1 performance report in per-rank subdirectories"
         )
 

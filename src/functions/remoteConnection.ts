@@ -22,3 +22,28 @@ export const isSameConnection = (a?: RemoteConnection | null, b?: RemoteConnecti
  */
 export const remoteConnectionKey = (connection?: RemoteConnection | null): string =>
     connection ? `${connection.name}|${connection.host}|${connection.port}` : '';
+
+/** Two names that differ only in case or surrounding space read as the same name to a user. */
+const normaliseConnectionName = (name: string): string => name.trim().toLowerCase();
+
+/**
+ * Whether `name` already belongs to another saved connection. The name is all a user has to tell
+ * connections apart in the picker, so a second one carrying it makes both ambiguous — and because
+ * identity includes the name, a duplicate also makes the two harder to keep straight in storage.
+ *
+ * `connectionBeingEdited` is excluded by identity rather than by name: an edit that keeps the name
+ * and changes the host would otherwise find the entry it is about to replace and report itself.
+ */
+export const isConnectionNameTaken = (
+    name: string,
+    connections: readonly RemoteConnection[],
+    connectionBeingEdited?: RemoteConnection,
+): boolean => {
+    const candidate = normaliseConnectionName(name);
+
+    return connections.some(
+        (connection) =>
+            !isSameConnection(connection, connectionBeingEdited) &&
+            normaliseConnectionName(connection.name) === candidate,
+    );
+};

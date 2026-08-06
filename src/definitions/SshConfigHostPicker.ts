@@ -9,11 +9,21 @@
  */
 export const SSH_CONFIG_HOST_CUSTOM = '*';
 
+/**
+ * Sentinel for "the user hasn't chosen yet", distinct from {@link SSH_CONFIG_HOST_CUSTOM}
+ * so a new connection can hold its form back until the choice is made. An empty alias is
+ * not something `~/.ssh/config` can express, so it can't collide with a real host.
+ */
+export const SSH_CONFIG_HOST_UNSELECTED = '';
+
 /** Picker label — the accessible name both dialogs and their tests address it by. */
 export const SSH_CONFIG_HOST_LABEL = 'SSH config host';
 
 /** Option copy for {@link SSH_CONFIG_HOST_CUSTOM}, asserted on by the picker's tests. */
-export const SSH_CONFIG_HOST_CUSTOM_LABEL = 'Custom';
+export const SSH_CONFIG_HOST_CUSTOM_LABEL = 'Add new connection';
+
+/** Option copy for {@link SSH_CONFIG_HOST_UNSELECTED}; only offered until a choice is made. */
+export const SSH_CONFIG_HOST_UNSELECTED_LABEL = 'Please select...';
 
 export const SSH_CONFIG_HOST_SUBLABEL = 'Prefill from ~/.ssh/config';
 
