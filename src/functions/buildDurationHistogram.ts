@@ -8,7 +8,12 @@ import {
     SAMPLE_OPS_PER_BUCKET,
 } from '../definitions/PerfDurationHistogram';
 import { TypedPerfTableRow } from '../definitions/PerfTable';
-import { buildLogDecadeBuckets, findBucketForDuration, hasBucketableDeviceTime } from './durationBuckets';
+import {
+    BucketableRow,
+    buildLogDecadeBuckets,
+    findBucketForDuration,
+    hasBucketableDeviceTime,
+} from './durationBuckets';
 
 const hasChartRawOpCode = (row: TypedPerfTableRow): boolean => {
     const { raw_op_code: rawOpCode } = row;
@@ -16,7 +21,7 @@ const hasChartRawOpCode = (row: TypedPerfTableRow): boolean => {
 };
 
 /** Stacking by op code needs a raw op code on top of what plain binning requires. */
-const isEligibleHistogramRow = (row: TypedPerfTableRow): boolean =>
+const isEligibleHistogramRow = (row: TypedPerfTableRow): row is BucketableRow =>
     hasBucketableDeviceTime(row) && hasChartRawOpCode(row);
 
 interface SampleCandidate {
@@ -55,10 +60,10 @@ function buildDurationHistogram(rows: TypedPerfTableRow[]): DurationHistogramDat
     }
 
     const buckets = buildLogDecadeBuckets(eligibleRows);
-    const rowsByBucketIndex = new Map<number, TypedPerfTableRow[]>();
+    const rowsByBucketIndex = new Map<number, BucketableRow[]>();
 
     eligibleRows.forEach((row) => {
-        const bucket = findBucketForDuration(row.device_time as number, buckets);
+        const bucket = findBucketForDuration(row.device_time, buckets);
 
         if (!bucket) {
             return;
@@ -79,7 +84,7 @@ function buildDurationHistogram(rows: TypedPerfTableRow[]): DurationHistogramDat
             aggregate.count += 1;
             insertTopSampleByDuration(aggregate.topSamples, {
                 opCode: row.op_code,
-                deviceTime: row.device_time as number,
+                deviceTime: row.device_time,
             });
             aggregateByOpCode.set(rawOpCode, aggregate);
         });

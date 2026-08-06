@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { DurationBucket } from '../../definitions/PerfDurationHistogram';
 import { ColumnKeys, PerfTableFilters, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { OpType } from '../../definitions/Performance';
@@ -89,6 +89,15 @@ const usePerfReportFiltering = ({
     const bufferTypeFilterSet = useMemo(() => new Set(activeBufferTypeFilters), [activeBufferTypeFilters]);
     const activeLayoutFilters = useMemo(() => activeLayoutFilterList, [activeLayoutFilterList]);
     const layoutFilterSet = useMemo(() => new Set(activeLayoutFilters), [activeLayoutFilters]);
+    const durationBucketFilterSet = useMemo(
+        () => new Set(activeDurationBucketFilterList),
+        [activeDurationBucketFilterList],
+    );
+    const matchesDurationBucket = useCallback(
+        (deviceTimeUs: TypedPerfTableRow['device_time']) =>
+            isDurationInSelectedBuckets(deviceTimeUs, durationBucketOptions, durationBucketFilterSet),
+        [durationBucketOptions, durationBucketFilterSet],
+    );
 
     const { filteredRows, filteredComparisonRowsList } = useMemo(() => {
         if (!isNormalisationApplied) {
@@ -98,7 +107,7 @@ const usePerfReportFiltering = ({
             const hasMathFilter = activeMathFilters.length > 0;
             const hasBufferTypeFilter = activeBufferTypeFilters.length > 0;
             const hasLayoutFilter = activeLayoutFilters.length > 0;
-            const hasDurationFilter = activeDurationBucketFilterList.length > 0;
+            const hasDurationFilter = durationBucketFilterSet.size > 0;
             const hasCrossReportFilters =
                 hasOpCodeTextFilter ||
                 hasRawOpCodeFilter ||
@@ -154,13 +163,7 @@ const usePerfReportFiltering = ({
                     const matchesLayout = hasLayoutFilter
                         ? alignedRow.layout !== null && layoutFilterSet.has(alignedRow.layout)
                         : true;
-                    const matchesDuration = hasDurationFilter
-                        ? isDurationInSelectedBuckets(
-                              alignedRow.device_time,
-                              durationBucketOptions,
-                              activeDurationBucketFilterList,
-                          )
-                        : true;
+                    const matchesDuration = hasDurationFilter ? matchesDurationBucket(alignedRow.device_time) : true;
 
                     return (
                         matchesOpCodeText &&
@@ -190,7 +193,7 @@ const usePerfReportFiltering = ({
         const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
         const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
         const hasRawOpCodeFilter = rawOpCodeFilterSet.size > 0;
-        const hasDurationFilter = activeDurationBucketFilterList.length > 0;
+        const hasDurationFilter = durationBucketFilterSet.size > 0;
         // Every filter resolved against the aligned rows rather than per dataset
         const hasAlignedRowFilters = hasOpCodeTextFilter || hasRawOpCodeFilter || hasDurationFilter;
         const filtersWithoutOpCode = {
@@ -227,13 +230,7 @@ const usePerfReportFiltering = ({
                 const matchesRawOpCode = hasRawOpCodeFilter
                     ? alignedRow.raw_op_code !== null && rawOpCodeFilterSet.has(alignedRow.raw_op_code)
                     : true;
-                const matchesDuration = hasDurationFilter
-                    ? isDurationInSelectedBuckets(
-                          alignedRow.device_time,
-                          durationBucketOptions,
-                          activeDurationBucketFilterList,
-                      )
-                    : true;
+                const matchesDuration = hasDurationFilter ? matchesDurationBucket(alignedRow.device_time) : true;
 
                 return matchesOpCodeText && matchesRawOpCode && matchesDuration;
             });
@@ -260,8 +257,8 @@ const usePerfReportFiltering = ({
         mathFilterSet,
         bufferTypeFilterSet,
         layoutFilterSet,
-        activeDurationBucketFilterList,
-        durationBucketOptions,
+        durationBucketFilterSet,
+        matchesDurationBucket,
         filterBySignpost,
         processedComparisonRows,
     ]);

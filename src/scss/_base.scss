@@ -25,6 +25,14 @@
     --graph-group: #7d7d7d;
     --graph-section-group: #9b59b6;
     --graph-selected: #{$tt-blue-accent};
+
+    /* Perf chart chrome — Plotly draws the axes and the in-plot controls from these,
+     * and the stylesheet styles the same controls on hover, so both must read one value.
+     * Surface is the page behind the charts: controls label themselves in it when their
+     * fill inverts. See getPerfChartChrome(). */
+    --perf-chart-line: #{$tt-grey-4};
+    --perf-chart-text: #{$tt-white};
+    --perf-chart-surface: #{$tt-background};
 }
 
 ::-webkit-scrollbar-track {

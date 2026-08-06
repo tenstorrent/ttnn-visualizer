@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-@use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
 .perf-duration-histogram-chart {
@@ -30,10 +29,10 @@
                 fill-opacity: 1 !important;
             }
 
-            // The selected bucket labels itself in the surface colour to sit on a white
+            // The selected bucket labels itself in the surface colour to sit on its inverted
             // fill, which the hover background would otherwise render unreadable
             .annotation-text {
-                fill: $tt-white !important;
+                fill: var(--perf-chart-text) !important;
             }
         }
         /* stylelint-enable declaration-no-important */

@@ -5,6 +5,11 @@
 /**
  * Shared log-decade binning for the op duration histogram and the perf table duration filter.
  * Both must agree on bucket edges, so neither may re-derive intervals of its own.
+ *
+ * The two bin different row sets — the histogram plots the active report, the table builds its
+ * filter options from every dataset — so the histogram's rows must stay a subset of the table's.
+ * Widen the histogram beyond the active report and a clicked bucket can name a decade the table
+ * has no option for, which the stale-selection prune in PerfReport then discards on sight.
  */
 import { DurationBucket } from '../definitions/PerfDurationHistogram';
 import { OpType } from '../definitions/Performance';
@@ -12,41 +17,40 @@ import { TypedPerfTableRow } from '../definitions/PerfTable';
 import { formatDurationBucketRange } from './formatDurationBucketRange';
 
 /** Log base for bucket edges: buckets span [10^n, 10^(n+1)), so each is ten times its lower bound. */
-export const DECADE_FACTOR = 10;
+const DECADE_FACTOR = 10;
+
+/** A row whose device time is known to be binnable, so callers need no cast to read it. */
+export type BucketableRow = TypedPerfTableRow & { device_time: number };
+
+const isBucketableDuration = (deviceTimeUs: number | null): deviceTimeUs is number =>
+    deviceTimeUs !== null && Number.isFinite(deviceTimeUs) && deviceTimeUs > 0;
 
 /** A row can be binned when it is a real device op with a positive, finite device time. */
-export const hasBucketableDeviceTime = (row: TypedPerfTableRow): boolean =>
-    row.op_type !== OpType.SIGNPOST &&
-    row.device_time !== null &&
-    Number.isFinite(row.device_time) &&
-    (row.device_time as number) > 0;
-
-const getMinMaxDuration = (durations: number[]): { min: number; max: number } => {
-    let min = durations[0];
-    let max = durations[0];
-
-    for (let index = 1; index < durations.length; index++) {
-        const duration = durations[index];
-        if (duration < min) {
-            min = duration;
-        }
-        if (duration > max) {
-            max = duration;
-        }
-    }
-
-    return { min, max };
-};
+export const hasBucketableDeviceTime = (row: TypedPerfTableRow): row is BucketableRow =>
+    row.op_type !== OpType.SIGNPOST && isBucketableDuration(row.device_time);
 
 /** Filters to bucketable rows itself, so callers may pass raw table rows. */
 export const buildLogDecadeBuckets = (rows: TypedPerfTableRow[]): DurationBucket[] => {
-    const positiveDurations = rows.filter(hasBucketableDeviceTime).map((row) => row.device_time as number);
+    // Single pass: a report can hold hundreds of thousands of rows, and this reruns whenever the row set changes.
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
 
-    if (positiveDurations.length === 0) {
-        return [];
+    for (const row of rows) {
+        if (hasBucketableDeviceTime(row)) {
+            const duration = row.device_time;
+
+            if (duration < min) {
+                min = duration;
+            }
+            if (duration > max) {
+                max = duration;
+            }
+        }
     }
 
-    const { min, max } = getMinMaxDuration(positiveDurations);
+    if (min === Number.POSITIVE_INFINITY) {
+        return [];
+    }
 
     // floor(log10(max)) so the top decade can contain max; ceil would leave an empty high bucket.
     const minExponent = Math.floor(Math.log10(min));
@@ -71,9 +75,17 @@ export const findBucketForDuration = (deviceTimeUs: number, buckets: DurationBuc
         return null;
     }
 
-    const matchedBucket = buckets.find((bucket) => deviceTimeUs >= bucket.minUs && deviceTimeUs < bucket.maxUs);
+    // Indexed rather than `find`: this runs per row over hundreds of thousands of rows, and
+    // `find` allocates a closure capturing the duration on every call.
+    for (let index = 0; index < buckets.length; index++) {
+        const bucket = buckets[index];
 
-    return matchedBucket ?? buckets[buckets.length - 1];
+        if (deviceTimeUs >= bucket.minUs && deviceTimeUs < bucket.maxUs) {
+            return bucket;
+        }
+    }
+
+    return buckets[buckets.length - 1];
 };
 
 /**
@@ -83,18 +95,13 @@ export const findBucketForDuration = (deviceTimeUs: number, buckets: DurationBuc
 export const isDurationInSelectedBuckets = (
     deviceTimeUs: number | null,
     buckets: DurationBucket[],
-    selectedMinUsList: DurationBucket['minUs'][],
+    selectedMinUsSet: ReadonlySet<DurationBucket['minUs']>,
 ): boolean => {
-    if (
-        selectedMinUsList.length === 0 ||
-        deviceTimeUs === null ||
-        !Number.isFinite(deviceTimeUs) ||
-        deviceTimeUs <= 0
-    ) {
+    if (selectedMinUsSet.size === 0 || !isBucketableDuration(deviceTimeUs)) {
         return false;
     }
 
     const bucket = findBucketForDuration(deviceTimeUs, buckets);
 
-    return bucket !== null && selectedMinUsList.includes(bucket.minUs);
+    return bucket !== null && selectedMinUsSet.has(bucket.minUs);
 };

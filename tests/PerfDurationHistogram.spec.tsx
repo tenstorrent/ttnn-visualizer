@@ -26,10 +26,12 @@ import {
 import { OpType, PerfTabIds } from '../src/definitions/Performance';
 import { PERF_CHART_TABLE_FILTER_HINT, PerfChartId } from '../src/definitions/PerformanceCharts';
 import { PERF_CHART_TRANSPARENT } from '../src/definitions/PlotConfigurations';
+import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { durationBucketFilterListAtom, perfSelectedTabAtom } from '../src/store/app';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
+import { setUpScrollResetMocks } from './helpers/mockScrollReset';
 import { TestProviders } from './helpers/TestProviders';
 
 type HistogramTrace = {
@@ -37,11 +39,31 @@ type HistogramTrace = {
     type?: string;
     customdata?: unknown;
     marker?: { color?: string };
+    x?: string[];
     y?: number[];
 };
 
-const getHintText = () =>
-    screen.queryAllByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT).map((hint) => hint.textContent);
+const getHintText = () => screen.queryAllByTestId(TEST_IDS.PERF_CHART_HINT).map((hint) => hint.textContent);
+
+// Distinct stand-ins for the real theme tokens: jsdom applies no stylesheet, so without these
+// every chrome colour resolves to '' and any assertion comparing two of them would hold vacuously.
+const CHART_CHROME = {
+    line: 'rgb(11, 11, 11)',
+    text: 'rgb(22, 22, 22)',
+    surface: 'rgb(33, 33, 33)',
+};
+
+const setUpChartChrome = () => {
+    document.documentElement.style.setProperty('--perf-chart-line', CHART_CHROME.line);
+    document.documentElement.style.setProperty('--perf-chart-text', CHART_CHROME.text);
+    document.documentElement.style.setProperty('--perf-chart-surface', CHART_CHROME.surface);
+};
+
+const tearDownChartChrome = () => {
+    document.documentElement.style.removeProperty('--perf-chart-line');
+    document.documentElement.style.removeProperty('--perf-chart-text');
+    document.documentElement.style.removeProperty('--perf-chart-surface');
+};
 
 const row = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
     ({
@@ -256,16 +278,13 @@ describe('PerfDurationHistogram duration bucket controls', () => {
     // Plotly calls the handler outside React's event system, so the re-render needs flushing
     const clickBucket = (index: number) => act(() => firePlotAnnotationClick(index));
 
-    // The tab swap scrolls the new panel to the top, which jsdom does not implement
     beforeEach(() => {
-        vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-            callback(0);
-            return 0;
-        });
-        vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+        setUpScrollResetMocks();
+        setUpChartChrome();
     });
 
     afterEach(() => {
+        tearDownChartChrome();
         vi.restoreAllMocks();
     });
 
@@ -275,7 +294,19 @@ describe('PerfDurationHistogram duration bucket controls', () => {
         const annotations = getAnnotations();
         expect(annotations).toHaveLength(2);
         expect(annotations.every((annotation) => annotation.captureevents === true)).toBe(true);
-        expect(annotations.every((annotation) => Boolean(annotation.text))).toBe(true);
+        // The x tick labels are switched off, so these carry the only range labelling in the chart
+        expect(annotations.map((annotation) => annotation.text)).toEqual([
+            formatDurationBucketRange(1, 10),
+            formatDurationBucketRange(10, 100),
+        ]);
+    });
+
+    it('anchors each control to the column it filters', () => {
+        renderHistogram();
+
+        const traceCategories = (getPlotInstances()[0]?.data as HistogramTrace[])[0]?.x;
+        expect(traceCategories).toEqual([formatDurationBucketRange(1, 10), formatDurationBucketRange(10, 100)]);
+        expect(getAnnotations().map((annotation) => annotation.x)).toEqual(traceCategories);
     });
 
     it('explains the bucket controls in the chart hint rather than per-annotation hover text', () => {
@@ -303,12 +334,23 @@ describe('PerfDurationHistogram duration bucket controls', () => {
         );
 
         expect(screen.getByText(PERF_DURATION_HISTOGRAM_EMPTY_MESSAGE)).toBeInTheDocument();
+        expect(getPlotInstances()).toHaveLength(0);
+        expect(getAnnotations()).toHaveLength(0);
     });
 
     it('fills in buckets already held in the filter', () => {
         renderHistogram([1]);
 
         expect(getSelectedFlags()).toEqual([true, false]);
+
+        // Selection inverts fill, border and label, and the label must flip with the fill to stay legible
+        const [selected, unselected] = getAnnotations();
+        expect(selected.bgcolor).toBe(CHART_CHROME.text);
+        expect(selected.bordercolor).toBe(CHART_CHROME.text);
+        expect(selected.font?.color).toBe(CHART_CHROME.surface);
+        expect(unselected.bgcolor).toBe(PERF_CHART_TRANSPARENT);
+        expect(unselected.bordercolor).toBe(CHART_CHROME.line);
+        expect(unselected.font?.color).toBe(CHART_CHROME.text);
     });
 
     it('filters to the clicked bucket and moves to the table tab', () => {

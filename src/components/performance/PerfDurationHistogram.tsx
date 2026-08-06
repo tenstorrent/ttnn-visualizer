@@ -21,13 +21,7 @@ import {
     SAMPLE_OPS_PER_BUCKET,
 } from '../../definitions/PerfDurationHistogram';
 import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
-import {
-    PERF_CHART_LINE_COLOUR,
-    PERF_CHART_SURFACE_COLOUR,
-    PERF_CHART_TEXT_COLOUR,
-    PERF_CHART_TRANSPARENT,
-    PlotConfiguration,
-} from '../../definitions/PlotConfigurations';
+import { PERF_CHART_TRANSPARENT, PlotConfiguration, getPerfChartChrome } from '../../definitions/PlotConfigurations';
 import { TEST_IDS } from '../../definitions/TestIds';
 import buildDurationHistogram from '../../functions/buildDurationHistogram';
 import { getHistogramOpCodeStacks } from '../../functions/getDisplayedHistogramOpCodes';
@@ -71,35 +65,36 @@ function PerfDurationHistogram({
 
     const bucketLabels = useMemo(() => bucketList.map((bucket) => bucket.label), [bucketList]);
 
-    // One control per column, standing in for the x tick labels. The fill reflects the filter
-    // already in force, so returning from the table shows which column it came from.
-    const bucketAnnotations = useMemo<Partial<Annotations>[]>(
-        () =>
-            bucketList.map((bucket) => {
-                const isSelected = selectedBucketMinUsList.includes(bucket.minUs);
+    // One control per column, standing in for the x tick labels. Selection inverts the control:
+    // the text colour becomes the fill and the label flips to the page surface to stay legible,
+    // so returning from the table shows which column the filter came from.
+    const bucketAnnotations = useMemo<Partial<Annotations>[]>(() => {
+        const chrome = getPerfChartChrome();
 
-                return {
-                    x: bucket.label,
-                    xref: 'x',
-                    y: 0,
-                    yref: 'paper',
-                    yanchor: 'top',
-                    yshift: PERF_DURATION_BUCKET_ANNOTATION_Y_SHIFT,
-                    text: bucket.label,
-                    showarrow: false,
-                    captureevents: true,
-                    borderwidth: 1,
-                    borderpad: 4,
-                    bgcolor: isSelected ? PERF_CHART_TEXT_COLOUR : PERF_CHART_TRANSPARENT,
-                    bordercolor: isSelected ? PERF_CHART_TEXT_COLOUR : PERF_CHART_LINE_COLOUR,
-                    font: {
-                        size: PERF_DURATION_BUCKET_ANNOTATION_FONT_SIZE,
-                        color: isSelected ? PERF_CHART_SURFACE_COLOUR : PERF_CHART_TEXT_COLOUR,
-                    },
-                };
-            }),
-        [bucketList, selectedBucketMinUsList],
-    );
+        return bucketList.map((bucket) => {
+            const isSelected = selectedBucketMinUsList.includes(bucket.minUs);
+
+            return {
+                x: bucket.label,
+                xref: 'x',
+                y: 0,
+                yref: 'paper',
+                yanchor: 'top',
+                yshift: PERF_DURATION_BUCKET_ANNOTATION_Y_SHIFT,
+                text: bucket.label,
+                showarrow: false,
+                captureevents: true,
+                borderwidth: 1,
+                borderpad: 4,
+                bgcolor: isSelected ? chrome.text : PERF_CHART_TRANSPARENT,
+                bordercolor: isSelected ? chrome.text : chrome.line,
+                font: {
+                    size: PERF_DURATION_BUCKET_ANNOTATION_FONT_SIZE,
+                    color: isSelected ? chrome.surface : chrome.text,
+                },
+            };
+        });
+    }, [bucketList, selectedBucketMinUsList]);
 
     const handleAnnotationClick = useCallback(
         (event: Readonly<ClickAnnotationEvent>) => {
@@ -200,30 +195,35 @@ function PerfDurationHistogram({
         });
     }, [bucketLabels, colourByOpCode, displayedOpCodes, histogramData.buckets, otherBucketStats, segmentMaps]);
 
-    const configuration: PlotConfiguration = {
-        margin: {
-            l: 50,
-            r: 0,
-            b: 80,
-            t: 0,
-        },
-        barMode: 'stack',
-        showLegend: false,
-        annotations: bucketAnnotations,
-        xAxis: {
-            title: {
-                text: 'Device time',
-                standoff: PERF_DURATION_BUCKET_AXIS_TITLE_STANDOFF,
+    // Memoized because PerfChart derives the Plotly layout from it, and Plotly diffs layout
+    // by reference — a fresh object here redraws the chart on every PerfReport render.
+    const configuration = useMemo<PlotConfiguration>(
+        () => ({
+            margin: {
+                l: 50,
+                r: 0,
+                b: 80,
+                t: 0,
             },
-            // The bucket annotations carry the range labels, so ticks would duplicate them
-            showticklabels: false,
-        },
-        yAxis: {
-            title: {
-                text: 'Op count',
+            barMode: 'stack',
+            showLegend: false,
+            annotations: bucketAnnotations,
+            xAxis: {
+                title: {
+                    text: 'Device time',
+                    standoff: PERF_DURATION_BUCKET_AXIS_TITLE_STANDOFF,
+                },
+                // The bucket annotations carry the range labels, so ticks would duplicate them
+                showticklabels: false,
             },
-        },
-    };
+            yAxis: {
+                title: {
+                    text: 'Op count',
+                },
+            },
+        }),
+        [bucketAnnotations],
+    );
 
     const title = PERF_CHART_LABELS[PerfChartId.OpDurationHistogram];
     const subtitle = hasComparisonReports ? PERF_DURATION_HISTOGRAM_ACTIVE_REPORT_SUBTITLE : undefined;

@@ -24,6 +24,8 @@ const row = (overrides: Partial<TypedPerfTableRow>): TypedPerfTableRow =>
 const bucketsFor = (durations: number[]) =>
     buildLogDecadeBuckets(durations.map((duration) => row({ device_time: duration })));
 
+const selected = (...minUsValues: number[]) => new Set(minUsValues);
+
 describe('hasBucketableDeviceTime', () => {
     it('accepts device ops with a positive finite device time', () => {
         expect(hasBucketableDeviceTime(row({ device_time: 0.5 }))).toBe(true);
@@ -92,30 +94,45 @@ describe('isDurationInSelectedBuckets', () => {
     const buckets = bucketsFor([1, 1000]);
 
     it('matches a duration against the bucket it bins into', () => {
-        expect(isDurationInSelectedBuckets(5, buckets, [1])).toBe(true);
-        expect(isDurationInSelectedBuckets(5, buckets, [10])).toBe(false);
+        expect(isDurationInSelectedBuckets(5, buckets, selected(1))).toBe(true);
+        expect(isDurationInSelectedBuckets(5, buckets, selected(10))).toBe(false);
     });
 
     it('matches any of several selected buckets', () => {
-        expect(isDurationInSelectedBuckets(5, buckets, [1, 100])).toBe(true);
-        expect(isDurationInSelectedBuckets(500, buckets, [1, 100])).toBe(true);
-        expect(isDurationInSelectedBuckets(50, buckets, [1, 100])).toBe(false);
+        expect(isDurationInSelectedBuckets(5, buckets, selected(1, 100))).toBe(true);
+        expect(isDurationInSelectedBuckets(500, buckets, selected(1, 100))).toBe(true);
+        expect(isDurationInSelectedBuckets(50, buckets, selected(1, 100))).toBe(false);
     });
 
     it('agrees with the bin assignment at decade boundaries', () => {
-        expect(isDurationInSelectedBuckets(10, buckets, [1])).toBe(false);
-        expect(isDurationInSelectedBuckets(10, buckets, [10])).toBe(true);
+        expect(isDurationInSelectedBuckets(10, buckets, selected(1))).toBe(false);
+        expect(isDurationInSelectedBuckets(10, buckets, selected(10))).toBe(true);
     });
 
     it('excludes null, NaN and non-positive device times', () => {
-        expect(isDurationInSelectedBuckets(null, buckets, [1])).toBe(false);
-        expect(isDurationInSelectedBuckets(Number.NaN, buckets, [1])).toBe(false);
-        expect(isDurationInSelectedBuckets(0, buckets, [1])).toBe(false);
-        expect(isDurationInSelectedBuckets(-5, buckets, [1])).toBe(false);
+        expect(isDurationInSelectedBuckets(null, buckets, selected(1))).toBe(false);
+        expect(isDurationInSelectedBuckets(Number.NaN, buckets, selected(1))).toBe(false);
+        expect(isDurationInSelectedBuckets(0, buckets, selected(1))).toBe(false);
+        expect(isDurationInSelectedBuckets(-5, buckets, selected(1))).toBe(false);
     });
 
     it('matches nothing when no bucket is selected or no bucket exists', () => {
-        expect(isDurationInSelectedBuckets(5, buckets, [])).toBe(false);
-        expect(isDurationInSelectedBuckets(5, [], [1])).toBe(false);
+        expect(isDurationInSelectedBuckets(5, buckets, selected())).toBe(false);
+        expect(isDurationInSelectedBuckets(5, [], selected(1))).toBe(false);
+    });
+});
+
+describe('histogram and table bucket agreement', () => {
+    // The histogram bins the active report while the table builds its filter options from every
+    // dataset, so a bucket the user can click must always exist among the table's options.
+    it('keeps a subset row set within the decades of the superset it is drawn from', () => {
+        const activeReportDurations = [5, 50];
+        const everyDatasetDurations = [...activeReportDurations, 0.5, 5000];
+
+        const optionMinUsValues = new Set(bucketsFor(everyDatasetDurations).map((bucket) => bucket.minUs));
+        const clickableMinUsValues = bucketsFor(activeReportDurations).map((bucket) => bucket.minUs);
+
+        expect(clickableMinUsValues.length).toBeGreaterThan(0);
+        expect(clickableMinUsValues.every((minUs) => optionMinUsValues.has(minUs))).toBe(true);
     });
 });

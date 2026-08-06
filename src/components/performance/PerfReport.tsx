@@ -59,8 +59,6 @@ import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { capitalizeString } from '../../functions/formatting';
-import { DECADE_FACTOR } from '../../functions/durationBuckets';
-import { formatDurationBucketRange } from '../../functions/formatDurationBucketRange';
 import { formatSyncedReportName } from '../../functions/reportRank';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
@@ -85,6 +83,16 @@ interface PerformanceReportProps {
 
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
 const STACKED_GROUP_BY = [StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP];
+
+/**
+ * Drops selections the current data can no longer offer, preserving the array identity when
+ * nothing changed so the effect that calls this cannot loop.
+ */
+const pruneToValidValues = <T,>(validValues: ReadonlySet<NonNullable<T>>, currentFilters: T[]): T[] => {
+    const nextFilters = currentFilters.filter((value) => value != null && validValues.has(value));
+
+    return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
+};
 
 const PerformanceReport = ({
     data,
@@ -315,35 +323,17 @@ const PerformanceReport = ({
     }, [selectedTabId, processedComparisonRows, comparisonIndex, isNormalisationApplied]);
 
     useEffect(() => {
-        setActiveRawOpCodeFilterList((currentFilters) => {
-            const nextFilters = currentFilters.filter((value) => validRawOpCodeValues.has(value));
-
-            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
-        });
+        setActiveRawOpCodeFilterList((currentFilters) => pruneToValidValues(validRawOpCodeValues, currentFilters));
     }, [validRawOpCodeValues, setActiveRawOpCodeFilterList]);
 
     useEffect(() => {
-        setActiveMathFilterList((currentFilters) => {
-            const nextFilters = currentFilters.filter((value) => validMathFilterValues.has(value));
-
-            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
-        });
-        setActiveBufferTypeFilterList((currentFilters) => {
-            const nextFilters = currentFilters.filter((value) => value !== null && validBufferTypeValues.has(value));
-
-            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
-        });
-        setActiveLayoutFilterList((currentFilters) => {
-            const nextFilters = currentFilters.filter((value) => value !== null && validLayoutValues.has(value));
-
-            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
-        });
+        setActiveMathFilterList((currentFilters) => pruneToValidValues(validMathFilterValues, currentFilters));
+        setActiveBufferTypeFilterList((currentFilters) => pruneToValidValues(validBufferTypeValues, currentFilters));
+        setActiveLayoutFilterList((currentFilters) => pruneToValidValues(validLayoutValues, currentFilters));
         // A bucket that no longer exists would filter every row out with no visible tag to explain it
-        setActiveDurationBucketFilterList((currentFilters) => {
-            const nextFilters = currentFilters.filter((value) => validDurationBucketValues.has(value));
-
-            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
-        });
+        setActiveDurationBucketFilterList((currentFilters) =>
+            pruneToValidValues(validDurationBucketValues, currentFilters),
+        );
     }, [
         validMathFilterValues,
         validBufferTypeValues,
@@ -598,10 +588,7 @@ const PerformanceReport = ({
                                 <MultiSelectField<DurationBucket, 'minUs'>
                                     keyName='minUs'
                                     options={durationBucketOptions}
-                                    labelFormatter={(minUs) =>
-                                        labelByBucketMinUs.get(minUs) ??
-                                        formatDurationBucketRange(minUs, minUs * DECADE_FACTOR)
-                                    }
+                                    labelFormatter={(minUs) => labelByBucketMinUs.get(minUs) ?? String(minUs)}
                                     placeholder='Select Device Time...'
                                     values={activeDurationBucketFilterList}
                                     updateHandler={setActiveDurationBucketFilterList}

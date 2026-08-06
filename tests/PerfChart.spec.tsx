@@ -12,9 +12,9 @@ import { PERF_CHART_TABLE_FILTER_HINT } from '../src/definitions/PerformanceChar
 import {
     NS_AXIS_HOVER_FORMAT,
     NS_AXIS_TICK_FORMAT,
-    PerfChartLayout,
     PerfPieChartLayout,
     getNsAxisConfig,
+    getPerfChartLayout,
 } from '../src/definitions/PlotConfigurations';
 import { TEST_IDS } from '../src/definitions/TestIds';
 
@@ -24,6 +24,7 @@ afterEach(() => {
 });
 
 const barData = [{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>];
+const baseLayout = getPerfChartLayout();
 
 describe('PerfChart', () => {
     it('forwards onPlotClick to Plot and shows the table-filter hint when clickable', () => {
@@ -38,9 +39,9 @@ describe('PerfChart', () => {
             />,
         );
 
-        expect(screen.getByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).toHaveTextContent(
+        expect(screen.getAllByTestId(TEST_IDS.PERF_CHART_HINT).map((hint) => hint.textContent)).toEqual([
             PERF_CHART_TABLE_FILTER_HINT,
-        );
+        ]);
 
         firePlotClick({ points: [{ customdata: 'Matmul' }] } as never);
         expect(onPlotClick).toHaveBeenCalledTimes(1);
@@ -55,7 +56,7 @@ describe('PerfChart', () => {
             />,
         );
 
-        expect(screen.queryByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).not.toBeInTheDocument();
+        expect(screen.queryAllByTestId(TEST_IDS.PERF_CHART_HINT)).toHaveLength(0);
     });
 
     it('renders subtitle when provided', () => {
@@ -127,7 +128,7 @@ describe('PerfChart', () => {
         expect(container.querySelector('.chart-container.legend-instructions')).toBeInTheDocument();
     });
 
-    it('merges configuration into the Cartesian layout from PerfChartLayout', () => {
+    it('merges configuration into the Cartesian layout from getPerfChartLayout', () => {
         const nsAxis = getNsAxisConfig('Time (ns)', {
             range: [0, 1_000_000],
             tickvals: [0, 500_000, 1_000_000],
@@ -150,7 +151,6 @@ describe('PerfChart', () => {
         expect(plotLayout?.paper_bgcolor).toBe('transparent');
         expect(plotLayout?.plot_bgcolor).toBe('transparent');
         expect(plotLayout?.margin).toEqual({ l: 100, r: 0, b: 50, t: 0 });
-        expect(plotLayout?.margin).not.toBe(PerfChartLayout.margin);
         expect(plotLayout?.xaxis?.fixedrange).toBe(true);
         expect(plotLayout?.xaxis?.title?.text).toBe('Operation');
         expect(plotLayout?.xaxis?.tickformat).toBe('d');
@@ -162,15 +162,44 @@ describe('PerfChart', () => {
         expect(plotLayout?.yaxis?.range).toEqual([0, 1_000_000]);
         expect(plotLayout?.yaxis?.tickvals).toEqual([0, 500_000, 1_000_000]);
         expect(plotLayout?.yaxis2?.tickformat).toBe(NS_AXIS_TICK_FORMAT);
-        // Nested title fonts must be cloned so Plotly cannot mutate the shared layout defaults.
-        expect(plotLayout?.yaxis?.title?.font).toEqual(PerfChartLayout.yaxis?.title?.font);
-        expect(plotLayout?.yaxis?.title?.font).not.toBe(PerfChartLayout.yaxis?.title?.font);
+        expect(plotLayout?.yaxis?.title?.font).toEqual(baseLayout.yaxis?.title?.font);
         // Base title fields beyond font must survive merge (naive title replace would drop these).
-        expect(plotLayout?.yaxis?.title?.standoff).toBe(PerfChartLayout.yaxis?.title?.standoff);
+        expect(plotLayout?.yaxis?.title?.standoff).toBe(baseLayout.yaxis?.title?.standoff);
         expect(plotLayout?.yaxis?.automargin).toBe(true);
-        expect(plotLayout?.yaxis2?.title?.standoff).toBe(PerfChartLayout.yaxis2?.title?.standoff);
+        expect(plotLayout?.yaxis2?.title?.standoff).toBe(baseLayout.yaxis2?.title?.standoff);
         expect(plotLayout?.yaxis2?.automargin).toBe(true);
         expect(plotLayout?.yaxis2?.side).toBe('right');
+    });
+
+    it('lets a caller widen the axis title standoff without dropping the base title font', () => {
+        const CALLER_STANDOFF = 34;
+
+        render(
+            <PerfChart
+                title='Test chart'
+                chartData={barData}
+                configuration={{
+                    xAxis: { title: { text: 'Device time', standoff: CALLER_STANDOFF }, showticklabels: false },
+                }}
+            />,
+        );
+
+        const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
+        expect(plotLayout?.xaxis?.title?.text).toBe('Device time');
+        expect(plotLayout?.xaxis?.title?.standoff).toBe(CALLER_STANDOFF);
+        expect(plotLayout?.xaxis?.title?.font).toEqual(baseLayout.xaxis?.title?.font);
+        expect(plotLayout?.xaxis?.showticklabels).toBe(false);
+    });
+
+    // The layout defaults used to be a module singleton that Plotly could mutate in place; the
+    // factory is what now makes that impossible, so it is the thing worth pinning.
+    it('builds independent layout defaults per call rather than sharing nested objects', () => {
+        const first = getPerfChartLayout();
+        const second = getPerfChartLayout();
+
+        expect(first).toEqual(second);
+        expect(first.margin).not.toBe(second.margin);
+        expect(first.yaxis?.title?.font).not.toBe(second.yaxis?.title?.font);
     });
 
     it('applies an explicit all-zero margin rather than falling back to defaults', () => {
@@ -186,10 +215,29 @@ describe('PerfChart', () => {
 
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
         expect(plotLayout?.margin).toEqual({ l: 0, r: 0, b: 0, t: 0 });
-        expect(plotLayout?.margin).not.toEqual(PerfChartLayout.margin);
+        expect(plotLayout?.margin).not.toEqual(baseLayout.margin);
     });
 
-    it('falls back to PerfChartLayout margin when configuration omits margin', () => {
+    it('forwards annotations without sharing the caller-memoized objects', () => {
+        const annotation = { x: '1 µs – 10 µs', text: '1 µs – 10 µs', font: { color: '#FFF' } };
+        const annotations = [annotation];
+
+        render(
+            <PerfChart
+                title='Test chart'
+                chartData={barData}
+                configuration={{ annotations }}
+            />,
+        );
+
+        const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
+        expect(plotLayout?.annotations).toEqual(annotations);
+        expect(plotLayout?.annotations).not.toBe(annotations);
+        expect(plotLayout?.annotations?.[0]).not.toBe(annotation);
+        expect(plotLayout?.annotations?.[0]?.font).not.toBe(annotation.font);
+    });
+
+    it('omits annotations from the layout when configuration supplies none', () => {
         render(
             <PerfChart
                 title='Test chart'
@@ -199,7 +247,19 @@ describe('PerfChart', () => {
         );
 
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
-        expect(plotLayout?.margin).toEqual(PerfChartLayout.margin);
-        expect(plotLayout?.margin).not.toBe(PerfChartLayout.margin);
+        expect(plotLayout?.annotations).toBeUndefined();
+    });
+
+    it('falls back to the shared layout margin when configuration omits margin', () => {
+        render(
+            <PerfChart
+                title='Test chart'
+                chartData={barData}
+                configuration={{}}
+            />,
+        );
+
+        const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
+        expect(plotLayout?.margin).toEqual(baseLayout.margin);
     });
 });

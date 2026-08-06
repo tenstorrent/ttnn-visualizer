@@ -4,7 +4,7 @@
 
 import classNames from 'classnames';
 import { ReactNode } from 'react';
-import PerfChartFilterHint from './PerfChartFilterHint';
+import PerfChartHint from './PerfChartHint';
 import { PERF_CHART_TABLE_FILTER_HINT } from '../../definitions/PerformanceCharts';
 import 'styles/components/PerfChartFrame.scss';
 
@@ -46,7 +46,7 @@ function PerfChartFrame({
             <h3>{title}</h3>
             {subtitle}
             {allHints.map((hint) => (
-                <PerfChartFilterHint
+                <PerfChartHint
                     key={hint}
                     text={hint}
                 />

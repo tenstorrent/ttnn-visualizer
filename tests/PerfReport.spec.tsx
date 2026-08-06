@@ -15,6 +15,8 @@ import {
     durationBucketFilterListAtom,
     rawOpCodeFilterListAtom,
 } from '../src/store/app';
+import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
+import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
@@ -26,6 +28,8 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 }));
 
 const COMPARISON_REPORT = 'report-b';
+/** Accessible name Blueprint gives a MultiSelect tag's dismiss button. */
+const REMOVE_TAG_LABEL = 'Remove tag';
 
 const row = (opCode: string, id = 1, deviceTime: number | null = null): TypedPerfTableRow =>
     ({
@@ -58,14 +62,7 @@ function renderReport({
     rawOpCodeFilterList = [],
     durationBucketFilterList = [],
 }: RenderOptions = {}) {
-    const initialAtomValues: [
-        (
-            | typeof comparisonPerformanceReportListAtom
-            | typeof rawOpCodeFilterListAtom
-            | typeof durationBucketFilterListAtom
-        ),
-        unknown,
-    ][] = [];
+    const initialAtomValues: AtomProviderInitialValues = [];
 
     if (comparisonReports) {
         initialAtomValues.push([comparisonPerformanceReportListAtom, comparisonReports]);
@@ -214,5 +211,34 @@ describe('PerformanceReport duration bucket filter', () => {
 
         expect(screen.getAllByText('Conv2d').length).toBeGreaterThan(0);
         expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+    });
+});
+
+describe('PerformanceReport duration bucket tag', () => {
+    // Clicking a histogram column applies the filter without touching the select, so the tag is
+    // the only thing telling the user what is filtered — and the only way back out of it.
+    it('names the selected bucket by its readable range rather than the stored minimum', () => {
+        renderReport({
+            data: [row('Matmul', 1, 5), row('Conv2d', 2, 500)],
+            durationBucketFilterList: [1],
+        });
+
+        expect(screen.getByText(formatDurationBucketRange(1, 10))).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: REMOVE_TAG_LABEL })).toBeInTheDocument();
+    });
+
+    it('restores the rows the filter hid when its tag is removed', () => {
+        renderReport({
+            data: [row('Matmul', 1, 5), row('Conv2d', 2, 500)],
+            durationBucketFilterList: [1],
+        });
+
+        expect(screen.queryByText('Conv2d')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: REMOVE_TAG_LABEL }));
+
+        expect(screen.getAllByText('Conv2d').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Matmul').length).toBeGreaterThan(0);
+        expect(screen.queryByText(formatDurationBucketRange(1, 10))).not.toBeInTheDocument();
     });
 });
