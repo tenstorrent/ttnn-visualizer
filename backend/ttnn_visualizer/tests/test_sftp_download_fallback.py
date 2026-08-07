@@ -4,6 +4,7 @@
 
 """Tests for scp fallback when the remote SFTP subsystem is unavailable."""
 
+import shlex
 import subprocess
 from unittest.mock import patch
 
@@ -11,8 +12,8 @@ import pytest
 from ttnn_visualizer.enums import SyncMethod
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
-    _scp_remote_target,
     _sftp_subsystem_unavailable,
+    download_single_file_scp,
     download_single_file_sftp,
     get_active_sync_method,
 )
@@ -38,12 +39,6 @@ def connection() -> RemoteConnection:
 
 def _scp_success() -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(args=["scp"], returncode=0, stdout="", stderr="")
-
-
-def test_scp_remote_target_has_no_shell_quotes(connection):
-    target = _scp_remote_target(connection, "/remote/report/config.json")
-    assert target == "user@example.test:/remote/report/config.json"
-    assert "'" not in target
 
 
 def test_sftp_subsystem_failure_falls_back_to_scp(connection, tmp_path):
@@ -94,6 +89,20 @@ def test_subsequent_downloads_skip_sftp_after_subsystem_failure(connection, tmp_
     # `-O` forces legacy SCP protocol so scp does not reuse the disabled SFTP subsystem.
     assert run.call_args_list[1][0][0][1] == "-O"
     assert run.call_args_list[2][0][0][1] == "-O"
+
+
+# The quoting contract itself lives in test_remote_command.py; this checks the download
+# path actually routes its target through it, since `-O` has the remote side expand the
+# path through a shell.
+def test_scp_download_quotes_the_remote_path_in_its_target(connection, tmp_path):
+    remote_file = "/remote/o'brien/reports/config.json"
+
+    with patch("subprocess.run", return_value=_scp_success()) as run:
+        download_single_file_scp(connection, remote_file, tmp_path / "config.json")
+
+    target = run.call_args[0][0][-2]
+    assert target.startswith(f"{connection.username}@{connection.host}:")
+    assert shlex.split(target.split(":", 1)[1]) == [remote_file]
 
 
 def test_active_sync_method_reflects_fallback_state(connection, tmp_path):

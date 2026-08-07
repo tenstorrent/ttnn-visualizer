@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { useState } from 'react';
@@ -11,6 +11,7 @@ import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection } from '../../definitions/
 import { ManagedEntity } from '../../definitions/ManagedEntity';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { isSameConnection, remoteConnectionKey } from '../../functions/remoteConnection';
+import { getRemoteConnectionPathError } from '../../functions/remotePath';
 import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import HighlightedText from '../HighlightedText';
 import SelectRowActions from './SelectRowActions';
@@ -40,11 +41,17 @@ const RemoteConnectionSelector = ({
     const [connectionToEdit, setConnectionToEdit] = useState<RemoteConnection | null>(null);
     const [connectionToDelete, setConnectionToDelete] = useState<RemoteConnection | null>(null);
     const selectedConnection = connection ?? connectionList[0];
+    // A connection saved before report paths were validated is kept in the list rather
+    // than hidden, so the only route back is editing it — which means the row has to say
+    // what is wrong and the fetch it would fail at has to be closed off.
+    const selectedConnectionPathError = selectedConnection ? getRemoteConnectionPathError(selectedConnection) : null;
 
     const renderRemoteConnection: ItemRenderer<RemoteConnection> = (item, { handleClick, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
+
+        const pathError = getRemoteConnectionPathError(item);
 
         return (
             // Presentational for the same reason as the other selectors: MenuItem owns the
@@ -67,6 +74,20 @@ const RemoteConnectionSelector = ({
                         />
                     }
                 />
+
+                {pathError && (
+                    <Tooltip
+                        content={`${pathError} Edit this connection to fix it.`}
+                        position={PopoverPosition.TOP}
+                    >
+                        <Icon
+                            icon={IconNames.WARNING_SIGN}
+                            intent={Intent.WARNING}
+                            data-testid={TEST_IDS.REMOTE_CONNECTION_PATH_WARNING}
+                            aria-label={`${item.name} has an unusable report path`}
+                        />
+                    </Tooltip>
+                )}
 
                 <SelectRowActions
                     entity={ManagedEntity.REMOTE_CONNECTION}
@@ -108,13 +129,13 @@ const RemoteConnectionSelector = ({
             </div>
 
             <Tooltip
-                content='Fetching remote folders...'
+                content={selectedConnectionPathError ?? 'Fetching remote folders...'}
                 position={PopoverPosition.TOP}
-                disabled={!loading}
+                disabled={!loading && !selectedConnectionPathError}
             >
                 <Button
                     icon={IconNames.REFRESH}
-                    disabled={disabled || !selectedConnection}
+                    disabled={disabled || !selectedConnection || selectedConnectionPathError !== null}
                     loading={loading}
                     text={FETCH_REMOTE_FOLDERS_LABEL}
                     onClick={() => onSyncRemoteFolderList(selectedConnection)}

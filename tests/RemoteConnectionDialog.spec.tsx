@@ -23,6 +23,7 @@ import {
 } from '../src/definitions/RemoteConnection';
 import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
 import {
+    REMOTE_PATH_NOT_ABSOLUTE_ERROR,
     SSH_HOST_LABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_PORT_LABEL,
@@ -494,6 +495,185 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
             port: 2222,
         });
         expect((onAddConnection.mock.calls[0][0] as RemoteConnection).identityFile).toBeUndefined();
+    });
+});
+
+describe('RemoteConnectionDialog remote path validation', () => {
+    // The backend refuses a relative path, so catching it here keeps the user in the
+    // form instead of sending a request that comes back as "Invalid connection data".
+    it.each([
+        [REMOTE_MEMORY_PATH_LABEL, 'tt-metal/generated/ttnn/reports'],
+        [REMOTE_PERFORMANCE_PATH_LABEL, '~/tt-metal/generated/profiler/reports'],
+    ])('reports a path that is not absolute on %s', (label, value) => {
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const input = screen.getByLabelText(label);
+        fireEvent.change(input, { target: { value } });
+
+        // Asserted as the input's description rather than as text on the page: Blueprint
+        // only colours the field, so the message reaches a screen reader solely through
+        // the aria-describedby the dialog wires up itself.
+        expect(input).toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeInvalid();
+        expect(getButtonWithText('Run tests')).toBeDisabled();
+    });
+
+    it('does not run the connection test while a path is invalid', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL), {
+            target: { value: 'reports' },
+        });
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        expect(testConnectionMock).not.toHaveBeenCalled();
+    });
+
+    it('clears the error once the path is made absolute', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const input = screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL);
+        fireEvent.change(input, { target: { value: 'reports' } });
+        expect(input).toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+
+        fireEvent.change(input, { target: { value: '/reports' } });
+
+        expect(input).not.toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeValid();
+        expect(getButtonWithText('Run tests')).toBeEnabled();
+    });
+
+    it('leaves an unconfigured performance path unflagged', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const input = screen.getByLabelText(REMOTE_PERFORMANCE_PATH_LABEL);
+        fireEvent.change(input, { target: { value: '' } });
+
+        expect(input).not.toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeValid();
+        expect(getButtonWithText('Run tests')).toBeEnabled();
+    });
+
+    // The list keeps a connection stored before paths had to be absolute, so this is the
+    // repair route: opening it has to name the problem and leave the test — the only way to
+    // re-enable saving — closed until the path is fixed. Saving is already blocked by the
+    // absent test result, so `!hasPathError` in the save gate is defence in depth.
+    it('names the problem and withholds the test when a stored path is no longer accepted', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                remoteConnection={{
+                    name: 'legacy',
+                    host: 'work-gpu',
+                    port: 22,
+                    username: 'bob',
+                    profilerPath: 'tt-metal/generated/ttnn/reports',
+                }}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL)).toHaveAccessibleDescription(
+            REMOTE_PATH_NOT_ABSOLUTE_ERROR,
+        );
+        expect(getButtonWithText('Run tests')).toBeDisabled();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('re-enables the test once the stored path is corrected', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                remoteConnection={{
+                    name: 'legacy',
+                    host: 'work-gpu',
+                    port: 22,
+                    username: 'bob',
+                    profilerPath: 'tt-metal/generated/ttnn/reports',
+                }}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const input = screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL);
+        fireEvent.change(input, { target: { value: '/tt-metal/generated/ttnn/reports' } });
+
+        expect(input).not.toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeValid();
+        expect(getButtonWithText('Run tests')).toBeEnabled();
+    });
+});
+
+describe('RemoteConnectionDialog connection test error handling', () => {
+    // A rejected field returns `{ error: … }`, not a status list. Casting that to an
+    // array reached `.map` as a non-array and took the dialog down with it.
+    it('falls back to a rendered failure when the error body is not a status list', async () => {
+        testConnectionMock.mockRejectedValue({
+            isAxiosError: true,
+            response: { status: 400, data: { error: 'Invalid connection data' } },
+        });
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('Connection failed')).toBeInTheDocument());
+        expect(screen.getByText('Invalid connection data')).toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('renders a status list returned as an error body', async () => {
+        testConnectionMock.mockRejectedValue({
+            isAxiosError: true,
+            response: {
+                status: 422,
+                data: [{ status: ConnectionTestStates.FAILED, message: 'SSH authentication failed' }],
+            },
+        });
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('SSH authentication failed')).toBeInTheDocument());
     });
 });
 

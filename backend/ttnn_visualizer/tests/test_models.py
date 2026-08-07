@@ -21,12 +21,19 @@ VALID_STORED_CONNECTION = {
     "profilerPath": "/reports",
 }
 
+VALID_STORED_PROFILER_FOLDER = {
+    "reportName": "resnet50",
+    "remotePath": "/reports/resnet50",
+    "lastModified": 1,
+}
 
-def _instance(remote_connection) -> InstanceTable:
+
+def _instance(remote_connection, remote_profiler_folder=None) -> InstanceTable:
     return InstanceTable(
         instance_id="test-instance-models",
         active_report={},
         remote_connection=remote_connection,
+        remote_profiler_folder=remote_profiler_folder,
     )
 
 
@@ -50,3 +57,44 @@ def test_to_pydantic_drops_a_connection_the_validators_now_reject(caplog):
     assert pydantic_instance.remote_connection is None
     assert pydantic_instance.instance_id == "test-instance-models"
     assert "unusable stored remote connection" in caplog.text
+
+
+# Documents an accepted regression: a relative path resolved against the SSH login home
+# and worked, so requiring absolute paths costs these users their stored connection. It
+# is dropped rather than raised on so the instance stays loadable and can be re-entered.
+def test_to_pydantic_drops_a_connection_with_a_relative_report_path(caplog):
+    instance = _instance(
+        {**VALID_STORED_CONNECTION, "profilerPath": "tt-metal/generated/ttnn/reports"}
+    )
+
+    with caplog.at_level(logging.WARNING):
+        pydantic_instance = instance.to_pydantic()
+
+    assert pydantic_instance.remote_connection is None
+    assert "unusable stored remote connection" in caplog.text
+
+
+def test_to_pydantic_keeps_a_valid_stored_report_folder():
+    instance = _instance(VALID_STORED_CONNECTION, VALID_STORED_PROFILER_FOLDER)
+
+    folder = instance.to_pydantic().remote_profiler_folder
+
+    assert folder is not None
+    assert folder.remotePath == "/reports/resnet50"
+
+
+# remotePath was discovered under a relative profilerPath, so it too could be stored
+# relative. The local report paths live in their own columns, so dropping this row costs
+# the sync badge rather than the loaded report.
+def test_to_pydantic_drops_a_report_folder_the_validators_now_reject(caplog):
+    instance = _instance(
+        VALID_STORED_CONNECTION,
+        {**VALID_STORED_PROFILER_FOLDER, "remotePath": "reports/resnet50"},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        pydantic_instance = instance.to_pydantic()
+
+    assert pydantic_instance.remote_profiler_folder is None
+    assert pydantic_instance.remote_connection is not None
+    assert "unusable stored remote report folder" in caplog.text
