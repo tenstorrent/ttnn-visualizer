@@ -18,7 +18,6 @@ import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notify
 import { CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
 import {
     FETCH_REMOTE_FOLDERS_LABEL,
-    MULTIHOST_CHECKBOX_LABEL,
     REMOTE_MEMORY_PATH_LABEL,
     RemoteConnection,
     RemoteFolder,
@@ -49,6 +48,7 @@ import mockRemoteProfilerFolderList from './data/mockRemoteProfilerFolderList.js
 import remoteConnection from './data/remoteConnection.json';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 import getButtonWithText from './helpers/getButtonWithText';
+import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
 import {
     getConnectionTrigger,
     getDeleteConnectionLabel,
@@ -1667,7 +1667,7 @@ const editConnection = async (connection: RemoteConnection) => {
     fireEvent.click(getConnectionTrigger(connection));
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
     fireEvent.click(screen.getByLabelText(getEditConnectionLabel(connection)));
-    await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeTruthy());
 };
 
 const runConnectionTestAndSave = async () => {
@@ -1696,7 +1696,7 @@ it('drops cached performance folders when the multihost flag is flipped', async 
     );
 
     await editConnection(connection);
-    fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+    fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
     await runConnectionTestAndSave();
 
     await waitFor(() => expect(window.localStorage.getItem(cacheKey)).toBeNull(), WAIT_FOR_OPTIONS);
@@ -1722,7 +1722,7 @@ it('keeps cached performance folders when an unrelated field is edited', async (
     await runConnectionTestAndSave();
 
     await waitFor(
-        () => expect(screen.queryByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeNull(),
+        () => expect(screen.queryByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeNull(),
         WAIT_FOR_OPTIONS,
     );
     expect(window.localStorage.getItem(cacheKey)).not.toBeNull();

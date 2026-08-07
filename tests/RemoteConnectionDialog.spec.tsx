@@ -17,7 +17,6 @@ import {
 } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import {
-    MULTIHOST_CHECKBOX_LABEL,
     REMOTE_MEMORY_PATH_LABEL,
     REMOTE_PERFORMANCE_PATH_LABEL,
     RemoteConnection,
@@ -31,6 +30,7 @@ import {
 } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
+import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
 
@@ -507,7 +507,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).not.toBeChecked();
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).not.toBeChecked();
     });
 
     it('reflects the saved flag when editing a connection', () => {
@@ -530,7 +530,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeChecked();
     });
 
     it('sends the flag with the connection test and the saved connection', async () => {
@@ -546,7 +546,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
         );
 
         fillName();
-        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
         fireEvent.click(getButtonWithText('Run tests'));
 
         await waitFor(() =>
@@ -577,7 +577,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
-        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
 
         expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeDisabled();

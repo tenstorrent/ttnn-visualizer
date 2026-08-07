@@ -20,6 +20,7 @@ import { ConnectionNameSubject, SAVE_BLOCKED_TOOLTIP, getNameFieldLabel } from '
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import {
     MULTIHOST_CHECKBOX_LABEL,
+    MULTIHOST_GROUP_LABEL,
     REMOTE_MEMORY_PATH_LABEL,
     REMOTE_PERFORMANCE_PATH_LABEL,
     RemoteConnection,
@@ -312,7 +313,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='Multihost Performance Reports'
+                            label={MULTIHOST_GROUP_LABEL}
                             subLabel='Reports are found at "ttrun/rank0/reports/<REPORT>", so the path above must be the folder that directly contains the rank folders (e.g. "/<PATH TO TT METAL>/generated/profiler/ttrun/"). Single-host reports will be ignored.'
                             labelFor='remote-performance-multihost'
                         >
