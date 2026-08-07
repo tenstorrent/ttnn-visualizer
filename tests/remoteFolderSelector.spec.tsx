@@ -465,9 +465,11 @@ it('lists a newly added connection as a dropdown row', async () => {
 
     const trigger = await screen.findByRole('button', { name: new RegExp(addedName) }, WAIT_FOR_OPTIONS);
     trigger.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    const rows = screen.getAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW);
+    // Waiting on a portal would be vacuous here: the dialog just dismissed is still running its exit
+    // transition, so its portal satisfies the check while the dropdown's own portal — which Blueprint
+    // only fills on a passive effect, a tick after the trigger reports itself open — is still empty.
+    const rows = await screen.findAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW, undefined, WAIT_FOR_OPTIONS);
 
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain(addedName);
