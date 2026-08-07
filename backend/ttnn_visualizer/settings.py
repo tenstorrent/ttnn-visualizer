@@ -9,6 +9,7 @@ from typing import Any, Callable, List, Mapping, Optional, Set
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
+from ttnn_visualizer.usage import USAGE_RECORDING_ENV_VAR
 from ttnn_visualizer.utils import (
     get_app_data_directory,
     get_report_data_directory,
@@ -178,6 +179,23 @@ class _AllowedOrigins:
         )
 
 
+class _UsageRecordingEnabled:
+    """Resolve the usage off switch on read rather than at class-body import time.
+
+    ``override_with_env_variables`` copies raw environment strings over class
+    attributes, which would replace a parsed bool with ``"false"`` — a truthy string,
+    so setting ``USAGE_RECORDING_ENABLED=false`` would leave recording on. A
+    descriptor is skipped by that loop (it tests for ``__get__``), which is the same
+    reason ``ALLOWED_ORIGINS`` is one.
+
+    This is only the environment half of the switch; :func:`usage.is_recording_enabled`
+    combines it with ``SERVER_MODE`` and the marker file at the usage path.
+    """
+
+    def __get__(self, instance: object, owner: type) -> bool:
+        return str_to_bool(os.getenv(USAGE_RECORDING_ENV_VAR, "true"))
+
+
 class DefaultConfig(object):
     # General Settings
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
@@ -185,6 +203,9 @@ class DefaultConfig(object):
     TESTING = False
     PRINT_ENV = True
     SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
+    # Local usage recording is on by default and writes nothing anywhere but this
+    # machine. See backend/ttnn_visualizer/usage.py.
+    USAGE_RECORDING_ENABLED = _UsageRecordingEnabled()
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
     _raw_max_content = os.getenv("MAX_CONTENT_LENGTH")
