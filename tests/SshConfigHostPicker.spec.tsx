@@ -10,7 +10,8 @@ import {
     SSH_CONFIG_HOST_ADD_CONNECTION_LABEL,
     SSH_CONFIG_HOST_ADD_SERVER_LABEL,
     SSH_CONFIG_HOST_CUSTOM,
-    SSH_CONFIG_HOST_LABEL,
+    SSH_CONFIG_HOST_GROUP_LABEL,
+    SSH_CONFIG_HOST_SUBLABEL,
     SSH_CONFIG_HOST_UNSELECTED,
     SSH_CONFIG_HOST_UNSELECTED_LABEL,
 } from '../src/definitions/SshConfigHostPicker';
@@ -69,7 +70,7 @@ const renderPicker = (
         />,
     );
 
-const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_LABEL) as HTMLSelectElement;
+const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL) as HTMLSelectElement;
 
 describe('SshConfigHostPicker', () => {
     it('renders null when ~/.ssh/config does not exist', () => {
@@ -132,6 +133,21 @@ describe('SshConfigHostPicker', () => {
         renderPicker(SSH_CONFIG_HOST_CUSTOM);
 
         expect(screen.getByRole('option', { name: 'work-gpu — gpu.example.com' })).toBeInTheDocument();
+    });
+
+    it('groups the config aliases apart from the option that adds a new target', () => {
+        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([MOCK_SSH_CONFIG_HOST]));
+
+        renderPicker(SSH_CONFIG_HOST_UNSELECTED);
+
+        const alias = screen.getByRole('option', { name: 'work-gpu — gpu.example.com' });
+        expect(alias.closest('optgroup')).toHaveAttribute('label', SSH_CONFIG_HOST_GROUP_LABEL);
+
+        // The other two are the dropdown's own options, not anything ~/.ssh/config offered.
+        expect(
+            screen.getByRole('option', { name: SSH_CONFIG_HOST_ADD_CONNECTION_LABEL }).closest('optgroup'),
+        ).toBeNull();
+        expect(screen.getByRole('option', { name: SSH_CONFIG_HOST_UNSELECTED_LABEL }).closest('optgroup')).toBeNull();
     });
 
     it('calls onSelectHost when a config host is chosen', () => {

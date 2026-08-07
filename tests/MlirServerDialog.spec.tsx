@@ -16,7 +16,7 @@ import {
 } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { MlirServerConnection } from '../src/definitions/MlirServer';
-import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
 import {
@@ -184,7 +184,7 @@ describe('MlirServerDialog connection test block', () => {
 describe('MlirServerDialog host choice gate', () => {
     const CONFIG_HOSTS = [{ host: 'work-gpu', user: 'alice', port: 2222 }];
 
-    const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_LABEL) as HTMLSelectElement;
+    const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL) as HTMLSelectElement;
     const queryNameField = () => screen.queryByLabelText('Name');
 
     it('shows nothing but the picker, and no actions, until a choice is made', () => {
@@ -234,7 +234,7 @@ describe('MlirServerDialog host choice gate', () => {
         // server that already has them it is an offer to undo the edit.
         renderMlirServerDialog({ existing: { name: 'saved', host: 'work-gpu', username: 'carol' } });
 
-        expect(screen.queryByLabelText(SSH_CONFIG_HOST_LABEL)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(SSH_CONFIG_HOST_SUBLABEL)).not.toBeInTheDocument();
         expect(screen.getByLabelText('SSH host')).toHaveValue('work-gpu');
         expect(useSshConfigHostsMock).not.toHaveBeenCalledWith(true);
     });
@@ -309,11 +309,13 @@ describe('MlirServerDialog SSH config prefill specifics', () => {
 
         renderMlirServerDialog();
 
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: SSH_CONFIG_HOST_CUSTOM } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), {
+            target: { value: SSH_CONFIG_HOST_CUSTOM },
+        });
         fillName();
         fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'carol' } });
         fireEvent.change(screen.getByLabelText('SSH port'), { target: { value: '2022' } });
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'bare-host' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'bare-host' } });
 
         expect(screen.getByLabelText('Name')).toHaveValue('my model explorer');
         expect(screen.getByLabelText('SSH host')).toHaveValue('bare-host');
@@ -326,10 +328,12 @@ describe('MlirServerDialog SSH config prefill specifics', () => {
 
         renderMlirServerDialog();
 
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: SSH_CONFIG_HOST_CUSTOM } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), {
+            target: { value: SSH_CONFIG_HOST_CUSTOM },
+        });
         const mlirPort = screen.getByLabelText('MLIR port') as HTMLInputElement;
         const portBeforePrefill = mlirPort.value;
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'work-gpu' } });
 
         expect(screen.getByLabelText('SSH port')).toHaveValue('2222');
         expect(mlirPort).toHaveValue(portBeforePrefill);

@@ -17,7 +17,7 @@ import Endpoints from '../src/definitions/Endpoints';
 import {
     SSH_CONFIG_HOST_ADD_CONNECTION_LABEL,
     SSH_CONFIG_HOST_CUSTOM,
-    SSH_CONFIG_HOST_LABEL,
+    SSH_CONFIG_HOST_SUBLABEL,
 } from '../src/definitions/SshConfigHostPicker';
 import axiosInstance from '../src/libs/axiosInstance';
 
@@ -67,7 +67,7 @@ describe('SshConfigHostPicker over the real useSshConfigHosts hook', () => {
 
         renderPicker();
 
-        await waitFor(() => expect(screen.getByLabelText(SSH_CONFIG_HOST_LABEL)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL)).toBeInTheDocument());
         expect(mockedGet).toHaveBeenCalledWith(Endpoints.REMOTE_SSH_CONFIG_HOSTS);
         expect(screen.getByRole('option', { name: 'work-gpu — gpu.example.com' })).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'bare-host' })).toBeInTheDocument();
@@ -79,8 +79,8 @@ describe('SshConfigHostPicker over the real useSshConfigHosts hook', () => {
 
         const { onSelectHost } = renderPicker();
 
-        await waitFor(() => expect(screen.getByLabelText(SSH_CONFIG_HOST_LABEL)).toBeInTheDocument());
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
+        await waitFor(() => expect(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL)).toBeInTheDocument());
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'work-gpu' } });
 
         expect(onSelectHost).toHaveBeenCalledWith(WORK_GPU);
     });

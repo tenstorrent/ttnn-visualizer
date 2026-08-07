@@ -7,15 +7,17 @@ import classNames from 'classnames';
 import { useMemo } from 'react';
 import {
     SSH_CONFIG_HOST_CUSTOM,
+    SSH_CONFIG_HOST_GROUP_LABEL,
     SSH_CONFIG_HOST_INPUT_ID,
-    SSH_CONFIG_HOST_LABEL,
     SSH_CONFIG_HOST_SUBLABEL,
+    SSH_CONFIG_HOST_SUBLABEL_ID,
     SSH_CONFIG_HOST_UNSELECTED,
     SSH_CONFIG_HOST_UNSELECTED_LABEL,
 } from '../../definitions/SshConfigHostPicker';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getSshConfigHostLabel } from '../../functions/formatting';
 import useSshConfigHostOptions from '../../hooks/useSshConfigHostOptions';
+import 'styles/components/SshConfigHostPicker.scss';
 
 interface SshConfigHostPickerProps {
     /** Selected alias, {@link SSH_CONFIG_HOST_CUSTOM}, or {@link SSH_CONFIG_HOST_UNSELECTED}. */
@@ -76,12 +78,14 @@ const SshConfigHostPicker = ({
 
     return (
         <FormGroup
-            label={SSH_CONFIG_HOST_LABEL}
-            subLabel={SSH_CONFIG_HOST_SUBLABEL}
-            labelFor={SSH_CONFIG_HOST_INPUT_ID}
+            className='ssh-config-host-picker'
+            subLabel={<span id={SSH_CONFIG_HOST_SUBLABEL_ID}>{SSH_CONFIG_HOST_SUBLABEL}</span>}
         >
             <HTMLSelect
                 id={SSH_CONFIG_HOST_INPUT_ID}
+                // Named by the sublabel rather than a heading of its own, which would only
+                // repeat it. A select with no accessible name is announced as just "combo box".
+                aria-labelledby={SSH_CONFIG_HOST_SUBLABEL_ID}
                 className={classNames({ 'ssh-config-host-placeholder': isUnselected })}
                 value={selectedValue}
                 onChange={(event) => handleChange(event.currentTarget.value)}
@@ -100,7 +104,10 @@ const SshConfigHostPicker = ({
                     </option>
                 )}
                 <option value={SSH_CONFIG_HOST_CUSTOM}>{addNewLabel}</option>
-                {options}
+
+                {/* Grouped so a long config reads as one list of somebody's existing hosts
+                    rather than as more options of the same kind as the one above it. */}
+                <optgroup label={SSH_CONFIG_HOST_GROUP_LABEL}>{options}</optgroup>
             </HTMLSelect>
         </FormGroup>
     );

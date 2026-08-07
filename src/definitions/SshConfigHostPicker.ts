@@ -17,9 +17,6 @@ export const SSH_CONFIG_HOST_CUSTOM = '*';
  */
 export const SSH_CONFIG_HOST_UNSELECTED = '';
 
-/** Picker label — the accessible name both dialogs and their tests address it by. */
-export const SSH_CONFIG_HOST_LABEL = '';
-
 /**
  * Option copy for {@link SSH_CONFIG_HOST_CUSTOM}. Both dialogs render this picker, so the
  * option has to name what the dialog around it saves — a shared label reads as the wrong
@@ -31,7 +28,20 @@ export const SSH_CONFIG_HOST_ADD_SERVER_LABEL = 'Add new server';
 /** Option copy for {@link SSH_CONFIG_HOST_UNSELECTED}; only offered until a choice is made. */
 export const SSH_CONFIG_HOST_UNSELECTED_LABEL = 'Please select...';
 
-export const SSH_CONFIG_HOST_SUBLABEL = 'Define a new connection or prefill from ~/.ssh/config';
+/**
+ * Heading over the aliases read from `~/.ssh/config`, which is the one thing the options in
+ * this dropdown don't otherwise have in common: picking one prefills the form from a stanza
+ * the user already wrote, where the option above it starts an empty one.
+ */
+export const SSH_CONFIG_HOST_GROUP_LABEL = '~/.ssh/config';
 
-/** Ties the picker's label to its control; both dialogs render exactly one picker. */
+/**
+ * The picker carries no heading of its own, so this doubles as the select's accessible name —
+ * what a screen reader announces is then the same wording that's on screen.
+ */
+export const SSH_CONFIG_HOST_SUBLABEL = 'Define new connection or prefill from ~/.ssh/config';
+
+/** Points the control at {@link SSH_CONFIG_HOST_SUBLABEL}; both dialogs render one picker. */
+export const SSH_CONFIG_HOST_SUBLABEL_ID = 'ssh-config-host-picker-sublabel';
+
 export const SSH_CONFIG_HOST_INPUT_ID = 'ssh-config-host-picker';

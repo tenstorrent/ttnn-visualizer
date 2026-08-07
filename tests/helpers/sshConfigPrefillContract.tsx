@@ -22,7 +22,7 @@ import { RenderResult, fireEvent, screen, waitFor } from '@testing-library/react
 import { Mock, describe, expect, it } from 'vitest';
 import {
     SSH_CONFIG_HOST_CUSTOM,
-    SSH_CONFIG_HOST_LABEL,
+    SSH_CONFIG_HOST_SUBLABEL,
     SSH_CONFIG_HOST_UNSELECTED,
 } from '../../src/definitions/SshConfigHostPicker';
 import { SSH_IDENTITY_FILE_LABEL } from '../../src/definitions/SshConnectionFields';
@@ -61,10 +61,10 @@ const ALIAS = 'work-gpu';
 const ALIAS_USER = 'alice';
 const ALIAS_PORT = 2222;
 
-const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_LABEL) as HTMLSelectElement;
+const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL) as HTMLSelectElement;
 
 const selectConfigHost = (alias: string) => {
-    fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: alias } });
+    fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: alias } });
 };
 
 /**
@@ -133,7 +133,7 @@ export const describeSshConfigPrefillContract = (
 
             renderDialog();
 
-            expect(screen.queryByLabelText(SSH_CONFIG_HOST_LABEL)).not.toBeInTheDocument();
+            expect(screen.queryByLabelText(SSH_CONFIG_HOST_SUBLABEL)).not.toBeInTheDocument();
         });
 
         it('hides the SSH config host picker when ~/.ssh/config does not exist', () => {
@@ -141,7 +141,7 @@ export const describeSshConfigPrefillContract = (
 
             renderDialog();
 
-            expect(screen.queryByLabelText(SSH_CONFIG_HOST_LABEL)).not.toBeInTheDocument();
+            expect(screen.queryByLabelText(SSH_CONFIG_HOST_SUBLABEL)).not.toBeInTheDocument();
         });
 
         it('gates the config-host fetch on the dialog being open', () => {

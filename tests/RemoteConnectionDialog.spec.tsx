@@ -16,7 +16,7 @@ import {
 } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { RemoteConnection } from '../src/definitions/RemoteConnection';
-import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
 import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
@@ -170,9 +170,11 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
 
         // Reaching the Name field at all means choosing something first, so the name is
         // typed after one alias and kept when the user settles on another.
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: SSH_CONFIG_HOST_CUSTOM } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), {
+            target: { value: SSH_CONFIG_HOST_CUSTOM },
+        });
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my lab box' } });
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'work-gpu' } });
 
         expect(screen.getByLabelText('Name')).toHaveValue('my lab box');
         expect(screen.getByLabelText('SSH Host')).toHaveValue('work-gpu');
@@ -189,7 +191,7 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'bare-host' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'bare-host' } });
 
         expect(screen.getByLabelText('Username')).toHaveValue('bob');
         expect(screen.getByLabelText('SSH Host')).toHaveValue('bare-host');
@@ -201,7 +203,7 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
 describe('RemoteConnectionDialog host choice gate', () => {
     const CONFIG_HOSTS = [{ host: 'work-gpu', user: 'alice', port: 2222 }];
 
-    const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_LABEL) as HTMLSelectElement;
+    const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL) as HTMLSelectElement;
     const queryNameField = () => screen.queryByLabelText('Name');
 
     it('shows nothing but the picker, and no actions, until a choice is made', () => {
@@ -281,7 +283,7 @@ describe('RemoteConnectionDialog host choice gate', () => {
         // connection that already has them it is an offer to undo the edit.
         renderRemoteConnectionDialog({ existing: { name: 'saved', host: 'work-gpu', username: 'carol' } });
 
-        expect(screen.queryByLabelText(SSH_CONFIG_HOST_LABEL)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(SSH_CONFIG_HOST_SUBLABEL)).not.toBeInTheDocument();
         expect(useSshConfigHostsMock).not.toHaveBeenCalledWith(true);
     });
 });
@@ -534,7 +536,7 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'work-gpu' } });
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
