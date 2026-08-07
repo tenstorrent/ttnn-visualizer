@@ -11,7 +11,7 @@ import { ConnectionNameSubject, getNameFieldLabel, getNameTakenMessage } from '.
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { CANCEL_DELETE_LABEL, CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
 import { MlirServerConnection } from '../src/definitions/MlirServer';
-import { SSH_HOST_LABEL } from '../src/definitions/SshConnectionFields';
+import { SSH_HOST_LABEL, SSH_USERNAME_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { getDeleteActionLabel, getEditActionLabel } from '../src/functions/managedEntityLabels';
 import { GraphBundle } from '../src/model/MLIRJsonModel';
@@ -364,6 +364,9 @@ it('opens a clean add-server form after a server has been added', async () => {
 
     fireEvent.click(screen.getByRole('button', { name: ADD_SERVER_BUTTON_LABEL }));
     fireEvent.change(screen.getByLabelText(SERVER_NAME_LABEL), { target: { value: SERVER.name } });
+    // Typed rather than left to the dialog's default, which seeds the username from getServerConfig
+    // and so is only populated when the developer's .env sets VITE_USERNAME.
+    fireEvent.change(screen.getByLabelText(SSH_USERNAME_LABEL), { target: { value: SERVER.username } });
     fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: SERVER.host } });
     fireEvent.click(screen.getByRole('button', { name: 'Run test' }));
     await waitFor(() => expect(screen.getByRole('button', { name: ADD_SERVER_LABEL })).toBeEnabled());
