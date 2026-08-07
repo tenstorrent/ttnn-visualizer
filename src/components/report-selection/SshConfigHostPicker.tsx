@@ -16,7 +16,6 @@ import {
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getSshConfigHostLabel } from '../../functions/formatting';
 import useSshConfigHostOptions from '../../hooks/useSshConfigHostOptions';
-import 'styles/components/SshConfigHostPicker.scss';
 
 interface SshConfigHostPickerProps {
     /** Selected alias, {@link SSH_CONFIG_HOST_CUSTOM}, or {@link SSH_CONFIG_HOST_UNSELECTED}. */
@@ -77,7 +76,6 @@ const SshConfigHostPicker = ({
 
     return (
         <FormGroup
-            className='ssh-config-host-picker'
             label={SSH_CONFIG_HOST_LABEL}
             subLabel={SSH_CONFIG_HOST_SUBLABEL}
             labelFor={SSH_CONFIG_HOST_INPUT_ID}
@@ -85,9 +83,9 @@ const SshConfigHostPicker = ({
             <HTMLSelect
                 id={SSH_CONFIG_HOST_INPUT_ID}
                 className={classNames({ 'ssh-config-host-placeholder': isUnselected })}
-                fill
                 value={selectedValue}
                 onChange={(event) => handleChange(event.currentTarget.value)}
+                fill
             >
                 {/* Blueprint types a `placeholder` prop, but it only spreads onto the <select>,
                     where HTML ignores it — a prompt has to be an option the value can point at.
