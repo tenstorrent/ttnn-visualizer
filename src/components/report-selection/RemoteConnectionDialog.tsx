@@ -16,15 +16,23 @@ import {
 import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
 import { useState } from 'react';
-import { ConnectionNameSubject, SAVE_BLOCKED_TOOLTIP } from '../../definitions/ConnectionDialog';
+import { ConnectionNameSubject, SAVE_BLOCKED_TOOLTIP, getNameFieldLabel } from '../../definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
+import {
+    MULTIHOST_CHECKBOX_LABEL,
+    REMOTE_MEMORY_PATH_LABEL,
+    REMOTE_PERFORMANCE_PATH_LABEL,
+    RemoteConnection,
+} from '../../definitions/RemoteConnection';
 import { SSH_CONFIG_HOST_ADD_CONNECTION_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
+    SSH_HOST_LABEL,
     SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
     SSH_IDENTITY_FILE_SUBLABEL,
+    SSH_PORT_LABEL,
+    SSH_USERNAME_LABEL,
 } from '../../definitions/SshConnectionFields';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getConnectionNameStatus, isConnectionNameTaken } from '../../functions/connectionName';
@@ -210,7 +218,7 @@ const RemoteConnectionDialog = ({
                 {!isAwaitingHostChoice && (
                     <>
                         <FormGroup
-                            label='Connection Name'
+                            label={getNameFieldLabel(ConnectionNameSubject.CONNECTION)}
                             labelFor='remote-connection-name'
                         >
                             <InputGroup
@@ -222,7 +230,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='SSH Host'
+                            label={SSH_HOST_LABEL}
                             subLabel={SSH_HOST_SUBLABEL}
                             labelFor='remote-ssh-host'
                         >
@@ -237,7 +245,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='SSH Username'
+                            label={SSH_USERNAME_LABEL}
                             labelFor='remote-ssh-username'
                         >
                             <InputGroup
@@ -250,7 +258,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='SSH Port'
+                            label={SSH_PORT_LABEL}
                             labelFor='remote-ssh-port'
                         >
                             <InputGroup
@@ -280,7 +288,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='Remote Memory Report Folder Path'
+                            label={REMOTE_MEMORY_PATH_LABEL}
                             subLabel='e.g., "/<PATH TO TT METAL>/generated/ttnn/reports/"'
                             labelFor='remote-memory-path'
                         >
@@ -292,7 +300,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='Remote Performance Report Folder Path'
+                            label={REMOTE_PERFORMANCE_PATH_LABEL}
                             subLabel='e.g., "/<PATH TO TT METAL>/generated/profiler/reports/"'
                             labelFor='remote-performance-path'
                         >

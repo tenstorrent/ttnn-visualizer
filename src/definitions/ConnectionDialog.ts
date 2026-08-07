@@ -19,6 +19,9 @@ export enum ConnectionNameSubject {
     SERVER = 'Server',
 }
 
+/** Accessible name of the name field, derived from the same noun as the messages about it. */
+export const getNameFieldLabel = (subject: ConnectionNameSubject) => `${subject} Name`;
+
 /** A target saved without a name is discarded as invalid the next time the list is read. */
 export const getNameRequiredMessage = (subject: ConnectionNameSubject) => `${subject} name is required`;
 

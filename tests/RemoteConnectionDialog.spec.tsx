@@ -11,13 +11,23 @@ import {
     ConnectionNameSubject,
     STALE_CONNECTION_TESTS_CLASS,
     getNameAvailableMessage,
+    getNameFieldLabel,
     getNameRequiredMessage,
     getNameTakenMessage,
 } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import {
+    REMOTE_MEMORY_PATH_LABEL,
+    REMOTE_PERFORMANCE_PATH_LABEL,
+    RemoteConnection,
+} from '../src/definitions/RemoteConnection';
 import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
-import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
+import {
+    SSH_HOST_LABEL,
+    SSH_IDENTITY_FILE_LABEL,
+    SSH_PORT_LABEL,
+    SSH_USERNAME_LABEL,
+} from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
 import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
@@ -78,10 +88,10 @@ describe('RemoteConnectionDialog defaults', () => {
             />,
         );
 
-        expect(screen.getByLabelText('SSH Port')).toHaveValue('2222');
-        expect(screen.getByLabelText('Remote memory report folder path')).toHaveValue('/mem');
-        expect(screen.getByLabelText('Remote performance report folder path')).toHaveValue('/perf');
-        expect(screen.getByLabelText('Username')).toHaveValue('bob');
+        expect(screen.getByLabelText(SSH_PORT_LABEL)).toHaveValue('2222');
+        expect(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL)).toHaveValue('/mem');
+        expect(screen.getByLabelText(REMOTE_PERFORMANCE_PATH_LABEL)).toHaveValue('/perf');
+        expect(screen.getByLabelText(SSH_USERNAME_LABEL)).toHaveValue('bob');
     });
 
     it('treats a missing performancePath on edit as an empty controlled input', () => {
@@ -102,9 +112,11 @@ describe('RemoteConnectionDialog defaults', () => {
             />,
         );
 
-        expect(screen.getByLabelText('Remote performance report folder path')).toHaveValue('');
+        expect(screen.getByLabelText(REMOTE_PERFORMANCE_PATH_LABEL)).toHaveValue('');
     });
 });
+
+const CONNECTION_NAME_LABEL = getNameFieldLabel(ConnectionNameSubject.CONNECTION);
 
 const getTestBlock = () => screen.queryByRole('group', { name: 'Test Connection' });
 
@@ -112,7 +124,8 @@ const getTestBlock = () => screen.queryByRole('group', { name: 'Test Connection'
 const getServerTestResults = () => screen.getByTestId(TEST_IDS.CONNECTION_TEST_RESULTS);
 
 /** Saving needs a name, so anything that ends at an enabled save button has to supply one. */
-const fillName = (name = 'my lab box') => fireEvent.change(screen.getByLabelText('Name'), { target: { value: name } });
+const fillName = (name = 'my lab box') =>
+    fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: name } });
 
 const PASSING_TESTS: ConnectionStatus[] = [
     { status: ConnectionTestStates.OK, message: 'SSH connection established' },
@@ -139,8 +152,7 @@ const renderRemoteConnectionDialog = ({ open = true, existing }: { open?: boolea
 
 describeSshConfigPrefillContract('RemoteConnectionDialog', {
     renderDialog: renderRemoteConnectionDialog,
-    hostLabel: 'SSH Host',
-    sshPortLabel: 'SSH Port',
+    nameSubject: ConnectionNameSubject.CONNECTION,
     runTestsLabel: 'Run tests',
     saveLabel: 'Add connection',
     passingTestMessage: 'SSH connection established',
@@ -168,11 +180,11 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
         fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), {
             target: { value: SSH_CONFIG_HOST_CUSTOM },
         });
-        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my lab box' } });
+        fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: 'my lab box' } });
         fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'work-gpu' } });
 
-        expect(screen.getByLabelText('Name')).toHaveValue('my lab box');
-        expect(screen.getByLabelText('SSH Host')).toHaveValue('work-gpu');
+        expect(screen.getByLabelText(CONNECTION_NAME_LABEL)).toHaveValue('my lab box');
+        expect(screen.getByLabelText(SSH_HOST_LABEL)).toHaveValue('work-gpu');
     });
 
     it('keeps the existing username when the config host has no User', () => {
@@ -188,10 +200,10 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
 
         fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'bare-host' } });
 
-        expect(screen.getByLabelText('Username')).toHaveValue('bob');
-        expect(screen.getByLabelText('SSH Host')).toHaveValue('bare-host');
-        expect(screen.getByLabelText('Name')).toHaveValue('bare-host');
-        expect(screen.getByLabelText('SSH Port')).toHaveValue('45985');
+        expect(screen.getByLabelText(SSH_USERNAME_LABEL)).toHaveValue('bob');
+        expect(screen.getByLabelText(SSH_HOST_LABEL)).toHaveValue('bare-host');
+        expect(screen.getByLabelText(CONNECTION_NAME_LABEL)).toHaveValue('bare-host');
+        expect(screen.getByLabelText(SSH_PORT_LABEL)).toHaveValue('45985');
     });
 });
 
@@ -213,7 +225,7 @@ describe('RemoteConnectionDialog connection test block', () => {
         await waitFor(() => expect(screen.getByText('SSH connection established')).toBeInTheDocument());
         expect(getServerTestResults()).not.toHaveClass(STALE_CONNECTION_TESTS_CLASS);
 
-        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'other-host' } });
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'other-host' } });
 
         // The record of what the last run found is worth more than a clean slate,
         // as long as it can't be read as approving the target now in the form.
@@ -236,7 +248,7 @@ describe('RemoteConnectionDialog connection test block', () => {
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
-        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'other-host' } });
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'other-host' } });
 
         // The name check is recomputed against the form as it stands, so greying it out
         // alongside the run's results would recede a verdict that is still current.
@@ -284,7 +296,7 @@ describe('RemoteConnectionDialog connection test block', () => {
         fillName();
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
-        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'other-host' } });
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'other-host' } });
         expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
 
         fireEvent.click(getButtonWithText('Run tests'));
@@ -405,11 +417,11 @@ describe('RemoteConnectionDialog connection name validation', () => {
 
 describe('RemoteConnectionDialog connection test invalidation', () => {
     it.each([
-        ['SSH Host', 'other-host'],
-        ['Username', 'carol'],
-        ['SSH Port', '2022'],
-        ['Remote memory report folder path', '/elsewhere'],
-        ['Remote performance report folder path', '/elsewhere-perf'],
+        [SSH_HOST_LABEL, 'other-host'],
+        [SSH_USERNAME_LABEL, 'carol'],
+        [SSH_PORT_LABEL, '2022'],
+        [REMOTE_MEMORY_PATH_LABEL, '/elsewhere'],
+        [REMOTE_PERFORMANCE_PATH_LABEL, '/elsewhere-perf'],
         [SSH_IDENTITY_FILE_LABEL, '/tmp/id_ed25519'],
     ])('stops a passing test result gating the save when %s is edited by hand', async (label, value) => {
         testConnectionMock.mockResolvedValue(PASSING_TESTS);
@@ -423,7 +435,7 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
         );
 
         fillName();
-        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'work-gpu' } });
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'work-gpu' } });
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
@@ -448,7 +460,7 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
-        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'renamed box' } });
+        fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: 'renamed box' } });
 
         expect(screen.getByText('SSH connection established')).toBeInTheDocument();
         expect(getServerTestResults()).not.toHaveClass(STALE_CONNECTION_TESTS_CLASS);

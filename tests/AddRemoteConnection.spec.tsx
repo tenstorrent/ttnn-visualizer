@@ -12,9 +12,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AddRemoteConnection from '../src/components/report-selection/AddRemoteConnection';
-import { ConnectionNameSubject, getNameTakenMessage } from '../src/definitions/ConnectionDialog';
+import { ConnectionNameSubject, getNameFieldLabel, getNameTakenMessage } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import { SSH_HOST_LABEL } from '../src/definitions/SshConnectionFields';
 import getButtonWithText from './helpers/getButtonWithText';
 import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
 
@@ -43,6 +44,7 @@ const PASSING_TESTS: ConnectionStatus[] = [
 ];
 
 const CONNECTION_NAME = 'Worker';
+const CONNECTION_NAME_LABEL = getNameFieldLabel(ConnectionNameSubject.CONNECTION);
 const ADD_BUTTON = 'Add new connection';
 const SAVE_BUTTON = 'Add connection';
 
@@ -74,8 +76,8 @@ const AddRemoteConnectionHarness = () => {
 
 const addConnection = async (name: string) => {
     fireEvent.click(getButtonWithText(ADD_BUTTON));
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: name } });
-    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'worker-01' } });
+    fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: name } });
+    fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'worker-01' } });
     fireEvent.click(getButtonWithText('Run tests'));
     await waitFor(() => expect(getButtonWithText(SAVE_BUTTON)).toBeEnabled());
     fireEvent.click(getButtonWithText(SAVE_BUTTON));
@@ -90,8 +92,8 @@ describe('AddRemoteConnection', () => {
 
         // Carrying the values over would also carry the name, which the list now holds —
         // so the dialog would open reporting the connection just saved as a duplicate.
-        expect(screen.getByLabelText('Name')).toHaveValue('');
-        expect(screen.getByLabelText('SSH Host')).toHaveValue('');
+        expect(screen.getByLabelText(CONNECTION_NAME_LABEL)).toHaveValue('');
+        expect(screen.getByLabelText(SSH_HOST_LABEL)).toHaveValue('');
         expect(screen.queryByRole('group', { name: 'Test Connection' })).not.toBeInTheDocument();
         expect(getButtonWithText(SAVE_BUTTON)).toBeDisabled();
     });
@@ -101,7 +103,7 @@ describe('AddRemoteConnection', () => {
 
         await addConnection(CONNECTION_NAME);
         fireEvent.click(getButtonWithText(ADD_BUTTON));
-        fireEvent.change(screen.getByLabelText('Name'), { target: { value: CONNECTION_NAME } });
+        fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: CONNECTION_NAME } });
 
         // Pins the wiring as well as the check: the dialog only sees the saved list because
         // this wrapper forwards it, and nothing else would notice if it stopped.

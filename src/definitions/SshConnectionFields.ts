@@ -7,6 +7,13 @@
  * take the same SSH target, so the two dialogs must describe it identically or the same field
  * appears to behave differently depending on where it is reached from.
  */
+/** Accessible names for the SSH fields; both dialogs and their tests address them by these. */
+export const SSH_HOST_LABEL = 'SSH Host';
+
+export const SSH_USERNAME_LABEL = 'SSH Username';
+
+export const SSH_PORT_LABEL = 'SSH Port';
+
 export const SSH_HOST_SUBLABEL = 'SSH host alias or hostname (e.g. work-gpu or localhost)';
 
 /** Accessible name for the identity input; both dialogs and their tests address it by this. */

@@ -44,6 +44,8 @@ export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     timeStyle: 'short',
 });
 
+export const REMOTE_MEMORY_PATH_LABEL = 'Remote Memory Report Folder Path';
+export const REMOTE_PERFORMANCE_PATH_LABEL = 'Remote Performance Report Folder Path';
 export const MULTIHOST_CHECKBOX_LABEL = 'Search per-rank subdirectories';
 export const FETCH_REMOTE_FOLDERS_LABEL = 'Fetch remote folders';
 export const NEVER_SYNCED_LABEL = 'Never synced';

@@ -11,11 +11,18 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
 import RemoteFolderSelector from '../src/components/report-selection/RemoteFolderSelector';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
+import { ConnectionNameSubject, getNameFieldLabel } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
 import { CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
-import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
+import {
+    FETCH_REMOTE_FOLDERS_LABEL,
+    REMOTE_MEMORY_PATH_LABEL,
+    RemoteConnection,
+    RemoteFolder,
+} from '../src/definitions/RemoteConnection';
+import { SSH_HOST_LABEL, SSH_USERNAME_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {
     LOCAL_STORAGE_KEY_CONNECTIONS,
@@ -69,6 +76,7 @@ const SELECT_LOCAL_REPORT_TEXT = 'Select a report...';
 const IS_ACTIVATING_REPORT_PROBE_TEST_ID = 'is-activating-report-probe';
 
 const EDITED_CONNECTION_NAME = 'Renamed Server';
+const CONNECTION_NAME_LABEL = getNameFieldLabel(ConnectionNameSubject.CONNECTION);
 
 const IsActivatingReportProbe = () => {
     const isActivatingReport = useAtomValue(isActivatingReportAtom);
@@ -394,7 +402,7 @@ it('applies an edit to a connection that is not selected without changing the se
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
     fireEvent.click(screen.getByLabelText(getEditConnectionLabel(otherConnection)));
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: EDITED_CONNECTION_NAME } });
+    fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: EDITED_CONNECTION_NAME } });
     fireEvent.click(getButtonWithText('Run tests'));
 
     await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
@@ -446,10 +454,10 @@ it('lists a newly added connection as a dropdown row', async () => {
     );
 
     fireEvent.click(getButtonWithText(ADD_NEW_CONNECTION));
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: addedName } });
-    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'added.example.com' } });
-    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'prod-user' } });
-    fireEvent.change(screen.getByLabelText('Remote memory report folder path'), { target: { value: '/opt/reports' } });
+    fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: addedName } });
+    fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'added.example.com' } });
+    fireEvent.change(screen.getByLabelText(SSH_USERNAME_LABEL), { target: { value: 'prod-user' } });
+    fireEvent.change(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL), { target: { value: '/opt/reports' } });
     fireEvent.click(getButtonWithText('Run tests'));
 
     await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
@@ -514,7 +522,7 @@ it('moves cached folder lists when an edit changes the host', async () => {
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
     fireEvent.click(screen.getByLabelText(getEditConnectionLabel(original)));
-    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: editedHost } });
+    fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: editedHost } });
     fireEvent.click(getButtonWithText('Run tests'));
 
     await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
@@ -1710,7 +1718,7 @@ it('keeps cached performance folders when an unrelated field is edited', async (
     await editConnection(connection);
     // Not the name: the cache is keyed on it, so a rename moves the entry rather
     // than dropping it and the assertion below would pass for the wrong reason.
-    fireEvent.change(screen.getByLabelText('Remote memory report folder path'), { target: { value: '/elsewhere' } });
+    fireEvent.change(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL), { target: { value: '/elsewhere' } });
     await runConnectionTestAndSave();
 
     await waitFor(

@@ -11,12 +11,14 @@ import {
     ConnectionNameSubject,
     STALE_CONNECTION_TESTS_CLASS,
     getNameAvailableMessage,
+    getNameFieldLabel,
     getNameRequiredMessage,
     getNameTakenMessage,
 } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { MlirServerConnection } from '../src/definitions/MlirServer';
+import { MLIR_PORT_LABEL, MlirServerConnection } from '../src/definitions/MlirServer';
 import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
+import { SSH_HOST_LABEL, SSH_PORT_LABEL, SSH_USERNAME_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
@@ -76,12 +78,14 @@ describe('MlirServerDialog defaults', () => {
             />,
         );
 
-        expect(screen.getByLabelText(/SSH Port/i)).toHaveValue('2222');
-        expect(screen.getByLabelText('Username')).toHaveValue('bob');
+        expect(screen.getByLabelText(SSH_PORT_LABEL)).toHaveValue('2222');
+        expect(screen.getByLabelText(SSH_USERNAME_LABEL)).toHaveValue('bob');
     });
 });
 
 const MLIR_SERVER_REACHABLE = 'MLIR server reachable';
+
+const SERVER_NAME_LABEL = getNameFieldLabel(ConnectionNameSubject.SERVER);
 
 const getTestBlock = () => screen.queryByRole('group', { name: 'Test Connection' });
 
@@ -90,11 +94,11 @@ const getServerTestResults = () => screen.getByTestId(TEST_IDS.CONNECTION_TEST_R
 
 /** Saving needs a name, so anything that ends at an enabled save button has to supply one. */
 const fillName = (name = 'my model explorer') =>
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: name } });
+    fireEvent.change(screen.getByLabelText(SERVER_NAME_LABEL), { target: { value: name } });
 
 /** What the test needs to reach a server at all, so Run test is offered. */
 const fillTestableTarget = () =>
-    fireEvent.change(screen.getByLabelText('SSH host'), { target: { value: 'aus-wh-05' } });
+    fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'aus-wh-05' } });
 
 const renderMlirServerDialog = ({ open = true, existing }: { open?: boolean; existing?: ExistingTarget } = {}) =>
     render(
@@ -116,8 +120,7 @@ const renderMlirServerDialog = ({ open = true, existing }: { open?: boolean; exi
 
 describeSshConfigPrefillContract('MlirServerDialog', {
     renderDialog: renderMlirServerDialog,
-    hostLabel: 'SSH host',
-    sshPortLabel: 'SSH port',
+    nameSubject: ConnectionNameSubject.SERVER,
     runTestsLabel: 'Run test',
     saveLabel: 'Add server',
     passingTestMessage: MLIR_SERVER_REACHABLE,
@@ -146,7 +149,7 @@ describe('MlirServerDialog connection test block', () => {
         await waitFor(() => expect(screen.getByText(MLIR_SERVER_REACHABLE)).toBeInTheDocument());
         expect(getServerTestResults()).not.toHaveClass(STALE_CONNECTION_TESTS_CLASS);
 
-        fireEvent.change(screen.getByLabelText('SSH host'), { target: { value: 'somewhere-else' } });
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'somewhere-else' } });
 
         // Aligned with the remote connection dialog: the record of what the last run found is
         // worth more than a clean slate, as long as it can't be read as approving the target
@@ -249,14 +252,14 @@ describe('MlirServerDialog SSH config prefill specifics', () => {
             target: { value: SSH_CONFIG_HOST_CUSTOM },
         });
         fillName();
-        fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'carol' } });
-        fireEvent.change(screen.getByLabelText('SSH port'), { target: { value: '2022' } });
+        fireEvent.change(screen.getByLabelText(SSH_USERNAME_LABEL), { target: { value: 'carol' } });
+        fireEvent.change(screen.getByLabelText(SSH_PORT_LABEL), { target: { value: '2022' } });
         fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'bare-host' } });
 
-        expect(screen.getByLabelText('Name')).toHaveValue('my model explorer');
-        expect(screen.getByLabelText('SSH host')).toHaveValue('bare-host');
-        expect(screen.getByLabelText('Username')).toHaveValue('carol');
-        expect(screen.getByLabelText('SSH port')).toHaveValue('2022');
+        expect(screen.getByLabelText(SERVER_NAME_LABEL)).toHaveValue('my model explorer');
+        expect(screen.getByLabelText(SSH_HOST_LABEL)).toHaveValue('bare-host');
+        expect(screen.getByLabelText(SSH_USERNAME_LABEL)).toHaveValue('carol');
+        expect(screen.getByLabelText(SSH_PORT_LABEL)).toHaveValue('2022');
     });
 
     it('leaves the MLIR server port alone when the stanza carries an SSH Port', () => {
@@ -267,11 +270,11 @@ describe('MlirServerDialog SSH config prefill specifics', () => {
         fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), {
             target: { value: SSH_CONFIG_HOST_CUSTOM },
         });
-        const mlirPort = screen.getByLabelText('MLIR port') as HTMLInputElement;
+        const mlirPort = screen.getByLabelText(MLIR_PORT_LABEL) as HTMLInputElement;
         const portBeforePrefill = mlirPort.value;
         fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'work-gpu' } });
 
-        expect(screen.getByLabelText('SSH port')).toHaveValue('2222');
+        expect(screen.getByLabelText(SSH_PORT_LABEL)).toHaveValue('2222');
         expect(mlirPort).toHaveValue(portBeforePrefill);
     });
 });

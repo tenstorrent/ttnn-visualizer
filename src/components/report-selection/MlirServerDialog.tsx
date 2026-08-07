@@ -5,15 +5,18 @@
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
-import { ConnectionNameSubject, SAVE_BLOCKED_TOOLTIP } from '../../definitions/ConnectionDialog';
+import { ConnectionNameSubject, SAVE_BLOCKED_TOOLTIP, getNameFieldLabel } from '../../definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { MlirServerConnection } from '../../definitions/MlirServer';
+import { MLIR_PORT_LABEL, MlirServerConnection } from '../../definitions/MlirServer';
 import { SSH_CONFIG_HOST_ADD_SERVER_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
+    SSH_HOST_LABEL,
     SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
     SSH_IDENTITY_FILE_SUBLABEL,
+    SSH_PORT_LABEL,
+    SSH_USERNAME_LABEL,
 } from '../../definitions/SshConnectionFields';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getConnectionNameStatus, isConnectionNameTaken } from '../../functions/connectionName';
@@ -178,7 +181,7 @@ const MlirServerDialog = ({
                 {!isAwaitingHostChoice && (
                     <>
                         <FormGroup
-                            label='Server Name'
+                            label={getNameFieldLabel(ConnectionNameSubject.SERVER)}
                             labelFor='mlir-server-name'
                         >
                             <InputGroup
@@ -189,7 +192,7 @@ const MlirServerDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='SSH Username'
+                            label={SSH_USERNAME_LABEL}
                             labelFor='mlir-server-username'
                         >
                             <InputGroup
@@ -200,7 +203,7 @@ const MlirServerDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='SSH Host'
+                            label={SSH_HOST_LABEL}
                             subLabel={SSH_HOST_SUBLABEL}
                             labelFor='mlir-server-host'
                         >
@@ -223,7 +226,7 @@ const MlirServerDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='SSH Port'
+                            label={SSH_PORT_LABEL}
                             labelFor='mlir-server-ssh-port'
                         >
                             <InputGroup
@@ -240,7 +243,7 @@ const MlirServerDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='MLIR port'
+                            label={MLIR_PORT_LABEL}
                             subLabel='HTTP port the MLIR server listens on, on the remote host (e.g. 8080)'
                             labelFor='mlir-server-port'
                         >
