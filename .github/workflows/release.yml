@@ -12,7 +12,7 @@ jobs:
     update-version:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
               # TODO Replace email with official email
             - run: git config --global user.email "support@tenstorrent.com"
             - run: git config --global user.name "CI Job"
