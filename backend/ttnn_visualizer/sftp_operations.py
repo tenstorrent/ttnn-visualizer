@@ -51,6 +51,12 @@ logger = logging.getLogger(__name__)
 # scp where sftp might now work, never a failed sync. A restart clears it.
 _sftp_subsystem_unavailable: set[tuple[str, str, int]] = set()
 
+# What the report search exits with when its root is not there, so the caller can
+# tell an absent path from one holding nothing. Kept clear of the codes the remote
+# side produces on its own: `find` uses 1, a shell that cannot run the command uses
+# 126 or 127, and ssh itself uses 255.
+_MISSING_ROOT_EXIT_CODE = 87
+
 
 def _remote_transfer_key(remote_connection: RemoteConnection) -> tuple[str, str, int]:
     return (
@@ -985,13 +991,25 @@ def read_remote_file(
     return ssh_client.read_file(path, timeout=30)
 
 
+class RemoteFolderSearch(NamedTuple):
+    """Folders the search matched, and whether its root was there to search.
+
+    One remote command answers both, but what a missing root *means* belongs to
+    the caller: the connection test reports it as a failed path, while the
+    listing flows treat it the same as a path holding nothing.
+    """
+
+    folders: List[str]
+    is_root_missing: bool
+
+
 def _find_performance_report_folders(
     remote_connection: RemoteConnection,
-) -> List[str]:
+) -> RemoteFolderSearch:
     """Remote performance report folders, honouring the connection's layout."""
     performance_path = remote_connection.performancePath
     if not performance_path:
-        return []
+        return RemoteFolderSearch(folders=[], is_root_missing=False)
 
     if not remote_connection.multihostPerformance:
         return find_folders_by_files(
@@ -1020,74 +1038,70 @@ class RemoteReportCounts(NamedTuple):
     performance: Optional[int]
 
 
+def _raise_missing_report_path(message: str) -> NoReturn:
+    logger.error(message)
+    raise RemoteConnectionException(message=message, status=ConnectionTestStates.FAILED)
+
+
 @remote_exception_handler
 def check_remote_path_for_reports(
     remote_connection: RemoteConnection,
 ) -> RemoteReportCounts:
-    remote_profiler_paths = []
+    """Count the reports under each configured path, one SSH round trip each.
+
+    A path that is not there fails the whole test rather than counting zero: the
+    search cannot say anything about reports under a directory it never reached,
+    and "exists but empty" is advice the user can act on where "does not exist"
+    is a different problem entirely.
+    """
+    profiler_search = RemoteFolderSearch(folders=[], is_root_missing=False)
     if remote_connection.profilerPath:
-        remote_profiler_paths = find_folders_by_files(
+        profiler_search = find_folders_by_files(
             remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
         )
+        if profiler_search.is_root_missing:
+            _raise_missing_report_path(
+                "Profiler directory does not exist or cannot be accessed"
+            )
     else:
         logger.info("No profiler path configured; skipping check")
 
-    remote_performance_paths = []
+    performance_search = RemoteFolderSearch(folders=[], is_root_missing=False)
     if remote_connection.performancePath:
-        remote_performance_paths = _find_performance_report_folders(remote_connection)
+        performance_search = _find_performance_report_folders(remote_connection)
+        if performance_search.is_root_missing:
+            _raise_missing_report_path(
+                "Performance directory does not exist or cannot be accessed"
+            )
     else:
         logger.info("No performance path configured; skipping check")
 
     return RemoteReportCounts(
         profiler=(
-            len(remote_profiler_paths) if remote_connection.profilerPath else None
+            len(profiler_search.folders) if remote_connection.profilerPath else None
         ),
         performance=(
-            len(remote_performance_paths) if remote_connection.performancePath else None
+            len(performance_search.folders)
+            if remote_connection.performancePath
+            else None
         ),
     )
 
 
-@remote_exception_handler
-def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str):
-    """Check if a remote path exists using SSH test command."""
-    path = getattr(remote_connection, path_key)
-
-    ssh_client = SSHClient(remote_connection)
-
-    try:
-        if ssh_client.check_path_exists(path, timeout=10):
-            return True
-        else:
-            # Directory does not exist or is inaccessible
-            if path_key == "performancePath":
-                message = "Performance directory does not exist or cannot be accessed"
-            if path_key == "profilerPath":
-                message = "Profiler directory does not exist or cannot be accessed"
-            else:
-                message = f"Remote path '{path}' does not exist or cannot be accessed"
-
-            logger.error(message)
-            raise RemoteConnectionException(
-                message=message, status=ConnectionTestStates.FAILED
-            )
-    except SSHException as e:
-        logger.error(f"Error checking remote path: {path}")
-        raise RemoteConnectionException(
-            message=f"Error checking remote path: {path}: {str(e)}",
-            status=ConnectionTestStates.FAILED,
-        )
-
-
-def _report_search_find_expression(
+def _report_search_command(
     root_folder: str, subdirectory_glob: Optional[str], file_names: List[str]
 ) -> str:
-    """Remote ``find`` expression listing report directories in one round trip.
+    """Remote command listing report directories in one round trip.
 
     Without ``subdirectory_glob``, candidates are the immediate children of
     ``root_folder``. With it, candidates sit directly below a matching relative
     subpath, so the search depth follows the number of glob segments. Only
     directories holding one of ``file_names`` are printed.
+
+    The root's own existence is settled here rather than by a preceding
+    ``test -e`` over its own SSH connection: ``find`` cannot distinguish "the
+    path is not there" from "nothing under it matched", and the connection test
+    has to tell a user those apart.
     """
     # A configured trailing slash is normalised out of both the root and the
     # pattern below. GNU and BSD `find` disagree on whether the root it echoes
@@ -1115,7 +1129,10 @@ def _report_search_find_expression(
         for file_name in file_names
     )
 
+    # `test -e`, matching what the standalone path check used to run, so a path
+    # whose parent is unreadable still reports as absent rather than as empty.
     return (
+        f"test -e {shlex.quote(search_root)} || exit {_MISSING_ROOT_EXIT_CODE}; "
         f"find {shlex.quote(search_root)} "
         f"-mindepth {depth} -maxdepth {depth} -type d{path_filter} "
         f"'(' {tests} ')' -print"
@@ -1184,8 +1201,8 @@ def find_folders_by_files(
     file_names: List[str],
     subdirectory_glob: Optional[str] = None,
     directory_filter: Optional[Callable[[str], bool]] = None,
-) -> List[str]:
-    """Return remote folders containing any of ``file_names``.
+) -> RemoteFolderSearch:
+    """Search for remote folders containing any of ``file_names``.
 
     By default these are report folders directly under ``root_folder``. Pass
     ``subdirectory_glob`` to look one level deeper instead, through intervening
@@ -1193,10 +1210,11 @@ def find_folders_by_files(
     candidates the glob cannot exclude before they cost an SSH round trip.
     """
     if not root_folder or not file_names:
-        return []
+        # Nothing was asked of the remote host, so nothing is known about the root.
+        return RemoteFolderSearch(folders=[], is_root_missing=False)
 
     ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        _report_search_find_expression(root_folder, subdirectory_glob, file_names),
+        _report_search_command(root_folder, subdirectory_glob, file_names),
     ]
 
     try:
@@ -1212,7 +1230,11 @@ def find_folders_by_files(
         )
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout finding folders in: {root_folder}")
-        return []
+        return RemoteFolderSearch(folders=[], is_root_missing=False)
+
+    if result.returncode == _MISSING_ROOT_EXIT_CODE:
+        logger.info("Search root does not exist or cannot be accessed: %s", root_folder)
+        return RemoteFolderSearch(folders=[], is_root_missing=True)
 
     matched_folders = [
         directory.strip()
@@ -1258,7 +1280,7 @@ def find_folders_by_files(
         else:
             logger.error(f"Error finding folders: {stderr}")
 
-    return matched_folders
+    return RemoteFolderSearch(folders=matched_folders, is_root_missing=False)
 
 
 @remote_exception_handler
@@ -1269,7 +1291,7 @@ def get_remote_performance_folders(
     performance_paths = []
 
     if remote_connection.performancePath:
-        performance_paths = _find_performance_report_folders(remote_connection)
+        performance_paths = _find_performance_report_folders(remote_connection).folders
     else:
         logger.info("No performance path configured for this connection")
         return []
@@ -1303,7 +1325,7 @@ def get_remote_profiler_folders(
     if remote_connection.profilerPath:
         profiler_paths = find_folders_by_files(
             remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
-        )
+        ).folders
     else:
         logger.info("No profiler path configured for this connection")
         return []

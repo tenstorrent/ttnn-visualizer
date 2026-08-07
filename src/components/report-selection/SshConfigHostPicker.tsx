@@ -7,7 +7,6 @@ import classNames from 'classnames';
 import { useMemo } from 'react';
 import {
     SSH_CONFIG_HOST_CUSTOM,
-    SSH_CONFIG_HOST_CUSTOM_LABEL,
     SSH_CONFIG_HOST_INPUT_ID,
     SSH_CONFIG_HOST_LABEL,
     SSH_CONFIG_HOST_SUBLABEL,
@@ -22,13 +21,21 @@ import 'styles/components/SshConfigHostPicker.scss';
 interface SshConfigHostPickerProps {
     /** Selected alias, {@link SSH_CONFIG_HOST_CUSTOM}, or {@link SSH_CONFIG_HOST_UNSELECTED}. */
     value: string;
+    /** Copy for {@link SSH_CONFIG_HOST_CUSTOM}, naming what the surrounding dialog adds. */
+    addNewLabel: string;
     /** When false, skip fetching (dialog closed). */
     enabled?: boolean;
     onSelectCustom: () => void;
     onSelectHost: (host: SshConfigHost) => void;
 }
 
-const SshConfigHostPicker = ({ value, enabled = true, onSelectCustom, onSelectHost }: SshConfigHostPickerProps) => {
+const SshConfigHostPicker = ({
+    value,
+    addNewLabel,
+    enabled = true,
+    onSelectCustom,
+    onSelectHost,
+}: SshConfigHostPickerProps) => {
     const { hosts, isAvailable } = useSshConfigHostOptions(enabled);
 
     // A generated SSH config can run to thousands of stanzas, and every keystroke in
@@ -64,7 +71,7 @@ const SshConfigHostPicker = ({ value, enabled = true, onSelectCustom, onSelectHo
         }
     };
 
-    // A host typed by hand belongs to the Custom option; nothing chosen yet belongs to neither.
+    // A host typed by hand resolves to SSH_CONFIG_HOST_CUSTOM; nothing chosen yet, to neither.
     const isUnselected = value === SSH_CONFIG_HOST_UNSELECTED;
     const selectedValue = isUnselected || aliases.has(value) ? value : SSH_CONFIG_HOST_CUSTOM;
 
@@ -94,7 +101,7 @@ const SshConfigHostPicker = ({ value, enabled = true, onSelectCustom, onSelectHo
                         {SSH_CONFIG_HOST_UNSELECTED_LABEL}
                     </option>
                 )}
-                <option value={SSH_CONFIG_HOST_CUSTOM}>{SSH_CONFIG_HOST_CUSTOM_LABEL}</option>
+                <option value={SSH_CONFIG_HOST_CUSTOM}>{addNewLabel}</option>
                 {options}
             </HTMLSelect>
         </FormGroup>

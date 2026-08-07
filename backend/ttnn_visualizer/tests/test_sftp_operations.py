@@ -165,7 +165,7 @@ class TestFindFoldersByFiles:
 
         # A connection per candidate directory is a full SSH handshake each, serially.
         assert run.call_count == 1
-        assert matched == ["/remote/reports/a", "/remote/reports/b"]
+        assert matched.folders == ["/remote/reports/a", "/remote/reports/b"]
 
         remote_cmd = _remote_shell_command_from_run(run)
         # Either file qualifies a directory, and -print is explicit because find only
@@ -184,20 +184,24 @@ class TestFindFoldersByFiles:
                 connection, "/remote/reports", ["config.json"]
             )
 
-        assert matched == ["/remote/reports/a", "/remote/reports/b"]
+        assert matched.folders == ["/remote/reports/a", "/remote/reports/b"]
 
     def test_no_file_names_makes_no_connection(self, connection):
         # Without a probe the find would match every directory, which is the opposite
         # of "folders containing one of these files".
         with patch("subprocess.run") as run:
-            assert find_folders_by_files(connection, "/remote/reports", []) == []
+            assert (
+                find_folders_by_files(connection, "/remote/reports", []).folders == []
+            )
 
         assert run.call_count == 0
 
     def test_no_matches_returns_empty(self, connection):
         with patch("subprocess.run", return_value=_completed("")):
             assert (
-                find_folders_by_files(connection, "/remote/reports", ["config.json"])
+                find_folders_by_files(
+                    connection, "/remote/reports", ["config.json"]
+                ).folders
                 == []
             )
 

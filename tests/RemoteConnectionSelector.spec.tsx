@@ -58,7 +58,7 @@ const SECOND_CONNECTION: RemoteConnection = {
 /** The dialog only enables its save button once a connection test has come back clean. */
 const PASSING_TESTS: ConnectionStatus[] = [
     { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-    { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+    { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
 ];
 
 const WAIT_FOR_OPTIONS = { timeout: 1000 };

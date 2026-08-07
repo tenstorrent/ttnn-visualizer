@@ -88,7 +88,6 @@ from ttnn_visualizer.serializers import (
 )
 from ttnn_visualizer.sftp_operations import (
     MULTIHOST_REPORT_LAYOUT_HINT,
-    check_remote_path_exists,
     check_remote_path_for_reports,
     get_active_sync_method,
     get_remote_performance_folders,
@@ -1771,32 +1770,10 @@ def test_remote_folder():
     except RemoteConnectionException as e:
         add_status(e.status.value, e.message, getattr(e, "detail", None))
 
-    # Test Directory Configuration. Success is silent here: it is reported
-    # below as part of the one status line the report search produces.
-    if not has_failures() and connection.profilerPath:
-        try:
-            check_remote_path_exists(connection, "profilerPath")
-        except AuthenticationFailedException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
-            return jsonify([status.model_dump() for status in statuses]), e.http_status
-        except RemoteConnectionException as e:
-            add_status(e.status.value, e.message, getattr(e, "detail", None))
-
-    # Test Directory Configuration (perf)
-    if not has_failures() and connection.performancePath:
-        try:
-            check_remote_path_exists(connection, "performancePath")
-        except AuthenticationFailedException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
-            return jsonify([status.model_dump() for status in statuses]), e.http_status
-        except RemoteConnectionException as e:
-            add_status(e.status.value, e.message, getattr(e, "detail", None))
-
-    # Check for Project Configurations
+    # Both configured paths are checked and searched here, one SSH round trip
+    # each: the search settles whether its root exists as part of the same
+    # command, and a path that exists is silent because the report count it
+    # produces below already says so.
     if not has_failures():
         try:
             report_counts = check_remote_path_for_reports(connection)

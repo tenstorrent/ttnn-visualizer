@@ -100,6 +100,7 @@ const MLIRFileSelector = () => {
 
                 <MlirServerDialog
                     open={isAddDialogOpen}
+                    existingServers={servers}
                     onAddServer={(server) => {
                         setServers([...servers, server]);
                         setSelectedServer(server);
@@ -145,6 +146,7 @@ const MLIRFileSelector = () => {
                         title='Edit MLIR server'
                         buttonLabel='Save server'
                         server={serverToEdit}
+                        existingServers={servers}
                         onAddServer={(updated) => {
                             setServers(
                                 servers.map((server) => (isSameMlirServer(server, serverToEdit) ? updated : server)),

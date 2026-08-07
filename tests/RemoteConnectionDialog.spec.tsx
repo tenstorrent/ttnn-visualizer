@@ -7,12 +7,20 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
+import {
+    ConnectionNameSubject,
+    STALE_CONNECTION_TESTS_CLASS,
+    getNameAvailableMessage,
+    getNameRequiredMessage,
+    getNameTakenMessage,
+} from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../src/definitions/RemoteConnection';
+import { RemoteConnection } from '../src/definitions/RemoteConnection';
 import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
 import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
+import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
 import {
     SshConfigHostsQueryResult,
     noSshConfigResult,
@@ -103,15 +111,6 @@ describe('RemoteConnectionDialog defaults', () => {
     });
 });
 
-// The multihost FormGroup's label points at the checkbox as well as heading the group, so the
-// checkbox's accessible name is that heading followed by its own label. Match on the half that
-// identifies the control.
-const MULTIHOST_CHECKBOX_NAME = new RegExp(MULTIHOST_CHECKBOX_LABEL);
-
-// A stale result stays on screen, so this class is what separates it from one
-// that still applies.
-const STALE_RESULTS_CLASS = 'stale-connection-tests';
-
 const getTestBlock = () => screen.queryByRole('group', { name: 'Test Connection' });
 
 /** The server results, which go stale — as opposed to the name check, which is recomputed. */
@@ -122,7 +121,7 @@ const fillName = (name = 'my lab box') => fireEvent.change(screen.getByLabelText
 
 const PASSING_TESTS: ConnectionStatus[] = [
     { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-    { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+    { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
 ];
 
 const renderRemoteConnectionDialog = ({ open = true, existing }: { open?: boolean; existing?: ExistingTarget } = {}) =>
@@ -303,14 +302,38 @@ describe('RemoteConnectionDialog connection test block', () => {
 
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(screen.getByText('SSH connection established')).toBeInTheDocument());
-        expect(getServerTestResults()).not.toHaveClass(STALE_RESULTS_CLASS);
+        expect(getServerTestResults()).not.toHaveClass(STALE_CONNECTION_TESTS_CLASS);
 
         fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'other-host' } });
 
         // The record of what the last run found is worth more than a clean slate,
         // as long as it can't be read as approving the target now in the form.
         expect(screen.getByText('SSH connection established')).toBeInTheDocument();
-        expect(getServerTestResults()).toHaveClass(STALE_RESULTS_CLASS);
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
+    });
+
+    it('lets a warning be saved, since an empty report folder is not a broken connection', async () => {
+        // The server reports a configured path holding no reports as WARNING rather than
+        // failing, so tightening this gate to OK-only would lock out the very case it
+        // was widened for — a host whose reports haven't been generated yet.
+        testConnectionMock.mockResolvedValue([
+            { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+            { status: ConnectionTestStates.WARNING, message: 'Memory path exists but no reports found' },
+        ]);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('Memory path exists but no reports found')).toBeInTheDocument());
+        expect(getButtonWithText('Add connection')).toBeEnabled();
     });
 
     it('drops the stale marking once the tests are run again', async () => {
@@ -328,12 +351,12 @@ describe('RemoteConnectionDialog connection test block', () => {
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
         fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'other-host' } });
-        expect(getServerTestResults()).toHaveClass(STALE_RESULTS_CLASS);
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
 
         fireEvent.click(getButtonWithText('Run tests'));
 
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
-        expect(getServerTestResults()).not.toHaveClass(STALE_RESULTS_CLASS);
+        expect(getServerTestResults()).not.toHaveClass(STALE_CONNECTION_TESTS_CLASS);
     });
 });
 
@@ -364,7 +387,7 @@ describe('RemoteConnectionDialog connection name validation', () => {
 
         fillName(SAVED.name);
 
-        expect(screen.getByText(`A connection named "${SAVED.name}" already exists`)).toBeInTheDocument();
+        expect(screen.getByText(getNameTakenMessage(ConnectionNameSubject.CONNECTION, SAVED.name))).toBeInTheDocument();
         expect(getButtonWithText('Add connection')).toBeDisabled();
     });
 
@@ -376,7 +399,9 @@ describe('RemoteConnectionDialog connection name validation', () => {
 
         fillName(name);
 
-        expect(screen.getByText(`A connection named "${name.trim()}" already exists`)).toBeInTheDocument();
+        expect(
+            screen.getByText(getNameTakenMessage(ConnectionNameSubject.CONNECTION, name.trim())),
+        ).toBeInTheDocument();
     });
 
     it('keeps a duplicate name from being saved even after the tests pass', async () => {
@@ -416,7 +441,9 @@ describe('RemoteConnectionDialog connection name validation', () => {
 
         fireEvent.click(getButtonWithText('Run tests'));
 
-        await waitFor(() => expect(screen.getByText('Connection name is required')).toBeInTheDocument());
+        await waitFor(() =>
+            expect(screen.getByText(getNameRequiredMessage(ConnectionNameSubject.CONNECTION))).toBeInTheDocument(),
+        );
         // Saved without a name, the connection is discarded as invalid on the next read.
         expect(getButtonWithText('Add connection')).toBeDisabled();
     });
@@ -428,7 +455,7 @@ describe('RemoteConnectionDialog connection name validation', () => {
         fireEvent.click(getButtonWithText('Run tests'));
 
         await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled());
-        expect(screen.getByText('Connection name is available')).toBeInTheDocument();
+        expect(screen.getByText(getNameAvailableMessage(ConnectionNameSubject.CONNECTION))).toBeInTheDocument();
     });
 
     it('reports an edit that takes the name of a different connection', () => {
@@ -438,7 +465,7 @@ describe('RemoteConnectionDialog connection name validation', () => {
 
         fillName(other.name);
 
-        expect(screen.getByText(`A connection named "${other.name}" already exists`)).toBeInTheDocument();
+        expect(screen.getByText(getNameTakenMessage(ConnectionNameSubject.CONNECTION, other.name))).toBeInTheDocument();
     });
 });
 
@@ -468,7 +495,7 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
 
         fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
-        expect(getServerTestResults()).toHaveClass(STALE_RESULTS_CLASS);
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeDisabled();
     });
 
@@ -490,7 +517,7 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'renamed box' } });
 
         expect(screen.getByText('SSH connection established')).toBeInTheDocument();
-        expect(getServerTestResults()).not.toHaveClass(STALE_RESULTS_CLASS);
+        expect(getServerTestResults()).not.toHaveClass(STALE_CONNECTION_TESTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeEnabled();
     });
 
@@ -606,7 +633,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
 
         fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
 
-        expect(getServerTestResults()).toHaveClass(STALE_RESULTS_CLASS);
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeDisabled();
     });
 });

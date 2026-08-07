@@ -7,6 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useAtomValue, useSetAtom } from 'jotai';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import MLIRFileSelector from '../src/components/report-selection/MLIRFileSelector';
+import { ConnectionNameSubject, getNameTakenMessage } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { CANCEL_DELETE_LABEL, CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
 import { MlirServerConnection } from '../src/definitions/MlirServer';
@@ -57,6 +58,9 @@ const WAIT_FOR_OPTIONS = { timeout: 1000 };
 const SELECTED_SERVER_TEST_ID = 'selected-server-probe';
 const START_ACTIVATING_LABEL = 'Start activating';
 const SAVE_SERVER_LABEL = 'Save server';
+/** The selector's own button, as opposed to the dialog's save button below. */
+const ADD_SERVER_BUTTON_LABEL = 'Add new server';
+const ADD_SERVER_LABEL = 'Add server';
 const EDITED_NAME = 'Renamed host';
 
 const editLabel = (server: MlirServerConnection) => getEditActionLabel(ManagedEntity.MLIR_SERVER, server.name);
@@ -347,4 +351,45 @@ it('follows the rename when the server in use is edited and saved', async () => 
     await runTestAndSave();
 
     expect(screen.getByTestId(SELECTED_SERVER_TEST_ID)).toHaveTextContent(EDITED_NAME);
+});
+
+it('opens a clean add-server form after a server has been added', async () => {
+    render(
+        <TestProviders>
+            <MLIRFileSelector />
+        </TestProviders>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: ADD_SERVER_BUTTON_LABEL }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: SERVER.name } });
+    fireEvent.change(screen.getByLabelText('SSH host'), { target: { value: SERVER.host } });
+    fireEvent.click(screen.getByRole('button', { name: 'Run test' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: ADD_SERVER_LABEL })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: ADD_SERVER_LABEL }));
+
+    fireEvent.click(screen.getByRole('button', { name: ADD_SERVER_BUTTON_LABEL }));
+
+    // The add dialog stays mounted between opens, so carrying the values over would carry the
+    // name the list now holds — reopening to report the server just saved as a duplicate.
+    expect(screen.getByLabelText('Name')).toHaveValue('');
+    expect(screen.getByLabelText('SSH host')).toHaveValue('');
+    expect(screen.getByRole('button', { name: ADD_SERVER_LABEL })).toBeDisabled();
+});
+
+it('reports a saved server name entered again in the add dialog', async () => {
+    render(
+        <TestProviders initialAtomValues={[[mlirServersAtom, [SERVER]]]}>
+            <MLIRFileSelector />
+        </TestProviders>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: ADD_SERVER_BUTTON_LABEL }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: SERVER.name } });
+
+    // Pins the wiring as well as the check: the dialog only sees the saved servers because
+    // the selector forwards them, and nothing else would notice if it stopped.
+    await waitFor(() =>
+        expect(screen.getByText(getNameTakenMessage(ConnectionNameSubject.SERVER, SERVER.name))).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: ADD_SERVER_LABEL })).toBeDisabled();
 });

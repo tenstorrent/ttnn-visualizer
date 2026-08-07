@@ -15,27 +15,27 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
-import classNames from 'classnames';
 import { useState } from 'react';
+import { ConnectionNameSubject, SAVE_BLOCKED_TOOLTIP } from '../../definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
-import { SSH_CONFIG_HOST_UNSELECTED } from '../../definitions/SshConfigHostPicker';
+import { SSH_CONFIG_HOST_ADD_CONNECTION_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
+    MAX_PORT,
     SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
     SSH_IDENTITY_FILE_SUBLABEL,
     SSH_USERNAME_SUBLABEL,
 } from '../../definitions/SshConnectionFields';
-import { TEST_IDS } from '../../definitions/TestIds';
 import { SshConfigHost } from '../../model/SshConfigHost';
-import { isConnectionNameTaken } from '../../functions/remoteConnection';
+import { getConnectionNameStatus, isConnectionNameTaken } from '../../functions/connectionName';
+import { isSameConnection } from '../../functions/remoteConnection';
 import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import useRemoteConnection from '../../hooks/useRemote';
-import useSshConfigHostOptions from '../../hooks/useSshConfigHostOptions';
-import useSshConfigHostSelection from '../../hooks/useSshConfigHostSelection';
-import ConnectionTestMessage from './ConnectionTestMessage';
+import useSshConfigHostChoice from '../../hooks/useSshConfigHostChoice';
+import ConnectionTestResults from './ConnectionTestResults';
 import SshConfigHostPicker from './SshConfigHostPicker';
 import 'styles/components/RemoteConnectionDialog.scss';
 
@@ -67,27 +67,6 @@ const PERFORMANCE_REPORT_SEARCH_STATUS = {
 };
 const FAILED_CONNECTION = { status: ConnectionTestStates.FAILED, message: 'Connection failed' };
 const FAILED_MEMORY_REPORT_PATH = { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' };
-const MISSING_NAME_STATUS = {
-    status: ConnectionTestStates.FAILED,
-    // A connection saved without one is discarded as invalid the next time the list is read.
-    message: 'Connection name is required',
-};
-const AVAILABLE_NAME_STATUS = { status: ConnectionTestStates.OK, message: 'Connection name is available' };
-
-const getConnectionNameStatus = (name: string, isNameTaken: boolean): ConnectionStatus => {
-    if (!name.trim()) {
-        return MISSING_NAME_STATUS;
-    }
-
-    if (isNameTaken) {
-        return {
-            status: ConnectionTestStates.FAILED,
-            message: `A connection named "${name.trim()}" already exists`,
-        };
-    }
-
-    return AVAILABLE_NAME_STATUS;
-};
 
 const getDefaultConnection = (): RemoteConnection => {
     const serverConfig = getServerConfig();
@@ -115,39 +94,23 @@ const RemoteConnectionDialog = ({
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(
         () => remoteConnection ?? getDefaultConnection(),
     );
-    const { selectedHost, selectHost, selectCustom, resetSelection } = useSshConfigHostSelection(
-        remoteConnection?.host,
-    );
-    // The picker exists to seed a connection that has no values yet. An edit has them, and the
-    // prefill overwrites the host, name, username, port and identity file together, so offering
-    // it here is offering to undo the edit. Not asking also keeps ~/.ssh/config unread.
     const isAddingConnection = !remoteConnection;
-    const { isAvailable: hasSshConfigHosts, isResolving: isResolvingSshConfig } = useSshConfigHostOptions(
-        open && isAddingConnection,
-    );
+    const { selectedHost, selectHost, selectCustom, resetSelection, isAwaitingHostChoice } = useSshConfigHostChoice({
+        open,
+        isAdding: isAddingConnection,
+        initialHost: remoteConnection?.host,
+    });
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [hasStaleTestResults, setHasStaleTestResults] = useState(false);
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
 
-    // A new connection is a choice between the ~/.ssh/config aliases and filling the form in by
-    // hand, so the form itself only competes with that choice. There is nothing to choose from
-    // when the picker can't render — including while the config is still loading, which would
-    // otherwise show the form only to take it away again.
-    const isAwaitingHostChoice =
-        isAddingConnection &&
-        selectedHost === SSH_CONFIG_HOST_UNSELECTED &&
-        (isResolvingSshConfig || hasSshConfigHosts);
-
+    const connectionName = connection.name ?? '';
     // Recomputed as the user types rather than captured by a test run: a rename deliberately
     // doesn't invalidate the SSH results, so a result frozen at run time would let a name later
     // edited into a duplicate keep its tick and be saved.
-    const isNameTaken = isConnectionNameTaken(connection.name ?? '', existingConnections, remoteConnection);
-    const nameStatus = getConnectionNameStatus(connection.name ?? '', isNameTaken);
-    // A name that collides can only be something the user typed, so reporting it before they ask
-    // for a test is feedback rather than an unprompted complaint. A name not filled in yet is the
-    // latter, so it waits for the run that the rest of the results arrive with.
-    const hasTestResults = connectionTests.length > 0 || isNameTaken;
+    const isNameTaken = isConnectionNameTaken(connectionName, existingConnections, isSameConnection, remoteConnection);
+    const nameStatus = getConnectionNameStatus(connectionName, isNameTaken, ConnectionNameSubject.CONNECTION);
 
     const isValidConnection =
         nameStatus.status === ConnectionTestStates.OK &&
@@ -242,6 +205,7 @@ const RemoteConnectionDialog = ({
                 {isAddingConnection && (
                     <SshConfigHostPicker
                         value={selectedHost}
+                        addNewLabel={SSH_CONFIG_HOST_ADD_CONNECTION_LABEL}
                         enabled={open}
                         onSelectCustom={selectCustom}
                         onSelectHost={handleSelectSshConfigHost}
@@ -305,7 +269,7 @@ const RemoteConnectionDialog = ({
 
                                     if (e.target.value === '') {
                                         updateTarget({ port: undefined });
-                                    } else if (number > 0 && number < 99999) {
+                                    } else if (number > 0 && number < MAX_PORT) {
                                         updateTarget({ port: number });
                                     }
                                 }}
@@ -368,7 +332,7 @@ const RemoteConnectionDialog = ({
             {!isAwaitingHostChoice && (
                 <DialogFooter
                     minimal
-                    className='remote-connection-dialog-footer'
+                    className='connection-dialog-footer'
                     actions={
                         <>
                             <Button
@@ -379,7 +343,7 @@ const RemoteConnectionDialog = ({
                             />
 
                             <Tooltip
-                                content='Pass connection tests before saving'
+                                content={SAVE_BLOCKED_TOOLTIP}
                                 disabled={isValidConnection}
                             >
                                 <Button
@@ -394,7 +358,10 @@ const RemoteConnectionDialog = ({
                                                 onSave(connection as RemoteConnection);
                                             }
 
-                                            closeDialog();
+                                            // The add dialog stays mounted between opens, so
+                                            // without this the next one starts on the connection
+                                            // just saved — and reports it as a duplicate.
+                                            closeDialog(true);
                                         }
                                     }}
                                 />
@@ -402,37 +369,12 @@ const RemoteConnectionDialog = ({
                         </>
                     }
                 >
-                    {hasTestResults && (
-                        <fieldset>
-                            <legend>Test Connection</legend>
-
-                            <ConnectionTestMessage
-                                status={nameStatus.status}
-                                message={nameStatus.message}
-                            />
-
-                            {/* Server results only exist once a test has run. Editing a field the
-                                test exercises leaves them on screen, marked as no longer applying —
-                                which the name above never is, so it sits outside the marking. */}
-                            <div
-                                className={classNames('connection-test-results', {
-                                    'stale-connection-tests': hasStaleTestResults,
-                                })}
-                                data-testid={TEST_IDS.CONNECTION_TEST_RESULTS}
-                            >
-                                {connectionTests.map((test, index) => {
-                                    return (
-                                        <ConnectionTestMessage
-                                            key={`${test.message}-${index}`}
-                                            status={test.status}
-                                            message={test.message}
-                                            detail={test.detail}
-                                        />
-                                    );
-                                })}
-                            </div>
-                        </fieldset>
-                    )}
+                    <ConnectionTestResults
+                        nameStatus={nameStatus}
+                        isNameTaken={isNameTaken}
+                        tests={connectionTests}
+                        isStale={hasStaleTestResults}
+                    />
                 </DialogFooter>
             )}
         </Dialog>

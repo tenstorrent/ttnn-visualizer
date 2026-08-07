@@ -15,8 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SshConfigHostPicker from '../src/components/report-selection/SshConfigHostPicker';
 import Endpoints from '../src/definitions/Endpoints';
 import {
+    SSH_CONFIG_HOST_ADD_CONNECTION_LABEL,
     SSH_CONFIG_HOST_CUSTOM,
-    SSH_CONFIG_HOST_CUSTOM_LABEL,
     SSH_CONFIG_HOST_LABEL,
 } from '../src/definitions/SshConfigHostPicker';
 import axiosInstance from '../src/libs/axiosInstance';
@@ -42,6 +42,7 @@ const renderPicker = (onSelectHost = vi.fn()) => {
         <QueryClientProvider client={client}>
             <SshConfigHostPicker
                 value={SSH_CONFIG_HOST_CUSTOM}
+                addNewLabel={SSH_CONFIG_HOST_ADD_CONNECTION_LABEL}
                 onSelectCustom={vi.fn()}
                 onSelectHost={onSelectHost}
             />
@@ -70,7 +71,7 @@ describe('SshConfigHostPicker over the real useSshConfigHosts hook', () => {
         expect(mockedGet).toHaveBeenCalledWith(Endpoints.REMOTE_SSH_CONFIG_HOSTS);
         expect(screen.getByRole('option', { name: 'work-gpu — gpu.example.com' })).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'bare-host' })).toBeInTheDocument();
-        expect(screen.getByRole('option', { name: SSH_CONFIG_HOST_CUSTOM_LABEL })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: SSH_CONFIG_HOST_ADD_CONNECTION_LABEL })).toBeInTheDocument();
     });
 
     it('hands the selected host straight through from the payload', async () => {

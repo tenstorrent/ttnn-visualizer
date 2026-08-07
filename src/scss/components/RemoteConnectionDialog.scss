@@ -49,8 +49,10 @@
     }
 
     // Results that no longer describe the current form recede, so their ticks
-    // can't be read as approving a target they were never run against.
-    .stale-connection-tests .connection-test-message {
+    // can't be read as approving a target they were never run against. Set on the
+    // wrapper rather than each message: opacity applies to the subtree as a group,
+    // so the effect is the same without reaching into another component's class.
+    .stale-connection-tests {
         opacity: 0.5;
     }
 }
@@ -58,7 +60,7 @@
 // A minimal footer stacks rather than flexes, so the results sit above the
 // buttons at full width. Blueprint always renders the main section, so the gap
 // is conditional on it holding something.
-.remote-connection-dialog-footer .bp6-dialog-footer-main-section:not(:empty) {
+.connection-dialog-footer .bp6-dialog-footer-main-section:not(:empty) {
     margin-bottom: 10px;
 }
 

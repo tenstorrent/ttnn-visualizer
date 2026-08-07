@@ -14,9 +14,8 @@
  * differ, so they arrive as options — and anything one dialog does alone (the MLIR port staying
  * untouched, the remote dialog keeping a name the user chose) stays in that dialog's own spec.
  *
- * Prefilling *an edit* is one of those: only the MLIR dialog offers the picker for a target it
- * already has values for, so what the picker reads as when a saved host matches an alias is
- * asserted in its spec, and the remote dialog's spec asserts the picker's absence instead.
+ * Neither dialog offers the picker for a target it already has values for, so everything here
+ * that involves the picker is an add; each spec asserts its own absence-on-edit separately.
  */
 
 import { RenderResult, fireEvent, screen, waitFor } from '@testing-library/react';
@@ -69,12 +68,11 @@ const selectConfigHost = (alias: string) => {
 };
 
 /**
- * A new connection opens on neither an alias nor Custom, and the remote dialog shows nothing
+ * A new target opens on neither an alias nor the add-new option, and both dialogs show nothing
  * but the picker until that changes. Tests that start from the form rather than from a prefill
- * make the same choice a user would; the MLIR dialog, which shows its form throughout, is
- * unaffected by choosing it.
+ * have to make the same choice a user would.
  */
-const chooseAddNewConnection = () => selectConfigHost(SSH_CONFIG_HOST_CUSTOM);
+const chooseAddNewTarget = () => selectConfigHost(SSH_CONFIG_HOST_CUSTOM);
 
 export const describeSshConfigPrefillContract = (
     dialogName: string,
@@ -101,7 +99,7 @@ export const describeSshConfigPrefillContract = (
 
             renderDialog();
 
-            chooseAddNewConnection();
+            chooseAddNewTarget();
             fireEvent.change(screen.getByLabelText(SSH_IDENTITY_FILE_LABEL), {
                 target: { value: '/tmp/id_ed25519' },
             });
@@ -115,7 +113,7 @@ export const describeSshConfigPrefillContract = (
             expect(screen.getByLabelText(SSH_IDENTITY_FILE_LABEL)).toHaveValue('');
         });
 
-        it('resets the picker to Custom when the host is typed by hand', () => {
+        it('resets the picker to SSH_CONFIG_HOST_CUSTOM when the host is typed by hand', () => {
             useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: ALIAS, user: ALIAS_USER }]));
 
             renderDialog();
@@ -178,7 +176,7 @@ export const describeSshConfigPrefillContract = (
             // a cancelled prefill from reappearing the next time it opens.
             expect(getPicker().value).toBe(SSH_CONFIG_HOST_UNSELECTED);
 
-            chooseAddNewConnection();
+            chooseAddNewTarget();
 
             expect(screen.getByLabelText(hostLabel)).toHaveValue('');
             expect(screen.getByLabelText('Username')).toHaveValue(defaultUsername);
@@ -207,7 +205,7 @@ export const describeSshConfigPrefillContract = (
             // Both dialogs gate their save button on the target being complete, so the test has to
             // run against a real one before a prefill can invalidate it. Neither treats the name as
             // part of the target, so filling it in doesn't itself discard the result.
-            chooseAddNewConnection();
+            chooseAddNewTarget();
             fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my lab box' } });
             fireEvent.change(screen.getByLabelText(hostLabel), { target: { value: 'aus-wh-05' } });
             fireEvent.click(getButtonWithText(runTestsLabel));
@@ -228,7 +226,7 @@ export const describeSshConfigPrefillContract = (
 
             renderDialog();
 
-            chooseAddNewConnection();
+            chooseAddNewTarget();
             fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my lab box' } });
             fireEvent.change(screen.getByLabelText(hostLabel), { target: { value: 'aus-wh-05' } });
             fireEvent.click(getButtonWithText(runTestsLabel));

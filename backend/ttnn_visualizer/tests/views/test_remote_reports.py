@@ -20,11 +20,13 @@ from ttnn_visualizer.models import (
     split_rank_suffix,
 )
 from ttnn_visualizer.sftp_operations import (
+    _MISSING_ROOT_EXIT_CODE,
     MULTIHOST_REPORT_LAYOUT_HINT,
     MULTIHOST_REPORT_PARENT_GLOB,
     TEST_PROFILER_FILE,
+    RemoteFolderSearch,
     _find_performance_report_folders,
-    _report_search_find_expression,
+    _report_search_command,
     check_remote_path_for_reports,
     find_folders_by_files,
     get_remote_performance_folders,
@@ -34,6 +36,11 @@ from ttnn_visualizer.views import (
     _report_search_status,
     _safe_report_folder_name,
 )
+
+
+def _found(folders: list) -> RemoteFolderSearch:
+    """A search that reached its root, which is the case unless a test says otherwise."""
+    return RemoteFolderSearch(folders=folders, is_root_missing=False)
 
 
 def _remote_connection_payload():
@@ -541,7 +548,7 @@ class TestMultihostPerformanceDiscovery:
 
     @staticmethod
     def _expression(root: str) -> str:
-        return _report_search_find_expression(
+        return _report_search_command(
             root, MULTIHOST_REPORT_PARENT_GLOB, [TEST_PROFILER_FILE]
         )
 
@@ -564,7 +571,7 @@ class TestMultihostPerformanceDiscovery:
         find_command = self._find_command(run)
         assert "-mindepth 1 -maxdepth 1" in find_command
         assert "-path" not in find_command
-        assert matched == [
+        assert matched.folders == [
             f"{self.MULTIHOST_ROOT}/report_a",
             f"{self.MULTIHOST_ROOT}/report_b",
         ]
@@ -592,7 +599,7 @@ class TestMultihostPerformanceDiscovery:
         )
         # mindepth already excludes the root, so the old -not -path guard is gone.
         assert "-not -path" not in find_command
-        assert matched == [
+        assert matched.folders == [
             f"{self.MULTIHOST_ROOT}/rank0/reports/report_a",
             f"{self.MULTIHOST_ROOT}/rank1/reports/report_b",
         ]
@@ -644,7 +651,7 @@ class TestMultihostPerformanceDiscovery:
                 subdirectory_glob=MULTIHOST_REPORT_PARENT_GLOB,
             )
 
-        assert len(matched) == 40
+        assert len(matched.folders) == 40
         assert run.call_count == 1
 
     def test_reports_survive_an_unreadable_sibling_directory(self):
@@ -665,7 +672,7 @@ class TestMultihostPerformanceDiscovery:
                 subdirectory_glob=MULTIHOST_REPORT_PARENT_GLOB,
             )
 
-        assert matched == [found]
+        assert matched.folders == [found]
 
     def test_permission_errors_name_the_directory_that_was_unreadable(self):
         """Only raised when nothing matched, and never blamed on a readable root."""
@@ -708,7 +715,7 @@ class TestMultihostPerformanceDiscovery:
         ):
             matched = _find_performance_report_folders(self._connection(multihost=True))
 
-        assert matched == [f"{self.MULTIHOST_ROOT}/rank0/reports/report_a"]
+        assert matched.folders == [f"{self.MULTIHOST_ROOT}/rank0/reports/report_a"]
         # The near miss cost nothing: discovery is a single remote command.
         assert run.call_count == 1
 
@@ -719,7 +726,7 @@ class TestMultihostPerformanceDiscovery:
             app.app_context(),
             patch(
                 "ttnn_visualizer.sftp_operations.find_folders_by_files",
-                return_value=[],
+                return_value=_found([]),
             ) as find_folders,
         ):
             get_remote_performance_folders(connection)
@@ -736,7 +743,7 @@ class TestMultihostPerformanceDiscovery:
             app.app_context(),
             patch(
                 "ttnn_visualizer.sftp_operations.find_folders_by_files",
-                return_value=[],
+                return_value=_found([]),
             ) as find_folders,
         ):
             get_remote_performance_folders(connection)
@@ -750,7 +757,7 @@ class TestMultihostPerformanceDiscovery:
             app.app_context(),
             patch(
                 "ttnn_visualizer.sftp_operations.find_folders_by_files",
-                return_value=["/remote/match"],
+                return_value=_found(["/remote/match"]),
             ) as find_folders,
         ):
             assert check_remote_path_for_reports(connection) == (1, 1)
@@ -937,7 +944,7 @@ class TestSyncedNameOnTheWire:
             app.app_context(),
             patch(
                 "ttnn_visualizer.sftp_operations._find_performance_report_folders",
-                return_value=paths,
+                return_value=_found(paths),
             ),
             patch(
                 "ttnn_visualizer.sftp_operations._remote_directory_mtimes",
@@ -1097,15 +1104,40 @@ class TestConnectionTestReportStatuses:
         return [status["message"] for status in response.get_json()]
 
     def _run_connection_test(self, client, payload, *, folders_per_path):
+        # No separate path check to stub: the search settles whether its root
+        # exists, so a stubbed search is a root that was there.
         with (
             patch("ttnn_visualizer.views.test_ssh_connection", return_value=True),
-            patch("ttnn_visualizer.views.check_remote_path_exists", return_value=True),
             patch(
                 "ttnn_visualizer.sftp_operations.find_folders_by_files",
-                side_effect=folders_per_path,
+                side_effect=[_found(folders) for folders in folders_per_path],
             ),
         ):
             return client.post("/api/remote/test", json=payload)
+
+    def test_a_path_that_is_not_there_fails_rather_than_counting_zero(
+        self, app, client
+    ):
+        """A search that never reached its root has nothing to say about reports."""
+        app.config["SERVER_MODE"] = False
+
+        with (
+            patch("ttnn_visualizer.views.test_ssh_connection", return_value=True),
+            patch(
+                "ttnn_visualizer.sftp_operations.find_folders_by_files",
+                return_value=RemoteFolderSearch(folders=[], is_root_missing=True),
+            ),
+        ):
+            response = client.post(
+                "/api/remote/test", json=_remote_connection_payload()
+            )
+
+        statuses = response.get_json()
+        assert self._messages(response) == [
+            "SSH connection established",
+            "Profiler directory does not exist or cannot be accessed",
+        ]
+        assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
 
     def test_reports_found_counts_are_confirmed(self, app, client):
         app.config["SERVER_MODE"] = False
@@ -1230,9 +1262,7 @@ class TestReportSearchAgainstRealFind:
 
     @staticmethod
     def _expression(root: str, subdirectory_glob: Optional[str]) -> str:
-        return _report_search_find_expression(
-            root, subdirectory_glob, [TEST_PROFILER_FILE]
-        )
+        return _report_search_command(root, subdirectory_glob, [TEST_PROFILER_FILE])
 
     @staticmethod
     def _run_find(expression: str) -> list[str]:
@@ -1323,3 +1353,30 @@ class TestReportSearchAgainstRealFind:
         )
 
         assert found == []
+
+    def test_a_missing_root_exits_with_the_sentinel_and_prints_nothing(self, tmp_path):
+        """The signal the connection test reads to fail the path rather than count zero."""
+        result = subprocess.run(
+            self._expression(str(tmp_path / "not-there"), None),
+            shell=True,
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == _MISSING_ROOT_EXIT_CODE
+        assert result.stdout == ""
+
+    def test_a_root_that_exists_but_holds_nothing_succeeds_empty(self, tmp_path):
+        """Distinct from the above: `find` ran, and found nothing to report."""
+        empty = tmp_path / "reports"
+        empty.mkdir()
+
+        result = subprocess.run(
+            self._expression(str(empty), None),
+            shell=True,
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0
+        assert result.stdout == ""

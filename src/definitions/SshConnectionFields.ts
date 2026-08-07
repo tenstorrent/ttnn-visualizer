@@ -32,3 +32,10 @@ export const SSH_IDENTITY_FILE_SUBLABEL =
     'Path to your private key. Leave empty to use SSH defaults / ~/.ssh/config for this host. Setting a path ignores SSH config for this connection.';
 
 export const SSH_IDENTITY_FILE_PLACEHOLDER = 'Leave empty for default / SSH config';
+
+/**
+ * Upper bound the port inputs reject beyond, shared so the two dialogs can't disagree about what
+ * a typed port may be. Deliberately looser than the 65535 a TCP port can reach: the field is
+ * digit-by-digit, so a tighter bound would refuse the keystrokes leading up to a legal port.
+ */
+export const MAX_PORT = 99999;

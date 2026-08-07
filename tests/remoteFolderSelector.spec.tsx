@@ -15,12 +15,7 @@ import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/Conne
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
 import { CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
-import {
-    FETCH_REMOTE_FOLDERS_LABEL,
-    MULTIHOST_CHECKBOX_LABEL,
-    RemoteConnection,
-    RemoteFolder,
-} from '../src/definitions/RemoteConnection';
+import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection, RemoteFolder } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {
     LOCAL_STORAGE_KEY_CONNECTIONS,
@@ -46,6 +41,7 @@ import mockRemoteProfilerFolderList from './data/mockRemoteProfilerFolderList.js
 import remoteConnection from './data/remoteConnection.json';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 import getButtonWithText from './helpers/getButtonWithText';
+import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
 import {
     getConnectionTrigger,
     getDeleteConnectionLabel,
@@ -73,11 +69,6 @@ const SELECT_LOCAL_REPORT_TEXT = 'Select a report...';
 const IS_ACTIVATING_REPORT_PROBE_TEST_ID = 'is-activating-report-probe';
 
 const EDITED_CONNECTION_NAME = 'Renamed Server';
-
-// The multihost FormGroup's label points at the checkbox as well as heading the group, so the
-// checkbox's accessible name is that heading followed by its own label. Match on the half that
-// identifies the control.
-const MULTIHOST_CHECKBOX_NAME = new RegExp(MULTIHOST_CHECKBOX_LABEL);
 
 const IsActivatingReportProbe = () => {
     const isActivatingReport = useAtomValue(isActivatingReportAtom);
@@ -378,7 +369,7 @@ it('applies an edit to a connection that is not selected without changing the se
     };
     const passingTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-        { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+        { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
     ];
 
     const axiosInstance = await import('../src/libs/axiosInstance');
@@ -435,7 +426,7 @@ it('applies an edit to a connection that is not selected without changing the se
 it('lists a newly added connection as a dropdown row', async () => {
     const passingTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-        { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+        { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
     ];
     const addedName = 'Added Server';
 
@@ -505,7 +496,7 @@ it('moves cached folder lists when an edit changes the host', async () => {
             return Promise.resolve({
                 data: [
                     { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-                    { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+                    { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
                 ] as ConnectionStatus[],
             } as AxiosResponse);
         }
