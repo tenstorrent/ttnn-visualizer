@@ -13,7 +13,6 @@ from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     HostKeyVerificationException,
     HostKeyVerificationFailedException,
-    NoReportsException,
     NoValidConnectionsError,
     RemoteConnectionException,
     RemoteFileReadException,
@@ -99,13 +98,6 @@ def remote_exception_handler(func):
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
                 message=f"Unable to open path: {str(err)}",
-            )
-        except NoReportsException as err:
-            current_app.logger.warning(f"No reports: {str(err)}")
-            raise RemoteConnectionException(
-                status=err.status,
-                message=f"No remote reports found: {str(err)}",
-                detail=getattr(err, "detail", None),
             )
         except NoValidConnectionsError as err:
             current_app.logger.warning(

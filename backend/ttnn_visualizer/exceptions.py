@@ -115,10 +115,6 @@ class HostKeyVerificationFailedException(RemoteConnectionException):
         )
 
 
-class NoReportsException(RemoteConnectionException):
-    pass
-
-
 class DatabaseFileNotFoundException(Exception):
     pass
 

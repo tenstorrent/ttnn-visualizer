@@ -27,6 +27,7 @@ from ttnn_visualizer.exceptions import (
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
     _MISSING_ROOT_EXIT_CODE,
+    RemoteSearchRootState,
     _get_remote_file_list_without_sizes,
     _remote_directory_mtimes,
     _remote_transfer_key,
@@ -206,7 +207,7 @@ class TestFindFoldersByFiles:
         assert matched.folders == []
         # A root that was there and matched nothing is the case the connection
         # test reports as a warning, so it must not read as an absent path.
-        assert matched.is_root_missing is False
+        assert matched.root_state is RemoteSearchRootState.PRESENT
 
     def test_the_sentinel_exit_code_is_reported_as_a_missing_root(self, connection):
         """`find` cannot tell an absent root from one holding nothing.
@@ -222,7 +223,22 @@ class TestFindFoldersByFiles:
                 connection, "/remote/missing", ["config.json"]
             )
 
-        assert matched.is_root_missing is True
+        assert matched.root_state is RemoteSearchRootState.MISSING
+        assert matched.folders == []
+
+    def test_a_timed_out_search_settles_nothing_about_its_root(self, connection):
+        """No reply is a third answer, distinct from "there" and "not there".
+
+        Returning `PRESENT` here would have the connection test warn that the
+        path exists but holds no reports, asserting a reachable root the search
+        never got to.
+        """
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("ssh", 1)):
+            matched = find_folders_by_files(
+                connection, "/remote/reports", ["config.json"]
+            )
+
+        assert matched.root_state is RemoteSearchRootState.UNKNOWN
         assert matched.folders == []
 
 

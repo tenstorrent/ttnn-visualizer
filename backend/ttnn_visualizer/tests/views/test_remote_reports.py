@@ -25,6 +25,7 @@ from ttnn_visualizer.sftp_operations import (
     MULTIHOST_REPORT_PARENT_GLOB,
     TEST_PROFILER_FILE,
     RemoteFolderSearch,
+    RemoteSearchRootState,
     _find_performance_report_folders,
     _report_search_command,
     check_remote_path_for_reports,
@@ -40,12 +41,17 @@ from ttnn_visualizer.views import (
 
 def _found(folders: list) -> RemoteFolderSearch:
     """A search that reached its root, which is the case unless a test says otherwise."""
-    return RemoteFolderSearch(folders=folders, is_root_missing=False)
+    return RemoteFolderSearch(folders=folders, root_state=RemoteSearchRootState.PRESENT)
 
 
 def _missing() -> RemoteFolderSearch:
     """A search whose root was not there, so it says nothing about reports."""
-    return RemoteFolderSearch(folders=[], is_root_missing=True)
+    return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.MISSING)
+
+
+def _unsettled() -> RemoteFolderSearch:
+    """A search that never got an answer, so its root's state is still open."""
+    return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
 
 
 def _remote_connection_payload():
@@ -1138,9 +1144,11 @@ class TestConnectionTestReportStatuses:
         )
 
         statuses = response.get_json()
+        # "Memory", matching the count and warning lines and the form field,
+        # rather than the "profiler" the backend calls this path internally.
         assert self._messages(response) == [
             "SSH connection established",
-            "Profiler directory does not exist or cannot be accessed",
+            "Memory directory does not exist or cannot be accessed",
         ]
         assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
 
@@ -1164,6 +1172,53 @@ class TestConnectionTestReportStatuses:
             "Performance directory does not exist or cannot be accessed",
         ]
         assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
+
+    def test_a_search_that_never_answered_is_not_reported_as_an_empty_path(
+        self, app, client
+    ):
+        """A timeout is a third answer, not the "exists but empty" warning.
+
+        Reporting it as empty asserts the root was reachable, which is the one
+        thing a search that never came back cannot establish.
+        """
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test_with_searches(
+            client, _remote_connection_payload(), searches=[_unsettled()]
+        )
+
+        statuses = response.get_json()
+        assert self._messages(response) == [
+            "SSH connection established",
+            "Memory directory could not be checked because the search did not complete",
+        ]
+        assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
+
+    def test_an_unreadable_root_fails_under_the_path_it_could_not_read(
+        self, app, client
+    ):
+        """A readable parent takes this down the raising path, not the sentinel.
+
+        `test -e` succeeds on a root whose own contents are unreadable, so the
+        failure comes from `find` rather than from the missing-root exit code —
+        a separate code path reaching the same kind of status line.
+        """
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test_with_searches(
+            client,
+            _remote_connection_payload(),
+            searches=[
+                RemoteConnectionException(
+                    message="Permission denied accessing '/remote/profiler/reports'.",
+                    status=ConnectionTestStates.FAILED,
+                )
+            ],
+        )
+
+        statuses = response.get_json()
+        assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
+        assert "/remote/profiler/reports" in statuses[-1]["message"]
 
     def test_reports_found_counts_are_confirmed(self, app, client):
         app.config["SERVER_MODE"] = False
