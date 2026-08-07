@@ -65,7 +65,7 @@ jobs:
       run: uv run --frozen --no-default-groups --group docs python scripts/index_remote_search.py
 
     - name: Upload artifact
-      uses: actions/upload-pages-artifact@v3
+      uses: actions/upload-pages-artifact@v5
       with:
         path: ./docs/output
 
